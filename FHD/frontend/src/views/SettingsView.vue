@@ -142,7 +142,7 @@
               embedded
               mod-id="xcagi-model-payment-bridge"
               view="ModelPaymentView"
-              title="模型服务"
+              :title="$t('settings.modelService')"
             />
             <div v-else class="settings-model-service-empty">
               <p class="settings-model-service-empty__title">{{ $t('settings.modelServiceMissingTitle') }}</p>
@@ -173,12 +173,12 @@
             <span class="settings-row__icon settings-row__icon--amber" aria-hidden="true">
               <i class="fa fa-shield"></i>
             </span>
-            <span class="settings-row__label">安全审计</span>
-            <span class="settings-row__meta">{{ auditLogsTotal }} 条</span>
+            <span class="settings-row__label">{{ $t('settings.securityAudit') }}</span>
+            <span class="settings-row__meta">{{ $t('settings.auditCount', { count: auditLogsTotal }) }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--list">
-            <p v-if="auditLogsLoading" class="muted" style="padding: 12px 16px; margin: 0;">加载中…</p>
+            <p v-if="auditLogsLoading" class="muted" style="padding: 12px 16px; margin: 0;">{{ $t('settings.auditLoading') }}</p>
             <p v-else-if="auditLogsError" class="settings-profile-form__hint" role="alert" style="padding: 12px 16px;">
               {{ auditLogsError }}
             </p>
@@ -188,17 +188,17 @@
                 <span class="settings-audit-list__meta">
                   {{ row.timestamp || row.ts || '' }}
                   · {{ row.user_id ?? '—' }}
-                  · {{ row.success === false ? '失败' : '成功' }}
+                  · {{ row.success === false ? $t('settings.auditFailed') : $t('settings.auditSuccess') }}
                 </span>
               </li>
             </ul>
-            <p v-else class="muted" style="padding: 12px 16px; margin: 0;">暂无审计记录（可配置 AUDIT_LOG_PATH）</p>
+            <p v-else class="muted" style="padding: 12px 16px; margin: 0;">{{ $t('settings.auditEmpty') }}</p>
             <div class="settings-profile-form__actions" style="padding: 0 16px 16px;">
               <button type="button" class="settings-profile-form__submit" @click="loadAuditLogs">
-                刷新
+                {{ $t('settings.refresh') }}
               </button>
               <button type="button" class="settings-profile-form__submit settings-profile-form__submit--ghost" @click="downloadAuditCsv">
-                导出 CSV
+                {{ $t('settings.exportCsv') }}
               </button>
             </div>
           </div>
@@ -213,17 +213,17 @@
             <span class="settings-row__icon settings-row__icon--purple" aria-hidden="true">
               <i class="fa fa-magic"></i>
             </span>
-            <span class="settings-row__label">AI 意图能力</span>
+            <span class="settings-row__label">{{ $t('settings.aiIntent') }}</span>
             <span v-if="currentIntentIndustryLabel" class="settings-row__pill" @click.stop>
               {{ currentIntentIndustryLabel }}
               <template v-if="currentIndustryUnit"> · {{ currentIndustryUnit }}</template>
             </span>
-            <span v-else class="settings-row__meta">只读展示</span>
+            <span v-else class="settings-row__meta">{{ $t('settings.readOnly') }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
 
           <div class="settings-card__body">
-        <div v-if="!currentIndustryConfig" class="intent-showcase-state muted">当前行业未加载，请刷新或检查后端行业配置</div>
+        <div v-if="!currentIndustryConfig" class="intent-showcase-state muted">{{ $t('settings.intentNotLoaded') }}</div>
         <div v-else class="intent-showcase-grid">
           <article
             v-for="entry in intentPackageEntries"
@@ -241,7 +241,7 @@
                   class="intent-tile-status"
                   :class="entry.enabled ? 'intent-tile-status--on' : 'intent-tile-status--off'"
                 >
-                  {{ entry.enabled ? '已接入' : '未接入' }}
+                  {{ entry.enabled ? $t('settings.intentEnabled') : $t('settings.intentDisabled') }}
                 </span>
               </div>
             </div>
@@ -252,7 +252,7 @@
                 :key="`${entry.key}-${kw}`"
                 class="intent-chip"
               >{{ kw }}</span>
-              <span v-if="!entry.keywords.length" class="intent-chip intent-chip--empty">暂无示例词</span>
+              <span v-if="!entry.keywords.length" class="intent-chip intent-chip--empty">{{ $t('settings.noSampleKeywords') }}</span>
             </div>
           </article>
         </div>
@@ -268,44 +268,44 @@
             <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
               <i class="fa fa-bookmark"></i>
             </span>
-            <span class="settings-row__label">拟人persy系统</span>
+            <span class="settings-row__label">{{ $t('settings.persySystem') }}</span>
             <span class="settings-row__meta">{{ persyFoldMeta }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
 
           <div class="settings-card__body settings-card__body--compact">
             <div class="persy-profile">
-              <div v-if="persyLoading" class="persy-profile__state muted">人设加载中…</div>
+              <div v-if="persyLoading" class="persy-profile__state muted">{{ $t('settings.persyLoading') }}</div>
               <div v-else-if="persyProfile" class="persy-profile__body">
                 <div class="persy-profile__head">
                   <span class="persy-profile__identity">{{ persyProfile.identity_composite || persyProfile.identity_primary }}</span>
                   <span class="persy-profile__type">{{ persyProfile.mbti_type }}</span>
-                  <span class="persy-profile__meta">互动 {{ persyProfile.interaction_count }} 轮</span>
+                  <span class="persy-profile__meta">{{ $t('settings.persyInteractions', { count: persyProfile.interaction_count }) }}</span>
                 </div>
                 <div class="persy-profile__axes">
                   <div class="persy-axis">
-                    <span class="persy-axis__label">亲切度</span>
+                    <span class="persy-axis__label">{{ $t('settings.persyWarmth') }}</span>
                     <div class="persy-axis__bar">
                       <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.warmth}%` }"></div>
                     </div>
                     <span class="persy-axis__score">{{ persyProfile.four_axes.warmth }}</span>
                   </div>
                   <div class="persy-axis">
-                    <span class="persy-axis__label">详细度</span>
+                    <span class="persy-axis__label">{{ $t('settings.persyVerbosity') }}</span>
                     <div class="persy-axis__bar">
                       <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.verbosity}%` }"></div>
                     </div>
                     <span class="persy-axis__score">{{ persyProfile.four_axes.verbosity }}</span>
                   </div>
                   <div class="persy-axis">
-                    <span class="persy-axis__label">主动度</span>
+                    <span class="persy-axis__label">{{ $t('settings.persyProactiveness') }}</span>
                     <div class="persy-axis__bar">
                       <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.proactiveness}%` }"></div>
                     </div>
                     <span class="persy-axis__score">{{ persyProfile.four_axes.proactiveness }}</span>
                   </div>
                   <div class="persy-axis">
-                    <span class="persy-axis__label">结构度</span>
+                    <span class="persy-axis__label">{{ $t('settings.persyStructuredness') }}</span>
                     <div class="persy-axis__bar">
                       <div class="persy-axis__fill" :style="{ width: `${persyProfile.four_axes.structuredness}%` }"></div>
                     </div>
@@ -319,12 +319,12 @@
                     :disabled="persyInferring"
                     @click="runPersyInfer"
                   >
-                    {{ persyInferring ? '推断中…' : '触发推断' }}
+                    {{ persyInferring ? $t('settings.persyInferring') : $t('settings.persyInfer') }}
                   </button>
                   <span v-if="persyLastReason" class="persy-profile__reason">{{ persyLastReason }}</span>
                 </div>
               </div>
-              <div v-else class="persy-profile__state muted">暂无人设数据</div>
+              <div v-else class="persy-profile__state muted">{{ $t('settings.persyEmpty') }}</div>
             </div>
 
             <div class="memory-v2-toolbar">
@@ -335,7 +335,7 @@
                 @change="loadMemoryV2"
               >
                 <option
-                  v-for="item in MEMORY_V2_STATUS_FILTERS"
+                  v-for="item in memoryV2StatusFilters"
                   :key="item.value"
                   :value="item.value"
                 >
@@ -348,9 +348,9 @@
                 :disabled="memoryV2Loading"
                 @change="loadMemoryV2"
               >
-                <option value="all">全部类型</option>
+                <option value="all">{{ $t('settings.memoryAllTypes') }}</option>
                 <option
-                  v-for="item in MEMORY_V2_TYPE_OPTIONS"
+                  v-for="item in memoryV2TypeOptions"
                   :key="item.value"
                   :value="item.value"
                 >
@@ -363,7 +363,7 @@
                 :disabled="memoryV2Loading"
                 @click="loadMemoryV2"
               >
-                刷新
+                {{ $t('settings.refresh') }}
               </button>
             </div>
 
@@ -376,7 +376,7 @@
                 :disabled="memoryV2Creating"
               >
                 <option
-                  v-for="item in MEMORY_V2_TYPE_OPTIONS"
+                  v-for="item in memoryV2TypeOptions"
                   :key="item.value"
                   :value="item.value"
                 >
@@ -388,7 +388,7 @@
                 class="settings-item__control settings-item__control--text memory-v2-form__input"
                 type="text"
                 maxlength="64"
-                placeholder="键"
+                :placeholder="$t('settings.memoryKey')"
                 :disabled="memoryV2Creating"
               >
               <input
@@ -396,7 +396,7 @@
                 class="settings-item__control settings-item__control--text memory-v2-form__input"
                 type="text"
                 maxlength="240"
-                placeholder="值"
+                :placeholder="$t('settings.memoryValue')"
                 :disabled="memoryV2Creating"
               >
               <input
@@ -413,13 +413,13 @@
                 class="btn btn-sm btn-primary"
                 :disabled="memoryV2Creating"
               >
-                {{ memoryV2Creating ? '写入中…' : '写入候选' }}
+                {{ memoryV2Creating ? $t('settings.memoryWriting') : $t('settings.memoryWriteCandidate') }}
               </button>
             </form>
 
             <pre v-if="memoryV2PlannerContext" class="memory-v2-context">{{ memoryV2PlannerContext }}</pre>
 
-            <p v-if="memoryV2Loading" class="memory-v2-state muted">加载中…</p>
+            <p v-if="memoryV2Loading" class="memory-v2-state muted">{{ $t('settings.memoryLoading') }}</p>
             <ul v-else-if="memoryV2Records.length" class="memory-v2-list">
               <li
                 v-for="record in memoryV2Records"
@@ -455,8 +455,8 @@
                 </div>
 
                 <div class="memory-v2-item__meta">
-                  <span>{{ record.source || '未知' }}</span>
-                  <span>置信度 {{ Number(record.confidence || 0).toFixed(2) }}</span>
+                  <span>{{ record.source || $t('settings.memoryUnknown') }}</span>
+                  <span>{{ $t('settings.memoryConfidence', { value: Number(record.confidence || 0).toFixed(2) }) }}</span>
                 </div>
 
                 <div class="memory-v2-actions">
@@ -467,7 +467,7 @@
                       :disabled="memoryV2BusyId === record.memory_id"
                       @click="saveMemoryV2Edit(record)"
                     >
-                      保存
+                      {{ $t('settings.save') }}
                     </button>
                     <button
                       type="button"
@@ -475,7 +475,7 @@
                       :disabled="memoryV2BusyId === record.memory_id"
                       @click="cancelMemoryV2Edit"
                     >
-                      取消
+                      {{ $t('settings.cancel') }}
                     </button>
                   </template>
                   <template v-else>
@@ -486,7 +486,7 @@
                       :disabled="memoryV2BusyId === record.memory_id"
                       @click="confirmMemoryV2(record)"
                     >
-                      确认
+                      {{ $t('settings.confirm') }}
                     </button>
                     <button
                       v-if="record.status === 'pending'"
@@ -495,7 +495,7 @@
                       :disabled="memoryV2BusyId === record.memory_id"
                       @click="rejectMemoryV2(record)"
                     >
-                      拒绝
+                      {{ $t('settings.reject') }}
                     </button>
                     <button
                       v-if="canEditMemoryV2(record)"
@@ -504,7 +504,7 @@
                       :disabled="memoryV2BusyId === record.memory_id"
                       @click="startMemoryV2Edit(record)"
                     >
-                      修正
+                      {{ $t('settings.revise') }}
                     </button>
                     <button
                       v-if="record.status !== 'deleted'"
@@ -513,13 +513,13 @@
                       :disabled="memoryV2BusyId === record.memory_id"
                       @click="deleteMemoryV2(record)"
                     >
-                      删除
+                      {{ $t('settings.delete') }}
                     </button>
                   </template>
                 </div>
               </li>
             </ul>
-            <p v-else class="memory-v2-state muted">暂无记忆</p>
+            <p v-else class="memory-v2-state muted">{{ $t('settings.memoryEmpty') }}</p>
           </div>
         </details>
 
@@ -550,7 +550,7 @@
               class="settings-item__control settings-item__control--select"
               @change="onSidebarThemeChange"
             >
-              <option v-for="theme in SIDEBAR_THEME_OPTIONS" :key="theme.value" :value="theme.value">
+              <option v-for="theme in sidebarThemeOptions" :key="theme.value" :value="theme.value">
                 {{ theme.label }}
               </option>
             </select>
@@ -560,7 +560,7 @@
             <span class="settings-item__icon settings-row__icon--amber" aria-hidden="true">
               <i class="fa fa-building"></i>
             </span>
-            <label class="settings-item__label" for="settings-company-brand">企业品牌名</label>
+            <label class="settings-item__label" for="settings-company-brand">{{ $t('settings.companyBrand') }}</label>
             <div class="settings-item__control-group">
               <input
                 id="settings-company-brand"
@@ -568,7 +568,7 @@
                 class="settings-item__control settings-item__control--text"
                 type="text"
                 maxlength="64"
-                placeholder="对外展示的企业名称"
+                :placeholder="$t('settings.companyBrandPlaceholder')"
               >
               <button
                 type="button"
@@ -576,7 +576,7 @@
                 :disabled="companyBrandSaving || !companyBrandDirty"
                 @click="saveCompanyBrand"
               >
-                {{ companyBrandSaving ? '保存中…' : '保存' }}
+                {{ companyBrandSaving ? $t('settings.saving') : $t('settings.save') }}
               </button>
             </div>
           </div>
@@ -624,7 +624,7 @@
             <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-database"></i>
             </span>
-            <span class="settings-item__label">数据存储</span>
+            <span class="settings-item__label">{{ $t('settings.dataStorage') }}</span>
             <span class="settings-item__value">{{ databaseStorageLabel }}</span>
           </div>
 
@@ -632,7 +632,7 @@
             <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-folder-open-o"></i>
             </span>
-            <span class="settings-item__label">数据库路径</span>
+            <span class="settings-item__label">{{ $t('settings.dbPath') }}</span>
             <span class="settings-item__value settings-item__value--mono" :title="currentDbPath">{{ currentDbPath }}</span>
           </div>
 
@@ -640,15 +640,15 @@
             <span class="settings-item__icon settings-row__icon--violet" aria-hidden="true">
               <i class="fa fa-cloud"></i>
             </span>
-            <label class="settings-item__label" for="settings-ai-mode">AI 部署模式</label>
+            <label class="settings-item__label" for="settings-ai-mode">{{ $t('settings.aiDeployMode') }}</label>
             <select
               id="settings-ai-mode"
               v-model="deploymentMode"
               class="settings-item__control settings-item__control--select"
               @change="onDeploymentModeChange"
             >
-              <option v-for="mode in deploymentModes" :key="mode.id" :value="mode.id">
-                {{ mode.label }}（{{ mode.badge }}）
+              <option v-for="mode in displayDeploymentModes" :key="mode.id" :value="mode.id">
+                {{ $t('settings.deploymentModeOption', { label: mode.label, badge: mode.badge }) }}
               </option>
             </select>
           </div>
@@ -657,7 +657,7 @@
             <span class="settings-item__icon settings-row__icon--cyan" aria-hidden="true">
               <i class="fa fa-random"></i>
             </span>
-            <span class="settings-item__label">网络与性能</span>
+            <span class="settings-item__label">{{ $t('settings.networkPerf') }}</span>
             <span class="settings-item__value">{{ deploymentModeBadge }}</span>
           </div>
 
@@ -665,7 +665,7 @@
             <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
               <i class="fa fa-database"></i>
             </span>
-            <label class="settings-item__label" for="settings-postgres-url">PostgreSQL 连接</label>
+            <label class="settings-item__label" for="settings-postgres-url">{{ $t('settings.postgresConnection') }}</label>
             <input
               id="settings-postgres-url"
               v-model="postgresUrlDraft"
@@ -675,7 +675,7 @@
               placeholder="postgresql+psycopg://user:password@host:5432/xcagi"
             >
             <p class="settings-item__hint">
-              性能模式会写入 PG profile，并生成 SQLite 到 PostgreSQL 的同步计划，重启后生效。
+              {{ $t('settings.performanceModeHint') }}
             </p>
           </div>
 
@@ -705,8 +705,8 @@
             <span class="settings-row__icon settings-row__icon--cyan" aria-hidden="true">
               <i class="fa fa-qrcode"></i>
             </span>
-            <span class="settings-row__label">移动端连接</span>
-            <span class="settings-row__meta">App 扫码配对</span>
+            <span class="settings-row__label">{{ $t('settings.mobilePairing') }}</span>
+            <span class="settings-row__meta">{{ $t('settings.mobilePairingMeta') }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--nested">
@@ -723,7 +723,7 @@
             <span class="settings-row__icon settings-row__icon--orange" aria-hidden="true">
               <i class="fa fa-puzzle-piece"></i>
             </span>
-            <span class="settings-row__label">扩展与 Mod</span>
+            <span class="settings-row__label">{{ $t('settings.extensions') }}</span>
             <span class="settings-row__meta">{{ modSettingsFoldMeta }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
@@ -738,21 +738,21 @@
               :disabled="modRoutesRetrying"
               @click="retryModRoutesLoad"
             >
-              {{ modRoutesRetrying ? '重试中…' : '重试加载 Mod 与路由' }}
+              {{ modRoutesRetrying ? $t('settings.retrying') : $t('settings.retryLoadMods') }}
             </button>
 
             <section v-if="hostBridgeMods.length" class="mod-fold-section">
               <div class="mod-fold-section-head">
-                <span class="mod-ui-off-label">宿主基础能力包</span>
+                <span class="mod-ui-off-label">{{ $t('settings.hostBridgePack') }}</span>
                 <span class="mod-host-pack-stat">
-                  {{ hostBridgeInstalledCount }}/{{ hostBridgeExpectedCount }} 已就绪
+                  {{ $t('settings.hostReady', { installed: hostBridgeInstalledCount, expected: hostBridgeExpectedCount }) }}
                 </span>
               </div>
               <div class="mod-host-pack-bar">
                 <button type="button" class="btn btn-secondary btn-sm" @click="hostPackExpanded = !hostPackExpanded">
-                  {{ hostPackExpanded ? '收起' : '清单' }}
+                  {{ hostPackExpanded ? $t('settings.collapse') : $t('settings.inventory') }}
                 </button>
-                <button type="button" class="btn btn-link btn-sm" @click="goHostPackOnboarding">一键装齐</button>
+                <button type="button" class="btn btn-link btn-sm" @click="goHostPackOnboarding">{{ $t('settings.installAll') }}</button>
               </div>
               <ul v-if="hostPackExpanded" class="mod-host-pack-list">
                 <li v-for="mod in hostBridgeMods" :key="mod.id" class="mod-host-pack-row">
@@ -763,22 +763,22 @@
                     :disabled="uninstallingModId === mod.id || isProtectedClientModId(mod.id)"
                     @click="onUninstallMod(mod.id)"
                   >
-                    {{ uninstallingModId === mod.id ? '卸载中…' : '卸载' }}
+                    {{ uninstallingModId === mod.id ? $t('settings.uninstalling') : $t('settings.uninstall') }}
                   </button>
                 </li>
               </ul>
             </section>
 
             <section v-if="workflowEmployeeMods.length" class="mod-fold-section mod-fold-section--inline">
-              <span class="mod-ui-off-label">工作流员工</span>
-              <span class="muted">共 {{ workflowEmployeeMods.length }} 个 ·</span>
-              <button type="button" class="btn btn-link btn-sm" @click="goModStore">扩展市场</button>
+              <span class="mod-ui-off-label">{{ $t('settings.workflowEmployees') }}</span>
+              <span class="muted">{{ $t('settings.workflowCount', { count: workflowEmployeeMods.length }) }}</span>
+              <button type="button" class="btn btn-link btn-sm" @click="goModStore">{{ $t('settings.modStore') }}</button>
             </section>
 
             <section class="mod-fold-section">
               <div class="mod-fold-section-head">
-                <span class="mod-ui-off-label">行业扩展包</span>
-                <button type="button" class="btn btn-link btn-sm" @click="goModStore">扩展市场</button>
+                <span class="mod-ui-off-label">{{ $t('settings.industryExtensions') }}</span>
+                <button type="button" class="btn btn-link btn-sm" @click="goModStore">{{ $t('settings.modStore') }}</button>
               </div>
               <div v-if="selectableExtensionMods.length" class="mod-single-list">
                 <div
@@ -803,13 +803,13 @@
                     :disabled="uninstallingModId === mod.id || isProtectedClientModId(mod.id)"
                     @click="onUninstallMod(mod.id)"
                   >
-                    {{ uninstallingModId === mod.id ? '卸载中…' : '卸载' }}
+                    {{ uninstallingModId === mod.id ? $t('settings.uninstalling') : $t('settings.uninstall') }}
                   </button>
                 </div>
               </div>
               <p v-else class="muted mod-single-empty">
-                <template v-if="loadError">加载失败，请重试 Mod 与路由。</template>
-                <template v-else>暂无行业扩展包。</template>
+                <template v-if="loadError">{{ $t('settings.loadModsFailed') }}</template>
+                <template v-else>{{ $t('settings.noIndustryExt') }}</template>
               </p>
             </section>
           </div>
@@ -817,7 +817,7 @@
 
         <div class="settings-card__footer">
           <button class="settings-primary-btn" type="button" @click="saveSettings" :disabled="loading || deploymentSaving">
-            {{ deploymentSaving ? '正在切换部署模式…' : loading ? $t('settings.saving') : $t('settings.saveSettings') }}
+            {{ deploymentSaving ? $t('settings.switchingDeployMode') : loading ? $t('settings.saving') : $t('settings.saveSettings') }}
           </button>
         </div>
           </div>
@@ -828,18 +828,18 @@
             <span class="settings-row__icon settings-row__icon--amber" aria-hidden="true">
               <i class="fa fa-flask"></i>
             </span>
-            <span class="settings-row__label">蒸馏模型版本</span>
-            <span class="settings-row__meta">训练产物</span>
+            <span class="settings-row__label">{{ $t('settings.distillationVersions') }}</span>
+            <span class="settings-row__meta">{{ $t('settings.trainingArtifacts') }}</span>
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--compact">
-            <p v-if="loadingVersions" class="muted">加载中...</p>
+            <p v-if="loadingVersions" class="muted">{{ $t('settings.versionsLoading') }}</p>
             <p v-else-if="versionsError" class="muted">{{ versionsError }}</p>
-            <p v-else-if="versions.length === 0" class="muted">暂无训练产物</p>
+            <p v-else-if="versions.length === 0" class="muted">{{ $t('settings.noVersions') }}</p>
             <div v-else class="settings-table-wrap">
               <table class="data-table settings-table">
                 <thead>
-                  <tr><th>文件</th><th>说明</th><th>修改时间</th><th>大小</th></tr>
+                  <tr><th>{{ $t('settings.colFile') }}</th><th>{{ $t('settings.colDescription') }}</th><th>{{ $t('settings.colModified') }}</th><th>{{ $t('settings.colSize') }}</th></tr>
                 </thead>
                 <tbody>
                   <tr v-for="v in versions" :key="v.name">
@@ -851,7 +851,7 @@
                 </tbody>
               </table>
             </div>
-            <p class="muted settings-meta-line">已积累蒸馏样本数：{{ sampleCount }}</p>
+            <p class="muted settings-meta-line">{{ $t('settings.sampleCountAccumulated', { count: sampleCount }) }}</p>
             <p v-if="sampleCountWarning" class="muted settings-meta-line">{{ sampleCountWarning }}</p>
           </div>
         </details>
@@ -946,7 +946,7 @@ import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 import { setAppLocale } from '@/i18n';
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards';
 
-const { t, locale } = useI18n();
+const { t, te, locale } = useI18n();
 const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
 
 function onLocaleChange() {
@@ -1022,7 +1022,7 @@ type DesktopDeploymentUpdateResponse = DesktopDeploymentResponse & {
   modeDetail?: DeploymentMode
 }
 
-function errorMessage(error: unknown, fallback = '未知错误'): string {
+function errorMessage(error: unknown, fallback = t('settings.unknownError')): string {
   return error instanceof Error ? error.message : String(error || fallback)
 }
 
@@ -1038,18 +1038,18 @@ const avatarCacheBust = ref(0);
 const profileDisplayNameDraft = ref('');
 const profileEmailDraft = ref('');
 const profileSaving = ref(false);
-const MEMORY_V2_TYPE_OPTIONS: Array<{ value: MemoryV2Type; label: string }> = [
-  { value: 'preference', label: '偏好' },
-  { value: 'entity', label: '实体' },
-  { value: 'episodic', label: '任务' },
-];
-const MEMORY_V2_STATUS_FILTERS: Array<{ value: 'all' | MemoryV2Status; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'pending', label: '待确认' },
-  { value: 'active', label: '已确认' },
-  { value: 'rejected', label: '已拒绝' },
-  { value: 'deleted', label: '已删除' },
-];
+const memoryV2TypeOptions = computed<Array<{ value: MemoryV2Type; label: string }>>(() => [
+  { value: 'preference', label: t('settings.memoryTypePreference') },
+  { value: 'entity', label: t('settings.memoryTypeEntity') },
+  { value: 'episodic', label: t('settings.memoryTypeEpisodic') },
+]);
+const memoryV2StatusFilters = computed<Array<{ value: 'all' | MemoryV2Status; label: string }>>(() => [
+  { value: 'all', label: t('settings.memoryStatusAll') },
+  { value: 'pending', label: t('settings.memoryStatusPending') },
+  { value: 'active', label: t('settings.memoryStatusActive') },
+  { value: 'rejected', label: t('settings.memoryStatusRejected') },
+  { value: 'deleted', label: t('settings.memoryStatusDeleted') },
+]);
 const memoryV2Records = ref<MemoryV2Record[]>([]);
 const memoryV2Summary = ref<MemoryV2Summary>({ total: 0, by_status: {}, by_type: {} });
 const memoryV2PlannerContext = ref('');
@@ -1080,17 +1080,17 @@ const persyLastReason = ref('');
 const persyUserId = computed(() => resolveModeScopedChatUserId());
 
 const persyFoldMeta = computed(() => {
-  if (!persyProfile.value) return '待确认 0 · 已确认 0';
-  const identity = persyProfile.value.identity_composite || persyProfile.value.identity_primary || '未初始化';
+  if (!persyProfile.value) return t('settings.persyFoldMetaEmpty');
+  const identity = persyProfile.value.identity_composite || persyProfile.value.identity_primary || t('settings.persyUninitialized');
   const interactions = persyProfile.value.interaction_count || 0;
-  return `${identity} · 互动 ${interactions}`;
+  return t('settings.persyFoldMeta', { identity, count: interactions });
 });
 
 async function loadPersyProfile() {
   persyLoading.value = true;
   try {
     const result = await butlerProfileApi.get(persyUserId.value);
-    if (result.success === false) throw new Error(result.message || '人设加载失败');
+    if (result.success === false) throw new Error(result.message || t('settings.persyLoadFailed'));
     persyProfile.value = result.profile || null;
   } catch (e: unknown) {
     persyProfile.value = null;
@@ -1104,13 +1104,13 @@ async function runPersyInfer() {
   persyLastReason.value = '';
   try {
     const result = await butlerProfileApi.infer({ userId: persyUserId.value });
-    if (result.success === false) throw new Error(result.message || '推断失败');
+    if (result.success === false) throw new Error(result.message || t('settings.persyInferFailed'));
     if (result.profile) persyProfile.value = result.profile;
     if (result.inference?.reasons?.length) {
       persyLastReason.value = result.inference.reasons[result.inference.reasons.length - 1];
     }
   } catch (e: unknown) {
-    persyLastReason.value = e instanceof Error ? e.message : '推断失败';
+    persyLastReason.value = e instanceof Error ? e.message : t('settings.persyInferFailed');
   } finally {
     persyInferring.value = false;
   }
@@ -1124,15 +1124,15 @@ const memoryV2UserId = computed(() => {
 const memoryV2FoldMeta = computed(() => {
   const pending = Number(memoryV2Summary.value.by_status.pending || 0);
   const active = Number(memoryV2Summary.value.by_status.active || 0);
-  return `待确认 ${pending} · 已确认 ${active}`;
+  return t('settings.memoryFoldMeta', { pending, active });
 });
 
 function memoryV2TypeLabel(type: unknown): string {
-  return MEMORY_V2_TYPE_OPTIONS.find((item) => item.value === type)?.label || String(type || '未知');
+  return memoryV2TypeOptions.value.find((item) => item.value === type)?.label || String(type || t('settings.memoryUnknown'));
 }
 
 function memoryV2StatusLabel(status: unknown): string {
-  return MEMORY_V2_STATUS_FILTERS.find((item) => item.value === status)?.label || String(status || '未知');
+  return memoryV2StatusFilters.value.find((item) => item.value === status)?.label || String(status || t('settings.memoryUnknown'));
 }
 
 function memoryV2EditableValue(value: unknown): string {
@@ -1167,7 +1167,7 @@ function memoryV2Time(value: unknown): string {
   if (!raw) return '';
   const parsed = Date.parse(raw);
   if (Number.isNaN(parsed)) return raw;
-  return new Date(parsed).toLocaleString('zh-CN', {
+  return new Date(parsed).toLocaleString(locale.value === 'en-US' ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -1191,15 +1191,15 @@ async function loadMemoryV2() {
       }),
       memoryV2Api.summary(memoryV2UserId.value),
     ]);
-    if (listResult.success === false) throw new Error(listResult.message || '记忆加载失败');
-    if (summaryResult.success === false) throw new Error(summaryResult.message || '记忆摘要加载失败');
+    if (listResult.success === false) throw new Error(listResult.message || t('settings.memoryLoadFailed'));
+    if (summaryResult.success === false) throw new Error(summaryResult.message || t('settings.memorySummaryFailed'));
     memoryV2Records.value = Array.isArray(listResult.memories) ? listResult.memories : [];
     memoryV2Summary.value = summaryResult.summary || listResult.summary || { total: 0, by_status: {}, by_type: {} };
     memoryV2PlannerContext.value = String(summaryResult.planner_context || '');
   } catch (e: unknown) {
     memoryV2Records.value = [];
     memoryV2PlannerContext.value = '';
-    memoryV2Error.value = errorMessage(e, '记忆加载失败');
+    memoryV2Error.value = errorMessage(e, t('settings.memoryLoadFailed'));
   } finally {
     memoryV2Loading.value = false;
   }
@@ -1209,7 +1209,7 @@ async function createMemoryV2Candidate() {
   const key = memoryV2Draft.key.trim();
   const value = memoryV2Draft.value.trim();
   if (!key || !value) {
-    await appAlert('请填写记忆键和值');
+    await appAlert(t('settings.memoryFillKeyValue'));
     return;
   }
   memoryV2Creating.value = true;
@@ -1223,12 +1223,12 @@ async function createMemoryV2Candidate() {
       confidence: Number(memoryV2Draft.confidence),
       source: 'settings_ui',
     });
-    if (result.success === false) throw new Error(result.message || '候选记忆创建失败');
+    if (result.success === false) throw new Error(result.message || t('settings.memoryCreateFailed'));
     memoryV2Draft.key = '';
     memoryV2Draft.value = '';
     await loadMemoryV2();
   } catch (e: unknown) {
-    memoryV2Error.value = errorMessage(e, '候选记忆创建失败');
+    memoryV2Error.value = errorMessage(e, t('settings.memoryCreateFailed'));
   } finally {
     memoryV2Creating.value = false;
   }
@@ -1239,25 +1239,25 @@ async function confirmMemoryV2(record: MemoryV2Record) {
   memoryV2Error.value = '';
   try {
     const result = await memoryV2Api.confirm(record.memory_id, memoryV2UserId.value);
-    if (result.success === false) throw new Error(result.message || '确认失败');
+    if (result.success === false) throw new Error(result.message || t('settings.memoryConfirmFailed'));
     await loadMemoryV2();
   } catch (e: unknown) {
-    memoryV2Error.value = errorMessage(e, '确认失败');
+    memoryV2Error.value = errorMessage(e, t('settings.memoryConfirmFailed'));
   } finally {
     memoryV2BusyId.value = '';
   }
 }
 
 async function rejectMemoryV2(record: MemoryV2Record) {
-  if (!(await appConfirm(`拒绝记忆「${record.key}」？`, { danger: true }))) return;
+  if (!(await appConfirm(t('settings.memoryRejectConfirm', { key: record.key }), { danger: true }))) return;
   memoryV2BusyId.value = record.memory_id;
   memoryV2Error.value = '';
   try {
     const result = await memoryV2Api.reject(record.memory_id, memoryV2UserId.value, 'settings_ui_rejected');
-    if (result.success === false) throw new Error(result.message || '拒绝失败');
+    if (result.success === false) throw new Error(result.message || t('settings.memoryRejectFailed'));
     await loadMemoryV2();
   } catch (e: unknown) {
-    memoryV2Error.value = errorMessage(e, '拒绝失败');
+    memoryV2Error.value = errorMessage(e, t('settings.memoryRejectFailed'));
   } finally {
     memoryV2BusyId.value = '';
   }
@@ -1278,7 +1278,7 @@ function cancelMemoryV2Edit() {
 async function saveMemoryV2Edit(record: MemoryV2Record) {
   const key = memoryV2Edit.key.trim();
   if (!key) {
-    await appAlert('请填写记忆键');
+    await appAlert(t('settings.memoryFillKey'));
     return;
   }
   memoryV2BusyId.value = record.memory_id;
@@ -1290,27 +1290,27 @@ async function saveMemoryV2Edit(record: MemoryV2Record) {
       value: parseMemoryV2InputValue(memoryV2Edit.value),
       reason: 'settings_ui_correction',
     });
-    if (result.success === false) throw new Error(result.message || '修正失败');
+    if (result.success === false) throw new Error(result.message || t('settings.memoryReviseFailed'));
     cancelMemoryV2Edit();
     await loadMemoryV2();
   } catch (e: unknown) {
-    memoryV2Error.value = errorMessage(e, '修正失败');
+    memoryV2Error.value = errorMessage(e, t('settings.memoryReviseFailed'));
   } finally {
     memoryV2BusyId.value = '';
   }
 }
 
 async function deleteMemoryV2(record: MemoryV2Record) {
-  if (!(await appConfirm(`删除记忆「${record.key}」？`, { danger: true }))) return;
+  if (!(await appConfirm(t('settings.memoryDeleteConfirm', { key: record.key }), { danger: true }))) return;
   memoryV2BusyId.value = record.memory_id;
   memoryV2Error.value = '';
   try {
     const result = await memoryV2Api.remove(record.memory_id, memoryV2UserId.value, 'settings_ui_deleted');
-    if (result.success === false) throw new Error(result.message || '删除失败');
+    if (result.success === false) throw new Error(result.message || t('settings.memoryDeleteFailed'));
     if (memoryV2Edit.memoryId === record.memory_id) cancelMemoryV2Edit();
     await loadMemoryV2();
   } catch (e: unknown) {
-    memoryV2Error.value = errorMessage(e, '删除失败');
+    memoryV2Error.value = errorMessage(e, t('settings.memoryDeleteFailed'));
   } finally {
     memoryV2BusyId.value = '';
   }
@@ -1424,7 +1424,7 @@ async function loadAuditLogs() {
     auditLogs.value = res?.data?.items || [];
     auditLogsTotal.value = res?.data?.total || 0;
   } catch (e: unknown) {
-    auditLogsError.value = errorMessage(e, '加载审计日志失败');
+    auditLogsError.value = errorMessage(e, t('settings.auditLoadFailed'));
   } finally {
     auditLogsLoading.value = false;
   }
@@ -1487,7 +1487,7 @@ const profileSubline = computed(() => {
   if (brand) {
     const display = String(u.display_name || '').trim();
     if (display && display !== brand) return `${username} · ${display}`;
-    return username || '修茈市场账号';
+    return username || t('settings.marketAccount');
   }
   const display = String(u.display_name || '').trim();
   if (display && username && display !== username) return username;
@@ -1510,14 +1510,14 @@ async function saveCompanyBrand() {
     const res = await authApi.updateCompanyBrand(brand);
     const raw = res as Record<string, unknown>;
     if (raw?.success === false) {
-      throw new Error(String(raw.message || '保存失败'));
+      throw new Error(String(raw.message || t('settings.saveFailed')));
     }
     accountProfileStore.companyBrand = brand;
     await accountProfileStore.refreshFromServer();
     companyBrandDraft.value = accountProfileStore.companyBrand || brand;
-    await appAlert('企业品牌名已保存');
+    await appAlert(t('settings.companyBrandSaved'));
   } catch (e) {
-    await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(t('settings.saveFailedWithDetail', { detail: e instanceof Error ? e.message : String(e) }));
   } finally {
     companyBrandSaving.value = false;
   }
@@ -1575,7 +1575,7 @@ async function onAvatarFileChange(ev: Event) {
   input.value = '';
   if (!file || !isLoggedIn.value) return;
   if (file.size > 4 * 1024 * 1024) {
-    await appAlert('头像图片不能超过 4MB');
+    await appAlert(t('settings.avatarTooLarge'));
     return;
   }
   avatarUploading.value = true;
@@ -1586,9 +1586,9 @@ async function onAvatarFileChange(ev: Event) {
       localUser.value = { ...localUser.value, avatar_url: url || '/api/auth/avatar' };
     }
     avatarCacheBust.value = Date.now();
-    await appAlert('头像已更新');
+    await appAlert(t('settings.avatarUpdated'));
   } catch (e) {
-    await appAlert(`头像上传失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(t('settings.avatarUploadFailed', { detail: e instanceof Error ? e.message : String(e) }));
   } finally {
     avatarUploading.value = false;
   }
@@ -1607,9 +1607,9 @@ async function saveProfile() {
       localUser.value = { ...localUser.value, ...updated };
       syncProfileDraftsFromUser(localUser.value);
     }
-    await appAlert('个人资料已保存');
+    await appAlert(t('settings.profileSaved'));
   } catch (e) {
-    await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(t('settings.saveFailedWithDetail', { detail: e instanceof Error ? e.message : String(e) }));
   } finally {
     profileSaving.value = false;
   }
@@ -1621,7 +1621,7 @@ const loginRoute = computed(() => ({
 }));
 
 async function onLogout() {
-  if (!(await appConfirm('确定退出本机账号？', { danger: true }))) return;
+  if (!(await appConfirm(t('settings.logoutConfirm'), { danger: true }))) return;
   logoutLoading.value = true;
   try {
     await authApi.logout();
@@ -1631,7 +1631,7 @@ async function onLogout() {
     await router.replace({ name: 'login', query: { redirect: '/' } });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await appAlert(`退出失败：${msg}`);
+    await appAlert(t('settings.logoutFailed', { detail: msg }));
   } finally {
     logoutLoading.value = false;
   }
@@ -1724,7 +1724,7 @@ const modRoutesStatusText = computed(() => {
     mods.value.length > 0 &&
     modRoutes.value.length === 0
   ) {
-    return 'Mod 路由未加载，请重试或刷新。';
+    return t('settings.modRoutesNotLoaded');
   }
   return '';
 });
@@ -1733,17 +1733,20 @@ const showModRoutesRetry = computed(() => Boolean(modRoutesStatusText.value));
 
 const modSettingsFoldMeta = computed(() => {
   const host = hostBridgeMods.value.length
-    ? `核心 ${hostBridgeInstalledCount.value}/${hostBridgeExpectedCount.value}`
+    ? t('settings.modFoldCore', {
+        installed: hostBridgeInstalledCount.value,
+        expected: hostBridgeExpectedCount.value,
+      })
     : '';
-  const ext = `${selectableExtensionMods.value.length} 个行业包`;
+  const ext = t('settings.modFoldIndustry', { count: selectableExtensionMods.value.length });
   const wf = workflowEmployeeMods.value.length
-    ? `${workflowEmployeeMods.value.length} 个工作流`
+    ? t('settings.modFoldWorkflow', { count: workflowEmployeeMods.value.length })
     : '';
-  return [host, ext, wf].filter(Boolean).join(' · ') || '管理扩展';
+  return [host, ext, wf].filter(Boolean).join(' · ') || t('settings.manageExtensions');
 });
 
 const basicSettingsSummary = computed(() => {
-  const mode = selectedDeploymentMode.value?.label || (aiMode.value === 'offline' ? t('settings.offline') : t('settings.aiModeOnline'));
+  const mode = selectedDisplayDeploymentMode.value?.label || (aiMode.value === 'offline' ? t('settings.offline') : t('settings.aiModeOnline'));
   return `${normalizedAssistantName.value} · ${mode}`;
 });
 
@@ -1754,9 +1757,9 @@ async function retryModRoutesLoad() {
     if (loadError.value) {
       await appAlert(loadError.value);
     } else if (mods.value.length > 0 && modRoutes.value.length === 0) {
-      await appAlert('仍未获取到路由表，请确认后端已完全启动或查看控制台 / 后端日志。');
+      await appAlert(t('settings.stillNoRoutes'));
     } else {
-      await appAlert('Mod 与路由已重新加载。');
+      await appAlert(t('settings.modsReloaded'));
     }
   } finally {
     modRoutesRetrying.value = false;
@@ -1781,27 +1784,27 @@ async function onUninstallMod(modId: string) {
   const mid = String(modId || '').trim();
   if (!mid) return;
   if (isProtectedClientModId(mid)) {
-    await appAlert('该扩展包为受保护的交付 Mod，不能从本机卸载。');
+    await appAlert(t('settings.protectedMod'));
     return;
   }
   const meta = mods.value.find((m) => String(m.id || '').trim() === mid) || null;
   const label = (meta && String(meta.name || '').trim()) || mid;
-  let question = `确定从本机卸载「${label}」（${mid}）吗？\n将删除磁盘上的包目录并解除加载，不可撤销。`;
+  let question = t('settings.uninstallConfirm', { label, id: mid });
   if (meta && meta.primary) {
-    question += '\n\n该包在 manifest 中标记为主扩展（primary），请确认宿主与其它 Mod 不再依赖此 id。';
+    question += t('settings.uninstallPrimaryHint');
   }
   if (activeModId.value === mid) {
-    question += '\n\n这是当前启用的扩展包，卸载后页面将刷新。';
+    question += t('settings.uninstallActiveHint');
   }
   if (!(await appConfirm(question, { danger: true }))) return;
   uninstallingModId.value = mid;
   try {
     const data = await api.delete<ApiMessageResult>(`/api/mods/${encodeURIComponent(mid)}`);
     if (!data || !data.success) {
-      await appAlert(`卸载失败：${(data && (data.message || data.error)) || '未知错误'}`);
+      await appAlert(t('settings.uninstallFailed', { detail: (data && (data.message || data.error)) || t('settings.unknownError') }));
       return;
     }
-    await appAlert(typeof data.message === 'string' ? data.message : `已卸载 ${mid}`);
+    await appAlert(typeof data.message === 'string' ? data.message : t('settings.uninstalled', { id: mid }));
     window.location.reload();
   } catch (err) {
     const msg =
@@ -1810,7 +1813,7 @@ async function onUninstallMod(modId: string) {
         : err instanceof Error
           ? err.message
           : String(err);
-    await appAlert(`卸载请求失败：${msg}`);
+    await appAlert(t('settings.uninstallRequestFailed', { detail: msg }));
   } finally {
     uninstallingModId.value = '';
   }
@@ -1854,7 +1857,7 @@ const selectedDeploymentMode = computed(() => (
 ));
 
 const deploymentModeBadge = computed(() => {
-  const mode = selectedDeploymentMode.value;
+  const mode = selectedDisplayDeploymentMode.value;
   return mode ? `${mode.badge} · ${mode.summary}` : '';
 });
 
@@ -1862,16 +1865,34 @@ const performanceModeSelected = computed(() => deploymentMode.value === 'perform
 
 const deploymentTransitionText = computed(() => (
   performanceModeSelected.value
-    ? '正在写入性能模式配置，生成 SQLite 到 PostgreSQL 同步计划…'
-    : '正在写入部署模式配置…'
+    ? t('settings.deployTransitionPerf')
+    : t('settings.deployTransitionDefault')
 ));
+
+function localizeDeploymentMode(mode: DeploymentMode): DeploymentMode {
+  const base = `settings.deploymentModes.${mode.id}`;
+  if (!te(`${base}.label`)) return mode;
+  return {
+    ...mode,
+    label: String(t(`${base}.label`)),
+    badge: String(t(`${base}.badge`)),
+    summary: String(t(`${base}.summary`)),
+  };
+}
+
+const displayDeploymentModes = computed(() => deploymentModes.value.map(localizeDeploymentMode));
+
+const selectedDisplayDeploymentMode = computed(() => {
+  const selected = selectedDeploymentMode.value;
+  return selected ? localizeDeploymentMode(selected) : selected;
+});
 
 function storageLabel(mode: string): string {
   return mode === 'local_sqlite'
-    ? '本地数据库（SQLite）'
+    ? t('settings.storageLocalSqlite')
     : mode === 'remote_postgresql'
-      ? '远程 PostgreSQL'
-      : '本地数据库';
+      ? t('settings.storageRemotePg')
+      : t('settings.storageLocal');
 }
 
 function onDeploymentModeChange() {
@@ -1880,7 +1901,7 @@ function onDeploymentModeChange() {
     aiMode.value = selected.aiMode;
   }
   deploymentStatusMessage.value = performanceModeSelected.value
-    ? '性能模式需要 PostgreSQL，并会在保存后生成 SQLite 到 PG 的同步计划。'
+    ? t('settings.performanceNeedsPg')
     : '';
 }
 
@@ -1961,24 +1982,33 @@ const currentIndustryLabel = computed(() => {
   const fromMod = String(activeModIndustry.value?.name || '').trim();
   if (fromMod) return fromMod;
   const id = String(currentIndustry.value || DEFAULT_INDUSTRY_ID).trim() || DEFAULT_INDUSTRY_ID;
-  return String(getIndustryPreset(id).name || id || '通用').trim();
+  return String(getIndustryPreset(id).name || id || t('settings.genericIndustry')).trim();
 });
 
 const systemDisplayName = computed(() => {
   const brand = deliveryBrandName.value;
-  if (brand) return `${brand} 交付工作台`;
-  return 'XCAGI 通用宿主';
+  if (brand) return t('settings.deliveryWorkbench', { brand });
+  return t('settings.genericHost');
 });
 
 const aboutDisplayLine = computed(() => {
   const brand = deliveryBrandName.value;
   const industry = currentIndustryLabel.value;
   if (brand) {
-    const industryPart = industry ? `${industry}基础线` : '账号定制基础线';
-    return `XCAGI 通用宿主 · ${brand} 交付 · ${industryPart}`;
+    const industryPart = industry
+      ? t('settings.aboutIndustryLine', { industry })
+      : t('settings.aboutCustomLine');
+    return t('settings.aboutWithBrand', { brand, industryPart });
   }
-  return 'XCAGI 通用宿主 · 能力由 Mod 提供';
+  return t('settings.aboutModCapability');
 });
+
+const sidebarThemeOptions = computed(() =>
+  SIDEBAR_THEME_OPTIONS.map((theme) => ({
+    ...theme,
+    label: t(`settings.sidebarThemes.${theme.value}`),
+  })),
+);
 
 const selectedSidebarAccent = computed(() => {
   const selected = SIDEBAR_THEME_OPTIONS.find((item) => item.value === sidebarThemePreset.value);
@@ -2034,6 +2064,8 @@ const intentPackageEntries = computed(() => {
   return INTENT_PACKAGE_ORDER.filter((key) => pkgs[key]).map((key) => ({
     key,
     ...pkgs[key],
+    name: t(`settings.intentPackages.${key}.name`),
+    description: t(`settings.intentPackages.${key}.description`),
     keywords: Array.isArray(pkgs[key].keywords)
       ? pkgs[key].keywords.filter((kw) => String(kw || '').trim()).slice(0, 12)
       : [],
@@ -2174,7 +2206,7 @@ async function saveSettings() {
   loading.value = true;
   try {
     if (desktopDatabaseVisible.value && performanceModeSelected.value && !postgresUrlDraft.value.trim() && !postgresConfigured.value) {
-      await appAlert('切换性能模式前请填写 PostgreSQL 连接地址。');
+      await appAlert(t('settings.performancePgRequired'));
       return;
     }
     const deploymentResult = await saveDeploymentSettings();
@@ -2191,7 +2223,7 @@ async function saveSettings() {
       })
     ]);
     const failed = saveResults.find(item => !item?.success);
-    if (failed) throw new Error(failed?.message || '保存失败');
+    if (failed) throw new Error(failed?.message || t('settings.saveFailed'));
     assistantName.value = normalizedAssistantName.value;
     window.localStorage.setItem(ASSISTANT_NAME_KEY, normalizedAssistantName.value);
     window.dispatchEvent(new CustomEvent('assistant-name-updated', {
@@ -2199,11 +2231,11 @@ async function saveSettings() {
         name: normalizedAssistantName.value
       }
     }));
-    const restartHint = deploymentResult?.restartRequired ? '，部署模式需重启后完全生效' : '';
-    await appAlert(`设置已保存${restartHint}`);
+    const restartHint = deploymentResult?.restartRequired ? t('settings.settingsSavedRestartHint') : '';
+    await appAlert(t('settings.settingsSaved', { hint: restartHint }));
   } catch (e: unknown) {
     console.error('保存设置失败:', e);
-    await appAlert(`保存失败: ${errorMessage(e)}`);
+    await appAlert(t('settings.saveFailedWithDetail', { detail: errorMessage(e) }));
   } finally {
     loading.value = false;
   }
@@ -2222,7 +2254,7 @@ async function saveDeploymentSettings(): Promise<DesktopDeploymentUpdateResponse
     if (pgUrl) payload.postgresUrl = pgUrl;
     const result = await api.put<DesktopDeploymentUpdateResponse>('/api/desktop/deployment', payload);
     const data = (result?.data ?? result) as DesktopDeploymentUpdateResponse;
-    if (!data?.success) throw new Error('部署模式保存失败');
+    if (!data?.success) throw new Error(t('settings.deploymentSaveFailed'));
     const db = data.database || {};
     databaseStorageLabel.value = storageLabel(String(db.storageMode || ''));
     currentDbPath.value = String(db.sqlitePath || db.databaseUrlRedacted || currentDbPath.value || '');
@@ -2230,8 +2262,8 @@ async function saveDeploymentSettings(): Promise<DesktopDeploymentUpdateResponse
     deploymentRestartRequired.value = Boolean(data.restartRequired);
     deploymentSyncCommand.value = String(data.syncPlan?.syncCommand || '');
     deploymentStatusMessage.value = performanceModeSelected.value
-      ? '性能模式配置已写入；SQLite→PG 同步计划已生成，重启后完全生效。'
-      : '部署模式配置已写入。';
+      ? t('settings.deploymentSavedPerf')
+      : t('settings.deploymentSaved');
     return data;
   } finally {
     deploymentSaving.value = false;
@@ -2254,17 +2286,17 @@ async function loadDistillationVersions() {
       distillation_samples?: number
       sample_count_error?: string
     }>('/api/distillation/versions');
-    if (!data?.success) throw new Error(data?.message || '加载失败');
+    if (!data?.success) throw new Error(data?.message || t('settings.loadFailed'));
     versions.value = Array.isArray(data.versions) ? data.versions : [];
     sampleCount.value = Number(data.distillation_samples || 0);
     if (data?.sample_count_error) {
-      sampleCountWarning.value = `样本数读取异常：${data.sample_count_error}`;
+      sampleCountWarning.value = t('settings.sampleCountError', { detail: data.sample_count_error });
     }
   } catch (e: unknown) {
     console.error('加载蒸馏版本失败:', e);
     versions.value = [];
     sampleCount.value = 0;
-    versionsError.value = `蒸馏信息加载失败：${errorMessage(e, '网络或服务异常')}`;
+    versionsError.value = t('settings.versionsLoadFailed', { detail: errorMessage(e, t('settings.networkOrServiceError')) });
   } finally {
     loadingVersions.value = false;
   }
