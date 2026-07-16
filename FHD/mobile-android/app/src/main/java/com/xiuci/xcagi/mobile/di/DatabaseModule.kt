@@ -24,6 +24,7 @@ object DatabaseModule {
                 XcagiDatabase.MIGRATION_6_7,
                 XcagiDatabase.MIGRATION_7_8,
                 XcagiDatabase.MIGRATION_8_9,
+                XcagiDatabase.MIGRATION_9_10,
             )
             .build()
 }

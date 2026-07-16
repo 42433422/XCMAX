@@ -178,6 +178,47 @@ class TestDesktopStatus:
         assert data["dbRecovery"]["action"] == "corrupt_no_backup"
 
 
+class TestMobilePairingStatus:
+    """``GET /api/desktop/mobile-pairing-status`` — 桌面设置页「移动端连接」绑定状态。"""
+
+    def test_requires_login(self, anon_client: TestClient) -> None:
+        r = anon_client.get("/api/desktop/mobile-pairing-status")
+        assert r.status_code == 401
+
+    def test_not_paired_when_no_relay_cached(self, client: TestClient) -> None:
+        with patch(
+            "app.application.facades.mobile_relay_facade.cached_desktop_relay_payload",
+            return_value=None,
+        ):
+            r = client.get("/api/desktop/mobile-pairing-status")
+        assert r.status_code == 200
+        data = r.json()
+        assert data == {"paired": False, "mobileUsername": "", "lastRelaySyncAt": 0}
+
+    def test_paired_with_mobile_username(self, client: TestClient) -> None:
+        with patch(
+            "app.application.facades.mobile_relay_facade.cached_desktop_relay_payload",
+            return_value={
+                "paired": True,
+                "mobile_username": "李雷",
+                "last_relay_sync_at": 1_700_000_000,
+            },
+        ):
+            r = client.get("/api/desktop/mobile-pairing-status")
+        assert r.status_code == 200
+        data = r.json()
+        assert data == {"paired": True, "mobileUsername": "李雷", "lastRelaySyncAt": 1_700_000_000}
+
+    def test_recoverable_error_falls_back_to_not_paired(self, client: TestClient) -> None:
+        with patch(
+            "app.application.facades.mobile_relay_facade.cached_desktop_relay_payload",
+            side_effect=OSError("disk unavailable"),
+        ):
+            r = client.get("/api/desktop/mobile-pairing-status")
+        assert r.status_code == 200
+        assert r.json() == {"paired": False, "mobileUsername": "", "lastRelaySyncAt": 0}
+
+
 class TestDownloadModel:
     def test_support_bundle_requires_login(self, anon_client: TestClient) -> None:
         with patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True):
