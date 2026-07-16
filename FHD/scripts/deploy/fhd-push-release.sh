@@ -12,6 +12,7 @@
 #   FHD_PUSH_REMOTE_DIR          默认 /var/www/update/releases/<channel>/server
 #   FHD_PUSH_SSH_KEY             SSH 私钥路径（默认 ~/.ssh/id_rsa 等）
 #   FHD_RELEASE_OUT_DIR          与 pack 脚本一致
+#   FHD_PUSH_IMAGE_TAR           auto（仅 image 模式）| 1（强制）| 0（跳过）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -139,10 +140,30 @@ atomic_upload "$TARBALL" "${REMOTE_DIR}/${ARTIFACT}"
 atomic_upload "$MANIFEST" "${REMOTE_DIR}/fhd-manifest.json"
 
 IMAGE_TAR="$OUT_DIR/fhd-api-image.tar.gz"
-if [[ -f "$IMAGE_TAR" ]]; then
+PUSH_IMAGE_TAR="${FHD_PUSH_IMAGE_TAR:-auto}"
+case "$PUSH_IMAGE_TAR" in
+  auto)
+    if [[ "${DEPLOY_MODE:-tarball}" == "image" ]]; then
+      PUSH_IMAGE_TAR=1
+    else
+      PUSH_IMAGE_TAR=0
+    fi
+    ;;
+  0 | 1) ;;
+  *)
+    echo "[err] FHD_PUSH_IMAGE_TAR 须为 auto、0 或 1，当前: $PUSH_IMAGE_TAR" >&2
+    deploy_emit push failed "invalid_push_image_tar"
+    exit 1
+    ;;
+esac
+
+if [[ -f "$IMAGE_TAR" && "$PUSH_IMAGE_TAR" == "1" ]]; then
   deploy_emit push started "artifact=fhd-api-image.tar.gz"
   atomic_upload "$IMAGE_TAR" "${REMOTE_DIR}/fhd-api-image.tar.gz"
   echo "[ok] image_tar=fhd-api-image.tar.gz"
+elif [[ -f "$IMAGE_TAR" ]]; then
+  deploy_emit push skipped "artifact=fhd-api-image.tar.gz reason=optional"
+  echo "[notice] 跳过可选镜像归档；设置 FHD_PUSH_IMAGE_TAR=1 可显式上传"
 fi
 
 deploy_emit push ok "channel=$CHANNEL version=$VERSION git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
