@@ -623,10 +623,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const statusCard = wrapper.find('.status-card')
     expect(statusCard.classes()).toContain('warn')
-    expect(statusCard.text()).toContain('缺')
+    expect(statusCard.text()).toContain('还差')
   })
 
-  it('host-pack 步骤：!baselineOk 且 missingAccountCustomCount=0 但 missingIndustryPackageCount>0', async () => {
+  it('host-pack 步骤：!baselineOk 且 missingIndustryPackageCount>0 时明细里提示行业包', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({
@@ -635,26 +635,52 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
         missing_account_custom_mod_ids: [],
         industry_mod_ids: ['ind-1'],
         missing_industry_mod_ids: ['ind-1'],
+        groups: [
+          {
+            id: 'core',
+            title: '核心',
+            hint: '核心提示',
+            items: [{ mod_id: 'mod-a', label: '模块A', installed: false, required: true }],
+          },
+        ],
       }),
     })
     await flushPromises()
     await flushPromises()
-    const statusCard = wrapper.find('.status-card')
-    expect(statusCard.text()).toContain('行业包')
+    expect(wrapper.find('.status-card').text()).toContain('还差')
+    const details = wrapper.find('.host-pack-details')
+    expect(details.exists()).toBe(true)
+    // 展开明细后才看到行业包提示
+    details.element.setAttribute('open', '')
+    await flushPromises()
+    expect(wrapper.text()).toContain('行业包')
   })
 
-  it('host-pack 步骤：baselinePlan.summary 有值时显示 summary', async () => {
+  it('host-pack 步骤：baselinePlan.summary 折叠在明细里', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ summary: '这是摘要' }),
+      baseline: createBaselinePlan({
+        summary: '这是摘要',
+        groups: [
+          {
+            id: 'core',
+            title: '核心',
+            hint: '',
+            items: [{ mod_id: 'mod-1', label: '模块1', installed: true, required: true }],
+          },
+        ],
+      }),
     })
     await flushPromises()
     await flushPromises()
-    const lead = wrapper.find('.lead.muted')
-    expect(lead.text()).toContain('这是摘要')
+    const details = wrapper.find('.host-pack-details')
+    expect(details.exists()).toBe(true)
+    details.element.setAttribute('open', '')
+    await flushPromises()
+    expect(wrapper.find('.lead.muted').text()).toContain('这是摘要')
   })
 
-  it('host-pack 步骤：sidebarBaselineGroups 渲染侧栏宿主桥接分组', async () => {
+  it('host-pack 步骤：明细折叠默认隐藏清单与 mod_id', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({
@@ -683,20 +709,21 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
+    expect(wrapper.text()).toContain('一键装齐')
+    expect(wrapper.text()).toContain('查看明细')
+    expect(wrapper.find('.baseline-list .mono').exists()).toBe(false)
+    const details = wrapper.find('.host-pack-details')
+    details.element.setAttribute('open', '')
+    await flushPromises()
     const groups = wrapper.findAll('.baseline-groups')
     expect(groups.length).toBeGreaterThanOrEqual(1)
-    // 侧栏分组标题
-    expect(wrapper.text()).toContain('侧栏宿主桥接')
-    // 行业包分组标题
-    expect(wrapper.text()).toContain('行业包与账号定制')
-    // 已安装项 ok class
+    expect(wrapper.text()).toContain('核心')
+    expect(wrapper.text()).toContain('行业包')
     expect(wrapper.find('.baseline-list li.ok').exists()).toBe(true)
-    // 必需未安装 warn class
     expect(wrapper.find('.baseline-list li.warn').exists()).toBe(true)
-    // 可选未安装 optional class
     expect(wrapper.find('.baseline-list li.optional').exists()).toBe(true)
-    // mod_id 显示（show_mod_id !== false）
-    expect(wrapper.find('.baseline-list .mono').exists()).toBe(true)
+    // 简化后不再展示 mod_id
+    expect(wrapper.find('.baseline-list .mono').exists()).toBe(false)
   })
 
   it('host-pack 步骤：sidebarBaselineGroups 为空但 baselineGroups 有值时走 fallback 分支', async () => {
@@ -749,14 +776,26 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       baseline: createBaselinePlan({
         baseline_ready: false,
         account_custom_mod_ids: [],
+        groups: [
+          {
+            id: 'core',
+            title: '核心',
+            hint: '',
+            items: [{ mod_id: 'mod-1', label: '模块1', installed: false, required: true }],
+          },
+        ],
       }),
     })
     await flushPromises()
     await flushPromises()
+    const details = wrapper.find('.host-pack-details')
+    expect(details.exists()).toBe(true)
+    details.element.setAttribute('open', '')
+    await flushPromises()
     expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示"下一步：写入演示数据"按钮', async () => {
+  it('host-pack 步骤：baselineOk 时显示「下一步」按钮', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -764,19 +803,32 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     const buttons = wrapper.findAll('.actions .btn.primary')
-    const nextBtn = buttons.find((b) => b.text().includes('下一步：写入演示数据'))
+    const nextBtn = buttons.find((b) => b.text().trim() === '下一步')
     expect(nextBtn).toBeTruthy()
   })
 
   it('host-pack 步骤：点击"重新检测"按钮触发 refreshStatus', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
+      baseline: createBaselinePlan({
+        baseline_ready: true,
+        groups: [
+          {
+            id: 'core',
+            title: '核心',
+            hint: '',
+            items: [{ mod_id: 'mod-1', label: '模块1', installed: true, required: true }],
+          },
+        ],
+      }),
     })
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline.mockClear()
-    const refreshBtn = wrapper.find('.btn.ghost')
+    const details = wrapper.find('.host-pack-details')
+    details.element.setAttribute('open', '')
+    await flushPromises()
+    const refreshBtn = wrapper.find('.host-pack-details .btn.ghost')
     expect(refreshBtn.text()).toContain('重新检测')
     await refreshBtn.trigger('click')
     await flushPromises()
@@ -1581,7 +1633,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.flowState.completeFlowAndGoChat.mockClear()
 
     const skipChatBtn = wrapper.find('.actions .btn.link')
-    expect(skipChatBtn.text()).toContain('先进入对话，稍后再补')
+    expect(skipChatBtn.text()).toContain('先进入对话')
     await skipChatBtn.trigger('click')
     await flushPromises()
 

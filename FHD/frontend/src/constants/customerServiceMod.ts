@@ -1,4 +1,4 @@
-/** K（客服）：外部/内部客服页桥接 Mod */
+/** 客服 API 能力桥接；页面入口已统一到「信息」。 */
 
 export const CUSTOMER_SERVICE_BRIDGE_MOD_ID = 'xcagi-customer-service-bridge'
 

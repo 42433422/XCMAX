@@ -5,9 +5,9 @@ const HOST_TRACKS: TutorialTrackMeta[] = [
   {
     id: 'basic',
     title: '宿主入门',
-    summary: '认识XC → 行业定型 → 补基础线（三步引导）',
+    summary: '认识XC → 行业定型 → 准备菜单（三步引导）',
     description:
-      '打开首次设置向导：默认只有智能对话与智能生态，先定行业，再按需补基础 Mod。',
+      '打开首次设置向导：默认只有智能对话与智能生态，先定行业，再一键装齐侧栏菜单。',
     kind: 'curated',
     recommended: true,
   },

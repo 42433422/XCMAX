@@ -34,6 +34,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
+from app.application.feature_flag_app import FeatureFlagName, is_enabled
 from app.db.models import User
 from app.errors import ErrorCode
 from app.exceptions import (
@@ -43,7 +44,6 @@ from app.exceptions import (
     ValidationError,
 )
 from app.infrastructure.auth.dependencies import get_current_user
-from app.services.feature_flag import FeatureFlagName, is_enabled
 from app.utils.audit_logger import audit_log as log_audit_event
 
 logger = logging.getLogger(__name__)
@@ -220,6 +220,7 @@ def _do_erase_task(
     "/export",
     response_model=GdprExportResponse,
     summary="导出当前用户的个人数据（GDPR Art. 15/20）",
+    description="创建个人数据导出任务，并返回可用于查询进度的任务标识。",
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def gdpr_export(
@@ -273,6 +274,7 @@ ERASE_CONFIRMATION_PHRASE = "ERASE MY DATA"
     "/erase",
     response_model=GdprEraseResponse,
     summary="擦除当前用户的个人数据（GDPR Art. 17）",
+    description="校验不可逆操作确认语后，创建个人数据匿名化或删除任务。",
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def gdpr_erase(
@@ -348,6 +350,7 @@ ALLOWED_RECTIFY_FIELDS = {
     "/rectify",
     response_model=GdprRectifyResponse,
     summary="更正当前用户的个人数据（GDPR Art. 16）",
+    description="更正允许修改的个人资料字段，并记录对应的审计事件。",
     status_code=status.HTTP_200_OK,
 )
 async def gdpr_rectify(
@@ -412,6 +415,7 @@ class GdprTaskStatusResponse(BaseModel):
     "/status/{task_id}",
     response_model=GdprTaskStatusResponse,
     summary="查询 GDPR 异步任务状态",
+    description="查询当前用户发起的 GDPR 导出或擦除任务的处理进度。",
 )
 async def gdpr_status(
     task_id: str,

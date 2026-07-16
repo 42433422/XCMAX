@@ -725,6 +725,41 @@ describe('mods store – coverage 补齐', () => {
       expect(modIds).toContain('attendance-industry');
     });
 
+    it('getModMenu：active 为行业包时仍并入同线账号定制菜单（不互斥）', () => {
+      const store = useModsStore();
+      store.mods = [
+        {
+          id: 'attendance-industry',
+          name: '考勤行业包',
+          version: '1.0',
+          author: '',
+          description: '',
+          primary: true,
+          menu: [],
+        },
+        {
+          id: 'taiyangniao-pro',
+          name: '太阳鸟 Pro',
+          version: '1.0',
+          author: '',
+          description: '',
+          menu: [
+            {
+              id: 'taiyangniao-pro-home',
+              label: '考勤表转换',
+              icon: 'fa-file-excel-o',
+              path: '/taiyangniao-pro',
+            },
+          ],
+        },
+      ] as never[];
+      store.setActiveModId('attendance-industry');
+
+      const menu = store.getModMenu();
+      expect(menu.map((m) => m.id)).toContain('taiyangniao-pro-home');
+      expect(menu.find((m) => m.id === 'taiyangniao-pro-home')?.modId).toBe('taiyangniao-pro');
+    });
+
     it('getModMenu 在 fromUi 为空时回退到 fromFull 并包含 aux pack', () => {
       // 使用 vi.doMock 让 modsForUi 返回空数组（通过 isAdminConsoleSpa）
       mockIsAdminConsoleSpa.mockReturnValue(true);
@@ -1455,13 +1490,21 @@ describe('mods store – coverage 补齐', () => {
       expect(store.modsForUi).toEqual([]);
     });
 
-    it('active mod 在列表中时仅返回该 mod', () => {
+    it('active 为账号定制时返回该 mod（同线行业包不反向叠入）', () => {
       const store = useModsStore();
       store.mods = sampleMods as never[];
       store.setActiveModId('taiyangniao-pro');
       const ui = store.modsForUi;
-      expect(ui).toHaveLength(1);
-      expect(ui[0].id).toBe('taiyangniao-pro');
+      expect(ui.map((m) => m.id)).toEqual(['taiyangniao-pro']);
+    });
+
+    it('active 为行业包时叠入同线账号定制', () => {
+      const store = useModsStore();
+      store.mods = sampleMods as never[];
+      store.setActiveModId('attendance-industry');
+      const ids = store.modsForUi.map((m) => m.id);
+      expect(ids[0]).toBe('attendance-industry');
+      expect(ids).toContain('taiyangniao-pro');
     });
   });
 

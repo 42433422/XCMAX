@@ -208,7 +208,7 @@
       <div v-else-if="activeTab === 'tutorial'" class="assistant-body assistant-body-tutorial">
         <div class="tutorial-track-pick">
           <div class="tutorial-track-heading">选择教程</div>
-          <p class="tutorial-track-lead">默认路线「宿主入门」：认识XC → 行业定型 → 按需补基础线。</p>
+          <p class="tutorial-track-lead">默认路线「宿主入门」：认识XC → 行业定型 → 准备菜单。</p>
           <ul class="tutorial-track-list">
             <li
               v-for="(track, index) in tutorialTracks"

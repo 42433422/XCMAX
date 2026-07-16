@@ -5,20 +5,19 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/excel/data", tags=["excel-data"])
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMP_EXCEL_DIR = str(_REPO_ROOT / "temp_excel")
+TEMP_EXCEL_DIR = os.path.join(get_app_data_dir(), "temp_excel")
 os.makedirs(TEMP_EXCEL_DIR, exist_ok=True)
 
 

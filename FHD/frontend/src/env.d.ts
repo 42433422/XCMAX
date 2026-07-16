@@ -12,6 +12,8 @@ interface Window {
     versions: Record<string, string>;
     getDataDir: () => Promise<string>;
     checkForUpdates: () => Promise<unknown>;
+    getUpdateStatus?: () => Promise<{ type: string; data?: unknown } | null>;
+    downloadUpdate: () => Promise<unknown>;
     installUpdate: () => Promise<void>;
     onUpdateEvent: (callback: (event: unknown) => void) => () => void;
     getPairingQrPayload?: () => Promise<string>;

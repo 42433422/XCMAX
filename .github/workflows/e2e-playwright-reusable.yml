@@ -28,6 +28,20 @@ jobs:
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies for live smoke
+        working-directory: FHD
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install \
+            -r deploy/requirements-server-api.txt \
+            -r deploy/requirements-dev.txt
+
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
@@ -47,10 +61,24 @@ jobs:
           done
           npm run test:e2e:p0 -- --reporter=line
 
-      - name: Run skeleton specs (optional full stack)
-        if: inputs.run_skeleton
+      # Mandatory real API + browser path. Mock contracts and deployable runtime
+      # remain separate gates so one cannot make the other look green.
+      - name: Run full-stack login + ERP P0 (mandatory)
         env:
           E2E_FULL_STACK: "1"
-          E2E_USER: admin
-          E2E_PASSWORD: admin123
+          E2E_USER: xcagi-enterprise-demo
+          E2E_PASSWORD: Demo@2026
+          E2E_ACCOUNT_KIND: enterprise
+          E2E_PYTHON: ${{ github.workspace }}/FHD/.venv/bin/python
         run: bash ../scripts/dev/e2e-full.sh
+
+      - name: Upload full-stack Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-full-stack-playwright-evidence
+          path: |
+            FHD/frontend/playwright-report/
+            FHD/docs/evidence/e2e/*.png
+          if-no-files-found: warn
+          retention-days: 14

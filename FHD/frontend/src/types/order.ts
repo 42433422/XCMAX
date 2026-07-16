@@ -10,7 +10,15 @@ export interface OrderItem {
 export interface Order {
   id: number;
   order_number: string;
+  purchase_unit?: string;
   purchase_unit_name: string;
+  product_name?: string;
+  model_number?: string;
+  quantity_kg?: number;
+  quantity_tins?: number;
+  tin_spec?: number;
+  unit_price?: number;
+  amount?: number;
   contact_person?: string;
   contact_phone?: string;
   contact_address?: string;

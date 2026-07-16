@@ -77,6 +77,18 @@ describe('useOrdersStore', () => {
     expect(store.orders.length).toBe(2)
   })
 
+  it('fetchOrders normalizes the ERP facade nested response', async () => {
+    ;(ordersApi.getOrders as any).mockResolvedValue({
+      success: true,
+      data: {
+        success: true,
+        data: [{ id: 9, purchase_unit: '门面客户' }],
+      },
+    })
+    await store.fetchOrders()
+    expect(store.orders).toEqual([{ id: 9, purchase_unit: '门面客户' }])
+  })
+
   it('fetchOrders normalizes data with .orders property', async () => {
     ;(ordersApi.getOrders as any).mockResolvedValue({
       orders: [{ id: 3 }],

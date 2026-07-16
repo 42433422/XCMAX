@@ -148,7 +148,9 @@ export function useAppProMode(
       }
     }
     isProMode.value = false
-    void exitModProMode()
+    // Startup normalization must not navigate. Calling exitModProMode here
+    // rewrote every non-chat deep link (including /orders and /materials) to
+    // the chat route shortly after the requested page had mounted.
     syncGlobalProMode()
   }
 

@@ -14,9 +14,11 @@ import {
 import { fetchProductSku } from '@/utils/productSku';
 import { useAccountProfileStore } from '@/stores/accountProfile';
 import {
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
   isAdminConsoleSpa,
   resolveAdminConsoleLoginUrl,
 } from '@/utils/adminConsoleUrl';
+import { isDesktopShell } from '@/utils/desktopShell';
 import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
@@ -33,6 +35,8 @@ const accountKind = ref<AccountKind>(isAdminConsoleSpa() ? 'admin' : 'enterprise
 const password = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
+/** 桌面壳：隐藏「管理员登录」入口（管理端仅网页 SSOT） */
+const showAdminEntry = computed(() => !isAdminConsoleSpa() && !isDesktopShell());
 const errorMessage = ref('');
 const altLoginHint = ref('');
 const oidcEnabled = ref(false);
@@ -172,6 +176,10 @@ onMounted(async () => {
     errorMessage.value = String(route.query.oidc_message || t('login.errSsoFailed'));
     return;
   }
+  const gateError = route.query.error;
+  if (typeof gateError === 'string' && gateError.trim()) {
+    errorMessage.value = gateError.trim();
+  }
   await tryAutoLogin();
 });
 
@@ -189,31 +197,49 @@ function stopQrPoll() {
 
 async function completeLoginSuccess(raw: Record<string, unknown>) {
   clearHostPackSkippedSession();
-  await applyMarketTokensAfterFhdLogin(raw);
   accountProfileStore.applyFromLoginPayload(raw);
+  // SSOT：桌面壳禁止管理员会话（派生 account_kind=admin 时拒入）
+  if (isDesktopShell() && accountProfileStore.isAdminAccount) {
+    try {
+      await authApi.logout().catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
+    errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE;
+    return;
+  }
   const loginUser =
     raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
       ? (raw.data as Record<string, unknown>)
       : raw;
   const accountUsername = String(loginUser?.username || username.value || phone.value || '').trim();
-  if (isEnterpriseEdition.value) {
-    try {
-      const { readEntitledModIdsFromAuthPayload, useModsStore } = await import('@/stores/mods');
-      const entitled = readEntitledModIdsFromAuthPayload(raw);
-      await useModsStore().initialize(true, {
-        entitledModIds: entitled,
-        forceFromEntitlements: entitled.length > 0,
-        accountUsername,
-      });
-    } catch (modErr) {
-      console.warn('[Login] mods refresh after auth:', modErr);
-    }
-  }
   await router.replace(
     isAdminConsoleSpa() && (redirectPath.value === '/' || !redirectPath.value)
       ? `/${ADMIN_OPERATOR_HOME_ROUTE}`
       : redirectPath.value,
   );
+
+  // Token handoff and MOD discovery are optional post-login bootstrap work.
+  // They must never hold the login button in "正在登录" or delay the first
+  // usable ERP screen when the market/MOD service is slow or offline.
+  void applyMarketTokensAfterFhdLogin(raw).catch((marketErr) => {
+    console.warn('[Login] market token handoff after auth:', marketErr);
+  });
+  if (isEnterpriseEdition.value) {
+    void (async () => {
+      try {
+        const { readEntitledModIdsFromAuthPayload, useModsStore } = await import('@/stores/mods');
+        const entitled = readEntitledModIdsFromAuthPayload(raw);
+        await useModsStore().initialize(true, {
+          entitledModIds: entitled,
+          forceFromEntitlements: entitled.length > 0,
+          accountUsername,
+        });
+      } catch (modErr) {
+        console.warn('[Login] mods refresh after auth:', modErr);
+      }
+    })();
+  }
 }
 
 function startOidcLogin() {
@@ -335,7 +361,16 @@ function selectEnterpriseLogin() {
 }
 
 function selectAdminLogin() {
+  // 桌面端禁止进管理端（防御：入口已隐藏，仍拦截直调）
+  if (isDesktopShell()) {
+    errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE;
+    return;
+  }
   const url = resolveAdminConsoleLoginUrl(redirectPath.value);
+  if (!url) {
+    errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE;
+    return;
+  }
   window.location.href = url;
 }
 
@@ -590,7 +625,7 @@ async function submitLogin() {
           <router-link :to="loginHelpRoute">{{ $t('login.help') }}</router-link>
         </footer>
 
-        <div v-if="!isAdminConsoleSpa()" class="login-admin-entry">
+        <div v-if="showAdminEntry" class="login-admin-entry">
           <button
             type="button"
             class="login-admin-link"

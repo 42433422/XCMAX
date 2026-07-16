@@ -1994,8 +1994,9 @@ class TestNotifyUser:
 
         with (
             patch("app.db.session.get_db") as mock_get_db,
-            patch("app.db.models.mobile_device.MobileDeviceToken"),
+            patch("app.services.mobile_push.sa_inspect") as mock_inspect,
         ):
+            mock_inspect.return_value.has_table.return_value = True
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             with (

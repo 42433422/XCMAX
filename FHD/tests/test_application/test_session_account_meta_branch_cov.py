@@ -540,6 +540,7 @@ class TestLoadSessionAccountMeta:
 class TestSessionRowToMetaDict:
     def test_full_fields(self) -> None:
         row = MagicMock()
+        row.user_id = 12
         row.account_kind = "admin"
         row.company_brand = "Co"
         row.market_user_id = 1
@@ -559,6 +560,7 @@ class TestSessionRowToMetaDict:
         assert result["impersonating_market_user_id"] == 8
         assert result["impersonating_username"] == "imp"
         assert result["tenant_id"] == 4
+        assert result["local_user_id"] == 12
 
     def test_none_account_kind_defaults_enterprise(self) -> None:
         row = MagicMock()

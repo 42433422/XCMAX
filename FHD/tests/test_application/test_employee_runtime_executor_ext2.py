@@ -249,9 +249,10 @@ class TestActionVendorConvert:
         src.write_text("hi")
         out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is False
-        assert "boom" in out["error"]
+        assert out["error"] == "转换失败，请查看服务日志"
+        assert "boom" not in out["error"]
 
-    def test_convert_with_explicit_output_path(self, tmp_path):
+    def test_convert_ignores_explicit_output_path(self, tmp_path):
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
         (backend / "convert.py").write_text(
@@ -265,7 +266,8 @@ class TestActionVendorConvert:
             tmp_path, "emp-1", {"file_path": str(src), "output_path": str(out_path)}, None
         )
         assert out["ok"] is True
-        assert str(out_path) in out["output_path"] or out["output_path"] == str(out_path)
+        assert out["output_path"] == str(tmp_path / "outputs" / "data.json")
+        assert out["output_path"] != str(out_path)
 
 
 # ── _action_direct_python_module ─────────────────────────────────────────────

@@ -1,16 +1,26 @@
-import { BrowserWindow, app, dialog, net, session } from 'electron'
+import { BrowserWindow, app, net, session } from 'electron'
 import type { Session } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import {
+  normalizeReleaseMedia,
+  parseReleaseMediaFromYaml,
+  type ReleaseMediaSlide,
+} from './release-media.js'
 
 let updateDownloaded = false
 let remoteBuildSha = ''
+let remoteReleaseNotes = ''
+let remoteReleaseMedia: ReleaseMediaSlide[] = []
 let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
+let downloadInFlight = false
+/** 最近一次可展示给渲染进程的更新事件（刷新页面后可重放）。 */
+let lastUpdateEvent: { type: string; data?: unknown } | null = null
 
 export async function ensureUpdaterNetSession(): Promise<Session> {
   if (updaterNetSession) {
@@ -18,11 +28,12 @@ export async function ensureUpdaterNetSession(): Promise<Session> {
   }
   if (!updaterNetSessionReady) {
     updaterNetSessionReady = (async () => {
-      const updaterSession = session.fromPartition('persist:xcagi-updater', { cache: false })
+      // electron-updater 6.x exposes the exact Session used by its HTTP executor
+      // through a read-only getter. Configure that Session in place; assigning to
+      // `autoUpdater.netSession` crashes packaged apps because the property has no setter.
+      const updaterSession = autoUpdater.netSession
       await updaterSession.setProxy({ mode: 'direct' })
       updaterNetSession = updaterSession
-      const updater = autoUpdater as unknown as { netSession?: Session }
-      updater.netSession = updaterSession
       return updaterSession
     })()
   }
@@ -72,6 +83,11 @@ export function isUpdateDownloaded(): boolean {
   return updateDownloaded
 }
 
+/** 渲染进程挂载时拉取，避免 update-available 发生在订阅前或页面刷新后丢失角标。 */
+export function getUpdateStatus(): { type: string; data?: unknown } | null {
+  return lastUpdateEvent
+}
+
 export function readLocalBuildSha(): string {
   if (!app.isPackaged) {
     return String(process.env.XCAGI_BUILD_SHA || '').trim()
@@ -110,6 +126,10 @@ function installSameVersionRebuildHook(): void {
   }
   const original = updater.isUpdateAvailable?.bind(autoUpdater)
   updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
+    // macOS auto-update must use a ZIP artifact; DMG-only feeds are not installable.
+    if (process.platform === 'darwin' && !updateInfoHasMacZip(updateInfo)) {
+      return false
+    }
     if (original?.(updateInfo)) {
       return true
     }
@@ -121,9 +141,42 @@ function installSameVersionRebuildHook(): void {
   }
 }
 
-export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toVersion: string) => Promise<void>): void {
+function updateInfoHasMacZip(updateInfo: UpdateInfo): boolean {
+  const files = Array.isArray(updateInfo.files) ? updateInfo.files : []
+  if (files.some(file => String(file?.url || '').toLowerCase().endsWith('.zip'))) {
+    return true
+  }
+  const pathHint = String(updateInfo.path || '').toLowerCase()
+  return pathHint.endsWith('.zip')
+}
+
+function enrichUpdateInfo(
+  info: UpdateInfo,
+): UpdateInfo & { buildSha?: string; releaseNotes?: string; releaseMedia?: ReleaseMediaSlide[] } {
+  const notes = String(
+    (info as UpdateInfo & { releaseNotes?: string }).releaseNotes || remoteReleaseNotes || ''
+  ).trim()
+  const fromInfo = normalizeReleaseMedia(
+    (info as UpdateInfo & { releaseMedia?: unknown }).releaseMedia,
+  )
+  const releaseMedia = fromInfo.length ? fromInfo : remoteReleaseMedia
+  return {
+    ...info,
+    buildSha: String(
+      (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
+    ).trim(),
+    releaseNotes: notes,
+    ...(releaseMedia.length ? { releaseMedia } : {}),
+  }
+}
+
+/**
+ * Cursor-style updates: check in background, never auto-download / auto-prompt.
+ * Renderer shows a corner badge; user opens notes modal, then downloads & restarts.
+ */
+export function configureUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = false
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
     void ensureUpdaterNetSession()
   }
@@ -143,55 +196,48 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   }
 
   const send = (type: string, data?: unknown) => {
-    mainWindow.webContents.send('xcagi:update-event', { type, data })
+    if (
+      type === 'update-available' ||
+      type === 'update-downloaded' ||
+      type === 'download-progress'
+    ) {
+      lastUpdateEvent = { type, data }
+    } else if (type === 'update-not-available') {
+      lastUpdateEvent = null
+    } else if (type === 'error' && lastUpdateEvent?.type === 'update-available') {
+      // 保留 available 快照，刷新后仍能显示角标；错误信息一并附上
+      lastUpdateEvent = {
+        type: 'update-available',
+        data: {
+          ...(typeof lastUpdateEvent.data === 'object' && lastUpdateEvent.data
+            ? lastUpdateEvent.data
+            : {}),
+          lastError: data,
+        },
+      }
+    }
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('xcagi:update-event', { type, data })
+    }
   }
 
   autoUpdater.on('checking-for-update', () => send('checking-for-update'))
   autoUpdater.on('update-available', info => {
-    send('update-available', info)
-    void autoUpdater.downloadUpdate().catch(error => {
-      send('error', { message: error.message, phase: 'download' })
-      appendUpdaterEvent('download_failed', { message: error.message })
-      updateDownloaded = false
-    })
+    appendUpdaterEvent('update_available', { version: info.version })
+    send('update-available', enrichUpdateInfo(info))
   })
   autoUpdater.on('update-not-available', info => send('update-not-available', info))
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
-  autoUpdater.on('update-downloaded', async info => {
+  autoUpdater.on('update-downloaded', info => {
     updateDownloaded = true
-    send('update-downloaded', info)
-    const result = await dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      buttons: ['稍后', '立即重启安装'],
-      defaultId: 1,
-      cancelId: 0,
-      title: 'XCAGI 更新已下载',
-      message: `新版本 ${info.version} 已准备好，是否立即重启安装？`
-    })
-    if (result.response === 1) {
-      try {
-        if (beforeInstall) {
-          await beforeInstall(info.version)
-        }
-        appendUpdaterEvent('install_start', { version: info.version })
-        autoUpdater.quitAndInstall(false, true)
-      } catch (error) {
-        appendUpdaterEvent('install_failed', {
-          message: error instanceof Error ? error.message : String(error),
-        })
-        updateDownloaded = true
-        await dialog.showMessageBox(mainWindow, {
-          type: 'error',
-          title: '更新安装失败',
-          message: '更新安装未完成，当前版本仍可继续使用。可导出诊断包后重试或安装上一版本。',
-        })
-      }
-    }
+    downloadInFlight = false
+    appendUpdaterEvent('update_downloaded', { version: info.version })
+    send('update-downloaded', enrichUpdateInfo(info))
   })
   autoUpdater.on('error', error => {
+    downloadInFlight = false
     send('error', { message: error.message, stack: error.stack, phase: 'updater' })
     appendUpdaterEvent('error', { message: error.message, stack: error.stack })
-    updateDownloaded = false
   })
 
   setTimeout(() => {
@@ -204,6 +250,29 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
     }
     void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 6 * 60 * 60 * 1000)
+}
+
+export async function downloadUpdate(): Promise<unknown> {
+  if (updateDownloaded) {
+    return { alreadyDownloaded: true }
+  }
+  if (downloadInFlight) {
+    return { downloading: true }
+  }
+  downloadInFlight = true
+  appendUpdaterEvent('download_start', {})
+  try {
+    return await autoUpdater.downloadUpdate()
+  } catch (error) {
+    downloadInFlight = false
+    updateDownloaded = false
+    const raw = error instanceof Error ? error.message : String(error)
+    const message = /ZIP file not provided/i.test(raw)
+      ? '更新服务器提供的是安装包（DMG），无法在应用内自动更新。请改用官网下载 ZIP/安装包，或等待已修复的更新源生效后再试。'
+      : raw
+    appendUpdaterEvent('download_failed', { message: raw })
+    throw new Error(message)
+  }
 }
 
 export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
@@ -221,6 +290,24 @@ export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
   }
 }
 
+function parseYamlBlock(content: string, field: string): string {
+  const lines = content.split(/\r?\n/)
+  const start = lines.findIndex(line => line.startsWith(`${field}:`))
+  if (start < 0) return ''
+  const head = lines[start].slice(`${field}:`.length).trim()
+  if (head && head !== '|' && head !== '>') {
+    return head.replace(/^["']|["']$/g, '')
+  }
+  const collected: string[] = []
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i]
+    if (!line.startsWith(' ') && !line.startsWith('\t') && line.trim() !== '') break
+    if (line.startsWith('signature:')) break
+    collected.push(line.replace(/^\s{2}/, ''))
+  }
+  return collected.join('\n').trim()
+}
+
 export async function checkForUpdates(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
@@ -233,6 +320,8 @@ export async function checkForUpdates(): Promise<unknown> {
   if (publicKeyPem && updateUrl) {
     const metadataText = await fetchLatestMetadataText()
     remoteBuildSha = parseYamlField(metadataText, 'buildSha')
+    remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
+    remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
     installSameVersionRebuildHook()
   }
   return autoUpdater.checkForUpdates()
@@ -268,12 +357,20 @@ export async function verifyLatestMetadataSignature(): Promise<void> {
 
 export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
   if (!updateDownloaded) {
-    throw new Error('尚未下载更新包，请先检查更新并等待下载完成')
+    throw new Error('尚未下载更新包，请先在更新面板确认下载')
   }
-  if (beforeInstall) {
-    await beforeInstall('manual')
+  try {
+    if (beforeInstall) {
+      await beforeInstall('manual')
+    }
+    appendUpdaterEvent('install_start', {})
+    autoUpdater.quitAndInstall(false, true)
+  } catch (error) {
+    appendUpdaterEvent('install_failed', {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    throw error
   }
-  autoUpdater.quitAndInstall(false, true)
 }
 
 /** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */
@@ -296,4 +393,12 @@ export async function verifyMetadataSignatureText(content: string, publicKeyPem:
 /** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
 export function __resetUpdateDownloadedForTest(): void {
   updateDownloaded = false
+  lastUpdateEvent = null
+  downloadInFlight = false
+  remoteReleaseMedia = []
+  remoteReleaseNotes = ''
+  remoteBuildSha = ''
 }
+
+export { normalizeReleaseMedia, parseReleaseMediaFromYaml } from './release-media.js'
+export type { ReleaseMediaSlide } from './release-media.js'

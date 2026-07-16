@@ -1,0 +1,12 @@
+W-02 录屏索引 — v4 内容复核 FAIL
+
+gate(pixel): unique=26 motion=16/99 → 曾报 PASS
+content review (looked at frames): FAIL
+  - early: desktop + ToDesk weak-password modal
+  - mid: stuck on XCAGI enterprise /login (no UI login completed)
+  - late ~64 identical frames: 运维对话 welcome bubble frozen
+
+files: rec/w02-acceptance.gif (current, not sign-off)
+shots/: stills only
+
+command smoke remains PASS; recording not signable.

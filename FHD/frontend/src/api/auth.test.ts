@@ -31,7 +31,7 @@ describe('authApi', () => {
       username: 'u',
       password: 'p',
       account_kind: 'enterprise',
-    })
+    }, { timeoutMs: 30_000 })
   })
 
   it('loginWithPhoneCode posts phone+code', async () => {
@@ -40,7 +40,7 @@ describe('authApi', () => {
       phone: '139',
       code: '0000',
       account_kind: 'personal',
-    })
+    }, { timeoutMs: 30_000 })
   })
 
   it('covers remaining endpoints', async () => {
@@ -72,6 +72,6 @@ describe('authApi', () => {
   it('logout clears storage and posts', async () => {
     window.localStorage.setItem('xcagi_market_access_token', 'tok')
     await authApi.logout()
-    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/logout', {})
+    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/logout', {}, { timeoutMs: 10_000 })
   })
 })

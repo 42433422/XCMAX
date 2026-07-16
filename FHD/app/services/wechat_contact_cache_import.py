@@ -204,11 +204,12 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
         sync_result = ensure_decrypted_wechat_dbs()
         if not sync_result.get("success"):
             # 配置/资源缺失 -> 503(Service Unavailable),前端可识别为"未配置"而非崩溃
-            status_code = 503 if sync_result.get("reason") == "not_configured" else 500
+            not_configured = sync_result.get("reason") == "not_configured"
+            status_code = 503 if not_configured else 500
             return {
                 "success": False,
-                "reason": sync_result.get("reason"),
-                "message": sync_result.get("message", "同步解密失败"),
+                "reason": "not_configured" if not_configured else None,
+                "message": "微信解密尚未配置" if not_configured else "同步解密失败",
             }, status_code
 
         # 定位解密后的库根目录:优先使用本次 ensure 成功定位到的工具目录
@@ -343,7 +344,7 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
         }, 200
     except RECOVERABLE_ERRORS as e:
         logger.exception("refresh_wechat_contacts_from_decrypt failed: %s", e)
-        return {"success": False, "message": f"刷新失败：{str(e)}"}, 500
+        return {"success": False, "message": "微信联系人刷新失败"}, 500
 
 
 def wechat_message_source_size_payload() -> tuple[dict[str, Any], int]:

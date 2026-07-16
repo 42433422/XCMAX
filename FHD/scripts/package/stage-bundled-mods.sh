@@ -53,4 +53,29 @@ for mod_id in "${IDS[@]}"; do
   echo "Staged: ${mod_id}"
 done
 
+# The host profile intentionally excludes the entire private `_employees`
+# marketplace tree, but the built-in Office docking UI directly exposes the
+# packs listed by this bridge. Bundle only that catalog so the visible
+# Excel/CSV/Word/PDF/PPT actions have real local executors in a fresh install.
+OFFICE_CATALOG="${MODS_ROOT}/xcagi-office-employee-pack-bridge/config/office_pack_catalog.json"
+EMPLOYEE_SOURCE_ROOT="${MODS_ROOT}/_employees"
+EMPLOYEE_STAGE_ROOT="${STAGE_DIR}/_employees"
+if [[ ! -f "${OFFICE_CATALOG}" ]]; then
+  echo "Missing Office employee catalog: ${OFFICE_CATALOG}" >&2
+  exit 1
+fi
+mkdir -p "${EMPLOYEE_STAGE_ROOT}"
+while IFS= read -r pack_id; do
+  [[ -n "${pack_id}" ]] || continue
+  src="${EMPLOYEE_SOURCE_ROOT}/${pack_id}"
+  if [[ ! -d "${src}" ]]; then
+    echo "Missing required Office employee pack: ${pack_id}" >&2
+    exit 1
+  fi
+  cp -R "${src}" "${EMPLOYEE_STAGE_ROOT}/${pack_id}"
+  echo "Staged Office employee: ${pack_id}"
+done < <("${PYTHON}" -c \
+  'import json,sys; print("\n".join(json.load(open(sys.argv[1], encoding="utf-8"))["pack_ids"]))' \
+  "${OFFICE_CATALOG}")
+
 echo "Staged ${#IDS[@]} mod id(s) for SKU ${SKU} -> ${STAGE_DIR}"

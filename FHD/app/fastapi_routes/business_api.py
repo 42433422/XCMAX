@@ -134,7 +134,7 @@ def _run_business_event_agent(
 ) -> Any:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("business_event") or {}).get("actions") or {}).get(action)
@@ -175,10 +175,11 @@ def _run_business_event_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "business-api",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:

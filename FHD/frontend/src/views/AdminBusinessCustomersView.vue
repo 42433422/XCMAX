@@ -258,9 +258,10 @@ function formatAccountTier(row: MarketCustomerRow): string {
   return ACCOUNT_TIER_LABELS[tier] || tier;
 }
 
-function formatBalance(row: WalletRow | undefined): string {
+function formatBalance(row: WalletRow | undefined, walletQuerySucceeded = true): string {
+  if (!walletQuerySucceeded) return '余额查询失败';
   const raw = row?.balance;
-  if (raw === null || raw === undefined || raw === '') return '余额 -';
+  if (raw === null || raw === undefined || raw === '') return '余额 ¥0.00';
   const n = typeof raw === 'string' ? parseFloat(raw) : raw;
   if (!Number.isFinite(n)) return '余额 -';
   return `余额 ¥${n.toFixed(2)}`;
@@ -287,6 +288,7 @@ function normalizeMarketCustomers(
   rawRows: MarketCustomerRow[],
   profiles: Record<string, LocalProfile>,
   wallets: Map<number, WalletRow>,
+  walletQuerySucceeded = true,
 ): BusinessCustomerRow[] {
   return rawRows.map((raw, index) => {
     const username = text(raw.username || raw.name);
@@ -319,7 +321,7 @@ function normalizeMarketCustomers(
       membershipLabel: formatMembership(row),
       accountTierLabel: formatAccountTier(row),
       industryText: text(row.industry_id) || '通用',
-      businessText: `${modCount} 个 Mod · ${formatBalance(wallet)}`,
+      businessText: `${modCount} 个 Mod · ${formatBalance(wallet, walletQuerySucceeded)}`,
       searchText: '',
     };
     out.searchText = buildSearchText(out);
@@ -394,7 +396,7 @@ async function loadCustomers() {
     if (erpRes.status === 'rejected') errors.push(`ERP客户读取失败：${erpRes.reason}`);
 
     customers.value = [
-      ...normalizeMarketCustomers(userRows, profiles, walletMap),
+      ...normalizeMarketCustomers(userRows, profiles, walletMap, walletsRes.status === 'fulfilled'),
       ...normalizeErpCustomers(erpRows),
     ];
     errorMessage.value = errors.join('；');

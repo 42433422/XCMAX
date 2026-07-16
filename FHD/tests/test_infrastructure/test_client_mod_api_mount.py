@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last, register_spa_history_fallback
 from app.infrastructure.mods.mod_manager import (
+    _entitled_client_mod_ids_for_api_mount,
     ensure_mod_api_ready,
     mount_entitled_client_mod_api_routes,
 )
@@ -108,3 +109,51 @@ def test_mount_entitled_client_mod_api_routes_uses_entitlement_list(
     mounted = mount_entitled_client_mod_api_routes(app, session_id="sess-2")
     assert mounted == ["taiyangniao-pro"]
     assert calls == ["taiyangniao-pro"]
+
+
+def test_api_mount_candidates_skip_unselected_open_industry_seed(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    selected = tmp_path / "attendance-industry"
+    selected.mkdir()
+
+    class _Mgr:
+        mods_root = str(tmp_path)
+
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id",
+        lambda session_id=None: None,
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+        lambda: {"attendance-industry", "coating-industry", "taiyangniao-pro"},
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.is_client_mod_id",
+        lambda mod_id: True,
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+        lambda mod_id: True,
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.platform_shell.PROTECTED_CLIENT_MOD_IDS",
+        set(),
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.industry_seed.open_industry_seed_mod_ids",
+        lambda: ["attendance-industry", "coating-industry"],
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: _Mgr(),
+    )
+
+    assert _entitled_client_mod_ids_for_api_mount("sess-3") == [
+        "attendance-industry",
+        "taiyangniao-pro",
+    ]
