@@ -91,8 +91,10 @@ gh workflow run fhd-release-desktop.yml \
 2. 两个平台的更新元数据都带 Ed25519 签名和同一 `buildSha`；
 3. official 路径完整写入后，稳定通道才更新；
 4. 公网下载返回完整字节，大小和 SHA256 与 manifest 一致；
-5. `latest.yml` 与 `latest-mac.yml` 在 stable/official 两条路径完全一致；
-6. 最后才更新网站下载指针。
+5. Windows 公网 EXE 在独立 `windows-latest` 任务上再次满足 Authenticode
+   `Status=Valid`、证书 Subject 和可信时间戳要求；
+6. `latest.yml` 与 `latest-mac.yml` 在 stable/official 两条路径完全一致；
+7. 上述公网验证全部通过后，才更新网站下载指针。
 
 公开路径：
 

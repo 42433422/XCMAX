@@ -117,6 +117,10 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
     assert "$signature.TimeStamperCertificate" in verifier
     assert post_gate.count("verify-windows-signature.ps1") == 3
     assert "verify-windows-installed-runtime.ps1" in workflow
+    assert "verify-public-windows-signature:" in workflow
+    assert "Get-AuthenticodeSignature -LiteralPath $installer" in workflow
+    assert "Published Windows installer is not Authenticode-valid" in workflow
+    assert "verify-windows-signature.ps1 `" in workflow
     assert "-ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME" in workflow
     assert '-ExpectedBuildSha "${{ github.sha }}"' in workflow
     assert "-ExpectedProductVersion $v" in workflow
@@ -142,6 +146,11 @@ def test_desktop_release_preflights_both_platforms_and_publishes_as_one_unit() -
     assert "deploy-macos:" not in workflow
     assert "needs: [release-preflight, windows, macos]" in workflow
     assert "Publish unified Windows + macOS release to CVM" in workflow
+    assert "publish-website-pointer:" in workflow
+    assert (
+        "needs: [generate-manifest, verify-download, verify-public-windows-signature]" in workflow
+    )
+    assert "needs.verify-public-windows-signature.result == 'success'" in workflow
     assert "--delay-updates" in workflow
     assert workflow.index('official_root="/var/www/xcagi-v${version}"') < workflow.index(
         'stable_root="/var/www/update/releases/stable"'
