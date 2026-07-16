@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import sys
 
 EMPLOYEE_ID = "pdf-full-read-employee"
 EMPLOYEE_LABEL = "PDF 生成员"
@@ -32,7 +32,7 @@ RULE_SPEC = {
   ],
   "requirements": [
     "Use direct_python only; handlers must be [\"direct_python\"].",
-    "Extract native text with PyMuPDF/pypdf; never use LLM for body text.",
+    "Extract native text and embedded images with pypdf; never use LLM for body text.",
     "Export images to outputs/images/{figures,photos,diagrams,icons,uncategorized}/.",
     "When ctx.call_llm supports vision, describe each image to outputs/images/<cat>/<name>.vlm.json.",
     "Write document_full.txt, document_meta.json, images_index.json.",

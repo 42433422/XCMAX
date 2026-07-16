@@ -54,7 +54,7 @@ async def ensure_deliverable_runtime(app: FastAPI) -> None:
             logger.warning("Deliverable mod load failed: %s", exc)
             return
 
-    status = build_deliverable_status()
+    status = build_deliverable_status(app=app)
     app.state.deliverable_status = status
 
     if status.get("deliverable"):

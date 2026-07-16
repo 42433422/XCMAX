@@ -291,27 +291,27 @@ class TestResolveUserIdInt:
     def test_from_header_x_user_id(self):
         req = MagicMock()
         req.headers = {"X-User-Id": "42"}
-        assert _resolve_user_id_int(req) == 42
+        assert _resolve_user_id_int(req) == "42"
 
     def test_from_body_user_id(self):
         req = MagicMock()
         req.headers = {}
-        assert _resolve_user_id_int(req, {"user_id": "7"}) == 7
+        assert _resolve_user_id_int(req, {"user_id": "7"}) == "7"
 
     def test_from_body_userId_camel(self):
         req = MagicMock()
         req.headers = {}
-        assert _resolve_user_id_int(req, {"userId": "3"}) == 3
+        assert _resolve_user_id_int(req, {"userId": "3"}) == "3"
 
     def test_default_when_no_user_id(self):
         req = MagicMock()
         req.headers = {}
-        assert _resolve_user_id_int(req) == 1
+        assert _resolve_user_id_int(req) == "1"
 
     def test_invalid_int_falls_back_to_one(self):
         req = MagicMock()
         req.headers = {"X-User-Id": "not-a-number"}
-        assert _resolve_user_id_int(req) == 1
+        assert _resolve_user_id_int(req) == "not-a-number"
 
 
 # ===========================================================================

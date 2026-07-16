@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "10.0.0",
+  [string]$Version = "1.0.0.0",
   [switch]$SkipBackend,
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
@@ -14,6 +14,10 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
 $Version = $Version.TrimStart("v", "V")
+if ($Version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+  throw "Invalid stable product version '$Version'; expected x.y.z or x.y.z.w"
+}
+$ToolchainVersion = (($Version -split '\.')[0..2] -join '.')
 
 $skuLabels = @{
   personal   = 'Personal'
@@ -24,8 +28,8 @@ $skuAppIds = @{
   enterprise = 'com.xcagi.desktop.enterprise'
 }
 $skuUpdateUrls = @{
-  personal   = 'https://update.xcagi.com/releases/stable/personal/'
-  enterprise = 'https://update.xcagi.com/releases/stable/enterprise/'
+  personal   = 'https://xiu-ci.com/releases/stable/personal/'
+  enterprise = 'https://xiu-ci.com/releases/stable/enterprise/'
 }
 
 function Assert-TextFileContains {
@@ -93,6 +97,17 @@ Assert-FileExists $backendExe "Windows backend executable"
 
 $desktopSku = Join-Path $Root "desktop\resources\product-sku.json"
 Write-SkuJson -Path $desktopSku -Sku $ProductSku
+$buildSha = $env:GITHUB_SHA
+if (-not $buildSha) {
+  try {
+    $buildSha = (git -C $Root rev-parse HEAD).Trim()
+  } catch {
+    $buildSha = ''
+  }
+}
+$buildInfoPath = Join-Path $Root "desktop\resources\build-info.json"
+$buildInfo = @{ schema_version = 1; gitSha = $buildSha; version = $Version }
+$buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
@@ -118,16 +133,59 @@ Assert-TextFileContains `
     "backendHealthMs",
     "180_000"
   )
-npm version $Version --no-git-tag-version --allow-same-version
+npm version $ToolchainVersion --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
-$ebArtifact = "XCAGI-$label-Setup-`${version}-`${arch}.`${ext}"
-npx electron-builder --win nsis zip --x64 --publish never `
-  "--config.directories.output=../release/xcagi-v$Version/$outSubdir" `
-  "--config.appId=$ebAppId" `
-  "--config.publish.url=$ebPublishUrl" `
-  "--config.nsis.artifactName=$ebArtifact" `
+$ebArtifact = "XCAGI-$label-Setup-$Version-`${arch}.`${ext}"
+$electronBuilderArgs = @(
+  'electron-builder',
+  '--win', 'nsis', 'zip',
+  '--x64',
+  '--publish', 'never',
+  "--config.directories.output=../release/xcagi-v$Version/$outSubdir",
+  "--config.appId=$ebAppId",
+  "--config.publish.url=$ebPublishUrl",
+  "--config.nsis.artifactName=$ebArtifact",
   "--config.extraMetadata.productSku=$ProductSku"
+)
+
+if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
+  $signingProvider = $env:XCAGI_WINDOWS_SIGNING_PROVIDER
+  if (-not $signingProvider) {
+    $signingProvider = 'sslcom'
+  }
+  if ($signingProvider -ne 'sslcom') {
+    throw "Unsupported Windows signing provider '$signingProvider'; stable releases require sslcom"
+  }
+
+  $requiredSigningVars = @(
+    'ES_USERNAME',
+    'ES_PASSWORD',
+    'CREDENTIAL_ID',
+    'ES_TOTP_SECRET',
+    'CODE_SIGN_TOOL_PATH',
+    'JAVA_HOME',
+    'XCAGI_WINDOWS_PUBLISHER_NAME'
+  )
+  $missingSigningVars = @($requiredSigningVars | Where-Object {
+    -not (Get-Item "Env:$_" -ErrorAction SilentlyContinue).Value
+  })
+  if ($missingSigningVars.Count -gt 0) {
+    throw "Windows signing is required, but these variables are missing: $($missingSigningVars -join ', ')"
+  }
+
+  $publisherName = $env:XCAGI_WINDOWS_PUBLISHER_NAME
+  Write-Host "Windows Authenticode signing required (SSL.com eSigner; publisher=$publisherName)"
+  $electronBuilderArgs += @(
+    '--config.forceCodeSigning=true',
+    "--config.win.publisherName=$publisherName",
+    '--config.win.signtoolOptions.sign=build/windows-sign.cjs',
+    '--config.win.signtoolOptions.signingHashAlgorithms=sha256'
+  )
+}
+
+& npx @electronBuilderArgs
+if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
 Pop-Location
 
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"
@@ -198,9 +256,13 @@ if (-not $SkipUiInstaller) {
     Where-Object { $_.Name -like '*安装程序*' } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
-  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $Version win
+  $env:XCAGI_BUILD_SHA = $buildSha
+  $env:XCAGI_PRODUCT_VERSION = $Version
+  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $ToolchainVersion win
 } elseif ($nsisExe) {
-  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $Version win
+  $env:XCAGI_BUILD_SHA = $buildSha
+  $env:XCAGI_PRODUCT_VERSION = $Version
+  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $ToolchainVersion win
 }
 
 $dlProj = Join-Path $Root "tools\XcagiDownloader\XcagiDownloader.csproj"

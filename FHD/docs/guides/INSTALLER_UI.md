@@ -33,13 +33,12 @@
 
 ```powershell
 cd <repo-root>
-powershell -File scripts/package/build-all-skus.ps1 -Version 10.0.0
+powershell -File scripts/package/build-installer.ps1 -Version 1.0.0.0 -ProductSku enterprise
 ```
 
 ```text
-release/xcagi-v8.0.0/
-  personal/XCAGI-Personal-Setup-8.0.0-x64.exe + latest.yml + tools/
-  enterprise/XCAGI-Enterprise-Setup-8.0.0-x64.exe + latest.yml + tools/
+release/xcagi-v1.0.0.0/
+  enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe + latest.yml + tools/
 ```
 
 生成安装图与 hero 插画：

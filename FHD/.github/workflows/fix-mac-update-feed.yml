@@ -1,0 +1,243 @@
+# 紧急修复：从成功的 Release Desktop run 恢复可追溯 ZIP，原子修复 stable/official feed。
+name: Fix macOS update feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Product version (four-part)
+        required: true
+        default: "1.0.0.0"
+      source_run_id:
+        description: Successful Release Desktop run containing the canonical macOS artifact
+        required: true
+      zip_name:
+        description: Canonical enterprise macOS ZIP filename
+        required: true
+        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+      build_sha:
+        description: Optional buildSha override (40-char git sha); empty = use source run SHA
+        required: false
+        default: ""
+
+permissions:
+  actions: read
+  contents: write
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  republish-mac-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography
+        run: pip install --quiet cryptography
+      - name: Download canonical release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${SOURCE_RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::source_run_id must be numeric."
+            exit 1
+          fi
+          RUN_META="$(gh run view "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --json conclusion,headSha,workflowName)"
+          RUN_CONCLUSION="$(printf '%s' "${RUN_META}" | jq -er '.conclusion')"
+          RUN_WORKFLOW="$(printf '%s' "${RUN_META}" | jq -er '.workflowName')"
+          SOURCE_RUN_SHA="$(printf '%s' "${RUN_META}" | jq -er '.headSha')"
+          if [ "${RUN_CONCLUSION}" != "success" ] || [ "${RUN_WORKFLOW}" != "Release Desktop" ]; then
+            echo "::error::source_run_id must identify a successful Release Desktop run."
+            exit 1
+          fi
+          if [[ ! "${SOURCE_RUN_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Source run has no full Git identity."
+            exit 1
+          fi
+          SOURCE_ARTIFACT_META="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name == "xcagi-desktop-macos-enterprise" and .expired == false)] | if length == 1 then .[0] else empty end')"
+          SOURCE_ARTIFACT_ID="$(printf '%s' "${SOURCE_ARTIFACT_META}" | jq -er '.id')"
+          SOURCE_ARTIFACT_SIZE="$(printf '%s' "${SOURCE_ARTIFACT_META}" | jq -er '.size_in_bytes')"
+          if [[ ! "${SOURCE_ARTIFACT_ID}" =~ ^[0-9]+$ ]] \
+            || [[ ! "${SOURCE_ARTIFACT_SIZE}" =~ ^[1-9][0-9]+$ ]]; then
+            echo "::error::Source run must contain exactly one unexpired macOS enterprise artifact."
+            exit 1
+          fi
+          echo "SOURCE_RUN_SHA=${SOURCE_RUN_SHA}" >> "${GITHUB_ENV}"
+          echo "SOURCE_ARTIFACT_ID=${SOURCE_ARTIFACT_ID}" >> "${GITHUB_ENV}"
+          echo "SOURCE_ARTIFACT_SIZE=${SOURCE_ARTIFACT_SIZE}" >> "${GITHUB_ENV}"
+          mkdir -p "${RUNNER_TEMP}/release-artifact"
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name xcagi-desktop-macos-enterprise \
+            --dir "${RUNNER_TEMP}/release-artifact"
+      - name: Verify canonical ZIP identity and atomically repair both feed paths
+        timeout-minutes: 90
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          ZIP_NAME: ${{ github.event.inputs.zip_name }}
+          PRODUCT_VERSION: ${{ github.event.inputs.version }}
+          BUILD_SHA: ${{ github.event.inputs.build_sha }}
+          ARTIFACT_DIR: ${{ runner.temp }}/release-artifact
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY missing"
+            exit 1
+          fi
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing"
+            exit 1
+          fi
+          if [[ ! "${PRODUCT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid four-part product version: ${PRODUCT_VERSION}"
+            exit 1
+          fi
+          case "${ZIP_NAME}" in
+            "XCAGI-Enterprise-${PRODUCT_VERSION}-mac-arm64.zip"|"XCAGI-Enterprise-${PRODUCT_VERSION}-mac-x64.zip") ;;
+            *)
+              echo "::error::ZIP_NAME must be the canonical enterprise macOS ZIP for ${PRODUCT_VERSION}."
+              exit 1
+              ;;
+          esac
+          if [ -n "${BUILD_SHA:-}" ] && [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::build_sha must be a full 40-character Git SHA."
+            exit 1
+          fi
+
+          mapfile -t ZIP_MATCHES < <(find "${ARTIFACT_DIR}" -type f -name "${ZIP_NAME}" -print)
+          if [ "${#ZIP_MATCHES[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one ${ZIP_NAME} in the source release artifact."
+            exit 1
+          fi
+          ZIP_PATH="${ZIP_MATCHES[0]}"
+          BLOCKMAP_PATH="${ZIP_PATH}.blockmap"
+          if [ ! -f "${BLOCKMAP_PATH}" ]; then
+            echo "::error::Canonical ZIP blockmap is missing from the source release artifact."
+            exit 1
+          fi
+
+          ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py "${ZIP_PATH}")"
+          if [ -z "${ZIP_BUILD_SHA}" ]; then
+            echo "::error::Canonical ZIP has no build-info.json Git identity."
+            exit 1
+          fi
+          if [ "${ZIP_BUILD_SHA}" != "${SOURCE_RUN_SHA}" ]; then
+            echo "::error::Canonical ZIP identity differs from the source release run."
+            exit 1
+          fi
+          if [ -n "${BUILD_SHA:-}" ] && [ "${BUILD_SHA}" != "${ZIP_BUILD_SHA}" ]; then
+            echo "::error::build_sha override differs from the canonical ZIP identity."
+            exit 1
+          fi
+
+          MANIFEST="$(curl -fsSL --retry 3 --retry-all-errors \
+            "https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json")"
+          MANIFEST_VERSION="$(printf '%s' "${MANIFEST}" | jq -er '.version')"
+          MANIFEST_SHA="$(printf '%s' "${MANIFEST}" | jq -er '.git_sha')"
+          if [ "${MANIFEST_VERSION}" != "${PRODUCT_VERSION}" ] || [ "${MANIFEST_SHA}" != "${ZIP_BUILD_SHA}" ]; then
+            echo "::error::Canonical ZIP identity does not match the published release manifest."
+            exit 1
+          fi
+
+          META="$(python3 scripts/deploy/hash_file_sha512.py "${ZIP_PATH}")"
+          SIZE="$(printf '%s\n' "${META}" | sed -n '1p')"
+          SHA512="$(printf '%s\n' "${META}" | sed -n '2p')"
+          TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
+          export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
+          export XCAGI_BUILD_SHA="${ZIP_BUILD_SHA}"
+          node scripts/package/generate-update-metadata.mjs "${ZIP_PATH}" "${TOOLCHAIN}" mac
+          FEED_PATH="$(dirname "${ZIP_PATH}")/latest-mac.yml"
+          python scripts/dev/sign_update_metadata.py "${FEED_PATH}"
+          echo "Verified canonical release identity: ${PRODUCT_VERSION} @ ${ZIP_BUILD_SHA}"
+
+          RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"
+          RELEASE_META="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json isDraft,isPrerelease,tagName)"
+          if [ "$(printf '%s' "${RELEASE_META}" | jq -er '.tagName')" != "${RELEASE_TAG}" ] \
+            || [ "$(printf '%s' "${RELEASE_META}" | jq -er '.isDraft')" != "false" ] \
+            || [ "$(printf '%s' "${RELEASE_META}" | jq -er '.isPrerelease')" != "false" ]; then
+            echo "::error::Expected an existing published stable GitHub release: ${RELEASE_TAG}"
+            exit 1
+          fi
+          gh release upload "${RELEASE_TAG}" \
+            "${ZIP_PATH}" \
+            "${BLOCKMAP_PATH}" \
+            "${FEED_PATH}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber
+          BLOCKMAP_SIZE="$(wc -c < "${BLOCKMAP_PATH}" | tr -d ' ')"
+          FEED_SIZE="$(wc -c < "${FEED_PATH}" | tr -d ' ')"
+          RELEASE_ASSETS="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json assets --jq '.assets')"
+          for ASSET_SPEC in \
+            "${ZIP_NAME}:${SIZE}" \
+            "${ZIP_NAME}.blockmap:${BLOCKMAP_SIZE}" \
+            "latest-mac.yml:${FEED_SIZE}"; do
+            ASSET_NAME="${ASSET_SPEC%%:*}"
+            EXPECTED_ASSET_SIZE="${ASSET_SPEC##*:}"
+            ACTUAL_ASSET_SIZE="$(printf '%s' "${RELEASE_ASSETS}" | jq -er \
+              --arg name "${ASSET_NAME}" \
+              '[.[] | select(.name == $name)] | if length == 1 then .[0].size else empty end')"
+            if [ "${ACTUAL_ASSET_SIZE}" != "${EXPECTED_ASSET_SIZE}" ]; then
+              echo "::error::GitHub release asset size mismatch: ${ASSET_NAME}"
+              exit 1
+            fi
+          done
+          echo "Published canonical updater as a persistent GitHub stable-release fallback."
+
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          STABLE_DEST="/var/www/update/releases/stable/enterprise"
+          OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
+          ARTIFACT_HEADERS="$(curl -sS -D - -o /dev/null \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip")"
+          ARTIFACT_URL="$(printf '%s\n' "${ARTIFACT_HEADERS}" \
+            | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | tail -n 1)"
+          if [ -z "${ARTIFACT_URL}" ]; then
+            echo "::error::GitHub did not return a signed artifact download URL."
+            exit 1
+          fi
+          ARTIFACT_URL_B64="$(printf '%s' "${ARTIFACT_URL}" | base64 | tr -d '\n')"
+          unset ARTIFACT_HEADERS ARTIFACT_URL
+
+          REMOTE_WORK="/tmp/xcagi-feed-repair-${GITHUB_RUN_ID}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '${REMOTE_WORK}' && mkdir -p '${REMOTE_WORK}'"
+          scp "${SSH_OPTS[@]}" \
+            scripts/deploy/hash_file_sha512.py \
+            scripts/deploy/extract_zip_build_sha.py \
+            scripts/deploy/restore_mac_feed_from_artifact.sh \
+            "root@${HOST}:${REMOTE_WORK}/"
+          scp "${SSH_OPTS[@]}" "${FEED_PATH}" "root@${HOST}:${REMOTE_WORK}/latest-mac.yml"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "ARTIFACT_URL_B64='${ARTIFACT_URL_B64}' \
+             EXPECTED_ARTIFACT_SIZE='${SOURCE_ARTIFACT_SIZE}' \
+             REMOTE_WORK='${REMOTE_WORK}' \
+             ZIP_NAME='${ZIP_NAME}' \
+             EXPECTED_BUILD_SHA='${ZIP_BUILD_SHA}' \
+             EXPECTED_SIZE='${SIZE}' \
+             EXPECTED_SHA512='${SHA512}' \
+             STABLE_DEST='${STABLE_DEST}' \
+             OFFICIAL_DEST='${OFFICIAL_DEST}' \
+             bash '${REMOTE_WORK}/restore_mac_feed_from_artifact.sh'"
+          echo "Repaired identical ZIP updater artifacts and latest-mac.yml at stable and official paths."

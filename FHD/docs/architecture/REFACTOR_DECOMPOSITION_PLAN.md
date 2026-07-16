@@ -12,7 +12,7 @@
 > - `FHD/docs/architecture/target-structure.md`（依赖方向铁律，仍有效）
 > - `FHD/app/application/README.md`（应用层规范，仍有效）
 
-最后更新：2026-06-17 · 维护：XCAGI 工程团队
+最后更新：2026-07-12 · 维护：XCAGI 工程团队
 
 ---
 
@@ -24,33 +24,34 @@
    Android `assembleDebug` 通过。
 3. **行为零变化优先**：先做「等价重构」（移动/抽取/改依赖方向），**不**在同一步混入逻辑修改。
 4. **棘轮护栏（ratchet）**：对每类债设「只减不增」CI 校验，防止边修边长。
-5. **覆盖率不退**：后端棘轮 floor 现 **84% 行 / 73% 分支**（HEAD 实测 **85.07% / 74.22%**；WIP **74.56% / 61.8%**，2026-06-17 红灯已收口），
-   见 `FHD/metrics/coverage-dual-summary.json`。拆分时**同步补特征测试**，新抽出的纯函数/UseCase 必须带测试。
+5. **覆盖率不退**：后端棘轮 floor 见 `FHD/metrics/coverage-dual-summary.json`（2026-07 HEAD 行 ~89.8% /
+   分支 ~83.9%）。拆分时**同步补特征测试**，新抽出的纯函数/UseCase 必须带测试。
 
 ---
 
 ## 1. 后端 `services/` ↔ `application/` 双层降债
 
-### 1.1 现状证据（实测 2026-06-13）
+### 1.1 现状证据（实测 2026-07-12）
 
 | 指标 | 实测 | 证据 |
 |---|---|---|
-| `app/services/**/*.py` | **106** | `glob` |
-| `app/application/**/*.py` | **131**（含 `ports/`、`facades/`、`workflow/` 子树） | `glob` |
-| `_app_service*.py`（应用服务） | 56 | 既往核实 |
-| **`_v2` 与同名非 v2 并存** | **17 对** | 见下表 |
-| **路由直依赖 `app.services`（违规）** | **14 个路由文件** | `grep "from app.services" fastapi_routes/` |
-| 路由依赖 `app.application`（合规） | ~50 文件 | `grep` |
-| `application/` 反向依赖 `app.services` | ~67 处 | 过渡包装，预期内 |
+| `app/services/**/*.py` | **126** | `layer_ratchet_baseline.json` |
+| `app/application/**/*.py` | 持续增长（含 `group_chat/`、`ai_chat/` 子包） | `glob` |
+| **`_v2` 与同名非 v2 并存** | **0**（已收敛） | `test_no_app_service_v2_files.py` |
+| **路由直依赖 `app.services`（违规）** | **6** 个路由文件（基线已锁） | `check_layer_ratchet.py` |
+| 三巨石主文件行数 | mobile_api_extensions **2477** / ai_group_chat **1920** / ai_chat **1796**（均 ≤2500） | `wc -l` |
 
-**核心问题**（与既有文档诊断一致，但规模翻 3 倍）：
-- **路由绕过应用层**：14 个 `fastapi_routes/*` 仍直接 `from app.services import ...`，违反
-  `target-structure.md` 的 `routes → application → domain` 铁律。
-  代表：`contract_lifecycle_api.py`(16)、`finance_invoices_api.py`(8)、`domains/wechat/routes.py`(7)、
-  `user_cs_wechat_passive_compat.py`(6)、`operations_line_api.py`(5)。
-- **`_v2` 双版本并存已收敛**：`FHD/app/application/*_app_service_v2.py` 已清零，
-  由 `MIGRATION_v2_DROP_PLAN.md` 与 `test_no_app_service_v2_files.py` 防回潮。
-- **`services/` 职责混杂**：106 个文件里混着领域逻辑、基础设施、AI 引擎、工具。
+**2026-07-12 本轮进度（拆巨石 · 清分层债）**：
+- Wave 0–1：`get_workflow_tool_registry` 改 `application.tools` + 小域门面 → routes→services **27→6**。
+- Wave 2：`mobile_api_extensions` 拆出 `mobile_extensions/routes_*.py` 子 router。
+- Wave 3：`ai_group_chat_service` → `application/group_chat/{constants,employee_registry,dispatch_router,message_formatting,storage}`。
+- Wave 4：`ai_chat_app_service` → `application/ai_chat/{excel_import_policy,excel_import_pipeline,workflow_response_builder,instant_tools}`。
+- 剩余 6 个违规（后置）：`contract_lifecycle_api`、`finance_invoices_api`、`domains/wechat`、`domains/misc`、`user_cs_wechat_passive_compat`、`xcagi_compat_chat_helpers`。
+
+**核心问题**（与既有文档诊断一致）：
+- **路由绕过应用层**：已从 14+/27 压到 **6**；剩余多为微信/发票/合同交叉域。
+- **`_v2` 双版本并存已收敛**：由 `MIGRATION_v2_DROP_PLAN.md` 与 CI guard 防回潮。
+- **`services/` 职责混杂**：仍混着领域逻辑、基础设施、AI 引擎、工具（分类下沉见 §1.2）。
 
 ### 1.2 `services/` 实际分类（决定各自去向）
 
@@ -96,10 +97,11 @@
 一个文件一提交，shim 保留到调用方全部迁移后由阶段 D 统一清。
 
 ### 1.4 护栏（CI 棘轮）
-- 新增 `scripts/dev/check_layer_ratchet.py`：
-  - 统计 `fastapi_routes/` 中 `from app.services` 出现的**文件数**，写入基线（当前 14），
+- `scripts/dev/check_layer_ratchet.py`：
+  - 统计 `fastapi_routes/` 中 `from app.services` 出现的**文件数**，写入基线（**当前 6**），
     PR 若 **> 基线** 则 fail（只减不增）。
-  - 统计 `app/services/**/*.py` 文件数基线（当前 106），新增即 fail（强制新代码进 domain/infra）。
+  - 统计 `app/services/**/*.py` 文件数基线（**当前 126**），新增即 fail（强制新代码进 domain/infra）。
+- `scripts/arch_fitness.py`：已知违例压制在 `arch_fitness_baseline.txt`；**禁止新增**。
 - 纳入 `verify_version_anchors.py` 同级的 dev 校验流程。
 
 ### 1.5 风险与验证

@@ -324,14 +324,16 @@ class TestActionVendorConvertDeep:
         backend.mkdir(parents=True)
         (backend / "convert.py").write_text(
             "def convert_file(src, out, *, template_path=None, payload=None, ctx=None, rule_spec=None):\n"
-            "    return {'ok': True}\n"
+            "    return {'ok': True, 'payload': payload}\n"
         )
         out = exec_mod._action_vendor_convert(
             tmp_path, "emp-generate-1", {"user_request": "generate something"}, None
         )
         assert out["ok"] is True
-        # Verify payload.json was created
-        assert (tmp_path / "inputs" / "payload.json").is_file()
+        payload_file = tmp_path / "inputs" / "payload.json"
+        assert payload_file.read_text(encoding="utf-8") == "{}"
+        assert "generate something" not in payload_file.read_text(encoding="utf-8")
+        assert out["output"]["payload"]["user_query"] == "generate something"
 
     def test_convert_returns_non_dict_result(self, tmp_path) -> None:
         backend = tmp_path / "backend" / "vendor" / "csv"
@@ -374,7 +376,8 @@ class TestActionVendorConvertDeep:
         src.write_text("hi")
         out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is False
-        assert "file system error" in out["error"]
+        assert out["error"] == "转换失败，请查看服务日志"
+        assert "file system error" not in out["error"]
 
     def test_convert_strips_file_path_from_payload(self, tmp_path) -> None:
         backend = tmp_path / "backend" / "vendor" / "csv"

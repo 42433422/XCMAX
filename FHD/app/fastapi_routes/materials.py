@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
@@ -62,7 +63,7 @@ def _run_materials_agent(
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("materials") or {}).get("actions") or {}).get(action)
@@ -108,10 +109,11 @@ def _run_materials_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "materials-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:
@@ -158,7 +160,7 @@ def add_material(request: Request, data: dict[str, Any] = Body(default_factory=d
         status = 200 if result.get("success") else 400
         if result.get("error_code") == "tool_exception":
             status = 500
-        return JSONResponse(result, status_code=status)
+        return JSONResponse(jsonable_encoder(result), status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("添加原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -182,7 +184,7 @@ def get_materials(
         )
         if result.get("success") and "count" not in result:
             result["count"] = len(result.get("data") or [])
-        return JSONResponse(result, status_code=200)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
     except RECOVERABLE_ERRORS as e:
         logger.error("获取原材料列表失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -204,7 +206,7 @@ def update_material(
         )
         if not result.get("success"):
             status = 500 if result.get("error_code") == "tool_exception" else 400
-            return JSONResponse(result, status_code=status)
+            return JSONResponse(jsonable_encoder(result), status_code=status)
         payload = result.get("data") or {}
         if isinstance(payload, dict):
             payload.setdefault("id", material_id)
@@ -214,7 +216,7 @@ def update_material(
         result["message"] = result.get("message") or "更新成功"
         result["data"] = payload
         return JSONResponse(
-            result,
+            jsonable_encoder(result),
             status_code=200,
         )
     except RECOVERABLE_ERRORS as e:
@@ -233,9 +235,9 @@ def delete_material(request: Request, material_id: int):
         )
         if not result.get("success"):
             status = 500 if result.get("error_code") == "tool_exception" else 400
-            return JSONResponse(result, status_code=status)
+            return JSONResponse(jsonable_encoder(result), status_code=status)
         result["message"] = result.get("message") or "删除成功"
-        return JSONResponse(result, status_code=200)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
     except RECOVERABLE_ERRORS as e:
         logger.error("删除原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -272,9 +274,9 @@ def batch_delete_materials(
         )
         if not result.get("success"):
             if result.get("error_code") == "tool_exception":
-                logger.error("批量删除原材料时 Agent 执行异常：%s", result.get("message"))
+                logger.error("批量删除原材料时 Agent 执行异常")
             else:
-                return JSONResponse(result, status_code=400)
+                return JSONResponse(jsonable_encoder(result), status_code=400)
         return JSONResponse(
             {
                 **result,
@@ -284,16 +286,16 @@ def batch_delete_materials(
             },
             status_code=200,
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("批量删除原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("批量删除原材料失败")
+        return JSONResponse({"success": False, "message": "批量删除失败"}, status_code=500)
 
 
 @router.get("/api/materials/low-stock")
 def get_low_stock_materials(threshold: float | None = Query(default=None)):
     try:
         result = _svc().get_low_stock_materials(threshold=threshold)
-        return JSONResponse(result, status_code=200)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
     except RECOVERABLE_ERRORS as e:
         logger.error("获取低库存原材料失败：%s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -308,7 +310,7 @@ def export_materials(
     try:
         result = _svc().export_to_excel(search=search, category=category, template_id=template_id)
         if not result.get("success"):
-            return JSONResponse(result, status_code=400)
+            return JSONResponse(jsonable_encoder(result), status_code=400)
         file_path = result.get("file_path")
         if file_path and os.path.exists(str(file_path)):
             return FileResponse(

@@ -15,7 +15,7 @@ const emit = defineEmits<{
   skip: []
 }>()
 
-const appVersion = `v${packageJson.version || '10.0.0'}`
+const appVersion = `v${packageJson.version || '1.0.0'}`
 
 function startupPublicUrl(fileName: string) {
   const base = String(import.meta.env.BASE_URL || '/')

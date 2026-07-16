@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # macOS/Linux：仅交叉编译 Windows Electron 壳（不含 PyInstaller 后端）。
-# 与 update 站上 Personal 10.0.0 薄壳安装包同构；完整内嵌后端请用 Windows 跑 build-installer.ps1。
+# 仅用于诊断的薄壳；完整内嵌后端请使用正式构建链。
 set -euo pipefail
 
-VERSION="${1:-10.0.0}"
+VERSION="${1:-1.0.0.0}"
 SKU="${2:-enterprise}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
+TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 
 case "${SKU}" in
   personal | enterprise) ;;
@@ -35,8 +36,8 @@ sku_label() { case "$1" in personal) echo Personal ;; enterprise) echo Enterpris
 sku_app_id() { case "$1" in personal) echo com.xcagi.desktop.personal ;; enterprise) echo com.xcagi.desktop.enterprise ;; esac; }
 sku_update_url() {
   case "$1" in
-    personal) echo https://update.xcagi.com/releases/stable/personal/ ;;
-    enterprise) echo https://update.xcagi.com/releases/stable/enterprise/ ;;
+    personal) echo https://xiu-ci.com/releases/stable/personal/ ;;
+    enterprise) echo https://xiu-ci.com/releases/stable/enterprise/ ;;
   esac
 }
 
@@ -54,6 +55,7 @@ if [[ "${SKU}" == "personal" ]]; then
 else
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
 fi
+# 桌面包不构建 admin-console（管理端仅网页 SSOT）
 
 printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-sku.json
 "${PYTHON}" scripts/package/generate-desktop-resources.py
@@ -62,11 +64,11 @@ printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-
 rm -rf "${ROOT}/dist/xcagi-backend"
 
 (cd desktop && [ -d node_modules ] || npm install)
-npm version "${VERSION}" --no-git-tag-version --prefix desktop --allow-same-version
+npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --prefix desktop --allow-same-version
 
 APP_ID="$(sku_app_id "${SKU}")"
 PUBLISH_URL="$(sku_update_url "${SKU}")"
-ARTIFACT="XCAGI-${LABEL}-Setup-\${version}-\${arch}.\${ext}"
+ARTIFACT="XCAGI-${LABEL}-Setup-${VERSION}-\${arch}.\${ext}"
 
 (
   cd desktop
@@ -85,5 +87,6 @@ SETUP="$(find "${OUT_DIR}" -maxdepth 1 -type f -name "XCAGI-${LABEL}-Setup-*.exe
 FINAL="${OUT_DIR}/XCAGI-${LABEL}-Setup-${VERSION}-x64.exe"
 [[ "${SETUP}" == "${FINAL}" ]] || mv -f "${SETUP}" "${FINAL}"
 
-node scripts/package/generate-update-metadata.mjs "${FINAL}" "${VERSION}" win
+XCAGI_PRODUCT_VERSION="${VERSION}" \
+  node scripts/package/generate-update-metadata.mjs "${FINAL}" "${TOOLCHAIN_VERSION}" win
 echo "[ok] ${FINAL} (electron-only; 内嵌后端需 Windows 构建链)"

@@ -50,7 +50,7 @@ def _display_mbti_type(profile: PersonaProfile) -> str:
     return f"{e}{n}{f}{j}"
 
 
-def persona_to_butler_view(profile: PersonaProfile, user_id: int) -> dict:
+def persona_to_butler_view(profile: PersonaProfile, user_id: int | str) -> dict:
     """把 persona 画像映射成 butler ``to_public_dict`` 形状（前端契约不变）。"""
     identity_name = profile.identity.name if profile.identity else "业务管家"
     return {
@@ -65,7 +65,7 @@ def persona_to_butler_view(profile: PersonaProfile, user_id: int) -> dict:
     }
 
 
-def persona_view_for_user(user_id: int) -> dict | None:
+def persona_view_for_user(user_id: int | str) -> dict | None:
     """读取 persona 画像（key=str(user_id)）并派生 butler 视图。
 
     无画像（用户尚未对话过）时返回 ``None``，由调用方回退 :func:`persona_default_view`。
@@ -74,17 +74,19 @@ def persona_view_for_user(user_id: int) -> dict | None:
     from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
 
     repo = PersonaRepositoryImpl()
-    profile = asyncio.run(repo.find_by_user_id(str(user_id)))
+    key = str(user_id).strip() or "1"
+    profile = asyncio.run(repo.find_by_user_id(key))
     if profile is None:
         return None
-    return persona_to_butler_view(profile, user_id)
+    return persona_to_butler_view(profile, key)
 
 
-def persona_default_view(user_id: int) -> dict:
+def persona_default_view(user_id: int | str) -> dict:
     """无 persona 画像（新用户未对话）时的默认视图——**仍由本桥派生**。
 
     构造中性 ``PersonaProfile``（四轴 0.5、通用行业冷启动身份「业务管家」）走与有画像
     用户完全相同的派生逻辑，使「MBTI / 四轴」只有本桥这一处派生源，杜绝 butler 侧
     ``derive_mbti`` 的第二套派生（单一真相源 + 自动派生）。
     """
-    return persona_to_butler_view(PersonaProfile(user_id=str(user_id), industry="通用"), user_id)
+    key = str(user_id).strip() or "1"
+    return persona_to_butler_view(PersonaProfile(user_id=key, industry="通用"), key)

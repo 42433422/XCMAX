@@ -44,8 +44,12 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
               child: FutureBuilder<List<_NotificationItem>>(
                 future: _future,
                 builder: (context, snapshot) {
-                  final items =
-                      snapshot.data ?? _androidFallbackNotifications();
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return Center(
+                      child: CircularProgressIndicator(color: colors.brand),
+                    );
+                  }
+                  final items = snapshot.data ?? const <_NotificationItem>[];
                   if (items.isEmpty) {
                     return Center(
                       child: Text(
@@ -87,10 +91,10 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   Future<List<_NotificationItem>> _load() async {
     try {
       final notifications = await _repository.loadPendingNotifications();
-      if (notifications.isEmpty) return _androidFallbackNotifications();
       return notifications.map(_NotificationItem.fromPending).toList();
     } catch (_) {
-      return _androidFallbackNotifications();
+      // Honest empty state — do not mask API failure with demo rows.
+      return const <_NotificationItem>[];
     }
   }
 
@@ -253,55 +257,6 @@ class _NotificationItem {
       dateText: '刚刚',
     );
   }
-}
-
-List<_NotificationItem> _androidFallbackNotifications() {
-  final now = DateTime.now();
-  return [
-    _NotificationItem(
-      id: '1',
-      type: _NotificationType.announcement,
-      title: '欢迎使用 XCAGI 企业版',
-      content: '您的企业 AI 助手已就绪。可以随时和小C助理对话，或前往 AI员工 页面查看企业智能伙伴。',
-      dateText: _formatNotificationDate(now.subtract(const Duration(hours: 2))),
-    ),
-    _NotificationItem(
-      id: '2',
-      type: _NotificationType.system,
-      title: '数据同步完成',
-      content: '您的会话和 AI 员工列表已同步至最新状态。',
-      dateText: _formatNotificationDate(now.subtract(const Duration(hours: 5))),
-      read: true,
-    ),
-    _NotificationItem(
-      id: '3',
-      type: _NotificationType.update,
-      title: '新功能：语音输入',
-      content: '聊天页和客服页现已支持语音输入，点击麦克风按钮即可将语音转为文字。',
-      dateText: _formatNotificationDate(now.subtract(const Duration(days: 1))),
-    ),
-    _NotificationItem(
-      id: '4',
-      type: _NotificationType.success,
-      title: '账号配对成功',
-      content: '您的移动端已成功配对企业端，可以开始使用全部功能。',
-      dateText: _formatNotificationDate(now.subtract(const Duration(days: 2))),
-      read: true,
-    ),
-    _NotificationItem(
-      id: '5',
-      type: _NotificationType.alert,
-      title: '请及时更新应用',
-      content: '检测到新版本可用，建议尽快更新以获得最新功能和安全修复。',
-      dateText: _formatNotificationDate(now.subtract(const Duration(days: 3))),
-      read: true,
-    ),
-  ];
-}
-
-String _formatNotificationDate(DateTime value) {
-  String two(int part) => part.toString().padLeft(2, '0');
-  return '${two(value.month)}-${two(value.day)} ${two(value.hour)}:${two(value.minute)}';
 }
 
 _NotificationType _typeFromChannel(String channel) {

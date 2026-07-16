@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "label_policy": "sealed_external_holdout_expectations",
+  "synthesizer_must_not_rewrite": true,
+  "pass_rate_floor": 0.85,
+  "cases": [
+    {
+      "case_id": "blind-ci-token-write-scope",
+      "source_url": "https://github.com/reviewdog/reviewdog/pull/1001",
+      "diff": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -0,0 +1,5 @@\n+on: pull_request_target\n+permissions:\n+  contents: write\n+  pull-requests: write\n+  id-token: write\n",
+      "external_diagnostics": [
+        {
+          "source_project": "reviewdog/reviewdog",
+          "path": ".github/workflows/ci.yml",
+          "line": 3,
+          "rule_id": "reviewdog:github-token-write-scope",
+          "severity": "error",
+          "message": "workflow grants write from pull_request_target"
+        }
+      ],
+      "expectation": {
+        "top_capability": "external_diagnostic_ingestion",
+        "expected_context": "ci_config",
+        "expected_severity": "high",
+        "min_publishable_comments": 1
+      }
+    },
+    {
+      "case_id": "blind-secret-leak-runtime",
+      "source_url": "https://github.com/example/security-holdout/pull/12",
+      "diff": "diff --git a/src/config.py b/src/config.py\n--- a/src/config.py\n+++ b/src/config.py\n@@ -0,0 +1,3 @@\n+API_KEY = \"sk-live-hardcoded-token-value\"\n+password = \"super-secret-password\"\n+print(API_KEY)\n",
+      "external_diagnostics": [],
+      "expectation": {
+        "top_capability": "",
+        "expected_context": "security",
+        "expected_severity": "high",
+        "min_publishable_comments": 1
+      }
+    },
+    {
+      "case_id": "blind-pr-agent-permission",
+      "source_url": "https://github.com/Codium-ai/pr-agent/pull/88",
+      "diff": "diff --git a/.github/workflows/pr-agent.yml b/.github/workflows/pr-agent.yml\n--- a/.github/workflows/pr-agent.yml\n+++ b/.github/workflows/pr-agent.yml\n@@ -0,0 +1,4 @@\n+permissions:\n+  contents: write\n+  pull-requests: write\n+  actions: write\n",
+      "external_diagnostics": [
+        {
+          "source_project": "Codium-ai/pr-agent",
+          "path": ".github/workflows/pr-agent.yml",
+          "line": 2,
+          "rule_id": "pr-agent:overbroad-permission",
+          "severity": "error",
+          "message": "pr-agent should not request write on contents"
+        }
+      ],
+      "expectation": {
+        "top_capability": "external_diagnostic_ingestion",
+        "expected_context": "ci_config",
+        "expected_severity": "high",
+        "min_publishable_comments": 1
+      }
+    },
+    {
+      "case_id": "blind-test-skip-marker",
+      "source_url": "https://github.com/example/test-holdout/pull/3",
+      "diff": "diff --git a/tests/test_auth.py b/tests/test_auth.py\n--- a/tests/test_auth.py\n+++ b/tests/test_auth.py\n@@ -0,0 +1,4 @@\n+import pytest\n+\n+@pytest.mark.skip(reason=\"broken\")\n+def test_login():\n+    assert True\n",
+      "external_diagnostics": [],
+      "expectation": {
+        "top_capability": "",
+        "expected_context": "tests",
+        "expected_severity": "",
+        "min_publishable_comments": 0
+      }
+    },
+    {
+      "case_id": "blind-frontend-eval",
+      "source_url": "https://github.com/example/frontend-holdout/pull/9",
+      "diff": "diff --git a/web/app.js b/web/app.js\n--- a/web/app.js\n+++ b/web/app.js\n@@ -0,0 +1,3 @@\n+const token = localStorage.getItem('api_token');\n+eval(token);\n+document.body.innerHTML = token;\n",
+      "external_diagnostics": [],
+      "expectation": {
+        "top_capability": "",
+        "expected_context": "runtime",
+        "expected_severity": "",
+        "min_publishable_comments": 1
+      }
+    },
+    {
+      "case_id": "blind-docs-only-no-blocker",
+      "source_url": "https://github.com/example/docs-holdout/pull/2",
+      "diff": "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -0,0 +1,2 @@\n+# Holdout docs\n+Updated contributor notes.\n",
+      "external_diagnostics": [],
+      "expectation": {
+        "top_capability": "",
+        "expected_context": "docs",
+        "expected_severity": "",
+        "min_publishable_comments": 0
+      }
+    },
+    {
+      "case_id": "blind-hunk-permission-rollback",
+      "source_url": "https://github.com/example/authz-holdout/pull/17",
+      "diff": "diff --git a/src/authz.py b/src/authz.py\n--- a/src/authz.py\n+++ b/src/authz.py\n@@ -0,0 +1,5 @@\n+def authorize(user):\n+    if user.is_admin:\n+        return True\n+    return True\n+    # permission check removed\n",
+      "external_diagnostics": [],
+      "expectation": {
+        "top_capability": "",
+        "expected_context": "security",
+        "expected_severity": "",
+        "min_publishable_comments": 0
+      }
+    }
+  ]
+}

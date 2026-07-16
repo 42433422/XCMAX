@@ -322,7 +322,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Verify v10 version anchors
+      - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
 
       - name: Pack FHD server release tarball
@@ -491,7 +491,8 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 含 fhd-api-image.tar.gz（约 600MB+）scp，12m 易超时（exit 124）
+    timeout-minutes: 60
     environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') || (github.event_name == 'push' && contains(github.ref, '-rc'))) && 'staging' || 'production' }}
     steps:
       - uses: actions/checkout@v4
@@ -509,10 +510,14 @@ jobs:
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
           FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
           FHD_CVM_PUSH_STRICT: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
-          FHD_CVM_PUSH_TIMEOUT: 12m
+          FHD_CVM_PUSH_TIMEOUT: 45m
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
+            if [ "${FHD_CVM_PUSH_STRICT:-false}" = "true" ]; then
+              echo "::error::CVM push required (strict mode: tag release or workflow_dispatch) but FHD_PUSH_HOST/FHD_PUSH_SSH_KEY secrets missing. Configure secrets or the production server will serve stale artifacts."
+              exit 1
+            fi
             echo "::notice::Skipping CVM push — configure FHD_PUSH_HOST and FHD_PUSH_SSH_KEY in repo secrets."
             exit 0
           fi
@@ -646,6 +651,28 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  desktop-windows-release-script-smoke:
+    name: desktop-windows-release-script-smoke
+    needs: [guard-temp-scripts]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Windows release scripts
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            'scripts/package/build-installer.ps1',
+            'scripts/package/pre-release-security.ps1',
+            'scripts/package/verify-windows-signature.ps1'
+          )) {
+            $content = Get-Content -LiteralPath $path -Raw
+            $null = [scriptblock]::Create($content)
+            Write-Host "PowerShell parse OK: $path"
+          }
+      - name: Parse SSL.com electron-builder signing hook
+        shell: pwsh
+        run: node --check desktop/build/windows-sign.cjs
 
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.

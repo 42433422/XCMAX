@@ -14,11 +14,12 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 27
+    assert result["summary"]["ready_decision_count"] == 28
     assert result["summary"]["core_decision_path_count"] == 12
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["product_mainline_absorption_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
+    assert result["summary"]["sealed_review_blind_acceptance_ready"] is True
     assert result["summary"]["external_advantage_matrix_ready"] is True
     assert result["summary"]["external_advantage_ci_regression_ready"] is True
     assert result["summary"]["external_process_adjudication_ready"] is True
@@ -61,6 +62,25 @@ def test_absorption_release_decision_blocks_without_holdout_quality(tmp_path: Pa
     assert result["summary"]["holdout_blind_eval_ready"] is False
     assert result["summary"]["blocking_decision_count"] == 1
     assert any(decision["name"] == "accept_blind_holdout_quality" and decision["action"] == "block" for decision in result["decisions"])
+
+
+def test_absorption_release_decision_blocks_without_sealed_review_blind(tmp_path: Path) -> None:
+    _write_decision_inputs(tmp_path)
+    manifest_dir = tmp_path / "tests" / "review_blind_cases"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(
+        '{"schema_version":1,"pass_rate_floor":0.85,"cases":[],"synthesizer_must_not_rewrite":true}',
+        encoding="utf-8",
+    )
+
+    result = build_absorption_release_decision(tmp_path)
+
+    assert result["status"] == "blocked"
+    assert result["summary"]["sealed_review_blind_acceptance_ready"] is False
+    assert any(
+        decision["name"] == "accept_sealed_review_blind_acceptance" and decision["action"] == "block"
+        for decision in result["decisions"]
+    )
 
 
 def test_absorption_release_decision_blocks_without_operator_journey(tmp_path: Path) -> None:

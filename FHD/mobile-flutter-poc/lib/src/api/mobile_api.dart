@@ -38,9 +38,8 @@ class XcagiMobileEndpoints {
   static const notificationsPending = '$base/notifications/pending';
   static const authQrConfirm = '$base/auth/qr/confirm';
   static const pairingExchange = '$base/pairing/exchange';
+  static const pairingLookup = '$base/pairing/lookup';
   static const pairingIssue = '$base/pairing/issue';
-  static const relayMobileConfirm = '$base/relay/mobile/confirm';
-  static const relayMobileConfirmCode = '$base/relay/mobile/confirm-code';
   static const relayMobileBindAccount = '$base/relay/mobile/bind-account';
   static const relayMobileDesktops = '$base/relay/mobile/desktops';
   static const relayTasks = '$base/relay/tasks';
@@ -69,7 +68,9 @@ class XcagiMobileEndpoints {
   static const mods = '$base/mods';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
-  static const imDirect = 'api/im/conversations/direct';
+  static const imConversations = '$base/im/conversations';
+  static const imDirect = '$base/im/conversations/direct';
+  static const imReadTemplate = '$base/im/conversations/{id}/read';
   static const financeSummary = 'api/finance/summary';
   static const aiChat = 'api/ai/chat';
   static const aiChatStream = 'api/ai/chat/stream';
@@ -91,6 +92,14 @@ class XcagiMobileEndpoints {
       '$base/admin/cursor-super-employee/messages';
   static const traeSuperEmployeeMessages =
       '$base/admin/trae-super-employee/messages';
+  static const codexSuperEmployeeStream =
+      '$base/admin/codex-super-employee/messages/stream';
+  static const claudeSuperEmployeeStream =
+      '$base/admin/claude-super-employee/messages/stream';
+  static const cursorSuperEmployeeStream =
+      '$base/admin/cursor-super-employee/messages/stream';
+  static const traeSuperEmployeeStream =
+      '$base/admin/trae-super-employee/messages/stream';
   static const circleLikeTemplate = '$base/circle/posts/{postId}/like';
   static const circleCommentsTemplate = '$base/circle/posts/{postId}/comments';
   static const relayTasksDetail = '$base/relay/tasks/{taskId}';
@@ -123,7 +132,11 @@ class XcagiMobileEndpoints {
       'api/service-bridge/requests/{id}/respond';
   static const inventoryItems = 'api/inventory/items';
   static const legacyModsList = 'api/mods/';
-  static const imMessagesTemplate = 'api/im/conversations/{id}/messages';
+  static const imMessagesTemplate = '$base/im/conversations/{id}/messages';
+  static const adminEmployeePendingQuestions =
+      '$base/admin/employee-pending-questions';
+  static const adminEmployeePendingQuestionAnswerTemplate =
+      '$base/admin/employee-pending-questions/{questionId}/answer';
   static const employeeChatStreamTemplate =
       '$base/employees/{employeeId}/chat/stream';
 
@@ -141,6 +154,20 @@ class XcagiMobileEndpoints {
     }
   }
 
+  static String superEmployeeStream(String tool) {
+    switch (tool.trim().toLowerCase()) {
+      case 'claude':
+        return claudeSuperEmployeeStream;
+      case 'cursor':
+        return cursorSuperEmployeeStream;
+      case 'trae':
+        return traeSuperEmployeeStream;
+      case 'codex':
+      default:
+        return codexSuperEmployeeStream;
+    }
+  }
+
   static String circleLike(int postId) {
     return circleLikeTemplate.replaceFirst('{postId}', '$postId');
   }
@@ -154,6 +181,10 @@ class XcagiMobileEndpoints {
       '{taskId}',
       Uri.encodeComponent(taskId),
     );
+  }
+
+  static String relayTaskCancel(String taskId) {
+    return '${relayTasksDetail.replaceFirst('{taskId}', Uri.encodeComponent(taskId))}/cancel';
   }
 
   static String approvalDetail(int id) {
@@ -311,6 +342,17 @@ class XcagiMobileEndpoints {
   static String imMessages(int conversationId) {
     return imMessagesTemplate.replaceFirst('{id}', '$conversationId');
   }
+
+  static String imRead(int conversationId) {
+    return imReadTemplate.replaceFirst('{id}', '$conversationId');
+  }
+
+  static String adminEmployeePendingQuestionAnswer(int questionId) {
+    return adminEmployeePendingQuestionAnswerTemplate.replaceFirst(
+      '{questionId}',
+      '$questionId',
+    );
+  }
 }
 
 class XcagiMobileTopology {
@@ -326,6 +368,8 @@ class XcagiMobileTopology {
   static const fhdApiListenPort = 5000;
   static const fhdApiUpstreamPort = 5100;
   static const modstoreListenPort = 8765;
+  // 后端 loopback 监听 17500 时，手机不可达；vite proxy 监听 0.0.0.0:5011 才可达。
+  static const lanReachableProxyPort = 5011;
   static const mustRunProcesses = ['web', 'modstore-scheduler'];
 }
 
@@ -394,6 +438,18 @@ class AndroidServerRouter {
       return enterpriseFhdBaseUrl();
     }
     return lanFhdBaseUrl();
+  }
+
+  /// 手机端 LAN 直连专用：当后端 loopback 监听 17500 时，手机不可达，
+  /// 需改用 vite proxy 端口 5011（监听 0.0.0.0）。
+  String lanReachableBaseUrl() {
+    final raw = lanFhdBaseUrl();
+    final loopbackPort = ':$fhdDefaultPort/';
+    if (raw.endsWith(loopbackPort)) {
+      final prefix = raw.substring(0, raw.length - loopbackPort.length);
+      return '$prefix:${XcagiMobileTopology.lanReachableProxyPort}/';
+    }
+    return raw;
   }
 
   String lanFhdBaseUrl() {
@@ -525,8 +581,6 @@ class AndroidAuthHeaderPolicy {
       '/${XcagiMobileEndpoints.authQrConfirm}',
       '/${XcagiMobileEndpoints.pairingIssue}',
       '/${XcagiMobileEndpoints.pairingExchange}',
-      '/${XcagiMobileEndpoints.relayMobileConfirm}',
-      '/${XcagiMobileEndpoints.relayMobileConfirmCode}',
     };
     return publicPaths.any(path.endsWith);
   }
@@ -538,9 +592,9 @@ class MobileAndroidBuild {
   static const modstoreBaseUrl = 'https://xiu-ci.com';
   static const enterpriseFhdBaseUrl = 'https://xiu-ci.com/fhd-api';
   static const versionCode = 10;
-  static const versionName = '10.0.0';
+  static const versionName = '1.0.0.0';
   static const displayVersion = 'v$versionName';
-  static const profileVersionText = '版本 10.0.0 (10)';
+  static const profileVersionText = '版本 1.0.0.0 (10)';
 }
 
 class MobileUpdateCheckResult {
@@ -587,6 +641,9 @@ class MobileApiClient {
   final StreamController<MobileSessionData> _sessionChanges =
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
+  Future<bool>? _refreshInFlight;
+  DateTime? _lastLanProbeAt;
+  bool? _lastLanProbeOk;
 
   String get configuredRelayId => _config.relayId.trim();
   String get localAvatarSource => _config.localAvatarSource.trim();
@@ -596,7 +653,13 @@ class MobileApiClient {
     yield* _sessionChanges.stream;
   }
 
-  Future<MobileSessionData> loadSession() async {
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async {
+    if (!forceReload &&
+        (_lastSession.hasAuth ||
+            _lastSession.hasIdentity ||
+            _lastSession.cachedModInfos.isNotEmpty)) {
+      return _lastSession.mergePreferNonBlank(_configSession());
+    }
     final stored = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
         );
@@ -613,6 +676,14 @@ class MobileApiClient {
     await _sessionStore.save(session);
     _rememberSession(notifyAs ?? await _decodeSavedCredential(session));
   }
+
+  /// Persist a session mutation while keeping the in-memory snapshot fresh.
+  ///
+  /// Callers must use this instead of `sessionStore.save(...)`: writing to the
+  /// store directly leaves `loadSession()` serving a stale cached session, so
+  /// consecutive mutations (e.g. caching the user message then the assistant
+  /// reply) silently overwrite each other.
+  Future<void> saveSession(MobileSessionData session) => _saveSession(session);
 
   Future<MobileSessionData> _decodeSavedCredential(
     MobileSessionData session,
@@ -689,6 +760,7 @@ class MobileApiClient {
   Future<void> saveLocalSettings({
     String? themeMode,
     bool? biometricEnabled,
+    String? serverMode,
   }) async {
     final current = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
@@ -702,6 +774,12 @@ class MobileApiClient {
     }
     if (biometricEnabled != null) {
       next = next.copyWith(biometricEnabled: biometricEnabled);
+    }
+    if (serverMode != null) {
+      final normalized = serverMode.trim().toLowerCase();
+      next = next.copyWith(
+        serverMode: normalized == 'lan' ? 'lan' : 'cloud',
+      );
     }
     await _saveSession(next);
   }
@@ -791,8 +869,17 @@ class MobileApiClient {
         autoLogin: false,
         cachedChatMessages: const <String, List<Map<String, Object?>>>{},
         conversationListStates: const <String, Map<String, Object?>>{},
+        cachedModInfos: const <Map<String, Object?>>[],
       ),
     );
+  }
+
+  Future<void> cacheModInfos(List<Map<String, Object?>> mods) async {
+    if (mods.isEmpty) return;
+    final current = await _sessionStore.load().catchError(
+          (_) => MobileSessionData.empty,
+        );
+    await _saveSession(current.copyWith(cachedModInfos: mods));
   }
 
   Future<void> persistLoginSession(
@@ -825,10 +912,34 @@ class MobileApiClient {
     );
     await _saveSession(
       next.copyWith(
-        setupComplete: false,
+        setupComplete:
+            fallbackAccountKind.trim().toLowerCase() == 'admin' ||
+            fallbackAccountKind.trim().toLowerCase() == 'admin_portal' ||
+            next.setupComplete,
         serverMode: _preferredServerModeAfterLogin(next),
       ),
     );
+    await registerDeviceTokenIfNeeded();
+  }
+
+  Future<void> registerDeviceTokenIfNeeded({
+    String pushProvider = 'fcm',
+    String? pushToken,
+  }) async {
+    final session = await loadSession();
+    final token = (pushToken ?? session.fcmToken).trim();
+    if (token.isEmpty) return;
+    try {
+      await registerDevice({
+        'fcm_token': token,
+        'push_provider': pushProvider,
+        'push_token': token,
+        'product_sku': MobileAndroidBuild.productSku,
+        'device_label': 'Flutter-Android',
+      });
+    } catch (_) {
+      // Android also swallows register failures.
+    }
   }
 
   Future<void> persistRelayBindingMeta(
@@ -881,6 +992,7 @@ class MobileApiClient {
     String hostWithPort = '',
     bool clearRelayDesktop = false,
     bool setupComplete = false,
+    bool preserveActiveAuth = false,
   }) async {
     final payload = data ?? const <String, Object?>{};
     final resolvedHost = hostWithPort.trim().ifEmpty(
@@ -892,8 +1004,8 @@ class MobileApiClient {
 
     var next = current;
     final access = _readString(payload, const ['access_token']);
-    if (access.isNotEmpty) {
-      final user = _asObjectMap(payload['user']);
+    final user = _asObjectMap(payload['user']);
+    if (!preserveActiveAuth && access.isNotEmpty) {
       next = next.copyWith(
         accessToken: access,
         refreshToken: _firstNonBlank([
@@ -915,6 +1027,10 @@ class MobileApiClient {
           'enterprise',
         ]),
         userId: _readInt(user, const ['id'], current.userId),
+      );
+    }
+    if (access.isNotEmpty || preserveActiveAuth) {
+      next = next.copyWith(
         relayBaseUrl: _firstNonBlank([
           _readString(payload, const ['relay_base_url']),
           current.relayBaseUrl,
@@ -960,6 +1076,9 @@ class MobileApiClient {
       next = next.copyWith(setupComplete: true);
     }
     await _saveSession(next);
+    if (next.hasAuth) {
+      await registerDeviceTokenIfNeeded();
+    }
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> mobileHealth() async {
@@ -969,6 +1088,106 @@ class MobileApiClient {
 
   Future<Map<String, Object?>> rootHealth() {
     return getJson(XcagiMobileEndpoints.rootHealth);
+  }
+
+  /// Align Android `XcagiRepository.preferCloudIfLanUnreachable`:
+  /// when enterprise LAN host is blank/unreachable, flip session to cloud so
+  /// subsequent API calls stop hammering a dead `192.168.x.x`.
+  Future<bool> preferCloudIfLanUnreachable() async {
+    final isEnterprise = AndroidProductSkuConfig.isEnterprise(
+      buildSku: MobileAndroidBuild.productSku,
+    );
+    if (!isEnterprise) return false;
+    final session = await loadSession();
+    if (session.serverMode.trim().toLowerCase() == 'cloud') return false;
+    final host = session.fhdHost.trim();
+    if (host.isEmpty) {
+      await _saveSession(session.copyWith(serverMode: 'cloud'));
+      _lastLanProbeAt = null;
+      _lastLanProbeOk = null;
+      return true;
+    }
+    final now = DateTime.now();
+    if (_lastLanProbeAt != null &&
+        _lastLanProbeOk == true &&
+        now.difference(_lastLanProbeAt!) < const Duration(seconds: 15)) {
+      return false;
+    }
+    final reachable = await probeLanHealth(host);
+    _lastLanProbeAt = now;
+    _lastLanProbeOk = reachable;
+    if (reachable) return false;
+    await _saveSession(session.copyWith(serverMode: 'cloud'));
+    _lastLanProbeAt = null;
+    _lastLanProbeOk = null;
+    return true;
+  }
+
+  /// Probe LAN host `/api/health` with a short timeout (pairing-style).
+  Future<bool> probeLanHealth(String hostWithPort) async {
+    final host = hostWithPort.trim();
+    if (host.isEmpty) return false;
+    final router = AndroidServerRouter(
+      fhdHost: host,
+      mode: AndroidServerMode.lan,
+      isEnterprise: true,
+    );
+    final base = router.lanReachableBaseUrl();
+    try {
+      final request = await _httpClient
+          .openUrl('GET', Uri.parse('${base}api/health'))
+          .timeout(const Duration(milliseconds: 900));
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set('X-XCAGI-Client', 'android');
+      final response = await request.close().timeout(
+        const Duration(milliseconds: 900),
+      );
+      await response.drain<void>();
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  AndroidServerRouter serverRouterForSession(MobileSessionData session) {
+    final mode = session.serverMode.trim().toLowerCase() == 'lan'
+        ? AndroidServerMode.lan
+        : AndroidServerMode.cloud;
+    final host = session.fhdHost.trim();
+    return AndroidServerRouter(
+      fhdHost: host.isEmpty ? '127.0.0.1' : host,
+      mode: mode,
+      isEnterprise: AndroidProductSkuConfig.isEnterprise(
+        buildSku: MobileAndroidBuild.productSku,
+      ),
+    );
+  }
+
+  Future<String> resolveSessionBaseUrl() async {
+    final session = await loadSession();
+    final mode = session.serverMode.trim().toLowerCase();
+    final host = session.fhdHost.trim();
+    final configBase = _config.baseUrl.trim();
+    final normalizedConfig =
+        configBase.endsWith('/') ? configBase : '$configBase/';
+
+    if (mode == 'lan') {
+      final local = session.localBaseUrl.trim();
+      if (local.isNotEmpty) {
+        return local.endsWith('/') ? local : '$local/';
+      }
+      if (host.isNotEmpty) {
+        return serverRouterForSession(session).fhdBaseUrl();
+      }
+    }
+
+    // After LAN→cloud flip we still keep fhdHost; route to enterprise cloud base.
+    if (mode == 'cloud' && host.isNotEmpty) {
+      return serverRouterForSession(session).fhdBaseUrl();
+    }
+
+    // Tests / explicit XCAGI_MOBILE_BASE_URL keep configured base.
+    return normalizedConfig;
   }
 
   Future<MobileEnvelope<AdminMobileHomeData>> adminHome() async {
@@ -1229,6 +1448,34 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<MobileEnvelope<Map<String, Object?>>> employeePendingQuestions({
+    int limit = 50,
+    bool includeHistory = false,
+    String? employeeId,
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.adminEmployeePendingQuestions,
+      query: {
+        'limit': '$limit',
+        'include_history': '$includeHistory',
+        if (employeeId != null && employeeId.trim().isNotEmpty)
+          'employee_id': employeeId.trim(),
+      },
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> answerEmployeePendingQuestion({
+    required int questionId,
+    required String answer,
+  }) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.adminEmployeePendingQuestionAnswer(questionId),
+      {'answer': answer.trim()},
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> login({
     required String username,
     required String password,
@@ -1479,6 +1726,18 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<MobileEnvelope<Map<String, Object?>>> pairingLookup({
+    required String code,
+    String baseUrl = '',
+  }) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.pairingLookup,
+      {'code': code.trim()},
+      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> issuePairing() async {
     final json = await postJson(XcagiMobileEndpoints.pairingIssue, const {});
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -1534,36 +1793,6 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-  Future<MobileEnvelope<Map<String, Object?>>> relayConfirm({
-    required String relayId,
-    required String code,
-  }) async {
-    final json = await postJson(XcagiMobileEndpoints.relayMobileConfirm, {
-      'relay_id': relayId.trim(),
-      'code': code.trim(),
-    });
-    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
-    if (envelope.success) {
-      await persistRelayBindingMeta(relayId.trim(), envelope.data);
-    }
-    return envelope;
-  }
-
-  Future<MobileEnvelope<Map<String, Object?>>> relayConfirmCode(
-    String code,
-  ) async {
-    final json = await postJson(XcagiMobileEndpoints.relayMobileConfirmCode, {
-      'code': code.trim(),
-    });
-    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
-    if (envelope.success) {
-      final relayId = _relayIdFromBindingData(envelope.data);
-      if (relayId.isNotEmpty) {
-        await persistRelayBindingMeta(relayId, envelope.data);
-      }
-    }
-    return envelope;
-  }
 
   Future<MobileEnvelope<Map<String, Object?>>> relayBindAccount(
     String relayId,
@@ -1600,6 +1829,16 @@ class MobileApiClient {
     String taskId,
   ) async {
     final json = await getJson(XcagiMobileEndpoints.relayTaskStatus(taskId));
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayCancelTask(
+    String taskId,
+  ) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.relayTaskCancel(taskId),
+      <String, Object?>{},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1874,6 +2113,14 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<Map<String, Object?>> imListConversations() {
+    return getJson(XcagiMobileEndpoints.imConversations);
+  }
+
+  Future<Map<String, Object?>> imMarkRead(int conversationId) {
+    return postJson(XcagiMobileEndpoints.imRead(conversationId), {});
+  }
+
   Future<Map<String, Object?>> imCreateDirect(int peerUserId) {
     return postJson(XcagiMobileEndpoints.imDirect, {
       'peer_user_id': peerUserId,
@@ -2140,12 +2387,202 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  /// LAN SSE 流式调用超级员工。逐 token 返回，与 streamChat 同样的 SSE 协议。
+  /// 失败时抛 [MobileApiException]，由调用方决定是否回退到直答/relay。
+  Future<String> streamSuperEmployeeMessage(
+    String tool,
+    String body, {
+    String baseUrl = '',
+    void Function(String token)? onToken,
+    void Function(String status)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    final path = XcagiMobileEndpoints.superEmployeeStream(tool);
+    final effectiveBaseUrl = baseUrl.trim().isEmpty ? null : baseUrl.trim();
+    final request = await _open(
+      'POST',
+      path,
+      baseUrl: effectiveBaseUrl,
+    );
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final bytes = utf8.encode(jsonEncode({
+      'body': body,
+      'message': body,
+      'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+    }));
+    request.contentLength = bytes.length;
+    request.add(bytes);
+
+    final response = await request.close().timeout(_config.timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final text = await utf8.decodeStream(response).timeout(_config.timeout);
+      final errBody = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+      throw MobileApiException(
+        statusCode: response.statusCode,
+        message: errBody['message']?.toString() ??
+            errBody['error']?.toString() ??
+            'HTTP ${response.statusCode}',
+        body: errBody,
+      );
+    }
+
+    final buffer = StringBuffer();
+    await for (final line
+        in response.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (isCancelled != null && isCancelled()) {
+        return buffer.toString();
+      }
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      final payload = trimmed.substring('data:'.length).trim();
+      if (payload.isEmpty || payload == '[DONE]') continue;
+
+      final json = _asObjectMap(jsonDecode(payload));
+      final eventType = json['type']?.toString() ?? '';
+      switch (eventType) {
+        case 'token':
+          final token = json['text']?.toString() ?? '';
+          if (token.isNotEmpty) {
+            buffer.write(token);
+            onToken?.call(token);
+          }
+          break;
+        case 'status':
+          final status = json['text']?.toString() ?? '';
+          if (status.isNotEmpty) {
+            onStatus?.call(status);
+          }
+          break;
+        case 'done':
+          final result = json['result'];
+          final finalText = _chatResultText(result).ifEmpty(buffer.toString());
+          return finalText.ifEmpty('（无回复）');
+        case 'error':
+          throw MobileApiException(
+            statusCode: response.statusCode,
+            message: json['message']?.toString() ?? 'stream error',
+            body: json,
+          );
+      }
+    }
+    return buffer.toString().ifEmpty('（无回复）');
+  }
+
+  /// Mirrors Android [XcagiRepository.refreshFhdAccessToken]: keep saved login
+  /// when access JWT expires but refresh_token is still valid.
+  Future<bool> _refreshFhdAccessToken() async {
+    if (_refreshInFlight != null) {
+      return _refreshInFlight!;
+    }
+    final future = _refreshFhdAccessTokenImpl();
+    _refreshInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<bool> _refreshFhdAccessTokenImpl() async {
+    final session = await loadSession();
+    final refresh = session.refreshToken.trim();
+    if (refresh.isEmpty) return false;
+    try {
+      final json = await _sendJsonRequest(
+        method: 'POST',
+        path: XcagiMobileEndpoints.authRefresh,
+        body: {'refresh_token': refresh},
+        allowAuthRefresh: false,
+      );
+      final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+      if (!envelope.success) return false;
+      final data = envelope.data;
+      if (data == null || data.isEmpty) return false;
+      final access = _readString(data, const ['access_token']);
+      if (access.isEmpty) return false;
+      final current = await _sessionStore.load().catchError(
+            (_) => MobileSessionData.empty,
+          );
+      await _saveSession(
+        current.copyWith(
+          accessToken: access,
+          refreshToken: _firstNonBlank([
+            _readString(data, const ['refresh_token']),
+            current.refreshToken,
+          ]),
+          sessionId: _firstNonBlank([
+            _readString(data, const ['session_id']),
+            current.sessionId,
+          ]),
+        ),
+      );
+      return true;
+    } on MobileApiException catch (error) {
+      if (error.statusCode == 401) {
+        await clearActiveAuth();
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, Object?>> _sendJsonRequest({
+    required String method,
+    required String path,
+    Map<String, String> query = const {},
+    Map<String, Object?>? body,
+    String? baseUrl,
+    String? authToken,
+    bool allowAuthRefresh = true,
+  }) async {
+    Future<Map<String, Object?>> perform() async {
+      var effectiveBase = baseUrl;
+      if (effectiveBase == null || effectiveBase.trim().isEmpty) {
+        // Skip LAN→cloud flip for the health probe itself to avoid recursion.
+        final isHealthProbe = path == XcagiMobileEndpoints.rootHealth ||
+            path == XcagiMobileEndpoints.health;
+        if (!isHealthProbe) {
+          await preferCloudIfLanUnreachable();
+        }
+        effectiveBase = await resolveSessionBaseUrl();
+      }
+      final request = await _open(
+        method,
+        path,
+        query: query,
+        baseUrl: effectiveBase,
+        authToken: authToken,
+      );
+      if (body != null) {
+        final bytes = utf8.encode(jsonEncode(body));
+        request.contentLength = bytes.length;
+        request.add(bytes);
+      }
+      return _readJsonResponse(request);
+    }
+
+    try {
+      return await perform();
+    } on MobileApiException catch (error) {
+      if (!allowAuthRefresh ||
+          error.statusCode != 401 ||
+          AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
+        rethrow;
+      }
+      final refreshed = await _refreshFhdAccessToken();
+      if (!refreshed) rethrow;
+      return perform();
+    }
+  }
+
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open('GET', path, query: query);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(method: 'GET', path: path, query: query);
   }
 
   Future<Map<String, Object?>> postJson(
@@ -2154,11 +2591,13 @@ class MobileApiClient {
     Map<String, String> query = const {},
     String? baseUrl,
   }) async {
-    final request = await _open('POST', path, query: query, baseUrl: baseUrl);
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(
+      method: 'POST',
+      path: path,
+      query: query,
+      body: body,
+      baseUrl: baseUrl,
+    );
   }
 
   Future<Map<String, Object?>> postModstoreJson(
@@ -2166,31 +2605,29 @@ class MobileApiClient {
     Map<String, Object?> body, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open(
-      'POST',
-      path,
+    return _sendJsonRequest(
+      method: 'POST',
+      path: path,
       query: query,
+      body: body,
       baseUrl: _config.modstoreBaseUrl,
       authToken: _config.marketAccessToken,
+      allowAuthRefresh: false,
     );
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-    return _readJsonResponse(request);
   }
 
   Future<Map<String, Object?>> getModstoreJson(
     String path, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open(
-      'GET',
-      path,
+    return _sendJsonRequest(
+      method: 'GET',
+      path: path,
       query: query,
       baseUrl: _config.modstoreBaseUrl,
       authToken: _config.marketAccessToken,
+      allowAuthRefresh: false,
     );
-    return _readJsonResponse(request);
   }
 
   Future<Map<String, Object?>> putJson(
@@ -2198,19 +2635,19 @@ class MobileApiClient {
     Map<String, Object?> body, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open('PUT', path, query: query);
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(
+      method: 'PUT',
+      path: path,
+      query: query,
+      body: body,
+    );
   }
 
   Future<Map<String, Object?>> deleteJson(
     String path, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open('DELETE', path, query: query);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(method: 'DELETE', path: path, query: query);
   }
 
   Future<HttpClientRequest> _open(

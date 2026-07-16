@@ -42,6 +42,23 @@ describe('useAgentRunEvents', () => {
     expect(update.status).toBe('success')
     expect(update.progress).toBe(100)
     expect(update.payload?.lastAgentEventId).toBe('evt_2')
+    expect(update.title).toContain('智能任务')
+    expect(update.summary).toBe('智能任务执行完成')
+    expect(String(update.title)).not.toContain('Agent')
+  })
+
+  it('sanitizes legacy backend event messages before showing them to users', () => {
+    const update = buildAgentRunTaskUpdate({
+      runId: 'run_legacy',
+      events: [{
+        event_id: 'evt_legacy',
+        run_id: 'run_legacy',
+        event_type: 'run.completed',
+        message: 'Legacy planner run 执行完成',
+      }],
+    })
+    expect(update.stage).toBe('智能任务 执行完成')
+    expect(String(update.stage)).not.toContain('Legacy')
   })
 
   it('fetches run events and upserts a task panel row', async () => {

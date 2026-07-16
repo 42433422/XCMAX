@@ -10,7 +10,8 @@ import {
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import type { ChatMessage } from './useChatMessages'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
 export interface UseChatSessionHistoryDeps {
   sessionId: Ref<string>
@@ -123,7 +124,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           return {
             role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
             content: normalizeServerContentToHtml(asString(row.content)),
-            time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            time: formatChatMessageTime(
+              row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
+            ),
           }
         }))
       } else if (localMessages.length > 0) {
@@ -132,8 +135,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           const roleRaw = asString(row.role || (msg as { role?: string }).role)
           return {
             role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            content: normalizeServerContentToHtml(asString(row.content || (msg as { content?: string }).content)),
-            time: asString((msg as { time?: string }).time) || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            // 本地缓存已经是可展示内容；再次 HTML 转义会把 &quot; 变成可见实体。
+            content: asString(row.content || (msg as { content?: string }).content),
+            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
           }
         }))
       } else if (data.success) {
@@ -154,8 +158,8 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           const roleRaw = asString(row.role || (msg as { role?: string }).role)
           return {
             role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            content: normalizeServerContentToHtml(asString(row.content || (msg as { content?: string }).content)),
-            time: asString((msg as { time?: string }).time) || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+            content: asString(row.content || (msg as { content?: string }).content),
+            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
           }
         }))
         historyError.value = ''

@@ -1,0 +1,2 @@
+Processing: /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/mac-notarize-cdn-20260712/XCAGI-10.0.0-mac-arm64.enterprise.dmg
+XCAGI-10.0.0-mac-arm64.enterprise.dmg does not have a ticket stapled to it.

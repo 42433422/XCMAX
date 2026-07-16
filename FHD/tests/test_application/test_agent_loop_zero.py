@@ -146,6 +146,8 @@ class TestRunEmployeeAgentLoop:
         assert result["ok"] is True
         assert result["output"] == "Hello from assistant"
         assert result["rounds"] == 1
+        assert result["exit_status"] == "completed"
+        assert result["trajectory"][0]["event"] == "assistant"
 
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
@@ -178,6 +180,40 @@ class TestRunEmployeeAgentLoop:
             )
         assert result["max_iterations_reached"] is True
         assert result["rounds"] == 2
+        assert result["exit_status"] == "max_iterations"
+
+    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
+    @patch("app.infrastructure.llm.client.require_api_key")
+    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-test")
+    def test_repeating_action_stops_with_machine_readable_status(
+        self, mock_model: MagicMock, mock_key: MagicMock, mock_client: MagicMock
+    ) -> None:
+        tc = MagicMock()
+        tc.id = "call_repeat"
+        tc.function.name = "same_tool"
+        tc.function.arguments = '{"value": 1}'
+        msg = MagicMock(content="", tool_calls=[tc])
+        completion = MagicMock()
+        completion.choices = [MagicMock(message=msg)]
+        mock_client.return_value.chat.completions.create.return_value = completion
+
+        with patch(
+            "app.application.tools.workflow.execute_workflow_tool",
+            return_value='{"success": false}',
+        ):
+            result = run_employee_agent_loop(
+                employee_id="emp1",
+                system_prompt="test",
+                task="repeat",
+                tools=[{"type": "function", "function": {"name": "same_tool"}}],
+                max_iterations=6,
+                repeat_limit=3,
+            )
+
+        assert result["ok"] is False
+        assert result["exit_status"] == "stuck_repeating_action"
+        assert result["rounds"] == 3
+        assert result["repeat_count"] == 3
 
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
     @patch("app.infrastructure.llm.client.require_api_key")
@@ -236,4 +272,5 @@ class TestRunEmployeeAgentLoop:
             tools=[],
         )
         assert result["ok"] is False
-        assert "network down" in result["error"]
+        assert result["error"] == "员工模型调用失败，请稍后重试"
+        assert "network down" not in result["error"]

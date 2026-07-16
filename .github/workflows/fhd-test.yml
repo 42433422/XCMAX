@@ -99,7 +99,7 @@ jobs:
           pip install -r deploy/requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
 
-      - name: Verify v10 version anchors
+      - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
 
       - name: Validate coverage SSOT metadata

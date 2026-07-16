@@ -33,8 +33,16 @@ _DEFAULT_URLOPEN = urllib.request.urlopen
 
 
 def _require_market_admin_session(request: Request) -> JSONResponse | None:
+    from app.application.desktop_admin_gate import (
+        assert_desktop_allows_session,
+        forbidden_payload,
+        is_desktop_runtime,
+    )
     from app.application.session_account_meta import load_session_account_meta
     from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    if is_desktop_runtime():
+        return JSONResponse(forbidden_payload(), status_code=403)
 
     sid = _session_id_from_request(request)
     if not sid:
@@ -43,6 +51,9 @@ def _require_market_admin_session(request: Request) -> JSONResponse | None:
             status_code=401,
         )
     meta = load_session_account_meta(sid) or {}
+    denied = assert_desktop_allows_session(meta, session_id=sid)
+    if denied is not None:
+        return JSONResponse(denied, status_code=403)
     if meta.get("account_kind") != "admin" or not meta.get("market_is_admin"):
         return JSONResponse(
             {"success": False, "message": "需要管理员账号登录后访问"},
@@ -129,7 +140,7 @@ async def _market_admin_proxy(
                 )
     try:
         from app.fastapi_routes.market_account import (
-            _authorization_from_request,
+            _authorization_from_request_resolved,
             _error_message,
             _proxy_json,
         )
@@ -140,7 +151,7 @@ async def _market_admin_proxy(
         )
 
     body_for_auth = json_body if isinstance(json_body, dict) else {}
-    authorization = _authorization_from_request(request, body_for_auth)
+    authorization = await _authorization_from_request_resolved(request, body_for_auth)
     if not authorization:
         return JSONResponse(
             {
@@ -504,15 +515,6 @@ CORE_MODULES = [
         "module_id": "other-tools",
         "display_name": "员工工作流",
         "route": "/other-tools",
-        "source": "core",
-        "sync_scope": "none",
-        "active": True,
-        "version": "1.0",
-    },
-    {
-        "module_id": "enterprise-customer-service",
-        "display_name": "外部客服",
-        "route": "/enterprise-customer-service",
         "source": "core",
         "sync_scope": "none",
         "active": True,

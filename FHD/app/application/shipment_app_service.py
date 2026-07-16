@@ -324,10 +324,11 @@ class ShipmentApplicationService:
                         or preview_data.get("sheet_name")
                         or ""
                     ).strip()
-                except RECOVERABLE_ERRORS as e:
+                except RECOVERABLE_ERRORS:
+                    logger.exception("读取出货记录模板信息失败")
                     return {
                         "success": False,
-                        "message": f"导出失败：读取模板信息异常（{str(e)}）",
+                        "message": "导出失败：读取模板信息异常",
                         "file_path": None,
                         "filename": None,
                         "count": 0,
@@ -428,10 +429,11 @@ class ShipmentApplicationService:
                 "count": len(records),
                 "template_used": template_path or "",
             }
-        except RECOVERABLE_ERRORS as e:
+        except RECOVERABLE_ERRORS:
+            logger.exception("导出出货记录失败")
             return {
                 "success": False,
-                "message": f"导出失败：{str(e)}",
+                "message": "导出失败，请稍后重试",
                 "file_path": None,
                 "filename": None,
                 "count": 0,

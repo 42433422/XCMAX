@@ -152,6 +152,7 @@ class AbsorptionResult:
     semantic_findings: tuple[str, ...] = ()
     rejection_findings: tuple[str, ...] = ()
     branch_workflow: dict[str, Any] = field(default_factory=dict)
+    capability_context: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -165,6 +166,7 @@ class AbsorptionResult:
             "semantic_findings": list(self.semantic_findings),
             "rejection_findings": list(self.rejection_findings),
             "branch_workflow": dict(self.branch_workflow),
+            "capability_context": dict(self.capability_context),
         }
 
 

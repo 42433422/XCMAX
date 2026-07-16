@@ -10,7 +10,7 @@
 ## 一条龙全自动发版
 
 ```bash
-bash FHD/mobile-harmony/scripts/release-harmony.sh --version 10.0.0
+bash FHD/mobile-harmony/scripts/release-harmony.sh --version 1.0.0.0
 ```
 
 执行步骤：

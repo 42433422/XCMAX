@@ -57,29 +57,111 @@ else
 fi
 
 hdr "3. 平台 LLM key 已配置？"
-if [ -r "$ENV_FILE" ]; then
-  FOUND=""
-  for k in DEEPSEEK_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY \
-    SILICONFLOW_API_KEY MOONSHOT_API_KEY DASHSCOPE_API_KEY QWEN_API_KEY \
-    PLATFORM_API_KEY MODSTORE_PLATFORM_API_KEY; do
-    v=$(grep -E "^${k}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '" ')
-    [ -n "$v" ] && FOUND="$FOUND $k"
-  done
-  if [ -n "$FOUND" ]; then
-    ok "检测到平台 key:$FOUND（不回显值）"
-  elif [ "${STRICT_PLATFORM_KEY:-1}" = "1" ]; then
-    bad "未在 .env 检出任何平台 LLM key，后台 loop 会空转"
-  else
-    warn "未检出平台 LLM key（STRICT_PLATFORM_KEY=0，降级为告警）"
-  fi
+# 与 modstore_server/llm_key_resolver.platform_api_key 对齐的完整名单（只报名字不回显值）。
+PLATFORM_KEY_NAMES=(
+  OPENAI_API_KEY DEEPSEEK_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GOOGLE_API_KEY
+  SILICONFLOW_API_KEY GROQ_API_KEY TOGETHER_API_KEY OPENROUTER_API_KEY
+  DASHSCOPE_API_KEY QWEN_API_KEY MOONSHOT_API_KEY
+  XIAOMI_API_KEY MIMO_API_KEY XIAOMI_MIMO_API_KEY MINIMAX_API_KEY
+  DOUBAO_API_KEY ARK_API_KEY WENXIN_API_KEY QIANFAN_API_KEY BAIDU_QIANFAN_API_KEY
+  HUNYUAN_API_KEY TENCENT_HUNYUAN_API_KEY ZHIPU_API_KEY BIGMODEL_API_KEY
+  XUNFEI_API_KEY SPARK_API_KEY YI_API_KEY LINGYIWANWU_API_KEY
+  STEPFUN_API_KEY BAICHUAN_API_KEY SENSETIME_API_KEY SENSENOVA_API_KEY
+  PLATFORM_API_KEY MODSTORE_PLATFORM_API_KEY
+)
 
+_key_present_in_file() {
+  local file="$1" key="$2" line raw
+  line=$(grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -1 || true)
+  [ -z "$line" ] && return 1
+  raw=$(printf '%s' "$line" | cut -d= -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'\'']//;s/["'\'']$//')
+  [ -n "$raw" ]
+}
+
+_key_commented_in_file() {
+  local file="$1" key="$2"
+  grep -Eq "^[[:space:]]*#[[:space:]]*${key}=" "$file" 2>/dev/null
+}
+
+FOUND=""
+COMMENTED=""
+SOURCES=""
+
+echo "  [.env 路径] $ENV_FILE"
+if [ -r "$ENV_FILE" ]; then
+  SOURCES="$SOURCES file"
+  for k in "${PLATFORM_KEY_NAMES[@]}"; do
+    if _key_present_in_file "$ENV_FILE" "$k"; then
+      FOUND="$FOUND $k"
+    elif _key_commented_in_file "$ENV_FILE" "$k"; then
+      COMMENTED="$COMMENTED $k"
+    fi
+  done
+else
+  warn "无法读取 $ENV_FILE（若密钥在 systemd EnvironmentFile / 其它路径，见下方进程扫描）"
+fi
+
+# 运行中的 API 进程环境（密钥可能只在 unit 里，不在仓库旁 .env）
+PROC_FOUND=""
+if command -v systemctl >/dev/null 2>&1; then
+  for unit in modstore modstore-api modstore_server xcagi-modstore; do
+    if systemctl cat "$unit" >/dev/null 2>&1; then
+      env_files=$(systemctl show -p EnvironmentFiles --value "$unit" 2>/dev/null | tr ' ' '\n' | sed 's/(.*)//g' | grep -v '^$' || true)
+      for ef in $env_files; do
+        [ -r "$ef" ] || continue
+        SOURCES="$SOURCES systemd:$unit"
+        for k in "${PLATFORM_KEY_NAMES[@]}"; do
+          case " $FOUND $PROC_FOUND " in
+            *" $k "*) continue ;;
+          esac
+          if _key_present_in_file "$ef" "$k"; then
+            PROC_FOUND="$PROC_FOUND $k"
+          fi
+        done
+      done
+    fi
+  done
+fi
+
+# /proc 环境变量名扫描（不打印值）
+if command -v pgrep >/dev/null 2>&1; then
+  for pat in 'uvicorn.*modstore' 'modstore_server' 'gunicorn.*modstore'; do
+    pid=$(pgrep -f "$pat" 2>/dev/null | head -1 || true)
+    [ -n "$pid" ] || continue
+    [ -r "/proc/$pid/environ" ] || continue
+    SOURCES="$SOURCES proc:$pid"
+    env_names=$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | cut -d= -f1 || true)
+    for k in "${PLATFORM_KEY_NAMES[@]}"; do
+      case " $FOUND $PROC_FOUND " in
+        *" $k "*) continue ;;
+      esac
+      echo "$env_names" | grep -qx "$k" && PROC_FOUND="$PROC_FOUND $k"
+    done
+    break
+  done
+fi
+
+ALL_FOUND=$(echo "$FOUND $PROC_FOUND" | xargs)
+if [ -n "$ALL_FOUND" ]; then
+  ok "检测到平台 key:$ALL_FOUND（来源提示:$SOURCES；不回显值）"
+elif [ -n "$COMMENTED" ]; then
+  if [ "${STRICT_PLATFORM_KEY:-1}" = "1" ]; then
+    bad "仅发现已注释的 key:$COMMENTED — 取消注释并写入真实值后 systemctl restart"
+  else
+    warn "仅发现已注释的 key:$COMMENTED"
+  fi
+elif [ "${STRICT_PLATFORM_KEY:-1}" = "1" ]; then
+  bad "未在 .env / systemd EnvironmentFile / 运行进程中检出任何平台 LLM key，后台 loop 会空转"
+else
+  warn "未检出平台 LLM key（STRICT_PLATFORM_KEY=0，降级为告警）"
+fi
+
+if [ -r "$ENV_FILE" ]; then
   if grep -qE "^MODSTORE_RUN_BACKGROUND_JOBS=1" "$ENV_FILE" 2>/dev/null; then
     ok "MODSTORE_RUN_BACKGROUND_JOBS=1"
   else
     warn "MODSTORE_RUN_BACKGROUND_JOBS 未在 .env 置 1，需核对 scheduler unit"
   fi
-else
-  warn "无法读取 $ENV_FILE"
 fi
 
 hdr "4. 健康探针与熔断信号"

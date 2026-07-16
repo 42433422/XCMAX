@@ -1,0 +1,26 @@
+---
+description: 收工后自动清理工作区（最高优先级）
+alwaysApply: true
+---
+
+# 收工自动清理工作区（最高优先级）
+
+完成可交付任务后，**清理工作区优先于汇报细节**。未清理不得视为任务结束。
+
+## 必须做
+
+1. 跑清理（二选一）：
+   - `python3 scripts/dev/clean_agent_workspace.py`
+   - 或等价：对触及的项目跑 Retort `clean-workspace` / `close_run_workspace`
+2. 清掉本会话产生的运行时残留：`.retort/**`（可保留 `absorption_state.json`）、过期 `.xcmax-logs` / `.xcmax-pids`、浅层 `__pycache__` / `.pytest_cache`
+3. 摘要里用一行说明清理结果（removed 数量 / 是否仍 dirty）
+
+## 禁止
+
+- 用 `git clean -fdx` 一刀切（会误删未跟踪源码）
+- 删除业务源码、密钥、`.env*`、未提交的有意改动
+- 只报告「做完了」却留下 `.retort` / 临时跑批目录
+
+## 钩子
+
+`.cursor/hooks.json` 的 `stop` / `sessionEnd` 会再跑一遍清理；Agent 仍须在收尾主动执行，双保险。

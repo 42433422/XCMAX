@@ -24,7 +24,7 @@
 ### handoff: mobile-android-release-officer → 本岗（iOS 岗专用）
 - **触发条件**：Android 双 SKU APK/AAB 产物就绪 + `verify_version_anchors.py` 绿
 - **输入**：`release-apk/` 产物路径、build.gradle.kts 版本锚点、smoke 通过报告
-- **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；版本锚点必须 10.0.0 对齐
+- **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；产品版本必须与 1.0.0.0 SSOT 对齐
 - **当前状态**：`FHD/mobile-ios/` 已落地；`release-ios.yml` 负责 XcodeGen / simulator build / dual-profile archive-export
 
 

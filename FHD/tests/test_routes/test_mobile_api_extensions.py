@@ -207,7 +207,6 @@ class TestPairingIssue:
                     "relay_id": "relay-account-1",
                     "pairing_code": "654321",
                     "relay_base_url": "https://relay.example.test/fhd-api/",
-                    "qr_json": {"v": 3, "relay_id": "relay-account-1", "code": "654321"},
                 },
             ),
         ):

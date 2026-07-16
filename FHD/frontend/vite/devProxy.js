@@ -308,6 +308,11 @@ export function buildDevProxy(apiBase) {
               proxyReq.setHeader('X-Forwarded-For', normalizedIp)
               proxyReq.setHeader('X-Real-IP', normalizedIp)
               }
+              // changeOrigin 会把 Host 改成后端地址；透传原始 Host 让 pairing 等逻辑拿到手机真实访问端口
+              const origHost = req.headers['host'] || ''
+              if (origHost) {
+                proxyReq.setHeader('X-Forwarded-Host', origHost)
+              }
             })
             proxy.on('error', (err, _req, res) => {
               logViteProxyConnectFailure('/api', apiBase, err)

@@ -105,6 +105,9 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
   function mountModal(modelValue = true) {
     return mount(AdminDeployUpdateModal, {
       props: { modelValue },
+      global: {
+        stubs: { Teleport: true },
+      },
     })
   }
 
@@ -512,7 +515,7 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       const pushBtn = wrapper.findAll('button')[2]
       await pushBtn.trigger('click')
       await nextTick()
-      expect(pushBtn.text()).toContain('推送中')
+      expect(wrapper.findAll('button')[2].text()).toContain('推送中')
       wrapper.unmount()
     })
   })

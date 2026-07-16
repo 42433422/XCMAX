@@ -105,17 +105,17 @@ describe('AdminEntitlementsView functions', () => {
     expect(vm.walletBalance({ id: 1 })).toBe('¥100.50')
   })
 
-  it('walletBalance returns — for missing wallet', async () => {
+  it('walletBalance returns zero for an account without a materialized wallet row', async () => {
     const wrapper = await mountComponent()
     const vm = wrapper.vm as any
-    expect(vm.walletBalance({ id: 999 })).toBe('—')
+    expect(vm.walletBalance({ id: 999 })).toBe('¥0.00')
   })
 
-  it('walletBalance returns — for null balance', async () => {
+  it('walletBalance returns zero for null balance', async () => {
     mockListWallets.mockResolvedValue({ items: [{ user_id: 1, balance: null }] })
     const wrapper = await mountComponent()
     const vm = wrapper.vm as any
-    expect(vm.walletBalance({ id: 1 })).toBe('—')
+    expect(vm.walletBalance({ id: 1 })).toBe('¥0.00')
   })
 
   it('walletBalance handles string balance', async () => {

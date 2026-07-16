@@ -21,7 +21,7 @@
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
       />
-      <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
+      <div v-if="isTaskPaneResizable && hasTaskPanelContent" class="chat-pane-handle-slot">
         <PaneResizeHandle
           orientation="vertical"
           label="调整任务面板宽度"
@@ -30,6 +30,7 @@
         />
       </div>
       <ChatTaskPanel
+        v-if="hasTaskPanelContent"
         :current-task="currentTask"
         :task-list="taskList"
         :filtered-task-list="filteredTaskList"
@@ -78,7 +79,6 @@
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
         @show-history="showHistoryPanel"
-        @trigger-upload="triggerUpload"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
         @pro-intent-change="onProIntentToolbarChange"
@@ -110,6 +110,7 @@
           rows="2"
           :placeholder="inputPlaceholder"
           v-model="messageInput"
+          aria-describedby="chat-composer-status"
           @keydown="handleKeyDown"
         ></textarea>
         <button
@@ -129,9 +130,26 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
-        <button class="btn btn-primary send-message-btn" id="sendMessageBtn" @click="sendMessage">
+        <button
+          class="btn btn-primary send-message-btn"
+          id="sendMessageBtn"
+          :disabled="!canSendMessage"
+          :aria-disabled="!canSendMessage"
+          :title="sendButtonTitle"
+          @click="sendMessage"
+        >
           发送
         </button>
+      </div>
+      <div
+        v-if="composerStatusText"
+        id="chat-composer-status"
+        class="chat-composer-status"
+        :class="{ 'chat-composer-status--error': !!voiceFeedbackText }"
+        role="status"
+        aria-live="polite"
+      >
+        {{ composerStatusText }}
       </div>
     </div>
     <ChatHistoryModal
@@ -140,7 +158,6 @@
       :history-loading="historyLoading"
       :history-error="historyError"
       :current-session-id="currentSessionId"
-      :format-task-time="formatTaskTime"
       @close="showHistory = false"
       @refresh="showHistoryPanel"
       @clear="clearHistorySessions"
@@ -253,7 +270,6 @@ const {
   setCustomOrderNumber,
   cancelTask,
   showTaskConfirm,
-  triggerUpload,
   onExcelAnalyzeFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
@@ -288,6 +304,7 @@ const {
   voiceButtonIcon,
   voiceButtonText,
   voiceButtonTitle,
+  voiceFeedbackText,
   startVoiceRecording,
   stopVoiceRecording,
   cleanupVoiceInput,
@@ -332,6 +349,26 @@ const visibleQuickButtons = computed(() => {
 const inputPlaceholder = computed(() => {
   const preset = getIndustryPreset(currentIndustryId.value)
   return isProMode.value ? preset.placeholderPro : preset.placeholderNormal
+})
+
+const hasTaskPanelContent = computed(() => (
+  !!currentTask.value
+  || taskList.value.length > 0
+  || !!latestAssistantPush.value
+  || (isProMode.value && !!proRuntimeTask.value)
+))
+
+const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
+const sendButtonTitle = computed(() => {
+  if (isLoading.value) return '正在发送，请稍候'
+  if (!messageInput.value.trim()) return '请先输入内容'
+  return '发送消息'
+})
+const composerStatusText = computed(() => {
+  if (voiceFeedbackText.value) return voiceFeedbackText.value
+  if (isLoading.value) return '正在发送，请稍候'
+  if (!messageInput.value.trim()) return '请输入内容后再发送'
+  return ''
 })
 
 const sendMessage = async () => {
@@ -405,3 +442,17 @@ function emitSwitchView(view: string) {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view } }))
 }
 </script>
+
+<style scoped>
+.chat-composer-status {
+  min-height: 18px;
+  padding: 4px 2px 0;
+  color: var(--app-text-muted, #667085);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.4;
+}
+
+.chat-composer-status--error {
+  color: #b42318;
+}
+</style>

@@ -52,17 +52,15 @@ def _load_checker_module():
     return mod
 
 
-def test_openapi_and_routes_are_consistent():
+def test_openapi_and_routes_are_consistent(monkeypatch):
     """生产路由与 OpenAPI schema 必须一致（无 error 级发现）。"""
     os.environ.setdefault("XCAGI_NEURO_INTENT", "1")
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
     checker = _load_checker_module()
-
-    from app.fastapi_app import get_fastapi_app
-
-    app = get_fastapi_app()
+    app = checker._build_app()
 
     routes = checker.collect_runtime_routes(app)
     ops, _schema = checker.collect_openapi_operations(app)
@@ -91,7 +89,7 @@ def test_openapi_and_routes_are_consistent():
         raise AssertionError("\n".join(lines))
 
 
-def test_openapi_schema_builds_without_pydantic_errors():
+def test_openapi_schema_builds_without_pydantic_errors(monkeypatch):
     """``app.openapi()`` 必须能生成完整 schema（无 PydanticUserError / ForwardRef 未解析等）。
 
     这条测试针对的是 ``from __future__ import annotations`` + 装饰器包装路由
@@ -99,12 +97,12 @@ def test_openapi_schema_builds_without_pydantic_errors():
     进而在 OpenAPI 生成时抛 ``PydanticUserError`` 的典型场景。
     """
     os.environ.setdefault("XCAGI_NEURO_INTENT", "1")
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
-    from app.fastapi_app import get_fastapi_app
-
-    app = get_fastapi_app()
+    checker = _load_checker_module()
+    app = checker._build_app()
 
     schema = app.openapi()
     assert isinstance(schema, dict)

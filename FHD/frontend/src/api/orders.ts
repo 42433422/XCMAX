@@ -1,6 +1,6 @@
 import { api, ApiError } from './core';
 import type { ApiResponse } from '@/types/api';
-import type { Order } from '@/types/order';
+import type { Order, OrderUpdateDTO } from '@/types/order';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 import { asRecord } from '@/utils/typeGuards'
 
@@ -13,6 +13,21 @@ export const ordersApi = {
 
   getOrder(orderNumber: string): Promise<ApiResponse<Order>> {
     return api.get<ApiResponse<Order>>(erp(`/api/orders/${encodeURIComponent(orderNumber)}`));
+  },
+
+  createOrder(payload: Record<string, unknown>): Promise<ApiResponse<Order>> {
+    return api.post<ApiResponse<Order>>(erp('/api/orders'), payload);
+  },
+
+  updateOrder(orderNumber: string, payload: OrderUpdateDTO | Record<string, unknown>): Promise<ApiResponse<Order>> {
+    return api.patch<ApiResponse<Order>>(
+      erp(`/api/orders/${encodeURIComponent(orderNumber)}`),
+      payload,
+    );
+  },
+
+  exportOrders(params: Record<string, unknown> = {}): Promise<Response> {
+    return api.download(erp('/api/orders/export'), params);
   },
 
   getLatestOrders(): Promise<ApiResponse<Order[]>> {

@@ -1305,10 +1305,13 @@ class TestRejectRequest:
                 "app.application.approval_workspace_app_service._node_query_for_user"
             ) as mock_nqf,
             patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
         ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
+            req.applicant_id = 2
+            req.title = "请假"
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = reject_request(1, request, body={"reason": "不符合要求"})
@@ -1343,10 +1346,13 @@ class TestRejectRequest:
                 "app.application.approval_workspace_app_service._node_query_for_user"
             ) as mock_nqf,
             patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
         ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
+            req.applicant_id = 2
+            req.title = "请假"
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = reject_request(1, request, body={"opinion": "不同意"})
@@ -1374,12 +1380,15 @@ class TestRejectRequest:
                 return_value=True,
             ),
             patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
             patch(
                 "app.application.approval_workspace_app_service._drop_pending_ai_workflow_after_rejection"
             ) as mock_drop,
         ):
             mock_resolve.return_value = 1
+            req.applicant_id = 2
+            req.title = "AI 工作流"
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
             mock_drop.return_value = {
                 "workflow_executed": False,

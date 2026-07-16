@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from app.application import persona_style_inject as inj
 from app.application.employee_runtime.agent import EmployeeAgent
 from app.domain.persona.entities import PersonaProfile
@@ -45,6 +47,13 @@ def test_style_for_user_zero_or_negative_empty():
     assert inj.persona_style_for_user(0) == ""
     assert inj.persona_style_for_user(-1) == ""
     assert inj.persona_style_for_user(None) == ""  # type: ignore[arg-type]
+
+
+def test_style_for_user_running_loop_returns_empty_without_creating_coroutine():
+    async def call_from_employee_api_path() -> str:
+        return inj.persona_style_for_user(1)
+
+    assert asyncio.run(call_from_employee_api_path()) == ""
 
 
 # ── 员工 config 注入(平台员工执行路径) ──

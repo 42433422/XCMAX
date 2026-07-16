@@ -64,7 +64,9 @@ ln -sfn .nm-e2e FHD/frontend/node_modules
 
 ## 证据截图
 
-全栈 P0 通过时写入 [`docs/evidence/e2e/01–05.png`](../docs/evidence/e2e/README.md)。
+全栈 P0 通过时写入 [`docs/evidence/e2e/01–06.png`](../docs/evidence/e2e/README.md)。mock smoke
+默认写入被忽略的 `playwright-report/evidence/`，不会覆盖正式验收证据；也可通过
+`E2E_EVIDENCE_DIR` 显式指定输出目录。
 
 ## CI
 

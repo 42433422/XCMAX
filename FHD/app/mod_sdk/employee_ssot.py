@@ -324,11 +324,17 @@ def derive_admin_duty_roster(
 # 顶层聚合 —— 给 API / 前端的完整派生包
 # ---------------------------------------------------------------------------
 def derive_employee_ssot(installed_ids: set[str] | frozenset[str] | None = None) -> dict[str, Any]:
-    """完整派生包：管理端 6 部门(上岗) + 企业端 4 部门(上架/未上架)。"""
+    """完整派生包：管理端 6 部门(上岗) + 企业端 4 部门(上架/未上架) + 统一联系人。"""
+    from app.mod_sdk.employee_ssot_contacts import derive_employee_contacts, employee_label_maps
+
+    employee_labels, employee_descriptions = employee_label_maps()
     return {
         "schema_version": int(load_duty_roster_document().get("schema_version") or 0),
         "admin": derive_admin_duty_roster(installed_ids),
         "enterprise": derive_enterprise_org(),
+        "contacts": derive_employee_contacts(installed_ids),
+        "employee_labels": employee_labels,
+        "employee_descriptions": employee_descriptions,
     }
 
 
@@ -355,4 +361,21 @@ __all__ = [
     "derive_admin_duty_roster",
     "derive_employee_ssot",
     "primary_admin_department_for",
+]
+
+# 联系人派生拆至 employee_ssot_contacts，此处 re-export 保持 import 路径稳定。
+from app.mod_sdk.employee_ssot_contacts import (  # noqa: E402
+    SUPER_EMPLOYEE_CONTACT_ORDER,
+    derive_employee_contacts,
+    employee_description,
+    employee_display_name,
+    load_employee_manifest_meta,
+)
+
+__all__ += [
+    "derive_employee_contacts",
+    "employee_description",
+    "employee_display_name",
+    "load_employee_manifest_meta",
+    "SUPER_EMPLOYEE_CONTACT_ORDER",
 ]

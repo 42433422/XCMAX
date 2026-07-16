@@ -19,7 +19,7 @@ def _normalize_dependencies(raw: Any) -> dict[str, str]:
     """Coerce a manifest ``dependencies`` field into ``{dep_id: version_spec}``.
 
     The canonical schema is a mapping of dependency id -> version spec, e.g.
-    ``{"xcagi": ">=10.0.0"}``. For backward compatibility some manifests declare
+    ``{"xcagi": ">=1.0.0.0"}``. For backward compatibility some manifests declare
     dependencies as a bare list of ids (``["other_mod"]``); those are treated as
     ``{id: "*"}`` (any version). Any other shape is ignored (empty dict) so that
     ``validate_dependencies`` never raises ``AttributeError`` at load time and
@@ -149,11 +149,25 @@ class ModMetadata:
 
 
 def parse_manifest(mod_path: str) -> ModMetadata | None:
-    manifest_path = os.path.join(mod_path, "manifest.json")
-    logger.info("[parse_manifest] Checking manifest at: %s", manifest_path)
-    if not os.path.isfile(manifest_path):
-        logger.warning("[parse_manifest] Mod manifest not found: %s", manifest_path)
+    try:
+        with os.scandir(mod_path) as entries:
+            manifest_entry = next(
+                (
+                    entry
+                    for entry in entries
+                    if entry.name == "manifest.json"
+                    and not entry.is_symlink()
+                    and entry.is_file(follow_symlinks=False)
+                ),
+                None,
+            )
+    except OSError:
+        manifest_entry = None
+    if manifest_entry is None:
+        logger.warning("[parse_manifest] Mod manifest not found")
         return None
+    manifest_path = manifest_entry.path
+    logger.info("[parse_manifest] Checking manifest")
 
     try:
         with open(manifest_path, encoding="utf-8") as f:
@@ -185,7 +199,7 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
                 logger.warning(
-                    "Mod %s requires xcagi %s but host version is 10.0.0",
+                    "Mod %s requires xcagi %s but host version is 1.0.0.0",
                     metadata.id,
                     version_spec,
                 )
@@ -204,7 +218,7 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
 def _check_xcagi_version(version_spec: str) -> bool:
     import re
 
-    current_version = "10.0.0"
+    current_version = "1.0.0.0"
 
     match = re.match(r">=([\d.]+)", version_spec)
     if match:

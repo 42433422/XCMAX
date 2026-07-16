@@ -81,6 +81,8 @@ describe('useChatTaskList', () => {
       type: 'test',
       source: 'user',
       status: 'running',
+      stage: 'Still working',
+      error: 'stale error',
       progress: 50,
     })
     expect(taskList.taskList.value).toHaveLength(1)
@@ -102,6 +104,8 @@ describe('useChatTaskList', () => {
     expect(task?.status).toBe('success')
     expect(task?.progress).toBe(100)
     expect(task?.summary).toBe('Done!')
+    expect(task?.stage).toBe('')
+    expect(task?.error).toBe('')
   })
 
   it('finishTask does nothing for non-existent task', () => {
@@ -118,11 +122,13 @@ describe('useChatTaskList', () => {
       type: 'test',
       source: 'user',
       status: 'running',
+      stage: 'Previous step',
     })
     taskList.failTask('task-1', 'Something went wrong')
     const task = taskList.taskList.value.find((t) => t.id === 'task-1')
     expect(task?.status).toBe('failed')
     expect(task?.error).toBe('Something went wrong')
+    expect(task?.stage).toBe('执行失败')
   })
 
   it('cancelTaskById marks task as cancelled', () => {
@@ -147,12 +153,14 @@ describe('useChatTaskList', () => {
       type: 'test',
       source: 'user',
       status: 'failed',
+      stage: '执行失败',
     })
     taskList.retryTask('task-1')
     const task = taskList.taskList.value.find((t) => t.id === 'task-1')
     expect(task?.status).toBe('running')
     expect(task?.title).toContain('重试')
     expect(task?.progress).toBe(0)
+    expect(task?.stage).toBe('')
   })
 
   it('toggleTaskExpanded adds and removes task id', () => {

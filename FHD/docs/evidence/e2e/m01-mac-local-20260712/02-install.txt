@@ -1,0 +1,8 @@
+stopping existing 17500
+backed up adhoc app
+MNT=/Volumes/XCAGI 10.0.0-arm64
+total 0
+drwxr-xr-x@  3 a4243342  staff   96 Jul 12 00:33 .
+drwxrwxr-x  23 root      admin  736 Jul 12 01:47 ..
+drwxr-xr-x@  9 a4243342  staff  288 Jul 12 00:38 Contents
+INSTALL_OK

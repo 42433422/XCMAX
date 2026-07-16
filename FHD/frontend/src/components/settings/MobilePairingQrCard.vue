@@ -76,12 +76,13 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import QRCode from 'qrcode';
 import {
+  applyDevProxyReachablePort,
   buildPairingQrText,
   fetchHostDiscoverHint,
   issueMobilePairing,
   loadDesktopPairingPayload,
   resolvePairingHost,
-  resolvePairingPortHint,
+  resolveReachablePairingPort,
   type PairingPayload,
 } from '@/api/mobilePairing';
 import { apiFetch } from '@/utils/apiBase';
@@ -223,9 +224,11 @@ async function refreshQr() {
     }
 
     const hint = await fetchHostDiscoverHint();
-    const port = Number(hint.api_port || resolvePairingPortHint());
+    const port = resolveReachablePairingPort(Number(hint.api_port || 0));
     const host = resolvePairingHost();
-    const payload = await issueMobilePairing(host, port);
+    const payload = applyDevProxyReachablePort(
+      await issueMobilePairing(host, port),
+    );
     await renderPayload(payload);
   } catch (error: unknown) {
     qrDataUrl.value = '';

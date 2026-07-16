@@ -119,6 +119,14 @@ def run_agent_handler(
             max_iters = int((actions_cfg or {}).get("max_iterations") or 0) or None
         except (TypeError, ValueError):
             max_iters = None
+    try:
+        wall_time_limit_sec = float((actions_cfg or {}).get("wall_time_limit_sec") or 300.0)
+    except (TypeError, ValueError):
+        wall_time_limit_sec = 300.0
+    try:
+        repeat_limit = int((actions_cfg or {}).get("repeat_limit") or 3)
+    except (TypeError, ValueError):
+        repeat_limit = 3
 
     return run_employee_agent_loop(
         employee_id=employee_id,
@@ -129,6 +137,8 @@ def run_agent_handler(
         workspace_root=workspace_root,
         gate=gate,
         max_iterations=max_iters or 6,
+        wall_time_limit_sec=max(1.0, wall_time_limit_sec),
+        repeat_limit=max(2, repeat_limit),
     )
 
 

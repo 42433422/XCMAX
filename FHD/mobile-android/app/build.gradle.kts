@@ -29,7 +29,7 @@ val injectedVersionCode: Int =
 val injectedVersionName: String =
     (project.findProperty("androidVersionName") as String?)?.takeIf { it.isNotBlank() }
         ?: System.getenv("XCAGI_ANDROID_VERSION_NAME")?.takeIf { it.isNotBlank() }
-        ?: "10.0.0"
+        ?: "1.0.0.0"
 
 val localProperties = Properties().apply {
     val propsFile = rootProject.file("local.properties")

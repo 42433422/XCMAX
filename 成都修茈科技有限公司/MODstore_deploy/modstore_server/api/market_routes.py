@@ -1346,7 +1346,8 @@ def api_buy_item(item_id: int, user: User = Depends(_get_current_user)):
             )
         if not wallet or wallet.balance < item.price:
             raise HTTPException(
-                402, f"余额不足，需要 ¥{item.price}，当前 ¥{wallet.balance if wallet else 0}"
+                402,
+                f"余额不足，需要 ¥{item.price}，当前 ¥{wallet.balance if wallet else 0}",
             )
 
         wallet.balance -= item.price
@@ -1388,8 +1389,8 @@ def api_download_item(item_id: int, user: User = Depends(_get_current_user)):
 
         from modstore_server.catalog_store import files_dir
 
-        path = files_dir() / item.stored_filename
-        if not path.is_file():
+        path = _existing_child_file(files_dir(), item.stored_filename)
+        if path is None:
             raise HTTPException(404, "文件缺失")
 
         # 流式下载大文件
@@ -1462,6 +1463,50 @@ def _upload_chunks_dir() -> Path:
     d = Path(__file__).resolve().parent / "upload_chunks"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _existing_child_file(parent: Path, name: str) -> Path | None:
+    try:
+        with os.scandir(parent) as entries:
+            for entry in entries:
+                if (
+                    entry.name == name
+                    and not entry.is_symlink()
+                    and entry.is_file(follow_symlinks=False)
+                ):
+                    return Path(entry.path)
+    except OSError:
+        return None
+    return None
+
+
+def _existing_upload_session(session_id: str) -> Path | None:
+    try:
+        with os.scandir(_upload_chunks_dir()) as entries:
+            for entry in entries:
+                if (
+                    entry.name == session_id
+                    and not entry.is_symlink()
+                    and entry.is_dir(follow_symlinks=False)
+                ):
+                    return Path(entry.path)
+    except OSError:
+        return None
+    return None
+
+
+def _catalog_suffix(raw_name: str) -> str | None:
+    raw = str(raw_name or "").lower()
+    suffix = raw if raw in {".zip", ".xcmod", ".xcemp"} else Path(raw).suffix.lower()
+    return {".zip": ".zip", ".xcmod": ".xcmod", ".xcemp": ".xcemp"}.get(suffix)
+
+
+def _new_catalog_file(suffix: str) -> tuple[Path, str]:
+    safe_suffix = {".zip": ".zip", ".xcmod": ".xcmod", ".xcemp": ".xcemp"}.get(suffix)
+    if safe_suffix is None:
+        raise ValueError("unsupported catalog suffix")
+    name = f"{uuid.uuid4().hex}{safe_suffix}"
+    return _catalog_files_dir() / name, name
 
 
 def _compute_sha256(file_path: Path) -> str:
@@ -1537,13 +1582,11 @@ async def api_admin_upload_catalog(
         sha256 = ""
 
         if file and file.filename:
-            suffix = Path(file.filename).suffix.lower()
-            if suffix not in {".zip", ".xcmod", ".xcemp"}:
+            suffix = _catalog_suffix(file.filename)
+            if suffix is None:
                 raise HTTPException(400, "仅支持 .zip / .xcmod / .xcemp 格式")
 
-            dest_dir = _catalog_files_dir()
-            dest_name = f"{pkg_id}-{version}{suffix}"
-            dest_path = dest_dir / dest_name
+            dest_path, dest_name = _new_catalog_file(suffix)
 
             content = await file.read()
             if len(content) > 100 * 1024 * 1024:
@@ -1599,7 +1642,8 @@ def api_admin_patch_catalog_item(
 
 
 @router.post(
-    "/admin/catalog/sync-from-xc-packages", summary="从 XC catalog_store 同步缺失条目到市场库"
+    "/admin/catalog/sync-from-xc-packages",
+    summary="从 XC catalog_store 同步缺失条目到市场库",
 )
 def api_admin_sync_xc_catalog_packages(user: User = Depends(_require_admin)):
     """将 ``packages.json`` 中尚未出现在 ``catalog_items`` 的包插入数据库（可选复制文件）。"""
@@ -1657,10 +1701,15 @@ def api_initiate_upload(
     user: User = Depends(_require_admin),
 ):
     """初始化分块上传会话"""
-    import uuid
-
     session_id = str(uuid.uuid4())
+    suffix = _catalog_suffix(file_name)
+    if suffix is None:
+        raise HTTPException(400, "仅支持 .zip / .xcmod / .xcemp 格式")
+    if total_size <= 0 or chunk_size <= 0:
+        raise HTTPException(400, "上传大小参数无效")
     total_chunks = (total_size + chunk_size - 1) // chunk_size
+    if total_chunks > 10000:
+        raise HTTPException(400, "文件分块过多")
 
     # 创建上传会话目录
     session_dir = _upload_chunks_dir() / session_id
@@ -1669,7 +1718,7 @@ def api_initiate_upload(
     # 存储会话信息
     session_info = {
         "session_id": session_id,
-        "file_name": file_name,
+        "suffix": suffix,
         "total_size": total_size,
         "chunk_size": chunk_size,
         "total_chunks": total_chunks,
@@ -1690,19 +1739,21 @@ async def api_upload_chunk(
     user: User = Depends(_require_admin),
 ):
     """上传单个文件块"""
-    session_dir = _upload_chunks_dir() / session_id
-    if not session_dir.exists():
+    session_dir = _existing_upload_session(session_id)
+    if session_dir is None:
         raise HTTPException(404, "上传会话不存在")
 
     # 读取会话信息
     with open(session_dir / "session.json", "r", encoding="utf-8") as f:
         session_info = json.load(f)
 
-    if chunk_index >= session_info["total_chunks"]:
+    total_chunks = int(session_info["total_chunks"])
+    if chunk_index < 0 or chunk_index >= total_chunks:
         raise HTTPException(400, "无效的块索引")
 
     # 保存文件块
-    chunk_path = session_dir / f"chunk_{chunk_index}"
+    chunk_name = tuple(f"chunk_{i}" for i in range(total_chunks))[chunk_index]
+    chunk_path = session_dir / chunk_name
     content = await file.read()
 
     with open(chunk_path, "wb") as f:
@@ -1725,8 +1776,8 @@ def api_complete_upload(
     user: User = Depends(_require_admin),
 ):
     """完成分块上传并合并文件"""
-    session_dir = _upload_chunks_dir() / session_id
-    if not session_dir.exists():
+    session_dir = _existing_upload_session(session_id)
+    if session_dir is None:
         raise HTTPException(404, "上传会话不存在")
 
     # 读取会话信息
@@ -1744,13 +1795,11 @@ def api_complete_upload(
         raise HTTPException(400, f"缺少文件块: {missing_chunks}")
 
     # 合并文件
-    suffix = Path(session_info["file_name"]).suffix.lower()
-    if suffix not in {".zip", ".xcmod", ".xcemp"}:
+    suffix = _catalog_suffix(str(session_info.get("suffix") or ""))
+    if suffix is None:
         raise HTTPException(400, "仅支持 .zip / .xcmod / .xcemp 格式")
 
-    dest_dir = _catalog_files_dir()
-    dest_name = f"{pkg_id}-{version}{suffix}"
-    dest_path = dest_dir / dest_name
+    dest_path, dest_name = _new_catalog_file(suffix)
 
     # 合并所有块
     with open(dest_path, "wb") as out_file:
@@ -1939,7 +1988,9 @@ async def api_admin_align_single_employee_llm_to_auto(
 
     用于「无密钥」修复路径：管理员在 dg-stats 上直接点单条「改为自动」时调用。
     """
-    from modstore_server.employee_pack_deepseek_align import align_single_employee_pack_llm_to_auto
+    from modstore_server.employee_pack_deepseek_align import (
+        align_single_employee_pack_llm_to_auto,
+    )
 
     result = await align_single_employee_pack_llm_to_auto(user, pkg_id, dry_run=dry_run)
     if not result.get("ok"):
@@ -2246,19 +2297,35 @@ def api_admin_list_wallets(
     offset: int = Query(0, ge=0),
     user: User = Depends(_require_admin),
 ):
+    """Return one wallet row per account, including users whose balance is still zero.
+
+    A wallet record is created lazily on first wallet use.  Listing the ``wallets`` table alone
+    therefore made untouched accounts look as if their balance could not be queried.
+    """
     sf = get_session_factory()
     with sf() as session:
-        total = session.query(Wallet).count()
-        rows = session.query(Wallet).order_by(Wallet.id).offset(offset).limit(limit).all()
+        total = session.query(User).count()
+        rows = (
+            session.query(User, Wallet)
+            .outerjoin(Wallet, Wallet.user_id == User.id)
+            .order_by(User.created_at.desc(), User.id.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         return {
             "items": [
                 {
-                    "id": w.id,
-                    "user_id": w.user_id,
-                    "balance": w.balance,
-                    "updated_at": w.updated_at.isoformat() if w.updated_at else "",
+                    "id": wallet.id if wallet else None,
+                    "user_id": account.id,
+                    "balance": wallet.balance if wallet else 0.0,
+                    "updated_at": (
+                        wallet.updated_at.isoformat()
+                        if wallet is not None and wallet.updated_at
+                        else ""
+                    ),
                 }
-                for w in rows
+                for account, wallet in rows
             ],
             "total": total,
         }

@@ -2,6 +2,7 @@ import type { AgentRunEvent } from '@/api/agentRuns'
 import agentRunsApi from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 
 type UpsertTask = (
   item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string },
@@ -38,22 +39,22 @@ export function extractAgentRunId(payload: unknown): string {
 
 function eventLabel(event: AgentRunEvent): string {
   const message = asString(event.message).trim()
-  if (message) return message
+  if (message) return normalizeTaskDisplayText(message)
   const type = asString(event.event_type).trim()
   const labels: Record<string, string> = {
-    'run.created': 'Agent run 已创建',
-    'planner.started': '正在生成 Agent 计划',
-    'planner.completed': 'Agent 计划生成完成',
-    'planner.blocked': 'Agent 计划被阻塞',
+    'run.created': '智能任务已创建',
+    'planner.started': '正在生成执行计划',
+    'planner.completed': '执行计划生成完成',
+    'planner.blocked': '执行计划无法继续',
     'tool.started': '正在执行工具',
     'tool.completed': '工具执行完成',
     'tool.failed': '工具执行失败',
     'step.waiting_user': '等待用户确认',
     'step.blocked': '步骤依赖未满足',
-    'run.completed': 'Agent run 执行完成',
-    'run.failed': 'Agent run 失败',
+    'run.completed': '智能任务执行完成',
+    'run.failed': '智能任务执行失败',
   }
-  return labels[type] || type || 'Agent run 更新'
+  return labels[type] || '执行状态已更新'
 }
 
 function statusFromEvents(events: AgentRunEvent[]): TaskItem['status'] {
@@ -86,7 +87,7 @@ export function buildAgentRunTaskUpdate(params: {
   const events = asArray<AgentRunEvent>(params.events)
   const last = events[events.length - 1]
   const status = statusFromEvents(events)
-  const stage = last ? eventLabel(last) : '等待 Agent 事件'
+  const stage = last ? eventLabel(last) : '等待执行状态'
   const errorEvent = [...events].reverse().find((event) =>
     ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type),
   )
@@ -95,11 +96,11 @@ export function buildAgentRunTaskUpdate(params: {
     id: `agent_${params.runId}`,
     type: 'agent_run',
     source: 'agent',
-    title: `Agent 任务：${userTitle || params.runId}`,
+    title: `智能任务：${userTitle || params.runId}`,
     status,
     progress: progressFromEvents(events),
     stage,
-    summary: status === 'success' ? 'Agent run 执行完成' : stage,
+    summary: status === 'success' ? '智能任务执行完成' : stage,
     error: errorEvent ? eventLabel(errorEvent) : '',
     messageRef: params.messageRef,
     payload: {

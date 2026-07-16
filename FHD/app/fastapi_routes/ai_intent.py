@@ -187,9 +187,9 @@ def ai_intent_test(body: dict = Body(default_factory=dict)):
     try:
         payload = {"success": True, "data": recognize_intents(message)}
         return _trace_intent_test_run(payload, message=message, body=body or {})
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "message": f"意图识别失败：{str(e)}"}, status_code=500
+            {"success": False, "message": "意图识别失败，请稍后重试"}, status_code=500
         )
 
 
@@ -206,7 +206,7 @@ def intent_health():
     except RECOVERABLE_ERRORS as e:
         logger.error("intent health: %s", e)
         return JSONResponse(
-            {"status": "error", "model_available": False, "error": str(e)},
+            {"status": "error", "model_available": False, "error": "健康检查失败"},
             status_code=500,
         )
 
@@ -261,7 +261,7 @@ def intent_predict(body: dict = Body(default_factory=dict)):
         return classifier.predict(text, return_probs=True)
     except RECOVERABLE_ERRORS as e:
         logger.error("intent predict: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "意图预测失败"}, status_code=500)
 
 
 @router.post("/api/intent/predict_batch")
@@ -276,4 +276,4 @@ def intent_predict_batch(body: dict = Body(default_factory=dict)):
         return {"results": results}
     except RECOVERABLE_ERRORS as e:
         logger.error("intent predict_batch: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "批量意图预测失败"}, status_code=500)

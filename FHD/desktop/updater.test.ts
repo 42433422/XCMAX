@@ -94,6 +94,24 @@ releaseDate: '2026-07-05T00:00:00.000Z'`
   })
 })
 
+describe('updater — parseYamlField', () => {
+  it('extracts buildSha from yaml text', async () => {
+    const { parseYamlField } = await import('./updater.js')
+    const content = `version: 10.0.0\nbuildSha: abc123\ntest: 1`
+    expect(parseYamlField(content, 'buildSha')).toBe('abc123')
+  })
+})
+
+describe('updater — downloadUpdate is explicit', () => {
+  it('exports downloadUpdate for user-triggered installs', async () => {
+    const mod = await import('./updater.js')
+    expect(typeof mod.downloadUpdate).toBe('function')
+    expect(typeof mod.configureUpdater).toBe('function')
+    expect(typeof mod.getUpdateStatus).toBe('function')
+    expect(mod.getUpdateStatus()).toBeNull()
+  })
+})
+
 describe('updater — verifyLatestMetadataSignature', () => {
   const savedEnv = { ...process.env }
 
@@ -111,6 +129,21 @@ describe('updater — verifyLatestMetadataSignature', () => {
   it('skips silently when env not configured', async () => {
     const { verifyLatestMetadataSignature } = await import('./updater.js')
     await expect(verifyLatestMetadataSignature()).resolves.toBeUndefined()
+  })
+
+  it('accepts fetched content with valid signature via fetchLatestMetadataText', async () => {
+    process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = TEST_PUBLIC_KEY_PEM
+    process.env.XCAGI_UPDATE_URL = 'https://update.example.com/releases/stable/enterprise/'
+    const validContent = buildMetadata('10.0.5')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => validContent
+    } as Response)
+    const { fetchLatestMetadataText } = await import('./updater.js')
+    await expect(fetchLatestMetadataText()).resolves.toContain('version: 10.0.5')
+    fetchSpy.mockRestore()
   })
 
   it('throws on HTTP failure (404)', async () => {

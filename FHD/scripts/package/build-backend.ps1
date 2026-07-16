@@ -1,6 +1,6 @@
 # FrontendEdition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP 侧栏
 param(
-  [string]$Version = "10.0.0",
+  [string]$Version = "1.0.0.0",
   [switch]$SkipFrontend,
   [ValidateSet('full', 'generic', 'minimal')]
   [string]$FrontendEdition = 'generic',
@@ -52,6 +52,7 @@ if (-not $SkipFrontend) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   }
   Pop-Location
+  # 桌面包不构建 admin-console（管理端仅网页 SSOT）
 }
 
 python -m pip install --upgrade pip

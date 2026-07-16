@@ -55,7 +55,8 @@ from typing import Any, Iterable
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    # scripts/tools/check_openapi_consistency.py -> FHD/
+    return Path(__file__).resolve().parents[2]
 
 
 def _norm_method(m: str) -> str:

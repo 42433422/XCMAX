@@ -168,6 +168,12 @@ def load_session_account_meta(session_id: str) -> dict[str, Any] | None:
 
 def session_row_to_meta_dict(row: UserSession) -> dict[str, Any]:
     imp_uid = getattr(row, "impersonating_market_user_id", None)
+    raw_local_uid = getattr(row, "user_id", None)
+    local_user_id = (
+        int(raw_local_uid)
+        if isinstance(raw_local_uid, (int, str)) and str(raw_local_uid).strip().isdigit()
+        else None
+    )
     return {
         "account_kind": str(getattr(row, "account_kind", None) or "enterprise").strip()
         or "enterprise",
@@ -181,6 +187,10 @@ def session_row_to_meta_dict(row: UserSession) -> dict[str, Any]:
         "impersonating_market_user_id": int(imp_uid) if imp_uid is not None else None,
         "impersonating_username": str(getattr(row, "impersonating_username", None) or "").strip(),
         "tenant_id": getattr(row, "tenant_id", None),
+        # Planner、工作区偏好与权限派生都需要本地用户主键。历史实现只在
+        # enrich_session_meta_with_tenant() 临时补此字段，直接 load 时永远缺失，
+        # 导致普通企业账号的行业上下文恒定回退到“通用”。
+        "local_user_id": local_user_id,
     }
 
 

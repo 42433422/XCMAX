@@ -1,4 +1,4 @@
-# 将最新 frontend 构建产物同步到本机已安装的 XCAGI（与网页端 dev 对齐请先 npm run build）
+# 将最新 frontend 构建产物同步到本机已安装的 XCAGI（桌面包不含 admin-vue-dist）
 # Edition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP
 param(
   [switch]$AlsoWinUnpacked,
@@ -7,7 +7,7 @@ param(
   [string]$Edition = 'generic',
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku = 'enterprise',
-  [string]$Version = '10.0.0'
+  [string]$Version = '1.0.0.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,13 +68,37 @@ if ($AlsoWinUnpacked) {
   }
 }
 
-foreach ($dst in $targets) {
-  $parent = Split-Path $dst
-  if (-not (Test-Path $parent)) { continue }
-  if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+function Sync-Robocopy([string]$from, [string]$to) {
+  $parent = Split-Path $to
+  if (-not (Test-Path $parent)) { return $false }
+  if (Test-Path $to) { Remove-Item $to -Recurse -Force }
   New-Item -ItemType Directory -Force -Path $parent | Out-Null
-  robocopy $Src $dst /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
-  if ($LASTEXITCODE -ge 8) { throw "robocopy failed: $dst (exit $LASTEXITCODE)" }
+  robocopy $from $to /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw "robocopy failed: $to (exit $LASTEXITCODE)" }
+  return $true
+}
+
+$synced = 0
+foreach ($dst in $targets) {
+  if (Sync-Robocopy $Src $dst) { $synced++ }
+}
+
+# 若旧安装残留 admin-vue-dist，主动清掉（桌面禁止本地管理端）
+$staleAdmin = @(
+  (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI\resources\backend\_internal\templates\admin-vue-dist')
+)
+if ($AlsoWinUnpacked) {
+  $ver = $Version.TrimStart('v', 'V')
+  $unpacked = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources"
+  if (Test-Path $unpacked) {
+    $staleAdmin += (Join-Path $unpacked 'backend\_internal\templates\admin-vue-dist')
+  }
+}
+foreach ($adminPath in $staleAdmin) {
+  if (Test-Path $adminPath) {
+    Remove-Item $adminPath -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "Removed stale admin-vue-dist: $adminPath"
+  }
 }
 
 $cacheRoot = Join-Path $env:APPDATA 'xcagi-desktop'
@@ -86,6 +110,7 @@ foreach ($sub in @('Cache', 'Code Cache', 'GPUCache')) {
   }
 }
 
-Write-Host "Synced vue-dist (edition=$Edition, index-$hash.js) -> $($targets.Count) path(s)."
+Write-Host "Synced vue-dist (edition=$Edition, index-$hash.js) -> $synced path(s)."
+Write-Host 'Desktop package does not include admin-vue-dist (web admin only).'
 Write-Host 'Restart XCAGI from Start Menu.'
 Write-Host 'If menu still shows 产品管理/出货记录: Settings -> switch industry to 考勤 (saved profile may be 涂料).'

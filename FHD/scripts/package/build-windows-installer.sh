@@ -3,10 +3,11 @@
 # 等价于 build-installer.ps1 -SkipUiInstaller（跳过 WPF 外壳，保留 NSIS + 内嵌后端）。
 set -euo pipefail
 
-VERSION="${1:-10.0.0}"
+VERSION="${1:-1.0.0.0}"
 SKU="${2:-enterprise}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
+TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 
 case "${SKU}" in
   personal | enterprise) ;;
@@ -41,8 +42,8 @@ sku_app_id() {
 
 sku_update_url() {
   case "$1" in
-    personal) echo https://update.xcagi.com/releases/stable/personal/ ;;
-    enterprise) echo https://update.xcagi.com/releases/stable/enterprise/ ;;
+    personal) echo https://xiu-ci.com/releases/stable/personal/ ;;
+    enterprise) echo https://xiu-ci.com/releases/stable/enterprise/ ;;
   esac
 }
 
@@ -61,7 +62,7 @@ export XCAGI_STAGED_MODS_DIR="${ROOT}/build/staged-mods-${SKU}"
 export XCAGI_MODS_ROOT="${XCAGI_STAGED_MODS_DIR}"
 export XCAGI_STAGED_INDUSTRY_SEEDS_DIR="${ROOT}/build/staged-industry-seeds-${SKU}"
 
-# 前端
+# 前端（桌面包不含 admin-console / admin-vue-dist）
 (cd frontend && [ -d node_modules ] || npm install)
 if [[ "${SKU}" == "personal" ]]; then
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
@@ -117,10 +118,10 @@ for marker in "packagedBackendCandidates" "electron-backend.log" "backend', '_in
     exit 1
   fi
 done
-npm version "${VERSION}" --no-git-tag-version --prefix desktop
+npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --prefix desktop --allow-same-version
 APP_ID="$(sku_app_id "${SKU}")"
 PUBLISH_URL="$(sku_update_url "${SKU}")"
-ARTIFACT="XCAGI-${LABEL}-Setup-\${version}-\${arch}.\${ext}"
+ARTIFACT="XCAGI-${LABEL}-Setup-${VERSION}-\${arch}.\${ext}"
 
 (
   cd desktop
@@ -158,6 +159,7 @@ for required in \
   fi
 done
 
-node scripts/package/generate-update-metadata.mjs "${FINAL}" "${VERSION}" win
+XCAGI_PRODUCT_VERSION="${VERSION}" \
+  node scripts/package/generate-update-metadata.mjs "${FINAL}" "${TOOLCHAIN_VERSION}" win
 
 echo "[ok] Windows installer: ${FINAL}"

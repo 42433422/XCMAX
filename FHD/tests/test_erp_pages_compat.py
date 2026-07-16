@@ -6,6 +6,21 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 
+def test_erp_duplicate_capabilities_stay_out_of_primary_sidebar():
+    retired = {
+        "mod-erp-materials-list",
+        "mod-erp-business-docking",
+        "mod-erp-wechat-contacts",
+    }
+    for mod_dir in (
+        REPO / "mods" / "xcagi-erp-domain-bridge",
+        REPO / "XCAGI" / "mods" / "xcagi-erp-domain-bridge",
+    ):
+        data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
+        menu_ids = {str(row.get("id") or "") for row in data.get("frontend", {}).get("menu", [])}
+        assert menu_ids.isdisjoint(retired)
+
+
 def test_erp_pages_registry_physical():
     from app.mod_sdk.erp_pages_compat import list_erp_pages_registry
 

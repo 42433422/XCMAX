@@ -799,6 +799,16 @@ def reject_request(
                     request_no=str(req.request_no or ""),
                     reason=reason,
                 )
+                if req.applicant_id:
+                    notify_mobile_user(
+                        int(req.applicant_id),
+                        "审批进度更新",
+                        f"《{req.title or req.request_no}》已驳回",
+                        {
+                            "route": f"/app/approval/{req.id}",
+                            "request_id": str(req.id),
+                        },
+                    )
                 data = _request_to_dict(req, include_records=True)
                 if workflow_execution is not None:
                     data["workflow_execution"] = workflow_execution
@@ -851,6 +861,13 @@ def reject_request(
 
         db.commit()
         db.refresh(req)
+        if req.applicant_id:
+            notify_mobile_user(
+                int(req.applicant_id),
+                "审批进度更新",
+                f"《{req.title or req.request_no}》已驳回",
+                {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
+            )
         return {"success": True, "data": _request_to_dict(req, include_records=True)}
 
 

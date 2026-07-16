@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
+import '../../im/im_websocket_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
@@ -30,6 +33,8 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
   var _messages = const <ImMessage>[];
   var _error = '';
   var _working = false;
+  var _wsConnected = false;
+  StreamSubscription<Map<String, Object?>>? _wsSubscription;
 
   @override
   void initState() {
@@ -40,16 +45,58 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
     );
     _conversationId = widget.initialConversationId ?? 0;
     _messages = widget.initialMessages ?? const <ImMessage>[];
-    if (_conversationId > 0 && widget.initialMessages == null) {
-      _reloadMessages();
+    if (_conversationId > 0) {
+      if (widget.initialMessages == null) {
+        _reloadMessages();
+      }
+      _attachWebSocket();
     }
   }
 
   @override
   void dispose() {
+    _wsSubscription?.cancel();
+    _repository.disconnectImWebSocket();
     _peerController.dispose();
     _draftController.dispose();
     super.dispose();
+  }
+
+  Future<void> _attachWebSocket() async {
+    _wsSubscription?.cancel();
+    _wsSubscription = _repository.imWebSocketEvents.listen(_onWebSocketEvent);
+    await _repository.connectImWebSocket();
+    if (!mounted) return;
+    setState(() => _wsConnected = _repository.imWebSocketConnected);
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() => _wsConnected = _repository.imWebSocketConnected);
+    });
+  }
+
+  void _onWebSocketEvent(Map<String, Object?> event) {
+    final parsed = ImWebSocketClient.parseMessageEvent(event);
+    if (parsed == null || parsed.conversationId != _conversationId) return;
+    if (_messages.any((message) => message.id == parsed.messageId)) return;
+    if (!mounted) return;
+    setState(() {
+      _messages = [
+        ..._messages,
+        ImMessage(
+          id: parsed.messageId,
+          senderUserId: parsed.senderUserId,
+          body: parsed.body,
+          createdAt: '刚刚',
+        ),
+      ];
+      _wsConnected = _repository.imWebSocketConnected;
+    });
+  }
+
+  String get _wsStatusText {
+    if (_wsConnected) return 'WebSocket 已连接，消息实时同步';
+    if (_conversationId > 0) return '正在连接 WebSocket…';
+    return 'WebSocket 未连接';
   }
 
   @override
@@ -156,7 +203,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
                       ),
                     ),
                     Text(
-                      'WebSocket 已连接，消息实时同步',
+                      _wsStatusText,
                       style: TextStyle(
                         color: colors.textSecondary,
                         fontSize: 12,
@@ -244,6 +291,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
       if (!mounted) return;
       setState(() => _conversationId = id);
       await _reloadMessages();
+      await _attachWebSocket();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {

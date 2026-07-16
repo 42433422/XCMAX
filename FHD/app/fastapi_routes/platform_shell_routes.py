@@ -1,4 +1,4 @@
-"""GET /api/platform-shell/capabilities — 通用化宿主能力清单（阶段 4）。"""
+"""GET /api/platform-shell/capabilities - host capability inventory (phase 4)."""
 
 from __future__ import annotations
 
@@ -51,16 +51,16 @@ async def decoupling_progress():
 
 
 @router.get("/deliverable-status")
-async def platform_shell_deliverable_status():
-    """可交付验收：edition 包是否装齐、Mod 路由是否挂载、建议下一步操作。"""
+async def platform_shell_deliverable_status(request: Request):
+    """Deliverable acceptance: edition pack, mod routes, recommended next step."""
     from app.mod_sdk.deliverable_status import build_deliverable_status
 
-    return {"success": True, "data": build_deliverable_status()}
+    return {"success": True, "data": build_deliverable_status(app=request.app)}
 
 
 @router.get("/industry-baseline")
-async def platform_shell_industry_baseline(request: Request, industry_id: str = "通用"):
-    """按行业返回建议补装的基础 Mod 清单（对话底座 + 行业基础线 + 行业包 + 账号定制）。"""
+async def platform_shell_industry_baseline(request: Request, industry_id: str = "general"):
+    """Suggested baseline mods for an industry (chat + industry pack + account)."""
     from app.mod_sdk.industry_baseline import build_industry_baseline_plan_for_request
 
     return {
@@ -71,7 +71,7 @@ async def platform_shell_industry_baseline(request: Request, industry_id: str = 
 
 @router.get("/onboarding-industries")
 async def platform_shell_onboarding_industries(request: Request):
-    """引导「行业定型」：开放可选行业及中性化行业包名；企业版按 entitlement 二级筛选。"""
+    """Onboarding industry picker; enterprise filters by entitlement."""
     from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
 
     return {"success": True, "data": await build_onboarding_industry_catalog_for_request(request)}
@@ -79,7 +79,7 @@ async def platform_shell_onboarding_industries(request: Request):
 
 @router.get("/employee-planner-status")
 async def platform_shell_employee_planner_status():
-    """办公 employee_pack 安装态 vs Planner 工具注册表（教程验收 / 设置诊断）。"""
+    """Office employee_pack install state vs Planner tool registry."""
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
     return {"success": True, "data": build_employee_tools_status()}
@@ -87,7 +87,7 @@ async def platform_shell_employee_planner_status():
 
 @router.get("/employee-tools")
 async def platform_shell_employee_tools():
-    """已加载 employee_pack 工具摘要 + runtime 缺失警告。"""
+    """Loaded employee_pack tool summary + runtime missing warnings."""
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
     return {"success": True, "data": build_employee_tools_status()}
@@ -95,11 +95,11 @@ async def platform_shell_employee_tools():
 
 @router.get("/employee-ssot")
 async def platform_shell_employee_ssot():
-    """员工 & 部门系统单一真相源派生视图。
+    """Employee & department SSOT derived views.
 
-    一份数据源 ``config/duty_roster.json`` 自动派生：
-    * ``admin``      —— 管理端 6 部门 + 上岗员工(编制 ∩ 已安装)。
-    * ``enterprise`` —— 企业端 4 部门(层) + 上架(商店)/未上架(宿主入门定制)员工。
+    Source ``config/duty_roster.json`` derives:
+    * ``admin`` - admin 6 depts + on-duty employees.
+    * ``enterprise`` - enterprise 4 layers + listed/unlisted employees.
     """
     from app.application.ops_closure_status import _installed_employee_pack_ids
     from app.mod_sdk.employee_ssot import derive_employee_ssot
@@ -108,7 +108,7 @@ async def platform_shell_employee_ssot():
     try:
         installed = _installed_employee_pack_ids()
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("employee-ssot: 读取已安装 employee_pack 失败: %s", exc)
+        logger.warning("employee-ssot: failed to read installed employee_pack: %s", exc)
 
     return {"success": True, "data": derive_employee_ssot(installed_ids=installed)}
 
@@ -151,7 +151,7 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
     if suffix not in _office_upload_suffixes():
         raise HTTPException(
             status_code=400,
-            detail=f"不支持的办公文件类型: {suffix or '(无扩展名)'}",
+            detail=f"unsupported office file type: {suffix or '(no extension)'}",
         )
 
     workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
@@ -169,24 +169,25 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
     return {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)}
 
 
-@router.post("/workspace-read-files")
+@router.post("/workspace-read-files", response_model=dict[str, object])
 async def platform_shell_workspace_read_files(body: WorkspaceReadFilesBody):
+    """Read approved output files located under the selected workspace."""
     from app.application.office_parse_app_service import read_workspace_output_files
 
     files = read_workspace_output_files(body.workspace_root, body.file_paths or [])
     return {"success": True, "data": {"files": files}}
 
 
-@router.post("/office/confirm")
+@router.post("/office/confirm", response_model=dict[str, object])
 async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Request):
-    """平台办公确认入库：知识库 / 业务库 intent。"""
+    """Office confirm ingest: knowledge / business intent."""
     from fastapi import HTTPException
 
     intent = str(body.intent or "").strip().lower()
     if intent == "knowledge_only":
         text = str(body.knowledge_text or "").strip()
         if not text:
-            raise HTTPException(status_code=400, detail="knowledge_text 不能为空")
+            raise HTTPException(status_code=400, detail="knowledge_text must not be empty")
         from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
         doc = get_dataset_rag_app_service().ingest_document(
@@ -197,13 +198,13 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
         return {"success": True, "data": {"intent": intent, "document": doc}}
     if intent == "attendance":
         if not body.file_path:
-            raise HTTPException(status_code=400, detail="file_path 必填")
+            raise HTTPException(status_code=400, detail="file_path ??")
         from pathlib import Path
 
         from app.application.attendance_import_app_service import import_attendance_workbook
-        from app.mod_sdk.workspace import resolve_safe_workspace_relpath
+        from app.mod_sdk.workspace import resolve_existing_workspace_file
 
-        excel_path = resolve_safe_workspace_relpath(body.file_path)
+        excel_path = resolve_existing_workspace_file(body.file_path)
         db_path = Path(body.workspace_root or ".") / "data" / "mod_dbs" / "taiyangniao-pro.db"
         result = import_attendance_workbook(
             excel_path,
@@ -217,19 +218,20 @@ async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Reques
             "success": True,
             "data": {
                 "intent": intent,
-                "note": "请通过智能对话 import_excel_to_database 完成 ERP 产品入库",
+                "note": "??????? import_excel_to_database ?? ERP ????",
                 "file_path": body.file_path,
             },
         }
-    raise HTTPException(status_code=400, detail=f"未知 intent: {intent}")
+    raise HTTPException(status_code=400, detail=f"?? intent: {intent}")
 
 
 class OnboardingSeedBody(BaseModel):
-    industry_id: str = "通用"
+    industry_id: str = "general"
 
 
-@router.post("/onboarding/seed-demo")
+@router.post("/onboarding/seed-demo", response_model=dict[str, object])
 async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request: Request):
+    """Create tenant-scoped demonstration data for the selected onboarding industry."""
     from app.application.onboarding_seed_app_service import seed_onboarding_demo_data
     from app.infrastructure.auth.dependencies import resolve_session_user
 
@@ -237,7 +239,7 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
     if user is None:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail="????")
     tenant_id = getattr(user, "tenant_id", None)
     if not tenant_id:
         from app.application.session_account_meta import enrich_session_meta_with_tenant
@@ -249,13 +251,14 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
     if not tenant_id:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=400, detail="缺少 tenant_id，无法写入演示数据")
+        raise HTTPException(status_code=400, detail="?? tenant_id,????????")
     data = seed_onboarding_demo_data(tenant_id=int(tenant_id), industry_id=body.industry_id)
     return {"success": True, "data": data}
 
 
-@router.get("/auth/permission-matrix")
+@router.get("/auth/permission-matrix", response_model=dict[str, object])
 async def platform_shell_permission_matrix(request: Request):
+    """Resolve the signed-in account's effective platform-shell permissions."""
     from app.application.auth_permission_resolver import resolve_permissions
     from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
@@ -264,7 +267,7 @@ async def platform_shell_permission_matrix(request: Request):
     if user is None:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail="????")
     sid = session_id_from_request(request)
     meta = enrich_session_meta_with_tenant(sid, user) if sid else {}
     account_kind = str(meta.get("account_kind") or getattr(user, "tier", "") or "personal")
@@ -279,12 +282,12 @@ async def platform_shell_office_sample_upload(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """教程 / 办公包演示：把样本存到 workspace/uploads/tutorial。"""
+    """?? / ?????:????? workspace/uploads/tutorial."""
     from app.infrastructure.auth.dependencies import resolve_session_user
 
     user = resolve_session_user(request)
     if user is None:
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail="????")
     data = await _save_workspace_upload(file, subdir="tutorial")
     return {"success": True, "data": data}
 
@@ -303,12 +306,12 @@ async def platform_shell_chat_office_file_upload(
     request: Request,
     file: UploadFile = File(...),
 ):
-    """智能对话上传：存到 workspace/uploads/chat，并返回 workspace_root 供办公员工读取。"""
+    """??????:?? workspace/uploads/chat,??? workspace_root ???????."""
     from app.infrastructure.auth.dependencies import resolve_session_user
 
     user = resolve_session_user(request)
     if user is None:
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=401, detail="????")
     data = await _save_workspace_upload(file, subdir="chat")
     return {"success": True, "data": data}
 
@@ -317,7 +320,7 @@ async def platform_shell_chat_office_file_upload(
 async def platform_shell_office_sample_cleanup(
     body: OfficeSampleCleanupBody | None = Body(default=None),
 ):
-    """删除教程上传的临时办公样本（仅 uploads/tutorial 下路径）。"""
+    """?????????????(? uploads/tutorial ???)."""
     import os
     from pathlib import Path
 

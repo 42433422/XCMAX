@@ -49,9 +49,26 @@ domains:
       - FHD/frontend/package.json#version
       - FHD/desktop/package.json#version
       - FHD/package.json#version
+      - FHD/XCAGI/package.json#version
+      - FHD/admin-console/package.json#version
+      - FHD/sunbird-console/package.json#version
       - FHD/app/fastapi_app/factory.py#FastAPI(version=)
       - FHD/app/infrastructure/mods/manifest.py#current_version
       - FHD/mobile-android/app/build.gradle.kts#versionName
+      - FHD/mobile-flutter-poc/android/app/build.gradle.kts#versionName
+      - FHD/mobile-flutter-poc/pubspec.yaml#version
+      - FHD/mobile-flutter-poc/ios/Flutter/Version.xcconfig#FLUTTER_BUILD_NAME
+      - FHD/desktop/resources/build-info.json#version
+      - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart#versionName
+      - FHD/config/download_release.json#marketing_version
+      - FHD/config/release_train.json#product_version
+      - 成都修茈科技有限公司/FHD/config/release_train.json#product_version
+      - FHD/contracts/openapi.json#info.version
+      - FHD/setup.iss#MyAppVersion
+      - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
+      - FHD/scripts/package/build-installer.sh#default-version
+      - FHD/scripts/package/build-installer.ps1#default-version
+      - FHD/release/VERSION
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
@@ -137,7 +154,6 @@ domains:
       - FHD/MODstore/modstore_server/duty_roster.py
       - FHD/frontend/src/domain/yuangonDutyRoster.ts
       - FHD/app/infrastructure/mods/catalog_visibility.py
-      - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/model/DutyRosterSsot.kt
       - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
       - FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart
@@ -168,7 +184,6 @@ domains:
     derived:
       - FHD/app/infrastructure/topology.py
       - FHD/frontend/src/constants/topology.ts
-      - FHD/mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt
       - FHD/config/topology.generated.json
     mode: sync+verify
@@ -210,6 +225,7 @@ domains:
       - FHD/contracts/openapi.json
       - FHD/app/fastapi_routes/mobile_api.py
       - FHD/app/fastapi_routes/mobile_api_extensions.py
+      - FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py
       - FHD/mobile-flutter-poc/README.md
       - FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md
       - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart
@@ -220,13 +236,6 @@ domains:
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt
-      - FHD/mobile-ios/PARITY_MATRIX.md
-      - FHD/mobile-ios/project.yml
-      - FHD/mobile-ios/XCAGIMobile/DesignSystem/Theme.swift
-      - FHD/mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift
-      - FHD/mobile-harmony/docs/PARITY_MATRIX.md
-      - FHD/mobile-harmony/entry/src/main/ets/design/DesignTokens.ets
-      - FHD/mobile-harmony/entry/src/main/ets/state/PerformanceMonitor.ets
     mode: lint
     check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check
     sync: null

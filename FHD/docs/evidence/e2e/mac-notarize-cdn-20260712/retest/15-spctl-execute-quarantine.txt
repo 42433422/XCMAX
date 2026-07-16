@@ -1,0 +1,3 @@
+/Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/mac-notarize-cdn-20260712/retest/install-root/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)

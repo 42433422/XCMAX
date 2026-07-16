@@ -160,6 +160,9 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert boundary["crash_isolation_verified"] is True
     assert boundary["crash_isolation_probe"]["returncode"] == 73
     assert boundary["crash_isolation_probe"]["worker_survived"] is True
+    assert "process_group_killed" in boundary["crash_isolation_probe"]
+    assert patch.get("process_safety", {}).get("runner") == "run_command_with_process_group"
+    assert patch.get("process_safety", {}).get("process_group_killed") is True
     assert any("runtime_boundary_verified=True" in item for item in result["results"][0]["evidence"])
     assert any("crash_isolation_verified=True" in item for item in result["results"][0]["evidence"])
     assert any("employee_patch_closure_status=ready" in item for item in result["results"][0]["evidence"])
