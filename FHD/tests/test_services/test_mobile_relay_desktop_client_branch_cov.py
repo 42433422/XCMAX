@@ -1477,6 +1477,87 @@ class TestPollOnceAdditional:
             mock_client_cls.return_value = mock_client
             _poll_once()  # should not raise
 
+    def test_persists_paired_and_mobile_username(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """poll 成功且服务端返回 paired 状态 + mobile_username 时，本地配置应同步落盘。
+
+        这是桌面设置页「已连接：xxx 的手机」状态展示的数据来源（见 desktop_runtime.py
+        mobile_pairing_status），必须与手机端 server_mode_label 使用同一套绑定语义。
+        """
+        cfg_file = tmp_path / "relay.json"
+        cfg_file.write_text(
+            json.dumps(
+                {
+                    "relay_id": "r1",
+                    "desktop_token": "tok",
+                    "relay_base_url": "https://x.example.com",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {
+            "data": {
+                "tasks": [],
+                "desktop": {"status": "paired", "mobile_user_id": 42, "mobile_username": "李雷"},
+            }
+        }
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = lambda s: mock_client
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+            _poll_once()
+
+        saved = json.loads(cfg_file.read_text(encoding="utf-8"))
+        assert saved.get("paired") is True
+        assert saved.get("mobile_username") == "李雷"
+        assert isinstance(saved.get("last_relay_sync_at"), int)
+        assert saved["last_relay_sync_at"] > 0
+
+    def test_does_not_downgrade_paired_when_desktop_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """desktop 字段缺失（如 body 结构异常）时不应清空既有的 paired/mobile_username。"""
+        cfg_file = tmp_path / "relay.json"
+        cfg_file.write_text(
+            json.dumps(
+                {
+                    "relay_id": "r1",
+                    "desktop_token": "tok",
+                    "relay_base_url": "https://x.example.com",
+                    "paired": True,
+                    "mobile_username": "已有绑定",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {"data": {"tasks": []}}
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = lambda s: mock_client
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+            _poll_once()
+
+        saved = json.loads(cfg_file.read_text(encoding="utf-8"))
+        assert saved.get("paired") is True
+        assert saved.get("mobile_username") == "已有绑定"
+
 
 # ---------------------------------------------------------------------------
 # _complete_relay_task

@@ -70,7 +70,7 @@
         :data-tour="`sidebar-${settingsMenuItem.key}`"
         :aria-label="settingsMenuItem.name"
         :aria-current="activeView === settingsMenuItem.key ? 'page' : undefined"
-        :title="settingsMenuItem.name"
+        :title="settingsMenuItem.description ? `${settingsMenuItem.name} · ${settingsMenuItem.description}` : settingsMenuItem.name"
         @click="selectView(settingsMenuItem.key)"
       >
         <span class="menu-item-icon" aria-hidden="true">
@@ -302,6 +302,7 @@ const settingsMenuItem = computed(() => {
     key: SETTINGS_MENU_ITEM.key,
     name: row?.name || SETTINGS_MENU_ITEM.name,
     iconClass: SETTINGS_MENU_ITEM.iconClass,
+    description: SETTINGS_MENU_ITEM.description,
   }
 })
 
