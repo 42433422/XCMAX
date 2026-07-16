@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   getDataDir: () => ipcRenderer.invoke('xcagi:get-data-dir'),
   exportSupportBundle: () => ipcRenderer.invoke('xcagi:export-support-bundle'),
   checkForUpdates: () => ipcRenderer.invoke('xcagi:check-for-updates'),
+  getUpdateStatus: () => ipcRenderer.invoke('xcagi:get-update-status'),
+  downloadUpdate: () => ipcRenderer.invoke('xcagi:download-update'),
   installUpdate: () => ipcRenderer.invoke('xcagi:install-update'),
   getPairingQrPayload: () => ipcRenderer.invoke('xcagi:pairing-qr'),
   setBadge: (count: number) => ipcRenderer.invoke('xcagi:set-badge', count),

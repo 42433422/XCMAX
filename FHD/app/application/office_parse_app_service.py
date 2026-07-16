@@ -94,25 +94,42 @@ def read_workspace_output_files(
     *,
     max_bytes: int = 2_097_152,
 ) -> list[dict[str, Any]]:
-    from app.mod_sdk.workspace import resolve_safe_workspace_relpath
+    from fastapi import HTTPException
 
+    from app.infrastructure.workspace import (
+        resolve_existing_file_under_root,
+    )
+    from app.infrastructure.workspace import (
+        workspace_root as configured_workspace_root,
+    )
+
+    base = configured_workspace_root()
     out: list[dict[str, Any]] = []
     for raw in file_paths:
-        rel = str(raw or "").strip().lstrip("/")
-        if not rel:
+        raw_path = str(raw or "").strip()
+        if not raw_path:
             continue
+        normalized = raw_path.replace("\\", "/")
+        base_text = base.as_posix().rstrip("/")
+        if normalized.startswith(f"{base_text}/"):
+            rel = normalized[len(base_text) + 1 :]
+        elif normalized.startswith("/") or (len(normalized) >= 3 and normalized[1:3] == ":/"):
+            out.append({"path": raw_path, "kind": "text", "error": "invalid_path"})
+            continue
+        else:
+            rel = normalized.lstrip("/")
         try:
-            path = resolve_safe_workspace_relpath(rel)
-        except ValueError as exc:
-            out.append({"path": rel, "kind": "text", "error": str(exc)})
-            continue
-        if not path.is_file():
+            path = resolve_existing_file_under_root(base, rel)
+        except FileNotFoundError:
             out.append({"path": rel, "kind": "text", "error": "file_not_found"})
+            continue
+        except (ValueError, OSError, HTTPException):
+            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
             continue
         try:
             blob = path.read_bytes()[:max_bytes]
-        except OSError as exc:
-            out.append({"path": rel, "kind": "text", "error": str(exc)})
+        except OSError:
+            out.append({"path": rel, "kind": "text", "error": "read_failed"})
             continue
         suffix = path.suffix.lower()
         if suffix == ".json":

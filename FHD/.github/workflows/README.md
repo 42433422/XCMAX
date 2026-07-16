@@ -7,10 +7,11 @@
 | `ci-cd.yml` | [`fhd-ci-cd.yml`](../../.github/workflows/fhd-ci-cd.yml) |
 | `release-gate-ci.yml` | [`fhd-release-gate-ci.yml`](../../.github/workflows/fhd-release-gate-ci.yml) |
 | `ci-mobile-android.yml` | 见 [`android-build.yml`](../../.github/workflows/android-build.yml)（仓根优先） |
-| `deploy.yml` | [`fhd-deploy.yml`](../../.github/workflows/fhd-deploy.yml) |
+| `deploy.yml`（历史） | [`fhd-deploy.yml`](../../.github/workflows/fhd-deploy.yml) — 单机 CVM rolling，非 K8s |
 | `release-desktop.yml` | [`fhd-release-desktop.yml`](../../.github/workflows/fhd-release-desktop.yml) |
 | `release-web.yml` | [`fhd-release-web.yml`](../../.github/workflows/fhd-release-web.yml) |
-| `release-android.yml` | [`fhd-release-android.yml`](../../.github/workflows/fhd-release-android.yml) |
+| `release-android.yml` | [`fhd-release-android.yml`](../../.github/workflows/fhd-release-android.yml) — **仅 Android** |
+| `release-ios.yml` / `release-harmony.yml` | **已删除**（源码归档至 `archive/mobile/`） |
 | 其余 `*.yml` | 同名加 `fhd-` 前缀，见根 `.github/workflows/` |
 | `test.yml` | [`fhd-test.yml`](../../.github/workflows/fhd-test.yml) — 轻量 smoke（Ruff / 路由 pytest / 前端 lint+Vitest / 仓卫生） |
 

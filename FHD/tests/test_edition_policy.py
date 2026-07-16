@@ -96,6 +96,36 @@ def test_seed_skips_existing(tmp_path, monkeypatch):
     assert row["status"] == "skipped"
 
 
+def test_seed_copies_bundled_employee_packs_without_overwriting_existing(tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    employees = bundle / "_employees"
+    for pack_id in ("pdf-generate-employee", "pdf-full-read-employee"):
+        pack = employees / pack_id
+        pack.mkdir(parents=True)
+        (pack / "manifest.json").write_text(
+            f'{{"id":"{pack_id}","artifact":"employee_pack"}}', encoding="utf-8"
+        )
+    target = tmp_path / "user-mods"
+    existing = target / "_employees" / "pdf-generate-employee"
+    existing.mkdir(parents=True)
+    (existing / "manifest.json").write_text('{"local":true}', encoding="utf-8")
+    monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(bundle))
+
+    from app.infrastructure.mods.mod_manager import ModManager
+
+    mm = ModManager(mods_root=str(target))
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: mm)
+    monkeypatch.setattr("app.mod_sdk.edition_policy.edition_mod_ids", lambda _edition: ())
+
+    result = seed_edition_mods_from_bundle("minimal", mods_root=target)
+
+    rows = {row["mod_id"]: row for row in result}
+    assert rows["_employees/pdf-generate-employee"]["status"] == "skipped"
+    assert rows["_employees/pdf-full-read-employee"]["status"] == "seeded"
+    assert (target / "_employees" / "pdf-full-read-employee" / "manifest.json").is_file()
+    assert (existing / "manifest.json").read_text(encoding="utf-8") == '{"local":true}'
+
+
 def test_seed_edition_does_not_include_open_industry_mods():
     from app.mod_sdk.edition_policy import edition_mod_ids
     from app.mod_sdk.industry_seed import open_industry_seed_mod_ids

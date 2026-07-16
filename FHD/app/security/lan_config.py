@@ -44,6 +44,21 @@ def _resolve_repo_root() -> Path:
     return here.parents[2]
 
 
+def _default_data_dir(repo_root: Path) -> Path:
+    """返回 LAN 运行数据目录。
+
+    Electron/桌面后端会显式传入用户数据根目录；打包版不得回落到
+    PyInstaller ``_MEIPASS`` 或 ``.app`` 资源目录。未配置桌面数据目录的源码
+    开发态保持原有 ``<repo>/data`` 行为。
+    """
+    desktop_root = (
+        os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+    ).strip()
+    if desktop_root:
+        return Path(desktop_root).expanduser().resolve() / "data"
+    return (repo_root / "data").resolve()
+
+
 @dataclass(frozen=True)
 class LanConfig:
     enabled: bool
@@ -219,7 +234,7 @@ def get_lan_config() -> LanConfig:
     if db_path_raw:
         db_path = Path(db_path_raw).expanduser().resolve()
     else:
-        db_path = (repo_root / "data" / "lan_license.db").resolve()
+        db_path = _default_data_dir(repo_root) / "lan_license.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     enabled = _env_bool("LAN_GUARD_ENABLED", default=False)

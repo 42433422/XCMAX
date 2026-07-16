@@ -9,10 +9,9 @@ SSOT（单一真相源）:
   1. 成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_roster.py (marker 区块)
   2. FHD/frontend/src/domain/yuangonDutyRoster.ts       (整体生成)
   3. FHD/app/infrastructure/mods/catalog_visibility.py  (改为运行时派生)
-  4. FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets (marker 区块)
-  5. FHD/mobile-android/app/src/main/java/.../DutyRosterSsot.kt (整体生成)
-  6. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
-  7. FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart (整体生成)
+  4. FHD/mobile-android/app/src/main/java/.../DutyRosterSsot.kt (整体生成)
+  5. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
+  6. FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart (整体生成)
 
 用法:
   python scripts/dev/sync_duty_roster.py --generate   # 生成所有派生文件
@@ -42,11 +41,31 @@ TARGETS = {
     "modstore": MODSTORE_DEPLOY / "modstore_server" / "duty_roster.py",
     "frontend": FHD / "frontend" / "src" / "domain" / "yuangonDutyRoster.ts",
     "catalog": FHD / "app" / "infrastructure" / "mods" / "catalog_visibility.py",
-    "mobile": FHD / "mobile-harmony" / "entry" / "src" / "main" / "ets" / "models" / "MobileModels.ets",
-    "android": FHD / "mobile-android" / "app" / "src" / "main" / "java" / "com" / "xiuci" / "xcagi" / "mobile" / "core" / "model" / "DutyRosterSsot.kt",
+    "android": FHD
+    / "mobile-android"
+    / "app"
+    / "src"
+    / "main"
+    / "java"
+    / "com"
+    / "xiuci"
+    / "xcagi"
+    / "mobile"
+    / "core"
+    / "model"
+    / "DutyRosterSsot.kt",
     # 企业端四层 + 员工层归属/上架状态（marker 区块；前端解析器优先查此表）
-    "enterprise": FHD / "frontend" / "src" / "constants" / "enterpriseWorkflowEstablishment.ts",
-    "flutter_poc": FHD / "mobile-flutter-poc" / "lib" / "src" / "data" / "duty_roster_ssot.dart",
+    "enterprise": FHD
+    / "frontend"
+    / "src"
+    / "constants"
+    / "enterpriseWorkflowEstablishment.ts",
+    "flutter_poc": FHD
+    / "mobile-flutter-poc"
+    / "lib"
+    / "src"
+    / "data"
+    / "duty_roster_ssot.dart",
 }
 
 # CI SSOT 标识
@@ -116,22 +135,51 @@ def scan_employee_manifests() -> dict[str, dict[str, str]]:
 # ── 格式化工具 ───────────────────────────────────────────────────────────
 def _py_quote(s: str) -> str:
     """Python 字符串引号（双引号，转义内部双引号和换行符）。"""
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
+    return (
+        '"'
+        + s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        + '"'
+    )
 
 
 def _ts_quote(s: str) -> str:
     """TS 字符串引号（单引号，转义内部单引号和换行符）。"""
-    return "'" + s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'"
+    return (
+        "'"
+        + s.replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        + "'"
+    )
 
 
 def _kt_quote(s: str) -> str:
     """Kotlin 字符串引号（双引号，转义内部双引号和换行符）。"""
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
+    return (
+        '"'
+        + s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        + '"'
+    )
 
 
 def _dart_quote(s: str) -> str:
     """Dart 字符串引号（单引号，转义内部单引号、换行符和插值符号）。"""
-    return "'" + s.replace("\\", "\\\\").replace("$", "\\$").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'"
+    return (
+        "'"
+        + s.replace("\\", "\\\\")
+        .replace("$", "\\$")
+        .replace("'", "\\'")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        + "'"
+    )
 
 
 def _dart_named_arg(name: str, value: str, indent: int = 4) -> list[str]:
@@ -175,7 +223,7 @@ def gen_modstore_areas_block(doc: dict[str, Any]) -> str:
     for area_key, block in areas.items():
         label = block.get("label") or area_key
         ids = block.get("ids") or []
-        lines.append(f'    {_py_quote(area_key)}: {{')
+        lines.append(f"    {_py_quote(area_key)}: {{")
         lines.append(f'        "label": {_py_quote(label)},')
         lines.append(f'        "ids": {_py_ids_list(ids, indent=12)},')
         lines.append("    },")
@@ -196,7 +244,7 @@ def gen_modstore_departments_block(doc: dict[str, Any]) -> str:
         label = dept.get("label") or dept_key
         five_line = dept.get("five_line_id") or dept_key
         subzones = dept.get("subzones") or {}
-        lines.append(f'    {_py_quote(dept_key)}: {{')
+        lines.append(f"    {_py_quote(dept_key)}: {{")
         lines.append(f'        "label": {_py_quote(label)},')
         lines.append(f'        "five_line_id": {_py_quote(five_line)},')
         lines.append('        "subzones": {')
@@ -302,7 +350,12 @@ def employee_partition_meta(
 def gen_ts_areas(doc: dict[str, Any]) -> str:
     """生成 YUANGON_AREAS 的 TS 文本。"""
     areas = doc.get("areas") or {}
-    lines = ["/**", " * 编制区域（与 FHD config/duty_roster.json areas 块一致）。", " */", "export const YUANGON_AREAS: Record<string, { label: string; ids: string[] }> = {"]
+    lines = [
+        "/**",
+        " * 编制区域（与 FHD config/duty_roster.json areas 块一致）。",
+        " */",
+        "export const YUANGON_AREAS: Record<string, { label: string; ids: string[] }> = {",
+    ]
     for area_key, block in areas.items():
         label = block.get("label") or area_key
         ids = block.get("ids") or []
@@ -314,9 +367,16 @@ def gen_ts_areas(doc: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def gen_ts_role_labels(manifests: dict[str, dict[str, str]], planned_ids: set[str]) -> str:
+def gen_ts_role_labels(
+    manifests: dict[str, dict[str, str]], planned_ids: set[str]
+) -> str:
     """生成 YUANGON_PKG_ROLE_LABELS（只含编制内员工）。"""
-    lines = ["/**", " * 编制员工中文名（来源于 mods/_employees 下各 manifest.json 的 name 字段）。", " */", "export const YUANGON_PKG_ROLE_LABELS: Record<string, string> = {"]
+    lines = [
+        "/**",
+        " * 编制员工中文名（来源于 mods/_employees 下各 manifest.json 的 name 字段）。",
+        " */",
+        "export const YUANGON_PKG_ROLE_LABELS: Record<string, string> = {",
+    ]
     for mid in sorted(planned_ids):
         name = manifests.get(mid, {}).get("name") or mid
         lines.append(f"  {_ts_quote(mid)}: {_ts_quote(name)},")
@@ -324,9 +384,16 @@ def gen_ts_role_labels(manifests: dict[str, dict[str, str]], planned_ids: set[st
     return "\n".join(lines)
 
 
-def gen_ts_descriptions(manifests: dict[str, dict[str, str]], planned_ids: set[str]) -> str:
+def gen_ts_descriptions(
+    manifests: dict[str, dict[str, str]], planned_ids: set[str]
+) -> str:
     """生成 YUANGON_PKG_DESCRIPTIONS（只含编制内员工）。"""
-    lines = ["/**", " * 编制员工说明（来源于 mods/_employees 下各 manifest.json 的 description 字段）。", " */", "export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {"]
+    lines = [
+        "/**",
+        " * 编制员工说明（来源于 mods/_employees 下各 manifest.json 的 description 字段）。",
+        " */",
+        "export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {",
+    ]
     for mid in sorted(planned_ids):
         desc = manifests.get(mid, {}).get("description") or ""
         lines.append(f"  {_ts_quote(mid)}: {_ts_quote(desc)},")
@@ -359,7 +426,9 @@ def gen_ts_departments(doc: dict[str, Any]) -> str:
         for sz_key, sz in subzones.items():
             sz_label = sz.get("label") or sz_key
             sz_ids = sz.get("ids") or []
-            lines.append(f"      {_ts_quote(sz_key)}: {{ label: {_ts_quote(sz_label)}, ids: {_ts_ids_list(sz_ids, indent=8)} }},")
+            lines.append(
+                f"      {_ts_quote(sz_key)}: {{ label: {_ts_quote(sz_label)}, ids: {_ts_ids_list(sz_ids, indent=8)} }},"
+            )
         lines.append("    },")
         lines.append("  },")
     lines.append("}")
@@ -383,7 +452,9 @@ def gen_ts_department_colors() -> str:
     return "\n".join(lines)
 
 
-def generate_frontend_yuangon_duty_roster_ts(doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> str:
+def generate_frontend_yuangon_duty_roster_ts(
+    doc: dict[str, Any], manifests: dict[str, dict[str, str]]
+) -> str:
     """生成前端 yuangonDutyRoster.ts 的完整内容。"""
     areas = doc.get("areas") or {}
     planned_ids = set()
@@ -492,7 +563,14 @@ def is_public_catalog_row(row: dict[str, Any]) -> bool:
 def gen_mobile_areas_block(doc: dict[str, Any]) -> str:
     """生成 MobileModels.ets 的 YUANGON_AREAS ArkTS 数组文本。"""
     areas = doc.get("areas") or {}
-    lines = [MARKER_BEGIN_TS, "/**", " * 编制区域常量表（CI SSOT 生成，与前端 yuangonDutyRoster.ts YUANGON_AREAS 对齐）。", " * 后端 admin/home 返回的 duty 员工按 yuangon_area 归入这些区域。", " */", "export const YUANGON_AREAS: DutyAreaInfo[] = ["]
+    lines = [
+        MARKER_BEGIN_TS,
+        "/**",
+        " * 编制区域常量表（CI SSOT 生成，与前端 yuangonDutyRoster.ts YUANGON_AREAS 对齐）。",
+        " * 后端 admin/home 返回的 duty 员工按 yuangon_area 归入这些区域。",
+        " */",
+        "export const YUANGON_AREAS: DutyAreaInfo[] = [",
+    ]
     for area_key, block in areas.items():
         label = block.get("label") or area_key
         ids = block.get("ids") or []
@@ -516,7 +594,9 @@ def _kt_ids_list(ids: list[str], indent: int = 8) -> str:
     return "listOf(\n" + inner + ",\n" + " " * (indent - 4) + ")"
 
 
-def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> str:
+def gen_android_duty_roster_kt(
+    doc: dict[str, Any], manifests: dict[str, dict[str, str]]
+) -> str:
     areas = doc.get("areas") or {}
     planned_ids: list[str] = []
     area_by_id: dict[str, str] = {}
@@ -565,7 +645,9 @@ def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[st
     )
     for area_key, block in areas.items():
         ids = [str(x).strip() for x in block.get("ids") or [] if str(x).strip()]
-        lines.append(f"        {_kt_quote(area_key)} to {_kt_ids_list(ids, indent=12)},")
+        lines.append(
+            f"        {_kt_quote(area_key)} to {_kt_ids_list(ids, indent=12)},"
+        )
     lines.extend(
         [
             "    )",
@@ -584,7 +666,11 @@ def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[st
         ]
     )
     for eid in planned_ids:
-        label = MOBILE_EMPLOYEE_LABEL_OVERRIDES.get(eid) or manifests.get(eid, {}).get("name") or eid
+        label = (
+            MOBILE_EMPLOYEE_LABEL_OVERRIDES.get(eid)
+            or manifests.get(eid, {}).get("name")
+            or eid
+        )
         lines.append(f"        {_kt_quote(eid)} to {_kt_quote(label)},")
     lines.extend(
         [
@@ -594,14 +680,20 @@ def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[st
         ]
     )
     for eid in planned_ids:
-        desc = MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES.get(eid) or manifests.get(eid, {}).get("description") or ""
+        desc = (
+            MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES.get(eid)
+            or manifests.get(eid, {}).get("description")
+            or ""
+        )
         lines.append(f"        {_kt_quote(eid)} to {_kt_quote(desc)},")
     lines.extend(["    )", "}"])
     return "\n".join(lines) + "\n"
 
 
 # ── 生成 Flutter POC duty_roster_ssot.dart（整体生成）─────────────────────
-def gen_flutter_poc_duty_roster_dart(doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> str:
+def gen_flutter_poc_duty_roster_dart(
+    doc: dict[str, Any], manifests: dict[str, dict[str, str]]
+) -> str:
     areas = doc.get("areas") or {}
     planned_ids: list[str] = []
     for block in areas.values():
@@ -639,7 +731,11 @@ def gen_flutter_poc_duty_roster_dart(doc: dict[str, Any], manifests: dict[str, d
     for eid in planned_ids:
         meta = manifests.get(eid, {})
         label = MOBILE_EMPLOYEE_LABEL_OVERRIDES.get(eid) or meta.get("name") or eid
-        summary = MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES.get(eid) or meta.get("description") or ""
+        summary = (
+            MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES.get(eid)
+            or meta.get("description")
+            or ""
+        )
         lines.extend(
             [
                 "  DutyRosterEmployee(",
@@ -681,18 +777,20 @@ def gen_enterprise_block(doc: dict[str, Any]) -> str:
     ]
     for layer in layers:
         lines.append(
-            f"  {{ id: {_ts_quote(layer.get('id',''))}, code: {_ts_quote(layer.get('code',''))}, "
-            f"label: {_ts_quote(layer.get('label',''))}, desc: {_ts_quote(layer.get('desc',''))}, "
-            f"color: {_ts_quote(layer.get('color',''))} }},"
+            f"  {{ id: {_ts_quote(layer.get('id', ''))}, code: {_ts_quote(layer.get('code', ''))}, "
+            f"label: {_ts_quote(layer.get('label', ''))}, desc: {_ts_quote(layer.get('desc', ''))}, "
+            f"color: {_ts_quote(layer.get('color', ''))} }},"
         )
     lines.append("] as const")
-    lines.append("export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {")
+    lines.append(
+        "export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {"
+    )
     for eid, meta in emps.items():
         lines.append(
             f"  {_ts_quote(eid)}: {{ id: {_ts_quote(eid)}, label: {_ts_quote(meta.get('label', eid))}, "
-            f"enterprise_layer: {_ts_quote(meta.get('enterprise_layer',''))}, "
-            f"listing: {_ts_quote(meta.get('listing',''))}, "
-            f"source: {_ts_quote(meta.get('source',''))}, mod_id: {_ts_quote(meta.get('mod_id',''))} }},"
+            f"enterprise_layer: {_ts_quote(meta.get('enterprise_layer', ''))}, "
+            f"listing: {_ts_quote(meta.get('listing', ''))}, "
+            f"source: {_ts_quote(meta.get('source', ''))}, mod_id: {_ts_quote(meta.get('mod_id', ''))} }},"
         )
     lines.append("}")
     lines.append(MARKER_END_TS)
@@ -700,7 +798,9 @@ def gen_enterprise_block(doc: dict[str, Any]) -> str:
 
 
 # ── marker 区块替换工具 ──────────────────────────────────────────────────
-def replace_marker_block(content: str, begin_marker: str, end_marker: str, new_block: str) -> str:
+def replace_marker_block(
+    content: str, begin_marker: str, end_marker: str, new_block: str
+) -> str:
     """替换文件中 marker 区块之间的内容。"""
     pattern = re.compile(
         re.escape(begin_marker) + r".*?" + re.escape(end_marker),
@@ -712,7 +812,9 @@ def replace_marker_block(content: str, begin_marker: str, end_marker: str, new_b
 
 
 # ── 主逻辑 ───────────────────────────────────────────────────────────────
-def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> str:
+def generate_target(
+    target: str, doc: dict[str, Any], manifests: dict[str, dict[str, str]]
+) -> str:
     """生成指定目标的文件内容。"""
     if target == "modstore":
         return generate_modstore_duty_roster(doc)
@@ -720,12 +822,6 @@ def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[
         return generate_frontend_yuangon_duty_roster_ts(doc, manifests)
     if target == "catalog":
         return generate_catalog_visibility_py()
-    if target == "mobile":
-        # mobile 用 marker 区块替换
-        path = TARGETS["mobile"]
-        content = path.read_text(encoding="utf-8")
-        new_block = gen_mobile_areas_block(doc)
-        return replace_marker_block(content, MARKER_BEGIN_TS, MARKER_END_TS, new_block)
     if target == "android":
         return gen_android_duty_roster_kt(doc, manifests)
     if target == "enterprise":
@@ -739,7 +835,9 @@ def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[
     raise ValueError(f"未知目标: {target}")
 
 
-def check_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> bool:
+def check_target(
+    target: str, doc: dict[str, Any], manifests: dict[str, dict[str, str]]
+) -> bool:
     """校验目标文件是否与 SSOT 一致。"""
     path = TARGETS[target]
     if not path.is_file():
@@ -756,8 +854,7 @@ def check_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[str
     act_lines = actual.splitlines()
     for i, (e, a) in enumerate(zip(exp_lines, act_lines)):
         if e != a:
-            print(f"    L{i+1} 期望: {e[:100]}")
-            print(f"    L{i+1} 实际: {a[:100]}")
+            print(f"    L{i + 1} 内容不一致（已隐藏敏感值）")
             break
     if len(exp_lines) != len(act_lines):
         print(f"    行数差异: 期望 {len(exp_lines)} 实际 {len(act_lines)}")
@@ -767,7 +864,9 @@ def check_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[str
 def main() -> int:
     parser = argparse.ArgumentParser(description="从 SSOT 生成编制派生文件")
     parser.add_argument("--generate", action="store_true", help="生成派生文件")
-    parser.add_argument("--check", action="store_true", help="CI 校验（不一致则 exit 1）")
+    parser.add_argument(
+        "--check", action="store_true", help="CI 校验（不一致则 exit 1）"
+    )
     parser.add_argument("--target", choices=list(TARGETS.keys()), help="只处理指定目标")
     args = parser.parse_args()
 

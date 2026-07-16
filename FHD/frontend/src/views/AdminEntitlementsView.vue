@@ -16,6 +16,9 @@
       </header>
 
       <div v-if="loadError" class="admin-entitlements-alert" role="alert">{{ loadError }}</div>
+      <div v-if="walletLoadError" class="admin-entitlements-alert admin-entitlements-alert--soft" role="status">
+        余额查询失败：{{ walletLoadError }}
+      </div>
 
       <section class="admin-sync-strip" aria-label="本地安装与同步状态">
         <div>
@@ -464,6 +467,7 @@ const forcePushingEntitlements = ref(false);
 
 // 用户钱包余额（远端 market /api/admin/wallets，按 user_id 索引）
 const walletMap = ref<Map<number, WalletRow>>(new Map());
+const walletLoadError = ref('');
 
 // 用户账号体系（本地持久化，按 username 合并远端用户列表）
 const userProfiles = ref<Record<string, LocalProfile>>({});
@@ -715,6 +719,7 @@ async function loadAssignable() {
 }
 
 async function loadWallets() {
+  walletLoadError.value = '';
   try {
     const res = await xcmaxAdminApi.listWallets();
     const body = res as { items?: WalletRow[]; data?: { items?: WalletRow[] } };
@@ -724,15 +729,17 @@ async function loadWallets() {
       if (w && typeof w.user_id === 'number') m.set(w.user_id, w);
     }
     walletMap.value = m;
-  } catch {
-    // 钱包加载失败不阻断页面
+  } catch (error) {
+    // 钱包加载失败不阻断页面，但要与真实零余额明确区分。
     walletMap.value = new Map();
+    walletLoadError.value = error instanceof Error ? error.message : String(error);
   }
 }
 
 function walletBalance(u: AdminUser): string {
+  if (walletLoadError.value) return '查询失败';
   const w = walletMap.value.get(u.id);
-  if (!w || w.balance === null || w.balance === undefined) return '—';
+  if (!w || w.balance === null || w.balance === undefined) return '¥0.00';
   const n = typeof w.balance === 'string' ? parseFloat(w.balance) : w.balance;
   if (Number.isNaN(n)) return '—';
   return `¥${n.toFixed(2)}`;

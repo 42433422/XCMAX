@@ -1,0 +1,5 @@
+Executable=/Applications/XCAGI.app/Contents/MacOS/XCAGI
+Identifier=com.xcagi.desktop.enterprise
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20400 size=309 flags=0x2(adhoc) hashes=3+3 location=embedded
+Signature=adhoc

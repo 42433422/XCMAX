@@ -832,7 +832,7 @@ server {
 
 ```python
 # JWT Token
-from jose import jwt
+import jwt
 
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"

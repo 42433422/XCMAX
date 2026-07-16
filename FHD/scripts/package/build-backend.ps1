@@ -52,6 +52,7 @@ if (-not $SkipFrontend) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   }
   Pop-Location
+  # 桌面包不构建 admin-console（管理端仅网页 SSOT）
 }
 
 python -m pip install --upgrade pip

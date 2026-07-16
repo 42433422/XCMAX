@@ -46,7 +46,7 @@ describe('ChatInputToolbar', () => {
     const wrapper = mountToolbar()
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
     expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('shell.upload')
+    expect(btn.text()).toContain('chat.uploadAttachment')
   })
 
   it('emits new-conversation when new chat button clicked', async () => {
@@ -67,8 +67,8 @@ describe('ChatInputToolbar', () => {
     const input = wrapper.find('input[type="file"]').element as HTMLInputElement
     input.click = click
     await wrapper.get('[data-tutorial-id="toolbar-excel-analyze"]').trigger('click')
-    expect(click).toHaveBeenCalled()
-    expect(wrapper.emitted('trigger-upload')).toHaveLength(1)
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('trigger-upload')).toBeUndefined()
   })
 
   it('emits register-excel-input on mount', () => {
@@ -98,7 +98,7 @@ describe('ChatInputToolbar', () => {
   it('shows upload text when not uploading', () => {
     const wrapper = mountToolbar({ excelAnalyzeUploading: false })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.text()).toContain('shell.upload')
+    expect(btn.text()).toContain('chat.uploadAttachment')
     expect(btn.text()).not.toContain('shell.uploadAnalyzing')
   })
 

@@ -149,11 +149,25 @@ class ModMetadata:
 
 
 def parse_manifest(mod_path: str) -> ModMetadata | None:
-    manifest_path = os.path.join(mod_path, "manifest.json")
-    logger.info("[parse_manifest] Checking manifest at: %s", manifest_path)
-    if not os.path.isfile(manifest_path):
-        logger.warning("[parse_manifest] Mod manifest not found: %s", manifest_path)
+    try:
+        with os.scandir(mod_path) as entries:
+            manifest_entry = next(
+                (
+                    entry
+                    for entry in entries
+                    if entry.name == "manifest.json"
+                    and not entry.is_symlink()
+                    and entry.is_file(follow_symlinks=False)
+                ),
+                None,
+            )
+    except OSError:
+        manifest_entry = None
+    if manifest_entry is None:
+        logger.warning("[parse_manifest] Mod manifest not found")
         return None
+    manifest_path = manifest_entry.path
+    logger.info("[parse_manifest] Checking manifest")
 
     try:
         with open(manifest_path, encoding="utf-8") as f:

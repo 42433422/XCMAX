@@ -17,49 +17,63 @@ def _blocks_from_text(plain: str) -> List[Dict[str, Any]]:
 
 
 def _extract_pdf(src_path: Path) -> Dict[str, Any]:
-    try:
-        import fitz
+    from pypdf import PdfReader
 
-        doc = fitz.open(src_path)
-        pages: List[Dict[str, Any]] = []
-        all_text: List[str] = []
-        for i in range(len(doc)):
-            text = (doc[i].get_text("text") or "").strip()
-            all_text.append(text)
-            pages.append({"page": i + 1, "text": text, "char_count": len(text)})
-        doc.close()
-        plain = "\n\n".join(all_text)
-        return {"engine": "pymupdf", "pages": pages, "plain_text": plain}
-    except Exception:
-        from pypdf import PdfReader
-
-        reader = PdfReader(str(src_path))
-        pages = []
-        all_text = []
-        for idx, page in enumerate(reader.pages, start=1):
-            text = (page.extract_text() or "").strip()
-            all_text.append(text)
-            pages.append({"page": idx, "text": text, "char_count": len(text)})
-        return {"engine": "pypdf", "pages": pages, "plain_text": "\n\n".join(all_text)}
+    reader = PdfReader(str(src_path))
+    pages: List[Dict[str, Any]] = []
+    all_text: List[str] = []
+    for idx, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        all_text.append(text)
+        pages.append({"page": idx, "text": text, "char_count": len(text)})
+    return {"engine": "pypdf", "pages": pages, "plain_text": "\n\n".join(all_text)}
 
 
 def _write_pdf_from_json(payload: Dict[str, Any], out_path: Path) -> None:
-    import fitz
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.pdfgen import canvas
 
-    doc = fitz.open()
+    font_name = "STSong-Light"
+    try:
+        pdfmetrics.getFont(font_name)
+    except KeyError:
+        pdfmetrics.registerFont(UnicodeCIDFont(font_name))
+
     pages = payload.get("pages") if isinstance(payload.get("pages"), list) else []
     if not pages:
         plain = str(payload.get("plain_text") or "")
         pages = [{"page": 1, "text": plain}]
+
+    pdf = canvas.Canvas(str(out_path), pagesize=A4)
+    width, height = A4
+    rendered_page = False
     for pg in pages:
         if not isinstance(pg, dict):
             continue
+        if rendered_page:
+            pdf.showPage()
+        rendered_page = True
         text = str(pg.get("text") or "")
-        page = doc.new_page(width=595, height=842)
-        if text:
-            page.insert_text((72, 72), text[:12000], fontsize=11)
-    doc.save(out_path)
-    doc.close()
+        text_object = pdf.beginText(54, height - 54)
+        text_object.setFont(font_name, 11)
+        text_object.setLeading(17)
+        raw_lines = text.splitlines() or [""]
+        for raw_line in raw_lines:
+            chunks = [raw_line[i : i + 48] for i in range(0, len(raw_line), 48)] or [""]
+            for line in chunks:
+                if text_object.getY() < 54:
+                    pdf.drawText(text_object)
+                    pdf.showPage()
+                    text_object = pdf.beginText(54, height - 54)
+                    text_object.setFont(font_name, 11)
+                    text_object.setLeading(17)
+                text_object.textLine(line)
+        pdf.drawText(text_object)
+    if not rendered_page:
+        pdf.drawString(54, height - 54, "")
+    pdf.save()
 
 
 async def convert_file(
@@ -84,7 +98,9 @@ async def convert_file(
         pdf_path = output_dir / Path(str(rule_spec.get("default_pdf_output_relpath"))).name
 
     if suffix in (".json", ".txt"):
-        spec, _warnings = await resolve_pdf_document_spec(src_path, payload or {}, ctx or {}, rule_spec or {})
+        spec, _warnings = await resolve_pdf_document_spec(
+            src_path, payload or {}, ctx or {}, rule_spec or {}
+        )
         plain = str(spec.get("plain_text") or "")
         pages = spec.get("pages") if isinstance(spec.get("pages"), list) else []
         blocks = _blocks_from_text(plain)
@@ -105,7 +121,11 @@ async def convert_file(
         pages = extracted.get("pages") if isinstance(extracted.get("pages"), list) else []
         blocks = _blocks_from_text(plain)
         payload_data = {
-            "metadata": {"source": src_path.name, "format": "pdf", "engine": extracted.get("engine")},
+            "metadata": {
+                "source": src_path.name,
+                "format": "pdf",
+                "engine": extracted.get("engine"),
+            },
             "pages": pages,
             "blocks": blocks,
             "plain_text": plain,

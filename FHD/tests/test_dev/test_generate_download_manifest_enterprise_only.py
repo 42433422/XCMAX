@@ -13,6 +13,18 @@ SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-download-manifest.py"
 VERIFY_SCRIPT = FHD_ROOT / "scripts" / "deploy" / "verify-download.sh"
 RELEASE_WORKFLOW = FHD_ROOT / ".github" / "workflows" / "release-desktop.yml"
 ROOT_RELEASE_WORKFLOW = FHD_ROOT.parent / ".github" / "workflows" / "fhd-release-desktop.yml"
+LEGACY_ROOT_RELEASE_WORKFLOW = (
+    FHD_ROOT.parent / ".github" / "workflows" / "modstore-build-desktop.yml"
+)
+LEGACY_SOURCE_RELEASE_WORKFLOW = (
+    FHD_ROOT.parent
+    / "成都修茈科技有限公司"
+    / "MODstore_deploy"
+    / ".github"
+    / "workflows"
+    / "build-desktop.yml"
+)
+WORKFLOW_PUBLISHER = FHD_ROOT.parent / "scripts" / "dev" / "publish_ci_workflows_to_root.py"
 FINALIZE_MACOS_DMG = FHD_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh"
 BUILD_INFO_SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-desktop-build-info.py"
 
@@ -80,6 +92,16 @@ def test_stable_manifest_is_enterprise_only_even_when_personal_files_exist(tmp_p
     assert public_release["android_git_sha"] == "a" * 40
 
 
+def test_frozen_personal_has_no_secondary_stable_desktop_publisher() -> None:
+    """Only the enterprise FHD workflow may write desktop stable artifacts."""
+
+    assert not LEGACY_ROOT_RELEASE_WORKFLOW.exists()
+    assert not LEGACY_SOURCE_RELEASE_WORKFLOW.exists()
+    assert '"build-desktop.yml": "modstore-build-desktop.yml"' not in (
+        WORKFLOW_PUBLISHER.read_text(encoding="utf-8")
+    )
+
+
 def test_release_is_not_ready_without_enterprise_windows_and_macos(tmp_path: Path) -> None:
     manifest, public_release = _generate(tmp_path, include_enterprise_mac=False)
 
@@ -97,6 +119,12 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
     assert "verify_only:" in workflow
     assert "inputs.verify_only == true || needs.generate-manifest.result == 'success'" in workflow
     assert '"https://xiu-ci.com/xcagi-v${version}/manifest.json"' in workflow
+    assert "Sign reconstructed update metadata" in workflow
+    assert 'python scripts/dev/sign_update_metadata.py "$metadata"' in workflow
+    assert "Verify public update metadata parity and signed identity" in workflow
+    assert 'cmp -s "$stable" "$official"' in workflow
+    assert "^signature: ed25519:" in workflow
+    assert 'grep -Fxq "buildSha: ${expected_sha}"' in workflow
     assert "Publish verified website download pointer" in workflow
     assert '.active_skus == ["enterprise"]' in workflow
     assert 'root_target="/root/成都修茈科技有限公司/download-release.json"' in workflow

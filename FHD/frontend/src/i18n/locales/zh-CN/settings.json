@@ -27,7 +27,7 @@
     "modelServiceMissingTitle": "模型服务尚未就绪",
     "modelServiceMissingLead": "本页用于查看修茈市场钱包余额、XCauto 用量与套餐；需先安装宿主基础线中的「模型付费桥接 Mod」。",
     "modelServiceMissingWhy": "它是宿主九件套之一（xcagi-model-payment-bridge），负责把本机 AI 模式（XCauto）与修茈市场钱包、计费 API 接起来。",
-    "modelServiceMissingHow": "完成首次引导「补基础线」或在下方「扩展与 Mod」/扩展市场一键装齐通用宿主包后，此处会出现余额与套餐入口。",
+    "modelServiceMissingHow": "完成首次引导「准备菜单」或在下方「扩展与 Mod」/扩展市场一键装齐通用宿主包后，此处会出现余额与套餐入口。",
     "modelServiceMissingNote": "未安装时智能对话仍可能可用，但无法在此查看余额；企业版请用修茈账号登录后再刷新本页。",
     "modelServiceOpenModStore": "打开扩展市场",
     "modelServiceOpenExtensions": "查看扩展与 Mod",

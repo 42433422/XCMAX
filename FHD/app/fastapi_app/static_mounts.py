@@ -32,16 +32,20 @@ def resolve_xcmax_dashboard_dir() -> str | None:
 
 def mount_xcmax_dashboard_static(app: FastAPI) -> None:
     """挂载 /xcmax-dashboard -> 仓根全景 HTML/JS/CSS（AutomationPolicy iframe）。"""
+    try:
+        from app.utils.deployment import is_desktop_mode
+
+        if is_desktop_mode():
+            logger.info("桌面模式跳过 /xcmax-dashboard 挂载（运维面仅网页）")
+            return
+    except RECOVERABLE_ERRORS as exc:
+        logger.debug("desktop mode probe for xcmax dashboard skipped: %s", exc)
     directory = resolve_xcmax_dashboard_dir()
     if not directory:
         logger.warning("xcmax-dashboard 目录未找到，跳过挂载（需 XCAGI-Full-Pipeline.html 于仓根）")
         return
     try:
 
-        @app.get(
-            "/xcmax-dashboard/.cache/xcmax/xcmax-pytest-coverage.json",
-            include_in_schema=False,
-        )
         def xcmax_dashboard_pytest_coverage_compat():
             for rel in (
                 ".cache/xcmax/xcmax-pytest-coverage.json",
@@ -60,6 +64,17 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
                 status_code=404,
             )
 
+        for coverage_path in (
+            "/xcmax-dashboard/.cache/xcmax/xcmax-pytest-coverage.json",
+            "/xcmax-dashboard/xcmax-pytest-coverage.json",
+        ):
+            app.add_api_route(
+                coverage_path,
+                xcmax_dashboard_pytest_coverage_compat,
+                methods=["GET"],
+                include_in_schema=False,
+            )
+
         app.mount(
             "/xcmax-dashboard",
             StaticFiles(directory=directory, html=True),
@@ -71,7 +86,19 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
 
 
 def mount_admin_console_static(app: FastAPI) -> None:
-    """挂载管理端 Vite 产物到 ``/admin``，避免未启动 dev server 时落入企业端 SPA。"""
+    """挂载管理端 Vite 产物到 ``/admin``，避免未启动 dev server 时落入企业端 SPA。
+
+    SSOT：管理端仅网页。桌面嵌入式后端（``is_desktop_mode``）不挂载 ``/admin``。
+    """
+    try:
+        from app.utils.deployment import is_desktop_mode
+
+        if is_desktop_mode():
+            logger.info("桌面模式跳过 /admin 挂载（管理端仅网页 SSOT）")
+            return
+    except RECOVERABLE_ERRORS as e:
+        logger.debug("desktop mode probe for admin mount skipped: %s", e)
+
     admin_dist = os.path.join(get_base_dir(), "templates", "admin-vue-dist")
     if not os.path.isdir(admin_dist):
         logger.warning("Admin console dist 目录不存在，跳过 /admin 挂载: %s", admin_dist)

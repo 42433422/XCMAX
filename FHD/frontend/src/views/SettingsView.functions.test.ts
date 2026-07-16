@@ -1286,14 +1286,14 @@ describe('SettingsView functions – persyUserId computed', () => {
     resetStores()
   })
 
-  it('无 user 时返回 1', async () => {
+  it('无聊天会话时返回普通模式默认会话键', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe(1)
+    expect(vm.persyUserId).toBe('web_normal_default')
     wrapper.unmount()
   })
 
-  it('user.id 为有效数字时返回该数字', async () => {
+  it('不再使用登录用户的数字 id', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
       data: { user: { id: 42, username: 'test', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
@@ -1302,11 +1302,11 @@ describe('SettingsView functions – persyUserId computed', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe(42)
+    expect(vm.persyUserId).toBe('web_normal_default')
     wrapper.unmount()
   })
 
-  it('user.id 为无效值时返回 1', async () => {
+  it('登录用户 id 无效时仍使用聊天会话键', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
       data: { user: { id: 'invalid', username: 'test', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
@@ -1315,11 +1315,11 @@ describe('SettingsView functions – persyUserId computed', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe(1)
+    expect(vm.persyUserId).toBe('web_normal_default')
     wrapper.unmount()
   })
 
-  it('user.id 为负数时返回 1', async () => {
+  it('登录用户 id 为负数时仍使用聊天会话键', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
       data: { user: { id: -5, username: 'test', display_name: 'Test', email: '', role: 'user', is_active: true }, permissions: [] },
@@ -1328,7 +1328,7 @@ describe('SettingsView functions – persyUserId computed', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe(1)
+    expect(vm.persyUserId).toBe('web_normal_default')
     wrapper.unmount()
   })
 })

@@ -55,6 +55,7 @@ if [[ "${SKU}" == "personal" ]]; then
 else
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
 fi
+# 桌面包不构建 admin-console（管理端仅网页 SSOT）
 
 printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-sku.json
 "${PYTHON}" scripts/package/generate-desktop-resources.py

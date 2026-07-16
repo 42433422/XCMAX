@@ -126,7 +126,7 @@ class EmployeeOrchestrator:
             return None
         cycle = self.graph.detect_cycle()
         if cycle:
-            logger.warning("collaboration cycle detected for %s: %s", eid, cycle)
+            logger.warning("collaboration cycle detected")
 
         exec_order = order if include_root else [n for n in order if n != eid]
         if not exec_order:

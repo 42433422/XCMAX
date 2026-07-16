@@ -4,7 +4,6 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { notarize } = require('@electron/notarize')
 
 function resolveApiKeyPath() {
   const explicit = (process.env.APP_STORE_CONNECT_API_KEY_PATH || '').trim()
@@ -30,6 +29,10 @@ function resolveApiKeyPath() {
 exports.default = async function afterSign(context) {
   if (context.electronPlatformName !== 'darwin') return
 
+  // @electron/notarize >= 3 is ESM-only. Keep electron-builder's CommonJS
+  // afterSign entrypoint, but load the notarization client dynamically.
+  const { notarize } = await import('@electron/notarize')
+
   const appName = context.packager.appInfo.productFilename
   const appPath = `${context.appOutDir}/${appName}.app`
   const apiKeyPath = resolveApiKeyPath()
@@ -41,7 +44,7 @@ exports.default = async function afterSign(context) {
   ).trim()
   const teamId = (process.env.APPLE_TEAM_ID || process.env.IOS_TEAM_ID || '').trim()
 
-  async function withRetry(label, fn, attempts = 2) {
+  async function withRetry(label, fn, attempts = 3) {
     let lastErr
     for (let i = 1; i <= attempts; i++) {
       try {
@@ -55,10 +58,12 @@ exports.default = async function afterSign(context) {
           msg.includes('No network route') ||
           msg.includes('ECONNRESET') ||
           msg.includes('ETIMEDOUT') ||
-          msg.includes('ENOTFOUND')
+          msg.includes('ENOTFOUND') ||
+          msg.includes('abortedUpload') ||
+          msg.includes('deadlineExceeded')
         console.warn(`[notarize] ${label} attempt ${i}/${attempts} failed: ${msg}`)
         if (!transient || i === attempts) throw err
-        const waitMs = Math.min(15000, 4000 * i)
+        const waitMs = Math.min(30000, 8000 * i)
         console.warn(`[notarize] retrying in ${waitMs}ms`)
         await new Promise((r) => setTimeout(r, waitMs))
       }

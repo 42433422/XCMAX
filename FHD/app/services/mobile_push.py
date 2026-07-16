@@ -140,6 +140,9 @@ def notify_user(
     from app.db.session import get_db
 
     with get_db() as db:
+        bind = db.get_bind()
+        if not sa_inspect(bind).has_table(MobileDeviceToken.__tablename__):
+            MobileDeviceToken.__table__.create(bind, checkfirst=True)
         rows = db.query(MobileDeviceToken).filter(MobileDeviceToken.user_id == user_id).all()
         devices = [
             {

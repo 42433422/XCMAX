@@ -132,9 +132,32 @@ def bundled_industry_seeds_dir() -> Path | None:
 
 
 def _resolve_seed_source(mod_id: str, pool: Path) -> Path | None:
-    trial = pool / mod_id
-    if trial.is_dir():
-        return trial
+    try:
+        with os.scandir(pool) as entries:
+            for entry in entries:
+                if (
+                    entry.name == mod_id
+                    and not entry.is_symlink()
+                    and entry.is_dir(follow_symlinks=False)
+                ):
+                    return Path(entry.path)
+    except OSError:
+        return None
+    return None
+
+
+def _existing_mod_directory(root: str, mod_id: str) -> Path | None:
+    try:
+        with os.scandir(root) as entries:
+            for entry in entries:
+                if (
+                    entry.name == mod_id
+                    and not entry.is_symlink()
+                    and entry.is_dir(follow_symlinks=False)
+                ):
+                    return Path(entry.path)
+    except OSError:
+        return None
     return None
 
 
@@ -159,8 +182,8 @@ def deactivate_other_open_industry_mods(
             logger.warning("unload open industry mod %s failed: %s", mod_id, exc)
         removed = False
         if remove_files:
-            dest = Path(mm.mods_root) / mod_id
-            if dest.is_dir():
+            dest = _existing_mod_directory(mm.mods_root, mod_id)
+            if dest is not None:
                 try:
                     shutil.rmtree(dest)
                     removed = True
@@ -175,8 +198,12 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
     从 industry-seeds 池复制单个行业 Mod 到 userData/mods 并 load_mod。
     industry_id 可为行业名或 mod_id。
     """
-    iid, mod_id = resolve_industry_or_mod_id(industry_id)
-    if not mod_id:
+    iid, requested_mod_id = resolve_industry_or_mod_id(industry_id)
+    mod_id = next(
+        (candidate for candidate in open_industry_seed_mod_ids() if candidate == requested_mod_id),
+        None,
+    )
+    if mod_id is None:
         return {
             "success": False,
             "status": "invalid",
@@ -189,10 +216,11 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     mm = get_mod_manager()
-    dst = Path(mm.mods_root) / mod_id
+    existing_dst = _existing_mod_directory(mm.mods_root, mod_id)
+    dst = existing_dst or (Path(mm.mods_root) / mod_id)
     pool = bundled_industry_seeds_dir()
 
-    if dst.is_dir():
+    if existing_dst is not None:
         loaded = False
         try:
             loaded = bool(mm.load_mod(mod_id))
