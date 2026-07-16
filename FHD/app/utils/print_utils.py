@@ -1,9 +1,10 @@
 import logging
 import os
-import shutil
+import re
 import subprocess
 import sys
 import time
+from typing import BinaryIO
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -24,6 +25,9 @@ except ImportError as _print_import_error:
 logging.basicConfig(level=logging.INFO, encoding="utf-8")
 logger = logging.getLogger(__name__)
 _CUPS_ERRORS = RECOVERABLE_ERRORS + (subprocess.SubprocessError,)
+_CUPS_LP = "/usr/bin/lp"
+_CUPS_LPSTAT = "/usr/bin/lpstat"
+_CUPS_PRINTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}$")
 
 
 class PrinterUtils:
@@ -40,8 +44,10 @@ class PrinterUtils:
             sys.platform == "darwin"
             and win32print is None
             and win32api is None
-            and shutil.which("lpstat") is not None
-            and shutil.which("lp") is not None
+            and os.path.isfile(_CUPS_LPSTAT)
+            and os.access(_CUPS_LPSTAT, os.X_OK)
+            and os.path.isfile(_CUPS_LP)
+            and os.access(_CUPS_LP, os.X_OK)
         )
 
     def _build_unavailable_result(self) -> dict:
@@ -63,12 +69,21 @@ class PrinterUtils:
     @classmethod
     def _run_cups(
         cls,
-        args: list[str],
+        command: str,
+        arguments: tuple[str, ...],
         *,
         timeout: float = 15,
+        input_stream: BinaryIO | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        if command == "lp":
+            executable = _CUPS_LP
+        elif command == "lpstat":
+            executable = _CUPS_LPSTAT
+        else:
+            raise ValueError("unsupported CUPS command")
         return subprocess.run(
-            args,
+            [executable, *arguments],
+            stdin=input_stream,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -78,7 +93,7 @@ class PrinterUtils:
 
     def _get_cups_default_printer(self) -> str | None:
         try:
-            result = self._run_cups(["lpstat", "-d"])
+            result = self._run_cups("lpstat", ("-d",))
             if result.returncode != 0:
                 return None
             line = result.stdout.strip()
@@ -127,7 +142,7 @@ class PrinterUtils:
 
     def _get_cups_printers(self) -> list[dict[str, str | bool]]:
         try:
-            result = self._run_cups(["lpstat", "-p"])
+            result = self._run_cups("lpstat", ("-p",))
             if result.returncode != 0:
                 logger.warning("CUPS printer query failed: %s", result.stderr.strip())
                 return []
@@ -151,40 +166,65 @@ class PrinterUtils:
             logger.error("CUPS printer discovery failed: %s", exc)
             return []
 
+    def _resolve_cups_printer_name(self, requested: str) -> str | None:
+        if not _CUPS_PRINTER_NAME_RE.fullmatch(requested):
+            return None
+        for printer in self._get_cups_printers():
+            candidate = str(printer.get("name") or "")
+            if candidate == requested and _CUPS_PRINTER_NAME_RE.fullmatch(candidate):
+                return candidate
+        return None
+
     def _print_cups(self, file_path: str, printer_name: str) -> dict:
+        validated_printer = self._resolve_cups_printer_name(printer_name)
+        if validated_printer is None:
+            return {
+                "success": False,
+                "message": "打印失败：打印机不存在或名称不安全",
+                "printer": printer_name,
+            }
         try:
-            result = self._run_cups(
-                ["lp", "-d", printer_name, os.path.abspath(file_path)],
-                timeout=30,
-            )
+            with open(os.path.realpath(file_path), "rb") as source:
+                result = self._run_cups(
+                    "lp",
+                    ("-d", validated_printer),
+                    timeout=30,
+                    input_stream=source,
+                )
             if result.returncode != 0:
-                message = result.stderr.strip() or result.stdout.strip() or "lp command failed"
+                logger.warning(
+                    "CUPS rejected print job for %s: %s",
+                    validated_printer,
+                    result.stderr.strip() or result.stdout.strip() or "lp command failed",
+                )
                 return {
                     "success": False,
-                    "message": f"打印失败：{message}",
-                    "printer": printer_name,
+                    "message": "打印失败：macOS 打印服务拒绝了任务",
+                    "printer": validated_printer,
                 }
-            output = result.stdout.strip()
             return {
                 "success": True,
-                "message": output or "打印任务已提交到 macOS CUPS",
+                "message": "打印任务已提交到 macOS CUPS",
                 "file": os.path.basename(file_path),
-                "printer": printer_name,
+                "printer": validated_printer,
                 "method": "cups_lp",
             }
         except _CUPS_ERRORS as exc:
             logger.error("CUPS print failed: %s", exc)
             return {
                 "success": False,
-                "message": f"打印失败：{exc}",
-                "printer": printer_name,
+                "message": "打印失败：macOS 打印服务暂不可用",
+                "printer": validated_printer,
             }
 
     def _monitor_cups_print_job(self, printer_name: str, timeout: int) -> bool:
+        validated_printer = self._resolve_cups_printer_name(printer_name)
+        if validated_printer is None:
+            return False
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                result = self._run_cups(["lpstat", "-o", printer_name])
+                result = self._run_cups("lpstat", ("-o", validated_printer))
                 if result.returncode == 0 and not result.stdout.strip():
                     return True
             except _CUPS_ERRORS as exc:
