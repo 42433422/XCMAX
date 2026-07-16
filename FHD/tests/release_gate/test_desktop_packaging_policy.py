@@ -150,6 +150,38 @@ def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> Non
     assert "CODE_SIGN_TOOL_PATH" in job
     assert "code_sign_tool-1.3.0.jar" in job
     assert "& $java -Xmx1024M -jar $jar --version" in job
+    assert "rollback-windows.test.ts" in job
+    assert "updater-install.test.ts" in job
+
+
+def test_desktop_update_rollback_is_fail_closed_and_windows_full_app() -> None:
+    main = (REPO_ROOT / "desktop" / "main.ts").read_text(encoding="utf-8")
+    rollback = (REPO_ROOT / "desktop" / "rollback.ts").read_text(encoding="utf-8")
+    windows = (REPO_ROOT / "desktop" / "rollback-windows.ts").read_text(encoding="utf-8")
+    updater = (REPO_ROOT / "desktop" / "updater.ts").read_text(encoding="utf-8")
+    entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
+
+    assert "继续更新但不支持回滚" not in main
+    assert "cancelPreparedRollback()" in main
+    assert "attachDatabaseBackupToRollback" in main
+    assert "consumeRollbackApplied()" in main
+    assert (
+        "if (pendingRollback) {\n"
+        "          await waitForMainApplicationReady()\n"
+        "          await waitForPostUpdateStartupStability()\n"
+        "          commitRollback()"
+    ) in main
+    assert "mainApplicationReady = ready" in main
+    assert "POST_UPDATE_STABILITY_MS = 5_000" in main
+    assert "rendererFailedDuringStartup = true" in main
+    assert "throw error" in main
+    assert "mode: 'windows-full'" in rollback
+    assert "launchWindowsFullRollback" in rollback
+    assert "windows-app-current" in rollback
+    assert "Move-Item -LiteralPath $stagingDir -Destination $installDir" in windows
+    assert "Copy-Item -LiteralPath $databaseBackupPath" in windows
+    assert "downloadedBuildSha.slice(0, 12)" in updater
+    assert "migration backup failed; refusing to continue" in entrypoint
 
 
 def test_desktop_package_includes_chat_voice_runtime() -> None:
