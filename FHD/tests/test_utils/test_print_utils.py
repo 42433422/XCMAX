@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, patch
+import subprocess
+from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
 
@@ -231,10 +232,8 @@ class TestMacosCupsPrinterUtils:
     def test_cups_backend_requires_both_commands(self):
         with (
             patch("app.utils.print_utils.sys.platform", "darwin"),
-            patch(
-                "app.utils.print_utils.shutil.which",
-                side_effect=lambda command: f"/usr/bin/{command}",
-            ),
+            patch("app.utils.print_utils.os.path.isfile", return_value=True),
+            patch("app.utils.print_utils.os.access", return_value=True),
             patch("app.utils.print_utils.win32print", None),
             patch("app.utils.print_utils.win32api", None),
         ):
@@ -328,17 +327,56 @@ class TestMacosCupsPrinterUtils:
             patch("app.utils.print_utils.win32print", None),
             patch("app.utils.print_utils.win32api", None),
             patch("app.utils.print_utils.os.path.exists", return_value=True),
+            patch.object(
+                pu,
+                "_resolve_cups_printer_name",
+                return_value="Canon_TS3700_series",
+            ),
+            patch("builtins.open", mock_open(read_data=b"pdf")),
             patch.object(pu, "_run_cups", return_value=result) as run_cups,
         ):
             output = pu.print_file("/tmp/test.pdf", "Canon_TS3700_series")
 
         assert output["success"] is True
         assert output["method"] == "cups_lp"
-        assert run_cups.call_args.args[0][:3] == [
+        assert run_cups.call_args.args == (
             "lp",
-            "-d",
-            "Canon_TS3700_series",
-        ]
+            ("-d", "Canon_TS3700_series"),
+        )
+        assert run_cups.call_args.kwargs["input_stream"] is not None
+
+    def test_cups_rejects_untrusted_printer_name_without_running_command(self):
+        pu = PrinterUtils()
+        with patch.object(pu, "_run_cups") as run_cups:
+            output = pu._print_cups("/tmp/test.pdf", "--option-injection")
+
+        assert output["success"] is False
+        assert "名称不安全" in output["message"]
+        run_cups.assert_not_called()
+
+    def test_cups_exception_is_not_exposed_to_api_caller(self):
+        pu = PrinterUtils()
+        with (
+            patch.object(
+                pu,
+                "_resolve_cups_printer_name",
+                return_value="Canon_TS3700_series",
+            ),
+            patch("builtins.open", mock_open(read_data=b"pdf")),
+            patch.object(
+                pu,
+                "_run_cups",
+                side_effect=subprocess.TimeoutExpired(
+                    cmd=["/usr/bin/lp", "sensitive-value"],
+                    timeout=30,
+                ),
+            ),
+        ):
+            output = pu._print_cups("/private/sensitive/test.pdf", "Canon_TS3700_series")
+
+        assert output["success"] is False
+        assert output["message"] == "打印失败：macOS 打印服务暂不可用"
+        assert "sensitive" not in output["message"]
 
     def test_cups_printer_probe_reports_missing_printer(self):
         pu = PrinterUtils()
