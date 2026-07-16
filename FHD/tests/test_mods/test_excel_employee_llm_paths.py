@@ -86,7 +86,9 @@ def _fake_llm(response: dict | str, *, ok: bool = True):
 
     async def call_llm(messages, **kwargs):
         calls.append({"messages": messages, "kwargs": kwargs})
-        content = response if isinstance(response, str) else json.dumps(response, ensure_ascii=False)
+        content = (
+            response if isinstance(response, str) else json.dumps(response, ensure_ascii=False)
+        )
         return {"ok": ok, "content": content, "error": "" if ok else "mock down"}
 
     call_llm.calls = calls  # type: ignore[attr-defined]
@@ -106,7 +108,10 @@ def test_mapper_llm_adopts_valid_bands_and_clear_zone(tmp_path: Path) -> None:
 
     call_llm = _fake_llm(
         {
-            "bands": {"am": {"row_offset": 0, "max_entries": 1}, "pm": {"row_offset": 1, "max_entries": 2}},
+            "bands": {
+                "am": {"row_offset": 0, "max_entries": 1},
+                "pm": {"row_offset": 1, "max_entries": 2},
+            },
             "key_col": None,
             "clear_zone": {"col_start": 4, "col_end": 33},
             "notes": ["块内 3 行推断为上午/下午两带"],
@@ -161,9 +166,7 @@ def test_mapper_llm_garbage_and_outage_are_recorded(tmp_path: Path) -> None:
     assert any("无法解析" in r["reason"] for r in rules1["evidence"]["llm"]["rejected"])
 
     rules2 = infer_mod.infer_rules(workbook, source_name="synthetic")
-    rules2 = asyncio.run(
-        llm_refine.llm_refine_rules(rules2, sheet, _fake_llm({}, ok=False))
-    )
+    rules2 = asyncio.run(llm_refine.llm_refine_rules(rules2, sheet, _fake_llm({}, ok=False)))
     assert any("不可用" in r["reason"] for r in rules2["evidence"]["llm"]["rejected"])
 
 
@@ -194,7 +197,12 @@ def test_mapper_convert_with_llm_ctx(tmp_path: Path) -> None:
     _, _, mapper_convert, _, _, _ = _load_pkgs()
     _workbook_json(tmp_path)
     call_llm = _fake_llm(
-        {"bands": {"am": {"row_offset": 0, "max_entries": 3}}, "clear_zone": None, "key_col": None, "notes": []}
+        {
+            "bands": {"am": {"row_offset": 0, "max_entries": 3}},
+            "clear_zone": None,
+            "key_col": None,
+            "notes": [],
+        }
     )
     result = asyncio.run(
         mapper_convert.convert_file(
@@ -241,7 +249,11 @@ def _qc_chain(tmp_path: Path):
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     filled = tmp_path / "filled.xlsx"
     writer.convert_file(
-        plan_path, filled, template_path=tmp_path / "template.xlsx", payload={}, ctx={},
+        plan_path,
+        filled,
+        template_path=tmp_path / "template.xlsx",
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
     return rules, plan, filled, qc_convert
@@ -252,7 +264,11 @@ def test_qc_semantic_findings_merge_into_verdict(tmp_path: Path) -> None:
     call_llm = _fake_llm(
         {
             "findings": [
-                {"severity": "fail", "detail": "甲的单日数值 2.0 与班次常理不符（示例）", "evidence": "per_key_numeric_sum"},
+                {
+                    "severity": "fail",
+                    "detail": "甲的单日数值 2.0 与班次常理不符（示例）",
+                    "evidence": "per_key_numeric_sum",
+                },
                 {"severity": "info", "detail": "其余键无记录属正常", "evidence": ""},
             ],
             "summary_zh": "本次回填结构正确，但甲的数值需人工复核。",

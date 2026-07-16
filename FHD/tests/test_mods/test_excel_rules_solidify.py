@@ -132,7 +132,11 @@ def test_golden_reverse_read_roundtrip(tmp_path: Path) -> None:
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     filled = tmp_path / "filled.xlsx"
     writer.convert_file(
-        plan_path, filled, template_path=tmp_path / "template.xlsx", payload={}, ctx={},
+        plan_path,
+        filled,
+        template_path=tmp_path / "template.xlsx",
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
     filled_wb = _read_json(reader, filled, tmp_path / "filled_wb.json")
@@ -150,14 +154,23 @@ def test_diff_records_reports_mismatch_missing_extra() -> None:
         {"key": "乙", "day": 2, "band": "am", "entries": [{"symbol": "√", "value": 1.0}]},
     ]
     produced = [
-        {"key": "甲", "day": 1, "band": "am", "entries": [{"symbol": "√", "value": 9.9}]},  # mismatch
+        {
+            "key": "甲",
+            "day": 1,
+            "band": "am",
+            "entries": [{"symbol": "√", "value": 9.9}],
+        },  # mismatch
         {"key": "丙", "day": 3, "band": "am", "entries": [{"symbol": "√", "value": 1.0}]},  # extra
     ]
     diff = golden_mod.diff_records(produced, expected)
     assert not diff["ok"]
     assert diff["stats"] == {
-        "expected_slots": 2, "produced_slots": 2,
-        "matched": 0, "mismatched": 1, "missing": 1, "extra": 1,
+        "expected_slots": 2,
+        "produced_slots": 2,
+        "matched": 0,
+        "mismatched": 1,
+        "missing": 1,
+        "extra": 1,
     }
 
 
@@ -165,7 +178,7 @@ def test_diff_records_reports_mismatch_missing_extra() -> None:
 # 固化循环（合成场景）
 # ---------------------------------------------------------------------------
 
-_GOOD_SCRIPT = '''```python
+_GOOD_SCRIPT = """```python
 def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
     records = []
     for sheet in source_workbook.get("sheets") or []:
@@ -180,9 +193,9 @@ def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
             records.append({"key": name, "day": day, "band": band,
                             "entries": [{"symbol": symbol, "value": hours}]})
     return records
-```'''
+```"""
 
-_BAD_BAND_SCRIPT = '''```python
+_BAD_BAND_SCRIPT = """```python
 def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
     records = []
     for sheet in source_workbook.get("sheets") or []:
@@ -193,15 +206,15 @@ def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
             records.append({"key": name, "day": int(row.get("日期")), "band": "夜班",
                             "entries": [{"symbol": "√", "value": 1.0}]})
     return records
-```'''
+```"""
 
-_FORBIDDEN_SCRIPT = '''```python
+_FORBIDDEN_SCRIPT = """```python
 import subprocess
 
 def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
     subprocess.run(["ls"])
     return []
-```'''
+```"""
 
 
 def _source_workbook() -> dict:
@@ -238,9 +251,7 @@ def test_solidify_succeeds_first_round(tmp_path: Path) -> None:
     call_llm = _fake_llm_seq([_GOOD_SCRIPT])
 
     result = asyncio.run(
-        solidify_mod.solidify_transform(
-            _source_workbook(), rules, _expected_records(), call_llm
-        )
+        solidify_mod.solidify_transform(_source_workbook(), rules, _expected_records(), call_llm)
     )
     assert result["ok"], result["iterations"]
     assert len(result["iterations"]) == 1
@@ -257,9 +268,7 @@ def test_solidify_iterates_on_feedback(tmp_path: Path) -> None:
     call_llm = _fake_llm_seq([_BAD_BAND_SCRIPT, _GOOD_SCRIPT])
 
     result = asyncio.run(
-        solidify_mod.solidify_transform(
-            _source_workbook(), rules, _expected_records(), call_llm
-        )
+        solidify_mod.solidify_transform(_source_workbook(), rules, _expected_records(), call_llm)
     )
     assert result["ok"]
     assert len(result["iterations"]) == 2
@@ -342,8 +351,7 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
 
 
 SOLIDIFIED_EXAMPLE = (
-    FHD_ROOT
-    / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
+    FHD_ROOT / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
 )
 
 
@@ -437,7 +445,7 @@ def test_solidify_reproduces_sunbird_conversion(tmp_path: Path) -> None:
 
     # 4) mock LLM「生成」桥接脚本：调太阳鸟真实算子转 records（验证窄接口契约
     #    足以无损承载太阳鸟转化；真 LLM 场景由宿主环境执行同一循环）
-    bridge_script = f'''```python
+    bridge_script = f"""```python
 import sys
 
 def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
@@ -466,7 +474,7 @@ def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
                 if trimmed:
                     records.append({{"key": name, "day": int(day), "band": band, "entries": trimmed}})
     return records
-```'''
+```"""
 
     result = asyncio.run(
         solidify_mod.solidify_transform(
@@ -490,7 +498,11 @@ def produce_records(source_workbook: dict, rules: dict) -> list[dict]:
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     ours_xlsx = tmp_path / "ours.xlsx"
     writer.convert_file(
-        plan_path, ours_xlsx, template_path=SUNBIRD_TEMPLATE, payload={}, ctx={},
+        plan_path,
+        ours_xlsx,
+        template_path=SUNBIRD_TEMPLATE,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
 

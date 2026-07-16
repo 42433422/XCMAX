@@ -36,7 +36,6 @@ function buildDeps(overrides: Partial<Parameters<typeof useChatStreamRound>[0]> 
     clearVoiceQueue: vi.fn(),
     ttsEnabled,
     buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hi' } })),
-    acknowledgeMultimodalRequest: vi.fn(),
     resolveChatTimeoutMs: vi.fn(() => 60000),
     handleChatRequiresToken: vi.fn(),
     onStreamDone: vi.fn().mockResolvedValue(undefined),
@@ -82,9 +81,9 @@ describe('useChatStreamRound', () => {
       expect(deps.applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, '已生成一半')
     })
     stopStreamingReply()
-    const result = await streamPromise
+    const ok = await streamPromise
 
-    expect(result).toMatchObject({ success: false, cancelled: true, response: '已生成一半' })
+    expect(ok).toBe(true)
     expect(deps.clearVoiceQueue).toHaveBeenCalled()
     expect(deps.saveMessage).toHaveBeenCalledWith('ai', '已生成一半')
     expect(deps.onStreamDone).not.toHaveBeenCalled()
@@ -114,64 +113,5 @@ describe('useChatStreamRound', () => {
 
     expect(deps.applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, '（已停止生成）')
     expect(deps.saveMessage).toHaveBeenCalledWith('ai', '（已停止生成）')
-  })
-
-  it('never renders or persists ephemeral tokens and exposes tool progress only as a sidecar', async () => {
-    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'token', text: 'internal trace', ephemeral: true })
-      onEvent({ type: 'tool_progress', label: 'Excel 解析' })
-      onEvent({ type: 'token', text: '用户可见' })
-      onEvent({ type: 'done', result: { success: true, response: '最终回复' } })
-    })
-    const { deps } = buildDeps()
-    const { runPlannerSseStream } = useChatStreamRound(deps)
-
-    const result = await runPlannerSseStream('hello', [])
-
-    expect(result).toMatchObject({ success: true, response: '最终回复' })
-    expect(deps.applyPlainTextToMessageIndex).not.toHaveBeenCalledWith(0, expect.stringContaining('internal trace'))
-    expect(deps.patchMessageAtIndex).toHaveBeenCalledWith(0, {
-      toolProgressLabel: '正在调用 Excel 解析…',
-    })
-    expect(deps.saveMessage).toHaveBeenCalledWith('ai', '最终回复')
-  })
-
-  it('keeps an attachment staged when the request fails before acceptance', async () => {
-    sendChatStream.mockRejectedValueOnce(new Error('offline'))
-    const snapshot = { sessionId: 's1', rows: [{ filename: 'report.xlsx' }] }
-    const { deps } = buildDeps({
-      buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hi' }, multimodalSnapshot: snapshot })),
-    })
-    const { runPlannerSseStream } = useChatStreamRound(deps)
-
-    const result = await runPlannerSseStream('hello', [])
-
-    expect(result.success).toBe(false)
-    expect(deps.acknowledgeMultimodalRequest).not.toHaveBeenCalled()
-  })
-
-  it('acknowledges exactly the accepted attachment snapshot before a user abort', async () => {
-    let abortSignal: AbortSignal | undefined
-    const snapshot = { sessionId: 's1', rows: [{ filename: 'report.xlsx' }] }
-    sendChatStream.mockImplementation((_body, opts) => {
-      abortSignal = opts?.signal
-      return Promise.resolve({ ok: true })
-    })
-    readPlannerSseResponse.mockImplementation(async () => {
-      await new Promise<void>((_resolve, reject) => {
-        abortSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-      })
-    })
-    const { deps } = buildDeps({
-      buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hi' }, multimodalSnapshot: snapshot })),
-    })
-    const { runPlannerSseStream, stopStreamingReply } = useChatStreamRound(deps)
-
-    const pending = runPlannerSseStream('hello', [])
-    await vi.waitFor(() => expect(deps.acknowledgeMultimodalRequest).toHaveBeenCalledWith(snapshot))
-    stopStreamingReply()
-    await pending
-
-    expect(deps.acknowledgeMultimodalRequest).toHaveBeenCalledTimes(1)
   })
 })

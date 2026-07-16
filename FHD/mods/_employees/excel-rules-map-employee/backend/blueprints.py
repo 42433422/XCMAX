@@ -228,7 +228,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return {'success': True, 'data': {'employee_id': emp_id, 'status': 'ready'}}
 
     app.include_router(router)
-    logger.info("employee_pack routes registered mod_id=%s emp=%s", mod_id, emp_id)
+    logger.info("employee_pack routes registered")
 
 
 def mod_init():

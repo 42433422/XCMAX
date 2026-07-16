@@ -20,9 +20,7 @@ WRITER_CONVERT = (
 )
 MAPPER_VENDOR = FHD_ROOT / "mods/_employees/excel-rules-map-employee/backend/vendor"
 QC_VENDOR = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/vendor"
-QC_EMPLOYEE = (
-    FHD_ROOT / "mods/_employees/excel-qc-employee/backend/employees/excel_qc_employee.py"
-)
+QC_EMPLOYEE = FHD_ROOT / "mods/_employees/excel-qc-employee/backend/employees/excel_qc_employee.py"
 
 SUNBIRD_TEMPLATE = Path(
     "/workspace/成都修茈科技有限公司/MODstore_deploy/var/employee_draft_assets/9/real-files-smoke/00_考勤-2026-3月份考勤统计表.xlsx"
@@ -87,7 +85,9 @@ def _build_chain(tmp_path: Path):
     reader.convert_file(
         template, wb_json, payload={}, ctx={}, rule_spec={"default_output_relpath": "workbook.json"}
     )
-    rules = infer_mod.infer_rules(json.loads(wb_json.read_text(encoding="utf-8")), source_name="synthetic")
+    rules = infer_mod.infer_rules(
+        json.loads(wb_json.read_text(encoding="utf-8")), source_name="synthetic"
+    )
     rules["bands"] = {
         "am": {"row_offset": 0, "max_entries": 1},
         "pm": {"row_offset": 1, "max_entries": 1},
@@ -103,7 +103,11 @@ def _build_chain(tmp_path: Path):
 
     filled = tmp_path / "filled.xlsx"
     writer.convert_file(
-        plan_path, filled, template_path=template, payload={}, ctx={},
+        plan_path,
+        filled,
+        template_path=template,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
     return rules, plan, filled, template
@@ -189,9 +193,7 @@ def test_qc_detects_clear_residue(tmp_path: Path) -> None:
 
     report = qc.run_qc(filled, plan, template_path=template, rules=rules)
     assert report["verdict"] == "FAIL"
-    assert any(
-        "残值" in i["detail"] for i in report["sections"]["conformance"]["issues"]
-    )
+    assert any("残值" in i["detail"] for i in report["sections"]["conformance"]["issues"])
 
 
 def test_qc_detects_mapper_false_claim(tmp_path: Path) -> None:
@@ -229,8 +231,7 @@ def test_qc_detects_protection_breach(tmp_path: Path) -> None:
     assert report["verdict"] == "FAIL"
     assert "writer" in report["blame"]
     assert any(
-        "保护区格与原模板不一致" in i["detail"]
-        for i in report["sections"]["protection"]["issues"]
+        "保护区格与原模板不一致" in i["detail"] for i in report["sections"]["protection"]["issues"]
     )
 
 
@@ -260,8 +261,7 @@ def test_qc_detects_rules_ref_mismatch(tmp_path: Path) -> None:
     assert report["verdict"] == "FAIL"
     assert "pipeline" in report["blame"]
     assert any(
-        "规则版本不一致" in i["detail"]
-        for i in report["sections"]["traceability"]["issues"]
+        "规则版本不一致" in i["detail"] for i in report["sections"]["traceability"]["issues"]
     )
 
 
@@ -277,10 +277,7 @@ def test_qc_detects_structure_drift(tmp_path: Path) -> None:
     report = qc.run_qc(filled, plan, rules=rules)
     assert report["verdict"] == "FAIL"
     assert "rules_stale" in report["blame"]
-    assert any(
-        "块键与规则不符" in i["detail"]
-        for i in report["sections"]["structure"]["issues"]
-    )
+    assert any("块键与规则不符" in i["detail"] for i in report["sections"]["structure"]["issues"])
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +309,13 @@ def test_qc_employee_run_end_to_end(tmp_path: Path) -> None:
     assert Path(item["output_path"]).is_file()
     report = json.loads(Path(item["output_path"]).read_text(encoding="utf-8"))
     assert set(report["sections"]) == {
-        "conformance", "protection", "expected", "formulas", "traceability", "structure", "semantic",
+        "conformance",
+        "protection",
+        "expected",
+        "formulas",
+        "traceability",
+        "structure",
+        "semantic",
     }
     # 无 call_llm 的测试环境：semantic 节如实 skipped
     assert report["sections"]["semantic"]["status"] == "skipped"
@@ -345,10 +348,15 @@ def test_qc_on_real_sunbird_chain(tmp_path: Path) -> None:
 
     wb_json = tmp_path / "wb.json"
     reader.convert_file(
-        SUNBIRD_TEMPLATE, wb_json, payload={}, ctx={},
+        SUNBIRD_TEMPLATE,
+        wb_json,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "workbook.json"},
     )
-    rules = infer_mod.infer_rules(json.loads(wb_json.read_text(encoding="utf-8")), source_name="sunbird")
+    rules = infer_mod.infer_rules(
+        json.loads(wb_json.read_text(encoding="utf-8")), source_name="sunbird"
+    )
     rules["bands"] = {
         "morning": {"row_offset": 0, "max_entries": 2},
         "afternoon": {"row_offset": 2, "max_entries": 2},
@@ -363,12 +371,14 @@ def test_qc_on_real_sunbird_chain(tmp_path: Path) -> None:
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     filled = tmp_path / "filled.xlsx"
     write_result = writer.convert_file(
-        plan_path, filled, template_path=SUNBIRD_TEMPLATE, payload={}, ctx={},
+        plan_path,
+        filled,
+        template_path=SUNBIRD_TEMPLATE,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
-    write_report = json.loads(
-        (filled.parent / "write_report.json").read_text(encoding="utf-8")
-    )
+    write_report = json.loads((filled.parent / "write_report.json").read_text(encoding="utf-8"))
 
     report = qc.run_qc(
         filled, plan, template_path=SUNBIRD_TEMPLATE, rules=rules, write_report=write_report

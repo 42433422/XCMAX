@@ -107,7 +107,13 @@ def _base_plan() -> dict:
                 "phase": "cell_writes",
                 "writes": [
                     {"sheet": "明细", "row": 3, "col": 3, "value": "√"},
-                    {"sheet": "明细", "ref": "D3", "value": "8", "value_type": "number", "number_format": "0.0"},
+                    {
+                        "sheet": "明细",
+                        "ref": "D3",
+                        "value": "8",
+                        "value_type": "number",
+                        "number_format": "0.0",
+                    },
                     {"sheet": "明细", "ref": "C4", "value": "√"},
                     {"sheet": "明细", "ref": "B6", "value": "2026-03-05", "value_type": "date"},
                 ],
@@ -274,7 +280,10 @@ def test_writer_plan_validation_errors(tmp_path: Path) -> None:
             {
                 "plan_version": 1,
                 "phases": [
-                    {"phase": "cell_writes", "writes": [{"sheet": "不存在", "ref": "A1", "value": 1}]}
+                    {
+                        "phase": "cell_writes",
+                        "writes": [{"sheet": "不存在", "ref": "A1", "value": 1}],
+                    }
                 ],
             }
         )
@@ -283,7 +292,9 @@ def test_writer_plan_validation_errors(tmp_path: Path) -> None:
             {
                 "plan_version": 1,
                 "template": {"sheet_names": ["不存在的表"]},
-                "phases": [{"phase": "cell_writes", "writes": [{"sheet": "明细", "ref": "A9", "value": 1}]}],
+                "phases": [
+                    {"phase": "cell_writes", "writes": [{"sheet": "明细", "ref": "A9", "value": 1}]}
+                ],
             }
         )
     with pytest.raises(ValueError, match="公式必须以 = 开头"):
@@ -291,7 +302,10 @@ def test_writer_plan_validation_errors(tmp_path: Path) -> None:
             {
                 "plan_version": 1,
                 "phases": [
-                    {"phase": "formula_writes", "writes": [{"sheet": "明细", "ref": "G1", "formula": "SUM(A:A)"}]}
+                    {
+                        "phase": "formula_writes",
+                        "writes": [{"sheet": "明细", "ref": "G1", "formula": "SUM(A:A)"}],
+                    }
                 ],
             }
         )
@@ -300,7 +314,17 @@ def test_writer_plan_validation_errors(tmp_path: Path) -> None:
             None,
             out,
             template_path=None,
-            payload={"plan": {"plan_version": 1, "phases": [{"phase": "cell_writes", "writes": [{"sheet": "明细", "ref": "A1", "value": 1}]}]}},
+            payload={
+                "plan": {
+                    "plan_version": 1,
+                    "phases": [
+                        {
+                            "phase": "cell_writes",
+                            "writes": [{"sheet": "明细", "ref": "A1", "value": 1}],
+                        }
+                    ],
+                }
+            },
             ctx={},
             rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
         )
@@ -371,7 +395,10 @@ def test_read_plan_write_reread_roundtrip(tmp_path: Path) -> None:
 
     # 1) 读取员读模板，拿到结构元数据
     reader.convert_file(
-        template, template_json, payload={}, ctx={},
+        template,
+        template_json,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "workbook.json"},
     )
     tpl = json.loads(template_json.read_text(encoding="utf-8"))
@@ -389,9 +416,7 @@ def test_read_plan_write_reread_roundtrip(tmp_path: Path) -> None:
         "phases": [
             {
                 "phase": "cell_writes",
-                "writes": [
-                    {"sheet": "明细", "row": r, "col": 3, "value": "√"} for r in name_rows
-                ],
+                "writes": [{"sheet": "明细", "row": r, "col": 3, "value": "√"} for r in name_rows],
             }
         ],
     }
@@ -400,14 +425,21 @@ def test_read_plan_write_reread_roundtrip(tmp_path: Path) -> None:
 
     # 3) 写入员回填
     result = writer.convert_file(
-        plan_path, filled, template_path=template, payload={}, ctx={},
+        plan_path,
+        filled,
+        template_path=template,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "outputs/filled.xlsx"},
     )
     assert result["cells_written"] == len(name_rows) == 2
 
     # 4) 读取员重读输出，验证闭环
     reader.convert_file(
-        filled, filled_json, payload={}, ctx={},
+        filled,
+        filled_json,
+        payload={},
+        ctx={},
         rule_spec={"default_output_relpath": "workbook.json"},
     )
     out = json.loads(filled_json.read_text(encoding="utf-8"))

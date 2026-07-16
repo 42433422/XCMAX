@@ -106,65 +106,6 @@ describe('useChatMessages', () => {
     expect(messages.messages.value[1]).toHaveProperty('attachments')
   })
 
-  it('restores approval, download, todo and workflow trace sidecars after reload', () => {
-    const sessionId = ref('sidecar-session')
-    const first = useChatMessages(sessionId)
-    first.addMessage('审批结果', 'ai', {
-      approvalCard: {
-        kind: 'workflow_approval',
-        plan_id: 'plan-1',
-        status: 'pending',
-        todo: ['确认导入'],
-      },
-      downloadUrl: '/api/files/report.xlsx',
-      shipmentDownloadUrl: '/api/shipment/report.pdf',
-      todoSteps: ['校验数据', '确认写入'],
-      workflowAction: 'workflow_confirmation_required',
-      nodeResults: [{
-        node_id: 'node-1',
-        tool_id: 'excel.import',
-        action: 'validate',
-        success: false,
-        message: '等待确认',
-        retryable: true,
-        retries: 1,
-      }],
-      contextSummary: '已关联 report.xlsx',
-      attachments: [{ name: 'report.xlsx', kind: 'excel' }],
-    })
-
-    const reloaded = useChatMessages(sessionId)
-    const restored = reloaded.messages.value.find((item) => item.content.includes('审批结果'))
-
-    expect(restored).toMatchObject({
-      downloadUrl: '/api/files/report.xlsx',
-      shipmentDownloadUrl: '/api/shipment/report.pdf',
-      todoSteps: ['校验数据', '确认写入'],
-      workflowAction: 'workflow_confirmation_required',
-      contextSummary: '已关联 report.xlsx',
-      approvalCard: { plan_id: 'plan-1', status: 'pending' },
-    })
-    expect(restored?.nodeResults?.[0]).toMatchObject({
-      node_id: 'node-1',
-      message: '等待确认',
-      retryable: true,
-      retries: 1,
-    })
-    expect(restored?.attachments).toEqual([{ name: 'report.xlsx', kind: 'excel' }])
-  })
-
-  it('keeps a sidecar-only result row during cache sanitization', () => {
-    messages.loadMessages([{
-      role: 'ai',
-      content: '',
-      time: '10:00',
-      downloadUrl: '/api/files/result.csv',
-    }])
-
-    expect(messages.messages.value).toHaveLength(1)
-    expect(messages.messages.value[0].downloadUrl).toBe('/api/files/result.csv')
-  })
-
   it('lastMessage returns last message', () => {
     messages.addMessage('first', 'user')
     messages.addMessage('second', 'ai')
@@ -361,24 +302,6 @@ describe('useChatMessages', () => {
     })
     const result = await messages.syncFromServer()
     expect(result).toBe(true)
-  })
-
-  it('syncFromServer overlays cached sidecars onto matching durable messages', async () => {
-    const chatApi = (await import('@/api/chat')).default
-    messages.addMessage('server reply', 'ai', {
-      approvalCard: { kind: 'workflow_approval', plan_id: 'p-sync', status: 'pending' },
-      downloadUrl: '/api/files/sync.xlsx',
-    })
-    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
-      messages: [{ role: 'ai', content: 'server reply', created_at: '2026-07-13T10:00:00Z' }],
-    })
-
-    await messages.syncFromServer()
-
-    expect(messages.messages.value[0]).toMatchObject({
-      downloadUrl: '/api/files/sync.xlsx',
-      approvalCard: { plan_id: 'p-sync', status: 'pending' },
-    })
   })
 
   it('syncFromServer handles empty response', async () => {

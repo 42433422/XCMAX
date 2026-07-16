@@ -66,10 +66,9 @@ def relay_boss_reply_to_employee(boss_user_id: int, employee_id: str, answer: st
             )
         if resp.status_code >= 400:
             logger.warning(
-                "relay_boss_reply_to_employee HTTP %s employee=%s body=%.200s",
+                "relay_boss_reply_to_employee HTTP %s employee=%s",
                 resp.status_code,
                 employee_id,
-                resp.text,
             )
             return False
         return True
