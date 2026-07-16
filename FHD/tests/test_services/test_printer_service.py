@@ -37,6 +37,32 @@ class TestPrinterService(unittest.TestCase):
 
     @patch("app.services.printer_service.EnhancedPrinterUtils")
     @patch("app.services.printer_service.PrinterUtils")
+    def test_document_printer_is_not_misreported_as_label_ready(self, mock_printer, mock_enhanced):
+        from app.services.printer_service import PrinterService
+
+        mock_printer_instance = MagicMock()
+        mock_printer.return_value = mock_printer_instance
+        mock_printer_instance.get_available_printers.return_value = [
+            {
+                "name": "Canon_TS3700_series",
+                "status": "就绪",
+                "is_default": True,
+            }
+        ]
+        mock_enhanced.return_value = MagicMock()
+
+        result = PrinterService().get_printers()
+
+        self.assertEqual(
+            result["classified"]["document_printer"]["name"],
+            "Canon_TS3700_series",
+        )
+        self.assertIsNone(result["classified"]["label_printer"]["name"])
+        self.assertFalse(result["summary"]["label_printer_ready"])
+        self.assertFalse(result["summary"]["all_ready"])
+
+    @patch("app.services.printer_service.EnhancedPrinterUtils")
+    @patch("app.services.printer_service.PrinterUtils")
     def test_get_printers_exception(self, mock_printer, mock_enhanced):
         from app.services.printer_service import PrinterService
 

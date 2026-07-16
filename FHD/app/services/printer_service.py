@@ -72,7 +72,7 @@ class PrinterService:
             name = (printer.get("name") or "").lower()
             if any(kw in name for kw in keywords):
                 return printer.get("name")
-        return printers[-1].get("name")
+        return None
 
     def get_printer_selection(self) -> dict:
         data = self._load_selection()
@@ -130,7 +130,9 @@ class PrinterService:
             "total_printers": len(printers),
             "document_printer_ready": bool(selected_doc),
             "label_printer_ready": bool(selected_label),
-            "all_ready": bool(selected_doc) and bool(selected_label),
+            "all_ready": (
+                bool(selected_doc) and bool(selected_label) and selected_doc != selected_label
+            ),
         }
         return {
             "classified": classified,

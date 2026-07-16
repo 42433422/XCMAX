@@ -13,7 +13,11 @@ Phase 4 组件：
 4. best-effort——任何组件不可用时降级，不阻断主流程。
 """
 
-from app.domain.neuro.evolution.evolution_handler import EvolutionHandler
+from app.domain.neuro.evolution.evolution_handler import (
+    EvolutionHandler,
+    get_evolution_handler,
+    reset_evolution_handler,
+)
 from app.domain.neuro.evolution.kb_retriever import (
     KBRetriever,
     KBSearchResult,
@@ -47,4 +51,6 @@ __all__ = [
     "get_runtime_self_fix",
     "reset_runtime_self_fix",
     "EvolutionHandler",
+    "get_evolution_handler",
+    "reset_evolution_handler",
 ]

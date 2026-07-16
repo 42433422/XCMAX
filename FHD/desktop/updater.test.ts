@@ -1,6 +1,36 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import crypto from 'node:crypto'
 
+const updaterMocks = vi.hoisted(() => ({
+  autoUpdater: {
+    autoDownload: false,
+    autoInstallOnAppQuit: false,
+    setFeedURL: vi.fn(),
+    on: vi.fn(),
+    checkForUpdates: vi.fn(() => Promise.resolve({})),
+    downloadUpdate: vi.fn(() => Promise.resolve()),
+    quitAndInstall: vi.fn(),
+  },
+}))
+
+vi.mock('electron', () => ({
+  app: {
+    isPackaged: false,
+    getVersion: () => '1.0.0',
+    getPath: () => '/tmp',
+  },
+  BrowserWindow: vi.fn(),
+  net: { request: vi.fn() },
+  session: {
+    defaultSession: {
+      resolveProxy: vi.fn(() => Promise.resolve('DIRECT')),
+      setProxy: vi.fn(() => Promise.resolve()),
+    },
+  },
+}))
+
+vi.mock('electron-updater', () => ({ autoUpdater: updaterMocks.autoUpdater }))
+
 // 动态生成 Ed25519 密钥对，避免硬编码私钥（更安全、可移植）
 const keyPair = crypto.generateKeyPairSync('ed25519')
 const TEST_PRIVATE_KEY_PEM = keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
@@ -194,5 +224,61 @@ describe('updater — __resetUpdateDownloadedForTest', () => {
   it('can be called without error', async () => {
     const { __resetUpdateDownloadedForTest } = await import('./updater.js')
     expect(() => __resetUpdateDownloadedForTest()).not.toThrow()
+  })
+})
+
+describe('updater — concurrent download requests', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('shares one in-flight updater promise', async () => {
+    let finish: (() => void) | undefined
+    updaterMocks.autoUpdater.downloadUpdate = vi.fn(
+      () => new Promise<void>(resolve => {
+        finish = resolve
+      }),
+    )
+    const { downloadUpdate, __resetUpdateDownloadedForTest } = await import('./updater.js')
+    __resetUpdateDownloadedForTest()
+
+    const first = downloadUpdate()
+    const second = downloadUpdate()
+    finish?.()
+    await Promise.all([first, second])
+
+    expect(updaterMocks.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('updater — available update error replay', () => {
+  it('persists an explicit available-with-error state for refreshed renderers', async () => {
+    vi.resetModules()
+    updaterMocks.autoUpdater.on = vi.fn()
+    const { configureUpdater, getUpdateStatus, __resetUpdateDownloadedForTest } = await import(
+      './updater.js'
+    )
+    __resetUpdateDownloadedForTest()
+    const mainWindow = {
+      isDestroyed: () => false,
+      webContents: { send: vi.fn() },
+    }
+
+    configureUpdater(mainWindow as never)
+    const available = updaterMocks.autoUpdater.on.mock.calls.find(
+      call => call[0] === 'update-available',
+    )?.[1] as ((value: { version: string }) => void) | undefined
+    const error = updaterMocks.autoUpdater.on.mock.calls.find(
+      call => call[0] === 'error',
+    )?.[1] as ((value: Error) => void) | undefined
+
+    available?.({ version: '1.0.1' })
+    error?.(new Error('network error'))
+    error?.(new Error('retry failed'))
+
+    expect(getUpdateStatus()?.type).toBe('update-available-with-error')
+    expect(
+      (getUpdateStatus()?.data as { lastError?: { message?: string } }).lastError?.message,
+    ).toBe('retry failed')
   })
 })

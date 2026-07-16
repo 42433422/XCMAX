@@ -72,6 +72,21 @@ describe('DesktopAppUpdatePrompt', () => {
     expect(wrapper.text()).toContain('可更新 1.0.0')
   })
 
+  it('keeps the update visible when refreshed status includes an error', async () => {
+    const wrapper = mountPrompt()
+    await flushPromises()
+    emitUpdate('update-available-with-error', {
+      version: '1.0.0',
+      buildSha: 'abcdef123456',
+      lastError: { message: 'network error' },
+    })
+    await nextTick()
+
+    expect(wrapper.find('.desktop-update-chip').exists()).toBe(true)
+    await wrapper.find('.desktop-update-chip').trigger('click')
+    expect(wrapper.text()).toContain('network error')
+  })
+
   it('opens notes modal and downloads only after click', async () => {
     const wrapper = mountPrompt()
     await flushPromises()
@@ -135,4 +150,3 @@ describe('DesktopAppUpdatePrompt', () => {
     expect(wrapper.find('.desktop-update-media__play').exists()).toBe(false)
   })
 })
-

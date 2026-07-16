@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import threading
 from datetime import datetime, timedelta
@@ -29,8 +30,9 @@ from .paths import ensure_desktop_dirs, is_desktop_mode
 
 logger = logging.getLogger(__name__)
 
-# 启动后延迟备份的秒数（避开 lifespan 高峰，让 mod/索引先建完）。
-_INITIAL_DELAY_SECONDS = 180
+# 启动后短暂延迟备份，避开 lifespan 的数据库迁移与路由装载高峰。
+# 180 秒会让短时使用场景长期没有首份备份；桌面 runtime 通常在 2 秒内 ready。
+_INITIAL_DELAY_SECONDS = 10
 # 循环检查间隔。不到 24h 也可，但每次循环会判断"今天是否已备份"，
 # 所以频繁检查不会导致频繁备份。
 _POLL_INTERVAL_SECONDS = 3600
@@ -40,6 +42,9 @@ _RETENTION_DAYS = 7
 _RETENTION_WEEKLY_DAYS = 28
 # 周日额外创建 weekly 备份的文件名标记。
 _WEEKLY_MARKER = "weekly"
+# xcagi-{version}-{stamp}.db / xcagi-{version}-weekly-{stamp}.db。
+# version 允许包含连字符，例如 1.0.0-beta 或 1.0.0-rc.1。
+_BACKUP_STAMP_RE = re.compile(r"^xcagi-(?P<version>.+?)(?:-weekly)?-(?P<stamp>\d{14})\.db$")
 
 _lock = threading.Lock()
 _stop_event: threading.Event | None = None
@@ -133,11 +138,14 @@ def _make_weekly_copy(daily_backup: Path) -> Path | None:
     文件名格式：xcagi-{version}-weekly-{stamp}.db
     复制而非重新备份，避免对运行中的库再做一次 sqlite3.backup()。
     """
-    parts = daily_backup.stem.split("-")
-    if len(parts) < 3 or _WEEKLY_MARKER in parts:
+    match = _BACKUP_STAMP_RE.match(daily_backup.name)
+    if match is None or _WEEKLY_MARKER in daily_backup.stem:
         return None
-    # parts: ["xcagi", "{version}", "{stamp}"] → 插入 weekly 标记
-    weekly_name = f"{'-'.join(parts[:-1])}-{_WEEKLY_MARKER}-{parts[-1]}.db"
+    stamp = match.group("stamp")
+    weekly_name = daily_backup.name.replace(
+        f"-{stamp}.db",
+        f"-{_WEEKLY_MARKER}-{stamp}.db",
+    )
     weekly_path = daily_backup.parent / weekly_name
     try:
         shutil.copy2(daily_backup, weekly_path)
@@ -176,13 +184,9 @@ def _has_backup_today(backups_dir: Path) -> bool:
     """
     today = datetime.now().strftime("%Y%m%d")
     for path in backups_dir.glob("xcagi-*.db"):
-        # 文件名格式 xcagi-{version}-{stamp}.db 或 xcagi-{version}-weekly-{stamp}.db
-        # 取末尾的 stamp 段（14 位数字）
-        parts = path.stem.split("-")
-        if len(parts) >= 3:
-            stamp = parts[-1]
-            if len(stamp) >= 8 and stamp[:8] == today:
-                return True
+        match = _BACKUP_STAMP_RE.match(path.name)
+        if match is not None and match.group("stamp").startswith(today):
+            return True
     return False
 
 

@@ -43,11 +43,61 @@ def load_manifest(path: str | os.PathLike[str]) -> list[ModelAsset]:
     return [ModelAsset(**item) for item in assets]
 
 
+def _response_status(response: object) -> int:
+    status = getattr(response, "status", None)
+    if isinstance(status, int):
+        return status
+    getcode = getattr(response, "getcode", None)
+    if callable(getcode):
+        code = getcode()
+        if isinstance(code, int):
+            return code
+    return 200
+
+
+def _set_response_read_timeout(response: object, timeout: float) -> None:
+    """Best-effort read timeout for urllib's HTTPResponse socket.
+
+    urllib exposes only one timeout argument for connect + read. CPython's
+    response object keeps the connected socket below ``fp.raw._sock``; keep
+    this optional so alternate handlers and test doubles remain supported.
+    """
+
+    current = response
+    for attribute in ("fp", "raw", "_sock"):
+        current = getattr(current, attribute, None)
+        if current is None:
+            return
+    settimeout = getattr(current, "settimeout", None)
+    if callable(settimeout):
+        settimeout(timeout)
+
+
+def _content_range_start(value: str) -> int | None:
+    # RFC 7233: "bytes 512-1023/2048"
+    if not value.startswith("bytes ") or "-" not in value:
+        return None
+    first = value[6:].split("-", 1)[0]
+    try:
+        return int(first)
+    except ValueError:
+        return None
+
+
+def _download_request(asset: ModelAsset, resume_from: int) -> urllib.request.Request:
+    headers = {"User-Agent": "XCAGI-Desktop/7"}
+    if resume_from > 0:
+        headers["Range"] = f"bytes={resume_from}-"
+    return urllib.request.Request(asset.url, headers=headers)
+
+
 def download_model(
     asset: ModelAsset,
     *,
     data_dir: str | os.PathLike[str] | None = None,
     progress: ProgressCallback | None = None,
+    connect_timeout: float = 10.0,
+    read_timeout: float = 60.0,
 ) -> Path:
     target_dir = models_dir(data_dir) / asset.name / asset.version
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -57,25 +107,78 @@ def download_model(
     if target.exists() and _sha256(target).lower() == asset.sha256.lower():
         return target
 
-    request = urllib.request.Request(asset.url, headers={"User-Agent": "XCAGI-Desktop/7"})
-    with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as out:
-        total = asset.size or int(response.headers.get("Content-Length") or 0)
-        copied = 0
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            out.write(chunk)
-            copied += len(chunk)
-            if progress:
-                progress(asset.name, copied, total)
+    resume_from = partial.stat().st_size if partial.exists() else 0
+    if asset.size and resume_from > asset.size:
+        partial.unlink(missing_ok=True)
+        resume_from = 0
+    if asset.size and resume_from == asset.size:
+        if _sha256(partial).lower() == asset.sha256.lower():
+            os.replace(partial, target)
+            return target
+        partial.unlink(missing_ok=True)
+        resume_from = 0
+
+    if asset.size:
+        remaining = max(asset.size - resume_from, 0)
+        safety_margin = min(max(asset.size // 20, 16 * 1024 * 1024), 64 * 1024 * 1024)
+        required_free = remaining + safety_margin
+        free = shutil.disk_usage(target_dir).free
+        if free < required_free:
+            raise OSError(
+                f"模型 {asset.name} 下载空间不足：需要至少 {required_free} bytes，"
+                f"当前剩余 {free} bytes"
+            )
+
+    request = _download_request(asset, resume_from)
+    response = urllib.request.urlopen(request, timeout=connect_timeout)
+    try:
+        status = _response_status(response)
+        content_range = str(response.headers.get("Content-Range") or "")
+        can_resume = (
+            resume_from > 0 and status == 206 and _content_range_start(content_range) == resume_from
+        )
+        if resume_from > 0 and not can_resume:
+            response.close()
+            response = urllib.request.urlopen(
+                _download_request(asset, 0),
+                timeout=connect_timeout,
+            )
+            resume_from = 0
+
+        _set_response_read_timeout(response, read_timeout)
+        mode = "ab" if resume_from > 0 else "wb"
+        copied = resume_from
+        if asset.size:
+            total = asset.size
+        else:
+            total = copied + int(response.headers.get("Content-Length") or 0)
+
+        with partial.open(mode) as out:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+                copied += len(chunk)
+                if progress:
+                    progress(asset.name, copied, total)
+    finally:
+        response.close()
+
+    if asset.size and partial.stat().st_size != asset.size:
+        raise OSError(
+            f"模型 {asset.name} 下载不完整：期望 {asset.size} bytes，"
+            f"实际 {partial.stat().st_size} bytes"
+        )
 
     digest = _sha256(partial)
     if digest.lower() != asset.sha256.lower():
         partial.unlink(missing_ok=True)
-        raise ValueError(f"模型 {asset.name} 校验失败: {digest}")
+        raise ValueError(
+            f"模型 {asset.name} 校验失败：期望 {asset.sha256[:12]}…，实际 {digest[:12]}…"
+        )
 
-    shutil.move(str(partial), target)
+    os.replace(partial, target)
     return target
 
 
