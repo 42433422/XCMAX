@@ -8,6 +8,7 @@ import com.xiuci.xcagi.mobile.core.db.ConversationListStateEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
+import com.xiuci.xcagi.mobile.core.db.NotificationCacheEntity
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.AiCirclePost
@@ -656,13 +657,44 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    /** 自建推送后台通道：拉取未送达的离线通知（服务端已标记 delivered）。失败返回空。 */
+    /**
+     * 自建推送后台通道：拉取未送达的离线通知（服务端已标记 delivered，一次性消费）。
+     * 服务端返回后即入 [db]（notification_cache），供「通知与公告」页作历史列表读取——
+     * 否则消费掉的通知在服务端就没了，页面会显得像永远清零。失败返回空，不影响调用方（PushPollWorker）。
+     */
     suspend fun fetchPendingNotifications(): List<PendingNotification> =
         try {
-            fhd().pendingNotifications().data?.notifications ?: emptyList()
+            val items = fhd().pendingNotifications().data?.notifications ?: emptyList()
+            if (items.isNotEmpty()) {
+                val now = System.currentTimeMillis()
+                db.notificationCacheDao().insertAll(
+                    items.map {
+                        NotificationCacheEntity(
+                            id = it.id,
+                            title = it.title,
+                            body = it.body,
+                            route = it.route,
+                            channel = it.channel,
+                            createdAt = now,
+                        )
+                    },
+                )
+            }
+            items
         } catch (_: Exception) {
             emptyList()
         }
+
+    /** 本地通知历史（含已消费自服务端的推送），按时间倒序，供通知页展示。 */
+    fun observeNotificationHistory(): Flow<List<NotificationCacheEntity>> =
+        db.notificationCacheDao().observeAll()
+
+    suspend fun markNotificationRead(id: Long) {
+        try {
+            db.notificationCacheDao().markRead(id)
+        } catch (_: Exception) {
+        }
+    }
 
     suspend fun pairingExchange(
         nonce: String = "",
