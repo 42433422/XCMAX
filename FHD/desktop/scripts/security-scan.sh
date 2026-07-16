@@ -16,26 +16,45 @@ SUPPRESSIONS="${REPO_ROOT}/.github/electronegativity-suppressions.json"
 
 GATE_SEVERITY="high"
 NO_BUILD=0
-for arg in "$@"; do
-  case "$arg" in
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --gate-severity)
+      if [ "$#" -lt 2 ]; then
+        echo "[err] --gate-severity requires high|medium|low" >&2
+        exit 2
+      fi
       GATE_SEVERITY="$2"
       shift 2
       ;;
     --gate-severity=*)
-      GATE_SEVERITY="${arg#*=}"
-      shift
+      GATE_SEVERITY="${1#*=}"
+      shift 1
       ;;
     --no-build)
       NO_BUILD=1
-      shift
+      shift 1
       ;;
     -h|--help)
       echo "用法: bash scripts/security-scan.sh [--gate-severity high|medium|low] [--no-build]"
       exit 0
       ;;
+    *)
+      echo "[err] unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
+
+case "${GATE_SEVERITY}" in
+  high|medium|low) ;;
+  *) echo "[err] invalid gate severity: ${GATE_SEVERITY}" >&2; exit 2 ;;
+esac
+
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || true)"
+if ! [[ "${NODE_MAJOR}" =~ ^[0-9]+$ ]] || [ "${NODE_MAJOR}" -lt 20 ]; then
+  echo "[err] Node.js 20+ is required; found: $(node --version 2>/dev/null || echo unavailable)" >&2
+  exit 2
+fi
 
 echo "[scan] desktop dir: ${DESKTOP_DIR}"
 echo "[scan] gate severity: ${GATE_SEVERITY}"
@@ -60,7 +79,9 @@ echo "[scan] installing electronegativity to ${EN_TMP}..."
 EN_BIN="${EN_TMP}/node_modules/.bin/electronegativity"
 if [ ! -x "${EN_BIN}" ]; then
   # .bin 软链可能在某些环境失败,直接用 node 调用
-  EN_BIN="node ${EN_TMP}/node_modules/@doyensec/electronegativity/dist/index.js"
+  EN_COMMAND=(node "${EN_TMP}/node_modules/@doyensec/electronegativity/dist/index.js")
+else
+  EN_COMMAND=("${EN_BIN}")
 fi
 
 # 4. 准备干净扫描目录
@@ -84,19 +105,33 @@ if [ -d "${DESKTOP_DIR}/dist" ]; then
 fi
 
 # 5. 跑扫描(CSV + SARIF)
-REPORT_DIR="$(mktemp -d)"
-trap 'rm -rf "${EN_TMP}" "${SCAN_DIR}" "${REPORT_DIR}"' EXIT
+REPORT_DIR="${ELECTRONEGATIVITY_REPORT_DIR:-$(mktemp -d)}"
+mkdir -p "${REPORT_DIR}"
+if [ -n "${ELECTRONEGATIVITY_REPORT_DIR:-}" ]; then
+  trap 'rm -rf "${EN_TMP}" "${SCAN_DIR}"' EXIT
+else
+  trap 'rm -rf "${EN_TMP}" "${SCAN_DIR}" "${REPORT_DIR}"' EXIT
+fi
 
 echo "[scan] running electronegativity (CSV)..."
-${EN_BIN} -i "${SCAN_DIR}" -o "${REPORT_DIR}/electronegativity.csv" -r -v false || true
-if [ ! -f "${REPORT_DIR}/electronegativity.csv" ]; then
-  echo "issue, severity, confidence, filename, location, sample, description, url" > "${REPORT_DIR}/electronegativity.csv"
+if ! "${EN_COMMAND[@]}" -i "${SCAN_DIR}" -o "${REPORT_DIR}/electronegativity.csv" -r -v false; then
+  echo "[err] Electronegativity CSV scan failed; refusing a synthetic green report" >&2
+  exit 1
+fi
+if [ ! -s "${REPORT_DIR}/electronegativity.csv" ]; then
+  echo "[err] Electronegativity CSV report is missing or empty" >&2
+  exit 1
 fi
 
 echo "[scan] running electronegativity (SARIF)..."
-${EN_BIN} -i "${SCAN_DIR}" -o "${REPORT_DIR}/electronegativity.sarif" -r -v false || true
-if [ ! -f "${REPORT_DIR}/electronegativity.sarif" ]; then
-  echo '{"$schema":"http://json.schemastore.org/sarif-2.1.0","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Electronegativity","rules":[]}},"results":[]}]}' > "${REPORT_DIR}/electronegativity.sarif"
+if ! "${EN_COMMAND[@]}" -i "${SCAN_DIR}" -o "${REPORT_DIR}/electronegativity.sarif" -r -v false; then
+  echo "[err] Electronegativity SARIF scan failed; refusing a synthetic green report" >&2
+  exit 1
+fi
+if [ ! -s "${REPORT_DIR}/electronegativity.sarif" ] || \
+   ! node -e 'const fs=require("node:fs"); const p=process.argv[1]; const r=JSON.parse(fs.readFileSync(p,"utf8")); if(r.version!=="2.1.0"||!Array.isArray(r.runs)) process.exit(1)' "${REPORT_DIR}/electronegativity.sarif"; then
+  echo "[err] Electronegativity SARIF report is missing or invalid" >&2
+  exit 1
 fi
 
 echo "[scan] report dir: ${REPORT_DIR}"

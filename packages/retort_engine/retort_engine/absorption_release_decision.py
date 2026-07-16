@@ -36,6 +36,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     review_family = _read_json(root / "docs" / "retort_review_family_behavior_replay.json")
     external_merge_landing = _read_json(root / "docs" / "retort_external_merge_landing.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
+    from retort_engine.review_blind_acceptance import build_review_blind_acceptance
+
+    sealed_blind = build_review_blind_acceptance(root)
     decisions = [
         _decision(
             "run_absorption",
@@ -260,6 +263,12 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["pr_holdout_blind_eval"],
         ),
         _decision(
+            "accept_sealed_review_blind_acceptance",
+            "blind_external_validation",
+            sealed_blind.get("summary", {}).get("floor_met") is True and sealed_blind.get("summary", {}).get("synthesizer_must_not_rewrite") is True,
+            ["review_blind_acceptance"],
+        ),
+        _decision(
             "allow_failure_rollback_replay",
             "failure_recovery_validation",
             failure_rollback.get("status") == "ready" and bool(failure_rollback.get("summary", {}).get("all_failures_rolled_back")),
@@ -296,6 +305,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "employee_scheduler_stress_unique_processes": scheduler_stress.get("summary", {}).get("unique_successful_process_id_count", ""),
         "employee_scheduler_stress_queued_tasks": scheduler_stress.get("summary", {}).get("queued_task_count", ""),
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
+        "sealed_review_blind_acceptance_ready": sealed_blind.get("summary", {}).get("floor_met") is True,
+        "sealed_review_blind_pass_rate": sealed_blind.get("summary", {}).get("pass_rate", ""),
         "external_advantage_matrix_ready": external_matrix.get("status") == "ready",
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
         "external_advantage_blind_third_party_ready": external_matrix.get("summary", {}).get("blind_third_party_all_cases_accepted", ""),
@@ -390,6 +401,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_absorption_continuity_probe.json",
                 "retort_pr_long_run_review.json",
                 "retort_pr_holdout_blind_eval.json",
+                "review_blind_acceptance",
                 "retort_pr_failure_rollback_replay.json",
                 "retort_production_recovery_drill.json",
                 "retort_product_mainline_absorption_proof.json",

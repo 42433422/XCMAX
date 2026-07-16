@@ -39,6 +39,13 @@ _STOP_EVENT = threading.Event()
 # 历史上 get_app_data_dir() 源码直跑会回落到仓库根，桌面便以与手机已配对 relay 不同
 # 的身份去轮询，任务永远卡在「排队中」。
 _CONFIG_FILE = Path(get_desktop_state_dir()) / "mobile_relay_desktop.json"
+
+
+def _relay_http_client(timeout: float) -> httpx.Client:
+    """云中继须直连公网 API；桌面系统代理未运行时 trust_env 会导致 Invalid port 等异常。"""
+    return httpx.Client(timeout=timeout, trust_env=False)
+
+
 _LEGACY_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
 _LEGACY_MIGRATION_DONE = False
 
@@ -364,7 +371,7 @@ def register_desktop_relay(
     }
     timeout = float(os.environ.get("XCAGI_RELAY_REGISTER_TIMEOUT_SEC") or "5")
     try:
-        with httpx.Client(timeout=timeout) as client:
+        with _relay_http_client(timeout) as client:
             resp = client.post(
                 _api_url("/api/mobile/v1/relay/desktop/register", base_url), json=body
             )
@@ -459,14 +466,61 @@ def stop_desktop_relay_poller() -> None:
     _STOP_EVENT.set()
 
 
+def _relay_poll_backoff_seconds(
+    failure_count: int,
+    *,
+    base_interval: float,
+    max_interval: float,
+) -> float:
+    """Return bounded exponential backoff for an unavailable public relay."""
+    failures = max(0, int(failure_count))
+    if failures <= 0:
+        return max(1.0, base_interval)
+    return min(max_interval, max(1.0, base_interval) * (2 ** min(failures - 1, 8)))
+
+
 def _poll_loop() -> None:
     interval = float(os.environ.get("XCAGI_RELAY_POLL_INTERVAL_SEC") or "4")
+    max_backoff = float(os.environ.get("XCAGI_RELAY_POLL_MAX_BACKOFF_SEC") or "300")
+    failure_count = 0
     while not _STOP_EVENT.is_set():
+        wait_seconds = max(1.0, interval)
         try:
             _poll_once()
-        except Exception:  # noqa: BLE001
-            logger.warning("mobile relay poll failed", exc_info=True)
-        _STOP_EVENT.wait(max(1.0, interval))
+            if failure_count:
+                logger.info("mobile relay poll recovered after %d failure(s)", failure_count)
+            failure_count = 0
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+            failure_count += 1
+            wait_seconds = _relay_poll_backoff_seconds(
+                failure_count,
+                base_interval=interval,
+                max_interval=max_backoff,
+            )
+            # 首次及指数节点保留一条精简告警；中间失败降为 debug，避免每次
+            # ConnectTimeout 都打印完整 traceback，把桌面日志刷满。
+            if failure_count == 1 or failure_count & (failure_count - 1) == 0:
+                logger.warning(
+                    "mobile relay unavailable; retry in %.0fs (failure %d): %s",
+                    wait_seconds,
+                    failure_count,
+                    exc,
+                )
+            else:
+                logger.debug("mobile relay remains unavailable: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            failure_count += 1
+            wait_seconds = _relay_poll_backoff_seconds(
+                failure_count,
+                base_interval=interval,
+                max_interval=max_backoff,
+            )
+            logger.warning(
+                "mobile relay poll failed; retry in %.0fs: %s",
+                wait_seconds,
+                exc,
+            )
+        _STOP_EVENT.wait(wait_seconds)
 
 
 def _complete_relay_task(
@@ -489,7 +543,7 @@ def _complete_relay_task(
             result.setdefault("error_code", relay_status)
             result.setdefault("error_message", str(result.get("error") or "").strip())
         timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
-        with httpx.Client(timeout=timeout) as client:
+        with _relay_http_client(timeout) as client:
             client.post(
                 _api_url(f"/api/mobile/v1/relay/desktop/tasks/{task_id}/complete", base_url),
                 json={
@@ -519,7 +573,7 @@ def _poll_once() -> None:
     if free <= 0:
         return
     timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
-    with httpx.Client(timeout=timeout) as client:
+    with _relay_http_client(timeout) as client:
         resp = client.post(
             _api_url("/api/mobile/v1/relay/desktop/poll", base_url),
             json={"relay_id": relay_id, "desktop_token": desktop_token, "max_tasks": free},
@@ -559,6 +613,68 @@ def _poll_once() -> None:
             name=f"relay-task-{task_id[:8]}",
             daemon=True,
         ).start()
+
+
+def _extract_tool_calls(assistant: dict[str, Any], tool_label: str) -> list[dict[str, Any]]:
+    """从 assistant_message body 里提取 dev-loop 关键步骤，供手机端时间线展示。
+
+    dev-loop 结束文本含 "闭环结果" 段落（分支/验证/推送），据此解析。
+    非开发任务（闲聊直答）返回空列表。
+    """
+    body = str(assistant.get("body") or assistant.get("content") or "").strip()
+    if not body or "闭环结果" not in body:
+        return []
+    import re
+
+    calls: list[dict[str, Any]] = []
+    # 分支
+    m = re.search(r"分支[：:]\s*(\S+)", body)
+    if m:
+        calls.append(
+            {
+                "action": "create_branch",
+                "icon": "branch",
+                "label": f"创建分支 {m.group(1)}",
+                "detail": m.group(1),
+            }
+        )
+    # 验证
+    m = re.search(r"验证[：:]\s*(通过|未通过)[（(]([^)）]*)", body)
+    if m:
+        ok = m.group(1) == "通过"
+        calls.append(
+            {
+                "action": "verify",
+                "icon": "check",
+                "label": f"验证{'通过' if ok else '未通过'}",
+                "detail": m.group(2)[:200],
+                "success": ok,
+            }
+        )
+    # 推送
+    m = re.search(r"推送[：:]\s*(.+?)(?:\n|$)", body)
+    if m:
+        push_text = m.group(1).strip()[:200]
+        calls.append(
+            {
+                "action": "push",
+                "icon": "upload",
+                "label": "推送分支",
+                "detail": push_text,
+                "success": "成功" in push_text or "已推送" in push_text,
+            }
+        )
+    # CLI 执行（总是在最前面）
+    calls.insert(
+        0,
+        {
+            "action": "cli_run",
+            "icon": "terminal",
+            "label": f"{tool_label} CLI 执行",
+            "detail": "调用无头 agent 修改代码",
+        },
+    )
+    return calls
 
 
 def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
@@ -652,6 +768,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
                 else {}
             )
             ok, relay_status, error = _classify_terminal_result(assistant, message=message)
+            tool_calls = _extract_tool_calls(assistant, tool_label)
+            if tool_calls:
+                result["tool_calls"] = tool_calls
             if ok:
                 return {"ok": True, "codex": result, "_relay_status": "completed"}
             return {

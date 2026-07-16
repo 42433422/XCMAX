@@ -215,7 +215,7 @@ vi.mock('@/api', () => ({
 }))
 
 vi.mock('../../package.json', () => ({
-  default: { version: '10.0.0' },
+  default: { version: '1.0.0' },
 }))
 
 /* ── global stubs ── */
@@ -717,7 +717,7 @@ describe('SettingsView.vue – computed properties', () => {
   it('appVersionLabel comes from package.json', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as Record<string, unknown>
-    expect(vm.appVersionLabel).toBe('10.0.0')
+    expect(vm.appVersionLabel).toBe('1.0.0')
     wrapper.unmount()
   })
 

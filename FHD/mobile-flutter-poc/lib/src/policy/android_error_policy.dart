@@ -4,6 +4,11 @@ String androidProductErrorMessage(String? raw, String fallback) {
   if (lower.contains('401') || message.contains('未授权')) {
     return '登录已过期，请重新登录或重新扫码绑定';
   }
+  if (lower.contains('400') ||
+      message.contains('配对码无效') ||
+      message.contains('缺少配对码')) {
+    return '配对码无效或已过期，请在电脑端刷新二维码后重试';
+  }
   if (lower.contains('403') || message.contains('拒绝')) {
     return '当前账号没有权限，请切换账号或重新绑定';
   }

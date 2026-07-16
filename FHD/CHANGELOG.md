@@ -4,7 +4,176 @@
 
 ---
 
-## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
+## 1.0.0.0（2026-07-12）— 稳定上线版本基线
+
+- **版本 SSOT**：对外产品版本统一为 `1.0.0.0`；npm/Electron、Flutter pub 与 Apple 市场版本映射为合法三段版本 `1.0.0`。
+- **发布链**：Windows/macOS/Android/Harmony/Web 工作流、打包脚本、发布目录和下载清单统一使用 `xcagi-v1.0.0.0`。
+- **自动更新**：Electron `latest*.yml` 保持 SemVer `1.0.0`，同时写入 `productVersion: 1.0.0.0`；制品文件名使用四段产品版本。
+- **Mod 兼容**：宿主与内置 Mod 的版本/依赖基线统一为 `1.0.0.0`，避免历史 `>=10.0.0` 阻断加载。
+- **下载清单**：manifest 补齐 `xcagi.download_manifest/v1` schema，官网 fallback、nginx 路径和双 SKU 文件名同步到稳定版本。
+- **发布纪律**：历史 `10.0.0` 制品与证据保留为历史事实；新的稳定制品必须重新构建、签名、公证、上传并通过端到端验收。
+
+## 历史 Unreleased（10.0.0 线内记录 · 截止 2026-07-12）
+
+### macOS 公证 CDN 闭环（2026-07-12 · v10 线内迭代）
+
+- **release(desktop)**：`main` Release Desktop 产出 Developer ID + 公证 staple 的 mac personal/enterprise 安装包（buildSha `3f00c87b`）
+- **release(cdn)**：本机 rsync 上架 `xiu-ci.com/releases/stable/{enterprise,personal}/`（DMG/ZIP/blockmap/`latest-mac.yml` + Ed25519）
+- **docs(evidence)**：公网下载/SHA512/Ed25519/Gatekeeper 复测 PASS — `mac-notarize-cdn-closure-2026-07-12.md`
+
+### v10-B/C 交付推进（2026-07-11 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：落地 `preferCloudIfLanUnreachable` + session LAN/云 base 路由，避免 5G 下死打局域网
+- **fix(mobile-flutter)**：探索 Tab 增加审批入口；通知页去掉假数据 fallback（空态诚实）
+- **fix(backend)**：审批驳回与 AI 工作流驳回均 `notify_mobile_user`，对齐通过路径
+- **fix(modstore)**：商品履约同步写入 `user_mods`（`pkg_id`），打通支付→桌面 entitlement
+- **ci(mobile)**：发版/门禁切到 `mobile-flutter-poc`（`ci-mobile-flutter` / `fhd-release-android` / `android-build`）；归档 Kotlin CI 改为走 Flutter
+- **docs(evidence)**：v10-B 终稿签字 — `v10-b-store-desktop-acceptance-2026-07-11-final.md`；`specs/tasks.md` **PL2 已勾选**
+- **docs(evidence)**：v10-C 底稿 `v10-c-mobile-acceptance-2026-07-11.md`（真机/正式签名未签，PL3 暂不勾）
+
+### v10-A 真机验收修复（2026-07-09 · v10 线内迭代）
+
+- **fix(desktop)**：`deliverable-status` 读取运行中 `request.app`，消除 `MOD_ROUTES_NOT_MOUNTED` 误判（Mac 真机已验）
+- **fix(desktop)**：桌面 fast-start 将 `platform-shell` 路由提前至 bootstrap，避免 deferred 完成前 SPA fallback 对 `/api/platform-shell/*` 返回 404（v10-A Win 404 根因）
+- **fix(desktop)**：`win_v10a_hotfix_deploy.ps1` 改为纯 ASCII + 轮询 health/deliverable（PS5 兼容）
+- **fix(desktop)**：PyInstaller `xcagi_backend.spec` 强制 hiddenimports（`platform_shell_routes` / `deliverable_status`），修复 Win frozen 包缺模块导致 deliverable-status 404
+- **fix(desktop)**：Win 源码中文 docstring 损坏导致 SyntaxError / invalid module；关键模块改为 ASCII 文案后重建通过
+- **fix(package)**：`add_data` 对单文件改用父目录 dest，避免 `alembic.ini` 被打成 `_MEIPASS/alembic.ini/alembic.ini`；`migrate.py` 兼容嵌套路径
+- **fix(desktop)**：PyInstaller 打包 OTA `migrate-only` 在 frozen 环境改走 `alembic.command` API（修复 `upgrade head` exit 2）
+- **docs(evidence)**：v10-A 终验 — Win A5 `deliverable=true` + A9 `migrate_exit=0`；`specs/tasks.md` PL1 已勾选
+
+### 桌面冷启体感（2026-07-08 · v10 线内迭代 · 第三轮）
+
+- **perf(desktop)**：先出 Splash 窗再 spawn 后端；Splash 状态文案 + 秒数反馈
+- **perf(desktop)**：主应用等待 `appRoutesReady`（ping + deferred 路由挂载完成）
+- **perf(backend)**：fast-start 仅注册 bootstrap 路由（health/infrastructure），业务路由并行 deferred
+- **perf(backend)**：lifespan 跳过 `mods_deferred_bootstrap` 重复同步 Mod 引导
+- **perf(package)**：PyInstaller 默认关闭 UPX（`XCAGI_PYINSTALLER_UPX=1` 可显式开启）
+
+### OTA session 代理绕过（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：`session.defaultSession.setProxy` 显式配置 `proxyBypassRules`，死代理（7890 未开）时 OTA 仍可直连 `xiu-ci.com`
+- **fix(desktop)**：Windows 系统代理场景改用 PAC——更新站 `DIRECT`，其余 `PROXY; DIRECT` 回退
+- **fix(desktop)**：OTA 专用 `netSession` 直连（`persist:xcagi-updater`），electron-updater 与元数据拉取均绕过死代理
+- **fix(desktop)**：检查更新期间临时将 `defaultSession` 切直连，规避死系统代理
+- **fix(desktop)**：启动时探测系统代理端口；不可达则 `defaultSession` 全程直连（桌面 UI 仅加载 127.0.0.1）
+- **fix(desktop)**：死代理在进程启动前追加 `--no-proxy-server`，避免 Chromium 仍走 WinINet 代理
+
+### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：`SKU_UPDATE_URL` 改走可达的 `xiu-ci.com/releases/stable/{sku}/`（`update.xcagi.com` 在 Win32 解析到不可达 IP）
+- **fix(desktop)**：electron-updater 不再默认 `channel: stable`（避免请求 `stable.yml` 404，应拉 `latest.yml`）
+- **fix(desktop)**：`proxy-bypass-list` 同时覆盖 `update.xcagi.com` 与 `xiu-ci.com`
+
+### OTA 推送验活（2026-07-08 · v10 线内迭代）
+
+- **chore(release)**：enterprise Windows 同版本 `buildSha` OTA 推送验活（Win32 真机拉取）
+
+### 桌面侧栏版本 + 配对码 SSOT（2026-07-08 · v10 线内迭代）
+
+- **fix(web)**：侧栏「系统正常」右侧显示 `v10.0.0`（非管理端从 `/api/health` 读取）
+- **fix(web)**：移动端配对 QR 与 6 位设备码统一 `normalizePairingPayload` SSOT
+
+### 桌面 LAN 配对 + OTA 代理绕过 + 云中继直连（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：后端默认绑定 `0.0.0.0:17500`，手机同 WiFi 可连局域网 IP；Electron UI 仍只加载 `127.0.0.1`
+- **fix(desktop)**：`proxy-bypass-list` 对 `xiu-ci.com` 直连，避免系统代理 `127.0.0.1:7890` 未开时 OTA 报 `ERR_PROXY_CONNECTION_FAILED`
+- **fix(desktop)**：死系统代理不可达时启动前追加 `--no-proxy-server`，`defaultSession` PAC/直连与 updater 专用 `netSession`
+- **fix(desktop)**：OTA `setFeedURL` 不再默认 `channel: stable`（避免拉 `stable.yml` 404）
+- **fix(desktop)**：v10 同版本迭代 OTA — `latest.yml` 写入 `buildSha`，`build-info.json` 比对后仍可拉取新包
+- **fix(mobile-relay)**：桌面云中继 `httpx` 使用 `trust_env=False`，修复代理环境下 `Invalid port` 注册失败
+
+### 桌面冷启性能（P1-3 · 2026-07-08 · v10 线内迭代）
+
+- **perf(desktop)**：Splash 先出窗，不再在 `show()` 前阻塞 `waitForBackendHealth`；就绪探测改 `/api/ping`（300ms 轮询）
+- **perf(desktop)**：主窗口立即 `show`，主应用加载与 ping 等待解耦，清缓存改为后台
+- **perf(desktop)**：`electron-backend.log` 超 8MB 自动轮转；打包默认 `LOG_LEVEL=WARNING`
+- **perf(backend)**：`XCAGI_DESKTOP_FAST_START=1` 时 lifespan 仅 DB+Mod，NeuroBus/员工调度/云中继/性能优化延后后台加载
+- **perf(backend)**：fast-start 下 Mod `bootstrap` 从 factory 同步路径延后到 deferred，消除 ~3.4s `mod_staged` 阻塞
+- **perf(api)**：`GET /api/health?lite=true` 跳过 NeuroBus 载荷
+- **perf(frontend)**：桌面壳 `mods` 列表重试退避缩短（150–600ms）
+
+### UX P0/P1 四线收敛（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：`mobile-relay-*` 会话 validate 不再误 401；`preferCloudIfLanUnreachable` + session 路由 LAN/云；`/employee-ssot` client
+- **docs**：移动统一 **Flutter 主线**；`mobile-android` / `mobile-ios` 归档；`MOBILE_FLUTTER.md` + SSOT 登记
+- **feat(web)**：`productErrorMessage` 统一引导/Mod/IM 错误文案；引导续接 `xcagi_product_flow_last_step`；企业版不再重复 shell welcome 拦截
+- **feat(web)**：IM 员工通讯录优先消费 `GET /api/platform-shell/employee-ssot`
+- **docs**：`PRODUCT_USER_FLOW.md` 对齐 industry → host-pack 实现顺序
+
+### 定价 SSOT 文档同步（2026-07-07 · v10 线内迭代）
+
+- **docs**：`LICENSING.md` 清除过期年费/Offline 固定价 FAQ，定价指向 `saas_plans.json` + MODstore `PlanTemplate`
+- **docs**：`account_system_ssot.md` / `SSOT_INDEX.md` 登记 `pricing-enterprise` / `pricing-membership` SSOT
+- **docs**：`COMMERCIAL_LICENSE.md` §2.1 / §4.3、`BUSINESS_MODEL.md` 对齐运行时价格，退役旧参考价表
+
+### OTA update 站 DNS/HTTPS 与推送（2026-07-07 · v10 线内迭代）
+
+- **决策**：放弃阿里云 `update.xcagi.com`（欠费停放），OTA/ manifest SSOT 统一 `https://xiu-ci.com/releases/stable/...`（腾讯云 DNSPod + 同机 nginx）
+- **fix(desktop)**：内置 OTA URL 改 `https://xiu-ci.com/releases/stable/{personal|enterprise}/`（同机 HTTPS alias 已可用）
+- **fix(admin)**：`check_deploy_updates` manifest 默认走 `http://119.27.178.147/.../fhd-manifest.json`，避免域名超时误判 unreachable
+- **ops**：新增 `ops/fix-update-xcagi-https.sh`（DNS 切到本机后 acme.sh 签发 + nginx 443）
+- **deploy**：已 pack+push `git_sha=7f2ad0fffad6`，服务器 `fhd-auto-update` 应用成功
+
+### Flutter 全功能补齐（2026-07-07 · v10 线内迭代）
+
+- **feat(mobile-flutter)**：员工任务中心（Phase-D 提问列表 + 老板回答）对齐 Android `EmployeeQuestionsScreen`；员工档案新增「问他/她的待回答问题」入口
+- **feat(mobile-flutter)**：IM WebSocket 实时客户端（`/ws/im` 心跳 + 断线重连），`ImMessengerScreen` 接入实时消息
+- **feat(mobile-flutter)**：登录/配对成功后自动 `registerDevice`（有 `fcm_token` 时），对齐 Android `PushRegistrar`
+- **test(mobile-flutter)**：员工提问与 IM WS 解析单测；**257** 测试全绿
+
+### 启动深链配对红屏修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：配对深链不再在 `_route == null`（加载中）或协议页触发，避免与路由切换冲突导致 `_dependents.isEmpty` 红屏
+- **fix(mobile-flutter)**：`MobileRepositoryScope` 上移到 `MaterialApp` 外层，配对 Toast 延后到下一帧展示
+
+### 配对码仅局域网 · 云中继账号鉴权（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：6 位配对码不再走 `relay/mobile/confirm-code`；统一 `pairing/lookup` → `pairing/exchange` 局域网绑定，与 Android 一致
+- **fix(frontend)**：`MobilePairingQrCard` 展示 LAN `shortCode`（非 relay `pairing_code`）；文案明确配对码仅同 WiFi，跨网走登录后云中继账号鉴权
+
+### 扫码配对 400 修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：配对 exchange 不再误打云端 `/fhd-api`；解析失败时禁止把整段 JSON 当 nonce 提交；局域网 baseUrl 改为 `http://host:port/` 并在 exchange 前写入 session `fhdHost`
+- **fix(mobile-flutter)**：400/配对码无效时展示「请在电脑端刷新二维码后重试」友好文案
+
+### 扫码相机权限修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：扫一扫「授予相机权限」按钮现通过原生 `ActivityCompat.requestPermissions` 弹出系统授权框；授权后自动启动 `MobileScanner`
+
+### 扫码相机启动修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：授权后等 `MobileScanner` 挂载再 `start()`，避免 `controllerNotAttached` 被静默吞掉；从设置返回时自动重试；相机故障与权限页分离展示
+
+### 扫码相机插件替换（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：小米真机 `mobile_scanner` CameraX 启动 NPE；改用 `camera` + ML Kit 帧流扫码，对齐原生 Kotlin 方案
+
+### 扫码识别无反应修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：相机帧转 ML Kit 输入改用 **NV21**（Android 插件仅支持 NV21/YV12，此前误用 iOS 的 yuv420 导致每帧静默失败）；修正旋转角与扫码成功后停流
+
+### 6 位设备码云中继绑定（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：输入 6 位设备码时优先调用 `relay/mobile/confirm-code`（对齐管理端「服务器中继设备码」），失败再回落局域网 `pairing/lookup`；LAN 探测单次超时缩短至 ~900ms，避免 spinner 卡数分钟
+- **fix(mobile-flutter)**：`xcagi://pairing?code=` 深链携带 query，未登录态可直接触发配对（便于 adb/桌面 QR 拉起绑定）
+
+### 6 位设备码局域网绑定（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：恢复「只输入设备码」— 同一 WiFi 下自动探测局域网电脑（`pairing/lookup` + 5011/17500 等端口），无需扫完整二维码
+- **fix(backend)**：`/api/mobile/v1/pairing/lookup` 加入 LAN 门禁白名单
+
+### 局域网扫码配对修复（2026-07-07 · v10 线内迭代）
+
+- **fix(backend)**：配对 QR 在后端仅监听 `127.0.0.1` 时不再写入手机不可达的 API 端口（如 `:17500`）；经 Vite 管理端/企业端（`:5011`/`:5001`）签发时改写入局域网可达的代理端口，并忽略 Vite Host 误作 API 端口
+- **fix(frontend)**：`MobilePairingQrCard` 在 dev 代理页即时把 QR 中的 `api_base_url` 改写到 `:5011`/`:5001`，刷新二维码后手机可立即扫码绑定（无需等后端重启）
+
+### Flutter 手机端聊天发送修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：根治聊天页「点击发送无反应」——`loadInitialMessages` 返回 fixed-length 列表后 `_messages.addAll/clear` 在 `setState` 内抛 `Cannot add to a fixed-length list`，`_sending` 卡 true 拦截后续发送；改为拷贝赋值 + 不可变式追加，并补 widget 回归测试
+- **fix(mobile-flutter)**：release R8 裁剪 `WorkDatabase` 导致新装包启动即崩；新增 `proguard-rules.pro`（对齐 mobile-android keep 规则）
+- **fix(mobile-flutter)**：`clearActiveAuth` 的 `cachedModInfos: const []` 类型转换崩溃；恢复企业端会话「已安装」徽章（对齐 Android AppViewModel）
+- **chore(mobile-flutter)**：IM 端点切换到 `api/mobile/v1/im/*` 并补 `im/conversations`、`read`、管理端客服收件箱、员工 Phase-D 提问端点，与 Android `ApiEndpoints.kt`/`FhdApi.kt` SSOT 重新对齐（parity 测试恢复全绿）
 
 ### 表格员工闭环 · LLM 亲考与固化产物（2026-07-06 · v10 线内迭代）
 

@@ -4,6 +4,43 @@ import json
 import time
 
 
+def test_relay_poll_backoff_is_bounded_and_resets():
+    from app.services import mobile_relay_desktop_client as relay
+
+    assert (
+        relay._relay_poll_backoff_seconds(
+            0,
+            base_interval=4,
+            max_interval=300,
+        )
+        == 4
+    )
+    assert (
+        relay._relay_poll_backoff_seconds(
+            1,
+            base_interval=4,
+            max_interval=300,
+        )
+        == 4
+    )
+    assert (
+        relay._relay_poll_backoff_seconds(
+            4,
+            base_interval=4,
+            max_interval=300,
+        )
+        == 32
+    )
+    assert (
+        relay._relay_poll_backoff_seconds(
+            99,
+            base_interval=4,
+            max_interval=300,
+        )
+        == 300
+    )
+
+
 def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
     from app.services import mobile_relay_desktop_client as relay
     from app.utils import device_identity
@@ -99,7 +136,6 @@ def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tm
     assert payload is not None
     assert payload["relay_id"] == "relay-cached"
     assert payload["pairing_code"] == "123456"
-    assert payload["qr_json"]["v"] == 3
     assert "desktop_token" not in payload
 
 

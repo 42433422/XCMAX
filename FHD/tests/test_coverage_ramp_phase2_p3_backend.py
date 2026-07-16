@@ -118,7 +118,7 @@ def test_compare_versions(v1: str, v2: str, expected: int) -> None:
 
 
 def test_check_xcagi_version_spec() -> None:
-    assert _check_xcagi_version(">=10.0.0") is True
+    assert _check_xcagi_version(">=1.0.0.0") is True
     assert _check_xcagi_version(">=99.0.0") is False
 
 

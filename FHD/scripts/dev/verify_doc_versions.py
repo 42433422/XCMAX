@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""扫描 docs/ 产品版本表述是否与 VERSION.md 锚点 10.0.0 对齐。"""
+"""扫描 docs/ 产品版本表述是否与 VERSION.md 稳定版本锚点对齐。"""
 
 from __future__ import annotations
 
@@ -25,6 +25,10 @@ SKIP_DIR_PARTS = {
 
 # 匹配对外产品版本 7.x / 8.x（非依赖版本如 python 3.11）
 BAD_PATTERNS = [
+    re.compile(r"\bXCAGI\s*v?10\.0\.0\b", re.I),
+    re.compile(r"xcagi-v10\.0\.0", re.I),
+    re.compile(r"Setup-10\.0\.0", re.I),
+    re.compile(r"v10\s*锁", re.I),
     re.compile(r"\bXCAGI\s*v?8\.0(?:\.0)?\b", re.I),
     re.compile(r"\bXCAGI\s*v?7\.0(?:\.0)?\b", re.I),
     re.compile(r"\bxcagi:8\.0\b", re.I),
@@ -37,11 +41,10 @@ BAD_PATTERNS = [
 
 def expected_version() -> str:
     text = VERSION_MD.read_text(encoding="utf-8")
-    m = re.search(r"^\|\s*\*\*产品版本\*\*\s*\|\s*`([^`]+)`", text, re.M)
+    m = re.search(r"^\|\s*\*\*XCAGI 稳定产品版本\*\*\s*\|\s*`([^`]+)`", text, re.M)
     if m:
         return m.group(1).strip()
-    m = re.search(r"10\.0\.0", text)
-    return m.group(0) if m else "10.0.0"
+    raise ValueError("VERSION.md 中缺少 XCAGI 稳定产品版本")
 
 
 def main() -> int:

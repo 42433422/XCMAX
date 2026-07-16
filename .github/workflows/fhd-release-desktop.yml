@@ -8,7 +8,15 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "10.0.0"
+        default: "1.0.0.0"
+        type: choice
+        options:
+          - "1.0.0.0"
+      verify_only:
+        description: "Verify already-published public artifacts without rebuilding or uploading"
+        required: true
+        default: false
+        type: boolean
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
@@ -21,8 +29,60 @@ defaults:
     working-directory: FHD
 
 jobs:
+  release-preflight:
+    if: ${{ inputs.verify_only != true }}
+    runs-on: ubuntu-latest
+    env:
+      ES_USERNAME: ${{ secrets.ES_USERNAME }}
+      ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+      CREDENTIAL_ID: ${{ secrets.CREDENTIAL_ID }}
+      ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      FHD_PUSH_SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY }}
+      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
+    steps:
+      - name: Fail closed before either platform builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in \
+            ES_USERNAME ES_PASSWORD CREDENTIAL_ID ES_TOTP_SECRET \
+            CSC_LINK CSC_KEY_PASSWORD \
+            APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_API_ISSUER_ID \
+            APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 \
+            XCAGI_UPDATE_ED25519_PRIVATE_KEY XCAGI_WINDOWS_PUBLISHER_NAME
+          do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ -z "${APPLE_TEAM_ID:-}" ] && [ -z "${IOS_TEAM_ID:-}" ]; then
+            missing+=("APPLE_TEAM_ID|IOS_TEAM_ID")
+          fi
+          if [ -z "${SERVER_SSH_KEY:-}" ] && [ -z "${FHD_PUSH_SSH_KEY:-}" ]; then
+            missing+=("SERVER_SSH_KEY|FHD_PUSH_SSH_KEY")
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Stable desktop release preflight is missing: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          echo "Stable desktop release preflight passed for Windows + macOS."
+
   windows:
+    needs: [release-preflight]
+    if: ${{ inputs.verify_only != true }}
     runs-on: windows-latest
+    env:
+      XCAGI_REQUIRE_WINDOWS_SIGNING: "1"
+      XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom
+      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,8 +99,19 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Install SSL.com CodeSignTool
+        uses: SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
+        with:
+          command: --version
+          environment_name: PROD
+          signing_method: v2
       - name: Build Windows enterprise installer
         shell: pwsh
+        env:
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
+          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          CREDENTIAL_ID: ${{ secrets.CREDENTIAL_ID }}
+          ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
@@ -53,9 +124,33 @@ jobs:
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
           scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku enterprise
+      - name: Assert critical resources packaged (enterprise)
+        shell: pwsh
+        run: |
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $v = $raw.TrimStart('v','V')
+          $sku = "enterprise"
+          $dir = "release/xcagi-v$v/$sku/win-unpacked/resources"
+          foreach ($p in @(
+            "backend/xcagi-backend.exe",
+            "product-sku.json",
+            "backend/_internal/mods"
+          )) {
+            if (-not (Test-Path "$dir/$p")) {
+              Write-Error "::error::Missing critical resource for ${sku}: $p (expected at $dir/$p)"
+              exit 1
+            }
+            Write-Host "OK $sku resource: $p"
+          }
+          & "$dir/backend/xcagi-backend.exe" --verify-frozen-critical-runtime
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "::error::Frozen Windows backend critical office/voice runtime probe failed."
+            exit 1
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-windows
+          name: xcagi-desktop-windows-enterprise
           path: |
             FHD/release/xcagi-v*/enterprise/*.exe
             FHD/release/xcagi-v*/enterprise/*.exe.blockmap
@@ -63,88 +158,21 @@ jobs:
             FHD/release/xcagi-v*/enterprise/*.zip.blockmap
             FHD/release/xcagi-v*/enterprise/latest*.yml
 
-  deploy-windows:
-    needs: [windows]
-    if: success()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: xcagi-desktop-windows
-          path: ${{ runner.temp }}/artifacts
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            FHD/scripts/dev
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install cryptography
-        run: pip install --quiet cryptography
-      - name: Sign update metadata (Ed25519)
-        env:
-          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
-            exit 1
-          fi
-          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
-          find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
-            echo "Signing: $f"
-            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
-          done
-      - name: Upload installers to update server
-        timeout-minutes: 30
-        working-directory: .
-        env:
-          # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
-          # fallback so a single SSH secret covers both desktop + CVM tarball pushes.
-          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping desktop upload."
-            exit 0
-          fi
-          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
-          mkdir -p ~/.ssh
-          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${RUNNER_TEMP}/artifacts"
-          raw="${{ github.event.inputs.version || github.ref_name }}"
-          raw="${raw#FHD/}"
-          raw="${raw#v}"
-          raw="${raw#V}"
-          version="${raw:-10.0.0}"
-          for sku in enterprise; do
-            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
-            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
-            dest="/var/www/update/releases/stable/$sku"
-            timeout 1800 rsync -avz --timeout=120 \
-              --include='*/' \
-              --include='*.exe' \
-              --include='*.exe.blockmap' \
-              --include='*.dmg' \
-              --include='*.dmg.blockmap' \
-              --include='latest*.yml' \
-              --exclude='*' \
-              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
-          done
-
   macos:
+    needs: [release-preflight]
+    if: ${{ inputs.verify_only != true }}
     runs-on: macos-latest
     env:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
       APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+      # Prefer ASC API key notarization. Do NOT set APPLE_ID here without
+      # APPLE_APP_SPECIFIC_PASSWORD — electron-builder will fail mid-sign.
       IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-      APPLE_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || secrets.IOS_TEAM_ID }}
       XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -158,17 +186,26 @@ jobs:
           cache-dependency-path: |
             FHD/frontend/package-lock.json
             FHD/desktop/package-lock.json
-      - name: Install macOS signing dependencies
-        run: pip install PyJWT requests cryptography
-      - name: Provision Developer ID certificate
-        run: python scripts/package/provision_mac_developer_id.py
-      - name: Build macOS enterprise installer
+      - name: Import Developer ID certificate (CSC_LINK p12)
         shell: bash
         run: |
           set -euo pipefail
-          CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          chmod +x scripts/package/import_mac_developer_id_p12.sh
+          scripts/package/import_mac_developer_id_p12.sh
+      - name: Build macOS enterprise installer
+        shell: bash
+        env:
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CSC_NAME:-}" ]; then
+            CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          fi
+          # electron-builder rejects names that still include the certificate type prefix
+          CSC_NAME="${CSC_NAME#Developer ID Application: }"
+          CSC_NAME="${CSC_NAME#Developer ID Application:}"
           if [ -z "${CSC_NAME}" ]; then
-            echo "::error::Developer ID Application certificate missing after provision step"
+            echo "::error::Developer ID Application certificate missing after CSC_LINK import"
             security find-identity -v -p codesigning || true
             exit 1
           fi
@@ -179,7 +216,7 @@ jobs:
           v="${v#v}"
           v="${v#V}"
           PYTHON=python3 scripts/package/build-installer.sh "$v" enterprise
-      - name: Verify macOS codesign
+      - name: Notarize and staple macOS enterprise DMG
         shell: bash
         run: |
           set -euo pipefail
@@ -187,7 +224,21 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
+          toolchain_version="$(printf '%s' "${v}" | cut -d. -f1-3)"
           dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
+          test -n "${dmg}"
+          chmod +x scripts/package/finalize-macos-dmg.sh
+          scripts/package/finalize-macos-dmg.sh "${dmg}" "${v}" "${toolchain_version}"
+      - name: Verify macOS codesign (enterprise)
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#FHD/}"
+          v="${v#v}"
+          v="${v#V}"
+          sku="enterprise"
+          dmg="$(find "release/xcagi-v${v}/${sku}" -name '*.dmg' -print -quit)"
           test -n "${dmg}"
           echo "Verifying ${dmg}"
           codesign -dv --verbose=4 "${dmg}" 2>&1 | tee /tmp/codesign.txt
@@ -195,15 +246,51 @@ jobs:
             echo "::error::DMG is still adhoc-signed"
             exit 1
           fi
-          hdiutil attach -nobrowse -quiet "${dmg}"
-          app="$(find /Volumes -maxdepth 2 -name 'XCAGI.app' -print -quit)"
+          codesign --verify --verbose=2 "${dmg}"
+          xcrun stapler validate "${dmg}"
+          spctl -a -vv -t open --context context:primary-signature "${dmg}"
+          mount_dir="$(mktemp -d)"
+          cleanup_mount() {
+            hdiutil detach "${mount_dir}" -quiet || true
+            rmdir "${mount_dir}" 2>/dev/null || true
+          }
+          trap cleanup_mount EXIT
+          hdiutil attach -nobrowse -readonly -quiet -mountpoint "${mount_dir}" "${dmg}"
+          app="$(find "${mount_dir}" -maxdepth 2 -name 'XCAGI.app' -print -quit)"
           test -n "${app}"
           codesign --verify --deep --strict --verbose=2 "${app}"
-          spctl -a -vv --type install "${app}" || echo "::warning::spctl assess may require stapled notarization ticket"
-          hdiutil detach "$(dirname "${app}")" -quiet || true
+          build_info="${app}/Contents/Resources/build-info.json"
+          test -f "${build_info}"
+          BUILD_INFO_PATH="${build_info}" \
+            EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
+            EXPECTED_PRODUCT_VERSION="${v}" \
+            python3 <<'PY'
+          import json
+          import os
+
+          path = os.environ["BUILD_INFO_PATH"]
+          expected_sha = os.environ["EXPECTED_BUILD_SHA"]
+          expected_version = os.environ["EXPECTED_PRODUCT_VERSION"]
+          with open(path, encoding="utf-8") as handle:
+              data = json.load(handle)
+          assert data.get("gitSha") == expected_sha, (
+              f"packaged gitSha mismatch: {data.get('gitSha')!r} != {expected_sha!r}"
+          )
+          assert data.get("version") == expected_version, (
+              f"packaged version mismatch: {data.get('version')!r} != {expected_version!r}"
+          )
+          print(f"Verified packaged identity: {expected_version} @ {expected_sha}")
+          PY
+          backend="${app}/Contents/Resources/backend/xcagi-backend"
+          test -x "${backend}"
+          "${backend}" --verify-frozen-critical-runtime
+          xcrun stapler validate "${app}"
+          spctl -a -vv -t exec "${app}"
+          cleanup_mount
+          trap - EXIT
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-macos
+          name: xcagi-desktop-macos-enterprise
           path: |
             FHD/release/xcagi-v*/enterprise/*.dmg
             FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
@@ -211,48 +298,105 @@ jobs:
             FHD/release/xcagi-v*/enterprise/*.zip.blockmap
             FHD/release/xcagi-v*/enterprise/latest*.yml
 
-  deploy-macos:
-    needs: [macos]
-    if: success()
+  generate-manifest:
+    needs: [release-preflight, windows, macos]
+    if: >-
+      always() &&
+      inputs.verify_only != true &&
+      needs.release-preflight.result == 'success' &&
+      needs.windows.result == 'success' &&
+      needs.macos.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: xcagi-desktop-macos
+          pattern: xcagi-desktop-*
+          merge-multiple: true
           path: ${{ runner.temp }}/artifacts
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            FHD/scripts/dev
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install cryptography
-        run: pip install --quiet cryptography
-      - name: Sign update metadata (Ed25519)
+      - name: Reconstruct release directory from artifacts
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-1.0.0.0}"
+          mkdir -p "release/xcagi-v${version}"
+          BASE="${RUNNER_TEMP}/artifacts"
+          sku=enterprise
+          src_dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
+          if [ -z "$src_dir" ]; then src_dir="$BASE"; fi
+          if [ -d "$src_dir" ]; then
+            mkdir -p "release/xcagi-v${version}/$sku"
+            find "$src_dir" -maxdepth 1 -type f \
+              \( -name '*.exe' -o -name '*.exe.blockmap' \
+                 -o -name '*.dmg' -o -name '*.dmg.blockmap' \
+                 -o -name '*.zip' -o -name '*.zip.blockmap' \
+                 -o -name 'latest*.yml' \) \
+              -exec cp -v {} "release/xcagi-v${version}/$sku/" \;
+          fi
+          ls -la "release/xcagi-v${version}/enterprise"
+      - name: Install metadata signing dependency
+        run: python -m pip install --quiet cryptography
+      - name: Sign reconstructed update metadata
         env:
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required before publishing reconstructed update metadata."
             exit 1
           fi
-          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
-          find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
-            echo "Signing: $f"
-            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-1.0.0.0}"
+          for metadata in "release/xcagi-v${version}/enterprise"/latest*.yml; do
+            test -f "$metadata"
+            python scripts/dev/sign_update_metadata.py "$metadata"
           done
-      - name: Upload macOS installers to update server
-        timeout-minutes: 30
+      - name: Generate manifest.json + download-release.json
+        working-directory: FHD
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-1.0.0.0}"
+          android_version="$(jq -er '.android_version' config/download_release.json)"
+          android_git_sha="$(jq -er '.android_git_sha' config/download_release.json)"
+          python scripts/package/generate-download-manifest.py \
+            --version "$version" \
+            --release-dir release \
+            --release-subdir "xcagi-v${version}" \
+            --git-sha "${{ github.sha }}" \
+            --android-version "$android_version" \
+            --android-git-sha "$android_git_sha" \
+            --output "${RUNNER_TEMP}/manifest.json" \
+            --download-release-output "${RUNNER_TEMP}/download-release.json"
+      - name: Upload manifest artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-download-manifest
+          path: |
+            ${{ runner.temp }}/manifest.json
+            ${{ runner.temp }}/download-release.json
+      - name: Publish unified Windows + macOS release to CVM
+        timeout-minutes: 45
         working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping macOS upload."
-            exit 0
+            echo "::error::Stable release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY."
+            exit 1
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           mkdir -p ~/.ssh
@@ -260,32 +404,178 @@ jobs:
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${RUNNER_TEMP}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
-          raw="${raw#FHD/}"
-          raw="${raw#v}"
-          raw="${raw#V}"
-          version="${raw:-10.0.0}"
-          for sku in enterprise; do
-            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
-            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
-            dest="/var/www/update/releases/stable/$sku"
-            timeout 1800 rsync -avz --timeout=120 \
-              --include='*/' \
+          raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
+          version="${raw:-1.0.0.0}"
+          sku=enterprise
+          src_dir="${GITHUB_WORKSPACE}/FHD/release/xcagi-v${version}/${sku}"
+          test -d "$src_dir"
+          find "$src_dir" -maxdepth 1 -type f -name '*.exe' -print -quit | grep -q .
+          find "$src_dir" -maxdepth 1 -type f -name '*.dmg' -print -quit | grep -q .
+          test -f "$src_dir/latest.yml"
+          test -f "$src_dir/latest-mac.yml"
+          test -f "${RUNNER_TEMP}/manifest.json"
+          test -f "${RUNNER_TEMP}/download-release.json"
+
+          publish_payload() {
+            local dest="$1"
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$dest'"
+            timeout 2400 rsync -avz --delay-updates --timeout=120 \
               --include='*.exe' \
               --include='*.exe.blockmap' \
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
+              --include='*.zip' \
+              --include='*.zip.blockmap' \
               --include='latest*.yml' \
               --exclude='*' \
-              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
+              -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:$dest/"
+          }
+
+          publish_json_atomically() {
+            local source="$1"
+            local target="$2"
+            local remote_tmp="${target}.tmp.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            scp "${SSH_OPTS[@]}" "$source" "root@${HOST}:$remote_tmp"
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+              "chmod 0644 '$remote_tmp' && mv -f '$remote_tmp' '$target'"
+          }
+
+          # Publish the immutable official path first. Stable auto-update metadata is
+          # changed only after the complete two-platform payload is available there.
+          official_root="/var/www/xcagi-v${version}"
+          publish_payload "${official_root}/${sku}"
+          publish_json_atomically "${RUNNER_TEMP}/manifest.json" "${official_root}/manifest.json"
+          publish_json_atomically "${RUNNER_TEMP}/download-release.json" "${official_root}/download-release.json"
+
+          stable_root="/var/www/update/releases/stable"
+          publish_payload "${stable_root}/${sku}"
+          publish_json_atomically "${RUNNER_TEMP}/manifest.json" "${stable_root}/manifest.json"
+          echo "Unified Windows + macOS release published to official and stable paths."
+
+  verify-download:
+    needs: [generate-manifest]
+    if: >-
+      always() &&
+      (inputs.verify_only == true || needs.generate-manifest.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.verify_only != true }}
+        with:
+          name: xcagi-download-manifest
+          path: ${{ runner.temp }}/manifest
+      - name: Fetch published manifest (verify-only)
+        if: ${{ inputs.verify_only == true }}
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          mkdir -p "${RUNNER_TEMP}/manifest"
+          curl -fsSL \
+            --retry 3 \
+            --retry-all-errors \
+            --retry-delay 2 \
+            --connect-timeout 15 \
+            --max-time 60 \
+            "https://xiu-ci.com/xcagi-v${version}/manifest.json" \
+            -o "${RUNNER_TEMP}/manifest/manifest.json"
+      - name: Verify download URLs (HTTP 200 + SHA256 + size)
+        run: |
+          set -euo pipefail
+          # Workflow-level defaults already set working-directory to FHD.
+          bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
+      - name: Verify public update metadata parity and signed identity
+        run: |
+          set -euo pipefail
+          manifest="${RUNNER_TEMP}/manifest/manifest.json"
+          expected_version="$(jq -er '.version' "$manifest")"
+          expected_sha="$(jq -er '.git_sha' "$manifest")"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          for metadata in latest.yml latest-mac.yml; do
+            stable="$tmpdir/stable-$metadata"
+            official="$tmpdir/official-$metadata"
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com/releases/stable/enterprise/$metadata" -o "$stable"
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com/xcagi-v${expected_version}/enterprise/$metadata" -o "$official"
+            cmp -s "$stable" "$official" || {
+              echo "::error::$metadata differs between stable and official download paths."
+              exit 1
+            }
+            grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "$official" || {
+              echo "::error::$metadata is missing its Ed25519 signature."
+              exit 1
+            }
+            grep -Fxq "productVersion: ${expected_version}" "$official"
+            grep -Fxq "buildSha: ${expected_sha}" "$official"
           done
+      - name: Publish verified website download pointer
+        if: ${{ inputs.verify_only != true }}
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::Verified release pointer publication requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY."
+            exit 1
+          fi
+          manifest="${RUNNER_TEMP}/manifest/manifest.json"
+          pointer="${RUNNER_TEMP}/manifest/download-release.json"
+          test -f "$pointer"
+          jq -e --slurpfile manifest "$manifest" '
+            .schema == "xcagi.download_release.public/v1"
+            and .release_ready == true
+            and .version_lock == $manifest[0].version
+            and .download_version == $manifest[0].version
+            and .git_sha == $manifest[0].git_sha
+            and .active_skus == ["enterprise"]
+            and (.frozen_skus | index("personal") != null)
+            and .primary_sku == "enterprise"
+            and (.android_version | type == "string" and length > 0)
+            and (.android_git_sha | test("^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$"))
+          ' "$pointer" >/dev/null
+
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          root_target="/root/成都修茈科技有限公司/download-release.json"
+          remote_tmp="${root_target}.tmp.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          scp "${SSH_OPTS[@]}" "$pointer" "root@${HOST}:${remote_tmp}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- "$remote_tmp" "$root_target" <<'REMOTE'
+          set -euo pipefail
+          incoming="$1"
+          root_target="$2"
+          chmod 0644 "$incoming"
+          mv -f "$incoming" "$root_target"
+          for target in \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json" \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/dist/download-release.json" \
+            "/root/成都修茈科技有限公司/corp-butler/download-release.json"
+          do
+            if [ -d "$(dirname "$target")" ]; then
+              tmp="${target}.tmp.$$"
+              cp -f "$root_target" "$tmp"
+              chmod 0644 "$tmp"
+              mv -f "$tmp" "$target"
+            fi
+          done
+          REMOTE
 
   github-release:
-    needs: [windows, macos]
+    needs: [release-preflight, windows, macos, verify-download]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/') &&
+      needs.release-preflight.result == 'success' &&
+      needs.windows.result == 'success' &&
+      needs.macos.result == 'success' &&
+      needs.verify-download.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -300,3 +590,5 @@ jobs:
             artifacts/**/*.zip
             artifacts/**/*.zip.blockmap
             artifacts/**/latest*.yml
+            artifacts/**/manifest.json
+            artifacts/**/download-release.json

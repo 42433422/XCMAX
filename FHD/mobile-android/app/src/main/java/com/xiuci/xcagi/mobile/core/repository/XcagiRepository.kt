@@ -57,8 +57,6 @@ import com.xiuci.xcagi.mobile.core.network.MobilePhoneLoginRequest
 import com.xiuci.xcagi.mobile.core.network.MobileRefreshRequest
 import com.xiuci.xcagi.mobile.core.network.PairingExchangeBody
 import com.xiuci.xcagi.mobile.core.network.RelayBindAccountBody
-import com.xiuci.xcagi.mobile.core.network.RelayConfirmBody
-import com.xiuci.xcagi.mobile.core.network.RelayConfirmCodeBody
 import com.xiuci.xcagi.mobile.core.network.RelayTaskCreateBody
 import com.xiuci.xcagi.mobile.core.network.RegisterRequest
 import com.xiuci.xcagi.mobile.core.network.RejectBody
@@ -710,75 +708,6 @@ class XcagiRepository @Inject constructor(
         return primary
     }
 
-    suspend fun relayPairingConfirm(
-        relayId: String,
-        code: String,
-        relayBaseUrl: String = "",
-    ): Result<Pair<String, Int>> {
-        val cleanRelayId = relayId.trim()
-        val cleanCode = code.trim()
-        if (cleanRelayId.isBlank() || cleanCode.isBlank()) {
-            return Result.failure(Exception("中继二维码缺少绑定信息"))
-        }
-        return try {
-            serverRouter.mode = ServerMode.CLOUD
-            sessionStore.setServerMode("cloud")
-            sessionStore.setFhdHost("")
-            val api = fhdForBase(relayBaseUrl)
-            val r = api.relayConfirm(RelayConfirmBody(relay_id = cleanRelayId, code = cleanCode))
-            if (!r.success) {
-                Result.failure(Exception(r.message.ifBlank { "中继绑定失败" }))
-            } else {
-                val data = r.data ?: emptyMap()
-                saveRelayAuthFromMap(data)
-                persistRelayBindingMeta(cleanRelayId, data)
-                sessionStore.setFhdHost("")
-                sessionStore.setSetupComplete(true)
-                Result.success("relay" to 0)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun relayPairingConfirmCode(
-        code: String,
-        relayBaseUrl: String = "",
-    ): Result<Pair<String, Int>> {
-        val cleanCode = code.trim()
-        if (cleanCode.length != 6 || !cleanCode.all { it.isDigit() }) {
-            return Result.failure(Exception("请输入 6 位设备码"))
-        }
-        return try {
-            serverRouter.mode = ServerMode.CLOUD
-            sessionStore.setServerMode("cloud")
-            sessionStore.setFhdHost("")
-            val api = fhdForBase(relayBaseUrl)
-            val r = api.relayConfirmCode(RelayConfirmCodeBody(code = cleanCode))
-            if (!r.success) {
-                Result.failure(Exception(r.message.ifBlank { "设备码绑定失败" }))
-            } else {
-                val data = r.data ?: emptyMap()
-                val relayId = data["relay_id"]?.toString().orEmpty()
-                    .ifBlank {
-                        @Suppress("UNCHECKED_CAST")
-                        ((data["desktop"] as? Map<String, Any?>)?.get("relay_id")?.toString()).orEmpty()
-                    }
-                if (relayId.isBlank()) {
-                    Result.failure(Exception("设备码绑定响应缺少 relay_id"))
-                } else {
-                    saveRelayAuthFromMap(data)
-                    persistRelayBindingMeta(relayId, data)
-                    sessionStore.setFhdHost("")
-                    sessionStore.setSetupComplete(true)
-                    Result.success("relay" to 0)
-                }
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     private fun nestedMap(data: Map<String, Any?>, key: String): Map<String, Any?> {
         @Suppress("UNCHECKED_CAST")
         return data[key] as? Map<String, Any?> ?: emptyMap()
@@ -985,12 +914,12 @@ class XcagiRepository @Inject constructor(
         val hostWithPort = compactHostPort(host, port)
         sessionStore.setRelayDesktopId("")
         sessionStore.clearInflightRelayTasks()
-        val relayBound = bindRelayDesktopByAccountFromMap(d)
         sessionStore.setFhdHost(hostWithPort)
         sessionStore.setServerMode("lan")
         serverRouter.fhdHost = hostWithPort
         serverRouter.mode = ServerMode.LAN
         saveRelayAuthFromMap(d)
+        val relayBound = bindRelayDesktopByAccountFromMap(d)
         if (!relayBound) {
             sessionStore.setRelayDesktopId("")
         }

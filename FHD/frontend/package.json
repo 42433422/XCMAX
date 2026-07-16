@@ -1,7 +1,7 @@
 {
   "name": "xcagi-frontend",
   "private": true,
-  "version": "10.0.0",
+  "version": "1.0.0",
   "type": "module",
   "engines": {
     "node": ">=18.18.0"
@@ -43,7 +43,7 @@
     "@vue-flow/minimap": "^1.5.4",
     "dompurify": "^3.4.11",
     "driver.js": "^1.4.0",
-    "echarts": "^6.0.0",
+    "echarts": "^6.1.0",
     "element-plus": "^2.13.7",
     "font-awesome": "^4.7.0",
     "mermaid": "^11.15.0",

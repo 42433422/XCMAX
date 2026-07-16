@@ -66,6 +66,7 @@ from retort_engine.project_assessment import Assessment, AssessmentDependencies,
 from retort_engine.project_assessment import assess_project as _project_assess_project
 from retort_engine.project_assessment import project_files as _assessment_project_files
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -163,6 +164,35 @@ def _now_iso() -> str:
 
 def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     own = Path(payload.get("own_project") or payload.get("project") or ".").expanduser().resolve()
+    keep_residue = bool(payload.get("keep_runtime_residue"))
+    result: dict[str, Any] | None = None
+    try:
+        result = _absorb_unguarded(payload)
+        return result
+    finally:
+        if not keep_residue:
+            from retort_engine.workspace_hygiene import close_run_workspace
+
+            closure = close_run_workspace(own, run_id=str(((result or {}).get("execution") or {}).get("run_id") or ""))
+            if isinstance(result, dict):
+                result["workspace_closure"] = closure
+                if not closure["summary"]["closed"] and result.get("status") not in {"blocked_by_self_depth_gate", "blocked_by_branch_workflow"}:
+                    result["status"] = f"{result.get('status')}_workspace_dirty"
+
+
+def _absorb_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
+    own = Path(payload.get("own_project") or payload.get("project") or ".").expanduser().resolve()
+    package_root = Path(__file__).resolve().parents[1]
+    if own != package_root:
+        policy_gate = external_improvement_gate(package_root, own)
+        if policy_gate["status"] != "allowed":
+            return {
+                "status": "blocked_by_self_depth_gate",
+                "summary": "Retort must verify its own frontier depth before improving another module.",
+                "tasks": [],
+                "external_improvement_gate": policy_gate,
+                "execution": {"status": "blocked_by_self_depth_gate"},
+            }
     external = payload.get("external_path") or payload.get("github_url") or payload.get("github") or ""
     external_path = _materialize_external_source(str(external), own, bool(payload.get("refresh")))
     branch_state = {"enabled": bool(payload.get("branch_workflow")), "status": "disabled"}
@@ -432,6 +462,18 @@ class RetortService:
         return build_absorption_saturation_report(
             str(payload.get("project") or payload.get("project_path") or "."),
             recent_limit=int(payload.get("recent_limit") or 3),
+        )
+
+    def self_bootstrap_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_self_bootstrap_plan(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def self_depth_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_self_depth_report(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def external_improvement_gate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return external_improvement_gate(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            str(payload.get("target") or ""),
         )
 
     def competitor_runtime_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -706,11 +748,51 @@ def _employee_result_files(root: Path) -> list[Path]:
 
 def _tasks_from_assessment(source: str, external_path: Path | None = None) -> list[dict[str, str]]:
     profile = _external_project_profile(external_path) if external_path else {}
-    tasks = [
-        {"task_id": "retort-absorb-depth", "title": "Absorb stronger implementation depth", "dimension": "comparative_analysis_depth", "owner_hint": "fhd-core-maintainer", "priority": "P1", "why": f"Compare implementation patterns from {source}."},
-        {"task_id": "retort-absorb-ux", "title": "Absorb better user experience", "dimension": "product_operability", "owner_hint": "market-frontend-dev", "priority": "P1", "why": f"Extract usable UX improvements from {source}."},
-        {"task_id": "retort-absorb-ops", "title": "Absorb better operational gates", "dimension": "operational_readiness", "owner_hint": "deploy-release-officer", "priority": "P2", "why": f"Adapt CI and release checks from {source}."},
-    ]
+    tasks: list[dict[str, str]] = []
+    if external_path and external_path.is_dir():
+        from retort_engine.repository_intelligence import (
+            build_ranked_repository_map,
+            compare_repository_gaps,
+            tasks_from_repository_gaps,
+        )
+        from retort_engine.review_pipeline import build_depth_absorption_workflow, group_review_files
+
+        own_root = Path(__file__).resolve().parents[1]
+        own_map = build_ranked_repository_map(own_root, focus_terms=("absorb", "agent", "review", "oracle"), max_files=12, max_chars=12_000)
+        graph_gap = compare_repository_gaps(own_root, external_path, max_files=12)
+        for row in tasks_from_repository_gaps(graph_gap, own_map, limit=4):
+            tasks.append(
+                {
+                    "task_id": str(row["task_id"]),
+                    "title": str(row["title"]),
+                    "dimension": str(row["dimension"]),
+                    "owner_hint": str(row.get("owner_hint") or "fhd-core-maintainer"),
+                    "priority": str(row.get("priority") or "P0"),
+                    "why": str(row["why"]),
+                    "acceptance": str(row.get("acceptance") or ""),
+                }
+            )
+        depth = build_depth_absorption_workflow(group_review_files(own_root), group_review_files(external_path), tasks)
+        for row in depth.get("employee_tasks") or []:
+            if not isinstance(row, dict):
+                continue
+            tasks.append(
+                {
+                    "task_id": str(row.get("task_id") or ""),
+                    "title": str(row.get("title") or ""),
+                    "dimension": str(row.get("dimension") or "comparative_analysis_depth"),
+                    "owner_hint": str(row.get("owner_hint") or "fhd-core-maintainer"),
+                    "priority": str(row.get("priority") or "P1"),
+                    "why": f"Depth workflow prioritized absorption from {source}.",
+                    "acceptance": str(row.get("acceptance") or ""),
+                }
+            )
+    if not tasks:
+        tasks = [
+            {"task_id": "retort-absorb-depth", "title": "Absorb stronger implementation depth", "dimension": "comparative_analysis_depth", "owner_hint": "fhd-core-maintainer", "priority": "P1", "why": f"Compare implementation patterns from {source}."},
+            {"task_id": "retort-absorb-ux", "title": "Absorb better user experience", "dimension": "product_operability", "owner_hint": "market-frontend-dev", "priority": "P1", "why": f"Extract usable UX improvements from {source}."},
+            {"task_id": "retort-absorb-ops", "title": "Absorb better operational gates", "dimension": "operational_readiness", "owner_hint": "deploy-release-officer", "priority": "P2", "why": f"Adapt CI and release checks from {source}."},
+        ]
     if profile.get("review_pipeline"):
         tasks.append({"task_id": "retort-absorb-review-pipeline", "title": "Adopt deterministic review pipeline stages", "dimension": "comparative_analysis_depth", "owner_hint": "fhd-core-maintainer", "priority": "P1", "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."})
     if profile.get("file_grouping"):

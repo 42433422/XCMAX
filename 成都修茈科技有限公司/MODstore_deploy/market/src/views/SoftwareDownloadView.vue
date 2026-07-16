@@ -62,6 +62,9 @@
       </div>
 
       <p v-if="releaseContext" class="sd-release-context">{{ releaseContext }}</p>
+      <p v-if="!releaseReady" class="sd-release-pending" role="status">
+        1.0.0.0 稳定版制品正在签名与验收，完成后开放下载。
+      </p>
 
       <ul class="sd-releases" aria-label="可下载版本">
         <li v-for="row in releaseRows" :key="row.id">
@@ -69,13 +72,14 @@
             type="button"
             class="sd-release-row"
             :class="{ 'sd-release-row--primary': row.primary }"
+            :disabled="!releaseReady"
             @click="download(row.sku, row.platform)"
           >
             <span class="sd-release-row__main">
               <span class="sd-release-row__name">{{ row.label }}</span>
               <span v-if="row.meta" class="sd-release-row__meta">{{ row.meta }}</span>
             </span>
-            <span class="sd-release-row__action">{{ row.primary ? '立即下载' : '下载' }}</span>
+            <span class="sd-release-row__action">{{ releaseReady ? (row.primary ? '立即下载' : '下载') : '待开放' }}</span>
           </button>
         </li>
       </ul>
@@ -103,6 +107,7 @@
         v-if="platformTab === 'desktop'"
         type="button"
         class="sd-dock__btn"
+        :disabled="!releaseReady"
         @click="download(edition, 'win')"
       >
         <span class="sd-dock__icon"><IconWindows /></span>
@@ -112,6 +117,7 @@
         v-if="platformTab === 'desktop'"
         type="button"
         class="sd-dock__btn"
+        :disabled="!releaseReady"
         @click="download(edition, 'mac')"
       >
         <span class="sd-dock__icon"><IconApple /></span>
@@ -120,6 +126,7 @@
       <button
         type="button"
         class="sd-dock__btn"
+        :disabled="!releaseReady"
         @click="download(edition, 'android')"
       >
         <span class="sd-dock__icon"><IconAndroid /></span>
@@ -136,8 +143,11 @@ import {
   DEFAULT_XCAGI_ANDROID_VERSION,
   DEFAULT_XCAGI_DOWNLOAD_VERSION,
   detectMacDownloadArch,
+  fetchDownloadManifest,
+  findManifestEntry,
   macDownloadArchLabel,
   normalizeXcagiDownloadBase,
+  type XcagiDownloadManifest,
   type XcagiDownloadPlatform,
   type XcagiProductSku,
   xcagiDownloadFileName,
@@ -152,11 +162,12 @@ const isEmbeddedInWorkbench = computed(() => String(route.name || '') === 'workb
 const brandLogoSrc = '/corp-butler/brand-xc-logo.jpg'
 
 // 下载版本来源优先级：运行时 /download-release.json（SSOT 公开子集，installer 日由发布脚本回写）
-// → 构建期 VITE_XCAGI_* → 代码常量（v10 锁 10.0.0）。运行时读取让「P6 推送后无需重建站点即生效」。
+// → 构建期 VITE_XCAGI_* → 代码常量（稳定版 1.0.0.0）。运行时读取让「P6 推送后无需重建站点即生效」。
 const downloadVersion = ref(import.meta.env.VITE_XCAGI_DOWNLOAD_VERSION || DEFAULT_XCAGI_DOWNLOAD_VERSION)
 const androidVersion = ref(import.meta.env.VITE_XCAGI_ANDROID_VERSION || DEFAULT_XCAGI_ANDROID_VERSION)
 const downloadBaseOverride = ref<string | undefined>(import.meta.env.VITE_XCAGI_DOWNLOAD_BASE_URL)
 const winInstallerMb = ref(String(import.meta.env.VITE_XCAGI_WIN_INSTALLER_MB || '212'))
+const releaseReady = ref(true)
 const downloadBase = computed(() =>
   normalizeXcagiDownloadBase(downloadBaseOverride.value, downloadVersion.value),
 )
@@ -191,16 +202,21 @@ async function loadReleaseManifest() {
     if (j.download_version) downloadVersion.value = String(j.download_version)
     if (j.android_version) androidVersion.value = String(j.android_version)
     if (j.win_installer_mb != null) winInstallerMb.value = String(j.win_installer_mb)
+    if (typeof j.release_ready === 'boolean') releaseReady.value = j.release_ready
     if (j.release_root) downloadBaseOverride.value = String(j.release_root)
     else if (j.cos_base_url)
       downloadBaseOverride.value = `${String(j.cos_base_url).replace(/\/$/, '')}/xcagi-v${downloadVersion.value}`
   } catch {
-    /* 离线 / 404：回退构建期常量（v10 锁 10.0.0） */
+    /* 离线 / 404：回退构建期稳定版本常量 */
   }
 }
 
 const macArch = detectMacDownloadArch()
 const macArchLabel = computed(() => macDownloadArchLabel(macArch))
+
+// 官方下载清单 manifest.json(CI 自动生成,含 SHA256 + size)。
+// onMounted 异步拉取;失败时 downloadUrl() 降级到 xcagiDownloadUrl() 静态生成。
+const downloadManifest = ref<XcagiDownloadManifest | null>(null)
 
 type PlatformTab = 'desktop' | 'android'
 const platformTab = ref<PlatformTab>('desktop')
@@ -268,6 +284,9 @@ function syncPlatformContext() {
 onMounted(() => {
   syncPlatformContext()
   void loadReleaseManifest()
+  void (async () => {
+    downloadManifest.value = await fetchDownloadManifest()
+  })()
   window.addEventListener('resize', syncPlatformContext)
 })
 
@@ -292,6 +311,10 @@ function downloadUrl(
   platform: XcagiDownloadPlatform,
   arch = macArch,
 ): string | null {
+  // 优先用 manifest.json 中的 URL(CI 自动生成,含 SHA256 校验)
+  const entry = findManifestEntry(downloadManifest.value, sku, platform, arch)
+  if (entry) return entry.url
+  // 降级:静态生成 URL(无 SHA256/size,但 URL 格式与 manifest 一致)
   return xcagiDownloadUrl(
     sku,
     platform,
@@ -314,6 +337,7 @@ function browserDownload(url: string, filename: string) {
 }
 
 async function download(sku: XcagiProductSku, platform: XcagiDownloadPlatform) {
+  if (!releaseReady.value) return
   const arch = platform === 'mac' ? macArch : undefined
   const url = downloadUrl(sku, platform, arch ?? macArch)
   if (!url) return
@@ -650,6 +674,18 @@ const IconAndroid = () =>
 
 .sd-dock__btn:hover {
   color: #fff;
+}
+
+.sd-release-pending {
+  margin: 0.75rem 0 0;
+  color: #f6c76a;
+  font-size: 0.82rem;
+}
+
+.sd-release-row:disabled,
+.sd-dock__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .sd-dock__icon {

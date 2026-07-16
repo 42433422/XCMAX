@@ -1,11 +1,16 @@
+import 'dart:async';
+
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart'
     as mlkit;
 import 'package:image_picker/image_picker.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
+import '../../platform/android_camera_permission.dart';
+import '../../platform/camera_barcode_input.dart';
 import '../../policy/android_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
@@ -24,45 +29,85 @@ class ScanQrScreen extends StatefulWidget {
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
 
-class _ScanQrScreenState extends State<ScanQrScreen> {
+class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver {
   late final MobileRepository _repository;
-  late final MobileScannerController _scannerController;
+  CameraController? _cameraController;
   late final ImagePicker _imagePicker;
-  late final mlkit.BarcodeScanner _albumScanner;
+  late final mlkit.BarcodeScanner _barcodeScanner;
+  final AndroidCameraPermission _cameraPermission =
+      const AndroidCameraPermission();
   var _flashOn = false;
   var _scanned = false;
   var _pairing = false;
   var _pickingAlbum = false;
   var _showSuccess = false;
+  var _permissionGranted = false;
+  var _checkingCameraPermission = true;
+  var _requestingCameraPermission = false;
+  var _bootstrappingScanner = false;
+  var _cameraReady = false;
+  var _processingFrame = false;
+  String? _cameraError;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _repository = MobileRepositoryScope.resolve(
       context,
       explicit: widget.repository,
     );
-    _scannerController = MobileScannerController(
-      formats: const [BarcodeFormat.qrCode],
-      facing: CameraFacing.back,
-    );
     _imagePicker = ImagePicker();
-    _albumScanner = mlkit.BarcodeScanner(
+    _barcodeScanner = mlkit.BarcodeScanner(
       formats: [mlkit.BarcodeFormat.qrCode],
     );
+    if (widget.enableCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_bootstrapScanner(requestPermission: false));
+      });
+    } else {
+      _checkingCameraPermission = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.enableCamera) return;
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      unawaited(_stopCameraStream());
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_bootstrapScanner(requestPermission: false));
+    }
   }
 
   @override
   void dispose() {
-    _scannerController.dispose();
-    _albumScanner.close();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_disposeCameraController());
+    _barcodeScanner.close();
     super.dispose();
+  }
+
+  Future<void> _disposeCameraController() async {
+    final controller = _cameraController;
+    _cameraController = null;
+    if (controller == null) return;
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+    } catch (_) {}
+    await controller.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final cameraEnabled = widget.enableCamera;
+    final scannerReady = cameraEnabled && _permissionGranted && _cameraReady;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -91,7 +136,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                         ),
                       ),
                       const Spacer(),
-                      if (cameraEnabled && !_scanned)
+                      if (scannerReady && !_scanned)
                         IconButton(
                           onPressed: _toggleTorch,
                           icon: Icon(
@@ -113,23 +158,46 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (cameraEnabled) ...[
-                        MobileScanner(
-                          controller: _scannerController,
-                          fit: BoxFit.cover,
-                          onDetect: _onDetect,
-                          errorBuilder: (context, error) {
-                            return _ScannerUnavailable(
-                              onRequestPermission: _requestCameraPermission,
-                              onOpenManual: _showManualInput,
-                            );
-                          },
-                        ),
-                        const Positioned.fill(child: _ScannerOverlay()),
-                      ] else
+                      if (cameraEnabled && scannerReady && _cameraController != null)
+                        Positioned.fill(
+                          child: FittedBox(
+                            fit: BoxFit.cover,
+                            clipBehavior: Clip.hardEdge,
+                            child: SizedBox(
+                              width: _cameraController!.value.previewSize?.height ??
+                                  MediaQuery.sizeOf(context).width,
+                              height: _cameraController!.value.previewSize?.width ??
+                                  MediaQuery.sizeOf(context).height,
+                              child: CameraPreview(_cameraController!),
+                            ),
+                          ),
+                        )
+                      else if (cameraEnabled &&
+                          (_checkingCameraPermission || _requestingCameraPermission))
+                        Center(
+                          child: CircularProgressIndicator(color: colors.brand),
+                        )
+                      else if (cameraEnabled && _cameraError != null)
+                        _ScannerFailure(
+                          message: _cameraError!,
+                          onRetry: _restartScanner,
+                          onOpenManual: _showManualInput,
+                        )
+                      else if (!cameraEnabled)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
                           onOpenManual: _showManualInput,
+                          requesting: _requestingCameraPermission,
+                        ),
+                      if (scannerReady)
+                        const Positioned.fill(child: _ScannerOverlay()),
+                      if (cameraEnabled &&
+                          !_permissionGranted &&
+                          !_checkingCameraPermission)
+                        _ScannerUnavailable(
+                          onRequestPermission: _requestCameraPermission,
+                          onOpenManual: _showManualInput,
+                          requesting: _requestingCameraPermission,
                         ),
                       if (cameraEnabled && _pairing)
                         Positioned.fill(
@@ -153,7 +221,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                             ),
                           ),
                         ),
-                      if (cameraEnabled && !_scanned)
+                      if (scannerReady && !_scanned)
                         Positioned(
                           bottom: 42,
                           left: 32,
@@ -209,31 +277,136 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   }
 
   Future<void> _toggleTorch() async {
-    setState(() => _flashOn = !_flashOn);
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    final next = !_flashOn;
+    setState(() => _flashOn = next);
     try {
-      await _scannerController.toggleTorch();
+      await controller.setFlashMode(
+        next ? FlashMode.torch : FlashMode.off,
+      );
     } catch (_) {
-      if (mounted) setState(() => _flashOn = !_flashOn);
+      if (mounted) setState(() => _flashOn = !next);
     }
   }
 
-  Future<void> _requestCameraPermission() async {
-    if (!widget.enableCamera) return;
-    try {
-      await _scannerController.start();
-    } catch (_) {}
+  Future<void> _bootstrapScanner({required bool requestPermission}) async {
+    if (!widget.enableCamera || _bootstrappingScanner) return;
+    _bootstrappingScanner = true;
+    if (mounted) {
+      setState(() {
+        _requestingCameraPermission = requestPermission;
+        if (!requestPermission) {
+          _checkingCameraPermission = true;
+        }
+        _cameraError = null;
+      });
+    }
+
+    var granted = await _cameraPermission.isGranted();
+    if (!granted && requestPermission) {
+      granted = await _cameraPermission.ensureGranted();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _permissionGranted = granted;
+      _checkingCameraPermission = false;
+      _requestingCameraPermission = false;
+      _bootstrappingScanner = false;
+    });
+
+    if (!granted) return;
+    await _initializeCamera();
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_scanned || _pairing) return;
-    final raw = capture.barcodes
-        .map((barcode) => barcode.rawValue?.trim() ?? '')
-        .firstWhere((value) => value.isNotEmpty, orElse: () => '');
-    if (raw.isEmpty) return;
-    _handleScanResult(raw);
+  Future<void> _initializeCamera() async {
+    if (!widget.enableCamera || !mounted) return;
+    try {
+      await _disposeCameraController();
+      final cameras = await availableCameras();
+      if (!mounted) return;
+      if (cameras.isEmpty) {
+        setState(() {
+          _cameraReady = false;
+          _cameraError = '未找到可用相机';
+        });
+        return;
+      }
+      final description = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        description,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
+      _cameraController = controller;
+      await controller.initialize();
+      if (!mounted) return;
+      await controller.startImageStream(_processCameraFrame);
+      if (!mounted) return;
+      setState(() {
+        _cameraReady = true;
+        _cameraError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _cameraReady = false;
+        _cameraError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _stopCameraStream() async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isStreamingImages) return;
+    try {
+      await controller.stopImageStream();
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _cameraReady = false);
+    }
+  }
+
+  Future<void> _restartScanner() async {
+    if (!widget.enableCamera) return;
+    await _bootstrapScanner(requestPermission: false);
+  }
+
+  Future<void> _requestCameraPermission() async {
+    if (!widget.enableCamera || _requestingCameraPermission) return;
+    await _bootstrapScanner(requestPermission: true);
+  }
+
+  Future<void> _processCameraFrame(CameraImage image) async {
+    if (_scanned || _pairing || _processingFrame) return;
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+    _processingFrame = true;
+    try {
+      final inputImage = inputImageFromCameraFrame(image, controller);
+      if (inputImage == null) return;
+      final barcodes = await _barcodeScanner.processImage(inputImage);
+      final raw = barcodes
+          .map((barcode) => barcode.rawValue?.trim() ?? '')
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+      if (raw.isEmpty || !mounted || _scanned || _pairing) return;
+      await _stopCameraStream();
+      if (!mounted) return;
+      _handleScanResult(raw);
+    } catch (_) {
+    } finally {
+      _processingFrame = false;
+    }
   }
 
   void _handleScanResult(String raw) {
+    if (_scanned || _pairing) return;
+    HapticFeedback.mediumImpact();
     final authPayload = parseAuthQrPayload(raw);
     if (authPayload != null) {
       setState(() => _scanned = true);
@@ -254,7 +427,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
         return;
       }
       final inputImage = mlkit.InputImage.fromFilePath(image.path);
-      final barcodes = await _albumScanner.processImage(inputImage);
+      final barcodes = await _barcodeScanner.processImage(inputImage);
       if (!mounted) return;
       final raw = barcodes
           .map((barcode) => barcode.rawValue?.trim() ?? '')
@@ -334,7 +507,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '请输入电脑端显示的 6 位设备码',
+                    '请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码',
                     style: TextStyle(
                       color: sheetColors.textSecondary,
                       fontSize: 13,
@@ -477,7 +650,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       passwordController.dispose();
       if (mounted && !_pairing) {
         setState(() => _scanned = false);
-        _scannerController.start().ignore();
+        unawaited(_resumeCameraStream());
       }
     });
   }
@@ -489,9 +662,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       _pairing = true;
       _scanned = true;
     });
-    try {
-      await _scannerController.stop();
-    } catch (_) {}
+    await _stopCameraStream();
     try {
       await _repository.exchangePairingCode(text);
       if (!mounted) return;
@@ -517,8 +688,27 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
         ),
       );
       if (widget.enableCamera) {
-        _scannerController.start().ignore();
+        unawaited(_resumeCameraStream());
       }
+    }
+  }
+
+  Future<void> _resumeCameraStream() async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      await _initializeCamera();
+      return;
+    }
+    if (controller.value.isStreamingImages) {
+      if (mounted) setState(() => _cameraReady = true);
+      return;
+    }
+    try {
+      await controller.startImageStream(_processCameraFrame);
+      if (mounted) setState(() => _cameraReady = true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _cameraError = error.toString());
     }
   }
 }
@@ -716,14 +906,68 @@ class _PairingDigitBox extends StatelessWidget {
   }
 }
 
+class _ScannerFailure extends StatelessWidget {
+  const _ScannerFailure({
+    required this.message,
+    required this.onRetry,
+    required this.onOpenManual,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onOpenManual;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message.isEmpty ? '相机启动失败' : message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 15,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextButton(
+            onPressed: onRetry,
+            child: Text('重试', style: TextStyle(color: colors.brand)),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: onOpenManual,
+            child: Text(
+              '输入设备码',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScannerUnavailable extends StatelessWidget {
   const _ScannerUnavailable({
     required this.onRequestPermission,
     required this.onOpenManual,
+    this.requesting = false,
   });
 
   final VoidCallback onRequestPermission;
   final VoidCallback onOpenManual;
+  final bool requesting;
 
   @override
   Widget build(BuildContext context) {
@@ -747,11 +991,20 @@ class _ScannerUnavailable extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           TextButton(
-            onPressed: onRequestPermission,
-            child: Text(
-              '授予相机权限',
-              style: TextStyle(color: colors.brand),
-            ),
+            onPressed: requesting ? null : onRequestPermission,
+            child: requesting
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.brand,
+                    ),
+                  )
+                : Text(
+                    '授予相机权限',
+                    style: TextStyle(color: colors.brand),
+                  ),
           ),
           const SizedBox(height: 12),
           TextButton(

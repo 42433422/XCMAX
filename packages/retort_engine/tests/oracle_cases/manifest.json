@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "instance_id": "oracle-add-helper",
+      "layer": "reproducible_evaluation",
+      "test_id": "tests/test_add.py::test_add",
+      "failing_output": "assert add(2, 3) == 5",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/add.py": "def add(a, b):\n    return a\n",
+        "tests/test_add.py": "from pkg.add import add\n\n\ndef test_add() -> None:\n    assert add(2, 3) == 5\n"
+      },
+      "patch_files": {
+        "pkg/add.py": "def add(a, b):\n    return a + b\n"
+      }
+    },
+    {
+      "instance_id": "oracle-multiply-helper",
+      "layer": "verified_task_synthesis",
+      "test_id": "tests/test_mul.py::test_mul",
+      "failing_output": "assert mul(3, 4) == 12",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/mul.py": "def mul(a, b):\n    return a\n",
+        "tests/test_mul.py": "from pkg.mul import mul\n\n\ndef test_mul() -> None:\n    assert mul(3, 4) == 12\n"
+      },
+      "patch_files": {
+        "pkg/mul.py": "def mul(a, b):\n    return a * b\n"
+      }
+    }
+  ]
+}

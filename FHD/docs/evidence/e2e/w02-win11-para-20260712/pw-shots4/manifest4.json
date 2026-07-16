@@ -1,0 +1,136 @@
+{
+  "ok": false,
+  "formLeftLogin": false,
+  "leftLogin": true,
+  "titleOk": true,
+  "contentDiverse": true,
+  "richText": 3,
+  "uniqueShas": 8,
+  "urls": [
+    "http://127.0.0.1:17500/login?redirect=/",
+    "http://127.0.0.1:17500/",
+    "http://127.0.0.1:17500/settings",
+    "http://127.0.0.1:17500/orders",
+    "http://127.0.0.1:17500/materials",
+    "http://127.0.0.1:17500/products",
+    "http://127.0.0.1:17500/customers",
+    "http://127.0.0.1:17500/traditional-mode"
+  ],
+  "titles": [
+    "XCAGI 企业版 · V10 · 登录",
+    "智能对话 - XCAGI",
+    "设置 - XCAGI",
+    "业务单据 - XCAGI",
+    "资源库 - XCAGI",
+    "业务对象 - XCAGI",
+    "组织管理 - XCAGI",
+    "表格模式 - XCAGI"
+  ],
+  "report": [
+    {
+      "name": "01-login.png",
+      "url": "http://127.0.0.1:17500/login?redirect=/",
+      "title": "XCAGI 企业版 · V10 · 登录",
+      "text": "XCAGI 企业版 智能企业管理平台 让 AI 驱动您的业务增长 企业级 AI 对话与智能体 审批工作流与 ERP 集成 即时通讯与团队协作 注册账号 企业账号登录 使用企业账号登录后展示企业品牌 账号密码 手机验证码 扫码登录 账号 密码 免登录 记住密码 登 录 忘记账号 · 忘记密码 · 帮助 管理员登录（独立运维台）",
+      "sha": "8392783e8c2a6953",
+      "bytes": 480762
+    },
+    {
+      "name": "02-filled.png",
+      "url": "http://127.0.0.1:17500/login?redirect=/",
+      "title": "XCAGI 企业版 · V10 · 登录",
+      "text": "XCAGI 企业版 智能企业管理平台 让 AI 驱动您的业务增长 企业级 AI 对话与智能体 审批工作流与 ERP 集成 即时通讯与团队协作 注册账号 企业账号登录 使用企业账号登录后展示企业品牌 账号密码 手机验证码 扫码登录 账号 密码 免登录 记住密码 登 录 忘记账号 · 忘记密码 · 帮助 管理员登录（独立运维台）",
+      "sha": "cb2aec0a6ecf02b5",
+      "bytes": 482533
+    },
+    {
+      "name": "03-after-form.png",
+      "url": "http://127.0.0.1:17500/login?redirect=/",
+      "title": "XCAGI 企业版 · V10 · 登录",
+      "text": "XCAGI 企业版 智能企业管理平台 让 AI 驱动您的业务增长 企业级 AI 对话与智能体 审批工作流与 ERP 集成 即时通讯与团队协作 注册账号 企业账号登录 使用企业账号登录后展示企业品牌 账号密码 手机验证码 扫码登录 账号 密码 免登录 记住密码 正在登录… 忘记账号 · 忘记密码 · 帮助 管理员登录（独立运维台）",
+      "sha": "7c3fa4b76f99477f",
+      "bytes": 482202
+    },
+    {
+      "name": "04-home.png",
+      "url": "http://127.0.0.1:17500/",
+      "title": "智能对话 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 涂料行业包 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "2e406653002779c4",
+      "bytes": 995290
+    },
+    {
+      "name": "05-settings.png",
+      "url": "http://127.0.0.1:17500/",
+      "title": "智能对话 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 涂料行业包 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "621a2bb815bd4f5e",
+      "bytes": 996058
+    },
+    {
+      "name": "06-chat.png",
+      "url": "http://127.0.0.1:17500/",
+      "title": "智能对话 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 涂料行业包 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "16affa305a771e0f",
+      "bytes": 995365
+    },
+    {
+      "name": "07-workbench.png",
+      "url": "http://127.0.0.1:17500/",
+      "title": "智能对话 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 员工空间 系统设置 系统正常 涂料行业包 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "b2f66260651ef710",
+      "bytes": 1000944
+    },
+    {
+      "name": "08-settings-url.png",
+      "url": "http://127.0.0.1:17500/settings",
+      "title": "设置 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "e3a319ee0eac2fde",
+      "bytes": 992668
+    },
+    {
+      "name": "09-orders.png",
+      "url": "http://127.0.0.1:17500/orders",
+      "title": "业务单据 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "e3a319ee0eac2fde",
+      "bytes": 992668
+    },
+    {
+      "name": "10-materials.png",
+      "url": "http://127.0.0.1:17500/materials",
+      "title": "资源库 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "e3a319ee0eac2fde",
+      "bytes": 992668
+    },
+    {
+      "name": "11-products.png",
+      "url": "http://127.0.0.1:17500/products",
+      "title": "业务对象 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "e3a319ee0eac2fde",
+      "bytes": 992668
+    },
+    {
+      "name": "12-customers.png",
+      "url": "http://127.0.0.1:17500/customers",
+      "title": "组织管理 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "e3a319ee0eac2fde",
+      "bytes": 992668
+    },
+    {
+      "name": "13-traditional.png",
+      "url": "http://127.0.0.1:17500/traditional-mode",
+      "title": "表格模式 - XCAGI",
+      "text": "通用助手 通用系统 智能对话 信息 智能生态 员工工作台 系统设置 系统正常 v10.0.0 通用工作台 智能对话 副窗",
+      "sha": "e3a319ee0eac2fde",
+      "bytes": 992668
+    }
+  ],
+  "method": "api-cookie-fallback"
+}

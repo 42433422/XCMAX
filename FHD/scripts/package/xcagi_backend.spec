@@ -5,21 +5,33 @@ import os
 from pathlib import Path
 
 import setuptools
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 ROOT = Path.cwd().resolve()
 
 
 def add_data(relative_path: str):
+    """Bundle data for PyInstaller.
+
+    Files must use the *parent* as dest (often ``.``). Using the filename as
+    dest creates ``_MEIPASS/<name>/<name>`` and breaks frozen lookups such as
+    ``_MEIPASS/alembic.ini``.
+    """
     src = ROOT / relative_path
     if not src.exists():
         return []
+    if src.is_file():
+        parent = str(Path(relative_path).parent).replace("\\", "/")
+        dest = "." if parent in ("", ".") else parent
+        return [(str(src), dest)]
     return [(str(src), relative_path)]
 
 
 datas = []
+binaries = []
 for item in [
     "templates/vue-dist",
+    # 桌面企业包刻意不携带 admin-vue-dist（管理端仅网页 SSOT）。
     "static",
     "resources",
     "config",
@@ -63,6 +75,7 @@ for module in [
     "app.middleware",
     "app.infrastructure.mods",
     "app.mod_sdk",
+    "app.control",
     "uvicorn",
     "fastapi",
     "sqlalchemy",
@@ -70,9 +83,68 @@ for module in [
 ]:
     hiddenimports.extend(collect_submodules(module))
 
+# v10-A: fast-start bootstrap imports these lazily; collect_submodules can miss them
+# on some Windows trees, causing deliverable-status 404 in frozen desktop builds.
+hiddenimports.extend(
+    [
+        "app.fastapi_routes.platform_shell_routes",
+        "app.mod_sdk.deliverable_status",
+        "app.mod_sdk.desktop_deliverable",
+        "app.mod_sdk.platform_shell",
+        "app.mod_sdk.decoupling_progress",
+        "app.mod_sdk.edition_policy",
+        "app.mod_sdk.edition_bootstrap",
+        "app.mod_sdk.product_skus",
+        "app.fastapi_routes.domains.admin_audit.routes",
+        "app.application.attendance_reference_data",
+        "app.application.chat_business_safety",
+        "app.services.ai_action_audit_service",
+        "app.services.ocr_service",
+        "app.runtime_integrity",
+    ]
+)
+
+# 主聊天“按住说话”是桌面端正式功能，不能把运行时依赖从安装包里排除。
+# faster-whisper 依赖 ctranslate2 + PyAV 的原生扩展；显式收集可避免 PyInstaller
+# 只看到 voice_routes 中的懒导入而漏包，最终在已安装应用里返回 503。
+for module in ["faster_whisper", "ctranslate2", "av", "tokenizers", "huggingface_hub"]:
+    try:
+        hiddenimports.extend(collect_submodules(module))
+    except Exception:
+        pass
+    try:
+        datas.extend(collect_data_files(module, include_py_files=False))
+    except Exception:
+        pass
+for module in ["ctranslate2", "av"]:
+    try:
+        binaries.extend(collect_dynamic_libs(module))
+    except Exception:
+        pass
+
+# Official PDF employees must remain usable in the commercial desktop package.
+# pypdf and ReportLab are permissively licensed; do not replace them with the
+# AGPL PyMuPDF/fitz runtime unless a separate commercial license is recorded.
+for module in ["pypdf", "reportlab"]:
+    try:
+        hiddenimports.extend(collect_submodules(module))
+    except Exception:
+        pass
+    try:
+        datas.extend(collect_data_files(module, include_py_files=False))
+    except Exception:
+        pass
+# de-dupe while preserving order
+_seen = set()
+_deduped = []
+for _name in hiddenimports:
+    if _name not in _seen:
+        _seen.add(_name)
+        _deduped.append(_name)
+hiddenimports = _deduped
+
 desktop_excludes = [
     "altair",
-    "av",
     "bitsandbytes",
     "IPython",
     "black",
@@ -81,7 +153,6 @@ desktop_excludes = [
     "cv2",
     "dash",
     "datasets",
-    "faster_whisper",
     "gradio",
     "grpc",
     "h5py",
@@ -127,7 +198,7 @@ desktop_excludes = [
 a = Analysis(
     [str(ROOT / "XCAGI" / "run_fastapi.py")],
     pathex=[str(ROOT), str(ROOT / "XCAGI")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -147,7 +218,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=os.environ.get("XCAGI_PYINSTALLER_UPX", "").strip().lower() in {"1", "true", "yes", "on"},
     console=False,
     disable_windowed_traceback=True,
     argv_emulation=False,
@@ -161,7 +232,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=os.environ.get("XCAGI_PYINSTALLER_UPX", "").strip().lower() in {"1", "true", "yes", "on"},
     upx_exclude=[],
     name="xcagi-backend",
 )

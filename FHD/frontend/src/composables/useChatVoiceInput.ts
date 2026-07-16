@@ -72,6 +72,11 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     return '按住这里说话，松开后会自动转写成文字填入输入框'
   })
 
+  /** 独立于按钮文案的可访问反馈，避免识别失败后用户只看到按钮恢复原状。 */
+  const voiceFeedbackText = computed(() => (
+    voiceState.value === 'error' ? (voiceErrorText.value || '语音识别失败，请重试') : ''
+  ))
+
   const pickSupportedMimeType = (): string => {
     const MR = (window as unknown as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder
     if (!MR || typeof MR.isTypeSupported !== 'function') return ''
@@ -151,7 +156,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
       }
       const text = String(data?.data?.text || '').trim()
       if (!text) {
-        setVoiceError('未识别到内容，请靠近麦克风再试')
+        setVoiceError('未识别到语音，请靠近麦克风后重试')
         return
       }
       const existing = (messageInput.value || '').trimEnd()
@@ -312,6 +317,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     voiceButtonIcon,
     voiceButtonText,
     voiceButtonTitle,
+    voiceFeedbackText,
     startVoiceRecording,
     stopVoiceRecording,
     cleanupVoiceInput,

@@ -1,0 +1,13 @@
+version: 10.0.0
+buildSha: 3f00c87b1792f754e5846935b5c79d6a8b58bab0
+files:
+  - url: XCAGI-10.0.0-mac-arm64.dmg
+    sha512: ys30nb/7wVXZhOoKoFzB5eo4txJ5zhARPg2liCxG713CfYFgNqRnLYWQi9aj9Oad51uN6N9kZi+Hdn+XJffMtw==
+    size: 236693837
+path: XCAGI-10.0.0-mac-arm64.dmg
+sha512: ys30nb/7wVXZhOoKoFzB5eo4txJ5zhARPg2liCxG713CfYFgNqRnLYWQi9aj9Oad51uN6N9kZi+Hdn+XJffMtw==
+releaseDate: '2026-07-12T07:40:09.538Z'
+stagingPercentage: 100
+forceUpgrade: false
+minVersion: 10.0.0
+signature: ed25519:u1g2Wusmxo7qAydZV26Ld+TTlVIujrBEccpUG8scX6bgHTI1xmei8mzAzg6SrIWPdXDmGJLk4BgNCu2kt1R4AA==

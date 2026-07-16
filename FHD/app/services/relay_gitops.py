@@ -24,7 +24,14 @@ from app.application.relay_workspace import resolve_verified_relay_workspace_roo
 
 logger = logging.getLogger(__name__)
 
-GIT_OP_KINDS = ("git.merge", "git.diff", "git.discard")
+GIT_OP_KINDS = (
+    "git.merge",
+    "git.diff",
+    "git.diff.structured",
+    "git.discard",
+    "git.log",
+    "git.cancel",
+)
 
 
 def _git(cwd: str, *args: str, timeout: float = 120.0) -> subprocess.CompletedProcess:
@@ -128,6 +135,141 @@ def git_diff(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]
     return {"ok": True, "reply": f"分支 {branch} 相对 {base} 的改动：\n```diff\n{clipped}\n```"}
 
 
+def _parse_unified_diff(diff_text: str) -> list[dict[str, Any]]:
+    """解析 unified diff 为结构化文件列表（红删绿增）。"""
+    files: list[dict[str, Any]] = []
+    cur: dict[str, Any] | None = None
+    cur_hunk: dict[str, Any] | None = None
+    for line in diff_text.splitlines():
+        if line.startswith("diff --git "):
+            if cur and cur_hunk:
+                cur["hunks"].append(cur_hunk)
+                cur_hunk = None
+            if cur:
+                files.append(cur)
+            parts = line.split(" b/", 1)
+            path = parts[1].split(" ", 1)[0] if len(parts) > 1 else ""
+            cur = {"path": path, "additions": 0, "deletions": 0, "hunks": []}
+            cur_hunk = None
+        elif line.startswith("+++") or line.startswith("---"):
+            continue
+        elif line.startswith("@@"):
+            if cur is None:
+                continue
+            if cur_hunk:
+                cur["hunks"].append(cur_hunk)
+            cur_hunk = {"header": line, "lines": []}
+        elif cur is not None and cur_hunk is not None:
+            if line.startswith("+"):
+                cur_hunk["lines"].append({"type": "add", "content": line[1:]})
+                cur["additions"] += 1
+            elif line.startswith("-"):
+                cur_hunk["lines"].append({"type": "del", "content": line[1:]})
+                cur["deletions"] += 1
+            elif line.startswith(" "):
+                cur_hunk["lines"].append({"type": "context", "content": line[1:]})
+    if cur and cur_hunk:
+        cur["hunks"].append(cur_hunk)
+    if cur:
+        files.append(cur)
+    return files
+
+
+def git_diff_structured(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
+    """结构化 diff：返回文件列表 + 逐行增删，供手机端可视化渲染。"""
+    repo = repo or _repo_root_from_payload(payload)
+    branch = _branch_from_payload(payload)
+    if not branch:
+        return {"ok": False, "_relay_status": "failed", "reply": "缺少分支名"}
+    base = _merge_base_branch(repo)
+    _git(repo, "fetch", "origin", branch, timeout=120)
+    ref = f"origin/{branch}"
+    mb = _git(repo, "merge-base", ref, base, timeout=30).stdout.strip()
+    if not mb:
+        ref = branch
+        mb = _git(repo, "merge-base", ref, base, timeout=30).stdout.strip()
+    start = mb or base
+    r = _git(repo, "diff", f"{start}..{ref}", timeout=60)
+    files = _parse_unified_diff(r.stdout)
+    if not files:
+        return {
+            "ok": True,
+            "reply": f"{branch} 相对 {base} 没有差异。",
+            "structured": {"files": [], "base": base, "branch": branch},
+        }
+    total_add = sum(f["additions"] for f in files)
+    total_del = sum(f["deletions"] for f in files)
+    return {
+        "ok": True,
+        "reply": f"{len(files)} 个文件改动（+{total_add} -{total_del}）",
+        "structured": {
+            "files": files,
+            "base": base,
+            "branch": branch,
+            "total_additions": total_add,
+            "total_deletions": total_del,
+        },
+    }
+
+
+def git_log(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
+    """分支 commit 列表（最近 N 条），供手机端分支详情页渲染。"""
+    repo = repo or _repo_root_from_payload(payload)
+    branch = _branch_from_payload(payload)
+    if not branch:
+        return {"ok": False, "_relay_status": "failed", "reply": "缺少分支名"}
+    base = _merge_base_branch(repo)
+    _git(repo, "fetch", "origin", branch, timeout=120)
+    ref = f"origin/{branch}"
+    mb = _git(repo, "merge-base", ref, base, timeout=30).stdout.strip()
+    if not mb:
+        ref = branch
+        mb = _git(repo, "merge-base", ref, base, timeout=30).stdout.strip()
+    start = mb or base
+    limit = max(1, min(20, int(payload.get("limit") or 10)))
+    # 格式: hash|date|author|subject; 再单独取 files-changed 数
+    fmt = "--pretty=format:%H|%ad|%an|%s"
+    r = _git(
+        repo,
+        "log",
+        fmt,
+        "--date=short",
+        f"{start}..{ref}",
+        f"-{limit}",
+        timeout=30,
+    )
+    commits: list[dict[str, Any]] = []
+    for line in r.stdout.splitlines():
+        parts = line.split("|", 3)
+        if len(parts) < 4:
+            continue
+        sha, date, author, subject = parts
+        # 查该 commit 改动文件数
+        fc = _git(repo, "show", "--stat", "--format=", sha, timeout=15).stdout
+        files_changed = len([ln for ln in fc.splitlines() if ln.strip() and "|" in ln])
+        commits.append(
+            {
+                "hash": sha[:8],
+                "date": date,
+                "author": author,
+                "subject": subject,
+                "files_changed": files_changed,
+            }
+        )
+    return {
+        "ok": True,
+        "reply": f"{len(commits)} 条提交",
+        "commits": commits,
+        "base": base,
+        "branch": branch,
+    }
+
+
+def git_cancel(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
+    """取消任务占位（实际取消逻辑在 relay service 层处理 task status）。"""
+    return {"ok": True, "reply": "已请求取消任务。"}
+
+
 def git_discard(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
     repo = repo or _repo_root_from_payload(payload)
     branch = _branch_from_payload(payload)
@@ -210,6 +352,12 @@ def git_merge(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any
 def handle_git_op(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     if kind == "git.diff":
         return git_diff(payload)
+    if kind == "git.diff.structured":
+        return git_diff_structured(payload)
+    if kind == "git.log":
+        return git_log(payload)
+    if kind == "git.cancel":
+        return git_cancel(payload)
     if kind == "git.discard":
         return git_discard(payload)
     if kind == "git.merge":

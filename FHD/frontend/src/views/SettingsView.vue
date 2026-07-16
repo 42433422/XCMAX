@@ -911,6 +911,7 @@ import { systemApi, type Industry as ApiIndustry } from '../api/system';
 import { intentPackagesApi, type IntentPackage as ApiIntentPackage } from '../api/intentPackages';
 import { memoryV2Api, type MemoryV2Record, type MemoryV2Status, type MemoryV2Summary, type MemoryV2Type } from '@/api/memoryV2';
 import { butlerProfileApi, type ButlerProfileView } from '@/api/butlerProfile';
+import { resolveModeScopedChatUserId } from '@/composables/useChatDbTokenGate';
 import { useIndustryStore } from '../stores/industry';
 import {
   SIDEBAR_THEME_OPTIONS,
@@ -1076,11 +1077,7 @@ const persyLoading = ref(false);
 const persyInferring = ref(false);
 const persyLastReason = ref('');
 
-const persyUserId = computed(() => {
-  const raw = localUser.value?.id || '1';
-  const num = Number(raw);
-  return Number.isFinite(num) && num > 0 ? num : 1;
-});
+const persyUserId = computed(() => resolveModeScopedChatUserId());
 
 const persyFoldMeta = computed(() => {
   if (!persyProfile.value) return '待确认 0 · 已确认 0';
@@ -1944,7 +1941,7 @@ const currentIndustry = ref(DEFAULT_INDUSTRY_ID);
 const currentIndustryUnit = ref('天');
 const sidebarThemePreset = ref('office-default');
 
-const appVersionLabel = computed(() => String(packageJson.version || '10.0.0'));
+const appVersionLabel = computed(() => String(packageJson.version || '1.0.0'));
 const isDesktopShell = computed(() => Boolean(window.xcagiDesktop));
 
 const accountCustomModIds = new Set<string>(ACCOUNT_CUSTOM_MOD_IDS);
@@ -2283,6 +2280,12 @@ async function onCheckForUpdates() {
   aboutUpdateMessage.value = '';
   aboutUpdateError.value = false;
   try {
+    // 手动检查时清掉「稍后提醒」，否则同版本角标会一直被 sessionStorage 压住
+    try {
+      sessionStorage.removeItem('xcagi_desktop_update_dismiss_version');
+    } catch {
+      /* ignore */
+    }
     await window.xcagiDesktop.checkForUpdates();
     aboutUpdateMessage.value = t('settings.updateCheckStarted');
   } catch (e: unknown) {

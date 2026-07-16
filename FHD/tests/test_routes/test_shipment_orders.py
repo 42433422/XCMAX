@@ -257,6 +257,22 @@ class TestApiOrdersList:
         r = client.get("/api/orders/search")
         assert r.json()["data"] == []
 
+    def test_create(self, client: TestClient, _mock_svc: MagicMock):
+        _mock_svc.create_shipment.return_value = {
+            "success": True,
+            "shipment": {"id": 1, "purchase_unit": "单位A"},
+        }
+        r = client.post(
+            "/api/orders",
+            json={"purchase_unit": "单位A", "products": [{"product_name": "产品A"}]},
+        )
+        assert r.status_code == 201
+        assert r.json()["success"] is True
+
+    def test_create_requires_products(self, client: TestClient):
+        r = client.post("/api/orders", json={"purchase_unit": "单位A", "products": []})
+        assert r.status_code == 400
+
 
 class TestApiOrdersGet:
     def test_found(self, client: TestClient, _mock_svc: MagicMock):
@@ -272,6 +288,41 @@ class TestApiOrdersGet:
     def test_invalid_number(self, client: TestClient, _mock_svc: MagicMock):
         r = client.get("/api/orders/abc")
         assert r.status_code == 404
+
+    def test_update(self, client: TestClient, _mock_svc: MagicMock):
+        _mock_svc.update_shipment_record.return_value = {"success": True}
+        _mock_svc.get_order.return_value = {
+            "id": 1,
+            "purchase_unit": "单位B",
+            "status": "completed",
+        }
+        r = client.patch(
+            "/api/orders/1",
+            json={"purchase_unit": "单位B", "status": "completed"},
+        )
+        assert r.status_code == 200
+        assert r.json()["data"]["purchase_unit"] == "单位B"
+
+    def test_update_rejects_unknown_status(self, client: TestClient):
+        r = client.patch("/api/orders/1", json={"status": "shipped"})
+        assert r.status_code == 400
+
+
+class TestApiOrdersExport:
+    def test_export_xlsx(self, client: TestClient, _mock_svc: MagicMock, tmp_path, monkeypatch):
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+        export_file = export_dir / "shipment_records_all_20260714_000000.xlsx"
+        export_file.write_bytes(b"xlsx-test")
+        monkeypatch.setattr("app.utils.path_utils.get_data_dir", lambda: str(tmp_path))
+        _mock_svc.export_shipment_records.return_value = {
+            "success": True,
+            "file_path": str(export_file),
+            "filename": export_file.name,
+        }
+        r = client.get("/api/orders/export")
+        assert r.status_code == 200
+        assert "spreadsheetml" in r.headers["content-type"]
 
 
 class TestApiOrdersDelete:

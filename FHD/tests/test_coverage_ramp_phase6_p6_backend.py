@@ -249,6 +249,33 @@ def test_work_mode_feed_invalid_per_contact_returns_422() -> None:
     assert resp2.status_code == 422
 
 
+def test_work_mode_feed_host_alias_returns_assistant_shape() -> None:
+    client = _wechat_compat_client()
+    legacy = {
+        "items": [
+            {
+                "username": "wx_1",
+                "display_name": "测试联系人",
+                "summary": "今天的消息",
+                "timestamp": 123,
+                "unread_count": 2,
+            }
+        ],
+        "per_contact": 1,
+    }
+    with patch.object(wechat_compat, "wechat_work_mode_feed", return_value=legacy):
+        resp = client.get(
+            "/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed",
+            params={"per_contact": 1},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["source"] == "host_compat"
+    assert body["feed"][0]["contact_name"] == "测试联系人"
+    assert body["feed"][0]["messages"][0]["text"] == "今天的消息"
+
+
 def test_work_mode_feed_recoverable_error_returns_empty_with_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1002,6 +1029,21 @@ def test_private_db_refresh_source_all_delegates_to_facade() -> None:
     assert body["success"] is False
 
 
+def test_private_db_refresh_source_contacts_hides_facade_error_detail() -> None:
+    client = _private_db_client()
+    with patch(
+        "app.application.facades.wechat_facade.refresh_wechat_contacts_from_decrypt"
+    ) as mock_refresh:
+        mock_refresh.return_value = ({"success": False, "message": "stack trace detail"}, 400)
+        resp = client.post(
+            f"/api/mod/{MOD_ID}/sources/refresh",
+            json={"source_id": WECHAT_SOURCE_ID, "refresh_type": "contacts"},
+        )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body == {"success": False, "message": "微信联系人刷新请求无效"}
+
+
 def test_private_db_refresh_source_messages_success() -> None:
     client = _private_db_client()
     with patch("app.services.wechat_group_customer_bridge.sync_group_messages") as mock_sync:
@@ -1040,7 +1082,7 @@ def test_private_db_refresh_source_messages_recoverable_error_returns_500() -> N
     assert resp.status_code == 500
     body = resp.json()
     assert body["success"] is False
-    assert "db broken" in body["message"]
+    assert body["message"] == "同步聊天记录失败"
 
 
 def test_private_db_refresh_source_unsupported_refresh_type_returns_400() -> None:

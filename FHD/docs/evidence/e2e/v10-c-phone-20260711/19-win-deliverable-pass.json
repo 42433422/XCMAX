@@ -1,0 +1,13 @@
+{
+  "ts": "2026-07-12T02:37:13.6549967+08:00",
+  "device": "5fdd29c4-9140-48fa-a28b-ab5db375201f",
+  "branch": "fix/v10-full-closure-loop",
+  "commit": "0a7caa66",
+  "mods_count": 12,
+  "deliverable": true,
+  "mods_routes_loaded": true,
+  "blockers": [],
+  "product_sku": "enterprise",
+  "edition": "full",
+  "missing_mod_ids": []
+}

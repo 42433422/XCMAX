@@ -26,6 +26,35 @@ export const HOST_PACK_ONBOARDING_EXEMPT_ROUTE_NAMES = new Set([
 
 let hostPackNeedsCache: { needs: boolean; at: number } | null = null
 const HOST_PACK_CACHE_TTL_MS = 60_000
+const SS_HOST_PACK_NEEDS_CACHE = 'xcagi_host_pack_needs_cache_v1'
+
+function readPersistedHostPackNeedsCache(): { needs: boolean; at: number } | null {
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(SS_HOST_PACK_NEEDS_CACHE) || 'null') as {
+      needs?: unknown
+      at?: unknown
+    } | null
+    if (!parsed || typeof parsed.needs !== 'boolean' || !Number.isFinite(Number(parsed.at))) {
+      return null
+    }
+    const cached = { needs: parsed.needs, at: Number(parsed.at) }
+    if (Date.now() - cached.at >= HOST_PACK_CACHE_TTL_MS) return null
+    return cached
+  } catch {
+    return null
+  }
+}
+
+function writeHostPackNeedsCache(needs: boolean, at: number): void {
+  hostPackNeedsCache = { needs, at }
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(SS_HOST_PACK_NEEDS_CACHE, JSON.stringify({ needs, at }))
+  } catch {
+    /* ignore */
+  }
+}
 
 export function shouldRouteToHostPackOnboarding(
   toName: string | symbol | null | undefined,
@@ -66,6 +95,12 @@ export function isHostPackSkippedThisSession(): boolean {
 
 export function invalidateHostPackCompletionCache(): void {
   hostPackNeedsCache = null
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.removeItem(SS_HOST_PACK_NEEDS_CACHE)
+  } catch {
+    /* ignore */
+  }
 }
 
 function readSessionAdminFlag(payload: unknown): boolean {
@@ -114,8 +149,15 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
   if (isHostPackSkippedThisSession()) return false
 
   const now = Date.now()
-  if (!force && hostPackNeedsCache && now - hostPackNeedsCache.at < HOST_PACK_CACHE_TTL_MS) {
-    return hostPackNeedsCache.needs
+  if (!force) {
+    const cached =
+      hostPackNeedsCache && now - hostPackNeedsCache.at < HOST_PACK_CACHE_TTL_MS
+        ? hostPackNeedsCache
+        : readPersistedHostPackNeedsCache()
+    if (cached) {
+      hostPackNeedsCache = cached
+      return cached.needs
+    }
   }
 
   let sku = 'generic'
@@ -125,12 +167,12 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
     return false
   }
   if (!isEnterpriseEdition(sku)) {
-    hostPackNeedsCache = { needs: false, at: now }
+    writeHostPackNeedsCache(false, now)
     return false
   }
 
   if (await isAdminAccountSessionForGate()) {
-    hostPackNeedsCache = { needs: false, at: now }
+    writeHostPackNeedsCache(false, now)
     return false
   }
 
@@ -140,7 +182,7 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
       String(catalog?.selected_industry_id || '').trim() || defaultOnboardingIndustryId()
     const plan = await fetchIndustryBaseline(industryId, force)
     const needs = plan?.baseline_ready !== true
-    hostPackNeedsCache = { needs, at: now }
+    writeHostPackNeedsCache(needs, now)
     return needs
   } catch {
     return false

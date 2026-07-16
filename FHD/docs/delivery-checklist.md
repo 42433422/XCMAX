@@ -33,6 +33,7 @@
 - [ ] `env.d.ts` 与 preload API 类型同步
 
 ## 打包
-- [ ] personal + enterprise 双 SKU dist 产物可生成
-- [ ] 更新源按 SKU 分离（`update.xcagi.com/releases/stable/{sku}/`）
+- [ ] enterprise 的 Windows、macOS 正式产物可生成，包内 `product-sku.json=enterprise`
+- [ ] 个人版未进入构建矩阵、上传目录、下载清单或验收门禁
+- [ ] 更新源固定为 `https://xiu-ci.com/releases/stable/enterprise/`
 - [ ] 前后端测试 baseline 通过

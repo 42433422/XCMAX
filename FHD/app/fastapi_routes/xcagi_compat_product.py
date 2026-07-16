@@ -279,7 +279,7 @@ def _run_products_compat_agent(
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("products") or {}).get("actions") or {}).get(action)
@@ -326,10 +326,11 @@ def _run_products_compat_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "products-compat-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:
@@ -399,6 +400,16 @@ def products_units(request: Request) -> dict:
 @router.get("/shipment/shipment-records/units/")
 def shipment_records_units() -> dict:
     return _products_units_for_select()
+
+
+@router.get("/mod/taiyangniao-pro/shipment/shipment-records/units")
+@router.get("/mod/taiyangniao-pro/shipment/shipment-records/units/")
+def taiyangniao_shipment_records_units_host_alias() -> dict:
+    """Stable host alias for desktop clients with independently updated private Mods."""
+    from app.application.attendance_reference_data import attendance_unit_names
+
+    units = attendance_unit_names(_products_units_for_select())
+    return {"success": True, "data": units, "units": units, "source": "host_compat"}
 
 
 @router.get("/purchase_units")

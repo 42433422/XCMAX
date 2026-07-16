@@ -1,0 +1,11 @@
+ts=2026-07-12T08:40:25Z
+sw_vers:
+ProductName:		macOS
+ProductVersion:		26.3
+BuildVersion:		25D125
+arch=arm64
+model=Mac16,10
+mem_gb=24
+disk:
+/dev/disk3s1s1   460Gi    17Gi    42Gi    29%    453k  443M    0%   /
+gatekeeper=assessments enabled

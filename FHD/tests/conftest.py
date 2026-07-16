@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+os.environ.setdefault("SECRET_KEY", "xcagi-test-only-secret-key-32-bytes-minimum")
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -70,6 +72,17 @@ def _default_enterprise_tenant_scope_for_tests(request):
 
     with tenant_scope(1):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _workspace_root_for_excel_reload_tests(request, monkeypatch):
+    """Keep direct Excel reload unit tests inside the production workspace boundary."""
+    if (
+        "TestTryStructuredReloadRecords" in request.node.nodeid
+        and "tmp_path" in request.fixturenames
+    ):
+        monkeypatch.setenv("WORKSPACE_ROOT", str(request.getfixturevalue("tmp_path")))
+    yield
 
 
 @pytest.fixture(autouse=True)

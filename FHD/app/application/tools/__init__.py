@@ -10,8 +10,10 @@ from app.application.tools.workflow import (  # noqa: F401
     resolve_safe_excel_path,
     run_natural_language_pandas,
 )
+from app.services.tools_execution.registry import _normalize_action  # noqa: F401
 
 __all__ = [
+    "_normalize_action",
     "execute_workflow_tool",
     "get_workflow_tool_registry",
     "handle_excel_analysis",

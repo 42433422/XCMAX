@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="10.0.0"
-ANDROID_VERSION="10.0.0"
+VERSION="1.0.0.0"
+ANDROID_VERSION="1.0.0.0"
 HARMONY_ARTIFACT=""
 
 usage() {
   cat <<'USAGE'
-Usage: stage-mobile-packages.sh [--version <10.0.0>] [--android-version <10.0.0>] [--harmony-artifact <path>]
+Usage: stage-mobile-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0.0>] [--harmony-artifact <path>]
 
 Build and stage mobile distribution folders:
   - release/packages-v${VERSION}/personal
@@ -61,6 +61,7 @@ ANDROID_VERSION="$(normalize_version "$ANDROID_VERSION")"
 FHD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
 ANDROID_ROOT="${FHD_ROOT}/mobile-android"
+FLUTTER_ROOT="${FHD_ROOT}/mobile-flutter-poc"
 OUT_ROOT="${REPO_ROOT}/release/packages-v${VERSION}"
 PERSONAL_DIR="${OUT_ROOT}/personal"
 ENTERPRISE_DIR="${OUT_ROOT}/enterprise"
@@ -137,7 +138,10 @@ copy_apk() {
   local out_dir="$3"
 
   local src
+  # Flutter mainline first (enterprise-only applicationId); archive Kotlin as fallback.
   src="$(printf '%s\n' \
+    "${FLUTTER_ROOT}/build/app/outputs/flutter-apk/app-release.apk" \
+    "${FLUTTER_ROOT}/build/app/outputs/apk/release/app-release.apk" \
     "${ANDROID_ROOT}/app/build/outputs/apk/${sku}/release/app-${sku}-release.apk" \
     "${ANDROID_ROOT}/app/build/outputs/apk/${sku}/debug/app-${sku}-debug.apk")"
 

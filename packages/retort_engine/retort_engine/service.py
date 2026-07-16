@@ -48,6 +48,7 @@ from retort_engine.review_adjudication_calibration import build_review_adjudicat
 from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
@@ -82,6 +83,18 @@ class RetortService:
             merge_after=bool(payload.get("merge_after")),
             allow_dirty_branch=bool(payload.get("allow_dirty_branch")),
         ).to_dict()
+
+    def self_bootstrap_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_self_bootstrap_plan(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def self_depth_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_self_depth_report(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def external_improvement_gate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return external_improvement_gate(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            str(payload.get("target") or ""),
+        )
 
     def record_result(self, payload: dict[str, Any]) -> dict[str, Any]:
         return feedback_ingest(history_store=str(payload.get("history_store") or ""), result_file=str(payload.get("result_file") or ""), task_id=str(payload.get("task_id") or ""), status=str(payload.get("status") or ""), summary=str(payload.get("summary") or ""), evidence=tuple(str(item) for item in payload.get("evidence") or ())).to_dict()
@@ -400,6 +413,18 @@ def create_app() -> Any:
     @app.post("/absorb")
     def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         return service.absorb(payload)
+
+    @app.post("/self-bootstrap-plan")
+    def self_bootstrap_plan_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.self_bootstrap_plan(payload)
+
+    @app.post("/self-depth-report")
+    def self_depth_report_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.self_depth_report(payload)
+
+    @app.post("/external-improvement-gate")
+    def external_improvement_gate_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.external_improvement_gate(payload)
 
     @app.post("/review-diff")
     def review_diff_route(payload: dict[str, Any]) -> dict[str, Any]:

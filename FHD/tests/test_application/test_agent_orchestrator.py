@@ -155,6 +155,40 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
     assert params["_runtime_context"]["source"] == "approval-test"
 
 
+def test_agent_orchestrator_resumes_exact_pending_step_after_durable_snapshot():
+    """Route confirmation survives a SQL-style pending snapshot race."""
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    patches = _planner_fallback_patches()
+    with (
+        patches[0],
+        patches[1],
+        patches[2],
+        patches[3],
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True, "message": "客户已写入"},
+        ) as mock_execute,
+    ):
+        orchestrator = AgentOrchestrator(repository=repo)
+        waiting = orchestrator.start_run(user_id="u1", message="请把客户 星光贸易 写入数据库")
+        waiting.status = "running"
+        waiting.steps[0].status = "pending"
+        repo.save(waiting)
+        completed = orchestrator.continue_run(
+            waiting.run_id,
+            approved_by="route",
+            approved_step_id=waiting.steps[0].node_id,
+        )
+
+    assert completed is not None
+    assert completed.status == "completed"
+    assert completed.steps[0].status == "completed"
+    mock_execute.assert_called_once()
+
+
 def test_agent_orchestrator_blocks_approved_step_when_budget_exceeded():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository

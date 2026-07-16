@@ -1,13 +1,18 @@
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# Archived Kotlin mobile-android CI — kept as a thin pointer so old path filters
+# still fail closed toward the Flutter mainline.
 name: ci-mobile-android
 
 on:
   push:
     paths:
       - "mobile-android/**"
+      - "mobile-flutter-poc/**"
       - ".github/workflows/ci-mobile-android.yml"
   pull_request:
     paths:
       - "mobile-android/**"
+      - "mobile-flutter-poc/**"
       - ".github/workflows/ci-mobile-android.yml"
 
 concurrency:
@@ -15,62 +20,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  assemble-debug:
+  redirect-to-flutter:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile-android
+        working-directory: mobile-flutter-poc
     steps:
       - uses: actions/checkout@v4
+      - name: Notice
+        run: |
+          echo "::notice::mobile-android is archived. CI mainline is mobile-flutter-poc (see ci-mobile-flutter.yml)."
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - name: Prepare Google Services config
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.XCAGI_ANDROID_GOOGLE_SERVICES_JSON }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter pub get + test
         run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          else
-            cat > app/google-services.json <<'JSON'
-          {
-            "project_info": {
-              "project_number": "100000000000",
-              "project_id": "xcagi-ci-placeholder",
-              "storage_bucket": "xcagi-ci-placeholder.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000personal",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.personal" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:000000000000000enterprise",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.enterprise" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-          fi
-      - name: Ensure gradlew executable
-        run: chmod +x ./gradlew
-      - name: Assemble Debug (personal + enterprise)
-        run: ./gradlew assemblePersonalDebug assembleEnterpriseDebug --no-daemon
-      - name: Lint
-        run: ./gradlew lintPersonalDebug --no-daemon
+          flutter pub get
+          flutter test
+      - name: Flutter build apk (debug)
+        run: flutter build apk --debug

@@ -1,0 +1,51 @@
+# CI SSOT: generated from FHD/.github/workflows/ci-mobile-flutter.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: ci-mobile-flutter
+
+on:
+  push:
+    paths:
+      - "FHD/mobile-flutter-poc/**"
+      - ".github/workflows/ci-mobile-flutter.yml"
+  pull_request:
+    paths:
+      - "FHD/mobile-flutter-poc/**"
+      - ".github/workflows/ci-mobile-flutter.yml"
+
+concurrency:
+  group: ci-mobile-flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  test-and-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter pub get
+        run: flutter pub get
+      - name: Flutter test
+        run: flutter test
+      - name: Flutter build apk (debug)
+        run: flutter build apk --debug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-flutter-debug-apk
+          path: FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error

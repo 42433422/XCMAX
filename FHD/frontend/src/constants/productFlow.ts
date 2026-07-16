@@ -13,6 +13,7 @@ import {
 
 export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
+export const LS_PRODUCT_FLOW_LAST_STEP = 'xcagi_product_flow_last_step'
 
 /** 副窗「新手教程」默认路线 id（宿主三步引导，原基础教程） */
 export const DEFAULT_TUTORIAL_TRACK_ID = 'basic'
@@ -58,8 +59,8 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   {
     id: 'host-pack',
     index: 3,
-    title: '补基础线',
-    subtitle: '装侧栏宿主能力卡片（桥接 Mod），非 AI 员工；定制 Mod 才补员工',
+    title: '准备菜单',
+    subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
   },
   {
     id: 'seed-demo',
@@ -224,4 +225,40 @@ export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
   if (s === 'first-ai-task' || s === 'ai-demo') return 'first-ai-task'
   if (s === 'done' || s === 'finish') return 'done'
   return 'welcome'
+}
+
+export function readProductFlowLastStep(): ProductFlowStepId | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    const scoped = readTenantScopedStorageItem(LS_PRODUCT_FLOW_LAST_STEP, scope)
+    const raw = scoped ?? (scope === 'local' ? localStorage.getItem(LS_PRODUCT_FLOW_LAST_STEP) : null)
+    if (!raw) return null
+    const step = parseFlowStepQuery(raw)
+    return step === 'welcome' && raw !== 'welcome' ? null : step
+  } catch {
+    return null
+  }
+}
+
+export function saveProductFlowLastStep(step: ProductFlowStepId): void {
+  if (typeof localStorage === 'undefined') return
+  if (step === 'done') return
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_LAST_STEP, step, scope)
+    if (scope === 'local') {
+      localStorage.setItem(LS_PRODUCT_FLOW_LAST_STEP, step)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 引导入口：URL ?step= 优先，否则续接上次步骤。 */
+export function resolveProductFlowEntryStep(queryStep?: unknown): ProductFlowStepId {
+  const explicit = String(queryStep ?? '').trim()
+  if (explicit) return parseFlowStepQuery(queryStep)
+  if (readProductFlowCompleted()) return 'done'
+  return readProductFlowLastStep() || 'welcome'
 }

@@ -9,9 +9,21 @@ from fastapi import FastAPI
 
 from app.fastapi_routes._route_helpers import is_ci_strict
 from app.fastapi_routes.registry import RouteRegistry
+from app.runtime_integrity import record_runtime_component
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_DESKTOP_REQUIRED_ROUTES = {
+    "purchase",
+    "inventory",
+    "finance",
+    "reports",
+    "mods",
+    "workspace_prefs",
+    "business_bridge",
+    "mod_store",
+}
 
 
 def _mod_taiyangniao_pro_exposes_attendance_api() -> bool:
@@ -85,15 +97,31 @@ def _mount(
             tags=tags,
             **kwargs,
         )
+        if registry.app is not None:
+            record_runtime_component(
+                registry.app,
+                f"business_route:{name}",
+                ok=True,
+                required=name in _DESKTOP_REQUIRED_ROUTES,
+            )
     except RECOVERABLE_ERRORS as exc:
         if is_ci_strict() and required_in_ci:
             raise RuntimeError(f"Required route mount failed in CI: {name}") from exc
+        if registry.app is not None:
+            record_runtime_component(
+                registry.app,
+                f"business_route:{name}",
+                ok=False,
+                required=name in _DESKTOP_REQUIRED_ROUTES,
+                detail=str(exc),
+            )
         logger.warning("%s not available: %s", name, exc)
 
 
 def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     """Register business API routers (deduplicated via registry)."""
-    del app  # business phase uses registry.apply in __init__
+    if registry.app is None:
+        registry.app = app
 
     _mount(
         registry,
@@ -174,11 +202,6 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         lambda: __import__(
             "app.fastapi_routes.mods_routes", fromlist=["get_mods_router"]
         ).get_mods_router(),
-    )
-    _mount(
-        registry,
-        "platform_shell",
-        lambda: __import__("app.fastapi_routes.platform_shell_routes", fromlist=["router"]).router,
     )
     _mount(
         registry,

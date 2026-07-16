@@ -149,3 +149,16 @@ FHD/1",
 !XCAGI-Full-Pipeline.html
 !XCAGI-Five-Line.html
 !XCAGI-Architecture-Map.html
+
+# Local build/install artifacts (never push to GitHub; >100MB)
+.xcmax-artifacts/
+
+# Local acceptance/runtime artifacts. Keep full-screen remote-control captures and
+# session-bearing login probes on the operator machine; commit only redacted
+# product evidence.
+/test.db
+FHD/docs/evidence/e2e/**/_todesk/
+FHD/docs/evidence/e2e/m01-mac-local-*/**/*cookies*.txt
+FHD/docs/evidence/e2e/m01-mac-local-*/**/*login-tries*.txt
+FHD/docs/evidence/e2e/m01-mac-local-*/**/*admin-login*.json
+FHD/docs/evidence/e2e/m01-mac-local-*/**/*enterprise-login*.json

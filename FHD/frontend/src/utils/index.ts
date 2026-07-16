@@ -63,7 +63,10 @@ export function downloadBlob(blob: Blob, filename: string): void {
  * 格式化日期
  */
 export function formatDate(date: string | number | Date): string {
-  const d = new Date(date);
+  const dateOnly = typeof date === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(date);
   return d.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',

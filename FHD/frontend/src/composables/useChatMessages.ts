@@ -10,6 +10,7 @@ import {
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 const VOICE_PLAY_TIMEOUT_MS = 30_000
@@ -148,15 +149,56 @@ export function useChatMessages(sessionId: Ref<string>) {
     return div.innerHTML
   }
 
+  function extractPlainText(raw: unknown): string {
+    const source = String(raw || '')
+    const entities: Record<string, string> = {
+      amp: '&',
+      apos: "'",
+      gt: '>',
+      lt: '<',
+      nbsp: ' ',
+      quot: '"',
+    }
+    let plain = ''
+    let index = 0
+
+    while (index < source.length) {
+      if (source[index] === '<') {
+        const tagEnd = source.indexOf('>', index + 1)
+        if (tagEnd < 0) {
+          plain += source.slice(index)
+          break
+        }
+        const tagName = source.slice(index + 1, tagEnd).trim().toLowerCase()
+        if (tagName === 'br' || tagName === 'br/' || tagName.startsWith('br ')) {
+          plain += '\n'
+        }
+        index = tagEnd + 1
+        continue
+      }
+
+      if (source[index] === '&') {
+        const entityEnd = source.indexOf(';', index + 1)
+        if (entityEnd > index && entityEnd - index <= 10) {
+          const entityName = source.slice(index + 1, entityEnd).toLowerCase()
+          const decoded = entities[entityName]
+          if (decoded !== undefined) {
+            plain += decoded
+            index = entityEnd + 1
+            continue
+          }
+        }
+      }
+
+      plain += source[index]
+      index += 1
+    }
+
+    return plain.replace(/\u00a0/g, ' ').trim()
+  }
+
   function hasMeaningfulContent(raw: unknown): boolean {
-    const html = String(raw || '')
-    if (!html) return false
-    const text = html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .trim()
-    return text.length > 0
+    return extractPlainText(raw).length > 0
   }
 
   function hasRenderableSidecar(row: Record<string, unknown>): boolean {
@@ -230,11 +272,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   function toPlainText(raw: unknown): string {
-    return String(raw || '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .trim()
+    return extractPlainText(raw)
   }
 
   function isWelcomeMessage(msg: Pick<ChatMessage, 'role' | 'content'>): boolean {
@@ -400,7 +438,9 @@ export function useChatMessages(sessionId: Ref<string>) {
         return {
           role: (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai',
           content: normalizeServerContentToHtml(row.content),
-          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          time: formatChatMessageTime(
+            row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
+          ),
         }
       })
       const sanitized = sanitizeMessagesList(mapped)

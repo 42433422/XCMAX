@@ -25,6 +25,7 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
 import { validateEnterpriseSessionCached } from '@/utils/authSessionCache';
 import { useModsStore } from '@/stores/mods';
 import {
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
   isAdminConsoleSpa,
   resolveAdminConsoleHomeUrl,
 } from '@/utils/adminConsoleUrl';
@@ -205,7 +206,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/wechat-contacts',
       name: 'wechat-contacts',
       redirect: { name: 'data-sources', query: { source: 'wechat_local_db' } },
-      meta: { title: '企业微信联系人' },
+      meta: { title: '数据来源' },
     },
     {
       path: '/print',
@@ -262,14 +263,14 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     {
       path: '/enterprise-customer-service',
       name: 'enterprise-customer-service',
-      component: () => import('../views/EnterpriseCustomerServiceView.vue'),
-      meta: { title: '外部客服', customerServiceSide: 'enterprise' },
+      redirect: { name: 'im' },
+      meta: { title: '信息' },
     },
     {
       path: '/internal-customer-service',
       name: 'internal-customer-service',
-      component: () => import('../views/InternalCustomerServiceView.vue'),
-      meta: { title: '内部客服', customerServiceSide: 'admin', requiresAdminAccount: true },
+      redirect: { name: 'im' },
+      meta: { title: '信息' },
     },
     {
       path: '/approval-hub',
@@ -660,25 +661,32 @@ router.beforeEach(async (to, _from, next) => {
   //   }
   // }
 
-  const customerServiceSide = to.meta?.customerServiceSide as string | undefined;
-  if (customerServiceSide === 'enterprise' || customerServiceSide === 'admin') {
+  // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）
+  if (!to.meta?.publicAccess && isDesktopShell() && !isAdminConsoleSpa()) {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
       const profile = useAccountProfileStore();
       if (!profile.loaded) {
         await profile.refreshFromServer();
       }
-      if (customerServiceSide === 'admin' && !profile.isAdminAccount) {
-        next({ name: 'im' });
-        return;
-      }
-      if (customerServiceSide === 'enterprise' && profile.isAdminAccount) {
-        next({ name: 'internal-customer-service' });
+      if (profile.isAdminAccount && to.name !== 'login') {
+        try {
+          const { authApi } = await import('@/api/auth');
+          await authApi.logout().catch(() => undefined);
+        } catch {
+          /* ignore */
+        }
+        next({
+          name: 'login',
+          query: {
+            redirect: '/',
+            error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+          },
+        });
         return;
       }
     } catch {
-      next({ name: 'chat' });
-      return;
+      /* ignore — 后续企业会话校验会兜底 */
     }
   }
 
@@ -718,11 +726,37 @@ router.beforeEach(async (to, _from, next) => {
             await profile.refreshFromServer();
           }
           if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
-            if (!isDesktopShell()) {
-              window.location.href = resolveAdminConsoleHomeUrl();
-              next(false);
+            // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
+            if (isDesktopShell()) {
+              try {
+                const { authApi } = await import('@/api/auth');
+                await authApi.logout().catch(() => undefined);
+              } catch {
+                /* ignore */
+              }
+              next({
+                name: 'login',
+                query: {
+                  redirect: '/',
+                  error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+                },
+              });
               return;
             }
+            const adminHome = resolveAdminConsoleHomeUrl();
+            if (!adminHome) {
+              next({
+                name: 'login',
+                query: {
+                  redirect: '/',
+                  error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+                },
+              });
+              return;
+            }
+            window.location.href = adminHome;
+            next(false);
+            return;
           }
         } catch {
           /* ignore */
@@ -747,9 +781,13 @@ router.beforeEach(async (to, _from, next) => {
     !to.meta?.publicAccess &&
     !isAdminConsoleSpa()
   ) {
-    // 首次引导始终从「认识宿主」开始；宿主包未齐时在步骤 2 由用户点「下一步」进入
-    next({ name: 'product-onboarding', query: { step: 'welcome', redirect: to.fullPath } });
-    return;
+    const sku = await fetchProductSku().catch(() => 'generic');
+    if (!isEnterpriseEdition(sku)) {
+      const { resolveProductFlowEntryStep } = await import('@/constants/productFlow');
+      const step = resolveProductFlowEntryStep(to.query?.step);
+      next({ name: 'product-onboarding', query: { step, redirect: to.fullPath } });
+      return;
+    }
   }
 
   if (
@@ -758,7 +796,10 @@ router.beforeEach(async (to, _from, next) => {
     !isAdminConsoleSpa()
   ) {
     try {
-      const onboardingStep = await resolveHostPackOnboardingStep(true);
+      // The login success navigation refreshes this gate once.  Reusing its
+      // short session cache keeps a subsequent desktop deep-link/reload from
+      // blocking the usable screen on the same three bootstrap requests.
+      const onboardingStep = await resolveHostPackOnboardingStep(false);
       if (onboardingStep) {
         next({
           name: 'product-onboarding',

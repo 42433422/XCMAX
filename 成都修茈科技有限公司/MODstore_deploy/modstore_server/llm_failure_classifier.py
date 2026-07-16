@@ -77,12 +77,15 @@ _TRANSIENT_NEEDLES = (
     "modstore_para_device_id",
     "device not online",
     "blocked_no_online_para_device",
+    "blocked_git_preflight",
     "para_api_failed_outboxed",
     "para_api_rejected_outboxed",
     "para_api_no_subtask_created",
     "para_api_missing_task_id",
     "no online para device",
     "未创建任何 subtask",
+    "git 预检",
+    "executorready",
 )
 
 _TRANSIENT_STATUS = {429, 502, 503, 504}

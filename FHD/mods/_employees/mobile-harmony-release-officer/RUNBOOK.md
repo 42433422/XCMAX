@@ -13,7 +13,7 @@
 
 ## 一条龙
 ```bash
-bash FHD/mobile-harmony/scripts/release-harmony.sh --version 10.0.0
+bash FHD/mobile-harmony/scripts/release-harmony.sh --version 1.0.0.0
 ```
 步骤:
 1. 倒序证书链(AGC 给的是 根→中间→叶子,hap-sign-tool 要 叶子→中间→根)

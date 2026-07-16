@@ -6,6 +6,7 @@ describe('Modal', () => {
   it('renders when modelValue is true', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.modal').exists()).toBe(true)
     expect(wrapper.find('.modal').classes()).toContain('visible')
@@ -14,6 +15,7 @@ describe('Modal', () => {
   it('does not have visible class when modelValue is false', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: false },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.modal').classes()).not.toContain('visible')
   })
@@ -21,6 +23,7 @@ describe('Modal', () => {
   it('displays title when provided', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true, title: 'Test Modal' },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.modal-header').exists()).toBe(true)
     expect(wrapper.text()).toContain('Test Modal')
@@ -29,6 +32,7 @@ describe('Modal', () => {
   it('hides header when no title', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true, title: '' },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.modal-header').exists()).toBe(false)
   })
@@ -37,6 +41,7 @@ describe('Modal', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true },
       slots: { default: '<p class="slot-content">Hello</p>' },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.slot-content').exists()).toBe(true)
   })
@@ -45,6 +50,7 @@ describe('Modal', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true },
       slots: { footer: '<button class="footer-btn">OK</button>' },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.modal-footer').exists()).toBe(true)
     expect(wrapper.find('.footer-btn').exists()).toBe(true)
@@ -53,6 +59,7 @@ describe('Modal', () => {
   it('hides footer when no footer slot', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true },
+      global: { stubs: { Teleport: true } },
     })
     expect(wrapper.find('.modal-footer').exists()).toBe(false)
   })
@@ -60,6 +67,7 @@ describe('Modal', () => {
   it('emits close on overlay click', async () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true },
+      global: { stubs: { Teleport: true } },
     })
     await wrapper.find('.modal').trigger('click.self')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
@@ -69,6 +77,7 @@ describe('Modal', () => {
   it('applies maxWidth style when provided', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true, maxWidth: '600px' },
+      global: { stubs: { Teleport: true } },
     })
     const content = wrapper.find('.modal-content')
     expect(content.attributes('style')).toContain('600px')
@@ -77,6 +86,7 @@ describe('Modal', () => {
   it('does not apply maxWidth when empty', () => {
     const wrapper = mount(Modal, {
       props: { modelValue: true, maxWidth: '' },
+      global: { stubs: { Teleport: true } },
     })
     const content = wrapper.find('.modal-content')
     // When maxWidth is empty, the computed style returns an empty object

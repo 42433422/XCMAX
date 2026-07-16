@@ -11,6 +11,9 @@
     <!-- 允许 DYLD 环境变量（子进程加载与调试兼容） -->
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
+    <!-- PyInstaller 后端加载同 Team 签名的 .so/.dylib（numpy/pandas 等）；缺此权限会 library load denied 并卡死启动 -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
     <!-- 后端 FastAPI 子进程需要出站网络（更新检查、LLM API、OCR 等） -->
     <key>com.apple.security.network.client</key>
     <true/>

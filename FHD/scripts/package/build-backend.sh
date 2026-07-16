@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-10.0.0}"
+VERSION="${1:-1.0.0.0}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -36,13 +36,28 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
       (cd frontend && npm run build)
       ;;
   esac
+  # 桌面包不构建 admin-console（管理端仅网页；进程级 is_desktop_mode 禁 /admin）
 fi
 
-PYTHON="${PYTHON:-python3}"
+if [ -z "${PYTHON:-}" ] && [ -x "${ROOT}/.venv/bin/python" ]; then
+  PYTHON="${ROOT}/.venv/bin/python"
+else
+  PYTHON="${PYTHON:-python3}"
+fi
 
+# uv-managed virtual environments may intentionally omit pip.  PyInstaller's
+# editable dependency install still uses pip, so bootstrap it deterministically
+# instead of failing after the (expensive) frontend build has completed.
+if ! "${PYTHON}" -m pip --version >/dev/null 2>&1; then
+  "${PYTHON}" -m ensurepip --upgrade
+fi
 "${PYTHON}" -m pip install --upgrade pip
 "${PYTHON}" -m pip install -e ".[server-api]"
 "${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  bash scripts/package/normalize-macos-python-binaries.sh "${PYTHON}"
+fi
 
 export XCAGI_VERSION="${VERSION}"
 if [[ -n "${PRODUCT_SKU}" ]]; then

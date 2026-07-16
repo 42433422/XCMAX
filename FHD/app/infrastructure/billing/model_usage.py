@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+from app.utils.path_utils import get_app_data_dir
 
 DEFAULT_LLM_TOKENS_PER_COST_UNIT = 1000
 _ledger_lock = threading.Lock()
@@ -50,6 +53,8 @@ def model_usage_ledger_path() -> Path:
     custom = (os.environ.get("MODEL_USAGE_LEDGER_PATH") or "").strip()
     if custom:
         return Path(custom)
+    if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
+        return Path(get_app_data_dir()) / "data" / "model_usage_ledger.json"
     return _repo_root() / "data" / "model_usage_ledger.json"
 
 

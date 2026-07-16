@@ -113,6 +113,7 @@ def test_ensure_sqlite_product_business_bootstrap_creates_purchase_units(
         }
     # ensure_sqlite_inventory_bootstrap 会创建 products / warehouses 等库存业务表
     assert "products" in tables
+    assert "materials" in tables
     assert "warehouses" in tables
 
 

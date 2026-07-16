@@ -32,6 +32,7 @@ from modstore_server.models import (
     Purchase,
     Quota,
     Transaction,
+    UserMod,
     UserPlan,
     Wallet,
 )
@@ -146,6 +147,17 @@ class ItemFulfilStrategy(FulfilStrategy):
                 is_active=True,
             )
         )
+        # Desktop entitlement SSOT reads user_mods (not Entitlement table).
+        # Bridge payment → entitled-mod-ids so install/catalog sync works.
+        mod_id = str(getattr(item, "pkg_id", "") or "").strip()
+        if mod_id:
+            already_um = (
+                session.query(UserMod)
+                .filter(UserMod.user_id == ctx.user_id, UserMod.mod_id == mod_id)
+                .first()
+            )
+            if not already_um:
+                session.add(UserMod(user_id=ctx.user_id, mod_id=mod_id))
         if ent_type == "employee":
             q = (
                 session.query(Quota)
