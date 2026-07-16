@@ -332,6 +332,7 @@ class TestMacosCupsPrinterUtils:
                 "_resolve_cups_printer_name",
                 return_value="Canon_TS3700_series",
             ),
+            patch.object(pu, "_resolve_allowed_print_path", return_value="/tmp/test.pdf"),
             patch("builtins.open", mock_open(read_data=b"pdf")),
             patch.object(pu, "_run_cups", return_value=result) as run_cups,
         ):
@@ -362,6 +363,11 @@ class TestMacosCupsPrinterUtils:
                 "_resolve_cups_printer_name",
                 return_value="Canon_TS3700_series",
             ),
+            patch.object(
+                pu,
+                "_resolve_allowed_print_path",
+                return_value="/private/sensitive/test.pdf",
+            ),
             patch("builtins.open", mock_open(read_data=b"pdf")),
             patch.object(
                 pu,
@@ -377,6 +383,42 @@ class TestMacosCupsPrinterUtils:
         assert output["success"] is False
         assert output["message"] == "打印失败：macOS 打印服务暂不可用"
         assert "sensitive" not in output["message"]
+
+    def test_cups_rejects_file_outside_allowed_roots(self):
+        pu = PrinterUtils()
+        with (
+            patch.object(
+                pu,
+                "_resolve_cups_printer_name",
+                return_value="Canon_TS3700_series",
+            ),
+            patch.object(pu, "_resolve_allowed_print_path", return_value=None),
+            patch("builtins.open", mock_open()) as open_file,
+            patch.object(pu, "_run_cups") as run_cups,
+        ):
+            output = pu._print_cups("/etc/passwd", "Canon_TS3700_series")
+
+        assert output["success"] is False
+        assert "允许的打印目录" in output["message"]
+        open_file.assert_not_called()
+        run_cups.assert_not_called()
+
+    def test_allowed_print_path_blocks_symlink_escape(self, tmp_path):
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir()
+        outside.mkdir()
+        secret = outside / "secret.pdf"
+        secret.write_bytes(b"secret")
+        link = allowed / "linked.pdf"
+        link.symlink_to(secret)
+
+        with patch.object(
+            PrinterUtils,
+            "_allowed_print_roots",
+            return_value=(str(allowed.resolve()),),
+        ):
+            assert PrinterUtils._resolve_allowed_print_path(str(link)) is None
 
     def test_cups_printer_probe_reports_missing_printer(self):
         pu = PrinterUtils()

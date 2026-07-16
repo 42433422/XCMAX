@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from typing import BinaryIO
 
@@ -175,6 +176,34 @@ class PrinterUtils:
                 return candidate
         return None
 
+    @staticmethod
+    def _allowed_print_roots() -> tuple[str, ...]:
+        from app.utils.path_utils import get_app_data_dir
+
+        roots = {
+            os.path.realpath(get_app_data_dir()),
+            os.path.realpath(tempfile.gettempdir()),
+        }
+        configured = os.environ.get("XCAGI_PRINT_ALLOWED_ROOTS", "")
+        for value in configured.split(os.pathsep):
+            value = value.strip()
+            if value:
+                roots.add(os.path.realpath(value))
+        return tuple(sorted(roots))
+
+    @classmethod
+    def _resolve_allowed_print_path(cls, file_path: str) -> str | None:
+        candidate = os.path.realpath(os.path.abspath(file_path))
+        if not os.path.isfile(candidate):
+            return None
+        for root in cls._allowed_print_roots():
+            try:
+                if os.path.commonpath((candidate, root)) == root:
+                    return candidate
+            except ValueError:
+                continue
+        return None
+
     def _print_cups(self, file_path: str, printer_name: str) -> dict:
         validated_printer = self._resolve_cups_printer_name(printer_name)
         if validated_printer is None:
@@ -183,8 +212,15 @@ class PrinterUtils:
                 "message": "打印失败：打印机不存在或名称不安全",
                 "printer": printer_name,
             }
+        validated_file = self._resolve_allowed_print_path(file_path)
+        if validated_file is None:
+            return {
+                "success": False,
+                "message": "打印失败：文件不在允许的打印目录中",
+                "printer": validated_printer,
+            }
         try:
-            with open(os.path.realpath(file_path), "rb") as source:
+            with open(validated_file, "rb") as source:
                 result = self._run_cups(
                     "lp",
                     ("-d", validated_printer),
@@ -205,7 +241,7 @@ class PrinterUtils:
             return {
                 "success": True,
                 "message": "打印任务已提交到 macOS CUPS",
-                "file": os.path.basename(file_path),
+                "file": os.path.basename(validated_file),
                 "printer": validated_printer,
                 "method": "cups_lp",
             }
