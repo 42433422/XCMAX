@@ -87,6 +87,9 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
     verifier = (REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1").read_text(
         encoding="utf-8"
     )
+    installed_runtime = (
+        REPO_ROOT / "scripts" / "package" / "verify-windows-installed-runtime.ps1"
+    ).read_text(encoding="utf-8")
 
     for name in (
         "ES_USERNAME",
@@ -113,6 +116,17 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
     assert "$signature.Status -ne 'Valid'" in verifier
     assert "$signature.TimeStamperCertificate" in verifier
     assert post_gate.count("verify-windows-signature.ps1") == 3
+    assert "verify-windows-installed-runtime.ps1" in workflow
+    assert "-ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME" in workflow
+    assert '-ExpectedBuildSha "${{ github.sha }}"' in workflow
+    assert "-ExpectedProductVersion $v" in workflow
+    assert "verify-windows-signature.ps1" in installed_runtime
+    assert "smoke-installed-windows.ps1" in installed_runtime
+    assert "Start-Process" in installed_runtime
+    assert "@('/S', \"/D=$InstallDir\")" in installed_runtime
+    assert "Uninstall XCAGI.exe" in installed_runtime
+    assert "Wait-PathRemoved -Path $installedExe" in installed_runtime
+    assert "deleteAppDataOnUninstall must remain false" in installed_runtime
 
 
 def test_desktop_release_preflights_both_platforms_and_publishes_as_one_unit() -> None:
@@ -144,6 +158,7 @@ def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> Non
     assert "build-installer.ps1" in job
     assert "pre-release-security.ps1" in job
     assert "verify-windows-signature.ps1" in job
+    assert "verify-windows-installed-runtime.ps1" in job
     assert "[scriptblock]::Create" in job
     assert "node --check desktop/build/windows-sign.cjs" in job
     assert "SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b" in job
