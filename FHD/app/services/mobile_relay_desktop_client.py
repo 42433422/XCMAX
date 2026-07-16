@@ -284,6 +284,8 @@ def _public_payload_from_config(config: dict[str, Any]) -> dict[str, Any] | None
         "relay_id": relay_id,
         "pairing_code": pairing_code,
         "paired": bool(config.get("paired")),
+        "mobile_username": str(config.get("mobile_username") or "").strip(),
+        "last_relay_sync_at": int(config.get("last_relay_sync_at") or 0),
         **({"expires_at": expires_at} if expires_at else {}),
         **({"exp": exp} if exp > 0 else {}),
         "relay_base_url": base_url,
@@ -313,6 +315,8 @@ def cached_desktop_relay_payload() -> dict[str, Any] | None:
         "relay_id": relay_id,
         "relay_base_url": str(config.get("relay_base_url") or "") or _relay_base_url(),
         "paired": True,
+        "mobile_username": str(config.get("mobile_username") or "").strip(),
+        "last_relay_sync_at": int(config.get("last_relay_sync_at") or 0),
     }
 
 
@@ -586,6 +590,13 @@ def _poll_once() -> None:
         tasks = data.get("tasks") if isinstance(data, dict) else []
     # poll 成功且服务端已把本 relay 配对到某手机账号时，持久化 paired 标志：register 据此复用本身份、
     # 绝不再换新 relay_id（即便配对码早已过期），根治「重启/出码即丢配对」。
+    # 同时记录 mobile_username + 本次同步时间，供桌面设置页展示「已连接：xxx 的手机 · 中继正常」，
+    # 与手机端「服务」状态文案（server_mode_label）对齐，不再让用户猜绑定是否生效。
+    config_changed = False
+    now_epoch = int(time.time())
+    if config.get("last_relay_sync_at") != now_epoch:
+        config["last_relay_sync_at"] = now_epoch
+        config_changed = True
     desktop = data.get("desktop") if isinstance(data, dict) else None
     if isinstance(desktop, dict):
         is_paired = (
@@ -594,7 +605,13 @@ def _poll_once() -> None:
         )
         if is_paired and not config.get("paired"):
             config["paired"] = True
-            _write_config(config)
+            config_changed = True
+        mobile_username = str(desktop.get("mobile_username") or "").strip()
+        if mobile_username and config.get("mobile_username") != mobile_username:
+            config["mobile_username"] = mobile_username
+            config_changed = True
+    if config_changed:
+        _write_config(config)
     if not isinstance(tasks, list):
         return
     for task in tasks:

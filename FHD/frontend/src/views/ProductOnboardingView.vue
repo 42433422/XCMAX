@@ -36,14 +36,14 @@
             />
             <div>
               <h1>认识 XC</h1>
-              <p class="welcome-tagline">专属于您的数字公司 · 默认干净，对话与生态先行</p>
+              <p class="welcome-tagline">专属于您的数字公司 · 默认干净，行业业务按需加载</p>
               <p class="lead">
-                日常界面只保留<strong>智能对话</strong>和<strong>智能生态</strong>；其它菜单、行业 Mod、AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。
+                日常界面默认有<strong>智能对话</strong>（找小C办事）、<strong>信息</strong>（联系AI同事）、<strong>智能生态</strong>和<strong>员工工作台</strong>；行业业务菜单、定制 AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。
               </p>
             </div>
           </div>
           <ul class="flow-list bullets">
-            <li><strong>干净起步</strong>：侧栏默认只有智能对话、智能生态，不堆满菜单</li>
+            <li><strong>干净起步</strong>：侧栏默认只有对话、信息、生态、员工工作台，不堆满行业菜单</li>
             <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些侧栏能力卡片</li>
             <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
           </ul>

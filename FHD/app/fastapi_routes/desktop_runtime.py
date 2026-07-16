@@ -243,6 +243,28 @@ def _resolve_last_backup(dirs: dict) -> dict[str, str | int | None]:
         return {"path": None, "filename": None, "timestamp": None, "size": None}
 
 
+@router.get("/mobile-pairing-status")
+def mobile_pairing_status(_user=Depends(get_logged_in_user)):
+    """本机与手机的服务器中继绑定状态，供设置页「移动端连接」展示。
+
+    与手机端「我的 → 服务」的状态文案（server_mode_label）用同一套词汇（服务器中继 / 已绑定），
+    让用户在两端看到一致的连接状态，而不是只能靠出码页面猜测是否已连上。
+    """
+    try:
+        from app.application.facades.mobile_relay_facade import cached_desktop_relay_payload
+
+        relay = cached_desktop_relay_payload()
+    except RECOVERABLE_ERRORS:
+        relay = None
+    if not relay:
+        return {"paired": False, "mobileUsername": "", "lastRelaySyncAt": 0}
+    return {
+        "paired": bool(relay.get("paired")),
+        "mobileUsername": str(relay.get("mobile_username") or ""),
+        "lastRelaySyncAt": int(relay.get("last_relay_sync_at") or 0),
+    }
+
+
 @router.get("/models")
 def list_models(_user=Depends(get_logged_in_user)):
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
