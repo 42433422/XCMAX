@@ -668,7 +668,8 @@ jobs:
           foreach ($path in @(
             'scripts/package/build-installer.ps1',
             'scripts/package/pre-release-security.ps1',
-            'scripts/package/verify-windows-signature.ps1'
+            'scripts/package/verify-windows-signature.ps1',
+            'scripts/package/verify-windows-installed-runtime.ps1'
           )) {
             $content = Get-Content -LiteralPath $path -Raw
             $null = [scriptblock]::Create($content)

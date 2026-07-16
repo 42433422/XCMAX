@@ -65,6 +65,15 @@ XCAGI-Enterprise-Setup-<version>-x64.exe
 - Signer Subject 包含 `XCAGI_WINDOWS_PUBLISHER_NAME`
 - 存在受信任时间戳证书
 
+签名校验通过后，Windows 发布任务还会把同一个 NSIS 安装包静默安装到隔离目录，并执行以下门禁：
+
+- 安装后的桌面与后端可执行文件仍保持有效签名和可信时间戳；
+- `build-info.json` 的完整 Git SHA、版本号与当前发布任务完全一致；
+- 安装后的企业版真实启动，`/api/health`、`/api/desktop/status`、Mod 与核心业务烟测全部通过；
+- 静默卸载成功，且用户数据按 `deleteAppDataOnUninstall=false` 保留。
+
+这道 CI 门禁用于阻止“文件签了名但安装后不能运行”的制品发布，不能替代真实 Win10/Win11 设备上的可见界面验收。
+
 ## 4. 发布
 
 证书已签发且所有配置齐全后，从主分支运行：
@@ -92,4 +101,4 @@ https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/
 https://xiu-ci.com/releases/stable/enterprise/
 ```
 
-发布完成后仍需在真实 Windows 设备完成安装、启动、自动升级和回滚验收，才能判定 Windows 稳定上线完成。
+发布完成后仍需在真实 Win10/Win11 设备完成可见界面的安装、启动、自动升级和回滚验收，才能判定 Windows 稳定上线完成。
