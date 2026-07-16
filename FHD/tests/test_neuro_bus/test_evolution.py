@@ -1124,6 +1124,18 @@ class TestRegisterCognitionHandlers:
         stats = get_cognition_stats()
         assert isinstance(stats, dict)
         assert "enabled" in stats
+        assert "error" not in stats["evolution"]
+        assert {
+            "handler",
+            "kb_retriever",
+            "reflex_pattern_miner",
+            "runtime_self_fix",
+        } <= stats["evolution"].keys()
+
+    def test_evolution_package_exports_singleton_getter(self):
+        from app.domain.neuro.evolution import get_evolution_handler
+
+        assert get_evolution_handler() is get_evolution_handler()
 
     def test_register_cognition_handlers_disabled_via_env(self, monkeypatch):
         """环境变量禁用时返回 enabled=False。"""
