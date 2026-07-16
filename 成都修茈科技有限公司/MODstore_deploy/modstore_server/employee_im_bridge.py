@@ -43,9 +43,15 @@ def _boss_user_id() -> int:
         return 0
 
 
-def _enabled() -> bool:
-    """是否启用员工 IM 推送。三项都配齐才算启用。"""
-    return bool(_internal_im_url() and _internal_api_key() and _boss_user_id())
+def _enabled(*, explicit_boss_user_id: int = 0) -> bool:
+    """是否启用员工 IM 推送。
+
+    url + key 必须配齐；老板 uid 可来自显式入参（入站回流场景，调用方已知真实老板），
+    否则要求 env ``FHD_BOSS_USER_ID``。
+    """
+    if not (_internal_im_url() and _internal_api_key()):
+        return False
+    return bool(int(explicit_boss_user_id or 0) > 0 or _boss_user_id())
 
 
 def notify_boss(
@@ -56,6 +62,8 @@ def notify_boss(
     avatar_url: str = "",
     body: str,
     hook: str = "",
+    boss_user_id: int = 0,
+    owner_user_id: int = 0,
 ) -> bool:
     """员工主动给老板发一条 IM 消息。
 
@@ -65,14 +73,16 @@ def notify_boss(
         display_name: 员工显示名（如 "LLM 运维工程师"）
         avatar_url: 员工头像 URL
         body: 消息正文（必填，非空）
-        hook: 触发源标记（cognition/verification/handoff/ask 等，用于日志追踪）
+        hook: 触发源标记（cognition/verification/handoff/ask/ack/reply 等，用于日志追踪）
+        boss_user_id: 显式指定收件老板；0 则由 env / FHD per-employee owner 表解析
+        owner_user_id: >0 时让 FHD 把该员工 owner 绑定成这个 user_id（后续免配 env）
 
     返回 True 表示推送成功；False 表示失败或被禁用。任何异常都不抛出。
     """
     body_text = (body or "").strip()
     if not body_text:
         return False
-    if not _enabled():
+    if not _enabled(explicit_boss_user_id=boss_user_id):
         logger.debug(
             "employee_im_bridge 跳过推送：env 未配齐（url/key/boss_uid），employee=%s hook=%s",
             employee_id,
@@ -82,7 +92,7 @@ def notify_boss(
 
     url = _internal_im_url()
     payload: dict[str, Any] = {
-        "boss_user_id": _boss_user_id(),
+        "boss_user_id": int(boss_user_id or 0) if int(boss_user_id or 0) > 0 else _boss_user_id(),
         "employee_id": str(employee_id or "").strip(),
         "mod_id": mod_id or "",
         "display_name": display_name or "",
@@ -90,6 +100,8 @@ def notify_boss(
         "body": body_text[:4000],
         "hook": hook or "",
     }
+    if int(owner_user_id or 0) > 0:
+        payload["owner_user_id"] = int(owner_user_id)
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",

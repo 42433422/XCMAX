@@ -175,6 +175,14 @@
 - **fix(mobile-flutter)**：`clearActiveAuth` 的 `cachedModInfos: const []` 类型转换崩溃；恢复企业端会话「已安装」徽章（对齐 Android AppViewModel）
 - **chore(mobile-flutter)**：IM 端点切换到 `api/mobile/v1/im/*` 并补 `im/conversations`、`read`、管理端客服收件箱、员工 Phase-D 提问端点，与 Android `ApiEndpoints.kt`/`FhdApi.kt` SSOT 重新对齐（parity 测试恢复全绿）
 
+### 员工 IM 工作闭环（2026-07-07 · v10 线内迭代）
+
+- **fix(im)**：`employee_id_for_conversation` 同时识别 `emp:` / `ai-employee:` 两套员工合成用户命名并按 `AiEmployeeProfile.user_id` 兜底反查——此前生产桥（`/api/internal/employee-im/send`）建的会话里老板回复被静默丢弃（已读不回）
+- **feat(im)**：桌面/Web `POST /api/im/conversations/{id}/messages` 补齐员工入站回流（与手机端对齐），共享 `app/infrastructure/im/employee_reply_relay.py`
+- **feat(modstore)**：老板 IM 消息无 pending 问题时不再丢弃：`boss_im_inbound` 转成该员工的 `PendingBriefTask(source_kind="boss_im")`，即时 ACK「收到我来处理」，调度循环直达点名员工执行后 IM 回音（失败也回音，不静默）
+- **feat(modstore)**：`boss_daily_im_report` 每日定时（默认北京 09:15）以数字管家身份把过去 24h 员工执行/任务/待答问题账本主动推送到老板 IM；注册 `boss_daily_im_report` 调度任务并纳入 `/api/scheduler/runtime` 追踪
+- **feat(modstore)**：`notify_boss` 支持显式 `boss_user_id` / `owner_user_id`（回流场景绑定员工 owner）；执行器 report hook 支持 `im_reply_managed` 抑制避免双发
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
