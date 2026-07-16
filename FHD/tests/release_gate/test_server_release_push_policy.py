@@ -81,6 +81,12 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
     for workflow in (source, published):
         assert "push_image_tar:" in workflow
         assert (
+            "group: cvm-push-release-${{ github.event_name == 'workflow_dispatch' "
+            "&& inputs.release_channel || (contains(github.ref, '-rc') "
+            "&& 'staging' || 'stable') }}"
+        ) in workflow
+        assert "cancel-in-progress: true" in workflow
+        assert (
             "FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '1' || '0' }}"
         ) in workflow
