@@ -72,7 +72,15 @@ const electronMocks = vi.hoisted(() => {
     }))
   }
   const screen = { getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } })) }
-  const nativeImage = { createFromPath: vi.fn(() => ({})), createEmpty: vi.fn(() => ({})) }
+  const nativeImageMock = {
+    isEmpty: vi.fn(() => false),
+    resize: vi.fn(function (this: unknown) { return this }),
+    setTemplateImage: vi.fn(),
+  }
+  const nativeImage = {
+    createFromPath: vi.fn(() => nativeImageMock),
+    createEmpty: vi.fn(() => ({})),
+  }
   return {
     app,
     BrowserWindow,
@@ -559,5 +567,44 @@ describe('main — bootstrap not called in test mode', () => {
     electronMocks.ipcMain.handle.mockClear()
     await import('./main.js')
     expect(electronMocks.ipcMain.handle).not.toHaveBeenCalled()
+  })
+})
+
+describe('main — createTray invoked on darwin', () => {
+  it('creates Tray instance (no darwin early return)', async () => {
+    const { __test_only } = await import('./main.js')
+    electronMocks.Tray.mockClear()
+    const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+    // createTray 已移除 darwin 早返回，所有平台都会调用 new Tray()
+    __test_only.createTray()
+    expect(electronMocks.Tray).toHaveBeenCalled()
+    existsSpy.mockRestore()
+  })
+})
+
+describe('main — backend spawn failure', () => {
+  it('shows the failure and exits instead of leaving a zombie shell', async () => {
+    const { __test_only } = await import('./main.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.app.quit.mockClear()
+    electronMocks.app.isQuitting = false
+
+    __test_only.handleBackendSpawnError(new Error('ENOENT'))
+
+    expect(electronMocks.dialog.showErrorBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.app.quit).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not display another error while the app is already quitting', async () => {
+    const { __test_only } = await import('./main.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.app.quit.mockClear()
+    electronMocks.app.isQuitting = true
+
+    __test_only.handleBackendSpawnError(new Error('late error'))
+
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
+    expect(electronMocks.app.quit).not.toHaveBeenCalled()
+    electronMocks.app.isQuitting = false
   })
 })

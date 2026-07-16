@@ -247,6 +247,7 @@ class TestMonitorPrintJobWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("app.utils.print_utils.win32print") as _mock_win32print,
             patch("app.utils.print_utils.time") as mock_time,
         ):
             mock_time.time.side_effect = RuntimeError("unexpected")
