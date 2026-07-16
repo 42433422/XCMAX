@@ -8,26 +8,35 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-EMPLOYEE_ID = "excel-full-read-employee"
-EMPLOYEE_LABEL = "Excel 读取员"
-SYSTEM_PROMPT = "你是Excel 读取员。你必须按 direct_python 方式处理真实文件，读取 payload 中的 file_path/path/excel_path，必要时使用打包模板，成功条件是实际写出输出文件。任何输入缺失、模板缺失、转换模块异常都要返回明确错误，禁止编造已完成。"
+EMPLOYEE_ID = "excel-qc-employee"
+EMPLOYEE_LABEL = "Excel 质检员"
+SYSTEM_PROMPT = "你是Excel 质检员。你必须按 direct_python 方式对回填结果做独立结构对账：计划符合性、保护区完整性、expected 自洽、公式健康、rules_ref 追溯、结构漂移，写出 qc_report.json 并给出 PASS/WARN/FAIL 与问责路由。你不复用映射员/写入员代码路径，从独立输入重算不变量。禁止在证据不足时给 PASS；缺输入的检查必须标记 skipped 并说明，不得假装通过。"
 RULE_SPEC = {
-    "brief": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格。",
+    "brief": "Excel质检员工：上传回填结果 .xlsx/.xlsm + payload 提供 plan.json（可选 rules.json/write_report.json/原模板），使用 direct_python 独立对账——计划符合性/保护区/expected 重算/公式 #REF! 与悬空引用/rules_ref 哈希追溯/块结构漂移，输出 outputs/qc_report.json（verdict PASS/WARN/FAIL + blame 问责路由），禁止编造检查结果。",
     "mode": "direct_python_file_transform",
     "accepted_extensions": [".xlsx", ".xlsm"],
     "default_action": "convert",
-    "default_output_relpath": "outputs/workbook.json",
-    "runtime_kind": "excel_full_read",
-    "output_schema": ["sheets", "columns", "headers", "rows", "cells", "merged_ranges", "meta"],
+    "default_output_relpath": "outputs/qc_report.json",
+    "runtime_kind": "excel_qc_report",
+    "output_schema": [
+        "verdict",
+        "blame",
+        "sections",
+        "summary",
+        "output_path",
+    ],
     "requirements": [
         'Use direct_python only; handlers must be ["direct_python"].',
-        "Parse .xlsx/.xlsm with openpyxl; write outputs/workbook.json.",
-        "JSON must include sheets[].name, columns, flat rows, headers, cells (row/col/value/formula), meta.",
-        "Sheets must expose merged_ranges; cells carry number_format when not General (template introspection).",
-        "Never claim success unless workbook.json is actually written.",
+        "Input file is the filled workbook; plan via payload.plan/plan_path (required); rules via payload.rules/rules_path, template via payload.template_path, write_report via payload.write_report_path (optional).",
+        "Independence: never import mapper/writer code; recompute invariants from plan + rules + output workbook directly.",
+        "Sections: conformance (cell/formula/clear/retain vs plan), protection (template diff), expected (plan-recompute vs mapper claim vs file-recompute), formulas (#REF!/dangling sheet refs), traceability (rules sha256 vs plan.meta.rules_ref), structure (rules.blocks keys vs file).",
+        "Missing inputs make a section skipped with reason — never fake pass.",
+        "When host provides ctx.call_llm (and payload.use_llm is not false), add semantic section: LLM business-sanity review (value plausibility, dropped-record suspicion, warning triage) over deterministic results, plus human_summary in Chinese; LLM can add findings but never overturn deterministic sections; payload.llm_strict=false downgrades LLM fail to warn.",
+        "Verdict: any fail -> FAIL with blame routing (writer_or_plan/mapper/pipeline/rules_stale); warn-only -> WARN; else PASS.",
+        "Never claim success unless qc_report.json is actually written; employee ok means QC executed, not QC passed.",
         "Return {ok, summary, items, warnings, error, meta}.",
     ],
-    "pack_id": "excel-full-read-employee",
+    "pack_id": "excel-qc-employee",
 }
 
 
@@ -80,7 +89,7 @@ def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
         payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
     ).strip()
     if not raw:
-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+        raise FileNotFoundError("缺少 file_path：请上传写入员产出的回填结果 .xlsx/.xlsm。")
     p = Path(raw).expanduser()
     if not p.is_absolute():
         p = _workspace_root(ctx, payload) / raw
@@ -93,45 +102,13 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
     rel = str(
         payload.get("output_relpath")
         or RULE_SPEC.get("default_output_relpath")
-        or "outputs/employee_output.xlsx"
+        or "outputs/qc_report.json"
     ).strip()
     p = Path(rel).expanduser()
     if not p.is_absolute():
         p = _workspace_root(ctx, payload) / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
-
-
-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
-    raw = str(
-        payload.get("template_relpath")
-        or RULE_SPEC.get("default_template_relpath")
-        or RULE_SPEC.get("template_relpath")
-        or ""
-    ).strip()
-    if not raw:
-        return None
-    candidates = []
-    p = Path(raw).expanduser()
-    if p.is_absolute():
-        candidates.append(p)
-    else:
-        candidates.append(_workspace_root(ctx, payload) / raw)
-        candidates.append(_pack_root() / raw)
-        candidates.append(_pack_root() / "backend" / "templates" / raw)
-        if raw.startswith("backend/"):
-            candidates.append(_pack_root() / raw[len("backend/") :])
-    for cand in candidates:
-        if cand.is_file():
-            return cand
-    bundled_templates = (
-        sorted((_pack_root() / "templates").rglob("*.xls*"))
-        if (_pack_root() / "templates").is_dir()
-        else []
-    )
-    if bundled_templates:
-        return bundled_templates[0]
-    return None
 
 
 async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -145,7 +122,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
             meta={"handler": "direct_python", "action": "help"},
         )
-    if action not in ("convert", "upload", "转换", ""):
+    if action not in ("convert", "upload", "qc", "质检", ""):
         return _err(
             f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
         )
@@ -153,32 +130,36 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         vendor_dir = _pack_root() / "vendor"
         if str(vendor_dir) not in sys.path:
             sys.path.insert(0, str(vendor_dir))
-        from excel_full_read.convert import convert_file
+        from excel_qc.convert import convert_file
 
         src = _resolve_input(payload, ctx)
         out = _resolve_output(payload, ctx)
-        template = _resolve_template(payload, ctx)
         result = convert_file(
-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+            src, out, template_path=None, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
         )
         if asyncio.iscoroutine(result):
             result = await result
-        if isinstance(result, dict):
-            result.setdefault("output_path", str(out))
-            result.setdefault("template_path", str(template or ""))
-        else:
-            result = {
-                "output_path": str(out),
-                "template_path": str(template or ""),
-                "result": result,
-            }
-        if not out.is_file():
+        produced = Path(str((result or {}).get("output_path") or out))
+        if not produced.is_file():
             return _err(
-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+                f"质检未生成报告文件：{produced}",
+                meta={"handler": "direct_python", "action": "convert"},
             )
+        verdict = str(result.get("verdict") or "")
+        run_warnings: List[str] = []
+        if verdict == "FAIL":
+            run_warnings.append(f"质检不通过：blame={result.get('blame')}（详见 qc_report.json）")
+        elif verdict == "WARN":
+            run_warnings.append("质检有警告（详见 qc_report.json）")
         normalized = _ok(
             result,
-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+            warnings=run_warnings,
+            meta={
+                "handler": "direct_python",
+                "action": "convert",
+                "runtime": "generated_python",
+                "verdict": verdict,
+            },
         )
         return {
             "ok": normalized["ok"],
@@ -191,6 +172,6 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         return _err(
             str(exc),
-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+            warnings=["请检查回填结果文件与 payload.plan/plan_path（必需）、rules/template（可选）是否齐备。"],
             meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
         )

@@ -182,6 +182,37 @@
 - **feat(modstore)**：老板 IM 消息无 pending 问题时不再丢弃：`boss_im_inbound` 转成该员工的 `PendingBriefTask(source_kind="boss_im")`，即时 ACK「收到我来处理」，调度循环直达点名员工执行后 IM 回音（失败也回音，不静默）
 - **feat(modstore)**：`boss_daily_im_report` 每日定时（默认北京 09:15）以数字管家身份把过去 24h 员工执行/任务/待答问题账本主动推送到老板 IM；注册 `boss_daily_im_report` 调度任务并纳入 `/api/scheduler/runtime` 追踪
 - **feat(modstore)**：`notify_boss` 支持显式 `boss_user_id` / `owner_user_id`（回流场景绑定员工 owner）；执行器 report hook 支持 `im_reply_managed` 抑制避免双发
+### 表格员工闭环 · LLM 亲考与固化产物（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：收录 `examples/sunbird-solidified/transform.py`——LLM 在固化循环中亲笔编写的太阳鸟考勤转换脚本（288 行零 taiyangniao 依赖），三轮迭代通过金样门禁（68.7%→97.8%→100%，3842/3842 槽），端到端与太阳鸟单体输出数据区 30240 格逐格 0 差异；每人参数（MORNING9/OT_1830）由金样归纳，等价模板 B 列 DSL 快照
+- **test(mods)**：`test_solidified_example_passes_golden_gate` 常驻回归——固化脚本对真实钉钉表金样对账必须全绿，同时守护金样反读器与 records 契约兼容性
+
+### 表格员工闭环 · 固化循环（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：规则映射员新增 `solidify` 动作（`solidify.py` + `golden.py`）：LLM 把业务转换规则写成 `produce_records(source_workbook, rules)` Python 脚本（窄接口，管道其余保持白盒）；循环「生成→静态安全检查→沙箱执行→records 契约校验→金样对账→diff 喂回重写」，全绿才固化 `transform.py` + `solidify_report.json`（迭代证据+sha256+rules_ref）；金样判据 = 金样 xlsx 按 rules 确定性反读 records 逐槽 diff；固化后每月运行零 LLM
+- **test(mods)**：`test_excel_rules_solidify.py` 7 用例：反读器往返、diff 三态、固化一轮过/反馈迭代/黑名单拒绝/失败留证、convert 层端到端；**太阳鸟金样端到端**：金样=太阳鸟单体转化真实钉钉表（4557 行/69 人），固化循环金样对账 3842/3842 槽全匹配，零 LLM 复跑数据区 30240 格逐格 0 差异——固化管道完整复现太阳鸟转化
+
+### 表格员工闭环 · LLM 协作（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：规则映射员接 LLM 精修（`llm_refine.py`）：LLM 基于表头/块文本样本回答 open_questions（bands 多带布局/键列兜底/clear_zone 边界），**每条提议经确定性验证**（越块/公式区重叠/覆盖率）才采纳，采纳与拒绝全留痕 `evidence.llm`；无 `ctx.call_llm` 或 `use_llm=false` 时与纯启发式一致
+- **feat(employee)**：质检员新增 `semantic` 第七节（`llm_review.py`）：LLM 业务合理性审查（数值常理/丢弃记录可疑度/警告分级）+ `human_summary` 中文摘要；LLM finding 计入 verdict（blame=`semantic_llm`）但不可推翻确定性六节，`llm_strict=false` 降级为 warn
+- **test(mods)**：`test_excel_employee_llm_paths.py` 8 用例（mock call_llm）：合法提议采纳/越界拒绝/乱码与宕机留痕/无 LLM 回归基线/semantic 并入 verdict/降级/skipped；真实太阳鸟模板 LLM 协作全链冒烟（LLM 提议三带布局→机器验证采纳→QC 语义审查抓出 30h 超常值）
+
+### 表格员工闭环 · 质检员（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：新增 `excel-qc-employee`（Excel 质检员）：对回填结果六节独立对账——计划符合性（cell/formula/clear/retain 逐格比对）、保护区完整性（原模板 diff）、expected 三方重算（映射员自述 ↔ 计划重算 ↔ 输出文件重算）、公式健康（#REF!/悬空 sheet 引用）、rules_ref 哈希追溯、块结构漂移；verdict PASS/WARN/FAIL + blame 问责路由（writer_or_plan/mapper/pipeline/rules_stale）；不 import 映射员/写入员代码，缺输入的节如实 skipped
+- **test(mods)**：`test_excel_qc_employee.py` 12 用例：诚实链路 PASS、六类篡改逐一检出（写入篡改/残值/伪造 expected/保护区破坏/#REF!/规则漂移）+ 真实太阳鸟模板五段全链质检（1290 格核对、3458 公式扫描、80 块零漂移）
+
+### 表格员工闭环 · 规则映射员（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：新增 `excel-rules-map-employee`（Excel 规则映射员）双动作：`infer` 从读取员模板 workbook.json 通用推断块结构（竖向合并周期投票）/键列（覆盖率×唯一率）/日历锚（1..N 等差序列）/公式区/公式模板（跨块数字等差拟合），产出可固化 rules.json 提案（confidences + open_questions）；`compile` 把固化规则 + 槽位记录编译为写入员 plan.json（day/band/entry 越界校验、公式按块实例化、expected 对账基准、rules_ref sha256 追溯）
+- **test(mods)**：`test_excel_rules_map_employee.py` 合成模板全字段推断 + 真实太阳鸟模板金样对照（151 块/31 天日历/16 公式列，实例化公式与模板原文逐字一致）+ 读→推→编→写→重读 e2e；真实模板四段全链冒烟通过
+
+### 表格员工闭环 · 读取员/模板写入员（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：新增 `excel-template-write-employee`（Excel 模板写入员）：模板 xlsx + `plan.json` 写入计划 → 回填结果，phases（clear_ranges/cell_writes/formula_writes/retain_sheets）顺序执行，模板样式/合并/既有公式保真，`protected_ranges` 拒写并记 violation，输出 `outputs/filled.xlsx` + `write_report.json`（透传 `expected` 供质检员对账）
+- **feat(employee)**：`excel-full-read-employee` workbook.json 每 sheet 新增 `merged_ranges`，cells 非 General 时输出 `number_format`（模板结构识别 / 回填保真前置）
+- **test(mods)**：`test_excel_template_write_employee.py` 覆盖读取员新字段、写入员全阶段、保护区、读→计划→写→重读闭环；太阳鸟真实模板（909 行 × 85 列、979 合并区、1944 SUMIF）冒烟通过
 
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
