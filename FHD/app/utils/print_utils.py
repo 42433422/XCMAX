@@ -195,21 +195,18 @@ class PrinterUtils:
 
     @classmethod
     def _resolve_allowed_print_path(cls, file_path: str) -> str | None:
-        safe_name = os.path.basename(file_path)
-        if safe_name in {"", ".", ".."}:
-            return None
         requested = os.path.realpath(os.path.abspath(file_path))
         for root in cls._allowed_print_roots():
             normalized_root = os.path.realpath(root)
-            candidate = os.path.realpath(os.path.join(normalized_root, safe_name))
-            if os.path.normcase(candidate) != os.path.normcase(requested):
-                continue
             try:
-                if os.path.commonpath(
-                    (candidate, normalized_root)
-                ) == normalized_root and os.path.isfile(candidate):
-                    return candidate
-            except ValueError:
+                with os.scandir(normalized_root) as entries:
+                    for entry in entries:
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        candidate = os.path.realpath(entry.path)
+                        if os.path.normcase(candidate) == os.path.normcase(requested):
+                            return candidate
+            except OSError:
                 continue
         return None
 
