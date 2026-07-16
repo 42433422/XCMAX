@@ -83,6 +83,19 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert workflow.count("--include='*.zip.blockmap'") == 1
     assert "publish_payload()" in workflow
     assert workflow.count('publish_payload "') == 2
+    assert "verify-public-windows-signature:" in workflow
+    assert workflow.index("verify-public-windows-signature:") < workflow.index(
+        "publish-website-pointer:"
+    )
+    verify_download_job = workflow.split("  verify-download:", 1)[1].split(
+        "\n  verify-public-windows-signature:", 1
+    )[0]
+    assert "Publish verified website download pointer" not in verify_download_job
+    pointer_job = workflow.split("  publish-website-pointer:", 1)[1].split(
+        "\n  github-release:", 1
+    )[0]
+    assert "Publish verified website download pointer" in pointer_job
+    assert "needs.verify-public-windows-signature.result == 'success'" in pointer_job
     assert "--delay-updates" in workflow
     assert "-o -name '*.zip'" in workflow
     assert '"XCAGI-*-${VERSION}-mac-*.zip"' in uploader

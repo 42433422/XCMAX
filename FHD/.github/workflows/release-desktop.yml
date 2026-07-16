@@ -522,8 +522,86 @@ jobs:
             grep -Fxq "productVersion: ${expected_version}" "$official"
             grep -Fxq "buildSha: ${expected_sha}" "$official"
           done
+
+  verify-public-windows-signature:
+    needs: [verify-download]
+    if: >-
+      always() &&
+      needs.verify-download.result == 'success'
+    runs-on: windows-latest
+    env:
+      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify published Windows Authenticode signature
+        shell: pwsh
+        run: |
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $version = $raw.TrimStart('v','V')
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "Invalid public desktop version: $version"
+          }
+
+          $manifestUrl = "https://xiu-ci.com/xcagi-v$version/manifest.json"
+          $manifestPath = Join-Path $env:RUNNER_TEMP 'xcagi-public-manifest.json'
+          Invoke-WebRequest `
+            -UseBasicParsing `
+            -TimeoutSec 60 `
+            -Uri $manifestUrl `
+            -OutFile $manifestPath
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          $entry = $manifest.channels.official_download.enterprise.win
+          if (-not $entry.url -or -not $entry.sha256 -or -not $entry.size) {
+            throw "Public manifest is missing the enterprise Windows artifact: $manifestUrl"
+          }
+
+          $installer = Join-Path $env:RUNNER_TEMP ([string]$entry.filename)
+          Invoke-WebRequest `
+            -UseBasicParsing `
+            -TimeoutSec 600 `
+            -Uri ([string]$entry.url) `
+            -OutFile $installer
+
+          $actualSize = (Get-Item -LiteralPath $installer).Length
+          if ($actualSize -ne [long]$entry.size) {
+            throw "Public Windows installer size mismatch: actual=$actualSize expected=$($entry.size)"
+          }
+          $actualSha = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedSha = ([string]$entry.sha256).ToLowerInvariant()
+          if ($actualSha -ne $expectedSha) {
+            throw "Public Windows installer SHA256 mismatch: actual=$actualSha expected=$expectedSha"
+          }
+
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          Write-Host "Public Authenticode status: $($signature.Status)"
+          Write-Host "Public Authenticode message: $($signature.StatusMessage)"
+          if ($signature.Status -ne 'Valid') {
+            throw "Published Windows installer is not Authenticode-valid: $($signature.Status) $($signature.StatusMessage)"
+          }
+          if (-not $env:XCAGI_WINDOWS_PUBLISHER_NAME) {
+            throw 'XCAGI_WINDOWS_PUBLISHER_NAME is required to verify the published certificate Subject.'
+          }
+
+          scripts/package/verify-windows-signature.ps1 `
+            -Path $installer `
+            -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+
+  publish-website-pointer:
+    needs: [generate-manifest, verify-download, verify-public-windows-signature]
+    if: >-
+      always() &&
+      inputs.verify_only != true &&
+      needs.generate-manifest.result == 'success' &&
+      needs.verify-download.result == 'success' &&
+      needs.verify-public-windows-signature.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-download-manifest
+          path: ${{ runner.temp }}/manifest
       - name: Publish verified website download pointer
-        if: ${{ inputs.verify_only != true }}
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
@@ -578,7 +656,7 @@ jobs:
           REMOTE
 
   github-release:
-    needs: [release-preflight, windows, macos, verify-download]
+    needs: [release-preflight, windows, macos, verify-download, verify-public-windows-signature]
     runs-on: ubuntu-latest
     if: >-
       always() &&
@@ -586,7 +664,8 @@ jobs:
       needs.release-preflight.result == 'success' &&
       needs.windows.result == 'success' &&
       needs.macos.result == 'success' &&
-      needs.verify-download.result == 'success'
+      needs.verify-download.result == 'success' &&
+      needs.verify-public-windows-signature.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:

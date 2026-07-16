@@ -16,7 +16,7 @@
 | 架构 | x64 | x64 | arm64 或 x64 |
 | 内存 | ≥ 8GB | ≥ 8GB | ≥ 8GB |
 | 磁盘 | ≥ 5GB 可用 | ≥ 5GB 可用 | ≥ 5GB 可用 |
-| 网络 | 可访问 update.xcagi.com | 可访问 update.xcagi.com | 可访问 update.xcagi.com |
+| 网络 | 可访问 xiu-ci.com/releases/stable | 可访问 xiu-ci.com/releases/stable | 可访问 xiu-ci.com/releases/stable |
 | 杀软 | Windows Defender 开启 | Windows Defender 开启 | Gatekeeper 开启 |
 | 用户权限 | 标准用户（非管理员） | 标准用户（非管理员） | 标准用户（非管理员） |
 | 浏览器 | Edge / Chrome | Edge / Chrome | Safari / Chrome |
@@ -30,12 +30,23 @@
 | M-01 | macOS | 26.3 (25D125) | arm64 | Mac16,10 | Agent（本机冒烟） | 2026-07-12 | ✅ 技术冒烟 PASS（长跑/回滚/语音 PARTIAL·SKIP） |
 | M-02 | macOS | 13.x | x64 | （填写） | （填写） | （填写） | ⏳ |
 | W-01 | Win10 | 22H2 | x64 | （填写） | （填写） | （填写） | ⏳ 无独立 Win10 机；DevFleet 仅 Win11 |
-| W-02 | Win11 | 26200 | x64 | ROG Zephyrus G16 | Agent（DevFleet/Para） | 2026-07-12 | ✅ 技术冒烟 PASS（CDN 安装+health+登录） |
+| W-02 | Win11 | 26200 | x64 | ROG Zephyrus G16 | Agent（DevFleet/Para） | 2026-07-12 | ❌ 命令冒烟 PASS；可见 UI 内容验收 FAIL |
 
 > M-01：[`m01-mac-local-acceptance-2026-07-12.md`](./m01-mac-local-acceptance-2026-07-12.md)  
 > W-02：[`w02-win11-para-acceptance-2026-07-12.md`](./w02-win11-para-acceptance-2026-07-12.md)
 
 > 至少 3 台：macOS 1 + Win10 1 + Win11 1。建议多备 1 台 macOS x64 覆盖旧机型。
+
+### 2026-07-16 稳定版闭环审计
+
+- 当前生产服务器已运行主分支 `2aa6086b27ab`，服务器健康检查通过。
+- 当前公开 Windows 安装包仍是 `buildSha=656db7b7506a0bd0a63ad68acf1a82dc486f365f`。
+- 对该公网 EXE 的 PE 头进行只读检查，证书表 offset/size 均为 `0`，即没有
+  Authenticode 签名结构；它不能作为 Windows 稳定上线签字制品。
+- W-02 的历史命令冒烟和旧录屏不得替代本次精确签名 buildSha 的可见验收；
+  关联证据文档已经将其内容验收标记为 FAIL。
+- 当前仓库没有在线 GitHub self-hosted Windows runner，DevFleet W-02 设备当前离线。
+  SSL.com 签发后必须先恢复真实 Win11 设备，并补充独立 Win10 22H2 设备。
 
 ---
 
@@ -112,6 +123,10 @@
 4. **无 P0/P1 缺陷**：验收中发现的 P0/P1 缺陷必须修复并复测
 5. **性能达标**：首次启动 P95 ≤ 60s，后续启动 P95 ≤ 15s（参考启动基线报告）
 6. **回滚验证**：阶段 4.7 必须实际触发一次回滚，验证 rollback-applied.json 生成
+7. **制品身份一致**：真机安装包、公开 manifest、`latest.yml` 与验收记录必须指向
+   同一个完整 `buildSha`；不得用旧包或 API-cookie/浏览器壳截图替代桌面程序验收
+8. **Windows 签名有效**：公网 EXE 必须由 Windows 系统验证
+   `Get-AuthenticodeSignature.Status=Valid`，证书 Subject 符合发布配置且存在可信时间戳
 
 ---
 
