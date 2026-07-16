@@ -205,6 +205,32 @@ interface ImReadStateDao {
     suspend fun clearAll()
 }
 
+@Entity(tableName = "notification_cache")
+data class NotificationCacheEntity(
+    @PrimaryKey val id: Long,
+    val title: String,
+    val body: String,
+    val route: String,
+    val channel: String,
+    val createdAt: Long,
+    val read: Boolean = false,
+)
+
+@Dao
+interface NotificationCacheDao {
+    @Query("SELECT * FROM notification_cache ORDER BY createdAt DESC LIMIT 100")
+    fun observeAll(): Flow<List<NotificationCacheEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(items: List<NotificationCacheEntity>)
+
+    @Query("UPDATE notification_cache SET read = 1 WHERE id = :id")
+    suspend fun markRead(id: Long)
+
+    @Query("DELETE FROM notification_cache")
+    suspend fun clear()
+}
+
 @Entity(tableName = "mod_info_cache")
 data class ModInfoCacheEntity(
     @PrimaryKey val id: String,
@@ -244,8 +270,9 @@ interface ModInfoCacheDao {
         ModInfoCacheEntity::class,
         ConversationListStateEntity::class,
         AiCircleCacheEntity::class,
+        NotificationCacheEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 abstract class XcagiDatabase : RoomDatabase() {
@@ -257,6 +284,7 @@ abstract class XcagiDatabase : RoomDatabase() {
     abstract fun modInfoCacheDao(): ModInfoCacheDao
     abstract fun conversationListStateDao(): ConversationListStateDao
     abstract fun aiCircleCacheDao(): AiCircleCacheDao
+    abstract fun notificationCacheDao(): NotificationCacheDao
 
     companion object {
         // 幂等守卫：install -r 保留旧 DB 时，列可能已存在，无条件 ADD COLUMN 会抛
@@ -361,6 +389,24 @@ abstract class XcagiDatabase : RoomDatabase() {
                         createdAt TEXT NOT NULL,
                         json TEXT NOT NULL,
                         cachedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS notification_cache (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        body TEXT NOT NULL,
+                        route TEXT NOT NULL,
+                        channel TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        read INTEGER NOT NULL DEFAULT 0
                     )
                     """.trimIndent()
                 )

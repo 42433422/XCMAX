@@ -15,7 +15,7 @@
       :aria-label="item.name"
       :aria-current="isActive && !hasActiveChild ? 'page' : undefined"
       :aria-expanded="hasChildren ? isExpanded : undefined"
-      :title="item.name"
+      :title="itemTooltip"
       @contextmenu.prevent
       @pointerdown="$emit('reorder-pointer-down', $event)"
       @keydown="$emit('keydown', $event)"
@@ -47,7 +47,7 @@
               :data-tour="`sidebar-${child.key}`"
               :aria-label="child.name"
               :aria-current="activeView === child.key ? 'page' : undefined"
-              :title="child.name"
+              :title="child.description ? `${child.name} · ${child.description}` : child.name"
               @click.stop="activateChild(child.key)"
               @pointerup.stop="activateChildFromPointer(child.key, $event)"
             >
@@ -107,6 +107,11 @@ const props = defineProps({
 })
 
 const hasChildren = computed(() => Boolean(props.item.children?.length))
+
+/** hover 提示：有 description 时显示「名称 · 一句说明」，帮用户分清相似入口（如智能对话/信息/AI群聊）。 */
+const itemTooltip = computed(() =>
+  props.item.description ? `${props.item.name} · ${props.item.description}` : props.item.name,
+)
 
 const emit = defineEmits(['parent-click', 'select-view', 'reorder-pointer-down', 'keydown'])
 

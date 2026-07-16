@@ -886,7 +886,7 @@ fun XcagiNavHost(
                 }
                 composable(Routes.LONGTAIL) { LongTailScreen(vm) }
                 composable(Routes.NOTIFICATIONS) {
-                    NotificationListScreen(onBack = { nav.popBackStack() })
+                    NotificationListScreen(vm = vm, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.ABOUT) {
                     val cfg by vm.appConfig.collectAsState()
