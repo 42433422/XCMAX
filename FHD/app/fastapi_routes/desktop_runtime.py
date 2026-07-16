@@ -28,6 +28,7 @@ from app.desktop_runtime import (
 from app.desktop_runtime.model_downloader import ModelAsset, download_model, load_manifest
 from app.desktop_runtime.support_bundle import build_support_bundle_zip
 from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
@@ -56,6 +57,7 @@ def desktop_status(request: Request):
     app = request.app
     mods_full = bool(getattr(app.state, "mods_full_load_done", False))
     mods_bg = bool(getattr(app.state, "mods_background_load_scheduled", False))
+    routes_ready = not bool(getattr(app.state, "deferred_routes_pending", False))
     timing: dict = {}
     try:
         from app.fastapi_app.startup_timing import startup_timing_snapshot
@@ -65,6 +67,7 @@ def desktop_status(request: Request):
         timing = {}
     db_recovery = _resolve_db_recovery_status()
     last_backup = _resolve_last_backup(dirs)
+    runtime = runtime_integrity_snapshot(app)
     return {
         "desktopMode": is_desktop_mode(),
         "dataDir": str(dirs["root"]),
@@ -78,7 +81,12 @@ def desktop_status(request: Request):
         "modsRoutesLoaded": bool(getattr(app.state, "mods_routes_loaded", False)),
         "modsFullLoadDone": mods_full,
         "modsBackgroundLoadScheduled": mods_bg,
-        "readyForUi": True,
+        "appRoutesReady": routes_ready,
+        "readyForUi": routes_ready,
+        "runtimeStatus": runtime["status"],
+        "degraded": runtime["status"] != "healthy",
+        "degradedReasons": runtime["degraded_reasons"],
+        "runtimeIntegrity": runtime,
         "modsReady": mods_full or not mods_bg,
         "startupTiming": timing,
         "dbRecovery": db_recovery,
@@ -86,8 +94,9 @@ def desktop_status(request: Request):
     }
 
 
-@router.get("/deployment")
+@router.get("/deployment", response_model=dict[str, object])
 def desktop_deployment_status():
+    """Return the active desktop deployment, database, and migration plan."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
     database_storage_catalog = load_database_storage_catalog()
@@ -139,8 +148,9 @@ def desktop_deployment_status():
     }
 
 
-@router.put("/deployment")
+@router.put("/deployment", response_model=dict[str, object])
 def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
+    """Persist a desktop deployment mode and report any required restart or sync."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
     database_storage_catalog = load_database_storage_catalog()

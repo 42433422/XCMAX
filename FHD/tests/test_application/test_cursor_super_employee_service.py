@@ -67,13 +67,11 @@ def test_cursor_super_employee_answers_identity_without_dispatch(tmp_path: Path,
     result = svc.invoke(user_id=1, message="你是谁")
 
     assert result["dispatch"]["status"] == "completed"
-    assert result["dispatch"]["dispatcher"] == "cursor_agent_cli"
+    assert result["dispatch"]["dispatcher"] == "cursor_agent_direct"
     assert result["assistant_message"]["kind"] == CURSOR_DIRECT_MESSAGE_KIND
-    assert "真实接入" in result["assistant_message"]["body"]
+    assert "超级员工-Cursor" in result["assistant_message"]["body"]
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
-    # Cursor Agent CLI 用 agent --print 模式，且携带用户问题。
-    assert "--print" in seen[0]
-    assert any("你是谁" in part for part in seen[0])
+    assert seen == []
 
 
 def test_cursor_super_employee_dispatches_to_para_cursor_device(tmp_path: Path, monkeypatch):

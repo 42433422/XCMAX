@@ -2205,12 +2205,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('欢迎使用 XCAGI 企业版'), findsOneWidget);
-    expect(
-      find.text('您的企业 AI 助手已就绪。可以随时和小C助理对话，或前往 AI员工 页面查看企业智能伙伴。'),
-      findsOneWidget,
-    );
-    expect(find.text('您的移动端已成功配对企业端，可以开始使用全部功能。'), findsOneWidget);
+    // Honest empty: no demo announcement fallback when API returns nothing.
+    expect(find.text('暂无通知'), findsOneWidget);
+    expect(find.text('欢迎使用 XCAGI 企业版'), findsNothing);
   });
 
   testWidgets('notifications page follows Android dark theme tokens', (
@@ -2322,7 +2319,10 @@ void main() {
     await tester.tap(find.text('输入设备码'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('请输入电脑端显示的 6 位设备码'), findsOneWidget);
+    expect(
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
+      findsOneWidget,
+    );
     expect(find.text('连接'), findsOneWidget);
     expect(
         tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
@@ -2363,7 +2363,7 @@ void main() {
 
     final sheetTitle = tester.widget<Text>(find.text('输入设备码').last);
     final sheetSubtitle = tester.widget<Text>(
-      find.text('请输入电脑端显示的 6 位设备码'),
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
     );
 
     expect(sheetTitle.style?.color, colors.textPrimary);
@@ -2448,7 +2448,7 @@ void main() {
     expect(find.text('安全'), findsOneWidget);
     expect(find.text('生物识别解锁'), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const ValueKey('settings_we_switch'))),
+      tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
       const Size(46, 28),
     );
     expect(find.text('外观'), findsOneWidget);
@@ -2498,7 +2498,10 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_设置')),
     );
     final switchWidget = tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('settings_we_switch')),
+      find.descendant(
+        of: find.byKey(const ValueKey('settings_biometric_switch')),
+        matching: find.byType(AnimatedContainer),
+      ),
     );
     final switchDecoration = switchWidget.decoration! as BoxDecoration;
     final themeIcon = tester.widget<Icon>(
@@ -2552,7 +2555,7 @@ void main() {
 
     await tester.tap(find.text('浅色'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings_we_switch')));
+    await tester.tap(find.byKey(const ValueKey('settings_biometric_switch')));
     await tester.pumpAndSettle();
 
     expect(api.session.themeMode, 'light');
@@ -3461,7 +3464,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('会话 #12'), findsOneWidget);
-    expect(find.text('WebSocket 已连接，消息实时同步'), findsOneWidget);
+    // Initial frame: conversation opened, WS attach in flight.
+    expect(find.text('正在连接 WebSocket…'), findsOneWidget);
     expect(find.text('用户 0'), findsOneWidget);
     expect(find.text('你好'), findsOneWidget);
     expect(find.text('输入消息'), findsOneWidget);
@@ -4612,7 +4616,7 @@ void main() {
           isPinned: true,
         ),
       ),
-      isNull,
+      FixedPartnerKind.trae,
     );
   });
 
@@ -5554,9 +5558,11 @@ void main() {
     await tester.tap(find.byTooltip('更多工具'));
     await tester.pump();
 
-    expect(find.text('新建对话'), findsOneWidget);
-    expect(find.text('OCR 识别'), findsOneWidget);
-    expect(find.text('语音输入'), findsOneWidget);
+    // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
+    expect(find.text('执行回顾'), findsOneWidget);
+    expect(find.text('新建对话'), findsNothing);
+    expect(find.text('OCR 识别'), findsNothing);
+    expect(find.text('语音输入'), findsNothing);
     expect(find.text('任务派工'), findsOneWidget);
     expect(find.text('验收回访'), findsOneWidget);
     expect(find.text('问题修复'), findsOneWidget);
@@ -5836,6 +5842,49 @@ void main() {
       {'branch': branchA, 'op': 'git.merge'},
     ]);
     expect(find.text('✅ 已合并 $branchA'), findsOneWidget);
+  });
+
+  testWidgets('chat assistant bubble embeds dev-loop mini timeline', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeRealtimeRepository();
+    const branch = 'super-employee/codex/fix-bug';
+    final body = '闭环结果：\n'
+        '分支：$branch\n'
+        '验证：通过（ruff lint 0 errors）\n'
+        '推送：已推送到远端';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ChatScreen(
+          conversation: demoConversations[1],
+          repository: repository,
+          initialMessages: [
+            ChatMessage(
+              id: 'a1',
+              conversationId: 'pinned:codex',
+              role: ChatRole.assistant,
+              body: body,
+              timeText: '刚刚',
+              hasEmployeeProfile: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('闭环'), findsOneWidget);
+    expect(find.byIcon(Icons.terminal), findsOneWidget);
+    expect(find.byIcon(Icons.call_split), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_upload_outlined), findsOneWidget);
+
+    await tester.tap(find.text('闭环'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('执行时间线'), findsOneWidget);
   });
 }
 
@@ -6171,6 +6220,7 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     calls.add({
@@ -6199,6 +6249,7 @@ class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     calls.add(body);
@@ -6230,6 +6281,7 @@ class _FakeInflightRelayRepository extends _FakeRealtimeRepository {
   Future<String?> resumeRelayTask({
     required String conversationId,
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     onToken?.call('思考中...');
@@ -6671,22 +6723,27 @@ class _FakeSettingsApi extends MobileApiClient {
   );
 
   @override
-  Future<MobileSessionData> loadSession() async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
 
   @override
   Future<void> saveLocalSettings({
     String? themeMode,
     bool? biometricEnabled,
+    String? serverMode,
   }) async {
     settingSaves.add({
       if (themeMode != null) 'themeMode': themeMode,
       if (biometricEnabled != null) 'biometricEnabled': biometricEnabled,
+      if (serverMode != null) 'serverMode': serverMode,
     });
     if (themeMode != null) {
       session = session.copyWith(themeMode: themeMode);
     }
     if (biometricEnabled != null) {
       session = session.copyWith(biometricEnabled: biometricEnabled);
+    }
+    if (serverMode != null) {
+      session = session.copyWith(serverMode: serverMode);
     }
   }
 
@@ -6748,7 +6805,7 @@ class _FakeProfileApi extends MobileApiClient {
   var meLoads = 0;
 
   @override
-  Future<MobileSessionData> loadSession() async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
 
   @override
   Future<void> clearActiveAuth() async {

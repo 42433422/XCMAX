@@ -84,9 +84,41 @@ export function buildPairingQrText(payload: PairingPayload): string {
 export function resolvePairingPortHint(fallback = 5000): number {
   if (typeof window !== 'undefined') {
     const pagePort = Number(window.location.port || 0);
-    if (pagePort === 5100 || pagePort === 5000) return pagePort;
+    if (pagePort === 5100 || pagePort === 5000 || pagePort === 5011) return pagePort;
   }
   const envPort = Number(import.meta.env.VITE_FHD_PORT || import.meta.env.VITE_API_PORT || 0);
   if (envPort > 0) return envPort;
   return fallback;
+}
+
+/** 后端 loopback 监听时，Vite 代理端口才是手机局域网可达地址。 */
+export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayload {
+  if (typeof window === 'undefined') return payload;
+  const pagePort = Number(window.location.port || 0);
+  if (pagePort !== 5001 && pagePort !== 5011) return payload;
+  const host = payload.host && payload.host !== '127.0.0.1'
+    ? payload.host
+    : resolvePairingHost();
+  if (!host || host === '127.0.0.1') return payload;
+  return {
+    ...payload,
+    host,
+    port: pagePort,
+  };
+}
+
+/**
+ * 判断当前页面是否通过 vite proxy 访问（端口从外部可达）。
+ * 当页面端口与后端 hint 端口不同时，说明存在反向代理，页面端口才是手机可达的端口。
+ */
+export function resolveReachablePairingPort(hintApiPort: number, fallback = 5000): number {
+  if (typeof window !== 'undefined') {
+    const pagePort = Number(window.location.port || 0);
+    if (pagePort > 0 && pagePort !== hintApiPort && pagePort !== 80 && pagePort !== 443) {
+      return pagePort;
+    }
+  }
+  const hint = Number(hintApiPort || 0);
+  if (hint > 0) return hint;
+  return resolvePairingPortHint(fallback);
 }

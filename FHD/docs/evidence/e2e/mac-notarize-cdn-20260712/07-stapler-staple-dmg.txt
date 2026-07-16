@@ -1,0 +1,4 @@
+Processing: /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/mac-notarize-cdn-20260712/XCAGI-10.0.0-mac-arm64.enterprise.dmg
+CloudKit query for XCAGI-10.0.0-mac-arm64.enterprise.dmg (2/502f33684c6e84ffe6bdf8730ed0b1074ce2d44a) failed due to "Record not found".
+Could not find base64 encoded ticket in response for 2/502f33684c6e84ffe6bdf8730ed0b1074ce2d44a
+The staple and validate action failed! Error 65.

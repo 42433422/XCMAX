@@ -169,6 +169,7 @@ let sidebarHoverTimer = null
 let sidebarViewportMedia = null
 const showMobileBottomNav = ref(false)
 let mobileBottomNavMedia = null
+let layoutActive = true
 
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
@@ -262,7 +263,7 @@ const viewTitlesBase = {
   'kitten-finance': '财务分析',
   'mod-store': '能力库',
   products: '业务对象',
-  'materials-list': '资源列表',
+  'materials-list': '资源库',
   materials: '资源库',
   'traditional-mode': '表格模式',
   'business-docking': '业务对接',
@@ -271,7 +272,7 @@ const viewTitlesBase = {
   'shipment-records': '业务记录',
   customers: '组织管理',
   'data-sources': '数据来源',
-  'wechat-contacts': '企业微信联系人',
+  'wechat-contacts': '数据来源',
   print: '模板与打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
@@ -288,8 +289,8 @@ const viewTitlesBase = {
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
   'chat-debug': '对话调试',
-  'enterprise-customer-service': '外部客服',
-  'internal-customer-service': '内部客服',
+  'enterprise-customer-service': '信息',
+  'internal-customer-service': '信息',
   'admin-entitlements': '账号权益',
   'xcmax-admin': '服务器后台总览',
   'automation-policy': '自动化方针',
@@ -490,6 +491,7 @@ onMounted(async () => {
       // 行业信息加载失败时，顶部标题保持默认文案
     }
   }
+  if (!layoutActive || typeof window === 'undefined') return
   sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
   if (sidebarViewportMedia) {
     onViewportChange(sidebarViewportMedia)
@@ -514,23 +516,26 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  layoutActive = false
   stopSidebarResize()
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.removeEventListener(eventName, handleGlobalActivity)
   })
-  if (!sidebarViewportMedia) return
-  if (typeof sidebarViewportMedia.removeEventListener === 'function') {
-    sidebarViewportMedia.removeEventListener('change', onViewportChange)
-  } else if (typeof sidebarViewportMedia.removeListener === 'function') {
-    sidebarViewportMedia.removeListener(onViewportChange)
+  if (sidebarViewportMedia) {
+    if (typeof sidebarViewportMedia.removeEventListener === 'function') {
+      sidebarViewportMedia.removeEventListener('change', onViewportChange)
+    } else if (typeof sidebarViewportMedia.removeListener === 'function') {
+      sidebarViewportMedia.removeListener(onViewportChange)
+    }
   }
-  if (!mobileBottomNavMedia) return
-  if (typeof mobileBottomNavMedia.removeEventListener === 'function') {
-    mobileBottomNavMedia.removeEventListener('change', onMobileNavViewportChange)
-  } else if (typeof mobileBottomNavMedia.removeListener === 'function') {
-    mobileBottomNavMedia.removeListener(onMobileNavViewportChange)
+  if (mobileBottomNavMedia) {
+    if (typeof mobileBottomNavMedia.removeEventListener === 'function') {
+      mobileBottomNavMedia.removeEventListener('change', onMobileNavViewportChange)
+    } else if (typeof mobileBottomNavMedia.removeListener === 'function') {
+      mobileBottomNavMedia.removeListener(onMobileNavViewportChange)
+    }
   }
 })
 </script>

@@ -28,6 +28,13 @@ from .cors import (
 )
 from .lifespan import lifespan
 from .middleware_extra import register_extra_middleware, register_prometheus_metrics
+
+
+def _desktop_fast_start_enabled() -> bool:
+    raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
 from .static_mounts import (
     mount_admin_console_static,
     mount_vue_dist_assets_dir,
@@ -43,6 +50,7 @@ def create_fastapi_app(
     enable_cors: bool = True,
     enable_docs: bool = True,
 ) -> FastAPI:
+    global _app_singleton
     if config_object is None:
         config_object = get_config("default")
 
@@ -70,7 +78,7 @@ def create_fastapi_app(
     app = FastAPI(
         title="XCAGI FastAPI",
         description="XCAGI 企业 AI 员工平台 - FastAPI 版本",
-        version="10.0.0",
+        version="1.0.0.0",
         docs_url="/docs" if enable_docs else None,
         redoc_url="/redoc" if enable_docs else None,
         lifespan=lifespan,
@@ -107,6 +115,10 @@ def create_fastapi_app(
     app.add_middleware(GlobalRateLimitMiddleware)
     app.add_middleware(AuthRateLimitMiddleware)
 
+    from app.middleware.desktop_admin_gate import DesktopAdminForbiddenMiddleware
+
+    app.add_middleware(DesktopAdminForbiddenMiddleware)
+
     logging.basicConfig(
         level=getattr(config_object, "LOG_LEVEL", "INFO"),
         format=getattr(
@@ -114,9 +126,15 @@ def create_fastapi_app(
         ),
     )
 
-    from app.fastapi_routes import register_all_routes
+    if _desktop_fast_start_enabled():
+        from app.fastapi_routes import register_bootstrap_routes
 
-    register_all_routes(app)
+        register_bootstrap_routes(app)
+        app.state.deferred_routes_pending = True
+    else:
+        from app.fastapi_routes import register_all_routes
+
+        register_all_routes(app)
 
     from app.middleware.error_handler import register_exception_handlers
 
@@ -125,7 +143,7 @@ def create_fastapi_app(
     try:
         from app.utils.metrics import init_metrics
 
-        init_metrics("XCAGI", os.environ.get("XCAGI_VERSION", "10.0.0"))
+        init_metrics("XCAGI", os.environ.get("XCAGI_VERSION", "1.0.0.0"))
     except RECOVERABLE_ERRORS as e:
         logger.warning("Prometheus init_metrics skipped: %s", e)
 
@@ -135,7 +153,10 @@ def create_fastapi_app(
     try:
         from app.fastapi_app.mod_startup import bootstrap_mod_extensions_sync
 
-        bootstrap_mod_extensions_sync(app)
+        if _desktop_fast_start_enabled():
+            app.state.mods_deferred_bootstrap = True
+        else:
+            bootstrap_mod_extensions_sync(app)
     except RECOVERABLE_ERRORS as e:
         logger.warning("Mod extensions staged load failed (lifespan may retry): %s", e)
 
@@ -153,6 +174,11 @@ def create_fastapi_app(
         logger.exception("Failed to register SPA history fallback: %s", e)
         raise
 
+    # ``create_fastapi_app`` is also called directly by the desktop runner.  Keep
+    # that serving instance as the process singleton so later login/entitlement
+    # callbacks mount dynamic MOD routes on the app that is actually listening.
+    # Previously ``get_fastapi_app()`` created a second, invisible FastAPI app.
+    _app_singleton = app
     return app
 
 

@@ -10,6 +10,7 @@ import '../../widgets/we_ui.dart';
 import '../circle/ai_circle_screen.dart';
 import '../chat/chat_screen.dart';
 import '../cs/admin_cs_console_screen.dart';
+import 'employee_questions_screen.dart';
 
 class AiEmployeeProfileScreen extends StatefulWidget {
   const AiEmployeeProfileScreen({
@@ -89,6 +90,7 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
                           employee: employee,
                           onOpenChat: () => _openChat(context, employee),
                           onOpenCircle: () => _openCircle(context),
+                          onOpenQuestions: () => _openQuestions(context, employee),
                         ),
                 ),
               ],
@@ -132,6 +134,17 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
           builder: (_) => AiCircleScreen(repository: _repository)),
     );
   }
+
+  void _openQuestions(BuildContext context, AiEmployeeProfile employee) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EmployeeQuestionsScreen(
+          repository: _repository,
+          employeeId: employee.employeeId,
+        ),
+      ),
+    );
+  }
 }
 
 class _EmployeeProfileBody extends StatelessWidget {
@@ -139,11 +152,13 @@ class _EmployeeProfileBody extends StatelessWidget {
     required this.employee,
     required this.onOpenChat,
     required this.onOpenCircle,
+    required this.onOpenQuestions,
   });
 
   final AiEmployeeProfile employee;
   final VoidCallback onOpenChat;
   final VoidCallback onOpenCircle;
+  final VoidCallback onOpenQuestions;
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +189,12 @@ class _EmployeeProfileBody extends StatelessWidget {
           text: '发消息',
           icon: Icons.chat,
           onTap: onOpenChat,
+        ),
+        const SizedBox(height: 8),
+        _ActionRow(
+          text: '问他/她的待回答问题',
+          icon: Icons.question_answer_outlined,
+          onTap: onOpenQuestions,
         ),
         const SizedBox(height: 8),
         _ActionRow(

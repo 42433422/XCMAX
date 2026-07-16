@@ -103,7 +103,7 @@ class FixedPartnerProfileScreen extends StatelessWidget {
   }
 }
 
-enum FixedPartnerKind { assistant, customerService, codex, cursor, claude }
+enum FixedPartnerKind { assistant, customerService, codex, cursor, claude, trae }
 
 class FixedPartnerProfileSpec {
   const FixedPartnerProfileSpec({
@@ -180,6 +180,21 @@ class FixedPartnerProfileSpec {
           avatarFallback: AppAvatarFallback.claude,
           avatarColor: AppTheme.momentAccent,
         );
+      case FixedPartnerKind.trae:
+        return _spec(
+          kind: kind,
+          id: PinnedIds.trae,
+          type: ConversationType.pinnedTrae,
+          name: '超级员工-Trae',
+          alias: '全设备协同 · IDE 执行端',
+          accountId: 'XCAGI-TRAE',
+          summary: '与 Codex/Cursor/Claude 同构的超级员工，把任务派发到在线 Trae 工作设备；派工不可用时回退本机 Trae CLI 直答，兼顾 IDE 执行端、备用额度与补位协作。',
+          source: 'XCAGI 超级员工 · Trae 通道',
+          abilityLabels: const ['多设备派工', 'IDE 执行', '补位协作', '本地 CLI'],
+          circleLabels: const ['派工', '协同', '开发'],
+          avatarFallback: AppAvatarFallback.trae,
+          avatarColor: AppTheme.success,
+        );
       case FixedPartnerKind.assistant:
         return _spec(
           kind: kind,
@@ -226,6 +241,7 @@ class FixedPartnerProfileSpec {
       case ConversationType.pinnedClaude:
         return FixedPartnerKind.claude;
       case ConversationType.pinnedTrae:
+        return FixedPartnerKind.trae;
       case ConversationType.aiTask:
       case ConversationType.systemNotification:
         return null;

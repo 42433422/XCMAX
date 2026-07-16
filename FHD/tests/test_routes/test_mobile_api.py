@@ -555,3 +555,55 @@ class TestMobileMeLogic:
 
         assert result["success"] is True
         assert result["data"]["account_kind"] == "admin"
+
+
+class TestMobileRelaySessionValidate:
+    def test_mobile_relay_session_validate_without_fhd_session_row(self, client, monkeypatch):
+        user = SimpleNamespace(
+            id=7,
+            username="relay-user",
+            display_name="Relay User",
+            email="",
+            role="enterprise",
+            is_active=True,
+            wx_avatar_url=None,
+        )
+
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.get_mobile_user",
+            lambda request: user,
+        )
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.verify_mobile_jwt",
+            lambda token: {
+                "typ": "access",
+                "session_id": "mobile-relay-deadbeef",
+                "account_kind": "enterprise",
+            },
+        )
+        monkeypatch.setattr(
+            "app.application.session_account_meta.load_session_account_meta",
+            lambda sid: {"account_kind": "enterprise"},
+        )
+
+        class SessionManager:
+            def get_session_info(self, session_id):
+                return None
+
+        class AuthApp:
+            session_manager = SessionManager()
+
+        monkeypatch.setattr(
+            "app.application.auth_app_service.get_auth_app_service",
+            lambda: AuthApp(),
+        )
+
+        r = client.get(
+            "/api/mobile/v1/auth/session/validate",
+            headers={"Authorization": "Bearer token", "X-Session-ID": "mobile-relay-deadbeef"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["success"] is True
+        assert body["data"]["valid"] is True
+        assert body["data"]["session_id"] == "mobile-relay-deadbeef"

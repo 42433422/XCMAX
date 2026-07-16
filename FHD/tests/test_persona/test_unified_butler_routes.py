@@ -47,6 +47,16 @@ def test_infer_returns_persona_view():
     assert resp["inference"]["source"] == "persona"
 
 
+def test_resolve_persona_user_id_keeps_session_scoped_string():
+    """对话流写 web_normal_*；Settings 必须用同一字符串键，禁止再 int() 丢会话。"""
+    req = _req()
+    assert (
+        misc_routes._resolve_persona_user_id(req, {"user_id": "web_normal_sess-abc"})
+        == "web_normal_sess-abc"
+    )
+    assert misc_routes._resolve_persona_user_id(req, {"user_id": "7"}) == "7"
+
+
 def test_no_persona_falls_back_to_bridge_default_not_butler():
     """无画像（新用户）：仍由桥派生中性默认视图——单一派生，杜绝 butler derive_mbti。"""
     with patch("app.application.persona_butler_bridge.persona_view_for_user", return_value=None):

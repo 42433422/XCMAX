@@ -103,12 +103,6 @@ def bootstrap_mod_extensions_sync(app: Any) -> None:
     load_mod_routes(app, mm)
     app.state.mods_routes_loaded = True
     try:
-        from app.mod_sdk.employee_runtime import warm_employee_tool_registry
-
-        warm_employee_tool_registry()
-    except RECOVERABLE_ERRORS:
-        logger.debug("employee tool warm scan skipped", exc_info=True)
-    try:
         from app.fastapi_app.startup_timing import mark_startup
 
         mark_startup("mod_staged")

@@ -1,6 +1,9 @@
 # XCAGI Android 原生客户端
 
-> **交付状态**：**签约级**（可构建 · 双 SKU · CI `android-build.yml`）；Kotlin Compose 双 SKU 签约级移动交付。与仓根 README / [`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md) 对齐。
+> **归档状态（2026-07-07）**：本目录 **Frozen → Archive**。移动交付 SSOT 已迁移至 **`FHD/mobile-flutter-poc/`**（Flutter，见 [`MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md)）。  
+> 此处仅保留：兼容 APK 构建、紧急安全修复、Flutter 迁移 diff 参照。**禁止**新增 Tab、业务流程或独立 UX。
+
+> **历史交付状态**：签约级 Kotlin Compose 双 SKU（2026-06 口径）。以下内容为归档参考。
 
 ## 概述
 
@@ -35,7 +38,7 @@ gradlew.bat assemblePersonalDebug assembleEnterpriseDebug
 ```powershell
 cd FHD
 python scripts/package/generate-android-icons.py
-powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
+powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 1.0.0.0
 ```
 
 产出：`release/packages-v8.0.0/personal/` 与 `enterprise/`（或已重命名为 `个人版` / `企业版`）。
@@ -107,7 +110,7 @@ powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
 ```powershell
 cd FHD
 powershell -File scripts/package/new-android-release-keystore.ps1
-powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 10.0.0 -AndroidVersion 1.3.0
+powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 1.0.0.0 -AndroidVersion 1.3.0
 ```
 
 - 密钥库默认路径：`mobile-android/signing/xcagi-release.jks`

@@ -12,6 +12,7 @@ Codex behaviour is preserved verbatim through ``CODEX_PROFILE`` so the existing
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -22,7 +23,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -116,6 +117,32 @@ def _utc_now() -> str:
 
 def _safe_json_line(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
+def _chunk_text(text: str, max_len: int = 120) -> list[str]:
+    """把完整文本切成 SSE token chunk（按句号/换行，每块 <= max_len 字）。"""
+    if not text:
+        return []
+    parts = re.split(r"(?<=[。！？!?\n])", text)
+    chunks: list[str] = []
+    buf = ""
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        if len(buf) + len(p) > max_len:
+            if buf:
+                chunks.append(buf)
+            if len(p) > max_len:
+                chunks.append(p)
+                buf = ""
+            else:
+                buf = p
+        else:
+            buf += p
+    if buf:
+        chunks.append(buf)
+    return chunks or [text]
 
 
 def _codex_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
@@ -424,12 +451,7 @@ class SuperEmployeeService:
             status="sent",
         )
         if self._should_reply_with_cli(text, ctx):
-            direct_body = self._cli_reply_body(text, ctx) or self._direct_reply_body(text)
-            if not direct_body:
-                direct_body = (
-                    f"{self._p.display_tool} CLI 暂时没有返回内容，"
-                    f"请确认本机 {self._p.display_tool} 已登录后重试。"
-                )
+            direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
             assistant_msg = self._message_row(
                 user_id=int(user_id),
                 role="assistant",
@@ -447,7 +469,7 @@ class SuperEmployeeService:
                 "queued": False,
                 "para_tier": 1,
                 "device_scope": "local_device",
-                "dispatcher": f"{self._p.tool_name}_cli",
+                "dispatcher": direct_dispatcher,
             }
             return {
                 "employee": {
@@ -473,8 +495,10 @@ class SuperEmployeeService:
         # 把原本的"已排队/调度器不可用"红字升级为可用回答。
         # 派工成功路径(accepted is True)完全不走这里；云端无 CLI 时 _cli_reply_body 返回空，自动跳过。
         if dispatch.get("accepted") is not True:
-            fallback_body = self._cli_reply_body(text, ctx)
-            if fallback_body:
+            fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
+            if fallback_body and not fallback_body.startswith(
+                f"{self._p.display_tool} CLI 暂时没有返回内容"
+            ):
                 assistant_msg = self._message_row(
                     user_id=int(user_id),
                     role="assistant",
@@ -496,7 +520,7 @@ class SuperEmployeeService:
                         "status": "completed",
                         "para_tier": 1,
                         "device_scope": "local_device",
-                        "fallback": f"{self._p.tool_name}_cli",
+                        "fallback": fallback_dispatcher,
                     },
                     "message": self._public_message(user_msg),
                     "assistant_message": self._public_message(assistant_msg),
@@ -535,7 +559,255 @@ class SuperEmployeeService:
             "messages": self.list_messages(user_id=int(user_id)),
         }
 
-    # ── 派工请求构建 ──
+    # ── LAN SSE 流式直答 ──
+
+    async def invoke_stream(
+        self,
+        *,
+        user_id: int,
+        message: str,
+        context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """LAN 模式下的流式直答：跳过 Para 派工，直接本地 CLI 执行并逐事件 yield。
+
+        yield 事件格式：
+        - {"type": "status", "text": "..."} — 状态提示（已连接/思考中/执行中）
+        - {"type": "token", "text": "..."} — 文本片段（逐字/逐块）
+        - {"type": "done", "result": {...}} — 完成，含最终回复
+        - {"type": "error", "message": "..."} — 失败
+        """
+        text = (message or "").strip()
+        if not text:
+            yield {"type": "error", "message": "message 不能为空"}
+            return
+        ctx = context if isinstance(context, dict) else {}
+        self._grant = CapabilityGrant.resolve(ctx)
+        self._relay_cli_trusted = ctx.get("force_cli_direct") is True
+        ctx.pop(CONTEXT_TOKEN_KEY, None)
+
+        # FAQ 直答（"你是谁"等）→ 直接 yield 完整回复
+        canned = self._direct_reply_body(text)
+        if canned:
+            yield {"type": "status", "text": f"已连接 {self._p.display_tool}"}
+            for chunk in _chunk_text(canned):
+                yield {"type": "token", "text": chunk}
+                await asyncio.sleep(0.02)
+            yield {"type": "done", "result": {"response": canned, "dispatcher": "faq"}}
+            return
+
+        cli_path = self._cli_path()
+        if not cli_path:
+            # CLI 不可用 → 走派工兜底文案
+            fallback_body, dispatcher = self._compose_direct_chat_reply(text, ctx)
+            yield {"type": "status", "text": f"已连接 {self._p.display_tool}"}
+            for chunk in _chunk_text(fallback_body):
+                yield {"type": "token", "text": chunk}
+                await asyncio.sleep(0.02)
+            yield {
+                "type": "done",
+                "result": {"response": fallback_body, "dispatcher": dispatcher},
+            }
+            return
+
+        # 闲聊/开发任务分流
+        base_cwd = self._cli_workspace(ctx)
+        is_task = self._is_task_intent(text, ctx)
+        if is_task and self._dev_loop_enabled() and self._cli_runner is subprocess.run:
+            # dev-loop 是多步骤闭环（isolate → CLI → verify → push），不适合逐 token 流式
+            # 走原同步路径，但用 status 事件推送阶段进度
+            yield {"type": "status", "text": f"{self._p.display_tool} 开始开发任务…"}
+            try:
+                body = await asyncio.to_thread(
+                    self._run_dev_task_loop, cli_path, text, base_cwd, ctx
+                )
+                yield {"type": "status", "text": "开发任务完成，正在整理回复…"}
+                for chunk in _chunk_text(body):
+                    yield {"type": "token", "text": chunk}
+                    await asyncio.sleep(0.03)
+                yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("invoke_stream dev_loop failed: %s", exc)
+                yield {"type": "error", "message": f"开发任务执行失败：{exc}"}
+            return
+
+        # 闲聊或简单 dev-loop（非多步骤）→ CLI 流式
+        prompt = self._cli_prompt(text) if not is_task else self._cli_work_prompt(text, base_cwd)
+        yield {"type": "status", "text": f"{self._p.display_tool} 正在思考…"}
+        try:
+            final_text = ""
+            async for event in self._run_cli_streaming(cli_path, prompt, base_cwd):
+                if event["type"] == "token":
+                    final_text += event["text"]
+                    yield event
+                elif event["type"] == "status":
+                    yield event
+                elif event["type"] == "done":
+                    final_text = event.get("text", final_text)
+                elif event["type"] == "error":
+                    yield event
+                    return
+            body = final_text.strip()
+            if not body:
+                body = f"{self._p.display_tool} CLI 暂时没有返回内容，请确认本机 {self._p.display_tool} 已登录后重试。"
+            yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("invoke_stream cli failed: %s", exc)
+            yield {"type": "error", "message": f"{self._p.display_tool} CLI 调用失败：{exc}"}
+
+    async def _run_cli_streaming(
+        self,
+        cli_path: str,
+        prompt: str,
+        cwd: str,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """异步执行 CLI，逐行读取 stdout 并 yield 事件。
+
+        - stream-json 工具（claude/cursor/trae）：每行是 JSON 事件，解析出 text token
+        - 非 stream-json 工具（codex）：stdout 不是结果，读 output-last-message 文件
+        """
+        with tempfile.TemporaryDirectory(prefix=f"xcagi-{self._p.tool_name}-stream-") as tmp:
+            output_path = Path(tmp) / "last_message.txt"
+            cmd = self._apply_scope_to_cmd(
+                self._p.cli_command_builder(cli_path, prompt, output_path, cwd)
+            )
+            env = self._cli_subprocess_env()
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    cwd=cwd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                )
+            except (OSError, FileNotFoundError) as exc:
+                yield {
+                    "type": "error",
+                    "message": f"{self._p.display_tool} CLI 启动失败：{exc}",
+                }
+                return
+
+            idle_timeout = self._cli_idle_timeout_seconds()
+            hard_cap = self._cli_hard_cap_seconds()
+            started = time.monotonic()
+            last_activity = time.monotonic()
+            stream_json = self._p.cli_stream_json
+            text_parts: list[str] = []
+
+            async def _read_stderr() -> str:
+                if proc.stderr is None:
+                    return ""
+                try:
+                    data = await asyncio.wait_for(proc.stderr.read(), timeout=2.0)
+                    return data.decode("utf-8", errors="replace")
+                except TimeoutError:
+                    return ""
+
+            while True:
+                if proc.stdout is None:
+                    break
+                try:
+                    raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=3.0)
+                except TimeoutError:
+                    # 检查 idle/hardcap 超时
+                    now = time.monotonic()
+                    if idle_timeout > 0 and (now - last_activity) > idle_timeout:
+                        proc.kill()
+                        yield {
+                            "type": "error",
+                            "message": f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无输出，判定卡住。",
+                        }
+                        return
+                    if hard_cap > 0 and (now - started) > hard_cap:
+                        proc.kill()
+                        yield {
+                            "type": "error",
+                            "message": f"{self._p.display_tool} CLI 运行超过 {hard_cap:g} 秒，已停止。",
+                        }
+                        return
+                    continue
+                if not raw_line:
+                    # EOF — 进程结束
+                    break
+                last_activity = time.monotonic()
+                line = raw_line.decode("utf-8", errors="replace").rstrip()
+                if not line:
+                    continue
+                if stream_json and line.startswith("{"):
+                    token = self._parse_stream_json_line(line)
+                    if token:
+                        text_parts.append(token)
+                        yield {"type": "token", "text": token}
+                # 非 stream-json 的 stdout 行不 yield（codex 的 stdout 是日志，不是回复）
+
+            # 等待进程退出
+            await proc.wait()
+            returncode = int(proc.returncode or 0)
+
+            # stream-json：text_parts 已收集
+            if stream_json:
+                body = "".join(text_parts).strip()
+                if body:
+                    yield {"type": "done", "text": body}
+                    return
+                # 没拿到文本 → 尝试 stderr
+                if returncode != 0:
+                    stderr_text = await _read_stderr()
+                    yield {
+                        "type": "error",
+                        "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}）：{stderr_text[:300]}",
+                    }
+                    return
+                yield {"type": "done", "text": ""}
+                return
+
+            # 非 stream-json（codex）：读 output-last-message 文件
+            if self._p.cli_reads_output_file and output_path.exists():
+                body = output_path.read_text(encoding="utf-8", errors="replace").strip()
+                if body:
+                    yield {"type": "done", "text": body}
+                    return
+            if returncode != 0:
+                stderr_text = await _read_stderr()
+                yield {
+                    "type": "error",
+                    "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}）：{stderr_text[:300]}",
+                }
+                return
+            yield {"type": "done", "text": ""}
+
+    def _parse_stream_json_line(self, line: str) -> str:
+        """解析单行 stream-json 事件，返回文本 token（无文本则空串）。"""
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            return ""
+        if not isinstance(ev, dict):
+            return ""
+        # Claude Code 事件格式
+        ev_type = ev.get("type")
+        if ev_type == "assistant":
+            msg = ev.get("message") if isinstance(ev.get("message"), dict) else {}
+            for blk in msg.get("content") or []:
+                if isinstance(blk, dict) and blk.get("type") == "text":
+                    t = str(blk.get("text") or "")
+                    if t:
+                        return t
+        elif ev_type == "result":
+            r = ev.get("result")
+            if isinstance(r, str) and r.strip():
+                return r
+        # Cursor / Trae 事件格式（stream-json，含 content 数组）
+        elif ev_type == "content_block_delta":
+            delta = ev.get("delta") if isinstance(ev.get("delta"), dict) else {}
+            t = str(delta.get("text") or "")
+            if t:
+                return t
+        elif ev_type == "message_delta":
+            # 部分工具在 message_delta 里带 text
+            t = str(ev.get("text") or "")
+            if t:
+                return t
+        return ""
 
     def _build_dispatch_request(
         self,
@@ -2076,6 +2348,24 @@ class SuperEmployeeService:
             lines.append(line)
         return "\n".join(lines).strip()
 
+    def _compose_direct_chat_reply(
+        self,
+        text: str,
+        context: dict[str, Any],
+    ) -> tuple[str, str]:
+        """普通对话直答：FAQ → CLI → 明确不可用提示。"""
+        canned = self._direct_reply_body(text)
+        if canned:
+            return canned, f"{self._p.tool_name}_direct"
+        cli_body = self._cli_reply_body(text, context)
+        if cli_body:
+            return cli_body, f"{self._p.tool_name}_cli"
+        return (
+            f"{self._p.display_tool} CLI 暂时没有返回内容，"
+            f"请确认本机 {self._p.display_tool} 已登录后重试。",
+            f"{self._p.tool_name}_cli",
+        )
+
     def _direct_reply_body(self, text: str) -> str:
         normalized = re.sub(r"[\s，。！？!?、,.]+", "", text.strip().lower())
         if not normalized:
@@ -2158,16 +2448,11 @@ class SuperEmployeeService:
             request_id = str(item.get("dispatch_request_id") or "")
             if not request_id or request_id in request_ids_with_reply:
                 continue
-            body = self._direct_reply_body(str(item.get("body") or ""))
-            if not body and cli_backfills < 1:
-                text = str(item.get("body") or "")
-                if self._should_reply_with_cli(text, {}):
-                    body = (
-                        self._cli_reply_body(text, {})
-                        or f"{self._p.display_tool} CLI 暂时没有返回内容，"
-                        f"请确认本机 {self._p.display_tool} 已登录后重试。"
-                    )
-                    cli_backfills += 1
+            text = str(item.get("body") or "")
+            body = self._direct_reply_body(text)
+            if not body and cli_backfills < 1 and self._should_reply_with_cli(text, {}):
+                body, _ = self._compose_direct_chat_reply(text, {})
+                cli_backfills += 1
             if not body:
                 continue
             rows.append(

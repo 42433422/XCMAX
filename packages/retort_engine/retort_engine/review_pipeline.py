@@ -334,6 +334,7 @@ def compare_component_gaps(own_groups: dict[str, dict[str, Any]], external_group
                 "file_gap": file_gap,
                 "marker_gap": marker_gap,
                 "representative_external_files": list((external.get("files") or [])[:5]),
+                "decision_role": "auxiliary_marker_scan",
             }
         )
     return sorted(gaps, key=lambda item: (int(item["marker_gap"]), int(item["file_gap"])), reverse=True)

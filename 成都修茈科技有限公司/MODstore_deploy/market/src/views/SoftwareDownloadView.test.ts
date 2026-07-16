@@ -107,6 +107,29 @@ afterEach(() => {
 })
 
 describe('SoftwareDownloadView', () => {
+  it('blocks downloads until the stable artifacts are ready', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          download_version: '1.0.0.0',
+          android_version: '1.0.0.0',
+          release_ready: false,
+          release_root: 'https://xiu-ci.com/xcagi-v1.0.0.0',
+        }),
+      ),
+    )
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const wrapper = await mountView()
+    const winButton = findButton(wrapper, 'Windows 64 位')
+
+    expect(wrapper.text()).toContain('稳定版制品正在签名与验收')
+    expect(winButton.attributes('disabled')).toBeDefined()
+    await winButton.trigger('click')
+    expect(anchorClick).not.toHaveBeenCalled()
+  })
+
   it('loads the release manifest and downloads the desktop installer with an anchor', async () => {
     vi.stubGlobal(
       'fetch',
@@ -147,8 +170,8 @@ describe('SoftwareDownloadView', () => {
     await flushPromises()
 
     expect(nativeDownload).toHaveBeenCalledWith({
-      url: 'https://dl.xiu-ci.com/xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe',
-      filename: 'XCAGI-Enterprise-Setup-10.0.0-x64.exe',
+      url: 'https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
+      filename: 'XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
     })
     expect(anchorClick).not.toHaveBeenCalled()
   })
@@ -171,7 +194,7 @@ describe('SoftwareDownloadView', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(textResponse()))
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('XC 10.0.0 · 企业版')
+    expect(wrapper.text()).toContain('XC 1.0.0.0 · 企业版')
     expect(wrapper.text()).toContain('完整 AI 创作与 ERP 能力')
     expect(wrapper.text()).not.toContain('个人版')
 
@@ -193,7 +216,7 @@ describe('SoftwareDownloadView', () => {
 
     expect(wrapper.classes()).toContain('sd--mobile')
     expect(wrapper.classes()).toContain('sd--android-ua')
-    expect(wrapper.text()).toContain('XC 10.0.0')
+    expect(wrapper.text()).toContain('XC 1.0.0.0')
     expect(wrapper.find('.sd-dock').exists()).toBe(true)
 
     await wrapper.find('.sd-dock button').trigger('click')

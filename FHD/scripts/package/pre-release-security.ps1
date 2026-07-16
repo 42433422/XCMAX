@@ -1,7 +1,7 @@
 param(
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
-  [string]$Version = '10.0.0',
+  [string]$Version = '1.0.0.0',
   [ValidateSet('personal', 'enterprise', 'all')]
   [string]$ProductSku = 'all'
 )
@@ -164,6 +164,10 @@ foreach ($sku in $skus) {
   $yml = Join-Path $skuDir 'latest.yml'
   if (-not $setup) { Fail "$sku missing Setup exe" }
   if (-not (Test-Path $yml)) { Fail "$sku missing latest.yml" }
+  $desktopExe = Join-Path $skuDir 'win-unpacked\XCAGI.exe'
+  & "$PSScriptRoot\verify-windows-signature.ps1" -Path $desktopExe
+  & "$PSScriptRoot\verify-windows-signature.ps1" -Path $backendExe
+  & "$PSScriptRoot\verify-windows-signature.ps1" -Path $setup.FullName
   Write-Host "OK $sku artifact: $($setup.Name)"
 }
 

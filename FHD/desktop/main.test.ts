@@ -60,12 +60,16 @@ const electronMocks = vi.hoisted(() => {
     showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true }))
   }
   const ipcMain = { handle: vi.fn() }
-  const shell = { openPath: vi.fn(), openExternal: vi.fn() }
+  const shell = { openPath: vi.fn() }
   const session = {
     defaultSession: {
       setPermissionRequestHandler: vi.fn(),
-      setPermissionCheckHandler: vi.fn()
-    }
+      setPermissionCheckHandler: vi.fn(),
+      setProxy: vi.fn(() => Promise.resolve())
+    },
+    fromPartition: vi.fn(() => ({
+      setProxy: vi.fn(() => Promise.resolve())
+    }))
   }
   const screen = { getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } })) }
   const nativeImage = { createFromPath: vi.fn(() => ({})), createEmpty: vi.fn(() => ({})) }
@@ -149,6 +153,27 @@ describe('main — resolveDefaultDesktopPort', () => {
   })
 })
 
+describe('main — resolveDesktopBackendBindHost', () => {
+  const saved = process.env.XCAGI_DESKTOP_API_HOST
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env.XCAGI_DESKTOP_API_HOST
+    else process.env.XCAGI_DESKTOP_API_HOST = saved
+  })
+
+  it('defaults to 0.0.0.0 for LAN pairing', async () => {
+    delete process.env.XCAGI_DESKTOP_API_HOST
+    const { resolveDesktopBackendBindHost } = await import('./main.js')
+    expect(resolveDesktopBackendBindHost()).toBe('0.0.0.0')
+  })
+
+  it('respects XCAGI_DESKTOP_API_HOST override', async () => {
+    process.env.XCAGI_DESKTOP_API_HOST = '127.0.0.1'
+    const { resolveDesktopBackendBindHost } = await import('./main.js')
+    expect(resolveDesktopBackendBindHost()).toBe('127.0.0.1')
+  })
+})
+
 describe('main — isPortAvailable', () => {
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
@@ -158,11 +183,11 @@ describe('main — isPortAvailable', () => {
   })
 
   it('returns false when port is already bound', async () => {
-    const { isPortAvailable } = await import('./main.js')
+    const { isPortAvailable, DESKTOP_BACKEND_BIND_HOST } = await import('./main.js')
     const net = await import('node:net')
     const server = net.createServer()
     await new Promise<void>(resolve => {
-      server.listen(0, '127.0.0.1', () => resolve())
+      server.listen(0, DESKTOP_BACKEND_BIND_HOST, () => resolve())
     })
     const port = (server.address() as { port: number }).port
     try {
@@ -207,6 +232,46 @@ describe('main — SKU constants', () => {
     expect(SKU_UPDATE_URL.personal).toMatch(/\/personal\/$/)
     expect(SKU_UPDATE_URL.enterprise).toMatch(/\/enterprise\/$/)
     expect(SKU_UPDATE_URL.personal).not.toBe(SKU_UPDATE_URL.enterprise)
+  })
+})
+
+describe('main — desktop splash & ping readiness', () => {
+  it('resolveDesktopSplashUrl returns file or data url', async () => {
+    const { resolveDesktopSplashUrl } = await import('./main.js')
+    const url = resolveDesktopSplashUrl()
+    expect(url.startsWith('file://') || url.startsWith('data:text/html')).toBe(true)
+  })
+
+  it('clampSplashProgress clamps to 0–100 integers', async () => {
+    const { clampSplashProgress } = await import('./main.js')
+    expect(clampSplashProgress(-5)).toBe(0)
+    expect(clampSplashProgress(42.6)).toBe(43)
+    expect(clampSplashProgress(150)).toBe(100)
+    expect(clampSplashProgress(Number.NaN)).toBe(0)
+  })
+
+  it('splash.html exposes progress helpers and a progressbar', () => {
+    const splashPath = path.join(__dirname, 'resources', 'splash.html')
+    const html = fs.readFileSync(splashPath, 'utf8')
+    expect(html).toContain('role="progressbar"')
+    expect(html).toContain('xcagiSetSplashProgress')
+    expect(html).toContain('id="bar"')
+    expect(html).toContain('id="pct"')
+  })
+})
+
+describe('main — OTA proxy PAC', () => {
+  it('routes update hosts DIRECT and others via proxy with DIRECT fallback', async () => {
+    const { buildOtaPacScript } = await import('./main.js')
+    const pac = buildOtaPacScript('127.0.0.1:7890')
+    expect(pac).toContain("host === 'xiu-ci.com'")
+    expect(pac).toContain("return 'PROXY 127.0.0.1:7890; DIRECT'")
+  })
+
+  it('parses proxy endpoint host and port', async () => {
+    const { parseProxyEndpoint } = await import('./main.js')
+    expect(parseProxyEndpoint('127.0.0.1:7890')).toEqual({ host: '127.0.0.1', port: 7890 })
+    expect(parseProxyEndpoint('bad')).toBeNull()
   })
 })
 
@@ -420,6 +485,19 @@ describe('main — isTrustedDesktopOrigin', () => {
   it('returns false for malformed URL', async () => {
     const { isTrustedDesktopOrigin } = await import('./main.js')
     expect(isTrustedDesktopOrigin('not-a-url', 17500)).toBe(false)
+  })
+})
+
+describe('main — desktopWindowOpenAction', () => {
+  it('allows only the trusted local desktop origin', async () => {
+    const { desktopWindowOpenAction } = await import('./main.js')
+    expect(desktopWindowOpenAction('http://127.0.0.1:17500/orders', 17500)).toBe('allow')
+  })
+
+  it('denies external and malformed URLs', async () => {
+    const { desktopWindowOpenAction } = await import('./main.js')
+    expect(desktopWindowOpenAction('https://example.com/', 17500)).toBe('deny')
+    expect(desktopWindowOpenAction('not-a-url', 17500)).toBe('deny')
   })
 })
 

@@ -45,9 +45,12 @@ from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.paibi_cli_cross_adjudication import build_paibi_cli_cross_adjudication
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
+from retort_engine.review_blind_acceptance import build_review_blind_acceptance
 from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
+from retort_engine.workspace_hygiene import clean_workspace
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -87,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     absorb_cmd.add_argument("--use-llm", action="store_true")
     absorb_cmd.add_argument("--no-execute-absorption", action="store_true")
     absorb_cmd.add_argument("--execution-timeout-sec", type=int, default=1800)
+    absorb_cmd.add_argument("--keep-runtime-residue", action="store_true")
     absorb_cmd.add_argument("--json", action="store_true")
     apply_absorb = sub.add_parser("apply-absorption")
     apply_absorb.add_argument("--payload-file", required=True)
@@ -406,6 +410,24 @@ def main(argv: list[str] | None = None) -> int:
     saturation.add_argument("--project", default=".")
     saturation.add_argument("--recent-limit", type=int, default=3)
     saturation.add_argument("--json", action="store_true")
+    bootstrap_plan = sub.add_parser("self-bootstrap-plan")
+    bootstrap_plan.add_argument("--project", default=".")
+    bootstrap_plan.add_argument("--json", action="store_true")
+    self_depth = sub.add_parser("self-depth-report")
+    self_depth.add_argument("--project", default=".")
+    self_depth.add_argument("--json", action="store_true")
+    external_gate = sub.add_parser("external-improvement-gate")
+    external_gate.add_argument("--project", default=".")
+    external_gate.add_argument("--target", required=True)
+    external_gate.add_argument("--json", action="store_true")
+    clean_workspace_cmd = sub.add_parser("clean-workspace")
+    clean_workspace_cmd.add_argument("--project", default=".")
+    clean_workspace_cmd.add_argument("--drop-durable-state", action="store_true")
+    clean_workspace_cmd.add_argument("--json", action="store_true")
+    review_blind = sub.add_parser("review-blind-acceptance")
+    review_blind.add_argument("--project", default=".")
+    review_blind.add_argument("--output", default="")
+    review_blind.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -424,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
             print(_format_scores("Final scores", result["final_assessment"]["scores"]))
         return 0 if result["status"] == "converged" else 1
     if args.command == "absorb":
-        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm, "execute_absorption": not args.no_execute_absorption, "execution_timeout_sec": args.execution_timeout_sec})
+        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm, "execute_absorption": not args.no_execute_absorption, "execution_timeout_sec": args.execution_timeout_sec, "keep_runtime_residue": args.keep_runtime_residue})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort absorption status: {result['status']}")
         return 0
     if args.command == "apply-absorption":
@@ -1099,6 +1121,44 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Retort absorption saturation status: {result['status']}")
             print(f"Saturated: {result['summary']['saturated']}")
         return 0
+    if args.command == "self-bootstrap-plan":
+        result = build_self_bootstrap_plan(args.project)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort self-bootstrap status: {result['status']}")
+            print(f"Implemented sources: {result['summary']['implemented_source_count']}/{result['summary']['source_count']}")
+            print(f"Strict source records: {result['summary']['strictly_recorded_source_count']}/{result['summary']['source_count']}")
+        return 0
+    if args.command == "self-depth-report":
+        result = build_self_depth_report(args.project)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort self-depth status: {result['status']}")
+            print(f"External improvement allowed: {result['external_improvement_allowed']}")
+        return 0 if result["external_improvement_allowed"] else 1
+    if args.command == "external-improvement-gate":
+        result = external_improvement_gate(args.project, args.target)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort external improvement gate: {result['status']}")
+        return 0 if result["status"] == "allowed" else 1
+    if args.command == "clean-workspace":
+        result = clean_workspace(args.project, keep_durable_state=not args.drop_durable_state)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort workspace cleanup: {result['status']}")
+            print(f"Removed: {result['summary']['removed_count']}")
+            print(f"Residue bytes: {result['summary']['residue_bytes']}")
+        return 0 if result["summary"]["clean"] else 1
+    if args.command == "review-blind-acceptance":
+        result = build_review_blind_acceptance(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort review blind acceptance: {result['status']}")
+            print(f"Pass rate: {result['summary']['pass_rate']} (floor {result['summary']['pass_rate_floor']})")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0

@@ -1,8 +1,9 @@
 # Android-first Flutter unification
 
-`mobile-android` is the product source of truth. This Flutter POC exists to converge
-Android, iOS, and Harmony toward one implementation surface, not to invent a fourth
-mobile product line.
+> **2026-07-07**：`mobile-flutter-poc` 已是 **唯一移动交付主线**。  
+> `mobile-android` / `mobile-ios` **归档中** — 下文「Android source of truth」仅指迁移期**行为参照**，不是长期 SSOT。冲突时以 OpenAPI + FastAPI + [`mobile_tri_platform_ssot.md`](../docs/mobile_tri_platform_ssot.md) 为准。
+
+`mobile-android`（归档）提供历史行为锚点。This Flutter POC exists to converge Android/iOS/Harmony 为单实现面，不得另起第四套移动产品叙事。
 
 ## Source anchors
 

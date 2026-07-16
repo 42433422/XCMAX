@@ -1,32 +1,44 @@
 # XCAGI 当前版本
 
-> 本文件只记录**单一事实来源**。完整发布说明请看 [`CHANGELOG.md`](CHANGELOG.md)。
-> [`README.md`](README.md) 中的 **「版本与发布约定」** 与本文件以下各节对齐；若出现不一致，**以本文件为准**并应通过 PR 修正 README。
+> 本文件是版本域的**单一事实来源（SSOT）**。完整发布说明见 [`CHANGELOG.md`](CHANGELOG.md)。
+> 若 README、发布工作流或下载清单与本文件不一致，必须先修正再发布。
 
 ---
 
-## 📦 版本号（必须同步的锚点）
+## 📦 稳定版本
+
+| 口径 | 版本 | 用途 |
+|------|------|------|
+| **XCAGI 稳定产品版本** | `1.0.0.0` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
+| **工具链兼容版本** | `1.0.0` | npm/Electron、Dart/Flutter、iOS/macOS `MARKETING_VERSION` |
+
+四段产品版本 `1.0.0.0` 是稳定上线版本的唯一对外口径。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
+
+## 🔗 必须同步的锚点
 
 | 组件 | 版本 | 文件 |
 |------|------|------|
-| **XCAGI 总版本** | `10.0.0` | `CHANGELOG.md`、`README.md` |
-| **Python 包（根）** | `10.0.0` | `pyproject.toml` |
-| **Python 包（XCAGI 子树）** | `10.0.0` | `XCAGI/pyproject.toml` |
-| **前端 SPA** | `10.0.0` | `frontend/package.json` |
-| **桌面壳 npm** | `10.0.0` | `desktop/package.json` |
-| **根级 npm（脚本/测试入口）** | `10.0.0` | `package.json` |
-| **FastAPI 应用** | `10.0.0` | `app/fastapi_app/factory.py`（`FastAPI(version=...)`） |
-| **Mod 依赖校验基线** | `10.0.0` | `app/infrastructure/mods/manifest.py` |
+| **Python 包（根）** | `1.0.0.0` | `pyproject.toml` |
+| **Python 包（XCAGI 子树）** | `1.0.0.0` | `XCAGI/pyproject.toml` |
+| **FastAPI 应用** | `1.0.0.0` | `app/fastapi_app/factory.py` |
+| **Mod 依赖校验基线** | `1.0.0.0` | `app/infrastructure/mods/manifest.py` |
+| **Android versionName** | `1.0.0.0` | Flutter / 原生 Android Gradle 配置 |
+| **前端 SPA** | `1.0.0` | `frontend/package.json` |
+| **桌面壳 npm** | `1.0.0` | `desktop/package.json` |
+| **根级 npm** | `1.0.0` | `package.json` |
+| **Flutter / Apple 市场版本** | `1.0.0` | `mobile-flutter-poc/pubspec.yaml`、`ios/Flutter/Version.xcconfig` |
 
-> 独立子工程保留自己的版本号：`MODstore/pyproject.toml`（`0.2.0`）、`MODstore/web/package.json`（`0.2.0`）、`MODstore/market/package.json`（`1.0.0`）。
+> 独立子工程保留自己的包版本；其产品下载路径和发布清单仍必须引用稳定产品版本 `1.0.0.0`。
 
-## 🔒 v10 锁定规则
+## 🔒 1.0 稳定版规则
 
-产品大版本锁死在 **v10**，全产品线版本锚点恒为 **`10.0.0`**。企业桌面端、AI 员工商店、移动 AI 协同 App 的后续交付只使用阶段名、channel、Git tag、`git_sha`、`sha256` 和制品 manifest 区分，不使用 `v10.1`、`v10.2`、`v10.3` 或 `v11` 作为路线承诺。
+当前稳定上线基线固定为 **`1.0.0.0`**。所有新制品、下载清单、发布目录和对外说明必须使用该版本；工具链内部按上表映射为 `1.0.0`。构建号、Git SHA、SHA-256 和签名状态用于区分同一稳定版本下的不同构建，不得擅自把产品版本改回 `10.0.0`。
 
-任何主版本解锁或锚点变更都必须先修改本文件，并同步 README、CHANGELOG、CI 发布约定和 `specs/product-lines-3-plus-2.md`；未完成同步前不得发布。
+历史 `10.0.0` 制品、证据和发布记录属于历史事实，不回写、不伪造；它们也不得作为新的稳定上线制品继续发布。
 
-## 🎯 当前定位（v10.0）
+任何版本变更都必须先修改本文件，并同步 README、CHANGELOG、CI 发布约定、下载清单和 `specs/product-lines-3-plus-2.md`；未完成同步前不得发布。
+
+## 🎯 当前定位（1.0 稳定版）
 
 **跨平台企业 AI 员工桌面平台** — Windows/macOS 桌面版 + Web 版并行交付，保留 Neuro-DDD + FastAPI + Mod 生态 + Token 认证钱包。
 
@@ -37,30 +49,25 @@
 | **Windows 桌面** | 签约级 | 主交付面 |
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
-| **Android** | **签约级** | Kotlin Compose 双 SKU；登录（密码/OTP/扫码）· SSE 对话 · 4 Tab · 工作台 WebView |
+| **Android** | **签约级** | Flutter 主线；登录、SSE 对话、4 Tab、审批和通知；原生 Android 已归档 |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 
 ## 🔗 相关文档
 
-- 📝 [完整变更日志 CHANGELOG.md](CHANGELOG.md)
-- 📖 [项目 README](README.md)
-- 🏗️ [架构设计 docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- 🗺️ [功能边界 docs/FEATURE_MAP.md](docs/FEATURE_MAP.md)
-- 🧭 [迁移登记册 docs/MIGRATION_REGISTRY.md](docs/MIGRATION_REGISTRY.md)
+- [完整变更日志 CHANGELOG.md](CHANGELOG.md)
+- [项目 README](README.md)
+- [架构设计 docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [功能边界 docs/FEATURE_MAP.md](docs/FEATURE_MAP.md)
+- [迁移登记册 docs/MIGRATION_REGISTRY.md](docs/MIGRATION_REGISTRY.md)
 
 ## 🔄 版本同步约定（发版前自检）
 
-当主版本号变更时，必须**同步修改**上表中的所有锚点文件，并在 `CHANGELOG.md` 顶部新增一节。建议在 PR 描述里贴一段 diff 摘要。
-
 ```bash
-# 快速全仓对齐扫描（PowerShell）
-rg -n --hidden -g '!node_modules' -g '!.archive' -g '!XCAGI/node_modules' \
-  'version\s*=\s*"[0-9]' pyproject.toml XCAGI/pyproject.toml \
-  frontend/package.json desktop/package.json package.json
-rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/manifest.py
+python scripts/dev/version_sync.py --apply
+python scripts/dev/verify_version_anchors.py
 ```
 
 ---
 
-*最后更新：2026-06-17（v10 锁定 · 版本锚点恒 10.0.0）*
+*最后更新：2026-07-12（稳定产品版本 1.0.0.0；工具链映射 1.0.0）*

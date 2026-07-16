@@ -252,7 +252,7 @@ def _run_dataset_rag_agent(
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     data = dict(params or {})
     access_payload = _dataset_access_payload_from_request(request)
@@ -309,10 +309,11 @@ def _run_dataset_rag_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "dataset-rag-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:

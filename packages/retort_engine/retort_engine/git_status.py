@@ -11,6 +11,8 @@ GENERATED_ABSORPTION_NAMES = {
     "retort_absorbed_patterns.py",
     "absorbed_capabilities.py",
     "test_absorbed_capabilities.py",
+    "absorbed_behavior_bridge.py",
+    "test_absorbed_behavior_bridge.py",
 }
 GIT_STATUS_RUNTIME_PARTS = {".retort", "__pycache__", ".pytest_cache", ".ruff_cache"}
 

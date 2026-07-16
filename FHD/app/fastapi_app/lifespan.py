@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from sqlalchemy.engine import make_url
@@ -33,7 +31,12 @@ from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_
 
 logger = logging.getLogger(__name__)
 
-_APP_ROOT = Path(__file__).resolve().parents[1]
+
+def _desktop_fast_start_enabled() -> bool:
+    import os
+
+    raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
 
 
 @asynccontextmanager
@@ -57,37 +60,57 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_db_done")
 
     try:
-        from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
+        from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
 
-        await ensure_deliverable_runtime(app)
+        purged = await asyncio.to_thread(purge_admin_sessions_on_desktop)
+        if purged:
+            logger.info("desktop admin gate: startup purged %s admin session(s)", purged)
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("Deliverable runtime setup skipped: %s", exc)
+        logger.warning("desktop admin session purge skipped: %s", exc)
 
-    try:
-        from app.utils.performance_initializer import init_performance_optimization
+    fast_start = _desktop_fast_start_enabled()
 
-        init_performance_optimization(app)
-        mark_startup("performance_optimizer_ready")
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("Performance optimizer init skipped: %s", exc)
+    if fast_start:
+        from app.fastapi_app.deferred_startup import schedule_deferred_heavy_startup
 
-    await _init_neuro_ddd_async(app)
-    await _init_employee_runtime_async(app)
-    await _init_mobile_relay_desktop_async(app)
+        await schedule_deferred_heavy_startup(app)
+    else:
+        try:
+            from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
+
+            await ensure_deliverable_runtime(app)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Deliverable runtime setup skipped: %s", exc)
+
+        try:
+            from app.utils.performance_initializer import init_performance_optimization
+
+            init_performance_optimization(app)
+            mark_startup("performance_optimizer_ready")
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Performance optimizer init skipped: %s", exc)
+
+        await _init_neuro_ddd_async(app)
+        await _init_employee_runtime_async(app)
+        await _init_mobile_relay_desktop_async(app)
+
+        try:
+            from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+
+            start_backup_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
 
     mark_startup("lifespan_ready")
-    logger.info("✅ FastAPI 应用启动完成")
-
-    try:
-        from app.desktop_runtime.backup_scheduler import start_backup_scheduler
-
-        start_backup_scheduler()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+    logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
 
     yield
 
     logger.info("🛑 FastAPI 应用关闭中...")
+    if fast_start:
+        from app.fastapi_app.deferred_startup import cancel_deferred_heavy_startup
+
+        await cancel_deferred_heavy_startup(app)
     try:
         from app.desktop_runtime.backup_scheduler import stop_backup_scheduler
 
@@ -143,15 +166,10 @@ async def _initialize_databases_async(app: FastAPI):
 
 
 def _run_ensure_ai_action_audit_table() -> None:
-    """加载审计 DDL 模块但不执行 app.services 包 __init__（避免牵连全量 application / 重型依赖）。"""
-    path = _APP_ROOT / "services" / "ai_action_audit_service.py"
-    spec = importlib.util.spec_from_file_location("_xcagi_ai_action_audit_service", str(path))
-    mod = importlib.util.module_from_spec(spec)
-    loader = spec.loader
-    if loader is None:
-        raise RuntimeError("无法加载 ai_action_audit_service")
-    loader.exec_module(mod)
-    mod.ensure_ai_action_audit_table()
+    """Initialize audit DDL through a normal import that also works when frozen."""
+    from app.services.ai_action_audit_service import ensure_ai_action_audit_table
+
+    ensure_ai_action_audit_table()
 
 
 def _initialize_databases_sync(app: FastAPI):
@@ -236,7 +254,13 @@ def _initialize_databases_sync(app: FastAPI):
 
         try:
             _run_ensure_ai_action_audit_table()
+            from app.runtime_integrity import clear_runtime_issue
+
+            clear_runtime_issue("ai_action_audit")
         except RECOVERABLE_ERRORS as audit_err:
+            from app.runtime_integrity import record_runtime_issue
+
+            record_runtime_issue("ai_action_audit", str(audit_err), ttl_seconds=3600)
             logger.warning("AI审计表初始化失败（不影响主流程）: %s", audit_err)
     except RECOVERABLE_ERRORS as e:
         safe_url = str(database_url or "").strip()
@@ -339,6 +363,9 @@ async def _init_mobile_relay_desktop_async(app: FastAPI):
 
 async def _init_mods_async(app: FastAPI):
     """初始化 Mod 扩展（create_fastapi_app 已分阶段挂载；此处仅补偿失败重试）。"""
+    if getattr(app.state, "mods_deferred_bootstrap", False):
+        logger.info("Mod bootstrap deferred; skipping lifespan mod init")
+        return
     if getattr(app.state, "mods_full_load_done", False):
         logger.info("Mod extensions fully loaded; skipping lifespan mod init")
         return

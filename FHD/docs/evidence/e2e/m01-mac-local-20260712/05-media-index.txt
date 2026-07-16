@@ -1,0 +1,8 @@
+-rw-------@ 1 a4243342  staff    67M Jul 12 01:43 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/rec/m01-acceptance.mov
+-rw-r--r--@ 1 a4243342  staff   734K Jul 12 01:47 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/01-download-done.png
+-rw-r--r--@ 1 a4243342  staff   735K Jul 12 01:47 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/02-dmg-mounted.png
+-rw-r--r--@ 1 a4243342  staff   736K Jul 12 01:47 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/02-installed-applications.png
+-rw-r--r--@ 1 a4243342  staff   941K Jul 12 01:48 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/03-after-login-attempt.png
+-rw-r--r--@ 1 a4243342  staff   941K Jul 12 01:48 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/03-launched.png
+-rw-r--r--@ 1 a4243342  staff   955K Jul 12 01:49 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/04-ui-focused.png
+-rw-r--r--@ 1 a4243342  staff   955K Jul 12 01:49 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/05-final.png

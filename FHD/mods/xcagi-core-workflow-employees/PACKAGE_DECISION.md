@@ -17,5 +17,5 @@
 
 ## 宿主依赖
 
-- `dependencies.xcagi >= 10.0.0`
+- `dependencies.xcagi >= 1.0.0.0`
 - 安装路径：`mods/xcagi-core-workflow-employees/`（同步到 FHD `XCAGI/mods/`）

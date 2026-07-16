@@ -1,4 +1,4 @@
-# XCAGI 可交付产品说明（v10.0）
+# XCAGI 1.0.0.0 企业版可交付产品说明
 
 > **产品模型**：每家客户独立部署一份宿主；装平台 MOD 后变为对应垂直系统。供应商不代运营客户业务库。
 
@@ -8,10 +8,9 @@
 
 | 交付物 | 路径 / 命令 | 验收 |
 |--------|-------------|------|
-| Windows 安装包（双 SKU，推荐） | `scripts/package/build-all-skus.ps1 -Version 10.0.0` | `release/xcagi-v10.0.0/{personal,enterprise}/` 各一 exe |
-| Windows 安装包（单 SKU） | `build-installer.ps1 -Version 10.0.0 -ProductSku personal\|enterprise` | 仅写入对应子目录，见下表 |
-| Windows 安装包（macOS/Linux 交叉构建） | `bash scripts/package/build-windows-installer.sh 10.0.0 enterprise` | Docker/Wine 构建，必须包含 `resources/backend/xcagi-backend.exe` |
-| macOS 安装包（单 SKU） | `bash scripts/package/build-installer.sh 10.0.0 enterprise` | 与 Windows 共用 SKU 资源契约，后端二进制按平台生成 |
+| Windows 企业版安装包 | `build-installer.ps1 -Version 1.0.0.0 -ProductSku enterprise` | `release/xcagi-v1.0.0.0/enterprise/` |
+| Windows 安装包（macOS/Linux 交叉构建） | `bash scripts/package/build-windows-installer.sh 1.0.0.0 enterprise` | Docker/Wine 构建，必须包含 `resources/backend/xcagi-backend.exe` |
+| macOS 安装包（单 SKU） | `bash scripts/package/build-installer.sh 1.0.0.0 enterprise` | 与 Windows 共用 SKU 资源契约，后端二进制按平台生成 |
 | 通用壳前端 | 默认 `npm run build`（generic） | 侧栏仅壳菜单 + Mod |
 | 内置 Mod 种子（L1 平台 bridge） | 安装包 `mods/` | 首启自动复制到 userData/mods |
 | 行业中性种子池（L2） | 安装包 `industry-seeds/`（仅 enterprise + open 行业） | 引导选行业后单拷，不全量激活 |
@@ -24,17 +23,18 @@
 
 ---
 
-## 双 SKU 发行矩阵
+## 当前发行矩阵
 
 | SKU | 命令 | 安装包文件名 | 内置 Mod | ERP |
 |-----|------|--------------|----------|-----|
-| **personal** | `-ProductSku personal` | `XCAGI-Personal-Setup-{ver}-x64.exe` | `MINIMAL_HOST_MOD_IDS`（3 个 bridge） | 否 |
 | **enterprise** | `-ProductSku enterprise` | `XCAGI-Enterprise-Setup-{ver}-x64.exe` | `GENERIC_HOST_MOD_IDS` + 辅助 Mod | **是**（`xcagi-erp-domain-bridge`） |
+
+`personal` 仅保留历史兼容构建代码，不进入当前版本目标、正式构建矩阵、上传目录、下载清单或交付验收。
 
 - 打包过滤：`scripts/package/stage-bundled-mods.ps1` / `.sh` → PyInstaller 打入 L1 `mods/` 白名单；**不含** `*-industry`。
 - 行业池：`scripts/package/stage-industry-seeds.ps1` / `.sh` → `industry-seeds/`（`onboarding_open_industry_ids` 对应 mod）。
-- 运行时：`XCAGI_PRODUCT_SKU` / `product-sku.json`；个人版**禁止**加载 ERP Mod（`mod_manager`）。
-- 更新站路径：`https://update.xcagi.com/releases/stable/{personal|enterprise}/`
+- 运行时：`XCAGI_PRODUCT_SKU=enterprise` / `product-sku.json` 必须与企业版包一致。
+- 更新站路径：`https://xiu-ci.com/releases/stable/enterprise/`
 - 打包后验收：`pre-release-security.ps1 -Phase post` 硬性检查 Windows 后端 exe、`product-sku.json`、`verify-bundled-mods.ps1`、`verify-industry-seeds.ps1`
 - 禁止发布 Electron-only Windows 空壳包：正式 Windows 包必须带内嵌 PyInstaller 后端。
 
@@ -62,7 +62,7 @@ powershell -ExecutionPolicy Bypass -File scripts/dev/adcdfg_acceptance.ps1
 powershell -ExecutionPolicy Bypass -File scripts/dev/deliverable_smoke.ps1
 ```
 
-确认 `VERSION.md` 与 `CHANGELOG.md` 顶部版本均为 **10.0.0**，且 `rg` 扫描锚点一致（见 VERSION.md）。
+确认 `VERSION.md` 的产品版本为 **1.0.0.0**、工具链映射为 **1.0.0**，并通过版本锚点校验。
 
 ---
 
@@ -89,7 +89,7 @@ GET /api/platform-shell/deliverable-status
 | `XCAGI_GENERIC_EDITION` | 桌面 `1` | generic 发行 |
 | `XCAGI_PLATFORM_SHELL` | 桌面 `1` | 平台壳模式 |
 | `XCAGI_DEFAULT_EDITION` | 桌面 `generic` | Electron 传入 |
-| `XCAGI_PRODUCT_SKU` | 无 | `personal` / `enterprise`（双 SKU 安装包） |
+| `XCAGI_PRODUCT_SKU` | `enterprise` | 当前正式包固定为企业版；`personal` 仅历史兼容 |
 | `XCAGI_AUTO_BOOTSTRAP_EDITION` | `0` | `1` 时启动会从公网 Catalog 补装 |
 | `XCAGI_REGISTER_LEGACY_ROUTES` | 非 full 关闭 | full 构建可设 `1` |
 

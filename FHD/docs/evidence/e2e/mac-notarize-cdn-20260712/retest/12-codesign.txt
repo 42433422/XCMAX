@@ -1,0 +1,15 @@
+Executable=/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/MacOS/XCAGI
+Identifier=com.xcagi.desktop.enterprise
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=456 flags=0x10000(runtime) hashes=3+7 location=embedded
+Signature size=9039
+Authority=Developer ID Application: jialong Li (G26WSH472M)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=Jul 12, 2026 at 00:36:19
+Notarization Ticket=stapled
+Info.plist entries=32
+TeamIdentifier=G26WSH472M
+Runtime Version=26.2.0
+Sealed Resources version=2 rules=13 files=1497
+Internal requirements count=1 size=188

@@ -53,6 +53,15 @@
     backface-visibility: hidden;
 }
 
+/* Routine office controls should not each become a compositor layer in Electron. */
+html.xcagi-electron body:not(.pro-mode-active) .menu-item,
+html.xcagi-electron body:not(.pro-mode-active) .page-view,
+html.xcagi-electron body:not(.pro-mode-active) .card,
+html.xcagi-electron body:not(.pro-mode-active) .btn,
+html.xcagi-electron body:not(.pro-mode-active) .message {
+    backface-visibility: visible;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -62,4 +71,3 @@
         transition-duration: 0.01ms !important;
     }
 }
-

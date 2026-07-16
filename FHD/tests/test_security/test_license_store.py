@@ -62,6 +62,17 @@ class TestIssueKey:
         with pytest.raises(ValueError, match="must not be empty"):
             license_store.issue_key(plaintext="   ")
 
+    def test_schema_initializes_again_when_database_path_changes(self, monkeypatch, tmp_path):
+        from app.security.lan_config import reset_lan_config_cache
+
+        license_store.issue_key(label="first-db")
+        second_db = tmp_path / "second_license.db"
+        monkeypatch.setenv("LAN_LICENSE_DB_PATH", str(second_db))
+        reset_lan_config_cache()
+
+        assert license_store.list_keys() == []
+        assert second_db.is_file()
+
 
 class TestListKeys:
     def test_empty(self):

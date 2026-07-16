@@ -48,6 +48,7 @@ private const val SessionFileName = "xcagi_session.json"
 private const val LegacySessionDataStorePath = "datastore/xcagi_session_enterprise.preferences_pb"
 private const val LegacySessionMigrationMarkerName = "xcagi_session_legacy_migrated"
 private const val RecordAudioPermissionRequestCode = 4242
+private const val CameraPermissionRequestCode = 4243
 
 private data class PackageDeltaSpec(
     val available: Boolean,
@@ -71,6 +72,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var deepLinkChannel: MethodChannel? = null
     private var pendingDeepLinkRoute: String? = null
     private var pendingRecordAudioPermissionResult: MethodChannel.Result? = null
+    private var pendingCameraPermissionResult: MethodChannel.Result? = null
     private val legacySessionDataStore: DataStore<Preferences> by lazy {
         PreferenceDataStoreFactory.create(
             produceFile = { File(filesDir, LegacySessionDataStorePath) },
@@ -175,6 +177,8 @@ class MainActivity : FlutterFragmentActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "ensureRecordAudio" -> ensureRecordAudioPermission(result)
+                "checkCamera" -> result.success(isCameraPermissionGranted())
+                "ensureCamera" -> ensureCameraPermission(result)
                 else -> result.notImplemented()
             }
         }
@@ -210,10 +214,17 @@ class MainActivity : FlutterFragmentActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != RecordAudioPermissionRequestCode) return
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-        pendingRecordAudioPermissionResult?.success(granted)
-        pendingRecordAudioPermissionResult = null
+        when (requestCode) {
+            RecordAudioPermissionRequestCode -> {
+                pendingRecordAudioPermissionResult?.success(granted)
+                pendingRecordAudioPermissionResult = null
+            }
+            CameraPermissionRequestCode -> {
+                pendingCameraPermissionResult?.success(granted)
+                pendingCameraPermissionResult = null
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -233,9 +244,22 @@ class MainActivity : FlutterFragmentActivity() {
         if (route.isNotBlank()) return route
         val data: Uri = intent?.data ?: return null
         return when {
-            data.scheme == "xcagi" -> data.host.orEmpty().let { host ->
-                data.path?.let { path -> "$host$path" } ?: host
-            }.ifBlank { null }
+            data.scheme == "xcagi" -> {
+                val host = data.host.orEmpty()
+                val path = data.path.orEmpty()
+                val base =
+                    when {
+                        path.isNotBlank() -> "$host$path"
+                        host.isNotBlank() -> host
+                        else -> ""
+                    }
+                val query = data.encodedQuery?.trim().orEmpty()
+                when {
+                    base.isBlank() -> null
+                    query.isNullOrBlank() -> base
+                    else -> "$base?$query"
+                }
+            }
             data.host?.contains("xiu-ci.com") == true -> data.path ?: "chat"
             else -> null
         }
@@ -282,6 +306,31 @@ class MainActivity : FlutterFragmentActivity() {
                         BiometricManager.Authenticators.DEVICE_CREDENTIAL,
                 )
                 .build(),
+        )
+    }
+
+    private fun isCameraPermissionGranted(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun ensureCameraPermission(result: MethodChannel.Result) {
+        if (isCameraPermissionGranted()) {
+            result.success(true)
+            return
+        }
+        if (pendingCameraPermissionResult != null) {
+            result.error(
+                "PERMISSION_REQUEST_IN_PROGRESS",
+                "相机权限请求正在进行",
+                null,
+            )
+            return
+        }
+        pendingCameraPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.CAMERA),
+            CameraPermissionRequestCode,
         )
     }
 

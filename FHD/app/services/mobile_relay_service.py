@@ -466,6 +466,46 @@ class MobileRelayService:
             )
             return _row_dict(row) if row else None
 
+    def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
+        """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
+        now = _utc_now()
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT t.* FROM mobile_relay_tasks t
+                        JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+                        WHERE t.task_id = :task_id
+                          AND d.mobile_user_id = :user_id
+                          AND d.status = 'paired'
+                        """
+                    ),
+                    {"task_id": task_id.strip(), "user_id": int(user_id)},
+                )
+                .mappings()
+                .first()
+            )
+            if not row:
+                return None
+            cur_status = str(row.get("status") or "").strip()
+            if cur_status not in {"queued", "running"}:
+                return _row_dict(row)
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_tasks
+                    SET status = 'cancelled',
+                        completed_at = :now,
+                        updated_at = :now
+                    WHERE task_id = :task_id AND status IN ('queued', 'running')
+                    """
+                ),
+                {"task_id": task_id.strip(), "now": now},
+            )
+            return _row_dict(row)
+
     def poll_desktop(
         self,
         *,

@@ -564,7 +564,12 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   }
 
   async function confirmOfficeDockingReview() {
-    const ready = officeDockingReviewItems.value.filter((item) => item.status === 'ready')
+    const ready = officeDockingReviewItems.value.filter((item) => (
+      item.status === 'ready'
+      && item.commitStatus !== 'committed'
+      && item.commitStatus !== 'committing'
+      && (item.selectedKnowledge || item.selectedDatabase)
+    ))
     if (!ready.length) return
     for (const item of ready) {
       item.commitStatus = 'committing'

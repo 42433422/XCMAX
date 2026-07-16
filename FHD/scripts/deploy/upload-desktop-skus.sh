@@ -2,7 +2,7 @@
 # 上传 release/xcagi-v{version}/{personal,enterprise}/ 桌面制品至 update 服务器。
 set -euo pipefail
 
-VERSION="${1:-10.0.0}"
+VERSION="${1:-1.0.0.0}"
 SKU="${2:-all}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
@@ -12,7 +12,8 @@ RELEASE_ROOT="${ROOT}/release/xcagi-v${VERSION}"
 
 HOST="${XCAGI_UPDATE_SSH_HOST:-119.27.178.147}"
 USER="${XCAGI_UPDATE_SSH_USER:-root}"
-REMOTE_BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update}"
+# 公网 OTA / 下载路径：https://xiu-ci.com/releases/stable/{sku}/
+REMOTE_BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update/releases/stable}"
 SSH_KEY="${XCAGI_UPDATE_SSH_KEY:-}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ServerAliveInterval=30)
@@ -62,8 +63,10 @@ for sku in "${skus[@]}"; do
   for pattern in \
     "XCAGI-*-Setup-${VERSION}-x64.exe" \
     "XCAGI-*-Setup-${VERSION}-x64.exe.blockmap" \
-    "XCAGI-${VERSION}-mac-*.dmg" \
-    "XCAGI-${VERSION}-mac-*.zip" \
+    "XCAGI-*-${VERSION}-mac-*.dmg" \
+    "XCAGI-*-${VERSION}-mac-*.dmg.blockmap" \
+    "XCAGI-*-${VERSION}-mac-*.zip" \
+    "XCAGI-*-${VERSION}-mac-*.zip.blockmap" \
     "XCAGI-*-Android-${VERSION}.apk" \
     "latest.yml" \
     "latest-mac.yml"; do

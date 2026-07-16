@@ -561,10 +561,9 @@ class TestModstorePlatformAdapterFromSession:
         mock_request = MagicMock()
         mock_request.headers.get.return_value = "Bearer req_token"
 
-        # The request Authorization header should be picked up directly
+        # Authorization 是 FHD JWT，不是 market token；无 session 时保持空。
         a = ModstorePlatformAdapter.from_session(request=mock_request)
-        # The token from request header should be set (no session lookup needed)
-        assert a.auth_token == "req_token"
+        assert a.auth_token == ""
 
     def test_from_session_no_token_no_session(self, monkeypatch):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter

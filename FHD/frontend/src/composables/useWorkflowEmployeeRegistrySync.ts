@@ -6,10 +6,18 @@ import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRe
 export function useWorkflowEmployeeRegistrySync() {
   const modsStore = useModsStore()
 
+  function reportSyncError(error: unknown) {
+    console.warn('[workflowEmployeeRegistry] sync failed:', error)
+  }
+
   async function syncRegistry() {
     if (modsStore.clientModsUiOff) return
-    await modsStore.initialize(true)
-    await syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi)
+    try {
+      await modsStore.initialize(true)
+      await syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi)
+    } catch (error) {
+      reportSyncError(error)
+    }
   }
 
   onMounted(syncRegistry)
@@ -18,7 +26,7 @@ export function useWorkflowEmployeeRegistrySync() {
     () => modsStore.modsForWorkflowUi,
     (list) => {
       if (modsStore.clientModsUiOff) return
-      void syncEnterpriseWorkflowRegistry(list)
+      void syncEnterpriseWorkflowRegistry(list).catch(reportSyncError)
     },
     { deep: true },
   )

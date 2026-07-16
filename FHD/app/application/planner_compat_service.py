@@ -45,6 +45,106 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _request_session_candidates(request: Request) -> list[str]:
+    """Return possible *host* session ids without mistaking the market token for one.
+
+    Desktop chat requests intentionally carry both the local ``session_id`` cookie
+    and a 修茈市场 bearer token.  The generic compatibility extractor prefers the
+    bearer value, which is correct for model proxying but is not a host session id.
+    Industry/persona lookup must therefore try the explicit host session sources
+    before that compatibility value.
+    """
+
+    candidates: list[str] = []
+
+    def _append(raw: Any) -> None:
+        value = raw.strip() if isinstance(raw, str) else ""
+        if value and value not in candidates:
+            candidates.append(value)
+
+    headers = getattr(request, "headers", {}) or {}
+    cookies = getattr(request, "cookies", {}) or {}
+    try:
+        _append(headers.get("X-Session-ID"))
+    except (AttributeError, TypeError):
+        pass
+
+    cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
+    try:
+        _append(cookies.get(cookie_name))
+    except (AttributeError, TypeError):
+        pass
+
+    # Keep the established extractor as a final fallback for mobile/legacy clients
+    # that only send Authorization.  A market bearer simply fails the DB lookup and
+    # the cookie candidate above remains authoritative.
+    try:
+        from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+        _append(_session_id_from_request(request))
+    except Exception:  # noqa: BLE001 - request identity derivation is best effort
+        logger.debug("planner session candidate extraction failed", exc_info=True)
+    return candidates
+
+
+_BINARY_CONTEXT_KEYS = frozenset(
+    {
+        "base64",
+        "data_url",
+        "dataurl",
+        "file_bytes",
+        "image_base64",
+        "image_data",
+        "pdf_base64",
+        "raw_bytes",
+    }
+)
+
+
+def _summarize_context_for_log(value: Any, *, key: str = "", depth: int = 0) -> Any:
+    """Build a bounded, binary-safe representation of planner context for logs."""
+
+    if depth >= 5:
+        return "<nested-context>"
+    if isinstance(value, bytes):
+        return f"<bytes length={len(value)}>"
+    if isinstance(value, str):
+        normalized_key = key.lower().replace("-", "_")
+        if value.startswith("data:"):
+            header, separator, payload = value.partition(",")
+            safe_header = header[:96]
+            payload_length = len(payload) if separator else 0
+            return f"<{safe_header} payload_chars={payload_length}>"
+        if normalized_key in _BINARY_CONTEXT_KEYS:
+            return f"<redacted-binary chars={len(value)}>"
+        if len(value) > 320:
+            return f"{value[:160]}… <text_chars={len(value)}>"
+        return value
+    if isinstance(value, dict):
+        items = list(value.items())
+        summarized = {
+            str(item_key): _summarize_context_for_log(
+                item_value,
+                key=str(item_key),
+                depth=depth + 1,
+            )
+            for item_key, item_value in items[:32]
+        }
+        if len(items) > 32:
+            summarized["<omitted_keys>"] = len(items) - 32
+        return summarized
+    if isinstance(value, (list, tuple)):
+        summarized_items = [
+            _summarize_context_for_log(item, key=key, depth=depth + 1) for item in value[:12]
+        ]
+        if len(value) > 12:
+            summarized_items.append(f"<omitted_items={len(value) - 12}>")
+        return summarized_items
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return f"<{type(value).__name__}>"
+
+
 def _derive_industry_from_session(request: Request) -> str:
     """单一真相源 + 自动派生：从 session account_kind + User.industry_id 派生 industry。
 
@@ -54,18 +154,41 @@ def _derive_industry_from_session(request: Request) -> str:
 
     前端/手机端无需传 industry，后端自动判断。
     """
+    state_raw = getattr(getattr(request, "state", None), "industry_id", "")
+    state_industry = state_raw.strip() if isinstance(state_raw, str) else ""
+    if state_industry == "管理端":
+        return "管理端"
     try:
         from app.application.session_account_meta import load_session_account_meta
-        from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
 
-        sid = _session_id_from_request(request)
-        if not sid:
-            return "通用"
-        meta = load_session_account_meta(sid) or {}
+        meta: dict[str, Any] = {}
+        for sid in _request_session_candidates(request):
+            candidate_meta = load_session_account_meta(sid) or {}
+            if candidate_meta:
+                meta = candidate_meta
+                break
         # 1. admin 账号 → 管理端
         if meta.get("account_kind") == "admin":
             return "管理端"
-        # 2. 普通账号 → User.industry_id
+        # 2. 请求中间件已经从认证用户解析出行业时直接复用。
+        if state_industry and state_industry != "通用":
+            return state_industry
+        # 3. 工作区选择是跨设备同步 SSOT；优先于可能尚未回写的 User.industry_id。
+        owner_id = ""
+        tenant_id = meta.get("tenant_id")
+        local_user_id = meta.get("local_user_id")
+        if tenant_id is not None and str(tenant_id).strip().isdigit():
+            owner_id = f"tenant:{int(tenant_id)}"
+        elif local_user_id is not None and str(local_user_id).strip().isdigit():
+            owner_id = f"session:{int(local_user_id)}"
+        if owner_id:
+            from app.application.tenant_workspace_prefs import get_workspace_prefs
+
+            prefs = get_workspace_prefs(owner_id)
+            selected = str(prefs.get("selected_industry_id") or "").strip()
+            if selected:
+                return selected
+        # 4. 普通账号 → User.industry_id
         local_user_id = meta.get("local_user_id")
         if local_user_id:
             from app.db.models.user import User
@@ -77,7 +200,7 @@ def _derive_industry_from_session(request: Request) -> str:
                     return str(row[0]).strip()
     except Exception:  # noqa: BLE001  # best-effort 派生，失败回退到默认行业
         logger.debug("derive_industry_from_session failed", exc_info=True)
-    return "通用"
+    return state_industry or "通用"
 
 
 def _attach_compat_chat_trace(
@@ -139,6 +262,28 @@ def _clear_legacy_tool_result_if_reply_has_no_records(reply: Any) -> None:
 
 def _env_truthy(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def _await_with_timeout(awaitable, *, timeout: float):
+    """Await with timeout without leaking a coroutine when ``wait_for`` fails early.
+
+    Besides normal timeouts, tests and fault-injection layers may raise before
+    ``asyncio.wait_for`` has awaited its argument.  Scheduling first and then
+    cancelling/consuming the task guarantees there is no orphaned
+    ``asyncio.to_thread`` coroutine or background execution.
+    """
+
+    task = asyncio.ensure_future(awaitable)
+    try:
+        return await asyncio.wait_for(task, timeout=timeout)
+    except (Exception, asyncio.CancelledError):
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except (Exception, asyncio.CancelledError):  # noqa: BLE001 - consume task before reraising original
+            pass
+        raise
 
 
 def _use_ai_chat_mainline(runtime_context: dict[str, Any] | None) -> bool:
@@ -220,6 +365,19 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
     assert_p2_elevated_claim_or_raise(request)
     tier = resolve_ai_tier(request)
     runtime_context = runtime_context_with_tier(runtime_context, tier)
+    # Business facts and side effects must be backed by a deterministic tool
+    # receipt.  Guard before either the new app service or legacy planner so
+    # deployment flags cannot reopen an LLM-only success path.
+    from app.application.chat_business_safety import try_handle_business_chat_action
+
+    business_payload = try_handle_business_chat_action(
+        body.message,
+        runtime_context=runtime_context,
+        user_id=getattr(body, "user_id", None),
+        request=request,
+    )
+    if business_payload is not None:
+        return business_payload
     try:
         from app.application.kitten_planner_context import (
             enrich_kitten_analyzer_runtime,
@@ -293,7 +451,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
         planner_runtime_context["db_write_token_present"] = True
     if _use_ai_chat_mainline(planner_runtime_context):
         try:
-            payload = await asyncio.wait_for(
+            payload = await _await_with_timeout(
                 _execute_ai_chat_mainline(
                     body,
                     planner_runtime_context,
@@ -342,7 +500,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
             planner_runtime_context["agent_run_id"] = pre_run.run_id
         except RECOVERABLE_ERRORS:
             logger.debug("legacy planner AgentRun pre-create skipped", exc_info=True)
-        reply = await asyncio.wait_for(
+        reply = await _await_with_timeout(
             asyncio.to_thread(
                 run_agent_chat,
                 body.message,
@@ -455,6 +613,17 @@ async def execute_compat_chat_batch(
     for txt in msgs:
         runtime_context, _ = _merge_runtime_context_with_message_paths(rolling_ctx, txt)
         runtime_context = runtime_context_with_tier(runtime_context, batch_tier)
+        from app.application.chat_business_safety import try_handle_business_chat_action
+
+        business_payload = try_handle_business_chat_action(
+            txt,
+            runtime_context=runtime_context,
+            user_id=getattr(body, "user_id", None),
+            request=request,
+        )
+        if business_payload is not None:
+            results.append(business_payload)
+            continue
         ok_read, read_req = _ensure_chat_db_read_authorized(
             request,
             message=txt,
@@ -522,7 +691,7 @@ async def execute_compat_chat_batch(
             planner_runtime_context["db_write_token_present"] = True
         if _use_ai_chat_mainline(planner_runtime_context):
             try:
-                payload = await asyncio.wait_for(
+                payload = await _await_with_timeout(
                     _execute_ai_chat_mainline(
                         body,
                         planner_runtime_context,
@@ -589,7 +758,7 @@ async def execute_compat_chat_batch(
             except RECOVERABLE_ERRORS:
                 logger.debug("legacy batch planner AgentRun pre-create skipped", exc_info=True)
             workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
-            reply = await asyncio.wait_for(
+            reply = await _await_with_timeout(
                 asyncio.to_thread(
                     run_agent_chat,
                     txt,
@@ -729,9 +898,9 @@ def _recent_history(svc, user_id: str) -> list[dict]:
 
 
 def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
-    """统一对话流 user_id 口径，与 butler 路由 (_resolve_user_id_int) 对齐：
-    优先 body.user_id，其次 X-User-Id 头，最后默认 '1'（与 butler 默认 1 同源），
-    使单部署单用户时对话流与 Settings UI 天然指向同一画像（桥接合并 / 目标 5）。
+    """统一对话流 user_id 口径，与 butler 路由 (_resolve_persona_user_id) 对齐：
+    优先 body.user_id，其次 X-User-Id 头，最后默认 '1'，
+    使 Settings UI 用同一会话作用域 id（``web_normal_<session>``）读到对话写入的画像。
     """
     uid = getattr(body, "user_id", None)
     if uid:
@@ -771,7 +940,7 @@ async def compat_chat_stream_async(
                 history = _recent_history(svc, user_id)
                 logger.info(
                     "persona_inject ctx=%s industry=%s history_len=%d",
-                    ctx,
+                    _summarize_context_for_log(ctx),
                     industry,
                     len(history),
                 )
