@@ -53,9 +53,38 @@ vi.mock('@/utils/apiBase', () => ({
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
 }))
 
+const { settingsI18nT, settingsI18nTe } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const zh = require('../i18n/locales/zh-CN/settings.json') as Record<string, unknown>
+  function lookup(path: string): unknown {
+    const parts = path.split('.')
+    let cur: unknown = zh
+    for (const part of parts) {
+      if (!cur || typeof cur !== 'object') return path
+      cur = (cur as Record<string, unknown>)[part]
+    }
+    return cur === undefined ? path : cur
+  }
+  function t(key: string, params?: Record<string, unknown>) {
+    const raw = lookup(key)
+    let text = typeof raw === 'string' ? raw : key
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+      }
+    }
+    return text
+  }
+  function te(key: string) {
+    return typeof lookup(key) === 'string'
+  }
+  return { settingsI18nT: t, settingsI18nTe: te }
+})
+
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (k: string) => k,
+    t: settingsI18nT,
+    te: settingsI18nTe,
     locale: ref('zh-CN'),
   }),
 }))
@@ -281,7 +310,7 @@ const globalStubs = {
 
 const i18nMock = {
   install(app: { config: { globalProperties: Record<string, unknown> } }) {
-    app.config.globalProperties.$t = (k: string) => k
+    app.config.globalProperties.$t = settingsI18nT
   },
 }
 
@@ -302,7 +331,6 @@ async function mountSettings(routeQuery: Record<string, string> = {}) {
     global: {
       plugins: [router, i18nMock],
       stubs: globalStubs,
-      mocks: { $t: (k: string) => k },
     },
   })
   return wrapper
