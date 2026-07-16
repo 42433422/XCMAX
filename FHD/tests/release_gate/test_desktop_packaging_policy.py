@@ -146,6 +146,10 @@ def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> Non
     assert "verify-windows-signature.ps1" in job
     assert "[scriptblock]::Create" in job
     assert "node --check desktop/build/windows-sign.cjs" in job
+    assert "SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b" in job
+    assert "CODE_SIGN_TOOL_PATH" in job
+    assert "code_sign_tool-1.3.0.jar" in job
+    assert "& $java -Xmx1024M -jar $jar --version" in job
 
 
 def test_desktop_package_includes_chat_voice_runtime() -> None:
