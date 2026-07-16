@@ -16,10 +16,13 @@ query() {
 }
 
 login_1h="$(query 'sum(increase(api_requests_total{endpoint="/api/auth/login"}[1h]))')"
-chat_1h="$(query 'sum(increase(chat_stream_first_byte_seconds_count[1h]))')"
+# 注意：原 chat_stream_first_byte_seconds_count 在 k6 流量下不会增长（k6 不消费 SSE
+# body，FastAPI StreamingResponse 的 async generator 不执行，first_byte 指标无法记录）。
+# 改用 api_requests_total{endpoint="/api/ai/chat/stream"} 衡量 chat 端点流量。
+chat_1h="$(query 'sum(increase(api_requests_total{endpoint="/api/ai/chat/stream"}[1h]))')"
 health_1h="$(query 'sum(increase(api_requests_total{endpoint="/api/health"}[1h]))')"
 
-log "1h increase: login=${login_1h} chat_first_byte=${chat_1h} health=${health_1h}"
+log "1h increase: login=${login_1h} chat_stream=${chat_1h} health=${health_1h}"
 
 fail=0
 python3 - <<PY
@@ -32,7 +35,7 @@ if login < min_login:
     print(f"FAIL login 1h increase {login} < {min_login}")
     exit(1)
 if chat < min_chat:
-    print(f"FAIL chat_stream_first_byte 1h increase {chat} < {min_chat}")
+    print(f"FAIL chat_stream 1h increase {chat} < {min_chat}")
     exit(1)
 if health < 1:
     print(f"FAIL health 1h increase {health} < 1")

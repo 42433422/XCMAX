@@ -771,6 +771,42 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    def _boss_daily_im_report_job() -> None:
+        try:
+
+            def _run() -> None:
+                from modstore_server.boss_daily_im_report import send_boss_daily_im_report
+
+                out = send_boss_daily_im_report()
+                logger.info(
+                    "boss daily im report: ok=%s sent=%s skipped=%s",
+                    out.get("ok"),
+                    out.get("sent"),
+                    out.get("skipped_reason") or "-",
+                )
+
+            _run_tracked_scheduler_job("boss_daily_im_report", _run)
+        except Exception:
+            logger.exception("boss daily im report job failed")
+
+    try:
+        from modstore_server.boss_daily_im_report import report_enabled, report_hour_utc
+
+        if report_enabled():
+            # 员工团队每日 IM 日报（主动汇报到老板手机），默认 01:15 UTC = 北京 09:15，
+            # 错开 00:00 daily_digest 邮件链，让老板早上打开手机就能看到昨天的账。
+            _scheduler.add_job(
+                _boss_daily_im_report_job,
+                CronTrigger(hour=report_hour_utc(), minute=15),
+                id="boss_daily_im_report",
+                replace_existing=True,
+                misfire_grace_time=_business_misfire_grace_time(),
+                coalesce=True,
+                max_instances=1,
+            )
+    except Exception:
+        logger.exception("register boss daily im report cron failed")
+
     try:
         _register_employee_cron_jobs()
     except Exception:

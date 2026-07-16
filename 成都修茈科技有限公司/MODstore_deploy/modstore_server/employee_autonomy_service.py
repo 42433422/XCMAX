@@ -761,6 +761,7 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> Dict[str, Any]:
             if not row:
                 continue
             task_brief = str(row.task_brief or "").strip()
+            source_kind = str(row.source_kind or "").strip()
             if not task_brief:
                 row.status = "cancelled"
                 row.error = "task_brief empty"
@@ -768,6 +769,27 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> Dict[str, Any]:
                 session.commit()
                 failed += 1
                 continue
+        # 老板 IM 指令：直达 owner 员工执行 + IM 回音（不走 task_router 能力再路由）。
+        if source_kind == "boss_im":
+            try:
+                from modstore_server.boss_im_inbound import dispatch_boss_im_task
+
+                bo = dispatch_boss_im_task(tid, actor_user_id=actor_uid)
+                if bo.get("ok"):
+                    done += 1
+                else:
+                    failed += 1
+            except Exception as exc:
+                logger.exception("boss_im dispatch crashed task_id=%s", tid)
+                with sf2() as session:
+                    row2 = session.get(PendingBriefTask, tid)
+                    if row2:
+                        row2.status = "failed"
+                        row2.error = str(exc)[:2000]
+                        row2.completed_at = datetime.now(timezone.utc)
+                        session.commit()
+                failed += 1
+            continue
         try:
             out = route_and_dispatch(
                 task_brief,

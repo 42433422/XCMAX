@@ -14,12 +14,14 @@
     "headers",
     "rows",
     "cells",
+    "merged_ranges",
     "meta"
   ],
   "requirements": [
     "Use direct_python only; handlers must be [\"direct_python\"].",
     "Parse .xlsx/.xlsm with openpyxl; write outputs/workbook.json.",
     "JSON must include sheets[].name, columns, flat rows, headers, cells (row/col/value/formula), meta.",
+    "Sheets must expose merged_ranges; cells carry number_format when not General (template introspection).",
     "Never claim success unless workbook.json is actually written.",
     "Return {ok, summary, items, warnings, error, meta}."
   ],

@@ -1,0 +1,30 @@
+{
+  "brief": "Excel质检员工：上传回填结果 .xlsx/.xlsm + payload 提供 plan.json（可选 rules.json/write_report.json/原模板），使用 direct_python 独立对账——计划符合性/保护区/expected 重算/公式 #REF! 与悬空引用/rules_ref 哈希追溯/块结构漂移，输出 outputs/qc_report.json（verdict PASS/WARN/FAIL + blame 问责路由），禁止编造检查结果。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".xlsx",
+    ".xlsm"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/qc_report.json",
+  "runtime_kind": "excel_qc_report",
+  "output_schema": [
+    "verdict",
+    "blame",
+    "sections",
+    "summary",
+    "output_path"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Input file is the filled workbook; plan via payload.plan/plan_path (required); rules via payload.rules/rules_path, template via payload.template_path, write_report via payload.write_report_path (optional).",
+    "Independence: never import mapper/writer code; recompute invariants from plan + rules + output workbook directly.",
+    "Sections: conformance (cell/formula/clear/retain vs plan), protection (template diff), expected (plan-recompute vs mapper claim vs file-recompute), formulas (#REF!/dangling sheet refs), traceability (rules sha256 vs plan.meta.rules_ref), structure (rules.blocks keys vs file).",
+    "Missing inputs make a section skipped with reason — never fake pass.",
+    "When host provides ctx.call_llm (and payload.use_llm is not false), add semantic section: LLM business-sanity review (value plausibility, dropped-record suspicion, warning triage) over deterministic results, plus human_summary in Chinese; LLM can add findings but never overturn deterministic sections; payload.llm_strict=false downgrades LLM fail to warn.",
+    "Verdict: any fail -> FAIL with blame routing (writer_or_plan/mapper/pipeline/rules_stale); warn-only -> WARN; else PASS.",
+    "Never claim success unless qc_report.json is actually written; employee ok means QC executed, not QC passed.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "excel-qc-employee"
+}

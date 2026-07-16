@@ -1,0 +1,34 @@
+{
+  "brief": "Excel规则映射员工：direct_python 双动作——infer 上传模板侧 workbook.json 推断块结构/键列/日历锚/公式区/公式模板并输出 outputs/rules.json 提案（置信度+open_questions）；compile 上传 rules.json（records 走 payload）编译 outputs/plan.json（clear/cell/formula/retain 阶段+expected+rules_ref），禁止编造结构。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".json"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/rules.json",
+  "runtime_kind": "excel_rules_map",
+  "output_schema": [
+    "action",
+    "output_path",
+    "block",
+    "key_col",
+    "calendar",
+    "formula_templates",
+    "confidences",
+    "open_questions",
+    "expected",
+    "rules_ref"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "infer: consume reader workbook.json (template side); detect row blocks via merged-range periodicity, key column, calendar anchor sequence, formula zones; fit per-column formula templates by numeric arithmetic progression across blocks.",
+    "infer output rules.json is a proposal: evidence.confidences + open_questions for human confirmation; never fabricate structure.",
+    "When host provides ctx.call_llm (and payload.use_llm is not false), refine the heuristic draft with LLM proposals (bands / key_col / clear_zone / open questions); every proposal must pass deterministic validation before adoption; adopted/rejected recorded in evidence.llm.",
+    "compile: rules.json + records (payload.records / records_path / bundled {rules, records}) -> plan.json following excel-template-write plan_version=1 contract.",
+    "solidify: bundled {source_workbook, golden_workbook|expected_records, rules} + ctx.call_llm -> LLM writes produce_records(source_workbook, rules) Python script; loop static-safety-check -> sandbox run -> records contract check -> golden diff (deterministic reverse-read of golden workbook); solidify only on full green: outputs/transform.py + solidify_report.json (iterations evidence, script sha256, rules_ref); monthly reruns then need zero LLM.",
+    "compile validates day/band/entry bounds, drops out-of-roster keys with reasons, emits expected block and meta.rules_ref sha256 for QC.",
+    "Never claim success unless rules.json / plan.json is actually written.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "excel-rules-map-employee"
+}

@@ -1,0 +1,4 @@
+Signer #1 certificate DN: CN=XCAGI, OU=Mobile, O=成都修茈科技有限公司, L=成都, ST=四川, C=CN
+Signer #1 certificate SHA-256 digest: 5ff4f8d7f045817bac644d06ce4781599f38f3965c8ae6c7de3d51723b2e2001
+Signer #1 certificate SHA-1 digest: efc6397994e92fe3d2c2e7d31c65fb6a66773ae6
+Signer #1 certificate MD5 digest: b54390e119b7036f474a789ce485e342
