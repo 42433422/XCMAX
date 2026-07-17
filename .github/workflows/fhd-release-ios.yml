@@ -127,7 +127,7 @@ jobs:
           mkdir -p "${import_dir}"
           printf '%s' "${IOS_CERTIFICATE_P12_BASE64}" | base64 --decode > "${import_dir}/source.p12"
           printf '%s' "${profile_base64}" | base64 --decode > "${import_dir}/profile.mobileprovision"
-          openssl pkcs12 -in "${import_dir}/source.p12" \
+          openssl pkcs12 -legacy -in "${import_dir}/source.p12" \
             -passin env:IOS_CERTIFICATE_PASSWORD -nodes -out "${import_dir}/identity.pem"
           openssl x509 -in "${import_dir}/identity.pem" -outform der \
             -out "${import_dir}/distribution.cer"
