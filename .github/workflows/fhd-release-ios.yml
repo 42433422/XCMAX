@@ -131,7 +131,7 @@ jobs:
             -passin env:IOS_CERTIFICATE_PASSWORD -nodes -out "${import_dir}/identity.pem"
           openssl x509 -in "${import_dir}/identity.pem" -outform der \
             -out "${import_dir}/distribution.cer"
-          openssl pkcs12 -export -in "${import_dir}/identity.pem" \
+          openssl pkcs12 -legacy -export -in "${import_dir}/identity.pem" \
             -inkey "${import_dir}/identity.pem" -passout pass: \
             -out "${import_dir}/distribution.p12"
 
