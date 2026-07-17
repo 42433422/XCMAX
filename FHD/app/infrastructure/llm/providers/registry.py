@@ -10,6 +10,7 @@ from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvi
 from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
 from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")
 _PROVIDER_ID_ALIASES = {
@@ -21,6 +22,18 @@ _PROVIDER_ID_ALIASES = {
     "openai": "openai_compatible",
     "deepseek": "openai_compatible",
 }
+
+
+def _maybe_instrument(provider: LLMProvider | None) -> LLMProvider | None:
+    """返回前包 InstrumentedProvider（装饰层自身异常时原样返回，fail-open）。"""
+    if provider is None:
+        return None
+    try:
+        from app.infrastructure.llm.instrumented_provider import wrap_provider
+
+        return wrap_provider(provider)
+    except RECOVERABLE_ERRORS:
+        return provider
 
 
 def _normalize_provider_id(provider_id: str | None) -> str:
@@ -51,7 +64,7 @@ class LLMProviderRegistry:
         self._providers[provider_id] = provider
 
     def get(self, provider_id: str) -> LLMProvider | None:
-        return self._providers.get(_normalize_provider_id(provider_id))
+        return _maybe_instrument(self._providers.get(_normalize_provider_id(provider_id)))
 
     def resolve(
         self,
@@ -62,7 +75,7 @@ class LLMProviderRegistry:
         if header_provider:
             p = self._providers.get(_normalize_provider_id(header_provider))
             if p and p.is_configured:
-                return p
+                return _maybe_instrument(p)
 
         if conversation_service is not None:
             mod = getattr(conversation_service, "modstore_adapter", None)
@@ -82,7 +95,7 @@ class LLMProviderRegistry:
         for pid in _routing_order():
             provider = self._providers.get(pid)
             if provider and provider.is_configured:
-                return provider
+                return _maybe_instrument(provider)
         return None
 
 
