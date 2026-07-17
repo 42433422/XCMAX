@@ -1,5 +1,7 @@
 require "shellwords"
 require "fileutils"
+require "match/importer"
+require "match/options"
 
 APP_IDENTIFIER = "com.xiuci.xcagi.mobile.enterprise"
 APP_STORE_ID = "6784260401"
@@ -16,6 +18,21 @@ platform :ios do
       key_filepath: ENV.fetch("APP_STORE_CONNECT_API_KEY_PATH"),
       duration: 1_200,
       in_house: false
+    )
+  end
+
+  desc "One-time non-interactive import of existing signing assets into match"
+  lane :import_match_assets do
+    params = FastlaneCore::Configuration.create(Match::Options.available_options, {})
+    params.load_configuration_file("Matchfile")
+    params[:type] = "appstore"
+    params[:skip_certificate_matching] = true
+
+    Match::Importer.new.import_cert(
+      params,
+      cert_path: ENV.fetch("MATCH_IMPORT_CERT_PATH"),
+      p12_path: ENV.fetch("MATCH_IMPORT_P12_PATH"),
+      profile_path: ENV.fetch("MATCH_IMPORT_PROFILE_PATH")
     )
   end
 

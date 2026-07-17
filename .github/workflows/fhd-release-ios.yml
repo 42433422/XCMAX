@@ -135,13 +135,10 @@ jobs:
             -inkey "${import_dir}/identity.pem" -passout pass: \
             -out "${import_dir}/distribution.p12"
 
-          printf '%s\n%s\n%s\n' \
-            "${import_dir}/distribution.cer" \
-            "${import_dir}/distribution.p12" \
-            "${import_dir}/profile.mobileprovision" \
-            | bundle exec fastlane match import \
-                --type appstore \
-                --skip_certificate_matching true
+          export MATCH_IMPORT_CERT_PATH="${import_dir}/distribution.cer"
+          export MATCH_IMPORT_P12_PATH="${import_dir}/distribution.p12"
+          export MATCH_IMPORT_PROFILE_PATH="${import_dir}/profile.mobileprovision"
+          bundle exec fastlane ios import_match_assets
 
       - name: Flutter pub get and test
         run: |
