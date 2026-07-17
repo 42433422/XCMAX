@@ -49,6 +49,8 @@ platform :ios do
 
     profile_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_profile-name"]
     UI.user_error!("match did not expose an App Store profile name") if profile_name.to_s.empty?
+    certificate_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_certificate-name"]
+    UI.user_error!("match did not expose a distribution certificate name") if certificate_name.to_s.empty?
 
     FileUtils.mkdir_p(IPA_OUTPUT_DIRECTORY)
     build_app(
@@ -58,11 +60,11 @@ platform :ios do
       clean: true,
       output_directory: IPA_OUTPUT_DIRECTORY,
       output_name: File.basename(IPA_PATH),
-      export_method: "app-store-connect",
+      export_method: "app-store",
       export_options: {
-        method: "app-store-connect",
+        method: "app-store",
         signingStyle: "manual",
-        signingCertificate: "Apple Distribution",
+        signingCertificate: certificate_name,
         teamID: team_id,
         manageAppVersionAndBuildNumber: false,
         uploadSymbols: true,
@@ -73,7 +75,7 @@ platform :ios do
       xcargs: [
         "DEVELOPMENT_TEAM=#{Shellwords.escape(team_id)}",
         "CODE_SIGN_STYLE=Manual",
-        "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}",
+        "CODE_SIGN_IDENTITY=#{Shellwords.escape(certificate_name)}",
         "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(profile_name)}",
         "FLUTTER_BUILD_NAME=#{Shellwords.escape(ENV.fetch('IOS_MARKETING_VERSION'))}",
         "FLUTTER_BUILD_NUMBER=#{Shellwords.escape(ENV.fetch('IOS_BUILD_NUMBER'))}"
