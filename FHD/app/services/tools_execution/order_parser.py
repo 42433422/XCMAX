@@ -367,8 +367,7 @@ def _parse_order_text(order_text: str) -> dict:
         try:
             import os
 
-            api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-            if api_key:
+            if os.environ.get("DEEPSEEK_API_KEY", "").strip():
                 from app.infrastructure.llm.structured_output import (
                     StructuredOutputError,
                     complete_structured_sync,
@@ -383,22 +382,18 @@ def _parse_order_text(order_text: str) -> dict:
                 try:
                     structured = complete_structured_sync(
                         [
-                            {
-                                "role": "system",
-                                "content": "你是结构化信息抽取助手，只输出 JSON。",
-                            },
+                            {"role": "system", "content": "你是结构化信息抽取助手，只输出 JSON。"},
                             {"role": "user", "content": prompt},
                         ],
-                        schema=_ORDER_EXTRACTION_SCHEMA,
+                        schema=_ORDER_SCHEMA,
+                        max_repairs=1,
+                        profile="order_parse",
                         temperature=0.0,
                         max_tokens=500,
-                        timeout_seconds=10.0,
                     )
-                except StructuredOutputError as struct_err:
-                    logger.warning(
-                        "AI 结构化抽取重试耗尽，回退规则流程: %s", struct_err.last_errors
-                    )
-                else:
+                except (StructuredOutputError, *RECOVERABLE_ERRORS):
+                    structured = None
+                if structured is not None:
                     parsed = structured.data
                     ai_unit = cleanup_unit_name(str(parsed.get("unit_name", "")).strip())
                     ai_model = str(parsed.get("model_number", "")).strip()
