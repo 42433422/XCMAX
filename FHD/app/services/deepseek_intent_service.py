@@ -71,6 +71,18 @@ SLOT_DEFINITIONS = {
 }
 
 
+_INTENT_SCHEMA = {
+    "type": "object",
+    "required": ["intent"],
+    "properties": {
+        "intent": {"type": "string"},
+        "confidence": {"type": "number"},
+        "slots": {"type": "object"},
+        "reasoning": {"type": "string"},
+    },
+}
+
+
 class DeepSeekIntentRecognizer:
     def __init__(
         self,
@@ -150,39 +162,50 @@ class DeepSeekIntentRecognizer:
             history = "\n".join([f"{m['role']}: {m['content']}" for m in context[-3:]])
             user_message = f"对话历史：\n{history}\n\n当前消息：{message}"
 
-        from app.infrastructure.llm.invoke import chat_completion_openai_format
+        from app.infrastructure.llm.structured_output import (
+            StructuredOutputError,
+            complete_structured,
+        )
 
-        last_error = None
-        for attempt in range(self.max_retries):
-            try:
-                result = await chat_completion_openai_format(
-                    [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message},
-                    ],
-                    temperature=0.1,
-                    max_tokens=300,
-                    profile="intent",
-                )
-                if result and result.get("choices"):
-                    content = result["choices"][0]["message"]["content"]
-                    parsed = self._parse_response(content, message)
-                    _intent_recognition_cache.set(cache_key, parsed)
-                    return parsed
-            except RECOVERABLE_ERRORS as e:
-                last_error = e
-                logger.warning(
-                    "DeepSeek 意图识别失败 (尝试 %s/%s): %s", attempt + 1, self.max_retries, e
-                )
-                if attempt < self.max_retries - 1:
-                    import asyncio
+        try:
+            structured = await complete_structured(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                schema=_INTENT_SCHEMA,
+                max_repairs=self.max_retries - 1,
+                profile="intent",
+                temperature=0.1,
+                max_tokens=300,
+            )
+        except StructuredOutputError as exc:
+            logger.error("DeepSeek 意图识别最终失败: %s", exc.last_errors)
+            fallback = self._fallback_result(message)
+            _intent_recognition_cache.set(cache_key, fallback)
+            return fallback
 
-                    await asyncio.sleep(0.5 * (attempt + 1))
+        parsed = self._normalize_intent_payload(structured.data, message)
+        _intent_recognition_cache.set(cache_key, parsed)
+        return parsed
 
-        logger.error("DeepSeek 意图识别最终失败: %s", last_error)
-        fallback = self._fallback_result(message)
-        _intent_recognition_cache.set(cache_key, fallback)
-        return fallback
+    def _normalize_intent_payload(
+        self, data: dict[str, Any], original_message: str
+    ) -> dict[str, Any]:
+        """complete_structured 校验通过后的收尾：意图白名单 + 槽位归一化。"""
+        intent = str(data.get("intent") or "")
+        if intent not in INTENT_DESCRIPTIONS and intent != "negation":
+            return self._fallback_result(original_message)
+        confidence = float(data.get("confidence") or 0.5)
+        raw_slots = data.get("slots")
+        slots = raw_slots if isinstance(raw_slots, dict) else {}
+        return {
+            "intent": intent,
+            "confidence": min(confidence, 1.0),
+            "slots": self._normalize_slots(slots, original_message),
+            "reasoning": str(data.get("reasoning") or ""),
+            "source": "deepseek",
+        }
 
     def _parse_response(self, content: str, original_message: str) -> dict[str, Any]:
         import json

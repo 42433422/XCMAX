@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.infrastructure.llm.providers.registry import LLMProviderRegistry
 
 
@@ -18,6 +20,13 @@ def _provider(provider_id: str, configured: bool) -> SimpleNamespace:
 
 
 class TestLLMProviderRegistry:
+    @pytest.fixture(autouse=True)
+    def _disable_instrumentation(self, monkeypatch) -> None:
+        # 本套件测 registry 注册/路由逻辑本身；关闭装饰层使身份断言聚焦路由边界。
+        # 装饰行为由 test_instrumented_provider.py 专门覆盖。
+        monkeypatch.setenv("XCAGI_GENAI_TRACE_ENABLED", "0")
+        monkeypatch.setenv("XCAGI_GUARDRAILS_ENABLED", "0")
+
     def test_register_and_get_roundtrip(self) -> None:
         reg = LLMProviderRegistry()
         fake = _provider("fake", configured=True)
