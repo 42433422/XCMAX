@@ -391,7 +391,9 @@ def _parse_order_text(order_text: str) -> dict:
                         temperature=0.0,
                         max_tokens=500,
                     )
-                except (StructuredOutputError, *RECOVERABLE_ERRORS):
+                except StructuredOutputError:
+                    structured = None
+                except RECOVERABLE_ERRORS:
                     structured = None
                 if structured is not None:
                     parsed = structured.data
