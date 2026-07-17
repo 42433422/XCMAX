@@ -16,6 +16,17 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_ORDER_SCHEMA = {
+    "type": "object",
+    "required": [],
+    "properties": {
+        "unit_name": {"type": "string"},
+        "model_number": {"type": "string"},
+        "tin_spec": {"type": "string"},
+        "quantity_tins": {"type": "string"},
+    },
+}
+
 
 def _parse_order_text(order_text: str) -> dict:
     try:
@@ -354,81 +365,70 @@ def _parse_order_text(order_text: str) -> dict:
                     }
 
         try:
-            import json
             import os
-
-            import httpx
 
             api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
             if api_key:
+                from app.infrastructure.llm.structured_output import (
+                    StructuredOutputError,
+                    complete_structured_sync,
+                )
+
                 prompt = (
                     "请从下面中文订单口语中抽取 JSON 字段："
                     "unit_name, model_number, tin_spec, quantity_tins。"
                     "仅返回 JSON，不要解释，不要 markdown。\n"
                     f"文本：{text}"
                 )
-                from app.infrastructure.llm.providers.credentials import (
-                    default_chat_completions_url,
-                )
-
-                with httpx.Client(timeout=8.0) as client:
-                    resp = client.post(
-                        default_chat_completions_url(),
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": "deepseek-chat",
-                            "messages": [
-                                {
-                                    "role": "system",
-                                    "content": "你是结构化信息抽取助手，只输出 JSON。",
-                                },
-                                {"role": "user", "content": prompt},
-                            ],
-                            "temperature": 0.0,
-                        },
+                try:
+                    structured = complete_structured_sync(
+                        [
+                            {
+                                "role": "system",
+                                "content": "你是结构化信息抽取助手，只输出 JSON。",
+                            },
+                            {"role": "user", "content": prompt},
+                        ],
+                        schema=_ORDER_EXTRACTION_SCHEMA,
+                        temperature=0.0,
+                        max_tokens=500,
+                        timeout_seconds=10.0,
                     )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        content = (
-                            (data.get("choices") or [{}])[0]
-                            .get("message", {})
-                            .get("content", "")
-                            .strip()
-                        )
-                        content = re.sub(r"^```json\s*|^```\s*|```$", "", content).strip()
-                        parsed = json.loads(content) if content else {}
-                        ai_unit = cleanup_unit_name(str(parsed.get("unit_name", "")).strip())
-                        ai_model = str(parsed.get("model_number", "")).strip()
-                        ai_spec_raw = str(parsed.get("tin_spec", "")).strip()
-                        ai_qty_raw = str(parsed.get("quantity_tins", "")).strip()
-                        ai_spec = parse_cn_number(ai_spec_raw) if ai_spec_raw else None
-                        ai_qty = parse_cn_number(ai_qty_raw) if ai_qty_raw else None
+                except StructuredOutputError as struct_err:
+                    logger.warning(
+                        "AI 结构化抽取重试耗尽，回退规则流程: %s", struct_err.last_errors
+                    )
+                else:
+                    parsed = structured.data
+                    ai_unit = cleanup_unit_name(str(parsed.get("unit_name", "")).strip())
+                    ai_model = str(parsed.get("model_number", "")).strip()
+                    ai_spec_raw = str(parsed.get("tin_spec", "")).strip()
+                    ai_qty_raw = str(parsed.get("quantity_tins", "")).strip()
+                    ai_spec = parse_cn_number(ai_spec_raw) if ai_spec_raw else None
+                    ai_qty = parse_cn_number(ai_qty_raw) if ai_qty_raw else None
 
-                        missing_prompt = build_missing_prompt(
-                            unit_name=ai_unit,
-                            model_number=ai_model or None,
-                            tin_spec=ai_spec,
-                            quantity_tins=int(ai_qty) if ai_qty else None,
-                        )
-                        if missing_prompt:
-                            return {"success": False, "message": missing_prompt}
+                    missing_prompt = build_missing_prompt(
+                        unit_name=ai_unit,
+                        model_number=ai_model or None,
+                        tin_spec=ai_spec,
+                        quantity_tins=int(ai_qty) if ai_qty else None,
+                    )
+                    if missing_prompt:
+                        return {"success": False, "message": missing_prompt}
 
-                        if ai_unit and ai_model and ai_spec and ai_qty:
-                            return {
-                                "success": True,
-                                "unit_name": ai_unit,
-                                "products": [
-                                    {
-                                        "name": "",
-                                        "model_number": ai_model,
-                                        "quantity_tins": int(ai_qty),
-                                        "tin_spec": float(ai_spec),
-                                    }
-                                ],
-                            }
+                    if ai_unit and ai_model and ai_spec and ai_qty:
+                        return {
+                            "success": True,
+                            "unit_name": ai_unit,
+                            "products": [
+                                {
+                                    "name": "",
+                                    "model_number": ai_model,
+                                    "quantity_tins": int(ai_qty),
+                                    "tin_spec": float(ai_spec),
+                                }
+                            ],
+                        }
         except RECOVERABLE_ERRORS as ai_err:
             logger.warning("AI 结构化抽取兜底失败，回退规则流程: %s", ai_err)
 
