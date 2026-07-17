@@ -1,0 +1,102 @@
+require "shellwords"
+require "fileutils"
+
+APP_IDENTIFIER = "com.xiuci.xcagi.mobile.enterprise"
+APP_STORE_ID = "6784260401"
+IPA_OUTPUT_DIRECTORY = File.expand_path("../../build/ios/ipa", __dir__)
+IPA_PATH = File.join(IPA_OUTPUT_DIRECTORY, "XCAGI.ipa")
+
+default_platform(:ios)
+
+platform :ios do
+  private_lane :connect_api_key do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
+      key_filepath: ENV.fetch("APP_STORE_CONNECT_API_KEY_PATH"),
+      duration: 1_200,
+      in_house: false
+    )
+  end
+
+  desc "Fetch match signing assets and build the Flutter IPA"
+  lane :build_ipa do
+    team_id = ENV.fetch("APPLE_TEAM_ID")
+    setup_ci if ENV["CI"] == "true"
+    match(
+      type: "appstore",
+      app_identifier: APP_IDENTIFIER,
+      team_id: team_id,
+      readonly: true
+    )
+
+    profile_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_profile-name"]
+    UI.user_error!("match did not expose an App Store profile name") if profile_name.to_s.empty?
+
+    FileUtils.mkdir_p(IPA_OUTPUT_DIRECTORY)
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      clean: true,
+      output_directory: IPA_OUTPUT_DIRECTORY,
+      output_name: File.basename(IPA_PATH),
+      export_method: "app-store-connect",
+      export_options: {
+        method: "app-store-connect",
+        signingStyle: "manual",
+        signingCertificate: "Apple Distribution",
+        teamID: team_id,
+        manageAppVersionAndBuildNumber: false,
+        uploadSymbols: true,
+        provisioningProfiles: {
+          APP_IDENTIFIER => profile_name
+        }
+      },
+      xcargs: [
+        "DEVELOPMENT_TEAM=#{Shellwords.escape(team_id)}",
+        "CODE_SIGN_STYLE=Manual",
+        "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}",
+        "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(profile_name)}",
+        "FLUTTER_BUILD_NAME=#{Shellwords.escape(ENV.fetch('IOS_MARKETING_VERSION'))}",
+        "FLUTTER_BUILD_NUMBER=#{Shellwords.escape(ENV.fetch('IOS_BUILD_NUMBER'))}"
+      ].join(" ")
+    )
+  end
+
+  desc "Upload the IPA to TestFlight and optionally submit the existing store version"
+  lane :distribute do
+    UI.user_error!("IPA not found at #{IPA_PATH}") unless File.exist?(IPA_PATH)
+    api_key = connect_api_key
+    marketing_version = ENV.fetch("IOS_MARKETING_VERSION")
+    build_number = ENV.fetch("IOS_BUILD_NUMBER")
+
+    sh(
+      "xcrun", "altool", "--upload-package", IPA_PATH,
+      "--apiKey", ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+      "--apiIssuer", ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
+      "--type", "ios",
+      "--apple-id", APP_STORE_ID,
+      "--bundle-id", APP_IDENTIFIER,
+      "--bundle-version", build_number,
+      "--bundle-short-version-string", marketing_version
+    )
+
+    next unless ENV["SUBMIT_FOR_REVIEW"] == "true"
+
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      app_version: marketing_version,
+      build_number: build_number,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: true,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      run_precheck_before_submit: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+end

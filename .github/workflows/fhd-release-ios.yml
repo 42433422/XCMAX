@@ -1,0 +1,205 @@
+# CI SSOT: generated from FHD/.github/workflows/release-ios.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Release iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App Store marketing version
+        required: true
+        type: string
+        default: "10.0.0"
+      build_number:
+        description: iOS build number; empty uses the Actions run number
+        required: false
+        type: string
+      bootstrap_match:
+        description: One-time import of the existing certificate/profile into match
+        required: true
+        default: false
+        type: boolean
+      submit_for_review:
+        description: Submit the uploaded build for App Review using existing store metadata
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fhd-release-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  build-and-distribute:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    env:
+      CI: "true"
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Xcode SDK
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Resolve release version
+        id: version
+        run: |
+          set -euo pipefail
+          marketing_version="${{ inputs.version }}"
+          build_number="${{ inputs.build_number }}"
+          if [[ -z "${build_number}" ]]; then
+            build_number="${{ github.run_number }}"
+          fi
+          if [[ ! "${marketing_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must use x.y.z format"
+            exit 2
+          fi
+          if [[ ! "${build_number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_number must contain digits only"
+            exit 2
+          fi
+          echo "marketing_version=${marketing_version}" >> "${GITHUB_OUTPUT}"
+          echo "build_number=${build_number}" >> "${GITHUB_OUTPUT}"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install pinned Fastlane
+        working-directory: FHD/mobile-flutter-poc/ios
+        run: |
+          bundle config set path vendor/bundle
+          bundle install --jobs 4 --retry 3
+
+      - name: Configure match deploy key
+        env:
+          MATCH_GIT_PRIVATE_KEY_CONTENT: ${{ secrets.MATCH_GIT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${MATCH_GIT_PRIVATE_KEY_CONTENT:?MATCH_GIT_PRIVATE_KEY secret is required}"
+          key_path="${RUNNER_TEMP}/xcagi-match-deploy-key"
+          printf '%s' "${MATCH_GIT_PRIVATE_KEY_CONTENT}" > "${key_path}"
+          chmod 600 "${key_path}"
+          mkdir -p "${HOME}/.ssh"
+          ssh-keyscan github.com >> "${HOME}/.ssh/known_hosts"
+          echo "MATCH_GIT_PRIVATE_KEY=${key_path}" >> "${GITHUB_ENV}"
+
+      - name: Bootstrap existing signing assets into match
+        if: ${{ inputs.bootstrap_match }}
+        working-directory: FHD/mobile-flutter-poc/ios
+        env:
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISION_PROFILE_ENTERPRISE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_ENTERPRISE_BASE64 }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          profile_base64="${IOS_PROVISION_PROFILE_ENTERPRISE_BASE64:-${IOS_PROVISION_PROFILE_BASE64:-}}"
+          : "${IOS_CERTIFICATE_P12_BASE64:?IOS_CERTIFICATE_P12_BASE64 secret is required}"
+          : "${IOS_CERTIFICATE_PASSWORD:?IOS_CERTIFICATE_PASSWORD secret is required}"
+          : "${profile_base64:?An App Store provisioning profile secret is required}"
+
+          import_dir="${RUNNER_TEMP}/match-import"
+          mkdir -p "${import_dir}"
+          printf '%s' "${IOS_CERTIFICATE_P12_BASE64}" | base64 --decode > "${import_dir}/source.p12"
+          printf '%s' "${profile_base64}" | base64 --decode > "${import_dir}/profile.mobileprovision"
+          openssl pkcs12 -in "${import_dir}/source.p12" \
+            -passin env:IOS_CERTIFICATE_PASSWORD -nodes -out "${import_dir}/identity.pem"
+          openssl x509 -in "${import_dir}/identity.pem" -outform der \
+            -out "${import_dir}/distribution.cer"
+          openssl pkcs12 -export -in "${import_dir}/identity.pem" \
+            -inkey "${import_dir}/identity.pem" -passout pass: \
+            -out "${import_dir}/distribution.p12"
+
+          printf '%s\n%s\n%s\n' \
+            "${import_dir}/distribution.cer" \
+            "${import_dir}/distribution.p12" \
+            "${import_dir}/profile.mobileprovision" \
+            | bundle exec fastlane match import \
+                --type appstore \
+                --skip_certificate_matching true
+
+      - name: Flutter pub get and test
+        run: |
+          flutter pub get
+          flutter test
+
+      - name: Prepare Flutter iOS release build
+        env:
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          flutter build ios --release --no-codesign \
+            --build-name "${IOS_MARKETING_VERSION}" \
+            --build-number "${IOS_BUILD_NUMBER}"
+
+      - name: Build signed IPA with match
+        working-directory: FHD/mobile-flutter-poc/ios
+        env:
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: bundle exec fastlane ios build_ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-flutter-ios-${{ steps.version.outputs.marketing_version }}-${{ steps.version.outputs.build_number }}
+          path: FHD/mobile-flutter-poc/build/ios/ipa/*.ipa
+          if-no-files-found: error
+
+      - name: Decode App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          : "${APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64:?APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 secret is required}"
+          key_dir="${HOME}/.appstoreconnect/private_keys"
+          key_path="${key_dir}/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          mkdir -p "${key_dir}"
+          printf '%s' "${APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64}" | base64 --decode > "${key_path}"
+          chmod 600 "${key_path}"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
+
+      - name: Upload to TestFlight or submit for review
+        working-directory: FHD/mobile-flutter-poc/ios
+        env:
+          IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+          IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+        run: bundle exec fastlane ios distribute
+
+      - name: Release summary
+        if: always()
+        run: |
+          {
+            echo "### XCAGI Flutter iOS"
+            echo ""
+            echo "- Version: \`${{ steps.version.outputs.marketing_version }} (${{ steps.version.outputs.build_number }})\`"
+            echo "- Bundle ID: \`com.xiuci.xcagi.mobile.enterprise\`"
+            echo "- Signing: Fastlane match, App Store profile"
+            echo "- Submitted for review: \`${{ inputs.submit_for_review }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
