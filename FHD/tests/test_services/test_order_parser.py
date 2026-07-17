@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -122,9 +122,7 @@ class TestParseOrderTextAI:
         assert result["success"] is False
 
     def test_ai_fallback_with_api_key_success(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        payload = {
             "choices": [
                 {
                     "message": {
@@ -133,42 +131,32 @@ class TestParseOrderTextAI:
                 }
             ]
         }
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
-
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "fake-key"}):
-            with patch("httpx.Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/api",
-                ):
-                    result = _parse_order_text("一些无法解析的文本xyz")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=payload),
+            ):
+                result = _parse_order_text("一些无法解析的文本xyz")
         assert isinstance(result, dict)
+        assert result.get("success") is True
+        assert result["products"][0]["model_number"] == "ABC-123"
 
     def test_ai_fallback_api_error(self):
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "fake-key"}):
-            with patch("httpx.Client") as mock_cls:
-                mock_cls.side_effect = OSError("connection failed")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(side_effect=OSError("connection failed")),
+            ):
                 result = _parse_order_text("一些无法解析的文本xyz")
         assert isinstance(result, dict)
 
-    def test_ai_fallback_non_200_status(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
-
+    def test_ai_fallback_llm_returns_none(self):
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "fake-key"}):
-            with patch("httpx.Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/api",
-                ):
-                    result = _parse_order_text("一些无法解析的文本xyz")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=None),
+            ):
+                result = _parse_order_text("一些无法解析的文本xyz")
         assert isinstance(result, dict)
 
 

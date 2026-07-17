@@ -6,7 +6,7 @@ Targets the 36 missing branches (68.4% → higher) reported by coverage_new.json
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -242,12 +242,8 @@ class TestAIFallbackPath:
             assert "success" in r
 
     def test_with_api_key_successful_ai_response(self):
-        """Mock httpx client to simulate a successful AI extraction."""
-        import httpx as _httpx
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        """Mock LLM invoke boundary to simulate a successful AI extraction."""
+        payload = {
             "choices": [
                 {
                     "message": {
@@ -256,27 +252,18 @@ class TestAIFallbackPath:
                 }
             ]
         }
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
 
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-test"}, clear=False):
-            with patch.object(_httpx, "Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/v1/chat/completions",
-                ):
-                    r = _parse_order_text("随机测试文本 无法解析")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=payload),
+            ):
+                r = _parse_order_text("随机测试文本 无法解析")
         assert "success" in r
 
     def test_with_api_key_missing_fields_returns_prompt(self):
         """AI returns partial data → missing_prompt triggers False response."""
-        import httpx as _httpx
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        payload = {
             "choices": [
                 {
                     "message": {
@@ -285,57 +272,33 @@ class TestAIFallbackPath:
                 }
             ]
         }
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
 
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-test"}, clear=False):
-            with patch.object(_httpx, "Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/v1/chat/completions",
-                ):
-                    r = _parse_order_text("文本无法解析 x y z")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=payload),
+            ):
+                r = _parse_order_text("文本无法解析 x y z")
         assert "success" in r
 
-    def test_api_key_non_200_response(self):
-        """AI returns non-200 → skip AI, fall through to final branches."""
-        import httpx as _httpx
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
-
+    def test_api_key_llm_none_falls_through(self):
+        """LLM 返回 None → skip AI, fall through to final branches."""
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-real"}, clear=False):
-            with patch.object(_httpx, "Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/v1/chat/completions",
-                ):
-                    r = _parse_order_text("完全无效文本")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=None),
+            ):
+                r = _parse_order_text("完全无效文本")
         assert "success" in r
 
-    def test_api_key_connection_error_caught(self):
-        """httpx raises ConnectError → RECOVERABLE_ERRORS catches it, logs warning."""
-        import httpx as _httpx
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.side_effect = _httpx.ConnectError("refused")
-
+    def test_api_key_llm_error_caught(self):
+        """LLM 调用异常 → complete_structured 重试耗尽后回退规则流程。"""
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-err"}, clear=False):
-            with patch.object(_httpx, "Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/v1/chat/completions",
-                ):
-                    r = _parse_order_text("无效文本测试")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(side_effect=OSError("refused")),
+            ):
+                r = _parse_order_text("无效文本测试")
         assert "success" in r
 
 
@@ -767,11 +730,7 @@ class TestAIFullSuccessReturn:
     """AI returns all four fields → success dict with products."""
 
     def test_ai_full_fields_returns_success(self):
-        import httpx as _httpx
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        payload = {
             "choices": [
                 {
                     "message": {
@@ -783,19 +742,14 @@ class TestAIFullSuccessReturn:
                 }
             ]
         }
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
 
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-full"}, clear=False):
-            with patch.object(_httpx, "Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/v1/chat/completions",
-                ):
-                    # Use text that matches nothing else so AI path is reached
-                    r = _parse_order_text("无法解析的奇怪文本 xyz")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=payload),
+            ):
+                # Use text that matches nothing else so AI path is reached
+                r = _parse_order_text("无法解析的奇怪文本 xyz")
         assert "success" in r
         # When AI succeeds fully, should return True with products
         if _ok(r):
@@ -804,12 +758,8 @@ class TestAIFullSuccessReturn:
             assert r["products"][0]["quantity_tins"] == 6
 
     def test_ai_markdown_stripped(self):
-        """Content with ```json fence → stripped correctly."""
-        import httpx as _httpx
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        """Content with ```json fence → extracted correctly."""
+        payload = {
             "choices": [
                 {
                     "message": {
@@ -823,18 +773,13 @@ class TestAIFullSuccessReturn:
                 }
             ]
         }
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_resp
 
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-md"}, clear=False):
-            with patch.object(_httpx, "Client", return_value=mock_client):
-                with patch(
-                    "app.infrastructure.llm.providers.credentials.default_chat_completions_url",
-                    return_value="http://fake/v1/chat/completions",
-                ):
-                    r = _parse_order_text("另一个无法解析的文本 abc")
+            with patch(
+                "app.infrastructure.llm.invoke.chat_completion_openai_format",
+                new=AsyncMock(return_value=payload),
+            ):
+                r = _parse_order_text("另一个无法解析的文本 abc")
         assert "success" in r
 
 
