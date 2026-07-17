@@ -52,6 +52,18 @@ platform :ios do
     certificate_name = ENV["sigh_#{APP_IDENTIFIER}_appstore_certificate-name"]
     UI.user_error!("match did not expose a distribution certificate name") if certificate_name.to_s.empty?
 
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: team_id,
+      targets: ["Runner"],
+      build_configurations: ["Release"],
+      sdk: "iphoneos*",
+      code_sign_identity: certificate_name,
+      profile_name: profile_name,
+      bundle_identifier: APP_IDENTIFIER
+    )
+
     FileUtils.mkdir_p(IPA_OUTPUT_DIRECTORY)
     build_app(
       workspace: "Runner.xcworkspace",
@@ -73,10 +85,6 @@ platform :ios do
         }
       },
       xcargs: [
-        "DEVELOPMENT_TEAM=#{Shellwords.escape(team_id)}",
-        "CODE_SIGN_STYLE=Manual",
-        "CODE_SIGN_IDENTITY=#{Shellwords.escape(certificate_name)}",
-        "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(profile_name)}",
         "FLUTTER_BUILD_NAME=#{Shellwords.escape(ENV.fetch('IOS_MARKETING_VERSION'))}",
         "FLUTTER_BUILD_NUMBER=#{Shellwords.escape(ENV.fetch('IOS_BUILD_NUMBER'))}"
       ].join(" ")
