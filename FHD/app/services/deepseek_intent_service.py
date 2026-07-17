@@ -197,7 +197,8 @@ class DeepSeekIntentRecognizer:
         if intent not in INTENT_DESCRIPTIONS and intent != "negation":
             return self._fallback_result(original_message)
         confidence = float(data.get("confidence") or 0.5)
-        slots = data.get("slots") if isinstance(data.get("slots"), dict) else {}
+        raw_slots = data.get("slots")
+        slots = raw_slots if isinstance(raw_slots, dict) else {}
         return {
             "intent": intent,
             "confidence": min(confidence, 1.0),

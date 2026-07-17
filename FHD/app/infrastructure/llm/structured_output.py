@@ -13,7 +13,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from app.infrastructure.llm import invoke
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -202,4 +202,4 @@ def complete_structured_sync(
         raise box["error"]
     if "result" not in box:
         raise StructuredOutputError(0, ["sync bridge timeout"], "")
-    return box["result"]
+    return cast(StructuredResult, box["result"])
