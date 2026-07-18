@@ -47,6 +47,10 @@
             <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些侧栏能力卡片</li>
             <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
           </ul>
+          <p class="lead muted pricing-anchor">
+            <strong>价格预期</strong>：99 元试用 30 天；满意后选购永久授权（1 万元起），一次购买永久使用。试用到期账户冻结，购买后即可继续使用。
+          </p>
+          <p v-if="trialStatusText" class="lead muted trial-status" role="status">{{ trialStatusText }}</p>
           <div class="actions">
             <button type="button" class="btn primary" @click="goStep('industry')">下一步：行业定型</button>
           </div>
@@ -109,6 +113,7 @@
             已选 <strong>{{ pickedIndustryName }}</strong>。点一下装齐推荐菜单，就可以进对话。
             AI 员工以后需要再装，不挡这一步。
           </p>
+          <p class="lead muted">行业 Mod 含在授权内，不单独收费；定制 AI 员工按需另行评估。</p>
           <div
             class="status-card"
             :class="{ ok: baselineOk && !loading, warn: !baselineOk && !loading }"
@@ -287,6 +292,7 @@ import {
 } from '@/constants/productFlow'
 import { useProductFlow } from '@/composables/useProductFlow'
 import { useIndustryStore } from '@/stores/industry'
+import { authApi } from '@/api/auth'
 import {
   clearDeliverableStatusCache,
   fetchIndustryBaseline,
@@ -447,6 +453,13 @@ function initialProductSku() {
 }
 
 const productSku = ref(initialProductSku())
+const subscription = ref(null)
+const trialStatusText = computed(() => {
+  const sub = subscription.value
+  if (!sub || sub.reason !== 'trial') return ''
+  const days = sub.trial_days_remaining ?? '—'
+  return `当前为试用账户：剩余 ${days} 天${sub.trial_expires_at ? `（至 ${sub.trial_expires_at}）` : ''}。满意后可选购永久授权（1 万元起）。`
+})
 const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
 const SIDEBAR_PREVIEW_MENU_KEYS = [
   'products',
@@ -854,6 +867,12 @@ onMounted(async () => {
     /* ignore */
   }
   try {
+    const subRes = await authApi.getSubscriptionStatus().catch(() => null)
+    if (subRes?.data) subscription.value = subRes.data
+  } catch {
+    /* ignore */
+  }
+  try {
     onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
     if (onboardingCatalog.value?.open_industry_ids?.length) {
       setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
@@ -1049,6 +1068,19 @@ onMounted(async () => {
 .lead.muted {
   font-size: 14px;
   color: #64748b;
+}
+
+.pricing-anchor {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-left: 3px solid #1d4ed8;
+  background: #eff6ff;
+  border-radius: 0 8px 8px 0;
+}
+
+.trial-status {
+  margin-top: 8px;
+  color: #059669;
 }
 
 .welcome-tagline {
