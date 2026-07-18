@@ -7,8 +7,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes import kellai_binding
 from app.application import kellai_binding_store
+from app.fastapi_routes import kellai_binding
 
 PAIRING_HEADERS = {"X-Kellai-Local-Pairing": "1"}
 XCMAX_HEADERS = {**PAIRING_HEADERS, "X-XCMAX-Client-Shell": "enterprise"}

@@ -28,7 +28,6 @@ from app.fastapi_routes.mobile_extensions.cs_helpers import (
     _strip_markdown_json_fence,
 )
 
-
 # ---------------------------------------------------------------------------
 # _safe_user_id
 # ---------------------------------------------------------------------------
