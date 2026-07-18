@@ -18,7 +18,7 @@
 - `FHD/docs/PROJECT_STATE.md`
 - `FHD/docs/ARCHITECTURE.md`
 - `FHD/docs/mobile_tri_platform_ssot.md`
-- `FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md`
+- `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md`
 - `FHD/config/duty_roster.json`
 - `scripts/dev/sync_duty_roster.py`
 - `FHD/contracts/openapi.json`

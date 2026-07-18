@@ -42,9 +42,9 @@ import 'package:xcagi_flutter_poc/src/features/scan/scan_qr_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/settings/settings_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/shell/home_shell.dart';
 import 'package:xcagi_flutter_poc/src/features/tools/ocr_screen.dart';
-import 'package:xcagi_flutter_poc/src/features/update/android_package_update_installer.dart';
+import 'package:xcagi_flutter_poc/src/features/update/package_update_installer.dart';
 import 'package:xcagi_flutter_poc/src/features/webview/desktop_tool_webview_screen.dart';
-import 'package:xcagi_flutter_poc/src/policy/android_runtime_policy.dart';
+import 'package:xcagi_flutter_poc/src/policy/mobile_runtime_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_assets.dart';
@@ -55,9 +55,9 @@ import 'package:xcagi_flutter_poc/src/widgets/group_grid_avatar.dart';
 import 'package:xcagi_flutter_poc/src/widgets/we_ui.dart';
 
 void main() {
-  setUp(AndroidProductSkuConfig.resetRemoteSku);
+  setUp(MobileProductSkuConfig.resetRemoteSku);
 
-  test('pairing QR parser follows Android short-code priority', () {
+  test('pairing QR parser follows Flutter short-code priority', () {
     final shortCode = parsePairingPayload('123456')!;
     expect(shortCode.code, '123456');
     expect(shortCode.token, '123456');
@@ -72,8 +72,9 @@ void main() {
     expect(deeplink.port, 5112);
     expect(deeplink.hostWithPort, '192.168.31.8:5112');
 
-    final json =
-        parsePairingPayload('{"v":2,"nonce":"abcdef123456","token":"789012"}')!;
+    final json = parsePairingPayload(
+      '{"v":2,"nonce":"abcdef123456","token":"789012"}',
+    )!;
     expect(json.code, '789012');
 
     final relay = parsePairingPayload(
@@ -98,14 +99,14 @@ void main() {
     expect(payload?.qrId, 'login-123');
     expect(payload?.accountKind, 'admin');
     expect(parseAuthQrPayload('xcagi://pair?code=123456'), isNull);
-    expect(androidAuthQrTargetLabel('admin'), '管理端');
-    expect(androidAuthQrTargetLabel('workspace'), '企业端');
-    expect(androidAuthQrUsernameHint('admin'), '管理员账号');
-    expect(androidAuthQrUsernameHint('workspace'), '企业账号');
+    expect(mobileAuthQrTargetLabel('admin'), '管理端');
+    expect(mobileAuthQrTargetLabel('workspace'), '企业端');
+    expect(mobileAuthQrUsernameHint('admin'), '管理员账号');
+    expect(mobileAuthQrUsernameHint('workspace'), '企业账号');
   });
 
-  test('theme tokens mirror Android Theme.kt constants', () {
-    // Keep Flutter locked to mobile-android/ui/theme/Theme.kt.
+  test('theme tokens match the Flutter design-token contract', () {
+    // Keep Flutter locked to the mobile design-token SSOT.
     final light = AppTheme.light();
     final dark = AppTheme.dark();
     const lightExtra = XcagiThemeColors.light;
@@ -158,7 +159,7 @@ void main() {
     expect(darkExtra.textTertiary, const Color(0xFF5C5C5C));
   });
 
-  testWidgets('message list renders Android-first department groups', (
+  testWidgets('message list renders Flutter-first department groups', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -179,7 +180,7 @@ void main() {
     );
 
     expect(find.text('admin'), findsOneWidget);
-    expect(find.text('账号 · 56位AI员工'), findsOneWidget);
+    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
     expect(find.text('查找会话或伙伴'), findsOneWidget);
     expect(find.text('超级开发部'), findsOneWidget);
     expect(find.text('(5)'), findsOneWidget);
@@ -192,10 +193,7 @@ void main() {
     final headerPadding = tester.widget<Padding>(
       find.byKey(const ValueKey('message_home_header_padding')),
     );
-    expect(
-      headerPadding.padding,
-      const EdgeInsets.fromLTRB(16, 8, 16, 10),
-    );
+    expect(headerPadding.padding, const EdgeInsets.fromLTRB(16, 8, 16, 10));
     final searchGap = tester.widget<SizedBox>(
       find.byKey(const ValueKey('message_home_header_search_gap')),
     );
@@ -208,10 +206,12 @@ void main() {
     expect(rowDividers.first.height, 0.5);
     expect(rowDividers.first.thickness, 0.5);
     expect(
-        rowDividers.first.color, AppTheme.light().colorScheme.outlineVariant);
+      rowDividers.first.color,
+      AppTheme.light().colorScheme.outlineVariant,
+    );
   });
 
-  testWidgets('message list text styles use Android typography tokens', (
+  testWidgets('message list text styles use Flutter typography tokens', (
     WidgetTester tester,
   ) async {
     const readConversation = ConversationItem(
@@ -240,9 +240,7 @@ void main() {
     expect(headerTitle.style?.height, typography.titleLarge?.height);
     expect(headerTitle.style?.fontWeight, FontWeight.w600);
 
-    final headerSubtitle = tester.widget<Text>(
-      find.text('账号 · 2位AI员工'),
-    );
+    final headerSubtitle = tester.widget<Text>(find.text('账号 · 2位AI员工'));
     expect(headerSubtitle.style?.fontSize, typography.labelMedium?.fontSize);
     expect(headerSubtitle.style?.height, typography.labelMedium?.height);
 
@@ -290,7 +288,7 @@ void main() {
     expect(unreadTitle.style?.fontWeight, FontWeight.w700);
   });
 
-  testWidgets('message list plus menu follows Android destinations', (
+  testWidgets('message list plus menu follows Flutter destinations', (
     WidgetTester tester,
   ) async {
     final opened = <String>[];
@@ -368,44 +366,45 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
-  testWidgets('message list conversation long press mirrors Android actions', (
-    WidgetTester tester,
-  ) async {
-    final repository = _FakeConversationActionRepository();
-    var refreshCount = 0;
+  testWidgets(
+    'message list conversation long press matches the mobile actions',
+    (WidgetTester tester) async {
+      final repository = _FakeConversationActionRepository();
+      var refreshCount = 0;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: MessageListScreen(
-            items: const [_fakeUnreadConversation],
-            repository: repository,
-            onRefresh: () async {
-              refreshCount += 1;
-            },
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: MessageListScreen(
+              items: const [_fakeUnreadConversation],
+              repository: repository,
+              onRefresh: () async {
+                refreshCount += 1;
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.longPress(find.text('客户会话'));
-    await tester.pumpAndSettle();
+      await tester.longPress(find.text('客户会话'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('标为已读'), findsOneWidget);
-    expect(find.text('取消置顶'), findsOneWidget);
-    expect(find.text('不再关注'), findsOneWidget);
-    expect(find.text('不显示该聊天'), findsOneWidget);
-    expect(find.text('删除该聊天'), findsOneWidget);
+      expect(find.text('标为已读'), findsOneWidget);
+      expect(find.text('取消置顶'), findsOneWidget);
+      expect(find.text('不再关注'), findsOneWidget);
+      expect(find.text('不显示该聊天'), findsOneWidget);
+      expect(find.text('删除该聊天'), findsOneWidget);
 
-    await tester.tap(find.text('标为已读'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('标为已读'));
+      await tester.pumpAndSettle();
 
-    expect(repository.actions, ['conversation-read:employee:demo:customer']);
-    expect(refreshCount, 1);
-  });
+      expect(repository.actions, ['conversation-read:employee:demo:customer']);
+      expect(refreshCount, 1);
+    },
+  );
 
-  testWidgets('message list group long press uses Android group operations', (
+  testWidgets('message list group long press uses Flutter group operations', (
     WidgetTester tester,
   ) async {
     final repository = _FakeConversationActionRepository();
@@ -443,30 +442,29 @@ void main() {
     expect(refreshCount, 1);
   });
 
-  testWidgets('message list group row mirrors Android pin and follow state', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: MessageListScreen(
-            groups: [
-              _fakeGroup.copyWith(isPinned: true, isFollowed: false),
-            ],
-            items: const [],
+  testWidgets(
+    'message list group row matches the mobile pin and follow state',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: MessageListScreen(
+              groups: [_fakeGroup.copyWith(isPinned: true, isFollowed: false)],
+              items: const [],
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
-    expect(find.text('不再关注'), findsOneWidget);
-    final timestamp = tester.widget<Text>(find.text('刚刚'));
-    expect(timestamp.style?.fontSize, 11);
-  });
+      expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
+      expect(find.text('不再关注'), findsOneWidget);
+      final timestamp = tester.widget<Text>(find.text('刚刚'));
+      expect(timestamp.style?.fontSize, 11);
+    },
+  );
 
-  testWidgets('message list dimmed group keeps Android avatar opacity', (
+  testWidgets('message list dimmed group keeps Flutter avatar opacity', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -474,9 +472,7 @@ void main() {
         theme: AppTheme.light(),
         home: Scaffold(
           body: MessageListScreen(
-            groups: [
-              _fakeGroup.copyWith(isFollowed: false),
-            ],
+            groups: [_fakeGroup.copyWith(isFollowed: false)],
             items: const [],
           ),
         ),
@@ -493,7 +489,7 @@ void main() {
     );
   });
 
-  testWidgets('message list dimmed conversation keeps Android avatar opacity', (
+  testWidgets('message list dimmed conversation keeps Flutter avatar opacity', (
     WidgetTester tester,
   ) async {
     const dimmedConversation = ConversationItem(
@@ -519,9 +515,7 @@ void main() {
     expect(
       tester.getSize(
         find.byKey(
-          const ValueKey(
-            'conversation_avatar_stack_employee:demo:unfollowed',
-          ),
+          const ValueKey('conversation_avatar_stack_employee:demo:unfollowed'),
         ),
       ),
       const Size(52, 52),
@@ -534,14 +528,14 @@ void main() {
     );
   });
 
-  testWidgets('message list read conversation text colors mirror Android', (
+  testWidgets('message list read conversation text colors mirror Flutter', (
     WidgetTester tester,
   ) async {
     const readConversation = ConversationItem(
       id: 'employee:demo:read',
       type: ConversationType.aiTask,
       title: '已读员工',
-      subtitle: '已读预览更接近 Android N600',
+      subtitle: '已读预览更接近 Flutter N600',
       timestampText: '6/24',
     );
 
@@ -554,10 +548,12 @@ void main() {
       ),
     );
 
-    expect(tester.widget<Text>(find.text('6/24')).style?.color,
-        AppTheme.textSecondary);
     expect(
-      tester.widget<Text>(find.text('已读预览更接近 Android N600')).style?.color,
+      tester.widget<Text>(find.text('6/24')).style?.color,
+      AppTheme.textSecondary,
+    );
+    expect(
+      tester.widget<Text>(find.text('已读预览更接近 Flutter N600')).style?.color,
       AppTheme.textStrongSecondary,
     );
   });
@@ -579,9 +575,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const Scaffold(
-          body: MessageListScreen(items: [conversation]),
-        ),
+        home: const Scaffold(body: MessageListScreen(items: [conversation])),
       ),
     );
 
@@ -597,114 +591,112 @@ void main() {
     expect(label.style?.color, installedBadge);
   });
 
-  testWidgets('message list hides backend admin badges from conversation cards',
-      (
-    WidgetTester tester,
-  ) async {
-    const conversations = [
-      ConversationItem(
-        id: 'employee:demo:backend',
-        type: ConversationType.aiTask,
-        title: '管理端员工',
-        subtitle: '不应该显示后台角标',
-        timestampText: '6/24',
-        badgeText: '管理端后台',
-        badgeColor: 0xFFED7B2F,
-      ),
-      ConversationItem(
-        id: 'employee:demo:server',
-        type: ConversationType.aiTask,
-        title: '服务器员工',
-        subtitle: '不应该显示后台角标',
-        timestampText: '6/23',
-        badgeText: '服务器后台',
-        badgeColor: 0xFFED7B2F,
-      ),
-    ];
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: const Scaffold(
-          body: MessageListScreen(items: conversations),
+  testWidgets(
+    'message list hides backend admin badges from conversation cards',
+    (WidgetTester tester) async {
+      const conversations = [
+        ConversationItem(
+          id: 'employee:demo:backend',
+          type: ConversationType.aiTask,
+          title: '管理端员工',
+          subtitle: '不应该显示后台角标',
+          timestampText: '6/24',
+          badgeText: '管理端后台',
+          badgeColor: 0xFFED7B2F,
         ),
-      ),
-    );
+        ConversationItem(
+          id: 'employee:demo:server',
+          type: ConversationType.aiTask,
+          title: '服务器员工',
+          subtitle: '不应该显示后台角标',
+          timestampText: '6/23',
+          badgeText: '服务器后台',
+          badgeColor: 0xFFED7B2F,
+        ),
+      ];
 
-    expect(find.text('管理端后台'), findsNothing);
-    expect(find.text('服务器后台'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('conversation_status_badge_管理端后台')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('conversation_status_badge_服务器后台')),
-      findsNothing,
-    );
-  });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(body: MessageListScreen(items: conversations)),
+        ),
+      );
 
-  testWidgets('message list sorts conversations by pinned then latest message',
-      (
-    WidgetTester tester,
-  ) async {
-    const pinned = ConversationItem(
-      id: 'pinned:assistant',
-      type: ConversationType.pinnedAssistant,
-      title: '置顶小C',
-      subtitle: '置顶优先',
-      timestampText: '6/22',
-      timestampMs: 1000,
-      isPinned: true,
-    );
-    const newestEmployee = ConversationItem(
-      id: 'employee:demo:newest',
-      type: ConversationType.aiTask,
-      title: '最新员工',
-      subtitle: '最近说话',
-      timestampText: '刚刚',
-      timestampMs: 3000,
-    );
-    const olderEmployee = ConversationItem(
-      id: 'employee:demo:older',
-      type: ConversationType.aiTask,
-      title: '旧员工',
-      subtitle: '更早消息',
-      timestampText: '6/24',
-      timestampMs: 1000,
-    );
-    const group = AiGroupConversation(
-      id: 'group-new',
-      name: '最新群聊',
-      memberCount: 2,
-      preview: '群消息',
-      timestampText: '刚刚',
-      timestampMs: 4000,
-      members: [],
-    );
+      expect(find.text('管理端后台'), findsNothing);
+      expect(find.text('服务器后台'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('conversation_status_badge_管理端后台')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('conversation_status_badge_服务器后台')),
+        findsNothing,
+      );
+    },
+  );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: const Scaffold(
-          body: MessageListScreen(
-            groups: [group],
-            items: [olderEmployee, newestEmployee, pinned],
+  testWidgets(
+    'message list sorts conversations by pinned then latest message',
+    (WidgetTester tester) async {
+      const pinned = ConversationItem(
+        id: 'pinned:assistant',
+        type: ConversationType.pinnedAssistant,
+        title: '置顶小C',
+        subtitle: '置顶优先',
+        timestampText: '6/22',
+        timestampMs: 1000,
+        isPinned: true,
+      );
+      const newestEmployee = ConversationItem(
+        id: 'employee:demo:newest',
+        type: ConversationType.aiTask,
+        title: '最新员工',
+        subtitle: '最近说话',
+        timestampText: '刚刚',
+        timestampMs: 3000,
+      );
+      const olderEmployee = ConversationItem(
+        id: 'employee:demo:older',
+        type: ConversationType.aiTask,
+        title: '旧员工',
+        subtitle: '更早消息',
+        timestampText: '6/24',
+        timestampMs: 1000,
+      );
+      const group = AiGroupConversation(
+        id: 'group-new',
+        name: '最新群聊',
+        memberCount: 2,
+        preview: '群消息',
+        timestampText: '刚刚',
+        timestampMs: 4000,
+        members: [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(
+            body: MessageListScreen(
+              groups: [group],
+              items: [olderEmployee, newestEmployee, pinned],
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final pinnedTop = tester.getTopLeft(find.text('置顶小C')).dy;
-    final groupTop = tester.getTopLeft(find.text('最新群聊')).dy;
-    final newestTop = tester.getTopLeft(find.text('最新员工')).dy;
-    final olderTop = tester.getTopLeft(find.text('旧员工')).dy;
+      final pinnedTop = tester.getTopLeft(find.text('置顶小C')).dy;
+      final groupTop = tester.getTopLeft(find.text('最新群聊')).dy;
+      final newestTop = tester.getTopLeft(find.text('最新员工')).dy;
+      final olderTop = tester.getTopLeft(find.text('旧员工')).dy;
 
-    expect(pinnedTop, lessThan(groupTop));
-    expect(groupTop, lessThan(newestTop));
-    expect(newestTop, lessThan(olderTop));
-  });
+      expect(pinnedTop, lessThan(groupTop));
+      expect(groupTop, lessThan(newestTop));
+      expect(newestTop, lessThan(olderTop));
+    },
+  );
 
-  testWidgets('message list unread conversation text colors mirror Android', (
+  testWidgets('message list unread conversation text colors mirror Flutter', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -726,7 +718,7 @@ void main() {
     );
   });
 
-  testWidgets('message list avatar geometry follows Android overflow policy', (
+  testWidgets('message list avatar geometry follows Flutter overflow policy', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -741,44 +733,22 @@ void main() {
     expect(
       tester.getSize(
         find.byKey(
-          const ValueKey(
-            'conversation_avatar_stack_employee:demo:customer',
-          ),
+          const ValueKey('conversation_avatar_stack_employee:demo:customer'),
         ),
       ),
       const Size(52, 52),
     );
   });
 
-  testWidgets('group grid avatar follows Android centered grid geometry', (
+  testWidgets('group grid avatar follows Flutter centered grid geometry', (
     WidgetTester tester,
   ) async {
     const members = [
-      AiGroupMember(
-        employeeId: 'member-1',
-        name: '成员1',
-        summary: '',
-      ),
-      AiGroupMember(
-        employeeId: 'member-2',
-        name: '成员2',
-        summary: '',
-      ),
-      AiGroupMember(
-        employeeId: 'member-3',
-        name: '成员3',
-        summary: '',
-      ),
-      AiGroupMember(
-        employeeId: 'member-4',
-        name: '成员4',
-        summary: '',
-      ),
-      AiGroupMember(
-        employeeId: 'member-5',
-        name: '成员5',
-        summary: '',
-      ),
+      AiGroupMember(employeeId: 'member-1', name: '成员1', summary: ''),
+      AiGroupMember(employeeId: 'member-2', name: '成员2', summary: ''),
+      AiGroupMember(employeeId: 'member-3', name: '成员3', summary: ''),
+      AiGroupMember(employeeId: 'member-4', name: '成员4', summary: ''),
+      AiGroupMember(employeeId: 'member-5', name: '成员5', summary: ''),
     ];
 
     await tester.pumpWidget(
@@ -786,9 +756,7 @@ void main() {
         theme: AppTheme.light(),
         home: Scaffold(
           body: MessageListScreen(
-            groups: [
-              _fakeGroup.copyWith(memberCount: 5, members: members),
-            ],
+            groups: [_fakeGroup.copyWith(memberCount: 5, members: members)],
             items: const [],
           ),
         ),
@@ -813,17 +781,14 @@ void main() {
     expect(firstSize.height, moreOrLessEquals(15.33, epsilon: 0.02));
   });
 
-  testWidgets('message list group search follows Android name-only filter', (
+  testWidgets('message list group search follows Flutter name-only filter', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
         home: const Scaffold(
-          body: MessageListScreen(
-            groups: [_fakeGroup],
-            items: [],
-          ),
+          body: MessageListScreen(groups: [_fakeGroup], items: []),
         ),
       ),
     );
@@ -839,17 +804,13 @@ void main() {
     expect(find.text('超级开发部'), findsOneWidget);
   });
 
-  testWidgets('message list empty state mirrors Android empty wording', (
+  testWidgets('message list empty state matches the mobile empty wording', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const Scaffold(
-          body: MessageListScreen(
-            items: [],
-          ),
-        ),
+        home: const Scaffold(body: MessageListScreen(items: [])),
       ),
     );
 
@@ -859,18 +820,13 @@ void main() {
     expect(find.text('下拉刷新或和小C助理聊聊吧'), findsOneWidget);
   });
 
-  testWidgets('message list loading empty state uses Android wording', (
+  testWidgets('message list loading empty state uses Flutter wording', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const Scaffold(
-          body: MessageListScreen(
-            items: [],
-            loading: true,
-          ),
-        ),
+        home: const Scaffold(body: MessageListScreen(items: [], loading: true)),
       ),
     );
 
@@ -880,15 +836,13 @@ void main() {
     expect(find.text('暂无会话'), findsNothing);
   });
 
-  testWidgets('message list header counts only loaded Android AI rows', (
+  testWidgets('message list header counts only loaded Flutter AI rows', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const Scaffold(
-          body: MessageListScreen(items: []),
-        ),
+        home: const Scaffold(body: MessageListScreen(items: [])),
       ),
     );
 
@@ -896,7 +850,7 @@ void main() {
     expect(find.textContaining('56位AI员工'), findsNothing);
   });
 
-  testWidgets('bottom nav labels match Android current shell', (
+  testWidgets('bottom nav labels match Flutter current shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -922,7 +876,7 @@ void main() {
     expect(unselectedLabel.style?.color, AppTheme.textStrongSecondary);
   });
 
-  testWidgets('bottom nav follows Android dark label tokens', (
+  testWidgets('bottom nav follows Flutter dark label tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -949,7 +903,7 @@ void main() {
     expect(unselectedLabel.style?.color, colors.textStrongSecondary);
   });
 
-  testWidgets('bottom nav host uses Android scaffold page behind chrome', (
+  testWidgets('bottom nav host uses Flutter scaffold page behind chrome', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -982,7 +936,7 @@ void main() {
     expect(capsule.elevation, 8);
   });
 
-  testWidgets('bottom nav hit area fills Android 66dp item surface', (
+  testWidgets('bottom nav hit area fills Flutter 66dp item surface', (
     WidgetTester tester,
   ) async {
     var selectedIndex = 0;
@@ -1021,15 +975,13 @@ void main() {
     expect(selectedIndex, 3);
   });
 
-  testWidgets('WeTopBar uses Android 64dp default content height', (
+  testWidgets('WeTopBar uses Flutter 64dp default content height', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const Scaffold(
-          body: WeTopBar(title: '小C助理', showBack: true),
-        ),
+        home: const Scaffold(body: WeTopBar(title: '小C助理', showBack: true)),
       ),
     );
 
@@ -1039,7 +991,7 @@ void main() {
     );
   });
 
-  testWidgets('shared mobile chrome follows Android dark theme tokens', (
+  testWidgets('shared mobile chrome follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1072,7 +1024,7 @@ void main() {
     expect(bottomTile.color, colors.page);
   });
 
-  testWidgets('WeField follows Android dark input background token', (
+  testWidgets('WeField follows Flutter dark input background token', (
     WidgetTester tester,
   ) async {
     final controller = TextEditingController();
@@ -1084,10 +1036,7 @@ void main() {
         darkTheme: AppTheme.dark(),
         themeMode: ThemeMode.dark,
         home: Scaffold(
-          body: WeField(
-            controller: controller,
-            placeholder: '输入消息',
-          ),
+          body: WeField(controller: controller, placeholder: '输入消息'),
         ),
       ),
     );
@@ -1104,7 +1053,7 @@ void main() {
     expect(decoration.color, isNot(colors.page));
   });
 
-  testWidgets('shared We UI text styles use Android typography tokens', (
+  testWidgets('shared We UI text styles use Flutter typography tokens', (
     WidgetTester tester,
   ) async {
     final controller = TextEditingController();
@@ -1155,12 +1104,14 @@ void main() {
     expect(cellValue.style?.height, textTheme.bodyMedium?.height);
     expect(field.style?.fontSize, textTheme.bodyLarge?.fontSize);
     expect(
-        field.decoration?.hintStyle?.fontSize, textTheme.bodyLarge?.fontSize);
+      field.decoration?.hintStyle?.fontSize,
+      textTheme.bodyLarge?.fontSize,
+    );
     expect(buttonStyle?.fontSize, textTheme.bodyLarge?.fontSize);
     expect(buttonStyle?.height, textTheme.bodyLarge?.height);
   });
 
-  testWidgets('chat detail uses Android compact 48dp top bar', (
+  testWidgets('chat detail uses Flutter compact 48dp top bar', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1179,7 +1130,7 @@ void main() {
     );
   });
 
-  testWidgets('chat detail follows Android dark theme tokens', (
+  testWidgets('chat detail follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1234,8 +1185,9 @@ void main() {
     expect(moreButton.color, colors.textPrimary);
   });
 
-  testWidgets('home shell follows Android conversation list with group rows',
-      (WidgetTester tester) async {
+  testWidgets('home shell follows Flutter conversation list with group rows', (
+    WidgetTester tester,
+  ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 1800);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1269,10 +1221,10 @@ void main() {
     );
   });
 
-  testWidgets('home shell uses Android personal conversation runtime', (
+  testWidgets('home shell uses Flutter personal conversation runtime', (
     WidgetTester tester,
   ) async {
-    AndroidProductSkuConfig.setRemoteSku('personal');
+    MobileProductSkuConfig.setRemoteSku('personal');
     final api = _FakeProfileApi(
       session: const MobileSessionData(accountKind: 'personal'),
     );
@@ -1296,10 +1248,10 @@ void main() {
     expect(find.text('客户客服'), findsNothing);
   });
 
-  testWidgets('home shell treats Android admin as enterprise effective', (
+  testWidgets('home shell treats Flutter admin as enterprise effective', (
     WidgetTester tester,
   ) async {
-    AndroidProductSkuConfig.setRemoteSku('personal');
+    MobileProductSkuConfig.setRemoteSku('personal');
     final api = _FakeProfileApi(
       session: const MobileSessionData(accountKind: 'admin_portal'),
     );
@@ -1339,7 +1291,7 @@ void main() {
     expect(find.byType(ChatScreen), findsNothing);
   });
 
-  testWidgets('home shell hides Android bottom nav on pushed direct chat', (
+  testWidgets('home shell hides Flutter bottom nav on pushed direct chat', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1426,14 +1378,11 @@ void main() {
     expect(find.text('来自 HomeShell repository client'), findsOneWidget);
   });
 
-  testWidgets('home shell refreshes Android local profile after profile edit', (
+  testWidgets('home shell refreshes Flutter local profile after profile edit', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
-      session: const MobileSessionData(
-        username: 'admin',
-        accountKind: 'admin',
-      ),
+      session: const MobileSessionData(username: 'admin', accountKind: 'admin'),
     );
     final repository = _FakeHomeShellRepository(
       client: api,
@@ -1466,7 +1415,7 @@ void main() {
     expect(api.session.username, 'admin-local');
   });
 
-  testWidgets('home shell seeds Android cached avatar before network refresh', (
+  testWidgets('home shell seeds Flutter cached avatar before network refresh', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
@@ -1493,7 +1442,7 @@ void main() {
     expect(repository.loadMeCalls, 1);
   });
 
-  testWidgets('home shell renders Android cached employees before refresh', (
+  testWidgets('home shell renders Flutter cached employees before refresh', (
     WidgetTester tester,
   ) async {
     final repository = _CachedFirstHomeShellRepository();
@@ -1515,36 +1464,36 @@ void main() {
     expect(repository.remoteConversations.isCompleted, isFalse);
   });
 
-  testWidgets('home shell keeps Android cached employees after refresh failure',
-      (
-    WidgetTester tester,
-  ) async {
-    final repository = _CachedFirstHomeShellRepository();
+  testWidgets(
+    'home shell keeps Flutter cached employees after refresh failure',
+    (WidgetTester tester) async {
+      final repository = _CachedFirstHomeShellRepository();
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: HomeShell(repository: repository),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: HomeShell(repository: repository),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-    repository.remoteConversations.completeError(
-      const MobileRepositoryException('offline'),
-    );
-    await tester.pump();
-    await tester.pump();
-    await tester.drag(find.byType(ListView).first, const Offset(0, -520));
-    await tester.pump();
+      repository.remoteConversations.completeError(
+        const MobileRepositoryException('offline'),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.drag(find.byType(ListView).first, const Offset(0, -520));
+      await tester.pump();
 
-    expect(find.text('缓存头像员工'), findsOneWidget);
-    expect(find.text('我: 先看缓存'), findsOneWidget);
-    expect(find.text('账号生态待同步'), findsNothing);
-    expect(repository.loadConversationCalls, 1);
-  });
+      expect(find.text('缓存头像员工'), findsOneWidget);
+      expect(find.text('我: 先看缓存'), findsOneWidget);
+      expect(find.text('账号生态待同步'), findsNothing);
+      expect(repository.loadConversationCalls, 1);
+    },
+  );
 
-  testWidgets('home shell header uses Android me endpoint account data', (
+  testWidgets('home shell header uses Flutter me endpoint account data', (
     WidgetTester tester,
   ) async {
     final repository = _FakeHomeShellRepository(
@@ -1578,11 +1527,11 @@ void main() {
 
     expect(repository.accountLoads, 1);
     expect(find.text('fallback-name'), findsOneWidget);
-    expect(find.text('账号 · 56位AI员工'), findsOneWidget);
+    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
     expect(find.text('admin'), findsNothing);
   });
 
-  testWidgets('AI employees tab matches Android employee roster shell', (
+  testWidgets('AI employees tab matches Flutter employee roster shell', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -1602,7 +1551,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('AI员工(56)'), findsOneWidget);
+    expect(find.text('AI员工(55)'), findsOneWidget);
     final aiEmployeeTitle = tester.widget<Text>(
       find.byKey(const ValueKey('ai_employee_title')),
     );
@@ -1625,7 +1574,7 @@ void main() {
     expect(find.text('发消息'), findsOneWidget);
   });
 
-  testWidgets('AI employees tab follows Android dark theme tokens', (
+  testWidgets('AI employees tab follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1640,8 +1589,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(AiEmployeesScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(AiEmployeesScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
     expect(scaffold.backgroundColor, colors.page);
 
@@ -1660,7 +1610,7 @@ void main() {
     expect(border.top.color, colors.divider);
   });
 
-  testWidgets('AI employee profile source mirrors Android source label', (
+  testWidgets('AI employee profile source matches the mobile source label', (
     WidgetTester tester,
   ) async {
     const employee = AiEmployeeProfile(
@@ -1708,7 +1658,7 @@ void main() {
     );
   });
 
-  testWidgets('AI employee profile reloads Android current employee source', (
+  testWidgets('AI employee profile reloads Flutter current employee source', (
     WidgetTester tester,
   ) async {
     const staleEmployee = AiEmployeeProfile(
@@ -1777,34 +1727,35 @@ void main() {
   });
 
   testWidgets(
-      'AI employee profile not found state mirrors Android refresh empty',
-      (WidgetTester tester) async {
-    final employee = adminDutyEmployeeProfiles().first;
-    final repository = _FakeEmployeesRepository(const []);
+    'AI employee profile not found state matches the mobile refresh empty',
+    (WidgetTester tester) async {
+      final employee = adminDutyEmployeeProfiles().first;
+      final repository = _FakeEmployeesRepository(const []);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: AiEmployeeProfileScreen(
-          employee: employee,
-          repository: repository,
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AiEmployeeProfileScreen(
+            employee: employee,
+            repository: repository,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('未找到该 AI 员工'), findsOneWidget);
-    expect(find.text('稍后刷新或从企业端同步数据'), findsOneWidget);
-    expect(find.text('刷新'), findsOneWidget);
-    expect(repository.employeeLoads, 1);
+      expect(find.text('未找到该 AI 员工'), findsOneWidget);
+      expect(find.text('稍后刷新或从企业端同步数据'), findsOneWidget);
+      expect(find.text('刷新'), findsOneWidget);
+      expect(repository.employeeLoads, 1);
 
-    await tester.tap(find.text('刷新'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('刷新'));
+      await tester.pumpAndSettle();
 
-    expect(repository.employeeLoads, 2);
-  });
+      expect(repository.employeeLoads, 2);
+    },
+  );
 
-  testWidgets('AI employee profile follows Android dark theme tokens', (
+  testWidgets('AI employee profile follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     final employee = adminDutyEmployeeProfiles().first;
@@ -1817,16 +1768,18 @@ void main() {
       ),
     );
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(AiEmployeeProfileScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(AiEmployeeProfileScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
     expect(scaffold.backgroundColor, colors.page);
 
     final nameText = tester.widget<Text>(find.text(employee.name).first);
     expect(nameText.style?.color, colors.textPrimary);
 
-    final sourceText =
-        tester.widget<Text>(find.text('来源：${employee.sourceLabel}').first);
+    final sourceText = tester.widget<Text>(
+      find.text('来源：${employee.sourceLabel}').first,
+    );
     expect(sourceText.style?.color, colors.textSecondary);
 
     await tester.scrollUntilVisible(find.text('发消息'), 240);
@@ -1834,7 +1787,7 @@ void main() {
     expect(chatText.style?.color, colors.brand);
   });
 
-  testWidgets('AI employees empty state matches Android refresh prompt', (
+  testWidgets('AI employees empty state matches Flutter refresh prompt', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1857,7 +1810,7 @@ void main() {
     expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
   });
 
-  testWidgets('AI employees search empty state matches Android wording', (
+  testWidgets('AI employees search empty state matches Flutter wording', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1879,7 +1832,7 @@ void main() {
     expect(find.text('扫码绑定工作台或登录账号后，员工会自动同步到这里。'), findsNothing);
   });
 
-  testWidgets('discover tab matches Android tool sections', (
+  testWidgets('discover tab matches Flutter tool sections', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -1895,10 +1848,7 @@ void main() {
     );
 
     expect(find.text('探索'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('we_top_bar_divider_探索')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('we_top_bar_divider_探索')), findsOneWidget);
     expect(find.text('AI交流'), findsOneWidget);
     expect(find.text('AI交流圈'), findsOneWidget);
     expect(find.text('查看企业 AI 员工动态、主页和能力介绍'), findsOneWidget);
@@ -1954,7 +1904,7 @@ void main() {
     );
   });
 
-  testWidgets('discover tab follows Android dark theme tokens', (
+  testWidgets('discover tab follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1994,18 +1944,16 @@ void main() {
   });
 
   testWidgets(
-      'discover desktop tools follow Android native map and hidden keys', (
-    WidgetTester tester,
-  ) async {
-    var openedWork = 0;
+    'discover desktop tools follow Flutter native map and hidden keys',
+    (WidgetTester tester) async {
+      var openedWork = 0;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: DiscoverScreen(
-            repository: _FakeDiscoverRepository(
-              const [
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: DiscoverScreen(
+              repository: _FakeDiscoverRepository(const [
                 MobileNavMenuItem(
                   key: 'chat',
                   name: '智能对话',
@@ -2054,39 +2002,39 @@ void main() {
                   source: 'core',
                   modId: null,
                 ),
-              ],
+              ]),
+              onOpenWork: () => openedWork += 1,
             ),
-            onOpenWork: () => openedWork += 1,
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('智能对话'), findsNothing);
-    expect(find.text('IM 消息'), findsNothing);
-    expect(find.text('AI员工生态'), findsOneWidget);
-    expect(find.text('员工工作流'), findsOneWidget);
-    expect(find.text('设置入口'), findsOneWidget);
-    expect(find.text('智慧分析'), findsOneWidget);
-    expect(find.text('点击打开'), findsWidgets);
+      expect(find.text('智能对话'), findsNothing);
+      expect(find.text('IM 消息'), findsNothing);
+      expect(find.text('AI员工生态'), findsOneWidget);
+      expect(find.text('员工工作流'), findsOneWidget);
+      expect(find.text('设置入口'), findsOneWidget);
+      expect(find.text('智慧分析'), findsOneWidget);
+      expect(find.text('点击打开'), findsWidgets);
 
-    await tester.tap(find.text('AI员工生态'));
-    await tester.pumpAndSettle();
-    expect(find.text('AI员工(56)'), findsOneWidget);
-    await tester.tap(find.byTooltip('返回'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('AI员工生态'));
+      await tester.pumpAndSettle();
+      expect(find.text('AI员工(55)'), findsOneWidget);
+      await tester.tap(find.byTooltip('返回'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('员工工作流'));
-    await tester.pump();
-    expect(openedWork, 1);
+      await tester.tap(find.text('员工工作流'));
+      await tester.pump();
+      expect(openedWork, 1);
 
-    await tester.tap(find.text('设置入口'));
-    await tester.pumpAndSettle();
-    expect(find.text('生物识别解锁'), findsOneWidget);
-  });
+      await tester.tap(find.text('设置入口'));
+      await tester.pumpAndSettle();
+      expect(find.text('生物识别解锁'), findsOneWidget);
+    },
+  );
 
-  testWidgets('AI circle renders Android moments shell from backend data', (
+  testWidgets('AI circle renders Flutter moments shell from backend data', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -2104,7 +2052,7 @@ void main() {
 
     expect(find.text('AI交流圈'), findsOneWidget);
     expect(find.text('AI员工交流圈'), findsOneWidget);
-    expect(find.text('56 位智能伙伴正在账号里值守'), findsOneWidget);
+    expect(find.text('55 位智能伙伴正在账号里值守'), findsOneWidget);
     expect(find.text('账号生态'), findsOneWidget);
     expect(find.text('员工动态、能力更新和协同消息会在这里汇总。'), findsOneWidget);
     expect(find.text('静态站内容编辑员'), findsOneWidget);
@@ -2130,46 +2078,49 @@ void main() {
     );
   });
 
-  testWidgets('AI circle keeps Android empty employee header without fallback',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: AiCircleScreen(
-          repository: _FakeCircleRepository(failEmployees: true),
+  testWidgets(
+    'AI circle keeps Flutter empty employee header without fallback',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AiCircleScreen(
+            repository: _FakeCircleRepository(failEmployees: true),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('0 位智能伙伴正在账号里值守'), findsOneWidget);
-    expect(find.text('56 位智能伙伴正在账号里值守'), findsNothing);
-    expect(find.text('已完成首页内容巡检。'), findsOneWidget);
-  });
+      expect(find.text('0 位智能伙伴正在账号里值守'), findsOneWidget);
+      expect(find.text('55 位智能伙伴正在账号里值守'), findsNothing);
+      expect(find.text('已完成首页内容巡检。'), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'AI circle like failure uses Android product error and rolls back',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: AiCircleScreen(
-          repository: _FakeCircleRepository(failLike: true),
+    'AI circle like failure uses Flutter product error and rolls back',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AiCircleScreen(
+            repository: _FakeCircleRepository(failLike: true),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('赞'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('赞'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('赞'), findsOneWidget);
-    expect(find.text('赞 1'), findsNothing);
-    expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
-    expect(find.textContaining('failed to connect'), findsNothing);
-  });
+      expect(find.text('赞'), findsOneWidget);
+      expect(find.text('赞 1'), findsNothing);
+      expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
+      expect(find.textContaining('failed to connect'), findsNothing);
+    },
+  );
 
-  testWidgets('notifications page renders Android announcement list shell', (
+  testWidgets('notifications page renders Flutter announcement list shell', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -2210,7 +2161,7 @@ void main() {
     expect(find.text('欢迎使用 XCAGI 企业版'), findsNothing);
   });
 
-  testWidgets('notifications page follows Android dark theme tokens', (
+  testWidgets('notifications page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2223,8 +2174,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(NotificationListScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(NotificationListScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final topBar = tester.widget<Container>(
       find.byKey(const ValueKey('we_top_bar_surface_通知与公告')),
@@ -2238,7 +2190,7 @@ void main() {
     expect(systemIcon.color, colors.brand);
   });
 
-  testWidgets('OCR page matches Android entry and status sections', (
+  testWidgets('OCR page matches Flutter entry and status sections', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2267,7 +2219,7 @@ void main() {
     expect(find.text('移动端相册识别正在接入，请先使用电脑端 OCR'), findsOneWidget);
   });
 
-  testWidgets('OCR page follows Android dark theme tokens', (
+  testWidgets('OCR page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2297,7 +2249,7 @@ void main() {
     expect(albumIcon.color, colors.success);
   });
 
-  testWidgets('scan page renders Android scanner shell and manual code entry', (
+  testWidgets('scan page renders Flutter scanner shell and manual code entry', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2319,14 +2271,12 @@ void main() {
     await tester.tap(find.text('输入设备码'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(
-      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
-      findsOneWidget,
-    );
+    expect(find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'), findsOneWidget);
     expect(find.text('连接'), findsOneWidget);
     expect(
-        tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
-        44);
+      tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
+      44,
+    );
     final connectButton = tester.widget<FilledButton>(
       find.descendant(
         of: find.byKey(const ValueKey('we_block_button_连接')),
@@ -2342,7 +2292,7 @@ void main() {
     );
   });
 
-  testWidgets('scan page follows Android dark theme tokens', (
+  testWidgets('scan page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2370,7 +2320,7 @@ void main() {
     expect(sheetSubtitle.style?.color, colors.textSecondary);
   });
 
-  testWidgets('scan pairing success follows Android full-screen overlay', (
+  testWidgets('scan pairing success follows Flutter full-screen overlay', (
     WidgetTester tester,
   ) async {
     final repository = _FakePairingRepository();
@@ -2378,10 +2328,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: ScanQrScreen(
-          repository: repository,
-          enableCamera: false,
-        ),
+        home: ScanQrScreen(repository: repository, enableCamera: false),
       ),
     );
 
@@ -2400,7 +2347,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1700));
   });
 
-  testWidgets('scan pairing failure uses Android product error', (
+  testWidgets('scan pairing failure uses Flutter product error', (
     WidgetTester tester,
   ) async {
     final repository = _FakePairingRepository(failPairing: true);
@@ -2408,10 +2355,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: ScanQrScreen(
-          repository: repository,
-          enableCamera: false,
-        ),
+        home: ScanQrScreen(repository: repository, enableCamera: false),
       ),
     );
 
@@ -2428,59 +2372,63 @@ void main() {
   });
 
   testWidgets(
-      'settings page matches Android security appearance feedback shell', (
-    WidgetTester tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(430, 1800);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
+    'settings page matches Flutter security appearance feedback shell',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 1800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const SettingsScreen()),
-    );
+      await tester.pumpWidget(
+        MaterialApp(theme: AppTheme.light(), home: const SettingsScreen()),
+      );
 
-    expect(find.text('设置'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('we_top_bar_divider_设置')),
-      findsOneWidget,
-    );
-    expect(find.text('安全'), findsOneWidget);
-    expect(find.text('生物识别解锁'), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
-      const Size(46, 28),
-    );
-    expect(find.text('外观'), findsOneWidget);
-    expect(find.text('主题模式'), findsOneWidget);
-    expect(find.text('跟随'), findsOneWidget);
-    expect(find.text('浅色'), findsOneWidget);
-    expect(find.text('深色'), findsOneWidget);
-    expect(find.text('反馈'), findsOneWidget);
-    expect(find.text('问题反馈'), findsOneWidget);
-    expect(find.text('提交后进入企业支持队列'), findsOneWidget);
-    final colors = AppTheme.colors(tester.element(find.byType(SettingsScreen)));
-    final feedbackIconBox = tester.widget<Container>(
-      find.byKey(const ValueKey('we_cell_icon_box_问题反馈')),
-    );
-    final feedbackIconDecoration = feedbackIconBox.decoration! as BoxDecoration;
-    expect(
-      feedbackIconDecoration.color,
-      colors.warning.withValues(alpha: 0.14),
-    );
-    expect(
-      tester
-          .getSize(
-              find.byKey(const ValueKey('settings_feedback_bottom_spacer')))
-          .height,
-      XcagiSpacing.md,
-    );
-    expect(find.text('版本'), findsOneWidget);
-    expect(find.text('检查更新'), findsOneWidget);
-    expect(find.text('获取企业版移动端最新构建'), findsOneWidget);
-  });
+      expect(find.text('设置'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('we_top_bar_divider_设置')),
+        findsOneWidget,
+      );
+      expect(find.text('安全'), findsOneWidget);
+      expect(find.text('生物识别解锁'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
+        const Size(46, 28),
+      );
+      expect(find.text('外观'), findsOneWidget);
+      expect(find.text('主题模式'), findsOneWidget);
+      expect(find.text('跟随'), findsOneWidget);
+      expect(find.text('浅色'), findsOneWidget);
+      expect(find.text('深色'), findsOneWidget);
+      expect(find.text('反馈'), findsOneWidget);
+      expect(find.text('问题反馈'), findsOneWidget);
+      expect(find.text('提交后进入企业支持队列'), findsOneWidget);
+      final colors = AppTheme.colors(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      final feedbackIconBox = tester.widget<Container>(
+        find.byKey(const ValueKey('we_cell_icon_box_问题反馈')),
+      );
+      final feedbackIconDecoration =
+          feedbackIconBox.decoration! as BoxDecoration;
+      expect(
+        feedbackIconDecoration.color,
+        colors.warning.withValues(alpha: 0.14),
+      );
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('settings_feedback_bottom_spacer')),
+            )
+            .height,
+        XcagiSpacing.md,
+      );
+      expect(find.text('版本'), findsOneWidget);
+      expect(find.text('检查更新'), findsOneWidget);
+      expect(find.text('获取企业版移动端最新构建'), findsOneWidget);
+    },
+  );
 
-  testWidgets('settings page follows Android dark theme tokens', (
+  testWidgets('settings page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2508,34 +2456,30 @@ void main() {
       find.byKey(const ValueKey('we_cell_icon_主题模式')),
     );
     final selectedThemeMode = tester.widget<Text>(find.text('跟随').last);
-    final scheme =
-        Theme.of(tester.element(find.byType(SettingsScreen))).colorScheme;
+    final scheme = Theme.of(
+      tester.element(find.byType(SettingsScreen)),
+    ).colorScheme;
 
     expect(scaffold.backgroundColor, colors.surface);
     expect(topBar.color, colors.surface);
-    expect(
-      switchDecoration.color,
-      scheme.outline.withValues(alpha: 0.28),
-    );
+    expect(switchDecoration.color, scheme.outline.withValues(alpha: 0.28));
     expect(themeIcon.color, colors.success);
     expect(selectedThemeMode.style?.color, scheme.onPrimary);
     expect(
       selectedThemeMode.style?.fontSize,
-      Theme.of(tester.element(find.byType(SettingsScreen)))
-          .textTheme
-          .labelMedium
-          ?.fontSize,
+      Theme.of(
+        tester.element(find.byType(SettingsScreen)),
+      ).textTheme.labelMedium?.fontSize,
     );
     expect(
       selectedThemeMode.style?.height,
-      Theme.of(tester.element(find.byType(SettingsScreen)))
-          .textTheme
-          .labelMedium
-          ?.height,
+      Theme.of(
+        tester.element(find.byType(SettingsScreen)),
+      ).textTheme.labelMedium?.height,
     );
   });
 
-  testWidgets('settings persists Android biometric and theme state', (
+  testWidgets('settings persists Flutter biometric and theme state', (
     WidgetTester tester,
   ) async {
     final api = _FakeSettingsApi(
@@ -2546,7 +2490,10 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: SettingsScreen(api: api)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: SettingsScreen(api: api),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -2566,7 +2513,7 @@ void main() {
     ]);
   });
 
-  testWidgets('settings feedback submits through Android app feedback API', (
+  testWidgets('settings feedback submits through Flutter app feedback API', (
     WidgetTester tester,
   ) async {
     final api = _FakeSettingsApi();
@@ -2592,7 +2539,7 @@ void main() {
     expect(find.text('上传图片后列表错位'), findsNothing);
   });
 
-  testWidgets('settings update check uses Android app config API', (
+  testWidgets('settings update check uses Flutter app config API', (
     WidgetTester tester,
   ) async {
     final api = _FakeSettingsApi();
@@ -2613,14 +2560,14 @@ void main() {
 
     expect(api.updateChecks, [
       {
-        'currentVersionCode': MobileAndroidBuild.versionCode,
-        'sku': MobileAndroidBuild.productSku,
+        'currentVersionCode': MobileBuildConfig.versionCode,
+        'sku': MobileBuildConfig.productSku,
       },
     ]);
     expect(find.text('已是最新版本'), findsOneWidget);
   });
 
-  testWidgets('settings update action opens Android package installer', (
+  testWidgets('settings update action opens Flutter package installer', (
     WidgetTester tester,
   ) async {
     final api = _FakeSettingsApi()
@@ -2631,9 +2578,7 @@ void main() {
         downloadUrl: 'https://xiu-ci.com/download/enterprise/app.apk',
         raw: {'ok': true},
       );
-    final installer = _FakeUpdateInstaller(
-      message: '系统安装器已打开，请确认安装',
-    );
+    final installer = _FakeUpdateInstaller(message: '系统安装器已打开，请确认安装');
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 1800);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -2654,13 +2599,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(installer.calls, hasLength(1));
-    expect(installer.calls.single.downloadUrl,
-        'https://xiu-ci.com/download/enterprise/app.apk');
+    expect(
+      installer.calls.single.downloadUrl,
+      'https://xiu-ci.com/download/enterprise/app.apk',
+    );
     expect(find.text('系统安装器已打开，请确认安装'), findsOneWidget);
     expect(find.text('已获取安装包下载地址'), findsNothing);
   });
 
-  testWidgets('about page matches Android company and compliance shell', (
+  testWidgets('about page matches Flutter company and compliance shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2668,16 +2615,13 @@ void main() {
     );
 
     expect(find.text('关于'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('we_top_bar_divider_关于')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('we_top_bar_divider_关于')), findsOneWidget);
     expect(find.text('XCAGI'), findsOneWidget);
     expect(
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
     );
-    expect(find.text(MobileAndroidBuild.displayVersion), findsWidgets);
+    expect(find.text(MobileBuildConfig.displayVersion), findsWidgets);
     expect(find.text('公司'), findsOneWidget);
     expect(find.text('成都修茈科技有限公司'), findsWidgets);
     expect(find.text('官网'), findsOneWidget);
@@ -2685,7 +2629,7 @@ void main() {
     expect(find.text('蜀ICP备2026014056号-3A'), findsOneWidget);
   });
 
-  testWidgets('about page follows Android dark theme tokens', (
+  testWidgets('about page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2703,11 +2647,8 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_关于')),
     );
     final title = tester.widget<Text>(find.text('XCAGI'));
-    final footer = tester
-        .widgetList<Text>(
-          find.text(AboutScreen.companyName),
-        )
-        .last;
+    final footer =
+        tester.widgetList<Text>(find.text(AboutScreen.companyName)).last;
 
     expect(scaffold.backgroundColor, colors.surface);
     expect(topBar.color, colors.surface);
@@ -2715,7 +2656,7 @@ void main() {
     expect(footer.style?.color, colors.textTertiary);
   });
 
-  testWidgets('about website opens Android external browser URL', (
+  testWidgets('about website opens Flutter external browser URL', (
     WidgetTester tester,
   ) async {
     final opened = <Uri>[];
@@ -2723,10 +2664,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: AboutScreen(openExternalUrl: (uri) async {
-          opened.add(uri);
-          return true;
-        }),
+        home: AboutScreen(
+          openExternalUrl: (uri) async {
+            opened.add(uri);
+            return true;
+          },
+        ),
       ),
     );
 
@@ -2737,7 +2680,7 @@ void main() {
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
-  testWidgets('about update check renders Android update prompt', (
+  testWidgets('about update check renders Flutter update prompt', (
     WidgetTester tester,
   ) async {
     final api = _FakeSettingsApi()
@@ -2750,7 +2693,10 @@ void main() {
       );
 
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: AboutScreen(api: api)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AboutScreen(api: api),
+      ),
     );
 
     await tester.tap(find.text('检查更新'));
@@ -2758,22 +2704,19 @@ void main() {
 
     expect(api.updateChecks, [
       {
-        'currentVersionCode': MobileAndroidBuild.versionCode,
-        'sku': MobileAndroidBuild.productSku,
+        'currentVersionCode': MobileBuildConfig.versionCode,
+        'sku': MobileBuildConfig.productSku,
       },
     ]);
     expect(find.text('发现新版本'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(WeDialog), findsOneWidget);
-    expect(
-      find.text('最新版本 10.0.1，将下载完整安装包并交给系统安装器安装。'),
-      findsOneWidget,
-    );
+    expect(find.text('最新版本 10.0.1，将下载完整安装包并交给系统安装器安装。'), findsOneWidget);
     expect(find.text('去更新'), findsOneWidget);
     expect(find.text('稍后'), findsOneWidget);
   });
 
-  testWidgets('about forced update prompt mirrors Android WeDialog lock', (
+  testWidgets('about forced update prompt matches the mobile WeDialog lock', (
     WidgetTester tester,
   ) async {
     final api = _FakeSettingsApi()
@@ -2786,7 +2729,10 @@ void main() {
       );
 
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: AboutScreen(api: api)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AboutScreen(api: api),
+      ),
     );
 
     await tester.tap(find.text('检查更新'));
@@ -2799,7 +2745,7 @@ void main() {
     expect(find.text('稍后'), findsNothing);
   });
 
-  testWidgets('legal consent page matches Android first-run agreement shell', (
+  testWidgets('legal consent page matches Flutter first-run agreement shell', (
     WidgetTester tester,
   ) async {
     var accepted = false;
@@ -2826,7 +2772,7 @@ void main() {
     expect(accepted, isTrue);
   });
 
-  testWidgets('legal consent page follows Android dark theme tokens', (
+  testWidgets('legal consent page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2838,8 +2784,9 @@ void main() {
       ),
     );
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(LegalConsentScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(LegalConsentScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final title = tester.widget<Text>(find.text('XCAGI'));
     final terms = tester.widget<Text>(find.text('《用户协议》'));
@@ -2850,7 +2797,7 @@ void main() {
     expect(terms.style?.decorationColor, colors.chatUserBubbleText);
   });
 
-  testWidgets('legal consent persists Android accepted version', (
+  testWidgets('legal consent persists Flutter accepted version', (
     WidgetTester tester,
   ) async {
     final api = _FakeLegalApi();
@@ -2880,10 +2827,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: const LegalConsentScreen(),
-      ),
+      MaterialApp(theme: AppTheme.light(), home: const LegalConsentScreen()),
     );
 
     await tester.tap(find.text('《用户协议》'));
@@ -2893,7 +2837,7 @@ void main() {
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
-  testWidgets('auth page matches Android password phone and scan entry shell', (
+  testWidgets('auth page matches Flutter password phone and scan entry shell', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -2946,7 +2890,7 @@ void main() {
     expect(find.text('获取验证码'), findsOneWidget);
   });
 
-  testWidgets('auth page follows Android dark theme tokens', (
+  testWidgets('auth page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2962,9 +2906,7 @@ void main() {
     final colors = AppTheme.colors(tester.element(find.byType(AuthScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final title = tester.widget<Text>(find.text('XCAGI 手机控制端'));
-    final subtitle = tester.widget<Text>(
-      find.text('连接服务器后台、企业工作台和电脑执行端'),
-    );
+    final subtitle = tester.widget<Text>(find.text('连接服务器后台、企业工作台和电脑执行端'));
     final selectedTab = tester.widget<Text>(find.text('密码登录'));
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
@@ -2977,7 +2919,7 @@ void main() {
     expect(agreement.style?.color, colors.textSecondary);
   });
 
-  testWidgets('auth page restores and saves Android remembered credentials', (
+  testWidgets('auth page restores and saves Flutter remembered credentials', (
     WidgetTester tester,
   ) async {
     final api = MobileApiClient(
@@ -3023,7 +2965,7 @@ void main() {
     expect(saved.savedPassword, 'secret');
   });
 
-  testWidgets('auth agreement links open Android external legal URLs', (
+  testWidgets('auth agreement links open Flutter external legal URLs', (
     WidgetTester tester,
   ) async {
     final opened = <Uri>[];
@@ -3035,10 +2977,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: AuthScreen(openExternalUrl: (uri) async {
-          opened.add(uri);
-          return true;
-        }),
+        home: AuthScreen(
+          openExternalUrl: (uri) async {
+            opened.add(uri);
+            return true;
+          },
+        ),
       ),
     );
 
@@ -3054,7 +2998,7 @@ void main() {
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
-  testWidgets('register page matches Android web form handoff shell', (
+  testWidgets('register page matches Flutter web form handoff shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3069,7 +3013,7 @@ void main() {
     expect(find.text('返回登录'), findsOneWidget);
   });
 
-  testWidgets('register page follows Android dark theme tokens', (
+  testWidgets('register page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3084,9 +3028,7 @@ void main() {
     final colors = AppTheme.colors(tester.element(find.byType(RegisterScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final title = tester.widget<Text>(find.text('账号注册'));
-    final subtitle = tester.widget<Text>(
-      find.text('使用网页开户注册表单，和桌面端保持一致。'),
-    );
+    final subtitle = tester.widget<Text>(find.text('使用网页开户注册表单，和桌面端保持一致。'));
     final icon = tester.widget<Icon>(find.byIcon(Icons.language));
 
     expect(scaffold.backgroundColor, colors.page);
@@ -3095,9 +3037,9 @@ void main() {
     expect(icon.color, colors.textPrimary);
   });
 
-  test('register webview intercepts Android completion URL', () {
+  test('register webview intercepts Flutter completion URL', () {
     var completed = false;
-    final handled = handleAndroidRegisterUrlOverride(
+    final handled = handleMobileRegisterUrlOverride(
       'https://xiu-ci.com/app/mobile-register-complete?ok=1',
       () => completed = true,
     );
@@ -3105,17 +3047,19 @@ void main() {
     expect(handled, isTrue);
     expect(completed, isTrue);
     expect(
-      handleAndroidRegisterUrlOverride(
+      handleMobileRegisterUrlOverride(
         'https://xiu-ci.com/login/register',
         () => completed = false,
       ),
       isFalse,
     );
-    expect(isAndroidRegisterCompleteUrlForTest('/app/mobile-register-complete'),
-        isTrue);
+    expect(
+      isMobileRegisterCompleteUrlForTest('/app/mobile-register-complete'),
+      isTrue,
+    );
   });
 
-  testWidgets('onboarding page matches Android three step startup flow', (
+  testWidgets('onboarding page matches Flutter three step startup flow', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3123,11 +3067,7 @@ void main() {
         theme: AppTheme.light(),
         home: const MobileOnboardingScreen(
           initialIndustries: [
-            OnboardingIndustry(
-              id: '通用',
-              title: '通用',
-              subtitle: '可选行业',
-            ),
+            OnboardingIndustry(id: '通用', title: '通用', subtitle: '可选行业'),
           ],
         ),
       ),
@@ -3150,7 +3090,7 @@ void main() {
     expect(find.text('继续'), findsOneWidget);
   });
 
-  testWidgets('onboarding page follows Android dark theme tokens', (
+  testWidgets('onboarding page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3160,18 +3100,15 @@ void main() {
         themeMode: ThemeMode.dark,
         home: const MobileOnboardingScreen(
           initialIndustries: [
-            OnboardingIndustry(
-              id: '通用',
-              title: '通用',
-              subtitle: '可选行业',
-            ),
+            OnboardingIndustry(id: '通用', title: '通用', subtitle: '可选行业'),
           ],
         ),
       ),
     );
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(MobileOnboardingScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(MobileOnboardingScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final topBar = tester.widget<Container>(
       find.byKey(const ValueKey('we_top_bar_surface_启动配置')),
@@ -3187,7 +3124,7 @@ void main() {
     expect(stepTitle.style?.color, colors.brand);
   });
 
-  testWidgets('market page matches Android MODstore sections', (
+  testWidgets('market page matches Flutter MODstore sections', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -3200,18 +3137,10 @@ void main() {
         theme: AppTheme.light(),
         home: const MarketListScreen(
           initialIndustries: [
-            OnboardingIndustry(
-              id: '通用',
-              title: '通用',
-              subtitle: '装齐行业基础能力',
-            ),
+            OnboardingIndustry(id: '通用', title: '通用', subtitle: '装齐行业基础能力'),
           ],
           initialPlans: [
-            PaymentPlan(
-              id: 'pro',
-              title: 'Pro 套餐',
-              subtitle: '市场统一收银台',
-            ),
+            PaymentPlan(id: 'pro', title: 'Pro 套餐', subtitle: '市场统一收银台'),
           ],
           initialCapabilities: [
             MarketCapability(
@@ -3241,7 +3170,7 @@ void main() {
     expect(find.text('使用'), findsOneWidget);
   });
 
-  testWidgets('market page follows Android dark theme tokens', (
+  testWidgets('market page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3251,18 +3180,10 @@ void main() {
         themeMode: ThemeMode.dark,
         home: const MarketListScreen(
           initialIndustries: [
-            OnboardingIndustry(
-              id: '通用',
-              title: '通用',
-              subtitle: '装齐行业基础能力',
-            ),
+            OnboardingIndustry(id: '通用', title: '通用', subtitle: '装齐行业基础能力'),
           ],
           initialPlans: [
-            PaymentPlan(
-              id: 'pro',
-              title: 'Pro 套餐',
-              subtitle: '市场统一收银台',
-            ),
+            PaymentPlan(id: 'pro', title: 'Pro 套餐', subtitle: '市场统一收银台'),
           ],
           initialCapabilities: [
             MarketCapability(
@@ -3276,8 +3197,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(MarketListScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(MarketListScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final topBar = tester.widget<Container>(
       find.byKey(const ValueKey('we_top_bar_surface_MODstore')),
@@ -3295,7 +3217,7 @@ void main() {
     expect(industryIcon.color, colors.brand);
   });
 
-  testWidgets('approval list and detail match Android approval flow shell', (
+  testWidgets('approval list and detail match Flutter approval flow shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3351,14 +3273,8 @@ void main() {
     expect(find.text('驳回'), findsOneWidget);
     expect(find.byType(WeBlockButton), findsOneWidget);
     expect(find.byType(WeBlockOutlinedButton), findsOneWidget);
-    expect(
-      tester.getSize(find.byType(FilledButton).last).height,
-      44,
-    );
-    expect(
-      tester.getSize(find.byType(OutlinedButton).last).height,
-      48,
-    );
+    expect(tester.getSize(find.byType(FilledButton).last).height, 44);
+    expect(tester.getSize(find.byType(OutlinedButton).last).height, 48);
 
     await tester.tap(find.text('驳回'));
     await tester.pumpAndSettle();
@@ -3387,7 +3303,7 @@ void main() {
     expect(find.text('确定通过该审批？'), findsOneWidget);
   });
 
-  testWidgets('approval page follows Android dark theme tokens', (
+  testWidgets('approval page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3410,8 +3326,9 @@ void main() {
     );
     await tester.pump();
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(ApprovalListScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(ApprovalListScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final topBar = tester.widget<Container>(
       find.byKey(const ValueKey('we_top_bar_surface_审批')),
@@ -3427,7 +3344,7 @@ void main() {
     expect(title.style?.color, colors.textPrimary);
   });
 
-  testWidgets('IM page matches Android direct conversation shell', (
+  testWidgets('IM page matches Flutter direct conversation shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3451,12 +3368,7 @@ void main() {
           key: ValueKey('im-conversation'),
           initialConversationId: 12,
           initialMessages: [
-            ImMessage(
-              id: 1,
-              senderUserId: 0,
-              body: '你好',
-              createdAt: '刚刚',
-            ),
+            ImMessage(id: 1, senderUserId: 0, body: '你好', createdAt: '刚刚'),
           ],
         ),
       ),
@@ -3471,7 +3383,7 @@ void main() {
     expect(find.text('输入消息'), findsOneWidget);
   });
 
-  testWidgets('IM page follows Android dark theme tokens', (
+  testWidgets('IM page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3482,25 +3394,16 @@ void main() {
         home: const ImMessengerScreen(
           initialConversationId: 12,
           initialMessages: [
-            ImMessage(
-              id: 1,
-              senderUserId: 0,
-              body: '我发的',
-              createdAt: '刚刚',
-            ),
-            ImMessage(
-              id: 2,
-              senderUserId: 99,
-              body: '对方的',
-              createdAt: '刚刚',
-            ),
+            ImMessage(id: 1, senderUserId: 0, body: '我发的', createdAt: '刚刚'),
+            ImMessage(id: 2, senderUserId: 99, body: '对方的', createdAt: '刚刚'),
           ],
         ),
       ),
     );
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(ImMessengerScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(ImMessengerScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final inputBar = tester.widget<Container>(
       find.byKey(const ValueKey('im_input_bar_surface')),
@@ -3514,17 +3417,11 @@ void main() {
 
     expect(scaffold.backgroundColor, colors.surface);
     expect(inputBar.color, colors.surface);
-    expect(
-      (mineBubble.decoration as BoxDecoration).color,
-      colors.brand,
-    );
-    expect(
-      (peerBubble.decoration as BoxDecoration).color,
-      colors.surfaceHigh,
-    );
+    expect((mineBubble.decoration as BoxDecoration).color, colors.brand);
+    expect((peerBubble.decoration as BoxDecoration).color, colors.surfaceHigh);
   });
 
-  testWidgets('IM message menu mirrors Android reply and delete actions', (
+  testWidgets('IM message menu matches the mobile reply and delete actions', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3533,12 +3430,7 @@ void main() {
         home: const ImMessengerScreen(
           initialConversationId: 12,
           initialMessages: [
-            ImMessage(
-              id: 1,
-              senderUserId: 0,
-              body: '你好',
-              createdAt: '刚刚',
-            ),
+            ImMessage(id: 1, senderUserId: 0, body: '你好', createdAt: '刚刚'),
           ],
         ),
       ),
@@ -3566,7 +3458,7 @@ void main() {
     expect(find.text('你好'), findsNothing);
   });
 
-  testWidgets('bridge page matches Android service bridge shell', (
+  testWidgets('bridge page matches Flutter service bridge shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3574,11 +3466,7 @@ void main() {
         theme: AppTheme.light(),
         home: const BridgeScreen(
           initialItems: [
-            BusinessListItem(
-              id: '7',
-              title: '客户验收回访',
-              subtitle: 'pending',
-            ),
+            BusinessListItem(id: '7', title: '客户验收回访', subtitle: 'pending'),
           ],
         ),
       ),
@@ -3619,20 +3507,18 @@ void main() {
   testWidgets('customer service bridge filters and replies customer requests', (
     WidgetTester tester,
   ) async {
-    final repository = _FakeBridgeRepository(
-      const [
-        BusinessListItem(
-          id: '9',
-          title: '我想买标准版',
-          subtitle: 'pending',
-          payload: {
-            'source_instance_name': '手机端 Alice',
-            'description': '我想买标准版',
-            'status': 'pending',
-          },
-        ),
-      ],
-    );
+    final repository = _FakeBridgeRepository(const [
+      BusinessListItem(
+        id: '9',
+        title: '我想买标准版',
+        subtitle: 'pending',
+        payload: {
+          'source_instance_name': '手机端 Alice',
+          'description': '我想买标准版',
+          'status': 'pending',
+        },
+      ),
+    ]);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -3668,8 +3554,10 @@ void main() {
         'respondedBy': 'mobile-admin-customer-service',
       },
     ]);
-    expect(repository.bridgeRequestTypes.last,
-        MobileRepository.customerServiceRequestType);
+    expect(
+      repository.bridgeRequestTypes.last,
+      MobileRepository.customerServiceRequestType,
+    );
   });
 
   testWidgets('admin customer service opens conversation and replies', (
@@ -3702,7 +3590,7 @@ void main() {
     ]);
   });
 
-  testWidgets('bridge page follows Android dark theme tokens', (
+  testWidgets('bridge page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3712,11 +3600,7 @@ void main() {
         themeMode: ThemeMode.dark,
         home: const BridgeScreen(
           initialItems: [
-            BusinessListItem(
-              id: '7',
-              title: '客户验收回访',
-              subtitle: 'pending',
-            ),
+            BusinessListItem(id: '7', title: '客户验收回访', subtitle: 'pending'),
           ],
         ),
       ),
@@ -3737,11 +3621,13 @@ void main() {
     expect(topBar.color, colors.surface);
     expect(icon.color, colors.textSecondary);
     expect(input.style?.color, colors.textPrimary);
-    expect(input.decoration?.hintStyle?.color,
-        colors.textSecondary.withValues(alpha: 0.6));
+    expect(
+      input.decoration?.hintStyle?.color,
+      colors.textSecondary.withValues(alpha: 0.6),
+    );
   });
 
-  testWidgets('ERP page matches Android customer shipment inventory tabs', (
+  testWidgets('ERP page matches Flutter customer shipment inventory tabs', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3750,11 +3636,7 @@ void main() {
         home: const ErpScreen(
           initialItemsByKind: {
             BusinessListKind.customers: [
-              BusinessListItem(
-                id: 'c1',
-                title: '上海客户',
-                subtitle: 'active',
-              ),
+              BusinessListItem(id: 'c1', title: '上海客户', subtitle: 'active'),
             ],
             BusinessListKind.shipments: [],
           },
@@ -3779,7 +3661,7 @@ void main() {
     expect(find.text('刷新'), findsOneWidget);
   });
 
-  testWidgets('business list page matches Android generic list shell', (
+  testWidgets('business list page matches Flutter generic list shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3788,11 +3670,7 @@ void main() {
         home: const BusinessListScreen(
           kind: BusinessListKind.shipments,
           initialItems: [
-            BusinessListItem(
-              id: 's1',
-              title: '发货单 SO-1',
-              subtitle: 'shipped',
-            ),
+            BusinessListItem(id: 's1', title: '发货单 SO-1', subtitle: 'shipped'),
           ],
         ),
       ),
@@ -3804,36 +3682,39 @@ void main() {
     expect(find.text('shipped'), findsOneWidget);
   });
 
-  testWidgets('business list page mirrors Android loading and error states', (
-    WidgetTester tester,
-  ) async {
-    final repository = _SlowBusinessRepository();
+  testWidgets(
+    'business list page matches the mobile loading and error states',
+    (WidgetTester tester) async {
+      final repository = _SlowBusinessRepository();
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: BusinessListScreen(
-          kind: BusinessListKind.shipments,
-          repository: repository,
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: BusinessListScreen(
+            kind: BusinessListKind.shipments,
+            repository: repository,
+          ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    expect(
-        find.byKey(const ValueKey('business_list_skeleton_0')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('business_list_skeleton_0')),
+        findsOneWidget,
+      );
 
-    repository.shipments.completeError(
-      const MobileRepositoryException('发货加载失败'),
-    );
-    await tester.pumpAndSettle();
+      repository.shipments.completeError(
+        const MobileRepositoryException('发货加载失败'),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('加载失败'), findsOneWidget);
-    expect(find.text('发货加载失败'), findsOneWidget);
-    expect(find.text('重试'), findsOneWidget);
-  });
+      expect(find.text('加载失败'), findsOneWidget);
+      expect(find.text('发货加载失败'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+    },
+  );
 
-  testWidgets('business list page follows Android dark theme tokens', (
+  testWidgets('business list page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3844,19 +3725,16 @@ void main() {
         home: const BusinessListScreen(
           kind: BusinessListKind.shipments,
           initialItems: [
-            BusinessListItem(
-              id: 's1',
-              title: '发货单 SO-1',
-              subtitle: 'shipped',
-            ),
+            BusinessListItem(id: 's1', title: '发货单 SO-1', subtitle: 'shipped'),
           ],
         ),
       ),
     );
     await tester.pump();
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(BusinessListScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(BusinessListScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final topBar = tester.widget<Container>(
       find.byKey(const ValueKey('we_top_bar_surface_发货')),
@@ -3868,7 +3746,7 @@ void main() {
     expect(title.style?.color, colors.textPrimary);
   });
 
-  testWidgets('longtail finance page matches Android finance summary shell', (
+  testWidgets('longtail finance page matches Flutter finance summary shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3916,7 +3794,7 @@ void main() {
     expect(find.text('连接企业后端后显示收入、成本、毛利与应付摘要'), findsOneWidget);
   });
 
-  testWidgets('longtail finance page follows Android dark theme tokens', (
+  testWidgets('longtail finance page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3949,7 +3827,7 @@ void main() {
     expect(voucherIcon.color, colors.success);
   });
 
-  testWidgets('enterprise module placeholders match Android branded entries', (
+  testWidgets('enterprise module placeholders match Flutter branded entries', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -3979,31 +3857,34 @@ void main() {
     expect(find.text('查看企业模块'), findsOneWidget);
   });
 
-  testWidgets('enterprise module placeholders follow Android dark theme tokens',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: ThemeMode.dark,
-        home: EnterpriseModuleScreen.brain(),
-      ),
-    );
+  testWidgets(
+    'enterprise module placeholders follow Flutter dark theme tokens',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: ThemeMode.dark,
+          home: EnterpriseModuleScreen.brain(),
+        ),
+      );
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(EnterpriseModuleScreen)));
-    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final topBar = tester.widget<Container>(
-      find.byKey(const ValueKey('we_top_bar_surface_智脑集成')),
-    );
-    final title = tester.widget<Text>(find.text('智脑集成').last);
+      final colors = AppTheme.colors(
+        tester.element(find.byType(EnterpriseModuleScreen)),
+      );
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      final topBar = tester.widget<Container>(
+        find.byKey(const ValueKey('we_top_bar_surface_智脑集成')),
+      );
+      final title = tester.widget<Text>(find.text('智脑集成').last);
 
-    expect(scaffold.backgroundColor, colors.page);
-    expect(topBar.color, colors.surface);
-    expect(title.style?.color, colors.textPrimary);
-  });
+      expect(scaffold.backgroundColor, colors.page);
+      expect(topBar.color, colors.surface);
+      expect(title.style?.color, colors.textPrimary);
+    },
+  );
 
-  test('webview URL and token injection match Android policy', () {
+  test('webview URL and token injection match Flutter policy', () {
     const config = MobileApiConfig(
       baseUrl: 'https://xiu-ci.com/fhd-api',
       marketAccessToken: 'market-access',
@@ -4011,7 +3892,7 @@ void main() {
       accessToken: 'fhd-access',
     );
 
-    final desktop = resolveAndroidDesktopWebUriForTest(
+    final desktop = resolveMobileDesktopWebUriForTest(
       '/customers?sku=enterprise',
       config: config,
     );
@@ -4020,7 +3901,7 @@ void main() {
       'https://xiu-ci.com/fhd-api/customers?sku=enterprise&shell=1',
     );
 
-    final mod = resolveAndroidModWebUriForTest(
+    final mod = resolveMobileModWebUriForTest(
       'attendance-industry',
       config: config,
     );
@@ -4029,7 +3910,7 @@ void main() {
       'https://xiu-ci.com/fhd-api/mod/attendance-industry/?shell=1',
     );
 
-    final script = buildAndroidTokenInjectScriptForTest(
+    final script = buildMobileTokenInjectScriptForTest(
       accessToken: 'market-access',
       refreshToken: 'market-refresh',
       fhdAccessToken: 'fhd-access',
@@ -4041,7 +3922,7 @@ void main() {
     expect(script, contains('xcagi-client-android'));
   });
 
-  testWidgets('customer service chat matches Android CS shell', (
+  testWidgets('customer service chat matches Flutter CS shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4068,7 +3949,7 @@ void main() {
     expect(find.text('我来处理'), findsOneWidget);
   });
 
-  testWidgets('customer service chat follows Android dark theme tokens', (
+  testWidgets('customer service chat follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4097,7 +3978,7 @@ void main() {
     expect(assistantBubble.color, colors.surface);
   });
 
-  testWidgets('customer service voice opens Android voice sheet', (
+  testWidgets('customer service voice opens Flutter voice sheet', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4116,7 +3997,7 @@ void main() {
     expect(find.text('需要麦克风权限才能使用语音输入'), findsNothing);
   });
 
-  testWidgets('voice input sheet follows Android dark theme tokens', (
+  testWidgets('voice input sheet follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4138,7 +4019,7 @@ void main() {
     expect(title.style?.color, colors.textPrimary);
   });
 
-  testWidgets('customer service message menu mirrors Android actions', (
+  testWidgets('customer service message menu matches the mobile actions', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4170,7 +4051,7 @@ void main() {
     expect(find.text('欢迎使用专属客服'), findsNothing);
   });
 
-  testWidgets('AI group list uses Android group operations shell', (
+  testWidgets('AI group list uses Flutter group operations shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4192,13 +4073,10 @@ void main() {
     expect(find.text('置顶聊天'), findsOneWidget);
     expect(find.text('不再关注'), findsOneWidget);
     expect(find.text('删除该聊天'), findsOneWidget);
-    expect(
-      tester.getSize(find.widgetWithText(TextButton, '标为未读')).height,
-      52,
-    );
+    expect(tester.getSize(find.widgetWithText(TextButton, '标为未读')).height, 52);
   });
 
-  testWidgets('AI group chat matches Android composer tools', (
+  testWidgets('AI group chat matches Flutter composer tools', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4227,15 +4105,21 @@ void main() {
     final inputBarDecoration = inputBar.decoration as BoxDecoration;
     final inputBarBorder = inputBarDecoration.border as Border;
     expect(
-        inputBarBorder.top.color, AppTheme.light().colorScheme.outlineVariant);
+      inputBarBorder.top.color,
+      AppTheme.light().colorScheme.outlineVariant,
+    );
     expect(inputBarBorder.top.width, 0.5);
     final groupTextField = tester.widget<TextField>(find.byType(TextField));
     expect(groupTextField.style?.fontSize, typography.bodyMedium?.fontSize);
     expect(groupTextField.style?.height, typography.bodyMedium?.height);
-    expect(groupTextField.decoration?.hintStyle?.fontSize,
-        typography.bodyMedium?.fontSize);
-    expect(groupTextField.decoration?.hintStyle?.height,
-        typography.bodyMedium?.height);
+    expect(
+      groupTextField.decoration?.hintStyle?.fontSize,
+      typography.bodyMedium?.fontSize,
+    );
+    expect(
+      groupTextField.decoration?.hintStyle?.height,
+      typography.bodyMedium?.height,
+    );
     final branchChip = tester.widget<Text>(find.text('工作分支 · 自动新建'));
     expect(branchChip.style?.fontSize, typography.labelMedium?.fontSize);
     expect(branchChip.style?.height, typography.labelMedium?.height);
@@ -4291,7 +4175,7 @@ void main() {
     expect(find.text('发送'), findsNothing);
   });
 
-  testWidgets('AI group chat follows Android dark theme tokens', (
+  testWidgets('AI group chat follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4307,8 +4191,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final colors =
-        AppTheme.colors(tester.element(find.byType(AiGroupChatScreen)));
+    final colors = AppTheme.colors(
+      tester.element(find.byType(AiGroupChatScreen)),
+    );
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     final inputBar = tester.widget<Container>(
       find.byKey(const ValueKey('group_input_bar_surface')),
@@ -4319,10 +4204,11 @@ void main() {
     expect(scaffold.backgroundColor, colors.page);
     expect(inputDecoration.color, colors.surface);
     expect(
-        inputBorder.top.color,
-        Theme.of(tester.element(find.byType(AiGroupChatScreen)))
-            .colorScheme
-            .outlineVariant);
+      inputBorder.top.color,
+      Theme.of(
+        tester.element(find.byType(AiGroupChatScreen)),
+      ).colorScheme.outlineVariant,
+    );
     final aiBubble = tester.widget<Container>(
       find.byKey(const ValueKey('group_bubble_m1')),
     );
@@ -4344,10 +4230,12 @@ void main() {
     );
 
     expect(
-        (userBubble.decoration as BoxDecoration).color, colors.chatUserBubble);
+      (userBubble.decoration as BoxDecoration).color,
+      colors.chatUserBubble,
+    );
   });
 
-  testWidgets('AI group branch picker mirrors Android refresh sheet', (
+  testWidgets('AI group branch picker matches the mobile refresh sheet', (
     WidgetTester tester,
   ) async {
     final repository = _FakeEmptyThenBranchRepository();
@@ -4378,7 +4266,7 @@ void main() {
     expect(find.text('远端分支'), findsOneWidget);
   });
 
-  testWidgets('AI group members sheet uses Android local member catalog', (
+  testWidgets('AI group members sheet uses Flutter local member catalog', (
     WidgetTester tester,
   ) async {
     final repository = _FakeRealtimeRepository();
@@ -4412,7 +4300,7 @@ void main() {
     expect(repository.candidateLoads, 0);
   });
 
-  testWidgets('AI group message menu mirrors Android actions', (
+  testWidgets('AI group message menu matches the mobile actions', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4447,7 +4335,7 @@ void main() {
     expect(find.text('先评估任务，再派给最合适的人。'), findsNothing);
   });
 
-  testWidgets('AI group chat voice opens Android voice sheet', (
+  testWidgets('AI group chat voice opens Flutter voice sheet', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4469,7 +4357,7 @@ void main() {
     expect(find.text('需要麦克风权限才能使用语音输入'), findsNothing);
   });
 
-  testWidgets('AI group work modes post Android tool_action payloads', (
+  testWidgets('AI group work modes post Flutter tool_action payloads', (
     WidgetTester tester,
   ) async {
     final repository = _FakeRealtimeRepository();
@@ -4498,13 +4386,12 @@ void main() {
     expect(repository.groupPostCalls.single['message'], '修复 Flutter 群聊派工');
     expect(repository.groupPostCalls.single['forceDispatch'], true);
     expect(repository.groupPostCalls.single['branchContext'], '');
-    expect(
-      repository.groupPostCalls.single['context'],
-      {'tool_action': 'dispatch_task'},
-    );
+    expect(repository.groupPostCalls.single['context'], {
+      'tool_action': 'dispatch_task',
+    });
   });
 
-  testWidgets('AI group followup sends Android default acceptance prompt', (
+  testWidgets('AI group followup sends Flutter default acceptance prompt', (
     WidgetTester tester,
   ) async {
     final repository = _FakeRealtimeRepository();
@@ -4533,13 +4420,12 @@ void main() {
     );
     expect(repository.groupPostCalls.single['forceDispatch'], false);
     expect(repository.groupPostCalls.single['branchContext'], '');
-    expect(
-      repository.groupPostCalls.single['context'],
-      {'tool_action': 'acceptance_followup'},
-    );
+    expect(repository.groupPostCalls.single['context'], {
+      'tool_action': 'acceptance_followup',
+    });
   });
 
-  testWidgets('AI group create keeps Android required Xiaoc member', (
+  testWidgets('AI group create keeps Flutter required Xiaoc member', (
     WidgetTester tester,
   ) async {
     final repository = _FakeRealtimeRepository();
@@ -4569,7 +4455,7 @@ void main() {
     expect(find.text('完成(2)'), findsOneWidget);
   });
 
-  testWidgets('fixed partner profile matches Android super employee profile', (
+  testWidgets('fixed partner profile matches Flutter super employee profile', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -4620,7 +4506,7 @@ void main() {
     );
   });
 
-  testWidgets('fixed partner profile follows Android dark theme tokens', (
+  testWidgets('fixed partner profile follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -4651,7 +4537,7 @@ void main() {
     expect(forumIcon.color, colors.momentAccent);
   });
 
-  testWidgets('profile tab matches Android current profile shell', (
+  testWidgets('profile tab matches Flutter current profile shell', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
@@ -4682,10 +4568,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('个人'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('we_top_bar_divider_个人')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('we_top_bar_divider_个人')), findsOneWidget);
     expect(find.text('admin'), findsOneWidget);
     expect(find.text('个人资料 · 软件内更新'), findsOneWidget);
     expect(find.text('账号、员工体系、工作台与执行端状态统一管理'), findsOneWidget);
@@ -4697,10 +4580,12 @@ void main() {
     expect(find.text('服务'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
-    expect(find.text(MobileAndroidBuild.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
     expect(find.text('蜀ICP备2026014056号-3A'), findsOneWidget);
     final heroDecoration = tester
-        .widget<Container>(find.byKey(const ValueKey('profile_hero_card')))
+        .widget<Container>(
+          find.byKey(const ValueKey('profile_hero_card')),
+        )
         .decoration! as BoxDecoration;
     final heroGradient = heroDecoration.gradient! as LinearGradient;
     expect(
@@ -4735,7 +4620,9 @@ void main() {
       AppTheme.textSecondary,
     );
     final walletDecoration = tester
-        .widget<Container>(find.byKey(const ValueKey('profile_wallet_card')))
+        .widget<Container>(
+          find.byKey(const ValueKey('profile_wallet_card')),
+        )
         .decoration! as BoxDecoration;
     final walletGradient = walletDecoration.gradient! as LinearGradient;
     expect(walletGradient.colors, [AppTheme.brand, AppTheme.brandGradientEnd]);
@@ -4801,7 +4688,7 @@ void main() {
     expect(find.text('返回'), findsWidgets);
   });
 
-  testWidgets('profile tab follows Android dark theme tokens', (
+  testWidgets('profile tab follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
@@ -4834,11 +4721,15 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_个人')),
     );
     final heroDecoration = tester
-        .widget<Container>(find.byKey(const ValueKey('profile_hero_card')))
+        .widget<Container>(
+          find.byKey(const ValueKey('profile_hero_card')),
+        )
         .decoration! as BoxDecoration;
     final heroGradient = heroDecoration.gradient! as LinearGradient;
     final avatarFrame = tester
-        .widget<Container>(find.byKey(const ValueKey('profile_avatar_frame')))
+        .widget<Container>(
+          find.byKey(const ValueKey('profile_avatar_frame')),
+        )
         .decoration! as BoxDecoration;
     final avatarBadge = tester
         .widget<Container>(
@@ -4846,7 +4737,9 @@ void main() {
         )
         .decoration! as BoxDecoration;
     final walletDecoration = tester
-        .widget<Container>(find.byKey(const ValueKey('profile_wallet_card')))
+        .widget<Container>(
+          find.byKey(const ValueKey('profile_wallet_card')),
+        )
         .decoration! as BoxDecoration;
     final walletGradient = walletDecoration.gradient! as LinearGradient;
     final chevron = tester.widget<Icon>(
@@ -4861,7 +4754,7 @@ void main() {
     expect(chevron.color, colors.textSecondary);
   });
 
-  testWidgets('profile solid hero mirrors Android accent chrome', (
+  testWidgets('profile solid hero matches the mobile accent chrome', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
@@ -4888,7 +4781,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final heroDecoration = tester
-        .widget<Container>(find.byKey(const ValueKey('profile_hero_card')))
+        .widget<Container>(
+          find.byKey(const ValueKey('profile_hero_card')),
+        )
         .decoration! as BoxDecoration;
     final heroGradient = heroDecoration.gradient! as LinearGradient;
     expect(heroGradient.colors[0], AppTheme.brandGradientEnd);
@@ -4932,7 +4827,7 @@ void main() {
     );
   });
 
-  testWidgets('profile card opens Android profile editor dialog', (
+  testWidgets('profile card opens Flutter profile editor dialog', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi();
@@ -4969,36 +4864,36 @@ void main() {
     expect(api.session.localAvatarSource, '');
   });
 
-  testWidgets('profile tab uses Android local session profile before remote me',
-      (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: ProfileScreen(
-            api: _FakeProfileApi(
-              session: const MobileSessionData(
-                username: 'local-admin',
-                accountKind: 'enterprise',
-                localAvatarSource: '/tmp/local-avatar.png',
-                fhdHost: '10.0.0.2:5112',
-                serverMode: 'lan',
+  testWidgets(
+    'profile tab uses Flutter local session profile before remote me',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: ProfileScreen(
+              api: _FakeProfileApi(
+                session: const MobileSessionData(
+                  username: 'local-admin',
+                  accountKind: 'enterprise',
+                  localAvatarSource: '/tmp/local-avatar.png',
+                  fhdHost: '10.0.0.2:5112',
+                  serverMode: 'lan',
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('local-admin'), findsOneWidget);
-    expect(find.text('账号'), findsWidgets);
-    expect(find.text('Agent 控制 · 10.0.0.2:5112'), findsWidgets);
-  });
+      expect(find.text('local-admin'), findsOneWidget);
+      expect(find.text('账号'), findsWidgets);
+      expect(find.text('Agent 控制 · 10.0.0.2:5112'), findsWidgets);
+    },
+  );
 
-  testWidgets('profile tab uses Android cached wallet before remote refresh', (
+  testWidgets('profile tab uses Flutter cached wallet before remote refresh', (
     WidgetTester tester,
   ) async {
     final api = _SlowWalletProfileApi(
@@ -5044,13 +4939,14 @@ void main() {
     expect(find.text('24'), findsOneWidget);
     final cachedWallet = WalletBalanceData.fromJson(
       Map<String, Object?>.from(
-          jsonDecode(api.session.walletBalanceJson) as Map),
+        jsonDecode(api.session.walletBalanceJson) as Map,
+      ),
     );
     expect(cachedWallet.balance, 99.5);
     expect(cachedWallet.membershipLevel, 'vip');
   });
 
-  testWidgets('profile delete account uses Android password confirm dialog', (
+  testWidgets('profile delete account uses Flutter password confirm dialog', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -5074,18 +4970,17 @@ void main() {
     expect(find.text('确认注销'), findsOneWidget);
     expect(find.text('取消'), findsOneWidget);
     expect(find.byType(WeField), findsOneWidget);
-    expect(tester.widget<TextField>(find.byType(TextField).last).obscureText,
-        isTrue);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).obscureText,
+      isTrue,
+    );
     final confirmButton = tester.widget<TextButton>(
-      find.ancestor(
-        of: find.text('确认注销'),
-        matching: find.byType(TextButton),
-      ),
+      find.ancestor(of: find.text('确认注销'), matching: find.byType(TextButton)),
     );
     expect(confirmButton.onPressed, isNotNull);
   });
 
-  testWidgets('profile delete account success follows Android logout flow', (
+  testWidgets('profile delete account success follows Flutter logout flow', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
@@ -5155,7 +5050,7 @@ void main() {
     expect(find.text('密码登录'), findsWidgets);
   });
 
-  testWidgets('profile logout clears Android active auth before login route', (
+  testWidgets('profile logout clears Flutter active auth before login route', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(
@@ -5206,7 +5101,7 @@ void main() {
     expect(find.text('密码登录'), findsWidgets);
   });
 
-  testWidgets('profile delete account failure uses Android error wording', (
+  testWidgets('profile delete account failure uses Flutter error wording', (
     WidgetTester tester,
   ) async {
     final api = _FakeProfileApi(deleteError: '注销失败，请检查网络后重试');
@@ -5235,7 +5130,7 @@ void main() {
     expect(find.text('密码登录'), findsNothing);
   });
 
-  testWidgets('connect page matches Android profile binding interstitial', (
+  testWidgets('connect page matches Flutter profile binding interstitial', (
     WidgetTester tester,
   ) async {
     var scanned = false;
@@ -5243,10 +5138,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: ConnectScreen(
-          fromProfile: true,
-          onScan: () => scanned = true,
-        ),
+        home: ConnectScreen(fromProfile: true, onScan: () => scanned = true),
       ),
     );
 
@@ -5265,10 +5157,7 @@ void main() {
     );
     expect(connectTitle.style?.fontSize, 24);
     expect(connectTitle.style?.fontWeight, FontWeight.w600);
-    expect(
-      find.text('绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。'),
-      findsOneWidget,
-    );
+    expect(find.text('绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。'), findsOneWidget);
     final connectDescription = tester.widget<Text>(
       find.byKey(const ValueKey('connect_description')),
     );
@@ -5296,10 +5185,11 @@ void main() {
     );
     final secondaryDecoration = secondaryButton.decoration! as BoxDecoration;
     expect(
-        tester
-            .getSize(find.byKey(const ValueKey('connect_secondary_button')))
-            .height,
-        48);
+      tester
+          .getSize(find.byKey(const ValueKey('connect_secondary_button')))
+          .height,
+      48,
+    );
     expect(secondaryDecoration.borderRadius, BorderRadius.circular(8));
     expect(secondaryDecoration.border?.top.color, AppTheme.divider);
     final secondaryText = tester.widget<Text>(find.text('返回').first);
@@ -5311,7 +5201,7 @@ void main() {
     expect(scanned, isTrue);
   });
 
-  testWidgets('connect page follows Android dark theme tokens', (
+  testWidgets('connect page follows Flutter dark theme tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -5346,7 +5236,7 @@ void main() {
     expect(secondaryDecoration.border?.top.color, colors.divider);
   });
 
-  testWidgets('chat top more opens Android fixed partner profile', (
+  testWidgets('chat top more opens Flutter fixed partner profile', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -5366,7 +5256,7 @@ void main() {
     expect(find.text('伙伴资料'), findsOneWidget);
   });
 
-  testWidgets('super employee chat hides Android CLI switch card', (
+  testWidgets('super employee chat hides Flutter CLI switch card', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -5379,13 +5269,15 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('super_dev_cli_model_switch_card')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('super_dev_cli_model_switch_card')),
+      findsNothing,
+    );
     expect(find.text('超级开发组 · CLI'), findsNothing);
     expect(find.text('超级员工-Codex'), findsOneWidget);
   });
 
-  testWidgets('chat detail resolves employee profile from Android modInfos', (
+  testWidgets('chat detail resolves employee profile from Flutter modInfos', (
     WidgetTester tester,
   ) async {
     const employee = AiEmployeeProfile(
@@ -5442,18 +5334,17 @@ void main() {
 
     expect(find.text('头像生成员工'), findsOneWidget);
     expect(find.text('旧会话标题'), findsNothing);
-    final employeeAvatars = tester
-        .widgetList<AppAvatar>(
-          find.byType(AppAvatar),
-        )
-        .where(
-          (avatar) =>
-              avatar.imageSource ==
-              'https://cdn.example.com/current-avatar.png',
-        );
+    final employeeAvatars =
+        tester.widgetList<AppAvatar>(find.byType(AppAvatar)).where(
+              (avatar) =>
+                  avatar.imageSource ==
+                  'https://cdn.example.com/current-avatar.png',
+            );
     expect(employeeAvatars, isNotEmpty);
-    expect(employeeAvatars.first.fallback,
-        AppAvatarFallback.empAvatarGenerationEmployee);
+    expect(
+      employeeAvatars.first.fallback,
+      AppAvatarFallback.empAvatarGenerationEmployee,
+    );
     expect(repository.employeeLoads, 1);
 
     await tester.tap(find.byTooltip('更多'));
@@ -5463,7 +5354,7 @@ void main() {
     expect(find.text('来源：AI市场 · 头像员工包'), findsOneWidget);
   });
 
-  testWidgets('chat detail shows Android bubble timestamps', (
+  testWidgets('chat detail shows Flutter bubble timestamps', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -5505,90 +5396,98 @@ void main() {
   });
 
   testWidgets(
-      'chat detail uses Android composer and hides debug endpoint strip', (
-    WidgetTester tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(430, 1800);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
+    'chat detail uses Flutter composer and hides debug endpoint strip',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 1800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: ChatScreen(
-          conversation: demoConversations[1],
-          initialMessages: const [],
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: ChatScreen(
+            conversation: demoConversations[1],
+            initialMessages: const [],
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('超级员工-Codex'), findsWidgets);
-    expect(find.byIcon(Icons.mic), findsOneWidget);
-    expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(find.text('发送'), findsNothing);
-    expect(find.textContaining('api/mobile'), findsNothing);
-    final typography = AppTheme.light().textTheme;
-    final composer = tester.widget<Container>(
-      find.byKey(const ValueKey('chat_composer_surface')),
-    );
-    final composerDecoration = composer.decoration as BoxDecoration;
-    final composerBorder = composerDecoration.border as Border;
-    expect(composerDecoration.color, AppTheme.surface);
-    expect(
-        composerBorder.top.color, AppTheme.light().colorScheme.outlineVariant);
-    expect(composerBorder.top.width, 0.5);
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.style?.fontSize, typography.bodyMedium?.fontSize);
-    expect(textField.style?.height, typography.bodyMedium?.height);
-    expect(textField.decoration?.hintStyle?.fontSize,
-        typography.bodyMedium?.fontSize);
-    expect(
-        textField.decoration?.hintStyle?.height, typography.bodyMedium?.height);
+      expect(find.text('超级员工-Codex'), findsWidgets);
+      expect(find.byIcon(Icons.mic), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
+      expect(find.text('发送'), findsNothing);
+      expect(find.textContaining('api/mobile'), findsNothing);
+      final typography = AppTheme.light().textTheme;
+      final composer = tester.widget<Container>(
+        find.byKey(const ValueKey('chat_composer_surface')),
+      );
+      final composerDecoration = composer.decoration as BoxDecoration;
+      final composerBorder = composerDecoration.border as Border;
+      expect(composerDecoration.color, AppTheme.surface);
+      expect(
+        composerBorder.top.color,
+        AppTheme.light().colorScheme.outlineVariant,
+      );
+      expect(composerBorder.top.width, 0.5);
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.style?.fontSize, typography.bodyMedium?.fontSize);
+      expect(textField.style?.height, typography.bodyMedium?.height);
+      expect(
+        textField.decoration?.hintStyle?.fontSize,
+        typography.bodyMedium?.fontSize,
+      );
+      expect(
+        textField.decoration?.hintStyle?.height,
+        typography.bodyMedium?.height,
+      );
 
-    await tester.enterText(find.byType(TextField), '继续');
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), '继续');
+      await tester.pump();
 
-    expect(find.text('发送'), findsOneWidget);
-    final sendText = tester.widget<Text>(find.text('发送'));
-    expect(sendText.style?.fontSize, 15);
-    expect(sendText.style?.height, typography.labelLarge?.height);
-    expect(sendText.style?.fontWeight, FontWeight.w500);
+      expect(find.text('发送'), findsOneWidget);
+      final sendText = tester.widget<Text>(find.text('发送'));
+      expect(sendText.style?.fontSize, 15);
+      expect(sendText.style?.height, typography.labelLarge?.height);
+      expect(sendText.style?.fontWeight, FontWeight.w500);
 
-    await tester.tap(find.byTooltip('更多工具'));
-    await tester.pump();
+      await tester.tap(find.byTooltip('更多工具'));
+      await tester.pump();
 
-    // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
-    expect(find.text('执行回顾'), findsOneWidget);
-    expect(find.text('新建对话'), findsNothing);
-    expect(find.text('OCR 识别'), findsNothing);
-    expect(find.text('语音输入'), findsNothing);
-    expect(find.text('任务派工'), findsOneWidget);
-    expect(find.text('验收回访'), findsOneWidget);
-    expect(find.text('问题修复'), findsOneWidget);
-    final toolPanel = tester.widget<Padding>(
-      find.byKey(const ValueKey('chat_tool_card_panel')),
-    );
-    expect(toolPanel.padding, const EdgeInsets.fromLTRB(12, 8, 12, 20));
-    expect(
-      tester.getSize(find.byKey(const ValueKey('chat_tool_card_任务派工'))).height,
-      92,
-    );
-    expect(
-      tester.getSize(find.byKey(const ValueKey('chat_tool_icon_box_任务派工'))),
-      const Size(62, 62),
-    );
-    final taskToolText = tester.widget<Text>(find.text('任务派工'));
-    expect(taskToolText.style?.fontSize, typography.labelMedium?.fontSize);
-    expect(taskToolText.style?.height, typography.labelMedium?.height);
+      // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
+      expect(find.text('执行回顾'), findsOneWidget);
+      expect(find.text('新建对话'), findsNothing);
+      expect(find.text('OCR 识别'), findsNothing);
+      expect(find.text('语音输入'), findsNothing);
+      expect(find.text('任务派工'), findsOneWidget);
+      expect(find.text('验收回访'), findsOneWidget);
+      expect(find.text('问题修复'), findsOneWidget);
+      final toolPanel = tester.widget<Padding>(
+        find.byKey(const ValueKey('chat_tool_card_panel')),
+      );
+      expect(toolPanel.padding, const EdgeInsets.fromLTRB(12, 8, 12, 20));
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('chat_tool_card_任务派工')))
+            .height,
+        92,
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('chat_tool_icon_box_任务派工'))),
+        const Size(62, 62),
+      );
+      final taskToolText = tester.widget<Text>(find.text('任务派工'));
+      expect(taskToolText.style?.fontSize, typography.labelMedium?.fontSize);
+      expect(taskToolText.style?.height, typography.labelMedium?.height);
 
-    await tester.tap(find.text('任务派工'));
-    await tester.pump();
+      await tester.tap(find.text('任务派工'));
+      await tester.pump();
 
-    expect(find.text('帮我安排并完成这个任务：继续'), findsOneWidget);
-  });
+      expect(find.text('帮我安排并完成这个任务：继续'), findsOneWidget);
+    },
+  );
 
-  testWidgets('chat detail streams into Android assistant placeholder bubble', (
+  testWidgets('chat detail streams into Flutter assistant placeholder bubble', (
     WidgetTester tester,
   ) async {
     final repository = _FakeStreamingChatRepository();
@@ -5635,7 +5534,7 @@ void main() {
     expect(find.text('发送失败'), findsNothing);
   });
 
-  testWidgets('chat detail long press supports Android reply and delete', (
+  testWidgets('chat detail long press supports Flutter reply and delete', (
     WidgetTester tester,
   ) async {
     final repository = _FakeStreamingChatRepository();
@@ -5685,7 +5584,7 @@ void main() {
     expect(find.text('开始处理完成'), findsNothing);
   });
 
-  testWidgets('chat detail stop keeps partial Android streaming bubble', (
+  testWidgets('chat detail stop keeps partial Flutter streaming bubble', (
     WidgetTester tester,
   ) async {
     final repository = _FakeStreamingChatRepository();
@@ -5723,7 +5622,7 @@ void main() {
     expect(find.text('发送失败'), findsNothing);
   });
 
-  testWidgets('super employee chat resumes Android inflight relay task', (
+  testWidgets('super employee chat resumes Flutter inflight relay task', (
     WidgetTester tester,
   ) async {
     final repository = _FakeInflightRelayRepository();
@@ -5754,7 +5653,7 @@ void main() {
     expect(find.text('电脑工具已完成任务。'), findsOneWidget);
   });
 
-  testWidgets('chat detail failed assistant bubble can resend like Android', (
+  testWidgets('chat detail failed assistant bubble can resend like Flutter', (
     WidgetTester tester,
   ) async {
     final repository = _FakeFailThenStreamingRepository();
@@ -5789,7 +5688,7 @@ void main() {
     expect(find.text('继续'), findsOneWidget);
   });
 
-  testWidgets('super employee chat shows Android git action bar', (
+  testWidgets('super employee chat shows Flutter git action bar', (
     WidgetTester tester,
   ) async {
     final repository = _FakeRealtimeRepository();
@@ -5849,7 +5748,7 @@ void main() {
   ) async {
     final repository = _FakeRealtimeRepository();
     const branch = 'super-employee/codex/fix-bug';
-    final body = '闭环结果：\n'
+    const body = '闭环结果：\n'
         '分支：$branch\n'
         '验证：通过（ruff lint 0 errors）\n'
         '推送：已推送到远端';
@@ -5860,7 +5759,7 @@ void main() {
         home: ChatScreen(
           conversation: demoConversations[1],
           repository: repository,
-          initialMessages: [
+          initialMessages: const [
             ChatMessage(
               id: 'a1',
               conversationId: 'pinned:codex',
@@ -5888,10 +5787,7 @@ void main() {
   });
 }
 
-Future<void> _tapHeaderPlusMenuItem(
-  WidgetTester tester,
-  String label,
-) async {
+Future<void> _tapHeaderPlusMenuItem(WidgetTester tester, String label) async {
   await tester.tap(find.byTooltip('更多'));
   await tester.pumpAndSettle();
   await tester.tap(find.text(label));
@@ -5952,11 +5848,7 @@ class _FakeRealtimeRepository extends MobileRepository {
 
   @override
   Future<CsInfo> loadCsInfo() async {
-    return const CsInfo(
-      available: true,
-      name: '客服在线',
-      online: true,
-    );
+    return const CsInfo(available: true, name: '客服在线', online: true);
   }
 
   @override
@@ -6050,7 +5942,10 @@ class _FakeRealtimeRepository extends MobileRepository {
   Future<List<GitBranchInfo>> loadGitBranches() async {
     return const [
       GitBranchInfo(
-          name: 'feature/android-parity', current: true, remote: false),
+        name: 'feature/android-parity',
+        current: true,
+        remote: false,
+      ),
     ];
   }
 
@@ -6200,11 +6095,7 @@ class _FakeBridgeRepository extends MobileRepository {
     required String response,
     String respondedBy = 'android',
   }) async {
-    replies.add({
-      'id': id,
-      'response': response,
-      'respondedBy': respondedBy,
-    });
+    replies.add({'id': id, 'response': response, 'respondedBy': respondedBy});
   }
 }
 
@@ -6421,10 +6312,7 @@ class _FakeHomeShellRepository extends MobileRepository {
     required int conversationId,
     required String body,
   }) async {
-    adminCsReplies.add({
-      'conversationId': conversationId,
-      'body': body,
-    });
+    adminCsReplies.add({'conversationId': conversationId, 'body': body});
   }
 
   @override
@@ -6593,10 +6481,7 @@ class _FakeConversationActionRepository extends _FakeRealtimeRepository {
 }
 
 class _FakeCircleRepository extends MobileRepository {
-  _FakeCircleRepository({
-    this.failEmployees = false,
-    this.failLike = false,
-  });
+  _FakeCircleRepository({this.failEmployees = false, this.failLike = false});
 
   final bool failEmployees;
   final bool failLike;
@@ -6717,13 +6602,14 @@ class _FakeSettingsApi extends MobileApiClient {
   MobileUpdateCheckResult updateResult = const MobileUpdateCheckResult(
     available: false,
     force: false,
-    versionName: MobileAndroidBuild.versionName,
+    versionName: MobileBuildConfig.versionName,
     downloadUrl: '',
     raw: {'ok': true},
   );
 
   @override
-  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async =>
+      session;
 
   @override
   Future<void> saveLocalSettings({
@@ -6763,18 +6649,15 @@ class _FakeSettingsApi extends MobileApiClient {
 
   @override
   Future<MobileUpdateCheckResult> checkForUpdate({
-    int currentVersionCode = MobileAndroidBuild.versionCode,
-    String sku = MobileAndroidBuild.productSku,
+    int currentVersionCode = MobileBuildConfig.versionCode,
+    String sku = MobileBuildConfig.productSku,
   }) async {
-    updateChecks.add({
-      'currentVersionCode': currentVersionCode,
-      'sku': sku,
-    });
+    updateChecks.add({'currentVersionCode': currentVersionCode, 'sku': sku});
     return updateResult;
   }
 }
 
-class _FakeUpdateInstaller implements AndroidPackageUpdateInstaller {
+class _FakeUpdateInstaller implements PackageUpdateInstaller {
   _FakeUpdateInstaller({this.message = ''});
 
   final String message;
@@ -6805,7 +6688,8 @@ class _FakeProfileApi extends MobileApiClient {
   var meLoads = 0;
 
   @override
-  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async =>
+      session;
 
   @override
   Future<void> clearActiveAuth() async {
@@ -6860,15 +6744,15 @@ class _FakeProfileApi extends MobileApiClient {
     return MobileEnvelope<WalletBalanceData>(
       success: true,
       message: '',
-      data: WalletBalanceData.androidCurrentFallback(),
+      data: WalletBalanceData.mobileCurrentFallback(),
       raw: const {'ok': true},
     );
   }
 
   @override
   Future<MobileAppConfigData> appConfig({
-    int currentVersionCode = MobileAndroidBuild.versionCode,
-    String sku = MobileAndroidBuild.productSku,
+    int currentVersionCode = MobileBuildConfig.versionCode,
+    String sku = MobileBuildConfig.productSku,
   }) async {
     appConfigLoads += 1;
     return MobileAppConfigData(

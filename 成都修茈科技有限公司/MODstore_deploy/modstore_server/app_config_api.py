@@ -34,7 +34,7 @@ _APP_FILING_APPROVED = (
     "on",
 )
 
-# versionCode / versionName 对齐 FHD/VERSION.md v10 锚点与 mobile-android/app/build.gradle.kts
+# versionCode / versionName 对齐 FHD/VERSION.md 与 Flutter Android Runner
 _ANDROID_MIN_VERSION = int(os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "10") or "10")
 _ANDROID_LATEST_VERSION = int(os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "10") or "10")
 _ANDROID_LATEST_NAME = (

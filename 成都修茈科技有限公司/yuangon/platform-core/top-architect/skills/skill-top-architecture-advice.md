@@ -29,7 +29,7 @@
 
 - 后端：`FHD/app/**`、`FHD/app/fastapi_routes/**`、`FHD/app/application/**`
 - 前端：`FHD/frontend/src/**`
-- 移动端：`FHD/mobile-flutter-poc/**`、`FHD/mobile-android/**`、`FHD/mobile-ios/**`、`FHD/mobile-harmony/**`
+- 移动端：`FHD/mobile-flutter-poc/**`（Flutter 业务代码 + Android/iOS Runner）
 - 员工体系：`FHD/mods/_employees/**`、`成都修茈科技有限公司/yuangon/**`
 - MODstore：`成都修茈科技有限公司/MODstore_deploy/modstore_server/**`、`成都修茈科技有限公司/MODstore_deploy/market/src/**`
 

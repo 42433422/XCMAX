@@ -145,7 +145,7 @@
           "support": ["sandbox-tester", "code-validator", "self-checker"]
         },
         "P4": {
-          "name": "四渠道构建",
+          "name": "Flutter 多渠道构建",
           "primary": ["pack-registrar", "deploy-release-officer"],
           "support": ["mobile-android-release-officer"]
         },
@@ -155,7 +155,6 @@
           "support": [
             "github-pr-gatekeeper",
             "mobile-android-release-officer",
-            "mobile-harmony-release-officer",
             "mobile-ios-release-officer"
           ]
         },

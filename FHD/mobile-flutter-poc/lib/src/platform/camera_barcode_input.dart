@@ -1,7 +1,5 @@
 import 'dart:io' show Platform;
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';

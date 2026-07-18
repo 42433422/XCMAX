@@ -238,7 +238,6 @@ class _NotificationItem {
     required this.title,
     required this.content,
     required this.dateText,
-    this.read = false,
   });
 
   final String id;
@@ -246,7 +245,7 @@ class _NotificationItem {
   final String title;
   final String content;
   final String dateText;
-  final bool read;
+  final bool read = false;
 
   factory _NotificationItem.fromPending(PendingNotification notification) {
     return _NotificationItem(

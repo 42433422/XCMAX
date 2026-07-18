@@ -1,7 +1,7 @@
 id: mobile-ios-release-officer
 name: iOS 发版员
 version: "1.1.0"
-domain: XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。
+domain: Flutter iOS 渠道发布：Runner、Fastlane match、签名、TestFlight / App Store Connect 上传与 release 门禁。
 owner: admin
 area: platform-core
 five_line_id: prod_software
@@ -9,7 +9,8 @@ subzone: build-release
 also_serves: []
 
 scope_globs:
-  - FHD/mobile-ios/**
+  - FHD/mobile-flutter-poc/ios/**
+  - FHD/mobile-flutter-poc/fastlane/**
   - FHD/.github/workflows/release-ios.yml
   - FHD/XCAGI/resources/**
 

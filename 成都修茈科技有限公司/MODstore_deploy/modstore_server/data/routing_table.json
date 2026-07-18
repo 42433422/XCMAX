@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-28T12:20:04+00:00",
+  "generated_at": "2026-07-18T06:21:08+00:00",
   "employees": [
     {
       "id": "artifact-generator",
@@ -695,28 +695,10 @@
       "id": "mobile-android-release-officer",
       "area": "platform-core",
       "scope_globs": [
-        "FHD/mobile-android/**",
-        "FHD/.github/workflows/ci-mobile-android.yml",
+        "FHD/mobile-flutter-poc/**",
+        "FHD/.github/workflows/ci-mobile-flutter.yml",
         "FHD/.github/workflows/release-android.yml",
         "release-apk/**"
-      ],
-      "forbidden_globs": [
-        "_local_secrets/**"
-      ],
-      "subscribes": [],
-      "depends_on": [
-        "test-qa-runner",
-        "deploy-release-officer"
-      ]
-    },
-    {
-      "id": "mobile-harmony-release-officer",
-      "area": "platform-core",
-      "scope_globs": [
-        "FHD/mobile-harmony/**",
-        "FHD/mobile-harmony/scripts/**",
-        "FHD/.github/workflows/release-harmony.yml",
-        "release-harmony/**"
       ],
       "forbidden_globs": [
         "_local_secrets/**"
@@ -731,7 +713,8 @@
       "id": "mobile-ios-release-officer",
       "area": "platform-core",
       "scope_globs": [
-        "FHD/mobile-ios/**",
+        "FHD/mobile-flutter-poc/ios/**",
+        "FHD/mobile-flutter-poc/fastlane/**",
         "FHD/.github/workflows/release-ios.yml",
         "FHD/XCAGI/resources/**"
       ],
@@ -749,6 +732,7 @@
       "area": "platform-core",
       "scope_globs": [
         "mods/**",
+        "FHD/mods/**",
         "eskill-prototype/**",
         "MODstore_deploy/modstore_server/market_files/**",
         "MODstore_deploy/modstore_server/market_files/REGISTRY.json",
@@ -793,6 +777,44 @@
       "depends_on": [
         "intake-dispatcher",
         "employee-pack-curator"
+      ]
+    },
+    {
+      "id": "top-architect",
+      "area": "platform-core",
+      "scope_globs": [
+        "FHD/docs/**",
+        "FHD/config/**",
+        "FHD/app/**",
+        "FHD/frontend/src/**",
+        "FHD/mobile-flutter-poc/**",
+        "FHD/mods/_employees/**",
+        "FHD/contracts/openapi.json",
+        "scripts/dev/**",
+        "docs/**",
+        "成都修茈科技有限公司/MODstore_deploy/docs/**",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/**",
+        "成都修茈科技有限公司/MODstore_deploy/market/src/**",
+        "成都修茈科技有限公司/yuangon/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "**/.env",
+        "**/.env.*",
+        "**/secrets/**",
+        "**/node_modules/**",
+        "**/build/**",
+        "**/dist/**"
+      ],
+      "subscribes": [
+        "architecture.question.created",
+        "employee.task.failed:fhd-core-maintainer",
+        "employee.task.failed:mobile-ios-release-officer",
+        "employee.task.failed:modstore-backend-api"
+      ],
+      "depends_on": [
+        "doc-knowledge-curator",
+        "test-qa-runner"
       ]
     },
     {
@@ -871,6 +893,8 @@
         "MODstore_deploy/pyproject.toml",
         "MODstore_deploy/templates/**",
         "MODstore_deploy/examples/**",
+        "MODstore_deploy/docs/**",
+        "MODstore_deploy/market/docs/**",
         "风格"
       ],
       "forbidden_globs": [
@@ -1045,6 +1069,7 @@
         "MODstore_deploy/market/nginx.conf",
         "MODstore_deploy/market/nginx-errors/**",
         "MODstore_deploy/market/nginx-snippets/**",
+        "MODstore_deploy/market/scripts/**",
         "MODstore_deploy/scripts/**"
       ],
       "forbidden_globs": [
@@ -1329,7 +1354,10 @@
       "id": "marketing-site-builder",
       "area": "site-and-marketing",
       "scope_globs": [
-        "marketing-site/**"
+        "marketing-site/**",
+        "marketing-assets/xc-brand-film/build.sh",
+        "marketing-assets/xc-brand-film/scripts/**",
+        "marketing-assets/xc-brand-film/assets/**"
       ],
       "forbidden_globs": [
         "_local_secrets/**",
@@ -1387,7 +1415,13 @@
         "./main.js",
         "./news.json",
         "./activities.json",
+        "./privacy.html",
         "./assets/**",
+        "corp-butler/**/*.html",
+        "corp-butler/**/*.js",
+        "corp-butler/**/*.css",
+        "corp-butler/**/*.jpg",
+        "corp-butler/**/*.json",
         "./src/**",
         "./package.json",
         "./package-lock.json",

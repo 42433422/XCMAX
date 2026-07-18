@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-ANDROID_DIR="${FHD_ROOT}/mobile-android"
+ANDROID_DIR="${FHD_ROOT}/mobile-flutter-poc"
 SDK="${ANDROID_DIR}/.toolchain/android-sdk"
 AVD_NAME="${XCAGI_ANDROID_AVD:-xcagi_surface_audit}"
 SYS_IMG="${XCAGI_ANDROID_SYS_IMAGE:-system-images;android-35;google_apis;arm64-v8a}"
@@ -23,7 +23,7 @@ SDKM="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
 AVDM="${ANDROID_HOME}/cmdline-tools/latest/bin/avdmanager"
 
 if [[ ! -x "${SDKM}" ]]; then
-  log "ERROR: sdkmanager 不存在，请先配置 mobile-android/.toolchain/android-sdk"
+  log "ERROR: sdkmanager 不存在，请先配置 mobile-flutter-poc/.toolchain/android-sdk"
   exit 1
 fi
 

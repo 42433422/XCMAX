@@ -959,24 +959,24 @@ async def test_android_gradle_requires_confirm(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_android_gradle_missing_gradlew(monkeypatch, tmp_path):
+async def test_android_gradle_missing_flutter_project(monkeypatch, tmp_path):
     monkeypatch.setattr(est, "_FHD_ROOT", tmp_path)
     r = await est.tool_android_gradle_build({"confirm": True}, {})
-    assert r["ok"] is False and "gradlew 不存在" in r["error"]
+    assert r["ok"] is False and "pubspec.yaml 不存在" in r["error"]
 
 
 @pytest.mark.asyncio
 async def test_android_gradle_runs(monkeypatch, tmp_path):
-    android = tmp_path / "mobile-android"
+    android = tmp_path / "mobile-flutter-poc"
     android.mkdir()
-    (android / "gradlew").write_text("#!/bin/sh")
+    (android / "pubspec.yaml").write_text("name: test")
     monkeypatch.setattr(est, "_FHD_ROOT", tmp_path)
+    monkeypatch.setattr(est.shutil, "which", lambda _: "/usr/bin/flutter")
     fake = _install_run_cmd(
         monkeypatch, {"returncode": 0, "stdout": "tasks", "stderr": "", "ok": True}
     )
     r = await est.tool_android_gradle_build({"confirm": True}, {})
-    assert fake.calls[0]["args"][0] == "bash"
-    assert "gradlew" in fake.calls[0]["args"][1]
+    assert fake.calls[0]["args"] == ["/usr/bin/flutter", "build", "apk", "--debug"]
     assert r["passed"] is True
 
 

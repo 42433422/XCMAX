@@ -671,7 +671,9 @@ class TestAiEmployeeMarketProfiles:
         assert len(items) == len(roster_ids)
         assert ids == roster_ids
         assert "llm-ops-engineer" in ids
-        assert "mobile-harmony-release-officer" in ids
+        assert "mobile-android-release-officer" in ids
+        assert "mobile-ios-release-officer" in ids
+        assert "mobile-harmony-release-officer" not in ids
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # XCMAX 工作区地图
 
-**最后更新**：2026-06-17
+**最后更新**：2026-07-18
 
 > **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](docs/CI_SSOT.md)。周度归档见 [`specs/weekly/`](specs/weekly/)。
 >
@@ -14,7 +14,7 @@
 |--------|------|--------|----------|----------------|
 | **企业桌面 ERP + AI** | [`FHD/`](FHD/) | **P0 主交付** — 企业桌面宿主、本地 ERP、AI 员工、行业 Mod | [`FHD/docs/START_HERE.md`](FHD/docs/START_HERE.md) | [`fhd-ci-cd.yml`](.github/workflows/fhd-ci-cd.yml) |
 | **AI 员工商店** | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | **P1 商业化线** — 员工 / Mod 目录、授权、支付、下载、更新 | [`MODstore_deploy/docs/developer/README.md`](成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`modstore-ci-backend-python.yml`](.github/workflows/modstore-ci-backend-python.yml) |
-| **移动 AI 协同 App** | [`FHD/mobile-android/`](FHD/mobile-android/) | **P2 配套线** — Kotlin Compose · 登录 / 扫码 / 对话 / 审批 / 通知 | [`FHD/docs/guides/MOBILE_ANDROID.md`](FHD/docs/guides/MOBILE_ANDROID.md) | [`.github/workflows/android-build.yml`](.github/workflows/android-build.yml) |
+| **移动 AI 协同 App** | [`FHD/mobile-flutter-poc/`](FHD/mobile-flutter-poc/) | **P2 配套线** — Flutter 统一 Android/iOS · 登录 / 扫码 / 对话 / 审批 / 通知 | [`FHD/mobile-flutter-poc/README.md`](FHD/mobile-flutter-poc/README.md) | [`fhd-ci-mobile-flutter.yml`](.github/workflows/fhd-ci-mobile-flutter.yml) |
 | **技术债与计划** | [`specs/`](specs/) | **活跃** — 规范与 checklist | [`specs/plan-2026-06.md`](specs/plan-2026-06.md) | — |
 | **个人版** | [`FHD/docs/_archive/FHD-个人/`](FHD/docs/_archive/FHD-个人/) | **冻结** — 暂停新增投入，仅保留兼容、归档和未来恢复入口 | [`FHD/docs/_archive/FHD-个人/ARCHIVED.md`](FHD/docs/_archive/FHD-个人/ARCHIVED.md) | 不进入当前版本目标 |
 | **工作区归档** | [`_archive/`](_archive/) | **只读** | 各目录 `ARCHIVED.md` | — |
@@ -27,7 +27,7 @@
 |------|------|
 | [`FHD/`](FHD/) | **企业桌面 ERP + AI 主交付**：后端、前端、桌面安装包、行业 Mod、企业交付文档；个人版仅保留兼容入口 |
 | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | **AI 员工商店**：MODstore、官网、支付、授权、下载与员工 / Mod 目录 |
-| [`FHD/mobile-android/`](FHD/mobile-android/) | **移动 AI 协同 App**：企业账号、扫码连接、AI 对话、通知、审批、移动查看 |
+| [`FHD/mobile-flutter-poc/`](FHD/mobile-flutter-poc/) | **Flutter 移动 AI 协同 App**：Android/iOS 共用业务代码，平台 Runner 仅负责系统能力与发版 |
 | [`specs/`](specs/) | 跨线产品策略、技术债清偿规范和周度执行记录 |
 
 ### 快速启动

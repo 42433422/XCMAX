@@ -152,15 +152,9 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _StatChip(
-                label: '+$additions',
-                color: colors.success,
-              ),
+              _StatChip(label: '+$additions', color: colors.success),
               const SizedBox(width: 8),
-              _StatChip(
-                label: '-$deletions',
-                color: colors.danger,
-              ),
+              _StatChip(label: '-$deletions', color: colors.danger),
             ],
           ),
         ],
@@ -232,10 +226,7 @@ class _FileDiffRow extends StatelessWidget {
             ),
             child: Text(
               status,
-              style: TextStyle(
-                color: statusColor,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 10),

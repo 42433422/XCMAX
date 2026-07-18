@@ -263,10 +263,7 @@ class _BusinessListResult {
 }
 
 class _BusinessModeCapsule extends StatelessWidget {
-  const _BusinessModeCapsule({
-    required this.selected,
-    required this.onSelect,
-  });
+  const _BusinessModeCapsule({required this.selected, required this.onSelect});
 
   final BusinessListKind selected;
   final ValueChanged<BusinessListKind> onSelect;

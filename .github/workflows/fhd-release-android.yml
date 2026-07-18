@@ -10,15 +10,6 @@ on:
         required: false
         type: string
         default: "1.0.0.0"
-      harmony_artifact:
-        description: Optional archived HarmonyOS .hap/.hsp path (product shipping is Android-only).
-        required: false
-        type: string
-      android_only:
-        description: Android-only package (default true; Harmony is archived).
-        required: true
-        default: true
-        type: boolean
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
   # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
@@ -144,11 +135,7 @@ jobs:
             --version "${{ steps.release_version.outputs.version }}"
             --android-version "${{ steps.release_version.outputs.version }}"
             --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk"
-            --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
           )
-          if [[ "${{ inputs.android_only }}" != "false" ]]; then
-            args+=(--android-only)
-          fi
           bash FHD/scripts/mobile/stage-release-packages.sh "${args[@]}"
       - name: Upload mobile package artifacts
         uses: actions/upload-artifact@v4

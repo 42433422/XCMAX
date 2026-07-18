@@ -1160,22 +1160,22 @@ class TestMobileTools:
         r = await tool_android_gradle_build({}, {})
         assert r["ok"] is False
 
-    async def test_android_gradle_no_gradlew(self, tmp_path):
-        android_dir = tmp_path / "mobile-android"
+    async def test_android_gradle_no_flutter_project(self, tmp_path):
+        android_dir = tmp_path / "mobile-flutter-poc"
         android_dir.mkdir()
         with patch.object(module, "_FHD_ROOT", tmp_path):
             r = await tool_android_gradle_build({"confirm": True}, {})
         assert r["ok"] is False
-        assert "gradlew" in r["error"]
+        assert "pubspec.yaml" in r["error"]
 
     async def test_android_gradle_success(self, tmp_path):
-        android_dir = tmp_path / "mobile-android"
+        android_dir = tmp_path / "mobile-flutter-poc"
         android_dir.mkdir()
-        gradlew = android_dir / "gradlew"
-        gradlew.touch()
+        (android_dir / "pubspec.yaml").write_text("name: test", encoding="utf-8")
         with patch.object(module, "_FHD_ROOT", tmp_path):
-            with patch.object(module, "_run_cmd", AsyncMock(return_value=_GOOD_RUN)):
-                r = await tool_android_gradle_build({"confirm": True}, {})
+            with patch("shutil.which", return_value="/usr/bin/flutter"):
+                with patch.object(module, "_run_cmd", AsyncMock(return_value=_GOOD_RUN)):
+                    r = await tool_android_gradle_build({"confirm": True}, {})
         assert r["ok"] is True
 
 

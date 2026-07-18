@@ -181,4 +181,5 @@ def test_digest_dispatch_derives_from_roster_ssot():
     dispatch = build_employee_dispatch_map()  # 不传参 → SSOT 派生
     planned = set(all_planned_duty_employee_ids())
     assert not (planned - set(dispatch)), "编制员工未被产线派生覆盖"
-    assert dispatch.get("mobile-harmony-release-officer") == {"P-App"}
+    assert dispatch.get("mobile-android-release-officer") == {"P-App"}
+    assert dispatch.get("mobile-ios-release-officer") == {"P-App"}

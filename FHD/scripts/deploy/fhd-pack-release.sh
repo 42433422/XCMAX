@@ -63,7 +63,7 @@ RSYNC_EXCLUDES=(
   --exclude 'node_modules'
   --exclude 'frontend'
   --exclude 'desktop'
-  --exclude 'mobile-android'
+  --exclude 'mobile-flutter-poc'
   --exclude 'tests'
   --exclude 'data'
   --exclude 'uploads'
