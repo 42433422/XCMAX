@@ -47,14 +47,7 @@ def _adb_bin() -> str:
     if custom:
         return custom
     fhd = _fhd_root()
-    bundled = (
-        fhd
-        / "mobile-flutter-poc"
-        / ".toolchain"
-        / "android-sdk"
-        / "platform-tools"
-        / "adb"
-    )
+    bundled = fhd / "mobile-flutter-poc" / ".toolchain" / "android-sdk" / "platform-tools" / "adb"
     if bundled.is_file():
         return str(bundled)
     return "adb"
