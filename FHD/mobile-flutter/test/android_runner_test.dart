@@ -20,6 +20,7 @@ void main() {
       'android/app/src/main/res/xml/file_paths.xml',
     ).readAsStringSync();
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final rootGradle = File('android/build.gradle.kts').readAsStringSync();
     final settingsGradle = File(
       'android/settings.gradle.kts',
     ).readAsStringSync();
@@ -113,12 +114,12 @@ void main() {
       lessThan(settingsGradle.indexOf('maven.aliyun.com/repository/public')),
     );
     expect(
-      gradle.indexOf('google()'),
-      lessThan(gradle.indexOf('maven.aliyun.com/repository/google')),
+      rootGradle.indexOf('google()'),
+      lessThan(rootGradle.indexOf('maven.aliyun.com/repository/google')),
     );
     expect(
-      gradle.indexOf('mavenCentral()'),
-      lessThan(gradle.indexOf('maven.aliyun.com/repository/public')),
+      rootGradle.indexOf('mavenCentral()'),
+      lessThan(rootGradle.indexOf('maven.aliyun.com/repository/public')),
     );
     expect(backgroundWork, contains('PeriodicWorkRequestBuilder'));
     expect(backgroundWork, contains('xcagi_mobile_sync'));
