@@ -314,7 +314,6 @@ const viewCases = [
   ['SandboxView', () => import('./views/SandboxView.vue')],
   ['ScriptWorkflowComposerView', () => import('./views/ScriptWorkflowComposerView.vue')],
   ['ScriptWorkflowDetailView', () => import('./views/ScriptWorkflowDetailView.vue')],
-  ['SoftwareDownloadView', () => import('./views/SoftwareDownloadView.vue')],
   ['UnifiedWorkbenchView', () => import('./views/UnifiedWorkbenchView.vue')],
   ['WalletRechargeView', () => import('./views/WalletRechargeView.vue')],
   ['WalletView', () => import('./views/WalletView.vue')],
