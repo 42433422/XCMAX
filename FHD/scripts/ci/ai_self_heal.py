@@ -59,6 +59,7 @@ class Fix:
     patch: str  # unified diff 片段（或空字符串表示 needs-human）
     needs_human: bool
     description: str
+    risk_level: str = "r3"  # r0/r1/r2/r3 — 分级合并 SLA 依据（LLM 修复强制 r3）
 
 
 @dataclass
@@ -322,7 +323,14 @@ def _make_truncate_line_patch(file_path: str, line_no: int) -> str:
 
 
 def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
-    """规则匹配：覆盖 80% 常见失败，返回每个错误对应的修复方案。"""
+    """规则匹配：覆盖 80% 常见失败，返回每个错误对应的修复方案。
+
+    风险分级（risk_level）：
+    - r0 极低：机械删除/截断，可 24h 自动合并
+    - r1 低：可能影响语义但校验可兜底，72h 无 review 自动合并
+    - r2 中：需人工 review，7d stale / 14d close
+    - r3 高：安全/业务/LLM，永不自动合并，7d stale / 30d close
+    """
     fixes: list[Fix] = []
     for err in errors:
         if err.tool == "ruff":
@@ -334,6 +342,7 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
                         patch=patch,
                         needs_human=False,
                         description=f"删除未使用 import: {err.file_path}:{err.line}",
+                        risk_level="r0",
                     )
                 )
                 continue
@@ -345,6 +354,7 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
                         patch=patch,
                         needs_human=False,
                         description=f"截断超长行: {err.file_path}:{err.line}",
+                        risk_level="r0",
                     )
                 )
                 continue
@@ -354,7 +364,8 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
                         error=err,
                         patch="",
                         needs_human=True,
-                        description=f"未使用局部变量，需人工确认是否安全删除: {err.message}",
+                        description=f"未使用局部变量（r1 二次校验后 72h 可 auto-merge）: {err.message}",
+                        risk_level="r1",
                     )
                 )
                 continue
@@ -363,18 +374,20 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
                     error=err,
                     patch="",
                     needs_human=True,
-                    description=f"ruff 未知错误码 {err.code}，需人工修复",
+                    description=f"ruff 错误码 {err.code}（r2 需人工）",
+                    risk_level="r2",
                 )
             )
             continue
         if err.tool == "bandit":
-            # bandit 全部标 needs-human（安全相关，不自动修）
+            # bandit 全部 r3（安全相关，永不自动合并）
             fixes.append(
                 Fix(
                     error=err,
                     patch="",
                     needs_human=True,
-                    description=f"bandit 安全告警 [{err.code}]，需人工评估: {err.message}",
+                    description=f"bandit 安全告警 [{err.code}]（r3 需人工）: {err.message}",
+                    risk_level="r3",
                 )
             )
             continue
@@ -384,7 +397,8 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
                     error=err,
                     patch="",
                     needs_human=True,
-                    description=f"mypy 类型错误，需人工修复: {err.message}",
+                    description=f"mypy 类型错误（r2 需人工）: {err.message}",
+                    risk_level="r2",
                 )
             )
             continue
@@ -394,12 +408,13 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
                     error=err,
                     patch="",
                     needs_human=True,
-                    description=f"pytest 测试失败，需人工分析: {err.message}",
+                    description=f"pytest 测试失败（r3 需人工分析）: {err.message}",
+                    risk_level="r3",
                 )
             )
             continue
         fixes.append(
-            Fix(error=err, patch="", needs_human=True, description="未知工具错误，需人工分析")
+            Fix(error=err, patch="", needs_human=True, description="未知工具错误（r3）", risk_level="r3")
         )
     return fixes
 
@@ -630,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
         llm_fixes = call_llm(needs_human_errors)
         if llm_fixes is not None:
             print(f"[heal] LLM 兜底生成 {len(llm_fixes)} 个候选修复")
-            # LLM 提供的修复替换原 needs-human fix（但仍标记 needs-human，不自动合并）
+            # LLM 提供的修复替换原 needs-human fix，但 LLM 强制 r3 永不自动合并
             for lf in llm_fixes:
                 # 找到原 fix 替换 patch
                 for i, orig in enumerate(fixes):
@@ -640,6 +655,7 @@ def main(argv: list[str] | None = None) -> int:
                             patch=lf.patch or orig.patch,
                             needs_human=True,  # LLM 修复仍标 needs-human
                             description=f"[LLM] {lf.description}",
+                            risk_level="r3",
                         )
                         break
         else:
@@ -663,6 +679,17 @@ def main(argv: list[str] | None = None) -> int:
 
     patch = apply_fixes(fixes)
     branch_name = f"autonomy/self-heal-{fingerprint[:8]}"
+
+    # 计算最高风险等级（r0 < r1 < r2 < r3），决定 PR 标签与 SLA 路径
+    risk_rank = {"r0": 0, "r1": 1, "r2": 2, "r3": 3}
+    max_risk = "r0"
+    for f in fixes:
+        if risk_rank.get(f.risk_level, 3) > risk_rank[max_risk]:
+            max_risk = f.risk_level
+    labels = ["ai-self-heal", f"risk:{max_risk}"]
+    if max_risk in {"r2", "r3"}:
+        labels.append("needs-human")
+
     pr_url = create_pr(
         branch=branch_name,
         patch=patch,
@@ -674,9 +701,18 @@ def main(argv: list[str] | None = None) -> int:
             f"- 错误条数: {len(errors)}\n"
             f"- 自动修复: {len(fixes) - needs_human_count}\n"
             f"- 需人工: {needs_human_count}\n"
+            f"- 最高风险: **{max_risk}**\n"
             f"- 指纹: `{fingerprint[:8]}`\n\n"
-            f"**业务码修复必须人工审查，禁止自动合并。**\n"
+            f"### 分级合并 SLA\n"
+            f"| 等级 | 含义 | 处理 |\n"
+            f"|------|------|------|\n"
+            f"| r0 | 机械修复（lint/format） | 24h 二次守卫通过 → auto-merge |\n"
+            f"| r1 | 低风险（未用变量等） | 72h 无 review → auto-merge |\n"
+            f"| r2 | 中风险（其他 lint/mypy） | 7d stale / 14d auto-close |\n"
+            f"| r3 | 高风险（bandit/pytest/LLM） | 永不自动合并，7d stale / 30d close |\n\n"
+            f"**当前 PR 风险等级 = `{max_risk}`，按上表对应路径处理。**\n"
         ),
+        labels=labels,
     )
     if not pr_url:
         print("[error] PR creation failed (fail-open, not blocking)")
