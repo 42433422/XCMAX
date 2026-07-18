@@ -21,6 +21,7 @@ const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'chat',
   'im',
   'ai-ecosystem',
+  'persy-knowledge',
   'employee-workflow',
   'workflow-employee-space',
   'mod-store',

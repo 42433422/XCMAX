@@ -72,6 +72,12 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
     iconClass: 'fa-sitemap',
     description: '智慧分析、AIOPEN、生产员工等应用入口',
   },
+  {
+    key: 'persy-knowledge',
+    name: '知识库',
+    iconClass: 'fa-book',
+    description: '查看企业知识、资料来源与长期记忆',
+  },
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
 

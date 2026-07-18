@@ -30,6 +30,7 @@ export const SHELL_CORE_MENU_KEYS = new Set([
   'chat',
   'im',
   'ai-ecosystem',
+  'persy-knowledge',
   'employee-workflow',
   'workflow-employee-space',
   'settings',
@@ -88,7 +89,7 @@ export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
  * 触发任一：
  * - 引导第三步「补基础线」已确认（host_pack_acknowledged）—— 用户走完引导即长出；
  * - 已安装账号定制 Mod（太阳鸟/奇士美等 entitlement 直发场景）。
- * 未走引导且无定制时保持初始化的 4 项壳菜单。
+ * 未走引导且无定制时保持初始化的 5 项核心壳菜单。
  */
 export function shouldExposeIndustrySidebar(
   installedModIds: Iterable<string>,
