@@ -217,7 +217,12 @@ class TestExtractLogApplicationService:
         registry = Mock()
         registry.extract_log_service = legacy_service
 
-        with patch("app.di.registry.get_service_registry", return_value=registry):
+        # Patch the symbol at its lookup site.  The getter deliberately keeps
+        # the DI accessor as a module import so registry ownership stays clear.
+        with patch(
+            "app.application.extract_log_app_service.get_service_registry",
+            return_value=registry,
+        ):
             resolved = get_extract_log_app_service()
 
         assert resolved is legacy_service

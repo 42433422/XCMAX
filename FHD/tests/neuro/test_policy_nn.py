@@ -62,6 +62,30 @@ def _write_manifest(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
+def _write_loadable_policy_bundle(
+    root: Path,
+    *,
+    active_version: str | None = "0",
+    versions: tuple[str, ...] = ("0",),
+    omit_path: bool = False,
+) -> Path:
+    """Create a self-contained manifest plus placeholder policy artifacts."""
+    policies = []
+    for version in versions:
+        relative_path = f"policy_v{version}.pt"
+        (root / relative_path).touch()
+        policy = {"version": version}
+        if not omit_path:
+            policy["path"] = relative_path
+        policies.append(policy)
+    manifest = root / "manifest.json"
+    payload = {"policies": policies}
+    if active_version is not None:
+        payload["active_version"] = active_version
+    _write_manifest(manifest, payload)
+    return manifest
+
+
 # ---------------------------------------------------------------------------
 # _manifest_path
 # ---------------------------------------------------------------------------
@@ -167,22 +191,33 @@ class TestLoadActivePolicy:
         with patch.object(policy_nn, "_manifest_path", return_value=manifest):
             assert load_active_policy() is None
 
-    def test_returns_none_when_torch_load_raises(self, mock_torch_nn, reset_policy_globals):
+    def test_returns_none_when_torch_load_raises(
+        self, mock_torch_nn, reset_policy_globals, tmp_path
+    ):
         fake_torch, _ = mock_torch_nn
         fake_torch.load.side_effect = RuntimeError("load failed")
         mock_model = MagicMock()
-        with patch.object(policy_nn, "RoutingMLP", return_value=mock_model):
+        manifest = _write_loadable_policy_bundle(tmp_path)
+        with (
+            patch.object(policy_nn, "_manifest_path", return_value=manifest),
+            patch.object(policy_nn, "RoutingMLP", return_value=mock_model),
+        ):
             assert load_active_policy() is None
+        fake_torch.load.assert_called_once_with(tmp_path / "policy_v0.pt", map_location="cpu")
 
-    def test_loads_policy_successfully_from_real_manifest(
-        self, mock_torch_nn, reset_policy_globals
+    def test_loads_policy_successfully_from_manifest_bundle(
+        self, mock_torch_nn, reset_policy_globals, tmp_path
     ):
         fake_torch, _ = mock_torch_nn
         mock_model = MagicMock()
-        with patch.object(policy_nn, "RoutingMLP", return_value=mock_model):
+        manifest = _write_loadable_policy_bundle(tmp_path, active_version="2", versions=("2",))
+        with (
+            patch.object(policy_nn, "_manifest_path", return_value=manifest),
+            patch.object(policy_nn, "RoutingMLP", return_value=mock_model),
+        ):
             result = load_active_policy()
         assert result is mock_model
-        fake_torch.load.assert_called_once()
+        fake_torch.load.assert_called_once_with(tmp_path / "policy_v2.pt", map_location="cpu")
         mock_model.load_state_dict.assert_called_once()
         mock_model.eval.assert_called_once()
         mock_model.to.assert_called_once_with("cpu")
@@ -190,12 +225,16 @@ class TestLoadActivePolicy:
         assert policy_nn._policy_device == "cpu"
 
     def test_env_override_changes_active_version(
-        self, mock_torch_nn, reset_policy_globals, monkeypatch
+        self, mock_torch_nn, reset_policy_globals, monkeypatch, tmp_path
     ):
         fake_torch, _ = mock_torch_nn
         monkeypatch.setenv("XCAGI_ROUTING_POLICY_VERSION", "0")
         mock_model = MagicMock()
-        with patch.object(policy_nn, "RoutingMLP", return_value=mock_model):
+        manifest = _write_loadable_policy_bundle(tmp_path, active_version="2", versions=("0", "2"))
+        with (
+            patch.object(policy_nn, "_manifest_path", return_value=manifest),
+            patch.object(policy_nn, "RoutingMLP", return_value=mock_model),
+        ):
             result = load_active_policy()
         assert result is mock_model
         call_args = fake_torch.load.call_args
@@ -206,8 +245,7 @@ class TestLoadActivePolicy:
         self, mock_torch_nn, reset_policy_globals, tmp_path
     ):
         fake_torch, _ = mock_torch_nn
-        manifest = tmp_path / "manifest.json"
-        _write_manifest(manifest, {"active_version": "0", "policies": [{"version": "0"}]})
+        manifest = _write_loadable_policy_bundle(tmp_path, omit_path=True)
         mock_model = MagicMock()
         with (
             patch.object(policy_nn, "_manifest_path", return_value=manifest),
@@ -219,11 +257,15 @@ class TestLoadActivePolicy:
         weights_arg = call_args.args[0] if call_args.args else call_args[0][0]
         assert str(weights_arg).endswith("policy_v0.pt")
 
-    def test_cuda_device_used_when_available(self, mock_torch_nn, reset_policy_globals):
+    def test_cuda_device_used_when_available(self, mock_torch_nn, reset_policy_globals, tmp_path):
         fake_torch, _ = mock_torch_nn
         fake_torch.cuda.is_available.return_value = True
         mock_model = MagicMock()
-        with patch.object(policy_nn, "RoutingMLP", return_value=mock_model):
+        manifest = _write_loadable_policy_bundle(tmp_path)
+        with (
+            patch.object(policy_nn, "_manifest_path", return_value=manifest),
+            patch.object(policy_nn, "RoutingMLP", return_value=mock_model),
+        ):
             result = load_active_policy()
         assert result is mock_model
         assert policy_nn._policy_device == "cuda"
@@ -232,8 +274,7 @@ class TestLoadActivePolicy:
     def test_active_version_defaults_to_zero_when_none(
         self, mock_torch_nn, reset_policy_globals, tmp_path
     ):
-        manifest = tmp_path / "manifest.json"
-        _write_manifest(manifest, {"policies": [{"version": "0", "path": "policy_v0.pt"}]})
+        manifest = _write_loadable_policy_bundle(tmp_path, active_version=None)
         mock_model = MagicMock()
         with (
             patch.object(policy_nn, "_manifest_path", return_value=manifest),
@@ -255,9 +296,15 @@ class TestLoadActivePolicy:
 
 
 class TestGetPolicy:
-    def test_caches_loaded_policy_on_second_call(self, mock_torch_nn, reset_policy_globals):
+    def test_caches_loaded_policy_on_second_call(
+        self, mock_torch_nn, reset_policy_globals, tmp_path
+    ):
         mock_model = MagicMock()
-        with patch.object(policy_nn, "RoutingMLP", return_value=mock_model) as mock_mlp:
+        manifest = _write_loadable_policy_bundle(tmp_path)
+        with (
+            patch.object(policy_nn, "_manifest_path", return_value=manifest),
+            patch.object(policy_nn, "RoutingMLP", return_value=mock_model) as mock_mlp,
+        ):
             result1 = get_policy()
             result2 = get_policy()
         assert result1 is mock_model

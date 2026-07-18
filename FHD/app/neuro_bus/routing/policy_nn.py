@@ -69,7 +69,11 @@ def load_active_policy() -> RoutingMLP | None:
     for p in manifest.get("policies") or []:
         if str(p.get("version")) == ver:
             rel = p.get("path") or f"policy_v{ver}.pt"
-            weights = Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / rel
+            # The manifest is the SSOT for a policy bundle, so relative weight
+            # paths must be resolved beside that manifest.  Keeping a second
+            # hard-coded resources root here made relocated/test bundles point
+            # back at the repository bundle instead of their own artifacts.
+            weights = manifest_file.parent / rel
             break
     if weights is None or not weights.is_file():
         logger.debug("routing policy weights not found for version=%s", ver)
