@@ -1,0 +1,80 @@
+# CI SSOT: generated from FHD/.github/workflows/ai-self-heal.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# CI SSOT: generated from FHD/.github/workflows/ai-self-heal.yml
+# 编辑源：FHD/.github/workflows/ai-self-heal.yml（根仓 .github/workflows/ai-self-heal.yml 为同步副本）
+name: AI Self-Heal
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline", "Smoke Tests"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "失败 workflow run id（手动触发用）"
+        required: false
+        default: ""
+      workflow_name:
+        description: "失败 workflow 名称"
+        required: false
+        default: ""
+      branch:
+        description: "失败 workflow 所在分支"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  self-heal:
+    # 仅当 workflow_run 失败时触发；workflow_dispatch 手动触发不受此条件限制
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: FHD/scripts/ci/requirements-self-heal.txt
+
+      - name: Install dependencies
+        working-directory: FHD
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/ci/requirements-self-heal.txt
+
+      - name: Run ai-self-heal (workflow_run trigger)
+        if: ${{ github.event_name == 'workflow_run' }}
+        working-directory: FHD
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: |
+          python scripts/ci/ai_self_heal.py \
+            --workflow "${{ github.event.workflow_run.name }}" \
+            --branch "${{ github.event.workflow_run.head_branch }}"
+
+      - name: Run ai-self-heal (manual dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        working-directory: FHD
+        run: |
+          python scripts/ci/ai_self_heal.py \
+            --run-id ${{ inputs.run_id }} \
+            --workflow "${{ inputs.workflow_name }}" \
+            --branch "${{ inputs.branch }}"
