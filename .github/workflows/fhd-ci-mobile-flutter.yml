@@ -49,3 +49,25 @@ jobs:
           name: xcagi-flutter-debug-apk
           path: FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
+
+  test-and-ios:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Xcode SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter pub get
+        run: flutter pub get
+      - name: Flutter test
+        run: flutter test
+      - name: Flutter build ios (debug, no codesign)
+        run: flutter build ios --debug --no-codesign
