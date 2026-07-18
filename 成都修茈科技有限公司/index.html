@@ -314,3 +314,342 @@
         gap: 1rem;
       }
       .cta-band h2 {
+        margin: 0 0 0.5rem;
+      }
+      .cta-band p {
+        margin: 0;
+        color: var(--text-soft);
+      }
+      @media (max-width: 768px) {
+        .hero-inner {
+          grid-template-columns: 1fr;
+        }
+        .step-flow {
+          grid-template-columns: 1fr;
+        }
+        .cta-band {
+          flex-direction: column;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+<body data-page="index">
+<div id="site-header"></div>
+
+<main>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="reveal">
+        <span class="eyebrow">AI 员工 · 桌面平台 · 行业变身</span>
+        <h1>装一个 Mod，桌面变成你们的行业系统</h1>
+        <p>XCAGI 是 AI 员工桌面平台——空壳宿主 + 行业 Mod 变身 + 三阶级 AI 员工（小C助理 / 超级员工 / 平台员工），帮助中小企业用 AI 员工跑业务。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/download">免费下载试用</a>
+          <a class="btn btn-secondary" href="/services.html">查看产品中心</a>
+        </div>
+      </div>
+      <div class="hero-visual reveal" data-delay="120">
+        <div class="hero-shot">
+          <img src="/assets/screenshots/hero-chat.png" alt="智能对话主界面" width="600" height="400" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 三步变身 -->
+  <section class="transform-steps">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">变身模型</p><h2>三步，桌面变行业系统</h2></div>
+        <p>空壳宿主 + 行业 Mod，装考勤包变考勤系统，装涂料包变涂料 ERP</p>
+      </div>
+      <div class="step-flow">
+        <div class="step-card reveal">
+          <div class="step-badge">1</div>
+          <h3>空宿主桌面</h3>
+          <p>基础 AI 助手界面，包含智能对话、员工工作台等核心入口</p>
+        </div>
+        <div class="step-card reveal" data-delay="80">
+          <div class="step-badge">2</div>
+          <h3>安装行业 Mod</h3>
+          <p>从 Mod 市场选择行业包，一键安装到工作台，校验宿主版本兼容</p>
+        </div>
+        <div class="step-card reveal" data-delay="160">
+          <div class="step-badge">3</div>
+          <h3>变身行业系统</h3>
+          <p>界面自动切换为行业专用布局，功能、数据、流程全部就绪</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 核心模块 -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Core Modules</p><h2>六大核心模块</h2></div>
+        <p>从智能对话到 Mod 市场，每个模块都是真实界面，非占位符。</p>
+      </div>
+      <div class="module-grid">
+        <article class="module-card reveal">
+          <img src="/assets/screenshots/hero-chat.png" alt="智能对话主界面" />
+          <div class="module-body">
+            <span class="module-tag">找小C办事</span>
+            <h3>智能对话</h3>
+            <p>统一的 AI 助手入口，通过自然语言下指令、查进度、办业务。支持悬浮窗和侧栏两种形态。</p>
+            <ul class="module-features">
+              <li>Persona 引擎驱动的小C助理</li>
+              <li>悬浮窗 + 侧栏双入口</li>
+              <li>任务进度实时追踪</li>
+            </ul>
+            <a class="module-link" href="/services.html">了解智能对话 →</a>
+          </div>
+        </article>
+
+        <article class="module-card reveal" data-delay="80">
+          <img src="/assets/screenshots/hero-workforce.png" alt="AI 员工工作台" />
+          <div class="module-body">
+            <span class="module-tag">四部门上岗</span>
+            <h3>AI 员工工作台</h3>
+            <p>四部门节点图展示 AI 员工组织架构，管理端六线部门 + 企业端四层 L1-L4，按 duty_roster 上岗。</p>
+            <ul class="module-features">
+              <li>企业端四层岗位结构</li>
+              <li>管理端六线部门约 54 岗位</li>
+              <li>按值班表自动调度</li>
+            </ul>
+            <a class="module-link" href="/services.html">了解工作台 →</a>
+          </div>
+        </article>
+
+        <article class="module-card reveal" data-delay="160">
+          <img src="/assets/screenshots/im-messenger.png" alt="信息" />
+          <div class="module-body">
+            <span class="module-tag">一对一</span>
+            <h3>信息</h3>
+            <p>一对一联系 AI 同事，像发微信一样给 AI 员工派单、追问进度、获取结果。</p>
+            <ul class="module-features">
+              <li>单聊会话与 AI 员工</li>
+              <li>任务派发与结果返回</li>
+              <li>历史消息上下文保留</li>
+            </ul>
+            <a class="module-link" href="/services.html">了解信息 →</a>
+          </div>
+        </article>
+
+        <article class="module-card reveal" data-delay="240">
+          <img src="/assets/screenshots/ai-group-chat.png" alt="AI 群聊" />
+          <div class="module-body">
+            <span class="module-tag">多员工协同</span>
+            <h3>AI 群聊</h3>
+            <p>把多个 AI 员工拉进一个群，一起讨论或派工。适合复杂任务的多角色协同。</p>
+            <ul class="module-features">
+              <li>多 AI 员工同群协作</li>
+              <li>任务分配与结果汇总</li>
+              <li>群聊历史可追溯</li>
+            </ul>
+            <a class="module-link" href="/services.html">了解 AI 群聊 →</a>
+          </div>
+        </article>
+
+        <article class="module-card reveal" data-delay="320">
+          <img src="/assets/screenshots/ai-ecosystem.png" alt="智能生态" />
+          <div class="module-body">
+            <span class="module-tag">四大 launcher</span>
+            <h3>智能生态</h3>
+            <p>智慧分析、AIOPEN、生产员工、员工商店四大应用入口，扩展 AI 员工能力边界。</p>
+            <ul class="module-features">
+              <li>智慧分析：数据洞察与报表</li>
+              <li>AIOPEN：开放能力接入</li>
+              <li>生产员工 + 员工商店</li>
+            </ul>
+            <a class="module-link" href="/services.html">了解智能生态 →</a>
+          </div>
+        </article>
+
+        <article class="module-card reveal" data-delay="400">
+          <img src="/assets/screenshots/mod-store.png" alt="Mod 市场" />
+          <div class="module-body">
+            <span class="module-tag">行业变身</span>
+            <h3>Mod 市场</h3>
+            <p>安装行业包把空壳宿主变身为考勤系统、涂料 ERP 等行业专用平台。支持灰度发布与评价。</p>
+            <ul class="module-features">
+              <li>考勤 / 涂料等行业包已交付</li>
+              <li>灰度发布与一键回滚</li>
+              <li>用户评价与作者分成</li>
+            </ul>
+            <a class="module-link" href="/market/">进入 Mod 市场 →</a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 三阶级 AI 员工 -->
+  <section class="section section-soft">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">AI Workforce</p><h2>三阶级 AI 员工体系</h2></div>
+        <p>从助理到平台员工，覆盖企业全链路自动化需求。</p>
+      </div>
+      <div class="tier-grid">
+        <div class="tier-card reveal">
+          <span class="tier-badge">L1</span>
+          <h3>小C助理</h3>
+          <p>电脑端智能对话入口，用户统一的 AI 助手。处理搜索、问答和跨工具操作。</p>
+          <ul class="tier-list">
+            <li>悬浮窗 + 侧栏双入口</li>
+            <li>Persona 共享引擎</li>
+            <li>可调度超级员工</li>
+          </ul>
+        </div>
+        <div class="tier-card reveal" data-delay="80">
+          <span class="tier-badge">L2</span>
+          <h3>超级员工</h3>
+          <p>Claude / Codex CLI 中继，多设备派工，独立人格。可调用平台员工完成复杂任务。</p>
+          <ul class="tier-list">
+            <li>多设备任务派发</li>
+            <li>独立人格与上下文</li>
+            <li>可调度平台员工</li>
+          </ul>
+        </div>
+        <div class="tier-card reveal" data-delay="160">
+          <span class="tier-badge">L3</span>
+          <h3>平台员工</h3>
+          <p>管理端六线部门约 54 岗位 + 企业端四层 L1-L4 约 13 岗位，按 duty_roster 上岗。</p>
+          <ul class="tier-list">
+            <li>管理端六线部门</li>
+            <li>企业端四层岗位</li>
+            <li>按值班表自动调度</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 定价 -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Pricing</p><h2>明码标价，没有隐藏费用</h2></div>
+        <p>基于 FHD/config/saas_plans.json 的真实档位。</p>
+      </div>
+      <div class="pricing-grid">
+        <div class="pricing-card featured reveal">
+          <strong>¥99</strong>
+          <span>试用 30 天</span>
+          <p style="margin:0.5rem 0 0;color:var(--text-soft);font-size:0.85rem;">含 100 元额度，到期冻结，可转永久授权</p>
+        </div>
+        <div class="pricing-card reveal" data-delay="80">
+          <strong>1–5 万</strong>
+          <span>永久授权 · 入门</span>
+        </div>
+        <div class="pricing-card reveal" data-delay="160">
+          <strong>5–10 万</strong>
+          <span>永久授权 · 成长</span>
+        </div>
+        <div class="pricing-card reveal" data-delay="240">
+          <strong>10–50 万</strong>
+          <span>永久授权 · 专业</span>
+        </div>
+        <div class="pricing-card reveal" data-delay="320">
+          <strong>50–100 万</strong>
+          <span>永久授权 · 旗舰</span>
+        </div>
+      </div>
+      <p class="pricing-note">所有档位一次购买永久使用。详细功能范围与服务内容请联系顾问确认。</p>
+    </div>
+  </section>
+
+  <!-- 真实客户案例 -->
+  <section class="section section-soft">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Real Customers</p><h2>首家客户交付证据</h2></div>
+        <p>不是虚构案例，是真实交付的行业 Mod 包。</p>
+      </div>
+      <div class="case-grid">
+        <article class="case-card reveal">
+          <img src="/assets/screenshots/transform-attendance.png" alt="太阳鸟考勤行业包变身后界面" />
+          <div class="case-body">
+            <span class="case-label">考勤行业 · 首家</span>
+            <h3>太阳鸟 PRO</h3>
+            <p>珠宝包装行业首家考勤客户定制实现。通过安装考勤行业 Mod 包，空壳宿主秒变完整考勤系统。</p>
+            <a class="case-link" href="/cases.html">查看案例详情 →</a>
+          </div>
+        </article>
+
+        <article class="case-card reveal" data-delay="80">
+          <img src="/assets/screenshots/mod-store.png" alt="Mod 市场中的奇士美涂料行业包" />
+          <div class="case-body">
+            <span class="case-label">涂料行业 · 首家</span>
+            <h3>奇士美 PRO</h3>
+            <p>涂料行业首家客户定制实现。交付内容：涂料行业定制 Mod 包，适配行业特定业务流程。</p>
+            <a class="case-link" href="/cases.html">查看案例详情 →</a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 开发者 -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">开发者</p><h2>Mod + AI 员工双发布</h2></div>
+        <a class="btn btn-light" href="/developer.html">进入开发者门户</a>
+      </div>
+      <p class="lead reveal" style="margin-bottom:28px">把你的行业经验做成 Mod 或 AI 员工，上架修茈 AI 市场，触达使用 XCAGI 的中小企业客户。</p>
+      <div class="grid grid-3">
+        <article class="card reveal">
+          <h3>Mod + AI 双发布</h3>
+          <p>同一个包既能作为功能 Mod 安装，也能上架为 AI 员工。基于 SDK 2.0 的 manifest、hook 与事件通信。</p>
+          <ul class="card-list">
+            <li>能力声明与宿主版本兼容校验</li>
+            <li>事件 hook 支持优先级与一次性订阅</li>
+          </ul>
+        </article>
+        <article class="card reveal" data-delay="80">
+          <h3>上架、灰度与评价</h3>
+          <p>按比例和标签灰度放量，逐步全量或一键回滚；用户评价与作者回复沉淀口碑。</p>
+          <ul class="card-list">
+            <li>灰度发布 / 全量 / 回滚</li>
+            <li>评分、评论与作者回复</li>
+          </ul>
+        </article>
+        <article class="card reveal" data-delay="160">
+          <h3>收益结算与行业模板</h3>
+          <p>按成交分成、对账结算与提现；提供 ERP、出货、客服、财务四套行业模板，复制即用。</p>
+          <ul class="card-list">
+            <li>成交分成与对账结算</li>
+            <li>四套行业模板脚手架</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-band reveal">
+        <div>
+          <h2>装一个 Mod，开始用 AI 员工跑业务</h2>
+          <p>下载 XCAGI 桌面平台，免费试用 30 天。体验空壳宿主 + 行业 Mod 变身。</p>
+        </div>
+        <a class="btn btn-primary" href="/download">免费下载试用</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="/partials/loader.js"></script>
+<script src="./main.js?v=20260619"></script>
+
+<div id="xc-corp-butler-root"></div>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>
+</body>
+</html>

@@ -15,7 +15,6 @@ import pytest
 
 from app.services import relay_gitops
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -64,17 +63,13 @@ class TestRepoRoot:
 
 class TestRepoRootFromPayload:
     def test_payload_none_returns_repo_root(self):
-        with patch.object(
-            relay_gitops, "resolve_verified_relay_workspace_root", return_value=""
-        ):
+        with patch.object(relay_gitops, "resolve_verified_relay_workspace_root", return_value=""):
             with patch.object(relay_gitops, "_repo_root", return_value="/fallback"):
                 result = relay_gitops._repo_root_from_payload(None)
         assert result == "/fallback"
 
     def test_payload_not_dict_returns_repo_root(self):
-        with patch.object(
-            relay_gitops, "resolve_verified_relay_workspace_root", return_value=""
-        ):
+        with patch.object(relay_gitops, "resolve_verified_relay_workspace_root", return_value=""):
             with patch.object(relay_gitops, "_repo_root", return_value="/fallback"):
                 result = relay_gitops._repo_root_from_payload("not-a-dict")  # type: ignore[arg-type]
         assert result == "/fallback"
@@ -139,9 +134,7 @@ class TestMergeBaseBranch:
 
     def test_env_empty_falls_back_to_symbolic_ref(self, monkeypatch):
         monkeypatch.setenv("XCMAX_GIT_MERGE_BASE", "   ")
-        with patch.object(
-            relay_gitops, "_git", return_value=_cp(stdout="feature/z\n")
-        ) as m_git:
+        with patch.object(relay_gitops, "_git", return_value=_cp(stdout="feature/z\n")) as m_git:
             result = relay_gitops._merge_base_branch("/repo")
         assert result == "feature/z"
         m_git.assert_called_once_with("/repo", "symbolic-ref", "--short", "HEAD", timeout=15)
@@ -755,9 +748,7 @@ class TestGitMerge:
     def test_merge_conflict_aborts_and_returns_failed(self):
         with patch.object(relay_gitops, "_repo_root_from_payload", return_value="/repo"):
             with patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
-                with patch.object(
-                    relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")
-                ):
+                with patch.object(relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")):
                     with patch.object(
                         relay_gitops,
                         "_git",
@@ -776,9 +767,7 @@ class TestGitMerge:
     def test_verify_failure_returns_failed(self):
         with patch.object(relay_gitops, "_repo_root_from_payload", return_value="/repo"):
             with patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
-                with patch.object(
-                    relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")
-                ):
+                with patch.object(relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")):
                     with patch.object(
                         relay_gitops,
                         "_git",
@@ -799,9 +788,7 @@ class TestGitMerge:
     def test_push_failure_returns_failed(self):
         with patch.object(relay_gitops, "_repo_root_from_payload", return_value="/repo"):
             with patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
-                with patch.object(
-                    relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")
-                ):
+                with patch.object(relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")):
                     with patch.object(
                         relay_gitops,
                         "_git",
@@ -823,9 +810,7 @@ class TestGitMerge:
     def test_merge_success(self):
         with patch.object(relay_gitops, "_repo_root_from_payload", return_value="/repo"):
             with patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
-                with patch.object(
-                    relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")
-                ):
+                with patch.object(relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")):
                     with patch.object(
                         relay_gitops,
                         "_git",
@@ -849,9 +834,7 @@ class TestGitMerge:
     def test_merge_exception_returns_failed(self):
         with patch.object(relay_gitops, "_repo_root_from_payload", return_value="/repo"):
             with patch.object(relay_gitops, "_merge_base_branch", return_value="main"):
-                with patch.object(
-                    relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")
-                ):
+                with patch.object(relay_gitops, "tempfile", MagicMock(gettempdir=lambda: "/tmp")):
                     with patch.object(
                         relay_gitops,
                         "_git",

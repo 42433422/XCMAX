@@ -25,6 +25,19 @@ def test_approval_blueprints_delegate_routes():
     assert "app.fastapi_routes.approval" in text
 
 
+def test_approval_route_keeps_bridge_compat_exports():
+    from app.fastapi_routes import approval
+
+    expected = {
+        "list_requests",
+        "get_request_detail",
+        "get_approval_users",
+        "list_flows",
+        "get_flow_detail",
+    }
+    assert all(callable(getattr(approval, name, None)) for name in expected)
+
+
 def test_list_approval_facade_registry_mod(monkeypatch):
     from app.mod_sdk import approval_compat as ac
 

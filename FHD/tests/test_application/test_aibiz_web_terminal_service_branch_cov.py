@@ -626,7 +626,7 @@ class TestResolveSurfaceAuditBranchCov:
                 return_value=({}, "remote empty"),
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
+                "app.application.surface_audit_service.read_surface_audit_cache",
                 return_value=mock_local,
             ),
         ):
@@ -646,7 +646,7 @@ class TestResolveSurfaceAuditBranchCov:
             "from_cache": True,
         }
         with patch(
-            "app.application.surface_audit_service.run_surface_audit_lane",
+            "app.application.surface_audit_service.read_surface_audit_cache",
             return_value=mock_local,
         ):
             surface, note = await _resolve_surface_audit(
@@ -1358,8 +1358,9 @@ class TestFetchSurfacePagePayloadBranchCov:
                 return_value="",
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
-                return_value=mock_local,
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=mock_local["pages"],
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="software", index=0)
@@ -1380,8 +1381,9 @@ class TestFetchSurfacePagePayloadBranchCov:
                 return_value="",
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
-                return_value=mock_local,
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=[],
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="software", index=0)
@@ -1407,9 +1409,9 @@ class TestFetchSurfacePagePayloadBranchCov:
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="web", index=0)
-        # data is not dict → falls through to 502
+        # data is not dict and no local cache -> explicit not-captured 404
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 502
+        assert result.status_code == 404
 
     @pytest.mark.asyncio
     async def test_remote_lane_success_false_with_message(self):
@@ -1430,7 +1432,7 @@ class TestFetchSurfacePagePayloadBranchCov:
         ):
             result = await fetch_surface_page_payload(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 502
+        assert result.status_code == 404
 
     @pytest.mark.asyncio
     async def test_remote_lane_no_message_default(self):
@@ -1451,8 +1453,8 @@ class TestFetchSurfacePagePayloadBranchCov:
         ):
             result = await fetch_surface_page_payload(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 502
-        assert "surface page unavailable" in result.body.decode()
+        assert result.status_code == 404
+        assert "surface page not captured" in result.body.decode()
 
     @pytest.mark.asyncio
     async def test_app_terminal_uses_local(self):
@@ -1469,8 +1471,9 @@ class TestFetchSurfacePagePayloadBranchCov:
                 return_value="Bearer token",
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
-                return_value=mock_local,
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=mock_local["pages"],
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="app", index=0)
@@ -1896,7 +1899,7 @@ class TestLoadSurfacePngBytesBranchCov:
         mock_page = {"screenshot_saved": "/nonexistent/path.png"}
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=mock_page,
             ),
@@ -1915,7 +1918,7 @@ class TestLoadSurfacePngBytesBranchCov:
 
         mock_page = {"android_capture": True, "screenshot_b64": ""}
         with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
+            "app.application.aibiz_web_terminal_service._cached_surface_page",
             new_callable=AsyncMock,
             return_value=mock_page,
         ):
@@ -1934,7 +1937,7 @@ class TestLoadSurfacePngBytesBranchCov:
         mock_page = {"id": "home"}
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=mock_page,
             ),
@@ -1966,7 +1969,7 @@ class TestLoadSurfacePngBytesBranchCov:
 
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -1995,7 +1998,7 @@ class TestLoadSurfacePngBytesBranchCov:
 
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -2016,7 +2019,7 @@ class TestLoadSurfacePngBytesBranchCov:
         from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
 
         with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
+            "app.application.aibiz_web_terminal_service._cached_surface_page",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -2033,7 +2036,7 @@ class TestLoadSurfacePngBytesBranchCov:
         # prefer_remote=True but no authorization → skips remote, goes to local
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value={"screenshot_b64": base64.b64encode(b"local").decode()},
             ),
@@ -2055,7 +2058,7 @@ class TestLoadSurfacePngBytesBranchCov:
         mock_page = {"screenshot_b64": b64_data}
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=mock_page,
             ),

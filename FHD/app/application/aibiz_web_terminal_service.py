@@ -31,6 +31,14 @@ _LANE_BY_TERMINAL = {
 }
 
 
+def _remote_timeout_seconds() -> float:
+    try:
+        value = float(os.environ.get("XCAGI_AIBIZ_REMOTE_TIMEOUT_SECONDS", "2"))
+    except ValueError:
+        value = 2.0
+    return max(1.0, min(value, 30.0))
+
+
 async def _resolve_market_authorization(request: Request) -> str:
     try:
         from app.fastapi_routes.market_account import (
@@ -74,6 +82,16 @@ async def _resolve_market_authorization(request: Request) -> str:
             return str(login["token"]).strip()
 
     return ""
+
+
+async def _resolve_market_authorization_bounded(request: Request) -> str:
+    try:
+        return await asyncio.wait_for(
+            _resolve_market_authorization(request), timeout=_remote_timeout_seconds()
+        )
+    except TimeoutError:
+        logger.warning("AIBiz market authorization timed out")
+        return ""
 
 
 def _unwrap(payload: Any) -> dict[str, Any]:
@@ -207,7 +225,7 @@ async def _load_surface_png_bytes(
         return None
 
     if not prefer_remote:
-        page = await _local_surface_page(lane, index)
+        page = await _cached_surface_page(lane, index)
         raw = _page_bytes(page if isinstance(page, dict) else None)
         if raw:
             return raw
@@ -221,12 +239,17 @@ async def _load_surface_png_bytes(
             f"{_market_base_url().rstrip('/')}/api/xcmax/admin/surface-audit/image"
             f"?lane={lane}&index={index}"
         )
-        async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
-            r = await client.get(url, headers={"Authorization": f"Bearer {authorization}"})
-        if r.status_code == 200:
-            return r.content
+        try:
+            async with httpx.AsyncClient(
+                timeout=_remote_timeout_seconds(), trust_env=False
+            ) as client:
+                r = await client.get(url, headers={"Authorization": f"Bearer {authorization}"})
+            if r.status_code == 200:
+                return r.content
+        except httpx.HTTPError:
+            logger.warning("remote surface image unavailable lane=%s index=%s", lane, index)
 
-    page = await _local_surface_page(lane, index)
+    page = await _cached_surface_page(lane, index)
     raw = _page_bytes(page if isinstance(page, dict) else None)
     if raw:
         return raw
@@ -326,6 +349,14 @@ async def _local_surface_page(lane: str, index: int) -> dict[str, Any] | None:
         return None
 
 
+async def _cached_surface_page(lane: str, index: int) -> dict[str, Any] | None:
+    pages = await _cached_lane_pages(lane)
+    if index < 0 or index >= len(pages):
+        return None
+    page = pages[index]
+    return page if isinstance(page, dict) else None
+
+
 _local_lane_pages_cache: dict[str, tuple[str, list[Any]]] = {}
 
 
@@ -372,7 +403,7 @@ async def serve_surface_image(
     prefer_remote = lane == "P-W"
 
     try:
-        authorization = await _resolve_market_authorization(request)
+        authorization = await _resolve_market_authorization_bounded(request)
     except RuntimeError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
@@ -408,7 +439,7 @@ async def build_terminal_payload(
         )
 
     try:
-        authorization = await _resolve_market_authorization(request)
+        authorization = await _resolve_market_authorization_bounded(request)
     except RuntimeError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
@@ -475,16 +506,13 @@ async def fetch_surface_page_payload(
     index = max(0, int(index))
 
     try:
-        authorization = await _resolve_market_authorization(request)
+        authorization = await _resolve_market_authorization_bounded(request)
     except RuntimeError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
     if lane in ("P-App", "P-S") or not authorization:
         try:
-            from app.application.surface_audit_service import run_surface_audit_lane
-
-            local = await asyncio.to_thread(run_surface_audit_lane, lane, refresh=False)
-            pages = local.get("pages") if isinstance(local.get("pages"), list) else []
+            pages = await _cached_lane_pages(lane)
             if index >= len(pages):
                 return JSONResponse(
                     {"success": False, "message": "index out of range"}, status_code=404
@@ -515,14 +543,19 @@ async def fetch_surface_page_payload(
 
     from app.fastapi_routes.market_account import _proxy_json
 
-    surface_raw = _unwrap(
-        await _proxy_json(
-            "GET",
-            f"/api/xcmax/admin/surface-audit/page?lane={lane}&index={index}",
-            authorization=authorization,
-            return_error_payload=True,
+    try:
+        remote_page = await asyncio.wait_for(
+            _proxy_json(
+                "GET",
+                f"/api/xcmax/admin/surface-audit/page?lane={lane}&index={index}",
+                authorization=authorization,
+                return_error_payload=True,
+            ),
+            timeout=_remote_timeout_seconds(),
         )
-    )
+    except TimeoutError:
+        remote_page = {"success": False, "message": "surface page request timed out"}
+    surface_raw = _unwrap(remote_page)
     if surface_raw.get("_error_response"):
         return cast("dict[str, Any] | JSONResponse", surface_raw["_error_response"])
     if surface_raw.get("success") and isinstance(surface_raw.get("data"), dict):
@@ -626,9 +659,16 @@ async def _resolve_surface_audit(
     }
     if local_enabled and (lane in ("P-App", "P-S") or not surface.get("pages")):
         try:
-            from app.application.surface_audit_service import run_surface_audit_lane
+            from app.application.surface_audit_service import (
+                read_surface_audit_cache,
+                run_surface_audit_lane,
+            )
 
-            local = await asyncio.to_thread(run_surface_audit_lane, lane, refresh=refresh)
+            if lane == "P-W" and not refresh:
+                local = await asyncio.to_thread(read_surface_audit_cache, lane)
+                local = local or {"success": False, "message": "本地巡检缓存不存在"}
+            else:
+                local = await asyncio.to_thread(run_surface_audit_lane, lane, refresh=refresh)
             if local.get("success") and local.get("pages"):
                 surface = local
                 adb_n = sum(
@@ -701,15 +741,20 @@ async def _fetch_remote_surface_audit(
     surface: dict[str, Any] = {}
     surface_note = ""
 
-    surface_raw = _unwrap(
-        await _proxy_json(
-            "GET",
-            f"/api/xcmax/admin/surface-audit/lane?lane={lane}&refresh={'1' if refresh else '0'}"
-            f"&compact={'1' if compact else '0'}",
-            authorization=authorization,
-            return_error_payload=True,
+    try:
+        remote_surface = await asyncio.wait_for(
+            _proxy_json(
+                "GET",
+                f"/api/xcmax/admin/surface-audit/lane?lane={lane}&refresh={'1' if refresh else '0'}"
+                f"&compact={'1' if compact else '0'}",
+                authorization=authorization,
+                return_error_payload=True,
+            ),
+            timeout=_remote_timeout_seconds(),
         )
-    )
+    except TimeoutError:
+        remote_surface = {"success": False, "message": "surface-audit request timed out"}
+    surface_raw = _unwrap(remote_surface)
     if surface_raw.get("_error_response"):
         err = surface_raw["_error_response"]
         if isinstance(err, JSONResponse) and err.status_code == 404:

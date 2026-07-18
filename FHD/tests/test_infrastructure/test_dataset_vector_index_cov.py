@@ -275,6 +275,12 @@ class TestSQLiteIndex:
         assert "dataset_vector_indexes" in tables
         assert "dataset_vector_chunks" in tables
 
+    def test_init_creates_missing_parent_directory(self, tmp_path):
+        db_path = tmp_path / "nested" / "dataset_rag" / "vectors.sqlite"
+        index = DatasetVectorSQLiteIndex(db_path)
+
+        assert Path(index.db_path).is_file()
+
     def test_replace_and_delete(self, sqlite_index):
         chunk = _make_chunk(
             metadata={

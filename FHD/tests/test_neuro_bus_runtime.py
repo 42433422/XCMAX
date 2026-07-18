@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -49,6 +52,40 @@ def test_publish_neuro_event_runtime_host_path(monkeypatch):
 
     monkeypatch.setattr("app.neuro_bus.bus.get_neuro_bus", lambda: _Bus())
     assert rt.publish_neuro_event_runtime("test.evt", {"x": 1}) is False
+
+
+def test_get_bundle_serializes_first_mod_load(monkeypatch):
+    from app.mod_sdk import neuro_bus_runtime as rt
+
+    rt._create_runtime_bundle.cache_clear()
+    rt._load_runtime_providers.cache_clear()
+    monkeypatch.setattr(rt, "_resolve_mod_path", lambda: ("neuro", "/tmp/neuro"))
+
+    active = 0
+    max_active = 0
+    state_lock = threading.Lock()
+
+    class _Provider:
+        @staticmethod
+        def create_bus_runtime_bundle():
+            nonlocal active, max_active
+            with state_lock:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.03)
+            with state_lock:
+                active -= 1
+            return {"publish": lambda *_args: True}
+
+    monkeypatch.setattr(rt, "_load_runtime_providers", lambda *_args: _Provider())
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            bundles = list(pool.map(lambda _index: rt._get_bundle(), range(4)))
+    finally:
+        rt._create_runtime_bundle.cache_clear()
+
+    assert max_active == 1
+    assert all(bundle is bundles[0] for bundle in bundles)
 
 
 def test_run_lifespan_setup_host_path(monkeypatch):

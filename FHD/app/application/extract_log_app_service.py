@@ -6,6 +6,8 @@
 
 from typing import TYPE_CHECKING, Any, Optional
 
+from app.di.registry import get_service_registry
+
 if TYPE_CHECKING:
     from app.application.ports.extract_log_store import ExtractLogStorePort
     from app.services.extract_log_service import ExtractLogService
@@ -62,8 +64,6 @@ def get_extract_log_app_service() -> "ExtractLogService":
     误接，导致路由在运行时调用不存在的方法。注册表本来就维护了兼容
     ``ExtractLogService``，这里应从注册表取它，而不是另建错误单例。
     """
-    from app.di.registry import get_service_registry
-
     return get_service_registry().extract_log_service
 
 

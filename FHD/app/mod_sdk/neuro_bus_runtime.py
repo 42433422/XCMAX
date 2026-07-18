@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from functools import lru_cache
 from typing import Any, cast
 
@@ -10,6 +11,7 @@ from app.mod_sdk.neuro_bus_compat import NEURO_BUS_BRIDGE_MOD_ID, is_neuro_bus_v
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_bundle_lock = threading.RLock()
 
 
 def is_neuro_bus_runtime_via_mod_enabled() -> bool:
@@ -35,12 +37,22 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
     return None, None
 
 
+@lru_cache(maxsize=4)
+def _create_runtime_bundle(mod_path: str, mod_id: str) -> dict[str, Any]:
+    mod = _load_runtime_providers(mod_path, mod_id)
+    return cast("dict[str, Any]", mod.create_bus_runtime_bundle())
+
+
 def _get_bundle() -> dict[str, Any]:
     mod_id, mod_path = _resolve_mod_path()
     if not mod_path:
         raise RuntimeError("neuro bus runtime mod not installed")
-    mod = _load_runtime_providers(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
-    return cast("dict[str, Any]", mod.create_bus_runtime_bundle())
+    # import_mod_backend_py installs dynamic modules in sys.modules.  Two first
+    # requests importing the same Mod concurrently can observe a half-executed
+    # adapter module.  Serialize and cache bundle construction; event publishing
+    # remains lock-free after the first successful load.
+    with _bundle_lock:
+        return _create_runtime_bundle(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
 
 
 async def run_lifespan_setup() -> None:

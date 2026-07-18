@@ -323,10 +323,44 @@ def get_distillation_db_path() -> str:
 
 
 def init_wechat_tasks_table(db_path: str | None = None) -> None:
-    """初始化 wechat_tasks 表（存放从微信解析出来的任务）"""
+    """初始化微信联系人、上下文和任务表。
+
+    桌面 SQLite 不执行完整 Alembic 链；三张表必须作为一个外键集合补齐，
+    否则联系人只读接口会在首次安装的空库上直接 500。
+    """
     db_path = db_path or get_db_path("products.db")
     with sqlite_conn(db_path) as conn:
         cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wechat_contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_name TEXT NOT NULL,
+                remark TEXT,
+                wechat_id TEXT,
+                contact_type TEXT DEFAULT 'contact',
+                is_active INTEGER DEFAULT 1,
+                is_starred INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wechat_contact_context (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                wechat_id TEXT,
+                context_json TEXT,
+                message_count INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (contact_id) REFERENCES wechat_contacts(id) ON DELETE CASCADE
+            )
+            """
+        )
+
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS wechat_tasks (
@@ -343,6 +377,20 @@ def init_wechat_tasks_table(db_path: str | None = None) -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_wechat_contacts_active_starred
+            ON wechat_contacts (is_active, is_starred)
+            """
+        )
+
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_wechat_contact_context_contact
+            ON wechat_contact_context (contact_id)
             """
         )
 

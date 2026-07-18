@@ -21,7 +21,6 @@ import pytest
 import app.fastapi_routes.mobile_api  # noqa: F401
 from app.fastapi_routes.mobile_extensions import routes_super_employee as rse
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -128,9 +127,7 @@ class TestCodexMessagesList:
     @pytest.mark.asyncio
     async def test_success_returns_messages(self):
         parent = _make_parent(uid=5)
-        parent.CodexSuperEmployeeService.return_value = _FakeService(
-            list_result=[{"id": "m1"}]
-        )
+        parent.CodexSuperEmployeeService.return_value = _FakeService(list_result=[{"id": "m1"}])
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_codex_super_employee_messages(
                 _request(), limit=10, user=_user()
@@ -267,9 +264,7 @@ class TestCodexInvoke:
     @pytest.mark.asyncio
     async def test_value_error_returns_400(self):
         parent = _make_parent()
-        parent.CodexSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=ValueError("bad")
-        )
+        parent.CodexSuperEmployeeService.return_value = _FakeService(invoke_exc=ValueError("bad"))
         body = rse.CodexSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_codex_super_employee_invoke(
@@ -283,9 +278,7 @@ class TestCodexInvoke:
 
         parent = _make_parent()
         exc_cls = next(iter(RECOVERABLE_ERRORS))
-        parent.CodexSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=exc_cls("down")
-        )
+        parent.CodexSuperEmployeeService.return_value = _FakeService(invoke_exc=exc_cls("down"))
         body = rse.CodexSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_codex_super_employee_invoke(
@@ -306,9 +299,7 @@ class TestCodexInvoke:
         parent.CodexSuperEmployeeService.return_value = _CaptureService()
         body = rse.CodexSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
-            await rse.mobile_admin_codex_super_employee_invoke(
-                _request(), body=body, user=_user()
-            )
+            await rse.mobile_admin_codex_super_employee_invoke(_request(), body=body, user=_user())
         assert captured["context"]["source"] == "mobile_im"
         assert captured["context"]["client_surface"] == "mobile"
         assert captured["context"]["target_devices"] == ["all"]
@@ -342,9 +333,7 @@ class TestClaudeRoutes:
     @pytest.mark.asyncio
     async def test_messages_success(self):
         parent = _make_parent()
-        parent.ClaudeSuperEmployeeService.return_value = _FakeService(
-            list_result=[{"id": "c1"}]
-        )
+        parent.ClaudeSuperEmployeeService.return_value = _FakeService(list_result=[{"id": "c1"}])
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_claude_super_employee_messages(
                 _request(), limit=10, user=_user()
@@ -414,18 +403,14 @@ class TestClaudeRoutes:
         parent.ClaudeSuperEmployeeService.return_value = _CaptureService()
         body = rse.ClaudeSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
-            await rse.mobile_admin_claude_super_employee_invoke(
-                _request(), body=body, user=_user()
-            )
+            await rse.mobile_admin_claude_super_employee_invoke(_request(), body=body, user=_user())
         assert captured["context"]["source"] == "mobile_im"
         assert captured["context"]["client_surface"] == "mobile"
 
     @pytest.mark.asyncio
     async def test_invoke_value_error_400(self):
         parent = _make_parent()
-        parent.ClaudeSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=ValueError("bad")
-        )
+        parent.ClaudeSuperEmployeeService.return_value = _FakeService(invoke_exc=ValueError("bad"))
         body = rse.ClaudeSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_claude_super_employee_invoke(
@@ -439,9 +424,7 @@ class TestClaudeRoutes:
 
         parent = _make_parent()
         exc_cls = next(iter(RECOVERABLE_ERRORS))
-        parent.ClaudeSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=exc_cls("x")
-        )
+        parent.ClaudeSuperEmployeeService.return_value = _FakeService(invoke_exc=exc_cls("x"))
         body = rse.ClaudeSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_claude_super_employee_invoke(
@@ -478,9 +461,7 @@ class TestCursorRoutes:
     @pytest.mark.asyncio
     async def test_messages_success(self):
         parent = _make_parent()
-        parent.CursorSuperEmployeeService.return_value = _FakeService(
-            list_result=[{"id": "cu1"}]
-        )
+        parent.CursorSuperEmployeeService.return_value = _FakeService(list_result=[{"id": "cu1"}])
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_cursor_super_employee_messages(
                 _request(), limit=10, user=_user()
@@ -534,9 +515,7 @@ class TestCursorRoutes:
         parent.CursorSuperEmployeeService.return_value = _CaptureService()
         body = rse.CursorSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
-            await rse.mobile_admin_cursor_super_employee_invoke(
-                _request(), body=body, user=_user()
-            )
+            await rse.mobile_admin_cursor_super_employee_invoke(_request(), body=body, user=_user())
         # Cursor sets device_scope (not client_surface)
         assert captured["context"]["device_scope"] == "all_devices"
         assert captured["context"]["target_devices"] == ["all"]
@@ -544,9 +523,7 @@ class TestCursorRoutes:
     @pytest.mark.asyncio
     async def test_invoke_value_error_400(self):
         parent = _make_parent()
-        parent.CursorSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=ValueError("bad")
-        )
+        parent.CursorSuperEmployeeService.return_value = _FakeService(invoke_exc=ValueError("bad"))
         body = rse.CursorSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_cursor_super_employee_invoke(
@@ -560,9 +537,7 @@ class TestCursorRoutes:
 
         parent = _make_parent()
         exc_cls = next(iter(RECOVERABLE_ERRORS))
-        parent.CursorSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=exc_cls("x")
-        )
+        parent.CursorSuperEmployeeService.return_value = _FakeService(invoke_exc=exc_cls("x"))
         body = rse.CursorSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_cursor_super_employee_invoke(
@@ -599,9 +574,7 @@ class TestTraeRoutes:
     @pytest.mark.asyncio
     async def test_messages_success(self):
         parent = _make_parent()
-        parent.TraeSuperEmployeeService.return_value = _FakeService(
-            list_result=[{"id": "t1"}]
-        )
+        parent.TraeSuperEmployeeService.return_value = _FakeService(list_result=[{"id": "t1"}])
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_trae_super_employee_messages(
                 _request(), limit=10, user=_user()
@@ -646,9 +619,7 @@ class TestTraeRoutes:
     async def test_invoke_admin_factory_context(self):
         parent = _make_parent(session_meta={"account_kind": "admin"})
         parent.TraeSuperEmployeeService.return_value = _FakeService()
-        body = rse.TraeSuperEmployeeMobileMessageBody(
-            message="run", context={"workspace_id": "tw"}
-        )
+        body = rse.TraeSuperEmployeeMobileMessageBody(message="run", context={"workspace_id": "tw"})
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_trae_super_employee_invoke(
                 _request(), body=body, user=_user()
@@ -670,9 +641,7 @@ class TestTraeRoutes:
         parent.TraeSuperEmployeeService.return_value = _CaptureService()
         body = rse.TraeSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
-            await rse.mobile_admin_trae_super_employee_invoke(
-                _request(), body=body, user=_user()
-            )
+            await rse.mobile_admin_trae_super_employee_invoke(_request(), body=body, user=_user())
         # Trae sets both client_surface and device_scope
         assert captured["context"]["client_surface"] == "mobile"
         assert captured["context"]["device_scope"] == "all_devices"
@@ -680,9 +649,7 @@ class TestTraeRoutes:
     @pytest.mark.asyncio
     async def test_invoke_value_error_400(self):
         parent = _make_parent()
-        parent.TraeSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=ValueError("bad")
-        )
+        parent.TraeSuperEmployeeService.return_value = _FakeService(invoke_exc=ValueError("bad"))
         body = rse.TraeSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_trae_super_employee_invoke(
@@ -696,9 +663,7 @@ class TestTraeRoutes:
 
         parent = _make_parent()
         exc_cls = next(iter(RECOVERABLE_ERRORS))
-        parent.TraeSuperEmployeeService.return_value = _FakeService(
-            invoke_exc=exc_cls("x")
-        )
+        parent.TraeSuperEmployeeService.return_value = _FakeService(invoke_exc=exc_cls("x"))
         body = rse.TraeSuperEmployeeMobileMessageBody(message="run")
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse.mobile_admin_trae_super_employee_invoke(
@@ -882,7 +847,9 @@ class TestStreamSuperEmployeeInvoke:
     @pytest.mark.asyncio
     async def test_stream_exception_yields_error_event(self):
         parent = _make_parent()
-        parent.CodexSuperEmployeeService.return_value = _FakeService(stream_exc=RuntimeError("boom"))
+        parent.CodexSuperEmployeeService.return_value = _FakeService(
+            stream_exc=RuntimeError("boom")
+        )
         with patch.object(rse, "_parent", return_value=parent):
             response = await rse._stream_super_employee_invoke(
                 _request(), "codex", {"message": "hi"}, _user()
@@ -904,9 +871,7 @@ class TestStreamSuperEmployeeInvoke:
 
         parent.CodexSuperEmployeeService.return_value = _CaptureService()
         with patch.object(rse, "_parent", return_value=parent):
-            await rse._stream_super_employee_invoke(
-                _request(), "codex", {"message": "hi"}, _user()
-            )
+            await rse._stream_super_employee_invoke(_request(), "codex", {"message": "hi"}, _user())
         parent.factory_context.assert_not_called()
 
     @pytest.mark.asyncio
@@ -914,9 +879,7 @@ class TestStreamSuperEmployeeInvoke:
         parent = _make_parent()
         parent.CodexSuperEmployeeService.return_value = _FakeService()
         with patch.object(rse, "_parent", return_value=parent):
-            response = await rse._stream_super_employee_invoke(
-                _request(), "codex", None, _user()
-            )
+            response = await rse._stream_super_employee_invoke(_request(), "codex", None, _user())
         assert response.status_code == 400
 
     @pytest.mark.asyncio

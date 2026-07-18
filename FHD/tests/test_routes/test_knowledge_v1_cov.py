@@ -158,9 +158,7 @@ class TestPublicDatasetPayload:
         assert result["public_field"] == "ok"
 
     def test_nested_dict_recursed(self):
-        result = kv._public_dataset_payload(
-            {"outer": {"_inner": 1, "keep": 2}, "_drop": 3}
-        )
+        result = kv._public_dataset_payload({"outer": {"_inner": 1, "keep": 2}, "_drop": 3})
         assert result == {"outer": {"keep": 2}}
 
     def test_empty_dict(self):
@@ -184,20 +182,14 @@ class TestIngestRequestValidator:
 
     def test_fixed_strategy_overlap_ge_size_raises(self):
         with pytest.raises(ValueError, match="chunk_overlap must be smaller"):
-            kv.IngestRequest(
-                text="hi", chunk_strategy="fixed", chunk_size=100, chunk_overlap=100
-            )
+            kv.IngestRequest(text="hi", chunk_strategy="fixed", chunk_size=100, chunk_overlap=100)
 
     def test_fixed_strategy_overlap_gt_size_raises(self):
         with pytest.raises(ValueError, match="chunk_overlap must be smaller"):
-            kv.IngestRequest(
-                text="hi", chunk_strategy="fixed", chunk_size=100, chunk_overlap=200
-            )
+            kv.IngestRequest(text="hi", chunk_strategy="fixed", chunk_size=100, chunk_overlap=200)
 
     def test_fixed_strategy_valid_overlap(self):
-        req = kv.IngestRequest(
-            text="hi", chunk_strategy="fixed", chunk_size=500, chunk_overlap=50
-        )
+        req = kv.IngestRequest(text="hi", chunk_strategy="fixed", chunk_size=500, chunk_overlap=50)
         assert req.chunk_size == 500
 
 
@@ -232,9 +224,7 @@ class TestDatasetDocumentIngestRequestValidator:
     def test_metadata_validator_runs(self):
         # Use a metadata that exceeds limits.
         with pytest.raises(ValueError, match="too many fields"):
-            kv.DatasetDocumentIngestRequest(
-                text="hi", metadata={f"k{i}": i for i in range(201)}
-            )
+            kv.DatasetDocumentIngestRequest(text="hi", metadata={f"k{i}": i for i in range(201)})
 
 
 # ===========================================================================
@@ -245,9 +235,7 @@ class TestDatasetDocumentIngestRequestValidator:
 class TestDatasetMetadataValidators:
     def test_dataset_query_metadata_filter_too_many_fields(self):
         with pytest.raises(ValueError, match="too many fields"):
-            kv.DatasetQueryRequest(
-                query="q", metadata_filter={f"k{i}": i for i in range(201)}
-            )
+            kv.DatasetQueryRequest(query="q", metadata_filter={f"k{i}": i for i in range(201)})
 
     def test_dataset_rollback_metadata_too_many_fields(self):
         with pytest.raises(ValueError, match="too many fields"):
@@ -259,9 +247,7 @@ class TestDatasetMetadataValidators:
 
     def test_dataset_rebuild_metadata_filter_too_many_fields(self):
         with pytest.raises(ValueError, match="too many fields"):
-            kv.DatasetRebuildRequest(
-                metadata_filter={f"k{i}": i for i in range(201)}
-            )
+            kv.DatasetRebuildRequest(metadata_filter={f"k{i}": i for i in range(201)})
 
 
 # ===========================================================================
@@ -390,9 +376,7 @@ class TestPersyMemoryResponse:
 class TestMergePersyRecall:
     def test_non_persy_dataset_returns_payload_unchanged(self):
         payload = {"success": True, "chunks": [{"x": 1}]}
-        result = kv._merge_persy_recall(
-            payload, request=_request(), params={"dataset_id": "other"}
-        )
+        result = kv._merge_persy_recall(payload, request=_request(), params={"dataset_id": "other"})
         assert result is payload
 
     def test_persy_dataset_but_payload_not_success_returns_unchanged(self):
@@ -438,7 +422,13 @@ class TestMergePersyRecall:
         payload = {
             "success": True,
             "chunks": [
-                {"text": "k1", "score": 0.5, "source": "s1", "chunk_index": 0, "metadata": {"document_id": "d1"}}
+                {
+                    "text": "k1",
+                    "score": 0.5,
+                    "source": "s1",
+                    "chunk_index": 0,
+                    "metadata": {"document_id": "d1"},
+                }
             ],
             "citations": [{"index": 1, "source": "doc"}],
             "answer": "kbase ans",
@@ -448,7 +438,13 @@ class TestMergePersyRecall:
             "success": True,
             "chunks": [
                 {"text": "mem1", "score": 0.9, "source": "memory", "metadata": {"memory_id": "m1"}},
-                {"text": "k1", "score": 0.5, "source": "s1", "chunk_index": 0, "metadata": {"document_id": "d1"}},
+                {
+                    "text": "k1",
+                    "score": 0.5,
+                    "source": "s1",
+                    "chunk_index": 0,
+                    "metadata": {"document_id": "d1"},
+                },
             ],
             "retriever": "persy",
         }
@@ -659,9 +655,7 @@ class TestDatasetAgentUserId:
 
     def test_access_context_actor_id(self):
         req = _request()
-        uid = kv._dataset_agent_user_id(
-            req, {"access_context": {"actor_id": "actor-1"}}
-        )
+        uid = kv._dataset_agent_user_id(req, {"access_context": {"actor_id": "actor-1"}})
         assert uid == "actor-1"
 
     def test_params_actor_id(self):
@@ -1123,7 +1117,7 @@ class TestDatasetRoutes:
     def test_diff_dataset_versions_routes_to_agent(self):
         client = _build_client()
         with patch.object(kv, "_run_dataset_rag_agent") as mock_run:
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             resp = client.post(
                 "/api/knowledge/v1/datasets/d1/versions/diff",
                 json={"source": "s", "from_version": "v1"},
@@ -1134,7 +1128,7 @@ class TestDatasetRoutes:
     def test_rollback_dataset_version_routes_to_agent(self):
         client = _build_client()
         with patch.object(kv, "_run_dataset_rag_agent") as mock_run:
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             resp = client.post(
                 "/api/knowledge/v1/datasets/d1/versions/rollback",
                 json={"source": "s", "target_version": "v1"},
@@ -1145,7 +1139,7 @@ class TestDatasetRoutes:
     def test_rebuild_dataset_index_routes_to_agent(self):
         client = _build_client()
         with patch.object(kv, "_run_dataset_rag_agent") as mock_run:
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             resp = client.post(
                 "/api/knowledge/v1/datasets/d1/index/rebuild",
                 json={},
@@ -1156,7 +1150,7 @@ class TestDatasetRoutes:
     def test_cancel_rebuild_job_routes_to_agent(self):
         client = _build_client()
         with patch.object(kv, "_run_dataset_rag_agent") as mock_run:
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             resp = client.post(
                 "/api/knowledge/v1/datasets/d1/index/rebuild/job-1/cancel",
             )
@@ -1166,7 +1160,7 @@ class TestDatasetRoutes:
     def test_delete_dataset_document_routes_to_agent(self):
         client = _build_client()
         with patch.object(kv, "_run_dataset_rag_agent") as mock_run:
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             resp = client.delete(
                 "/api/knowledge/v1/datasets/d1/documents/doc-1",
             )
@@ -1263,9 +1257,7 @@ class TestDatasetGraph:
                 return_value=merged,
             ),
         ):
-            resp = client.get(
-                f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/graph?limit=80"
-            )
+            resp = client.get(f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/graph?limit=80")
         assert resp.status_code == 200
         # merge_memory_graph called because both succeeded.
         ds_svc.knowledge_graph.assert_called_once()
@@ -1301,9 +1293,7 @@ class TestDatasetGraph:
                 return_value=merged,
             ) as mock_merge,
         ):
-            resp = client.get(
-                f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/graph?limit=80"
-            )
+            resp = client.get(f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/graph?limit=80")
         assert resp.status_code == 200
         # Memory graph empty → graph_limit stays at the full limit.
         assert ds_svc.knowledge_graph.call_args.kwargs["limit"] == 80
@@ -1371,13 +1361,9 @@ class TestDatasetGraph:
             ),
             patch.object(kv, "_persy_memory_service", return_value=mem_svc),
             patch.object(kv, "_dataset_access_context_from_request", return_value=None),
-            patch(
-                "app.application.persy_memory_app_service.merge_memory_graph"
-            ) as mock_merge,
+            patch("app.application.persy_memory_app_service.merge_memory_graph") as mock_merge,
         ):
-            resp = client.get(
-                f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/graph?limit=80"
-            )
+            resp = client.get(f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/graph?limit=80")
         assert resp.status_code == 200
         # merge not called when memory_graph fails.
         mock_merge.assert_not_called()
@@ -1422,9 +1408,7 @@ class TestPersyMemoryListQuery:
             patch.object(kv, "_persy_memory_service", return_value=svc),
             patch.object(kv, "_dataset_access_context_from_request", return_value=None),
         ):
-            resp = client.get(
-                f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/memories"
-            )
+            resp = client.get(f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/memories")
         assert resp.status_code == 403
 
     def test_list_scope_missing_returns_403(self):
@@ -1438,9 +1422,7 @@ class TestPersyMemoryListQuery:
             patch.object(kv, "_persy_memory_service", return_value=svc),
             patch.object(kv, "_dataset_access_context_from_request", return_value=None),
         ):
-            resp = client.get(
-                f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/memories"
-            )
+            resp = client.get(f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/memories")
         assert resp.status_code == 403
 
     def test_list_other_error_returns_400(self):
@@ -1454,9 +1436,7 @@ class TestPersyMemoryListQuery:
             patch.object(kv, "_persy_memory_service", return_value=svc),
             patch.object(kv, "_dataset_access_context_from_request", return_value=None),
         ):
-            resp = client.get(
-                f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/memories"
-            )
+            resp = client.get(f"/api/knowledge/v1/datasets/{kv._PERSY_DATASET_ID}/memories")
         assert resp.status_code == 400
 
     def test_query_unsupported_dataset_returns_404(self):
@@ -1614,9 +1594,7 @@ class TestPersyMemoryMutations:
 
     def test_delete_unsupported_dataset_returns_404(self):
         client = _build_client()
-        resp = client.delete(
-            "/api/knowledge/v1/datasets/other/memories/m1?reason=bad"
-        )
+        resp = client.delete("/api/knowledge/v1/datasets/other/memories/m1?reason=bad")
         assert resp.status_code == 404
 
 
@@ -1707,7 +1685,7 @@ class TestUploadDatasetDocument:
             patch("app.utils.path_utils.get_upload_dir", return_value=str(tmp_path)),
             patch.object(kv, "_run_dataset_rag_agent") as mock_run,
         ):
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             client.post(
                 "/api/knowledge/v1/datasets/d1/documents/upload",
                 files={"file": ("doc.txt", b"hi", "text/plain")},
@@ -1764,7 +1742,7 @@ class TestUploadDatasetDocument:
             patch("app.utils.path_utils.get_upload_dir", return_value=str(tmp_path)),
             patch.object(kv, "_run_dataset_rag_agent") as mock_run,
         ):
-            mock_run.return_value = MagicMock(status_code=200, body=b'{}')
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
             client.post(
                 "/api/knowledge/v1/datasets/d1/documents/upload",
                 files={"file": (f"{long_stem}.txt", b"hi", "text/plain")},

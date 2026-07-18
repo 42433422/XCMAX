@@ -226,7 +226,7 @@ class TestLoadSurfacePngBytes:
 
         mock_page = {"screenshot_saved": str(png_file)}
         with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
+            "app.application.aibiz_web_terminal_service._cached_surface_page",
             new_callable=AsyncMock,
             return_value=mock_page,
         ):
@@ -242,7 +242,7 @@ class TestLoadSurfacePngBytes:
         b64_data = base64.b64encode(b"android screenshot").decode()
         mock_page = {"android_capture": True, "screenshot_b64": b64_data}
         with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
+            "app.application.aibiz_web_terminal_service._cached_surface_page",
             new_callable=AsyncMock,
             return_value=mock_page,
         ):
@@ -261,7 +261,7 @@ class TestLoadSurfacePngBytes:
         mock_page = {"id": "home"}
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=mock_page,
             ),
@@ -283,7 +283,7 @@ class TestLoadSurfacePngBytes:
         mock_page = {"screenshot_b64": b64_data}
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=mock_page,
             ),
@@ -300,7 +300,7 @@ class TestLoadSurfacePngBytes:
         from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
 
         with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
+            "app.application.aibiz_web_terminal_service._cached_surface_page",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -322,7 +322,7 @@ class TestLoadSurfacePngBytes:
 
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -351,7 +351,7 @@ class TestLoadSurfacePngBytes:
 
         with (
             patch(
-                "app.application.aibiz_web_terminal_service._local_surface_page",
+                "app.application.aibiz_web_terminal_service._cached_surface_page",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
@@ -371,7 +371,7 @@ class TestLoadSurfacePngBytes:
         from app.application.aibiz_web_terminal_service import _load_surface_png_bytes
 
         with patch(
-            "app.application.aibiz_web_terminal_service._local_surface_page",
+            "app.application.aibiz_web_terminal_service._cached_surface_page",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -643,8 +643,9 @@ class TestFetchSurfacePagePayload:
                 return_value="",
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
-                return_value={"pages": [{"id": "home"}]},
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=[{"id": "home"}],
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="software", index=5)
@@ -668,8 +669,9 @@ class TestFetchSurfacePagePayload:
                 return_value="",
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
-                return_value=mock_local,
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=mock_local["pages"],
             ),
         ):
             result = await fetch_surface_page_payload(request, terminal="software", index=0)
@@ -690,7 +692,8 @@ class TestFetchSurfacePagePayload:
                 return_value="",
             ),
             patch(
-                "app.application.surface_audit_service.run_surface_audit_lane",
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
                 side_effect=RuntimeError("boom"),
             ),
         ):

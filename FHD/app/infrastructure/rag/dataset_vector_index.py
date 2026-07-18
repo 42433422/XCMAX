@@ -50,7 +50,9 @@ class DatasetVectorSQLiteIndex:
     backend_name = "sqlite_vector"
 
     def __init__(self, db_path: str | Path) -> None:
-        self._db_path = str(Path(db_path).expanduser().resolve())
+        resolved = Path(db_path).expanduser().resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        self._db_path = str(resolved)
         self._ensure_tables()
 
     @property
