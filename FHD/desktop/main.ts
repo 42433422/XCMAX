@@ -23,6 +23,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   installUpdate,
+  readLocalBuildSha,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import {
@@ -37,6 +38,11 @@ import {
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { AutonomyController } from './autonomy/controller'
+import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
+import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
+import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
+import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
 
 const APP_NAME = 'XCAGI'
 const POST_UPDATE_STABILITY_MS = 5_000
@@ -357,6 +363,9 @@ let tray: Tray | null = null
 let restartCount = 0
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
+
+// 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
+let autonomyController: AutonomyController | null = null
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -819,6 +828,15 @@ async function startBackend(): Promise<void> {
     if (app.isQuitting) {
       return
     }
+    // 通知自治控制器 backend 退出（控制器据此追踪崩溃频率，5min ≥3 次则自动回滚）
+    autonomyController?.ingest({
+      source: 'backend_exit',
+      kind: 'backend_exit',
+      severity: 'crit',
+      detail: `backend exited code=${code} uptime=${uptimeMs}ms`,
+      ts: Date.now(),
+      payload: { code, uptimeMs, restartCount },
+    })
     // 快速退出（< 5 秒）：通常是端口占用或配置错误，不自动重启以免浪费用户时间
     if (uptimeMs < 5000) {
       void dialog.showErrorBox(
@@ -1549,6 +1567,35 @@ function bootstrap(): void {
           await waitForPostUpdateStartupStability()
           commitRollback()
           writeBackendLog(`[rollback] 后端、业务路由、主界面与观察期就绪，已提交（marker 删除）\n`)
+        }
+        // 启动自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归）
+        // 控制器提供新增能力：5min 内 backend 崩溃 ≥3 次自动回滚、磁盘满自动清日志、配置漂移自动纠正
+        try {
+          const adapter = new DesktopAutonomyAdapter({
+            backendProcessRef: () => {
+              if (!backendProcess) return null
+              const pid = backendProcess.pid ?? null
+              const startedAt = startupMarks.backendSpawnMs ?? null
+              return { pid, running: true, startedAt }
+            },
+            restartCountRef: () => restartCount,
+            port: DEFAULT_PORT,
+            appVersion: app.getVersion(),
+            buildSha: readLocalBuildSha(),
+            configPath: null,
+          })
+          autonomyController = new AutonomyController(
+            adapter,
+            [backendCrashPolicy, degradedRemediationPolicy, updateRollbackPolicy],
+            {
+              enabled: !process.env.XCAGI_DESKTOP_TEST,
+              pollIntervalMs: 5_000,
+            },
+          )
+          autonomyController.start()
+          writeBackendLog(`[autonomy] controller started\n`)
+        } catch (e) {
+          writeBackendLog(`[autonomy] controller start failed: ${e instanceof Error ? e.message : e}\n`)
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
