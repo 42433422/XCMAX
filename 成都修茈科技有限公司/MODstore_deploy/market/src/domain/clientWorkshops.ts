@@ -99,15 +99,6 @@ const CLIENT_WORKSHOPS_SEED: ClientWorkshop[] = [
     route: { name: 'workbench-materials' },
     tags: ['功能页'],
   },
-  {
-    id: 'wb-download',
-    label: '软件下载',
-    description: '客户端与工具下载页。',
-    kind: 'page',
-    enabled: true,
-    route: { name: 'workbench-download' },
-    tags: ['功能页'],
-  },
 ]
 
 export const CLIENT_WORKSHOPS: readonly ClientWorkshop[] = Object.freeze(
