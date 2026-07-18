@@ -70,12 +70,14 @@ describe('backendCrashPolicy', () => {
   })
 
   it('5min 窗口外（>5min）的崩溃不计入', () => {
-    const now = 1_000_000
+    // 注：policy 用 latest signal ts 作"now"（纯函数，禁用 Date.now()）
+    // 故需相对 latest signal ts 构造窗口外信号
+    const latestTs = 1_000_000
     const windowMs = 5 * 60 * 1000
     const signals = [
-      makeSignal('backend_exit', now - windowMs - 1), // 窗口外
-      makeSignal('backend_exit', now - 100_000),
-      makeSignal('backend_exit', now - 50_000),
+      makeSignal('backend_exit', latestTs - 50_000 - windowMs - 1), // 相对 latest 窗口外
+      makeSignal('backend_exit', latestTs - 100_000),
+      makeSignal('backend_exit', latestTs - 50_000), // latest，policy 用此作 now
     ]
     const plan = backendCrashPolicy.plan(signals)
     expect(plan.actions).toHaveLength(0)
@@ -89,7 +91,7 @@ describe('backendCrashPolicy', () => {
 })
 
 describe('degradedRemediationPolicy', () => {
-  it('matches 包含 7 个 kind', () => {
+  it('matches 包含 10 个 kind（Phase 1 新增 disk_low / db_corrupt / network_down）', () => {
     expect(degradedRemediationPolicy.matches).toContain('disk_full')
     expect(degradedRemediationPolicy.matches).toContain('config_fingerprint_changed')
     expect(degradedRemediationPolicy.matches).toContain('port_in_use')
@@ -97,7 +99,10 @@ describe('degradedRemediationPolicy', () => {
     expect(degradedRemediationPolicy.matches).toContain('NEURO_BUS_CIRCUIT_OPEN')
     expect(degradedRemediationPolicy.matches).toContain('NEURO_BUS_DLQ_FULL')
     expect(degradedRemediationPolicy.matches).toContain('NEURO_BUS_RATE_LIMIT')
-    expect(degradedRemediationPolicy.matches).toHaveLength(7)
+    expect(degradedRemediationPolicy.matches).toContain('disk_low')
+    expect(degradedRemediationPolicy.matches).toContain('db_corrupt')
+    expect(degradedRemediationPolicy.matches).toContain('network_down')
+    expect(degradedRemediationPolicy.matches).toHaveLength(10)
   })
 
   it('disk_full → clear_cache (low)', () => {

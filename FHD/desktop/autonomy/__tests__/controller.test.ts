@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { AutonomyController } from '../controller.js'
 import type { AutonomyAdapter, Action, ActionResult, RuntimeTruthSnapshot, Signal, AuditEntry } from '../types.js'
 
@@ -28,7 +28,7 @@ function makeMockAdapter(opts: {
       if (truthArr.length > 1) truthIdx += 1
       return result
     },
-    subscribeSignals(_emit) { /* empty */ },
+    subscribeSignals(_emit: (signal: Signal) => void) { /* empty */ },
     async executeAction(action: Action): Promise<ActionResult> {
       executed.push(action)
       if (typeof opts.executeResult === 'function') return opts.executeResult(action)
@@ -340,5 +340,118 @@ describe('AutonomyController', () => {
     ctrl.ingest(makeSignal('trigger', Date.now()))
     await ctrl.tick()
     expect(adapter.executed.length).toBe(0)
+  })
+})
+
+describe('AutonomyController — crossTierGate integration', () => {
+  const ENV_KEY = 'XCAGI_CROSS_TIER_GATE'
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    delete process.env[ENV_KEY]
+  })
+
+  /** 构造一个直接产出 rollback_version 动作的 policy */
+  function makeRollbackPolicy() {
+    return {
+      id: 'rollback-p',
+      matches: ['trigger'],
+      gate: 'auto' as const,
+      plan(_signals: Signal[]) {
+        return {
+          diagnosis: { root_cause: 'test', confidence: 1, detail: '', evidence: [] },
+          actions: [{
+            type: 'rollback_version' as const,
+            params: { reason: 'test' },
+            idempotency_key: 'rollback:test',
+            max_attempts: 2,
+            risk: 'high' as const,
+          }],
+        }
+      },
+    }
+  }
+
+  it('env 未设时 crossTierGate 跳过，动作正常执行', async () => {
+    delete process.env[ENV_KEY]
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed.length).toBe(1)
+    expect(adapter.executed[0].type).toBe('rollback_version')
+  })
+
+  it('env=1 且 adapter 未实现 getRemoteState → fail-open 放行', async () => {
+    process.env[ENV_KEY] = '1'
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    // 不设置 getRemoteState，应 fail-open
+    const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed.length).toBe(1)
+  })
+
+  it('env=1 且 getRemoteState 返回 server_manifest_frozen=true → 拦截 rollback_version', async () => {
+    process.env[ENV_KEY] = '1'
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    // 注入 getRemoteState 返回 frozen=true
+    ;(adapter as unknown as { getRemoteState: () => Promise<Record<string, unknown>> }).getRemoteState = async () => ({
+      server_manifest_frozen: true,
+    })
+    const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed.length).toBe(0)
+    // 应有 skipped 审计
+    const skipped = adapter.audits.find(
+      a => a.action && typeof a.action === 'object' && 'type' in a.action && a.action.type === 'skipped',
+    )
+    expect(skipped).toBeDefined()
+    expect(skipped?.action).toMatchObject({ type: 'skipped' })
+  })
+
+  it('env=1 且 getRemoteState 返回 server_manifest_frozen=false → 放行', async () => {
+    process.env[ENV_KEY] = '1'
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    ;(adapter as unknown as { getRemoteState: () => Promise<Record<string, unknown>> }).getRemoteState = async () => ({
+      server_manifest_frozen: false,
+    })
+    const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed.length).toBe(1)
+  })
+
+  it('env=1 且 getRemoteState 抛错 → fail-open 放行 + 写 audit', async () => {
+    process.env[ENV_KEY] = '1'
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    ;(adapter as unknown as { getRemoteState: () => Promise<never> }).getRemoteState = async () => {
+      throw new Error('network down')
+    }
+    const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed.length).toBe(1)
+    // 应有 cross_tier_query_failed 的 skipped 审计
+    const failedAudit = adapter.audits.find(
+      a => a.action && typeof a.action === 'object' && 'type' in a.action && a.action.type === 'skipped'
+        && Array.isArray((a.action as { reasons: string[] }).reasons)
+        && (a.action as { reasons: string[] }).reasons.some(r => r.includes('cross_tier_query_failed')),
+    )
+    expect(failedAudit).toBeDefined()
   })
 })

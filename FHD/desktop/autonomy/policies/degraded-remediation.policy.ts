@@ -58,6 +58,25 @@ const KIND_TO_ACTION: Record<string, { type: Action['type']; risk: Action['risk'
     max_attempts: 1,
     idempotency_key: 'escalate:neurobus_rate_limit',
   },
+  // Phase 1 新增：非代码故障信号 → escalate（AI 不能直接修，必须人工介入）
+  disk_low: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:disk_low',
+  },
+  db_corrupt: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:db_corrupt',
+  },
+  network_down: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:network_down',
+  },
 }
 
 export const degradedRemediationPolicy: Policy = {
