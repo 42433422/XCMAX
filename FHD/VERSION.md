@@ -22,7 +22,7 @@
 | **Python 包（XCAGI 子树）** | `1.0.0.0` | `XCAGI/pyproject.toml` |
 | **FastAPI 应用** | `1.0.0.0` | `app/fastapi_app/factory.py` |
 | **Mod 依赖校验基线** | `1.0.0.0` | `app/infrastructure/mods/manifest.py` |
-| **Android versionName** | `1.0.0.0` | Flutter / 原生 Android Gradle 配置 |
+| **Android versionName** | `1.0.0.0` | Flutter Android Runner Gradle 配置 |
 | **前端 SPA** | `1.0.0` | `frontend/package.json` |
 | **桌面壳 npm** | `1.0.0` | `desktop/package.json` |
 | **根级 npm** | `1.0.0` | `package.json` |
@@ -49,7 +49,7 @@
 | **Windows 桌面** | 签约级 | 主交付面 |
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
-| **Android** | **签约级** | Flutter 主线；登录、SSE 对话、4 Tab、审批和通知；原生 Android 已归档 |
+| **Android** | **签约级** | Flutter 主线；登录、SSE 对话、4 Tab、审批和通知；独立原生 Android 已删除 |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 

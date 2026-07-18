@@ -1,5 +1,7 @@
 # XCAGI 移动客户端（Flutter Android+iOS）
 
+本文是 Flutter 移动端日常开发与统一交付入口的 SSOT。
+
 `FHD/mobile-flutter-poc/` 是唯一移动端实现与交付主线。独立 Kotlin、SwiftUI、HarmonyOS
 产品工程和重复 Android CI 已删除；历史只能从 Git 取证。
 
