@@ -106,12 +106,8 @@ def module_for_path(path: str) -> str:
         return "runtime-retort"
     if path.startswith("packages/retort_engine/"):
         return "retort-engine"
-    if path.startswith("FHD/mobile-android/"):
-        return "fhd-mobile-android"
-    if path.startswith("FHD/mobile-ios/"):
-        return "fhd-mobile-ios"
-    if path.startswith("FHD/mobile-harmony/"):
-        return "fhd-mobile-harmony"
+    if path.startswith("FHD/mobile-flutter-poc/"):
+        return "fhd-mobile-flutter"
     if path.startswith("FHD/frontend/"):
         return "fhd-frontend"
     if path.startswith("FHD/app/"):

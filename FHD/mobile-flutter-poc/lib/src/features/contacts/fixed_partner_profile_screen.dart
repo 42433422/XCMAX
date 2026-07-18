@@ -46,10 +46,7 @@ class FixedPartnerProfileScreen extends StatelessWidget {
                     showArrow: false,
                   ),
                   const SizedBox(height: 10),
-                  _CirclePreview(
-                    spec: spec,
-                    onTap: () => _openCircle(context),
-                  ),
+                  _CirclePreview(spec: spec, onTap: () => _openCircle(context)),
                   const SizedBox(height: 10),
                   _PlainCell(
                     title: '基础功能',
@@ -103,7 +100,14 @@ class FixedPartnerProfileScreen extends StatelessWidget {
   }
 }
 
-enum FixedPartnerKind { assistant, customerService, codex, cursor, claude, trae }
+enum FixedPartnerKind {
+  assistant,
+  customerService,
+  codex,
+  cursor,
+  claude,
+  trae,
+}
 
 class FixedPartnerProfileSpec {
   const FixedPartnerProfileSpec({
@@ -188,7 +192,8 @@ class FixedPartnerProfileSpec {
           name: '超级员工-Trae',
           alias: '全设备协同 · IDE 执行端',
           accountId: 'XCAGI-TRAE',
-          summary: '与 Codex/Cursor/Claude 同构的超级员工，把任务派发到在线 Trae 工作设备；派工不可用时回退本机 Trae CLI 直答，兼顾 IDE 执行端、备用额度与补位协作。',
+          summary:
+              '与 Codex/Cursor/Claude 同构的超级员工，把任务派发到在线 Trae 工作设备；派工不可用时回退本机 Trae CLI 直答，兼顾 IDE 执行端、备用额度与补位协作。',
           source: 'XCAGI 超级员工 · Trae 通道',
           abilityLabels: const ['多设备派工', 'IDE 执行', '补位协作', '本地 CLI'],
           circleLabels: const ['派工', '协同', '开发'],
@@ -441,11 +446,7 @@ class _PlainCell extends StatelessWidget {
             ),
           ),
           if (showArrow)
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: colors.textTertiary,
-            ),
+            Icon(Icons.chevron_right, size: 20, color: colors.textTertiary),
         ],
       ),
     );
@@ -453,10 +454,7 @@ class _PlainCell extends StatelessWidget {
 }
 
 class _CirclePreview extends StatelessWidget {
-  const _CirclePreview({
-    required this.spec,
-    required this.onTap,
-  });
+  const _CirclePreview({required this.spec, required this.onTap});
 
   final FixedPartnerProfileSpec spec;
   final VoidCallback onTap;
@@ -476,11 +474,7 @@ class _CirclePreview extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.forum,
-                    size: 20,
-                    color: colors.momentAccent,
-                  ),
+                  Icon(Icons.forum, size: 20, color: colors.momentAccent),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

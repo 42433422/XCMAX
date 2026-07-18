@@ -204,7 +204,6 @@
             "change-request-auditor",
             "github-pr-gatekeeper",
             "mobile-android-release-officer",
-            "mobile-harmony-release-officer",
             "mobile-ios-release-officer"
           ]
         },
@@ -319,7 +318,6 @@
         "enterprise-adoption-officer",
         "delivery-receipt-officer",
         "mobile-android-release-officer",
-        "mobile-harmony-release-officer",
         "mobile-ios-release-officer"
       ]
     },

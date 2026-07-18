@@ -214,10 +214,7 @@ class StepRail extends StatelessWidget {
 }
 
 class _IntroStep extends StatelessWidget {
-  const _IntroStep({
-    required this.onNext,
-    required this.onFinish,
-  });
+  const _IntroStep({required this.onNext, required this.onFinish});
 
   final VoidCallback onNext;
   final VoidCallback onFinish;
@@ -238,8 +235,10 @@ class _IntroStep extends StatelessWidget {
         ),
         SizedBox(
           width: double.infinity,
-          child:
-              OutlinedButton(onPressed: onFinish, child: const Text('稍后进入应用')),
+          child: OutlinedButton(
+            onPressed: onFinish,
+            child: const Text('稍后进入应用'),
+          ),
         ),
       ],
     );
@@ -276,7 +275,9 @@ class _IndustryStep extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-                onPressed: onReload, child: const Text('刷新行业目录')),
+              onPressed: onReload,
+              child: const Text('刷新行业目录'),
+            ),
           ),
         ] else ...[
           for (final industry in industries.take(8)) ...[

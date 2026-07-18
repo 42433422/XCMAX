@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
@@ -16,8 +14,14 @@ void main() {
         'CLAUDE': PinnedIds.claude,
         'TRAE': PinnedIds.trae,
       },
-      _androidPinnedIds(),
-      reason: 'Flutter fixed conversation ids must mirror Android PinnedIds.',
+      {
+        'CS': 'pinned:cs',
+        'ASSISTANT': 'pinned:assistant',
+        'CODEX': 'pinned:codex',
+        'CURSOR': 'pinned:cursor',
+        'CLAUDE': 'pinned:claude',
+        'TRAE': 'pinned:trae',
+      },
     );
     expect(
       conversationTypeForFixed(id: PinnedIds.assistant),
@@ -41,7 +45,7 @@ void main() {
     );
   });
 
-  test('AI group fixed member ids mirror Android catalog constants', () {
+  test('AI group fixed member ids match the Flutter contract', () {
     expect(
       {
         'XIAOC_ASSISTANT_EMPLOYEE_ID': AiGroupMemberIds.xiaocAssistant,
@@ -50,13 +54,17 @@ void main() {
         'CLAUDE_SUPER_EMPLOYEE_ID': AiGroupMemberIds.claudeSuperEmployee,
         'TRAE_SUPER_EMPLOYEE_ID': AiGroupMemberIds.traeSuperEmployee,
       },
-      _androidAiGroupMemberIds(),
-      reason:
-          'Flutter fixed AI group member ids must mirror Android AiGroupMemberCatalog.kt.',
+      {
+        'XIAOC_ASSISTANT_EMPLOYEE_ID': 'xcagi-assistant',
+        'CODEX_SUPER_EMPLOYEE_ID': 'codex-super-employee',
+        'CURSOR_SUPER_EMPLOYEE_ID': 'cursor-super-employee',
+        'CLAUDE_SUPER_EMPLOYEE_ID': 'claude-super-employee',
+        'TRAE_SUPER_EMPLOYEE_ID': 'trae-super-employee',
+      },
     );
   });
 
-  test('chat avatar fallback follows Android pinned conversation policy', () {
+  test('chat avatar fallback follows the pinned conversation policy', () {
     expect(
       chatAvatarFallback(
         conversationId: PinnedIds.codex,
@@ -99,7 +107,7 @@ void main() {
     );
   });
 
-  test('employee avatar fallback mirrors Android employee id mapping', () {
+  test('employee avatar fallback normalizes employee ids', () {
     expect(
       employeeAvatarFallback(
         employeeId: 'employee:admin-duty:site-content-editor',
@@ -116,41 +124,11 @@ void main() {
     );
   });
 
-  test('avatar fallback enum assets mirror Android AppAvatar drawable table',
-      () {
-    expect(
-      AppAvatarFallback.values.map((fallback) => fallback.assetPath).toList(),
-      _androidAvatarAssetPaths(),
-      reason:
-          'Flutter avatar fallback assets must mirror Android AppAvatar.kt.',
-    );
-  });
-
-  test('employee avatar fallback table mirrors Android source table', () {
-    final androidDrawables = _androidAvatarDrawableByFallback();
-    final androidEmployeeFallbacks = _androidEmployeeAvatarFallbackMap();
-
-    for (final entry in androidEmployeeFallbacks.entries) {
-      final expectedDrawable = androidDrawables[entry.value];
-      if (expectedDrawable == null) {
-        throw StateError('Android fallback ${entry.value} has no drawable');
-      }
-      final expectedAsset = 'assets/avatars/$expectedDrawable.png';
-      expect(
-        employeeAvatarFallback(employeeId: entry.key).assetPath,
-        expectedAsset,
-        reason: 'Employee avatar fallback drifted for ${entry.key}',
-      );
-      expect(
-        employeeAvatarFallback(employeeId: entry.key.replaceAll('-', '_'))
-            .assetPath,
-        expectedAsset,
-        reason: 'Employee avatar underscore fallback drifted for ${entry.key}',
-      );
+  test('all Flutter avatar fallbacks resolve to bundled assets', () {
+    for (final fallback in AppAvatarFallback.values) {
+      expect(fallback.assetPath, startsWith('assets/avatars/'));
+      expect(fallback.assetPath, endsWith('.png'));
     }
-  });
-
-  test('local account avatar fallback uses Android user asset', () {
     expect(
       AppAvatarFallback.user.assetPath,
       'assets/avatars/avatar_default_user.png',
@@ -163,7 +141,7 @@ void main() {
     );
   });
 
-  test('super employee routing policy matches Android relay policy', () {
+  test('super employee routing policy matches the relay contract', () {
     expect(relayKindForConversation(PinnedIds.codex), 'codex.invoke');
     expect(relayKindForConversation(PinnedIds.cursor), 'cursor.invoke');
     expect(relayKindForConversation(PinnedIds.claude), 'claude.invoke');
@@ -171,7 +149,7 @@ void main() {
     expect(relayKindForConversation(PinnedIds.assistant), isNull);
   });
 
-  test('super employee messages path matches Android endpoints', () {
+  test('super employee messages path matches the mobile API contract', () {
     expect(
       superEmployeeMessagesPath(PinnedIds.codex),
       'api/mobile/v1/admin/codex-super-employee/messages',
@@ -189,59 +167,4 @@ void main() {
       'api/mobile/v1/admin/trae-super-employee/messages',
     );
   });
-}
-
-Map<String, String> _androidPinnedIds() {
-  final source = File(
-    '../mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/model/ConversationItem.kt',
-  ).readAsStringSync();
-  return {
-    for (final match in RegExp(
-      r'const val\s+([A-Z0-9_]+)\s*=\s*"([^"]+)"',
-    ).allMatches(source))
-      match.group(1)!: match.group(2)!,
-  };
-}
-
-Map<String, String> _androidAiGroupMemberIds() {
-  final source = File(
-    '../mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/navigation/AiGroupMemberCatalog.kt',
-  ).readAsStringSync();
-  return {
-    for (final match in RegExp(
-      r'internal const val\s+([A-Z0-9_]+)\s*=\s*"([^"]+)"',
-    ).allMatches(source))
-      match.group(1)!: match.group(2)!,
-  };
-}
-
-List<String> _androidAvatarAssetPaths() {
-  return _androidAvatarDrawableByFallback()
-      .values
-      .map((drawable) => 'assets/avatars/$drawable.png')
-      .toList(growable: false);
-}
-
-Map<String, String> _androidAvatarDrawableByFallback() {
-  final source = File(
-    '../mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/components/mobile/AppAvatar.kt',
-  ).readAsStringSync();
-  return {
-    for (final match in RegExp(
-      r'([A-Z0-9_]+)\(R\.drawable\.([a-z0-9_]+)\)',
-    ).allMatches(source))
-      match.group(1)!: match.group(2)!,
-  };
-}
-
-Map<String, String> _androidEmployeeAvatarFallbackMap() {
-  final source = File(
-    '../mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/components/mobile/EmployeeAvatarFallbacks.kt',
-  ).readAsStringSync();
-  return {
-    for (final match in RegExp(
-      r'"([^"]+)"\s+to\s+AppAvatarFallback\.([A-Z0-9_]+)',
-    ).allMatches(source))
-      match.group(1)!: match.group(2)!,
-  };
 }

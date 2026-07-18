@@ -35,11 +35,7 @@ Set<String> flutterDiscoverHiddenKeysForTest() {
 }
 
 class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({
-    super.key,
-    this.repository,
-    this.onOpenWork,
-  });
+  const DiscoverScreen({super.key, this.repository, this.onOpenWork});
 
   final MobileRepository? repository;
   final VoidCallback? onOpenWork;
@@ -145,8 +141,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             subtitle: '拍照识别文字与文档',
                             icon: Icons.camera_alt,
                             iconColor: Theme.of(context).colorScheme.tertiary,
-                            iconBg:
-                                Theme.of(context).colorScheme.tertiaryContainer,
+                            iconBg: Theme.of(
+                              context,
+                            ).colorScheme.tertiaryContainer,
                             onTap: _openOcr,
                           ),
                           WeCell(
@@ -154,8 +151,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             subtitle: '企业公告与系统通知',
                             icon: Icons.notifications,
                             iconColor: colors.danger,
-                            iconBg:
-                                Theme.of(context).colorScheme.errorContainer,
+                            iconBg: Theme.of(
+                              context,
+                            ).colorScheme.errorContainer,
                             onTap: _openNotifications,
                             showDivider: false,
                           ),
@@ -259,7 +257,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       case 'settings':
         Navigator.of(context).push(
           MaterialPageRoute(
-              builder: (_) => SettingsScreen(api: _repository.client)),
+            builder: (_) => SettingsScreen(api: _repository.client),
+          ),
         );
         return;
       default:
@@ -278,7 +277,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   void _openAiCircle() {
     Navigator.of(context).push(
       MaterialPageRoute(
-          builder: (_) => AiCircleScreen(repository: _repository)),
+        builder: (_) => AiCircleScreen(repository: _repository),
+      ),
     );
   }
 
@@ -305,9 +305,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   void _openOcr() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const OcrScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const OcrScreen()));
   }
 }
 

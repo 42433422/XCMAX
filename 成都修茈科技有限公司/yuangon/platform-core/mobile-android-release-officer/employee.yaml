@@ -1,7 +1,7 @@
 id: mobile-android-release-officer
 name: Android 发版员
 version: "1.0.0"
-domain: P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。
+domain: Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。
 owner: admin
 area: platform-core
 five_line_id: prod_software
@@ -9,8 +9,8 @@ subzone: build-release
 also_serves: []
 
 scope_globs:
-  - FHD/mobile-android/**
-  - FHD/.github/workflows/ci-mobile-android.yml
+  - FHD/mobile-flutter-poc/**
+  - FHD/.github/workflows/ci-mobile-flutter.yml
   - FHD/.github/workflows/release-android.yml
   - release-apk/**
 

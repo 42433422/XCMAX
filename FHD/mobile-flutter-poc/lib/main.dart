@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'src/app/android_startup_shell.dart';
+import 'src/app/mobile_startup_shell.dart';
 import 'src/data/mobile_repository.dart';
 
 void main() {
@@ -19,6 +19,6 @@ class _XcagiFlutterPocAppState extends State<XcagiFlutterPocApp> {
 
   @override
   Widget build(BuildContext context) {
-    return AndroidStartupApp(repository: _repository);
+    return MobileStartupApp(repository: _repository);
   }
 }

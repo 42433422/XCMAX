@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../webview/desktop_tool_webview_screen.dart';
 
-bool handleAndroidRegisterUrlOverride(
-  String nextUrl,
-  VoidCallback onComplete,
-) {
-  if (!isAndroidRegisterCompleteUrl(nextUrl)) return false;
+bool handleMobileRegisterUrlOverride(String nextUrl, VoidCallback onComplete) {
+  if (!isMobileRegisterCompleteUrl(nextUrl)) return false;
   onComplete();
   return true;
 }
@@ -118,10 +115,10 @@ class RegisterScreen extends StatelessWidget {
           title: '注册',
           path: '/login/register?redirect=%2Fapp%2Fmobile-register-complete',
           onUrlOverride: (nextUrl) {
-            return handleAndroidRegisterUrlOverride(nextUrl, () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('注册完成，请使用新账号登录')),
-              );
+            return handleMobileRegisterUrlOverride(nextUrl, () {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('注册完成，请使用新账号登录')));
               onLogin?.call();
               if (onLogin == null) {
                 Navigator.of(context).popUntil((route) => route.isFirst);

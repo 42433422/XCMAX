@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""服务拓扑 SSOT 派生器：config/service_topology.yaml 为唯一真相源，派生四端常量 + 机器可读 JSON。
+"""服务拓扑 SSOT 派生器：从 YAML 派生 Python、TypeScript、Dart 常量和 JSON。
 
 用法:
   python scripts/dev/service_topology_ssot.py check               # 校验派生产物一致（CI 阻断）
@@ -138,38 +138,22 @@ def render_ts(m: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render_ets(m: dict[str, Any]) -> str:
-    # ArkTS 严格模式：只用扁平、显式类型的常量，规避索引/联合类型坑。
-    lines = [JS_HEADER]
-    lines.append(f"export const PRODUCTION_HOST: string = '{m['host']}';")
-    lines.append(f"export const PRODUCTION_SCHEME: string = '{m['scheme']}';")
-    lines.append("")
-    for name, val in m["url_consts"]:
-        lines.append(f"export const {name}: string = '{val}';")
-    lines.append("")
-    for name, val in m["port_consts"]:
-        lines.append(f"export const {name}: number = {val};")
-    lines.append("")
-    lines.append(f"export const MUST_RUN_PROCESSES: string[] = {_ts_array(m['must_run'])};")
-    lines.append("")
-    return "\n".join(lines)
+def _dart_name(name: str) -> str:
+    words = name.lower().split("_")
+    return words[0] + "".join(word.title() for word in words[1:])
 
 
-def render_kotlin(m: dict[str, Any]) -> str:
-    lines = [JS_HEADER]
-    lines.append("package com.xiuci.xcagi.mobile.core.network")
-    lines.append("")
-    lines.append("object Topology {")
-    lines.append(f'    const val PRODUCTION_HOST = "{m["host"]}"')
-    lines.append(f'    const val PRODUCTION_SCHEME = "{m["scheme"]}"')
+def render_dart(m: dict[str, Any]) -> str:
+    lines = [JS_HEADER, "class XcagiMobileTopology {", "  const XcagiMobileTopology._();"]
+    lines.append(f"  static const productionHost = '{m['host']}';")
+    lines.append(f"  static const productionScheme = '{m['scheme']}';")
     for name, val in m["url_consts"]:
-        lines.append(f'    const val {name} = "{val}"')
+        lines.append(f"  static const {_dart_name(name)} = '{val}';")
     for name, val in m["port_consts"]:
-        lines.append(f"    const val {name} = {val}")
-    kt_arr = "listOf(" + ", ".join(f'"{x}"' for x in m["must_run"]) + ")"
-    lines.append(f"    val MUST_RUN_PROCESSES = {kt_arr}")
-    lines.append("}")
-    lines.append("")
+        lines.append(f"  static const {_dart_name(name)} = {val};")
+    values = ", ".join(f"'{item}'" for item in m["must_run"])
+    lines.append(f"  static const mustRunProcesses = <String>[{values}];")
+    lines.extend(["}", ""])
     return "\n".join(lines)
 
 
@@ -193,11 +177,7 @@ def render_json(m: dict[str, Any]) -> str:
 TARGETS: list[tuple[str, str, Any]] = [
     ("python", "app/infrastructure/topology.py", render_python),
     ("ts", "frontend/src/constants/topology.ts", render_ts),
-    (
-        "kotlin",
-        "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt",
-        render_kotlin,
-    ),
+    ("dart", "mobile-flutter-poc/lib/src/data/service_topology_ssot.dart", render_dart),
     ("json", "config/topology.generated.json", render_json),
 ]
 
@@ -205,23 +185,7 @@ TARGETS: list[tuple[str, str, Any]] = [
 # ──────────────────────────── 部署侧 report-only 校验（不影响退出码） ────────────────────────────
 def deploy_advisories(m: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    # 1) 安卓 build.gradle.kts BuildConfig 与 SSOT 比对（在仓内、真实漂移对）
-    gradle = ROOT / "mobile-android" / "app" / "build.gradle.kts"
-    if gradle.is_file():
-        txt = gradle.read_text(encoding="utf-8")
-        fhd_url = dict(m["url_consts"]).get("FHD_API_BASE_URL", "")
-        if fhd_url and fhd_url not in txt:
-            out.append(f"build.gradle.kts: ENTERPRISE_FHD_BASE_URL 可能 != SSOT({fhd_url})")
-        desktop_port = next(
-            (v for n, v in m["port_consts"] if n == "DESKTOP_FHD_LISTEN_PORT"), None
-        )
-        if (
-            desktop_port is not None
-            and f'"{desktop_port}"' not in txt
-            and f'"{desktop_port}"' not in txt
-        ):
-            out.append(f"build.gradle.kts: FHD_DEFAULT_PORT 可能 != SSOT({desktop_port})")
-    # 2) nginx 在仓外（/etc/nginx），仅声明式提示
+    # nginx 在仓外（/etc/nginx），仅声明式提示
     routes = ", ".join(
         f"{r.get('path')}→:{r.get('upstream_port')}"
         for r in m["nginx_routes"]
@@ -300,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
 
     gen_p = sub.add_parser("generate", help="生成/同步派生产物")
     gen_p.add_argument("--apply", action="store_true", help="真写（默认 dry-run）")
-    gen_p.add_argument("--target", help="仅处理指定目标 (python/ts/ets/kotlin/json)")
+    gen_p.add_argument("--target", help="仅处理指定目标 (python/ts/dart/json)")
 
     args = parser.parse_args(argv)
     if args.command == "check":

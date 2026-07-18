@@ -38,7 +38,7 @@
 | FHD 后端代码 | `fhd-core-maintainer` |
 | MODstore 后端 | `modstore-backend-api` |
 | MODstore 前端 | `market-frontend-dev` 或 `workbench-ux-stylist` |
-| 移动发布 | `mobile-android-release-officer` / `mobile-ios-release-officer` / `mobile-harmony-release-officer` |
+| 移动发布 | `mobile-android-release-officer` / `mobile-ios-release-officer`（均基于 Flutter） |
 | 测试验收 | `test-qa-runner` |
 | 文档固化 | `doc-knowledge-curator` |
 | 员工包制作 | `employee-planner` → `artifact-generator` → `quality-validator` |
@@ -49,4 +49,4 @@
 - [ ] 学习回答包含“概念 -> 项目落点 -> 源码入口 -> 验证命令”。
 - [ ] 升级回答包含迁移顺序、影响范围、风险、回滚和测试。
 - [ ] 涉及 SSOT 时明确源文件和派生文件。
-- [ ] 涉及跨端时覆盖 Flutter、旧 Android/iOS/Harmony、FastAPI、OpenAPI。
+- [ ] 涉及跨端时覆盖 Flutter Android/iOS、FastAPI、OpenAPI。

@@ -1,6 +1,6 @@
 # CI SSOT: generated from FHD/.github/workflows/mutation-smoke.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# CI SSOT: generated from FHD/.github/workflows/mutation-smoke.yml
+# CI SSOT: generated from FHD/.github/workflows/fhd-mutation-smoke.yml
 name: mutation-smoke
 
 on:

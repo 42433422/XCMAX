@@ -12,32 +12,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FHD_ROOT = path.resolve(__dirname, '../..')
 const CONFIG_PATH = path.join(FHD_ROOT, 'config/surface_audit_pages.json')
 
-function resolveSku() {
-  const fromEnv = (process.env.SURFACE_AUDIT_PRODUCT_SKU || '').trim()
-  if (fromEnv) return fromEnv
-  try {
-    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
-    return cfg.lanes?.['P-App']?.product_sku || 'personal'
-  } catch {
-    return 'personal'
-  }
-}
-
-const SKU = resolveSku()
-const DEFAULT_ADB = path.join(FHD_ROOT, 'mobile-android/.toolchain/android-sdk/platform-tools/adb')
+const DEFAULT_ADB = path.join(FHD_ROOT, 'mobile-flutter-poc/.toolchain/android-sdk/platform-tools/adb')
 const PACKAGE =
   process.env.SURFACE_AUDIT_ANDROID_PACKAGE ||
-  (SKU === 'enterprise' ? 'com.xiuci.xcagi.mobile.enterprise' : 'com.xiuci.xcagi.mobile.personal')
-const APK_CANDIDATES =
-  SKU === 'enterprise'
-    ? [
-        path.join(FHD_ROOT, 'mobile-android/app/build/outputs/apk/enterprise/debug/app-enterprise-debug.apk'),
-        path.join(FHD_ROOT, 'mobile-android/app/build/outputs/apk/enterpriseDebug/app-enterprise-debug.apk'),
-      ]
-    : [
-        path.join(FHD_ROOT, 'mobile-android/app/build/outputs/apk/personal/debug/app-personal-debug.apk'),
-        path.join(FHD_ROOT, 'mobile-android/app/build/outputs/apk/personalDebug/app-personal-debug.apk'),
-      ]
+  'com.xiuci.xcagi.mobile.enterprise'
+const APK_CANDIDATES = [
+  path.join(FHD_ROOT, 'mobile-flutter-poc/build/app/outputs/flutter-apk/app-debug.apk'),
+  path.join(FHD_ROOT, 'mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk'),
+]
 
 const outArgIdx = process.argv.indexOf('--out')
 const OUT_PATH = outArgIdx >= 0 ? process.argv[outArgIdx + 1] : ''
@@ -156,15 +138,6 @@ function androidRoute(pageDef) {
   return route
 }
 
-function uninstallPersonalPackage() {
-  if (SKU !== 'enterprise') return
-  try {
-    adb('uninstall', 'com.xiuci.xcagi.mobile.personal')
-  } catch {
-    /* 未安装个人版时忽略 */
-  }
-}
-
 function waitMs(pageDef) {
   if (pageDef.android_wait_ms) return Number(pageDef.android_wait_ms)
   if (WEBVIEW_IDS.has(pageDef.id)) return Math.max(DEFAULT_WAIT_MS, 7500)
@@ -232,20 +205,6 @@ function setModstoreBlocked(block) {
     modstoreBlocked = block
   } catch {
     /* 非 root 设备跳过 */
-  }
-}
-
-function reinstallPersonalApk() {
-  if (SKU !== 'enterprise') return
-  const personalApk = path.join(
-    FHD_ROOT,
-    'mobile-android/app/build/outputs/apk/personal/debug/app-personal-debug.apk',
-  )
-  if (!fs.existsSync(personalApk)) return
-  try {
-    adb('install', '-r', personalApk)
-  } catch {
-    /* 可选恢复个人版 */
   }
 }
 
@@ -338,9 +297,6 @@ function filterPages(pages) {
   return (pages || []).filter((p) => {
     if (p.web_only) return false
     if (!p.android_route && !p.id) return false
-    if (p.sku === 'enterprise' && (process.env.SURFACE_AUDIT_PRODUCT_SKU || 'personal') === 'personal') {
-      return process.env.SURFACE_AUDIT_INCLUDE_ENTERPRISE === '1'
-    }
     return true
   })
 }
@@ -397,12 +353,10 @@ async function main() {
     try {
       installApkIfNeeded(apk)
     } catch (err) {
-      reinstallPersonalApk()
       return finish({ success: false, message: `APK 安装失败: ${err}`, pages: [] })
     }
   }
 
-  uninstallPersonalPackage()
 
   const results = []
   for (const pageDef of appPages) {
@@ -440,7 +394,6 @@ async function main() {
   }
 
   setModstoreBlocked(false)
-  reinstallPersonalApk()
 
   finish({
     success: results.some((r) => r.screenshot_b64),
@@ -461,7 +414,6 @@ async function main() {
 }
 
 function finish(payload) {
-  reinstallPersonalApk()
   const text = JSON.stringify(payload)
   if (OUT_PATH) {
     fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true })

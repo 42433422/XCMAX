@@ -157,10 +157,8 @@ class _MessageListScreenState extends State<MessageListScreen> {
   void _openGroup(AiGroupConversation group) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AiGroupChatScreen(
-          initialGroup: group,
-          repository: _repository,
-        ),
+        builder: (_) =>
+            AiGroupChatScreen(initialGroup: group, repository: _repository),
       ),
     );
   }
@@ -423,10 +421,7 @@ class _ConversationSheetAction {
 }
 
 class _ConversationActionSheet extends StatelessWidget {
-  const _ConversationActionSheet({
-    required this.title,
-    required this.actions,
-  });
+  const _ConversationActionSheet({required this.title, required this.actions});
 
   final String title;
   final List<_ConversationSheetAction> actions;
@@ -627,9 +622,7 @@ class _ConversationEmptyState extends StatelessWidget {
             ],
             Text(
               loading ? '正在同步会话…' : '暂无会话',
-              style: textTheme.bodyLarge?.copyWith(
-                color: colors.textSecondary,
-              ),
+              style: textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
             ),
             if (!loading) ...[
               const SizedBox(height: 8),
@@ -708,9 +701,7 @@ class GroupConversationRow extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.bodyLarge?.copyWith(
                               color: group.isHidden
-                                  ? colors.textSecondary.withValues(
-                                      alpha: 0.65,
-                                    )
+                                  ? colors.textSecondary.withValues(alpha: 0.65)
                                   : !group.isFollowed
                                       ? colors.textSecondary
                                       : colors.textPrimary,
@@ -765,8 +756,9 @@ List<Object> _sortMessageEntries(
     final aPinned = _messageEntryPinned(a.entry);
     final bPinned = _messageEntryPinned(b.entry);
     if (aPinned != bPinned) return aPinned ? -1 : 1;
-    final timestampOrder = _messageEntryTimestampMs(b.entry)
-        .compareTo(_messageEntryTimestampMs(a.entry));
+    final timestampOrder = _messageEntryTimestampMs(
+      b.entry,
+    ).compareTo(_messageEntryTimestampMs(a.entry));
     if (timestampOrder != 0) return timestampOrder;
     return a.index.compareTo(b.index);
   });
@@ -795,10 +787,7 @@ String? _visibleConversationBadge(ConversationItem item) {
 }
 
 class _IndexedMessageEntry {
-  const _IndexedMessageEntry({
-    required this.index,
-    required this.entry,
-  });
+  const _IndexedMessageEntry({required this.index, required this.entry});
 
   final int index;
   final Object entry;
@@ -1056,9 +1045,7 @@ class _PlusMenuRow extends StatelessWidget {
           const SizedBox(width: 14),
           Text(
             label,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colors.textPrimary,
-            ),
+            style: textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
           ),
         ],
       ),
@@ -1128,9 +1115,7 @@ class _SearchBarFieldState extends State<_SearchBarField> {
               onChanged: widget.onValueChanged,
               maxLines: 1,
               textAlignVertical: TextAlignVertical.center,
-              style: textTheme.bodyMedium?.copyWith(
-                color: colors.textPrimary,
-              ),
+              style: textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
               decoration: InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
@@ -1242,10 +1227,7 @@ class _StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        border: Border.all(
-          color: color.withValues(alpha: 0.30),
-          width: 0.5,
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.30), width: 0.5),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(

@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../platform/credential_cipher.dart';
-import '../policy/android_runtime_policy.dart';
+import '../data/service_topology_ssot.dart';
+import '../policy/mobile_runtime_policy.dart';
 import 'mobile_models.dart';
 import 'mobile_session_store.dart';
+
+export '../data/service_topology_ssot.dart';
 
 class XcagiMobileEndpoints {
   static const rootHealth = 'api/health';
@@ -355,24 +358,6 @@ class XcagiMobileEndpoints {
   }
 }
 
-class XcagiMobileTopology {
-  static const productionHost = 'xiu-ci.com';
-  static const productionScheme = 'https';
-  static const siteRootUrl = 'https://xiu-ci.com';
-  static const fhdApiBaseUrl = 'https://xiu-ci.com/fhd-api';
-  static const marketBaseUrl = 'https://xiu-ci.com/market';
-  static const llmV1BaseUrl = 'https://xiu-ci.com/v1';
-  static const marketCatalogUrl = 'https://xiu-ci.com/api/market/catalog';
-  static const imWsUrl = 'wss://xiu-ci.com/ws/im';
-  static const desktopFhdListenPort = 17500;
-  static const fhdApiListenPort = 5000;
-  static const fhdApiUpstreamPort = 5100;
-  static const modstoreListenPort = 8765;
-  // 后端 loopback 监听 17500 时，手机不可达；vite proxy 监听 0.0.0.0:5011 才可达。
-  static const lanReachableProxyPort = 5011;
-  static const mustRunProcesses = ['web', 'modstore-scheduler'];
-}
-
 class MobileApiConfig {
   const MobileApiConfig({
     this.baseUrl = const String.fromEnvironment(
@@ -411,30 +396,27 @@ class MobileApiConfig {
   final Duration timeout;
 }
 
-enum AndroidServerMode {
-  lan,
-  cloud,
-}
+enum MobileServerMode { lan, cloud }
 
-class AndroidServerRouter {
-  const AndroidServerRouter({
+class MobileServerRouter {
+  const MobileServerRouter({
     this.fhdHost = '127.0.0.1',
-    this.mode = AndroidServerMode.cloud,
+    this.mode = MobileServerMode.cloud,
     this.isEnterprise = true,
-    this.fhdDefaultPort = MobileAndroidBuild.fhdDefaultPort,
-    this.enterpriseFhdBaseUrlRaw = MobileAndroidBuild.enterpriseFhdBaseUrl,
-    this.modstoreBaseUrlRaw = MobileAndroidBuild.modstoreBaseUrl,
+    this.fhdDefaultPort = MobileBuildConfig.fhdDefaultPort,
+    this.enterpriseFhdBaseUrlRaw = MobileBuildConfig.enterpriseFhdBaseUrl,
+    this.modstoreBaseUrlRaw = MobileBuildConfig.modstoreBaseUrl,
   });
 
   final String fhdHost;
-  final AndroidServerMode mode;
+  final MobileServerMode mode;
   final bool isEnterprise;
   final int fhdDefaultPort;
   final String enterpriseFhdBaseUrlRaw;
   final String modstoreBaseUrlRaw;
 
   String fhdBaseUrl() {
-    if (mode == AndroidServerMode.cloud && isEnterprise) {
+    if (mode == MobileServerMode.cloud && isEnterprise) {
       return enterpriseFhdBaseUrl();
     }
     return lanFhdBaseUrl();
@@ -447,7 +429,7 @@ class AndroidServerRouter {
     final loopbackPort = ':$fhdDefaultPort/';
     if (raw.endsWith(loopbackPort)) {
       final prefix = raw.substring(0, raw.length - loopbackPort.length);
-      return '$prefix:${XcagiMobileTopology.lanReachableProxyPort}/';
+      return '$prefix:${XcagiMobileTopology.mobileLanProxyListenPort}/';
     }
     return raw;
   }
@@ -469,8 +451,10 @@ class AndroidServerRouter {
   }
 
   String enterpriseFhdBaseUrl() {
-    final base =
-        enterpriseFhdBaseUrlRaw.trim().replaceFirst(RegExp(r'/+$'), '');
+    final base = enterpriseFhdBaseUrlRaw.trim().replaceFirst(
+          RegExp(r'/+$'),
+          '',
+        );
     return '$base/';
   }
 
@@ -481,9 +465,9 @@ class AndroidServerRouter {
 
   String activeWriteBaseUrl() {
     switch (mode) {
-      case AndroidServerMode.lan:
+      case MobileServerMode.lan:
         return fhdBaseUrl();
-      case AndroidServerMode.cloud:
+      case MobileServerMode.cloud:
         return modstoreBaseUrl();
     }
   }
@@ -500,8 +484,8 @@ class AndroidServerRouter {
   }
 }
 
-class AndroidAuthHeaderPolicy {
-  const AndroidAuthHeaderPolicy._();
+class MobileAuthHeaderPolicy {
+  const MobileAuthHeaderPolicy._();
 
   static String normalizedBase(String base) =>
       base.trim().replaceFirst(RegExp(r'/+$'), '');
@@ -566,8 +550,10 @@ class AndroidAuthHeaderPolicy {
 
   static bool isPublicAuthWriteRequest(String urlOrPath) {
     final parsed = Uri.tryParse(urlOrPath);
-    final rawPath =
-        (parsed?.path ?? urlOrPath).replaceFirst(RegExp(r'/+$'), '');
+    final rawPath = (parsed?.path ?? urlOrPath).replaceFirst(
+      RegExp(r'/+$'),
+      '',
+    );
     final path = rawPath.startsWith('/') ? rawPath : '/$rawPath';
     const publicPaths = {
       '/api/auth/login',
@@ -586,7 +572,7 @@ class AndroidAuthHeaderPolicy {
   }
 }
 
-class MobileAndroidBuild {
+class MobileBuildConfig {
   static const productSku = 'enterprise';
   static const fhdDefaultPort = 17500;
   static const modstoreBaseUrl = 'https://xiu-ci.com';
@@ -614,7 +600,7 @@ class MobileUpdateCheckResult {
 
   String get title => force ? '需要更新' : '发现新版本';
 
-  String get androidPromptMessage => '最新版本 $versionName，将下载完整安装包并交给系统安装器安装。';
+  String get updatePromptMessage => '最新版本 $versionName，将下载完整安装包并交给系统安装器安装。';
 
   Map<String, Object?> get apkDelta {
     final value = raw['apk_delta'];
@@ -628,16 +614,17 @@ class MobileApiClient {
     MobileApiConfig config = const MobileApiConfig(),
     MobileSessionStore? sessionStore,
     HttpClient? httpClient,
-    AndroidCredentialCipher? credentialCipher,
+    PlatformCredentialCipher? credentialCipher,
   })  : _config = config,
         _sessionStore = sessionStore ?? FileMobileSessionStore(),
         _httpClient = httpClient ?? HttpClient(),
-        _credentialCipher = credentialCipher ?? const AndroidCredentialCipher();
+        _credentialCipher =
+            credentialCipher ?? const PlatformCredentialCipher();
 
   final MobileApiConfig _config;
   final MobileSessionStore _sessionStore;
   final HttpClient _httpClient;
-  final AndroidCredentialCipher _credentialCipher;
+  final PlatformCredentialCipher _credentialCipher;
   final StreamController<MobileSessionData> _sessionChanges =
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
@@ -691,9 +678,8 @@ class MobileApiClient {
     final stored = session.savedPassword;
     if (stored.isEmpty) return session;
     if (!stored.startsWith('enc:v1:')) return session;
-    final decoded = await _credentialCipher.decrypt(stored).catchError(
-          (_) => '',
-        );
+    final decoded =
+        await _credentialCipher.decrypt(stored).catchError((_) => '');
     if (decoded == stored) return session;
     return session.copyWith(savedPassword: decoded);
   }
@@ -777,9 +763,7 @@ class MobileApiClient {
     }
     if (serverMode != null) {
       final normalized = serverMode.trim().toLowerCase();
-      next = next.copyWith(
-        serverMode: normalized == 'lan' ? 'lan' : 'cloud',
-      );
+      next = next.copyWith(serverMode: normalized == 'lan' ? 'lan' : 'cloud');
     }
     await _saveSession(next);
   }
@@ -788,9 +772,7 @@ class MobileApiClient {
     final current = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
         );
-    await _saveSession(
-      current.copyWith(legalAcceptedVersion: version.trim()),
-    );
+    await _saveSession(current.copyWith(legalAcceptedVersion: version.trim()));
   }
 
   Future<void> saveSetupComplete(bool complete) async {
@@ -901,10 +883,13 @@ class MobileApiClient {
         accessToken: accessToken,
         refreshToken: _readString(data, const ['refresh_token']),
         sessionId: _readString(data, const ['session_id']),
-        username: _readString(user, const ['username', 'name'])
-            .ifEmpty(fallbackUsername),
-        accountKind: _readString(data, const ['account_kind'])
-            .ifEmpty(fallbackAccountKind),
+        username: _readString(user, const [
+          'username',
+          'name',
+        ]).ifEmpty(fallbackUsername),
+        accountKind: _readString(data, const [
+          'account_kind',
+        ]).ifEmpty(fallbackAccountKind),
         userId: _readInt(user, const ['id'], 0),
         marketAccessToken: marketToken,
         marketRefreshToken: _readString(data, const ['market_refresh_token']),
@@ -912,8 +897,7 @@ class MobileApiClient {
     );
     await _saveSession(
       next.copyWith(
-        setupComplete:
-            fallbackAccountKind.trim().toLowerCase() == 'admin' ||
+        setupComplete: fallbackAccountKind.trim().toLowerCase() == 'admin' ||
             fallbackAccountKind.trim().toLowerCase() == 'admin_portal' ||
             next.setupComplete,
         serverMode: _preferredServerModeAfterLogin(next),
@@ -934,11 +918,11 @@ class MobileApiClient {
         'fcm_token': token,
         'push_provider': pushProvider,
         'push_token': token,
-        'product_sku': MobileAndroidBuild.productSku,
-        'device_label': 'Flutter-Android',
+        'product_sku': MobileBuildConfig.productSku,
+        'device_label': 'XCAGI Flutter Mobile',
       });
     } catch (_) {
-      // Android also swallows register failures.
+      // Push-token registration failure must not block the Flutter app.
     }
   }
 
@@ -1090,12 +1074,12 @@ class MobileApiClient {
     return getJson(XcagiMobileEndpoints.rootHealth);
   }
 
-  /// Align Android `XcagiRepository.preferCloudIfLanUnreachable`:
+  /// Keep the mobile failover contract when an enterprise LAN is unavailable:
   /// when enterprise LAN host is blank/unreachable, flip session to cloud so
   /// subsequent API calls stop hammering a dead `192.168.x.x`.
   Future<bool> preferCloudIfLanUnreachable() async {
-    final isEnterprise = AndroidProductSkuConfig.isEnterprise(
-      buildSku: MobileAndroidBuild.productSku,
+    final isEnterprise = MobileProductSkuConfig.isEnterprise(
+      buildSku: MobileBuildConfig.productSku,
     );
     if (!isEnterprise) return false;
     final session = await loadSession();
@@ -1127,9 +1111,9 @@ class MobileApiClient {
   Future<bool> probeLanHealth(String hostWithPort) async {
     final host = hostWithPort.trim();
     if (host.isEmpty) return false;
-    final router = AndroidServerRouter(
+    final router = MobileServerRouter(
       fhdHost: host,
-      mode: AndroidServerMode.lan,
+      mode: MobileServerMode.lan,
       isEnterprise: true,
     );
     final base = router.lanReachableBaseUrl();
@@ -1140,8 +1124,8 @@ class MobileApiClient {
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set('X-XCAGI-Client', 'android');
       final response = await request.close().timeout(
-        const Duration(milliseconds: 900),
-      );
+            const Duration(milliseconds: 900),
+          );
       await response.drain<void>();
       return response.statusCode >= 200 && response.statusCode < 300;
     } catch (_) {
@@ -1149,16 +1133,16 @@ class MobileApiClient {
     }
   }
 
-  AndroidServerRouter serverRouterForSession(MobileSessionData session) {
+  MobileServerRouter serverRouterForSession(MobileSessionData session) {
     final mode = session.serverMode.trim().toLowerCase() == 'lan'
-        ? AndroidServerMode.lan
-        : AndroidServerMode.cloud;
+        ? MobileServerMode.lan
+        : MobileServerMode.cloud;
     final host = session.fhdHost.trim();
-    return AndroidServerRouter(
+    return MobileServerRouter(
       fhdHost: host.isEmpty ? '127.0.0.1' : host,
       mode: mode,
-      isEnterprise: AndroidProductSkuConfig.isEnterprise(
-        buildSku: MobileAndroidBuild.productSku,
+      isEnterprise: MobileProductSkuConfig.isEnterprise(
+        buildSku: MobileBuildConfig.productSku,
       ),
     );
   }
@@ -1313,24 +1297,30 @@ class MobileApiClient {
   Future<MobileEnvelope<Map<String, Object?>>> markAiGroupUnread(
     String groupId,
   ) async {
-    final json =
-        await postJson(XcagiMobileEndpoints.aiGroupMarkUnread(groupId), {});
+    final json = await postJson(
+      XcagiMobileEndpoints.aiGroupMarkUnread(groupId),
+      {},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> markAiGroupRead(
     String groupId,
   ) async {
-    final json =
-        await postJson(XcagiMobileEndpoints.aiGroupMarkRead(groupId), {});
+    final json = await postJson(
+      XcagiMobileEndpoints.aiGroupMarkRead(groupId),
+      {},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> toggleAiGroupFollowed(
     String groupId,
   ) async {
-    final json =
-        await putJson(XcagiMobileEndpoints.aiGroupFollowed(groupId), {});
+    final json = await putJson(
+      XcagiMobileEndpoints.aiGroupFollowed(groupId),
+      {},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1351,8 +1341,10 @@ class MobileApiClient {
   Future<MobileEnvelope<Map<String, Object?>>> toggleConversationPin(
     String conversationId,
   ) async {
-    final json =
-        await putJson(XcagiMobileEndpoints.conversationPin(conversationId), {});
+    final json = await putJson(
+      XcagiMobileEndpoints.conversationPin(conversationId),
+      {},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1400,7 +1392,8 @@ class MobileApiClient {
     String conversationId,
   ) async {
     final json = await deleteJson(
-        XcagiMobileEndpoints.conversationDelete(conversationId));
+      XcagiMobileEndpoints.conversationDelete(conversationId),
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1622,8 +1615,8 @@ class MobileApiClient {
   }
 
   Future<MobileAppConfigData> appConfig({
-    int currentVersionCode = MobileAndroidBuild.versionCode,
-    String sku = MobileAndroidBuild.productSku,
+    int currentVersionCode = MobileBuildConfig.versionCode,
+    String sku = MobileBuildConfig.productSku,
   }) async {
     final json = await getModstoreJson(
       XcagiMobileEndpoints.appConfig,
@@ -1634,13 +1627,13 @@ class MobileApiClient {
       },
     );
     final data = MobileAppConfigData.fromJson(json);
-    AndroidProductSkuConfig.setRemoteSku(data.sku);
+    MobileProductSkuConfig.setRemoteSku(data.sku);
     return data;
   }
 
   Future<MobileUpdateCheckResult> checkForUpdate({
-    int currentVersionCode = MobileAndroidBuild.versionCode,
-    String sku = MobileAndroidBuild.productSku,
+    int currentVersionCode = MobileBuildConfig.versionCode,
+    String sku = MobileBuildConfig.productSku,
   }) async {
     final json = await getModstoreJson(
       XcagiMobileEndpoints.appConfig,
@@ -1650,21 +1643,21 @@ class MobileApiClient {
         'current_version_code': currentVersionCode.toString(),
       },
     );
-    AndroidProductSkuConfig.setRemoteSku(_readString(json, const ['sku']));
+    MobileProductSkuConfig.setRemoteSku(_readString(json, const ['sku']));
     final latestVersionCode = _readInt(
-      json,
-      const ['latest_android_version'],
-      0,
-    );
+        json,
+        const [
+          'latest_android_version',
+        ],
+        0);
     final minVersionCode = _readInt(json, const ['min_android_version'], 0);
     final forceUpdate = _readBool(json, const ['force_update']);
     final forceRequired = currentVersionCode < minVersionCode ||
         (forceUpdate && currentVersionCode < latestVersionCode);
     final available = forceRequired || currentVersionCode < latestVersionCode;
-    final latestVersionName = _readString(
-      json,
-      const ['latest_android_version_name'],
-    ).ifEmpty(latestVersionCode.toString());
+    final latestVersionName = _readString(json, const [
+      'latest_android_version_name',
+    ]).ifEmpty(latestVersionCode.toString());
 
     return MobileUpdateCheckResult(
       available: available,
@@ -1682,8 +1675,8 @@ class MobileApiClient {
     final json = await postModstoreJson(XcagiMobileEndpoints.appFeedback, {
       'message': message.trim(),
       'contact': contact.trim(),
-      'app_version': MobileAndroidBuild.versionName,
-      'sku': MobileAndroidBuild.productSku,
+      'app_version': MobileBuildConfig.versionName,
+      'sku': MobileBuildConfig.productSku,
       'platform': 'android',
     });
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -1717,10 +1710,7 @@ class MobileApiClient {
   }) async {
     final json = await postJson(
       XcagiMobileEndpoints.pairingExchange,
-      {
-        'nonce': nonce.trim(),
-        'code': code.trim(),
-      },
+      {'nonce': nonce.trim(), 'code': code.trim()},
       baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
     );
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -1793,7 +1783,6 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-
   Future<MobileEnvelope<Map<String, Object?>>> relayBindAccount(
     String relayId,
   ) async {
@@ -1860,10 +1849,9 @@ class MobileApiClient {
   Future<MobileEnvelope<Map<String, Object?>>> selectOnboardingIndustry(
     String industryId,
   ) async {
-    final json = await postJson(
-      XcagiMobileEndpoints.onboardingSelectIndustry,
-      {'industry_id': industryId.trim().isEmpty ? '通用' : industryId.trim()},
-    );
+    final json = await postJson(XcagiMobileEndpoints.onboardingSelectIndustry, {
+      'industry_id': industryId.trim().isEmpty ? '通用' : industryId.trim(),
+    });
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1902,13 +1890,11 @@ class MobileApiClient {
     required String modId,
     required String industryId,
   }) async {
-    final json = await postJson(
-      XcagiMobileEndpoints.installCustomerDeliverySeed,
-      {
-        'mod_id': modId.trim(),
-        'industry_id': industryId.trim().isEmpty ? '通用' : industryId.trim(),
-      },
-    );
+    final json =
+        await postJson(XcagiMobileEndpoints.installCustomerDeliverySeed, {
+      'mod_id': modId.trim(),
+      'industry_id': industryId.trim().isEmpty ? '通用' : industryId.trim(),
+    });
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1977,10 +1963,7 @@ class MobileApiClient {
     String? status,
     String? requestType,
   }) async {
-    final query = <String, String>{
-      'page': '$page',
-      'per_page': '$perPage',
-    };
+    final query = <String, String>{'page': '$page', 'per_page': '$perPage'};
     final cleanStatus = status?.trim();
     if (cleanStatus != null && cleanStatus.isNotEmpty) {
       query['status'] = cleanStatus;
@@ -2002,10 +1985,7 @@ class MobileApiClient {
     String? status,
     String? requestType,
   }) {
-    final query = <String, String>{
-      'page': '$page',
-      'per_page': '$perPage',
-    };
+    final query = <String, String>{'page': '$page', 'per_page': '$perPage'};
     final cleanStatus = status?.trim();
     if (cleanStatus != null && cleanStatus.isNotEmpty) {
       query['status'] = cleanStatus;
@@ -2059,9 +2039,7 @@ class MobileApiClient {
     return getJson(XcagiMobileEndpoints.financeSummary);
   }
 
-  Future<Map<String, Object?>> marketAccountSync(
-    Map<String, String> body,
-  ) {
+  Future<Map<String, Object?>> marketAccountSync(Map<String, String> body) {
     return postJson(XcagiMobileEndpoints.marketAccountSync, body);
   }
 
@@ -2093,9 +2071,7 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-  Future<MobileEnvelope<AiCircleListData>> circlePosts({
-    int limit = 50,
-  }) async {
+  Future<MobileEnvelope<AiCircleListData>> circlePosts({int limit = 50}) async {
     final json = await getJson(
       XcagiMobileEndpoints.circlePosts,
       query: {'limit': '$limit'},
@@ -2237,8 +2213,9 @@ class MobileApiClient {
             break;
           case 'done':
             final result = json['result'];
-            final finalText =
-                _chatResultText(result).ifEmpty(buffer.toString());
+            final finalText = _chatResultText(
+              result,
+            ).ifEmpty(buffer.toString());
             return finalText.ifEmpty('（无回复）');
           case 'error':
             throw MobileApiException(
@@ -2399,24 +2376,24 @@ class MobileApiClient {
   }) async {
     final path = XcagiMobileEndpoints.superEmployeeStream(tool);
     final effectiveBaseUrl = baseUrl.trim().isEmpty ? null : baseUrl.trim();
-    final request = await _open(
-      'POST',
-      path,
-      baseUrl: effectiveBaseUrl,
-    );
+    final request = await _open('POST', path, baseUrl: effectiveBaseUrl);
     request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
-    final bytes = utf8.encode(jsonEncode({
-      'body': body,
-      'message': body,
-      'context': const {'source': 'mobile', 'client_surface': 'mobile'},
-    }));
+    final bytes = utf8.encode(
+      jsonEncode({
+        'body': body,
+        'message': body,
+        'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+      }),
+    );
     request.contentLength = bytes.length;
     request.add(bytes);
 
     final response = await request.close().timeout(_config.timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await utf8.decodeStream(response).timeout(_config.timeout);
-      final errBody = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+      final errBody = _asObjectMap(
+        text.trim().isEmpty ? null : jsonDecode(text),
+      );
       throw MobileApiException(
         statusCode: response.statusCode,
         message: errBody['message']?.toString() ??
@@ -2468,8 +2445,8 @@ class MobileApiClient {
     return buffer.toString().ifEmpty('（无回复）');
   }
 
-  /// Mirrors Android [XcagiRepository.refreshFhdAccessToken]: keep saved login
-  /// when access JWT expires but refresh_token is still valid.
+  /// Keep the saved login when the access JWT expires but refresh_token is
+  /// still valid.
   Future<bool> _refreshFhdAccessToken() async {
     if (_refreshInFlight != null) {
       return _refreshInFlight!;
@@ -2569,7 +2546,7 @@ class MobileApiClient {
     } on MobileApiException catch (error) {
       if (!allowAuthRefresh ||
           error.statusCode != 401 ||
-          AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
+          MobileAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
         rethrow;
       }
       final refreshed = await _refreshFhdAccessToken();
@@ -2663,7 +2640,7 @@ class MobileApiClient {
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set('X-XCAGI-Client', 'android');
-    request.headers.set('X-XCAGI-SKU', MobileAndroidBuild.productSku);
+    request.headers.set('X-XCAGI-SKU', MobileBuildConfig.productSku);
 
     final session = await loadSession();
     final explicitAuthorization = authToken?.trim() ?? '';
@@ -2674,9 +2651,9 @@ class MobileApiClient {
       );
     } else {
       final selectedBearer = _requestToken(session: session, url: uri);
-      if (AndroidAuthHeaderPolicy.shouldAttachSelectedBearer(
+      if (MobileAuthHeaderPolicy.shouldAttachSelectedBearer(
         isPublicAuthWriteRequest:
-            AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(uri.toString()),
+            MobileAuthHeaderPolicy.isPublicAuthWriteRequest(uri.toString()),
         callerAuthorization:
             request.headers.value(HttpHeaders.authorizationHeader) ?? '',
         selectedBearer: selectedBearer,
@@ -2687,10 +2664,7 @@ class MobileApiClient {
         );
       }
     }
-    final sessionId = _firstNonBlank([
-      _config.sessionId,
-      session.sessionId,
-    ]);
+    final sessionId = _firstNonBlank([_config.sessionId, session.sessionId]);
     if (sessionId.isNotEmpty) {
       request.headers.set('X-Session-ID', sessionId);
       request.headers.set(HttpHeaders.cookieHeader, 'session_id=$sessionId');
@@ -2698,16 +2672,10 @@ class MobileApiClient {
     return request;
   }
 
-  Uri _buildUri(
-    String path,
-    Map<String, String> query, {
-    String? baseUrl,
-  }) {
+  Uri _buildUri(String path, Map<String, String> query, {String? baseUrl}) {
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
     final rawBase = baseUrl ?? _config.baseUrl;
-    final base = Uri.parse(
-      rawBase.endsWith('/') ? rawBase : '$rawBase/',
-    );
+    final base = Uri.parse(rawBase.endsWith('/') ? rawBase : '$rawBase/');
     final uri = base.resolve(normalizedPath);
     if (query.isEmpty) return uri;
     return uri.replace(queryParameters: {...uri.queryParameters, ...query});
@@ -2732,10 +2700,7 @@ class MobileApiClient {
       ...json,
       'data': {
         ...data,
-        'user': {
-          ...user,
-          'avatar_url': avatar,
-        },
+        'user': {...user, 'avatar_url': avatar},
       },
     };
   }
@@ -2751,16 +2716,10 @@ class MobileApiClient {
     );
   }
 
-  String _requestToken({
-    required MobileSessionData session,
-    required Uri url,
-  }) {
-    return AndroidAuthHeaderPolicy.selectBearer(
+  String _requestToken({required MobileSessionData session, required Uri url}) {
+    return MobileAuthHeaderPolicy.selectBearer(
       url: url.toString(),
-      fhdToken: _firstNonBlank([
-        _config.accessToken,
-        session.accessToken,
-      ]),
+      fhdToken: _firstNonBlank([_config.accessToken, session.accessToken]),
       marketToken: _firstNonBlank([
         _config.marketAccessToken,
         session.marketAccessToken,
@@ -2908,9 +2867,9 @@ String _compactHostPort(String host, int port) {
 }
 
 String _preferredServerModeAfterLogin(MobileSessionData session) {
-  return AndroidAuthRoutingPolicy.preferredServerModeAfterLogin(
-    isEnterprise: AndroidProductSkuConfig.isEnterprise(
-      buildSku: MobileAndroidBuild.productSku,
+  return MobileAuthRoutingPolicy.preferredServerModeAfterLogin(
+    isEnterprise: MobileProductSkuConfig.isEnterprise(
+      buildSku: MobileBuildConfig.productSku,
     ),
     configuredHost: session.fhdHost,
     currentMode: session.serverMode,
