@@ -15,7 +15,7 @@ class DutyRosterEmployee {
 }
 
 const adminDutyModId = 'admin-duty-employees';
-const plannedAdminEmployeeCount = 56;
+const plannedAdminEmployeeCount = 55;
 
 const adminDutyRosterEmployees = <DutyRosterEmployee>[
   DutyRosterEmployee(
@@ -201,19 +201,13 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     id: 'mobile-android-release-officer',
     label: 'Android 发版员',
     summary:
-        'P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。',
-  ),
-  DutyRosterEmployee(
-    id: 'mobile-harmony-release-officer',
-    label: '鸿蒙发版员',
-    summary:
-        '鸿蒙 HarmonyOS 渠道全自动发版:assembleApp 编译 → hap-sign-tool 真证书签名(AGC 发布证书)→ AGC Publishing API 上传 + 自动提交审核。本机(Mac mini)执行,密钥在 ~/XCMAX-runtime/harmony/signing(仓库外);一条龙 scripts/release-harmony.sh,详见 RUNBOOK.md。',
+        'Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。',
   ),
   DutyRosterEmployee(
     id: 'mobile-ios-release-officer',
     label: 'iOS 发版员',
     summary:
-        'XCAGI iOS 渠道发布：主线上架、冻结兼容 SKU、Apple Developer profile、GitHub Secrets、XcodeGen 工程、签名、TestFlight / App Store Connect 上传与 release 门禁。',
+        'Flutter iOS 渠道发布：Runner、Fastlane match、签名、TestFlight / App Store Connect 上传与 release 门禁。',
   ),
   DutyRosterEmployee(
     id: 'test-qa-runner',

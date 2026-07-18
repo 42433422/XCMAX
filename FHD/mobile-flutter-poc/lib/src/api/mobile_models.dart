@@ -52,8 +52,9 @@ class MobileAppConfigData {
       ok: _readBool(json, const ['ok', 'success']),
       legalVersion: _readString(json, const ['legal_version']).ifEmpty('1'),
       sku: _readString(json, const ['sku']),
-      profilePage:
-          MobileProfilePageConfig.fromJson(_readMap(json['profile_page'])),
+      profilePage: MobileProfilePageConfig.fromJson(
+        _readMap(json['profile_page']),
+      ),
       raw: json,
     );
   }
@@ -478,7 +479,7 @@ class WalletBalanceData {
   final bool synced;
   final String message;
 
-  factory WalletBalanceData.androidCurrentFallback() {
+  factory WalletBalanceData.mobileCurrentFallback() {
     return const WalletBalanceData(
       balance: 10070.30,
       currency: 'CNY',
@@ -506,22 +507,19 @@ class WalletBalanceData {
 }
 
 class MobileNavMenuData {
-  const MobileNavMenuData({
-    required this.items,
-    required this.accountKind,
-  });
+  const MobileNavMenuData({required this.items, required this.accountKind});
 
   final List<MobileNavMenuItem> items;
   final String accountKind;
 
   factory MobileNavMenuData.fromJson(Map<String, Object?> json) {
     return MobileNavMenuData(
-      items: _readList(json['items'])
-          .map(MobileNavMenuItem.fromJson)
-          .toList(growable: false),
-      accountKind: _readString(json, const ['account_kind']).ifEmpty(
-        'enterprise',
-      ),
+      items: _readList(
+        json['items'],
+      ).map(MobileNavMenuItem.fromJson).toList(growable: false),
+      accountKind: _readString(json, const [
+        'account_kind',
+      ]).ifEmpty('enterprise'),
     );
   }
 }
@@ -556,18 +554,15 @@ class MobileNavMenuItem {
 }
 
 class AiCircleListData {
-  const AiCircleListData({
-    required this.items,
-    required this.count,
-  });
+  const AiCircleListData({required this.items, required this.count});
 
   final List<AiCirclePost> items;
   final int count;
 
   factory AiCircleListData.fromJson(Map<String, Object?> json) {
-    final items = _readList(json['items'])
-        .map(AiCirclePost.fromJson)
-        .toList(growable: false);
+    final items = _readList(
+      json['items'],
+    ).map(AiCirclePost.fromJson).toList(growable: false);
     return AiCircleListData(
       items: items,
       count: _readInt(json, const ['count'], items.length),
@@ -617,9 +612,9 @@ class AiCirclePost {
       createdAt: _readString(json, const ['created_at']),
       likeCount: _readInt(json, const ['like_count'], 0),
       likedByMe: _readBool(json, const ['liked_by_me']),
-      comments: _readList(json['comments'])
-          .map(AiCircleComment.fromJson)
-          .toList(growable: false),
+      comments: _readList(
+        json['comments'],
+      ).map(AiCircleComment.fromJson).toList(growable: false),
     );
   }
 
@@ -675,9 +670,9 @@ class PendingNotificationsData {
 
   factory PendingNotificationsData.fromJson(Map<String, Object?> json) {
     return PendingNotificationsData(
-      notifications: _readList(json['notifications'] ?? json['items'])
-          .map(PendingNotification.fromJson)
-          .toList(growable: false),
+      notifications: _readList(
+        json['notifications'] ?? json['items'],
+      ).map(PendingNotification.fromJson).toList(growable: false),
     );
   }
 }

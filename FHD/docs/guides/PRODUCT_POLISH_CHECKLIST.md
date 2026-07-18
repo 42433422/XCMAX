@@ -50,8 +50,8 @@
 - 后端：`app/services/mobile_relay_service.py`
 - **Flutter（主线）**：`mobile-flutter-poc/lib/src/api/mobile_api.dart`（`preferCloudIfLanUnreachable`、会话 base URL）
 - **Flutter（主线）**：`mobile-flutter-poc/lib/src/data/mobile_repository.dart`
-- **Flutter（主线）**：`mobile-flutter-poc/lib/src/policy/android_error_policy.dart`
-- ~~Android 原生~~：`mobile-android/…` **归档中**，仅参照，禁止新功能
+- **Flutter（主线）**：`mobile-flutter-poc/lib/src/policy/mobile_error_policy.dart`
+- Android/iOS Runner 只负责平台通道与发布，不承载独立业务实现。
 
 ### 必测证据
 
@@ -118,8 +118,8 @@
 - 后端：`app/fastapi_routes/mobile_api_extensions.py`
 - 前端：`frontend/src/views/ImMessengerView.vue`
 - 前端：`frontend/src/domain/yuangonDutyRoster.ts`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/model/ConversationItem.kt`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/navigation/ConversationListScreen.kt`
+- Flutter：`mobile-flutter-poc/lib/src/models/conversation.dart`
+- Flutter：`mobile-flutter-poc/lib/src/features/messages/message_list_screen.dart`
 
 ### 必测证据
 
@@ -153,8 +153,8 @@
 ### 代码落点
 
 - 前端：`frontend/src/views/ImMessengerView.vue`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/navigation/ConversationListScreen.kt`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/navigation/ChatScreen.kt`
+- Flutter：`mobile-flutter-poc/lib/src/features/messages/message_list_screen.dart`
+- Flutter：`mobile-flutter-poc/lib/src/features/chat/chat_screen.dart`
 - 后端：`app/application/im_app_service.py`
 - 后端：`app/fastapi_routes/im_routes.py`
 
@@ -196,8 +196,8 @@
 - 后端：`app/fastapi_routes/im_routes.py`
 - 后端：`app/services/mobile_relay_service.py`
 - 前端：`frontend/src/views/ImMessengerView.vue`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/repository/XcagiRepository.kt`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/navigation/ChatScreen.kt`
+- Flutter：`mobile-flutter-poc/lib/src/data/mobile_repository.dart`
+- Flutter：`mobile-flutter-poc/lib/src/features/chat/chat_screen.dart`
 
 ### 必测证据
 
@@ -288,4 +288,3 @@
 - 只显示“设备绑定成功”，但员工列表、消息、个人页仍 401。
 - 只把 Codex 任务放入队列，没有真实 Codex/MCP/电脑端执行回写。
 - 只做流程图，不解释员工职责、输入、输出和状态。
-

@@ -240,10 +240,7 @@ class AiGroupMessage {
 }
 
 class AiGroupPostResult {
-  const AiGroupPostResult({
-    this.group,
-    this.messages = const [],
-  });
+  const AiGroupPostResult({this.group, this.messages = const []});
 
   final AiGroupConversation? group;
   final List<AiGroupMessage> messages;

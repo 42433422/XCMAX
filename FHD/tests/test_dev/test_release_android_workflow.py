@@ -29,18 +29,12 @@ def test_android_release_requires_real_signing_and_verifies_the_apk() -> None:
     assert "versionName='${EXPECTED_VERSION}'" in workflow
 
 
-def test_android_only_mode_is_the_release_default_after_harmony_archival() -> None:
+def test_flutter_android_package_staging_has_no_legacy_native_inputs() -> None:
     workflow = WORKFLOW.read_text()
     stage_script = STAGE_SCRIPT.read_text()
 
-    assert "android_only:" in workflow
-    assert "default: true" in workflow
-    assert 'if [[ "${{ inputs.android_only }}" != "false" ]]' in workflow
-    assert "args+=(--android-only)" in workflow
     assert 'bash FHD/scripts/mobile/stage-release-packages.sh "${args[@]}"' in workflow
-
-    assert "ANDROID_ONLY=1" in stage_script
-    assert "--android-only)" in stage_script
-    assert 'if [[ "${ANDROID_ONLY}" -eq 1 ]]' in stage_script
-    assert "Product shipping is Android-only" in stage_script
-    assert 'MODULE_ROOT="${REPO_ROOT}/archive/mobile/mobile-harmony"' in stage_script
+    assert "mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" in workflow
+    assert "mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" in stage_script
+    assert "mobile-android" not in stage_script
+    assert "harmony" not in stage_script.lower()

@@ -69,7 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 future: _walletFuture,
                 builder: (context, snapshot) {
                   final wallet = snapshot.data ??
-                      WalletBalanceData.androidCurrentFallback();
+                      WalletBalanceData.mobileCurrentFallback();
                   return ListView(
                     padding: EdgeInsets.zero,
                     children: [
@@ -96,9 +96,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             subtitle: '绑定服务器后台、企业工作台或电脑执行端',
                             icon: Icons.qr_code_2,
                             iconColor: Theme.of(context).colorScheme.secondary,
-                            iconBg: Theme.of(context)
-                                .colorScheme
-                                .secondaryContainer,
+                            iconBg: Theme.of(
+                              context,
+                            ).colorScheme.secondaryContainer,
                             onTap: _openConnectPc,
                           ),
                           WeCell(
@@ -106,9 +106,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             subtitle: _serverModeLabel,
                             icon: Icons.verified,
                             iconColor: Theme.of(context).colorScheme.secondary,
-                            iconBg: Theme.of(context)
-                                .colorScheme
-                                .secondaryContainer,
+                            iconBg: Theme.of(
+                              context,
+                            ).colorScheme.secondaryContainer,
                             showDivider: false,
                             onTap: _openSettings,
                           ),
@@ -129,8 +129,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             subtitle: '成都修茈科技有限公司',
                             icon: Icons.account_balance_wallet,
                             iconColor: colors.warning,
-                            iconBg:
-                                Theme.of(context).colorScheme.primaryContainer,
+                            iconBg: Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer,
                             showDivider: false,
                             onTap: _openAbout,
                           ),
@@ -140,10 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const WeSectionCaption('账号管理'),
                       WeCellGroup(
                         children: [
-                          WeRedActionCell(
-                            text: '退出登录',
-                            onTap: _logout,
-                          ),
+                          WeRedActionCell(text: '退出登录', onTap: _logout),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -158,7 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                         child: Text(
-                          MobileAndroidBuild.profileVersionText,
+                          MobileBuildConfig.profileVersionText,
                           style: TextStyle(
                             color: colors.textTertiary,
                             fontSize: 11,
@@ -219,13 +217,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<WalletBalanceData> _loadWalletFromNetworkOrFallback() async {
     try {
       final envelope = await _api.walletBalance();
-      final wallet =
-          envelope.data ?? WalletBalanceData.androidCurrentFallback();
+      final wallet = envelope.data ?? WalletBalanceData.mobileCurrentFallback();
       unawaited(_api.saveWalletBalanceJson(_walletBalanceCacheJson(wallet)));
       return wallet;
     } catch (_) {
       return await _loadCachedWallet() ??
-          WalletBalanceData.androidCurrentFallback();
+          WalletBalanceData.mobileCurrentFallback();
     }
   }
 
@@ -248,7 +245,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final session = await _api.loadSession();
       if (!mounted) return;
       setState(() {
-        _serverModeLabel = session.androidServerModeLabel;
+        _serverModeLabel = session.mobileServerModeLabel;
         if (!session.hasIdentity) return;
         if (session.username.trim().isNotEmpty) {
           _displayName = session.username.trim();
@@ -268,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       });
     } catch (_) {
-      // Android keeps the last visible state if local profile storage is unavailable.
+      // Keep the last visible state if local profile storage is unavailable.
     }
   }
 
@@ -280,7 +277,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _profilePage = config.profilePage;
       });
     } catch (_) {
-      // Keep the Android defaults when the market config endpoint is offline.
+      // Keep the mobile defaults when the market config endpoint is offline.
     }
   }
 
@@ -288,8 +285,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final envelope = await _api.me();
       if (!envelope.success || !mounted) return;
-      final me =
-          MobileMeData.fromJson(envelope.data ?? const <String, Object?>{});
+      final me = MobileMeData.fromJson(
+        envelope.data ?? const <String, Object?>{},
+      );
       setState(() {
         if (!_hasLocalDisplayName) {
           _displayName = me.displayName.ifEmpty(_displayName).ifEmpty('未登录');
@@ -327,22 +325,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _openConnectPc() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ConnectScreen(fromProfile: true),
-      ),
+      MaterialPageRoute(builder: (_) => const ConnectScreen(fromProfile: true)),
     );
   }
 
   void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SettingsScreen(api: _api)),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SettingsScreen(api: _api)));
   }
 
   void _openAbout() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => AboutScreen(api: _api)),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => AboutScreen(api: _api)));
   }
 
   Future<void> _logout() async {
@@ -351,10 +347,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
     await _api.clearActiveAuth();
     if (!mounted) return;
-    _replaceWithAndroidLogoutDestination(before);
+    _replaceWithMobileLogoutDestination(before);
   }
 
-  void _replaceWithAndroidLogoutDestination(MobileSessionData before) {
+  void _replaceWithMobileLogoutDestination(MobileSessionData before) {
     final setupComplete =
         before.setupComplete || before.fhdHost.trim().isNotEmpty;
     final Widget destination = setupComplete
@@ -394,9 +390,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final message = avatarChanged && !nameChanged
         ? (result.avatarPath.isEmpty ? '头像已移除' : '头像已更新')
         : '资料已保存';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<String?> _pickAvatar() async {
@@ -413,9 +409,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await _api.deleteAccount(password);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('账号已成功注销')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('账号已成功注销')));
       _replaceWithAuth();
     } catch (error) {
       if (!mounted) return;
@@ -519,10 +515,7 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              TextButton(
-                onPressed: _pickAvatar,
-                child: const Text('更换头像'),
-              ),
+              TextButton(onPressed: _pickAvatar, child: const Text('更换头像')),
               TextButton(
                 onPressed: _avatarPath.isEmpty
                     ? null
@@ -702,11 +695,7 @@ class _ProfileHeroCard extends StatelessWidget {
                       accent.withValues(alpha: 0.82),
                       Theme.of(context).colorScheme.tertiary,
                     ]
-                  : [
-                      colors.surface,
-                      glassAccent,
-                      glassTail,
-                    ],
+                  : [colors.surface, glassAccent, glassTail],
               stops: solidHero ? null : const [0, 0.7, 1],
             ),
           ),
@@ -891,11 +880,7 @@ class _EditableAvatar extends StatelessWidget {
                   color: accent,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.photo,
-                  size: 13,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.photo, size: 13, color: Colors.white),
               ),
             ),
           ),
@@ -906,10 +891,7 @@ class _EditableAvatar extends StatelessWidget {
 }
 
 class _ProfileAvatarPreview extends StatelessWidget {
-  const _ProfileAvatarPreview({
-    required this.avatarPath,
-    required this.size,
-  });
+  const _ProfileAvatarPreview({required this.avatarPath, required this.size});
 
   final String avatarPath;
   final double size;
@@ -1062,10 +1044,7 @@ Color _profileAccentColor(BuildContext context, String? accent) {
 }
 
 class _WalletBalanceCard extends StatelessWidget {
-  const _WalletBalanceCard({
-    required this.wallet,
-    required this.onRefresh,
-  });
+  const _WalletBalanceCard({required this.wallet, required this.onRefresh});
 
   final WalletBalanceData wallet;
   final VoidCallback onRefresh;
@@ -1107,8 +1086,9 @@ class _WalletBalanceCard extends StatelessWidget {
                     child: Text(
                       '账户余额',
                       style: TextStyle(
-                        color:
-                            colors.chatUserBubbleText.withValues(alpha: 0.85),
+                        color: colors.chatUserBubbleText.withValues(
+                          alpha: 0.85,
+                        ),
                         fontSize: 13,
                         height: 1.31,
                         fontWeight: FontWeight.w500,
@@ -1143,8 +1123,9 @@ class _WalletBalanceCard extends StatelessWidget {
                     child: Text(
                       currency,
                       style: TextStyle(
-                        color:
-                            colors.chatUserBubbleText.withValues(alpha: 0.85),
+                        color: colors.chatUserBubbleText.withValues(
+                          alpha: 0.85,
+                        ),
                         fontSize: 13,
                         height: 1.31,
                         fontWeight: FontWeight.w500,

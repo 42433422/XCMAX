@@ -69,8 +69,10 @@ class EnterpriseModuleScreen extends StatelessWidget {
             ),
             Expanded(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 36),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 36,
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,

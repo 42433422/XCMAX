@@ -1,34 +1,14 @@
-        # Android 发版员 (`mobile-android-release-officer`)
+# Android 发版员（`mobile-android-release-officer`）
 
-        **area**：`platform-core`  
-        **yuangon 路径**：`成都修茈科技有限公司/yuangon/platform-core/mobile-android-release-officer/`
+负责 Flutter Android 渠道构建、签名、APK/AAB 发布与真机 smoke。
 
-        ## 职责
+核心范围：
 
-        P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。
-
-        ## 上游依赖 (`depends_on`)
-
-        - `test-qa-runner`
-- `deploy-release-officer`
-
-        ## 支持的 Handlers
-
-        - `llm_md`：接收 Markdown 任务描述，调用 LLM 输出结构化结果
-- `echo`：调试用：原样返回输入，用于 smoke 测试
-
-        ## Scope（核心文件范围）
-
-        - `FHD/mobile-android/**`
-- `FHD/.github/workflows/ci-mobile-android.yml`
+- `FHD/mobile-flutter-poc/**`
+- `FHD/.github/workflows/ci-mobile-flutter.yml`
 - `FHD/.github/workflows/release-android.yml`
 - `release-apk/**`
-- `yuangon/platform-core/mobile-android-release-officer/**`
 
-        ## 相关链接
-
-        - manifest：`FHD/mods/_employees/mobile-android-release-officer/manifest.json`
-        - runbook：[runbook.md](./runbook.md)
-
-        ---
-        *本文件由 `bootstrap_yuangon.py` 生成，v10 线内迭代*
+独立 Kotlin 产品工程已经退役，不得恢复。岗位 manifest 位于
+`FHD/mods/_employees/mobile-android-release-officer/manifest.json`，执行手册见
+[runbook.md](./runbook.md)。

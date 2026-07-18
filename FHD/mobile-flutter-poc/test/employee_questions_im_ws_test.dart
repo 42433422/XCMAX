@@ -3,7 +3,7 @@ import 'package:xcagi_flutter_poc/src/data/employee_pending_question.dart';
 import 'package:xcagi_flutter_poc/src/im/im_websocket_client.dart';
 
 void main() {
-  test('EmployeePendingQuestion maps Android pending question payload', () {
+  test('EmployeePendingQuestion maps Flutter pending question payload', () {
     final question = EmployeePendingQuestion.fromJson({
       'id': 7,
       'employee_id': 'llm-ops-engineer',
@@ -26,11 +26,7 @@ void main() {
     final event = ImWebSocketClient.parseMessageEvent({
       'type': 'im.message',
       'conversation_id': 12,
-      'message': {
-        'id': 99,
-        'sender_user_id': 3,
-        'body': '你好',
-      },
+      'message': {'id': 99, 'sender_user_id': 3, 'body': '你好'},
     });
 
     expect(event, isNotNull);

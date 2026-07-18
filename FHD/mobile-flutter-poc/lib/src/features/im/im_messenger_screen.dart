@@ -357,10 +357,7 @@ class _EmptyConversationHint extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             alignment: Alignment.center,
-            child: Icon(
-              Icons.chat_bubble_outline,
-              color: colors.textSecondary,
-            ),
+            child: Icon(Icons.chat_bubble_outline, color: colors.textSecondary),
           ),
           const SizedBox(height: 8),
           Text(
@@ -406,10 +403,8 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: message.mine ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
-        onLongPressStart: (details) => _showActions(
-          context,
-          details.globalPosition,
-        ),
+        onLongPressStart: (details) =>
+            _showActions(context, details.globalPosition),
         child: Container(
           key: ValueKey('im_bubble_${message.id}'),
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
@@ -430,10 +425,9 @@ class _MessageBubble extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: message.mine
-                      ? Theme.of(context)
-                          .colorScheme
-                          .onPrimary
-                          .withValues(alpha: 0.72)
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.onPrimary.withValues(alpha: 0.72)
                       : colors.textTertiary,
                   fontSize: 11,
                   height: 1.27,
@@ -479,9 +473,9 @@ class _MessageBubble extends StatelessWidget {
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body));
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已复制')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已复制')));
         break;
       case 'reply':
         onReply();

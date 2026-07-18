@@ -88,7 +88,7 @@ modstore_server/payment_orders/
 # Mistyped local SQLite runtime file; real seed DBs must be explicitly allowlisted.
 成都修茈科技有限公司/MODstore_deploy/modstore.db)
 FHD/.tools/
-FHD/mobile-android/.toolchain/
+FHD/mobile-flutter-poc/.toolchain/
 
 # 本地 IDE / 运行时（不入库）
 .cursor/settings.json

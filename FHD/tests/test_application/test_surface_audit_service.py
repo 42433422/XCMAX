@@ -367,7 +367,7 @@ class TestAdbHasDevice:
             # Create the adb path so is_file() returns True
             adb_path = (
                 tmp_path
-                / "mobile-android"
+                / "mobile-flutter-poc"
                 / ".toolchain"
                 / "android-sdk"
                 / "platform-tools"
@@ -387,7 +387,7 @@ class TestAdbHasDevice:
         ):
             adb_path = (
                 tmp_path
-                / "mobile-android"
+                / "mobile-flutter-poc"
                 / ".toolchain"
                 / "android-sdk"
                 / "platform-tools"
@@ -407,7 +407,7 @@ class TestAdbHasDevice:
         ):
             adb_path = (
                 tmp_path
-                / "mobile-android"
+                / "mobile-flutter-poc"
                 / ".toolchain"
                 / "android-sdk"
                 / "platform-tools"

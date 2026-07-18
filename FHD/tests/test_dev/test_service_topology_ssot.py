@@ -1,4 +1,4 @@
-"""service-topology SSOT 派生守卫：5 目标无漂移 + 源 schema 合法。
+"""service-topology SSOT 派生守卫：4 目标无漂移 + 源 schema 合法。
 
 自包含（subprocess，不 import app），不触发 app.services 的预存循环导入。
 """
@@ -15,7 +15,7 @@ SOURCE = FHD / "config" / "service_topology.yaml"
 
 
 def test_service_topology_targets_in_sync():
-    """5 个派生产物与 service_topology.yaml 一致；漂移则失败并提示重生成。"""
+    """4 个派生产物与 service_topology.yaml 一致；漂移则失败并提示重生成。"""
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "check"],
         cwd=str(FHD),

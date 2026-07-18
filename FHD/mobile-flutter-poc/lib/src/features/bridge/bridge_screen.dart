@@ -314,14 +314,14 @@ class _ReplyPanel extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            WeSectionCaption(
-              selectedId > 0 ? '$title #$selectedId' : title,
-            ),
+            WeSectionCaption(selectedId > 0 ? '$title #$selectedId' : title),
             WeCellGroup(
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: WeField(
                     controller: controller,
                     placeholder: placeholder,

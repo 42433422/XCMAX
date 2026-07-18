@@ -72,7 +72,7 @@ const _fixedSuperGroupCandidates = <AiGroupCandidate>[
   ),
 ];
 
-List<AiGroupCandidate> _androidGroupMemberCatalog(
+List<AiGroupCandidate> _mobileGroupMemberCatalog(
   List<AiEmployeeProfile> employees,
 ) {
   final catalog = <AiGroupCandidate>[
@@ -212,10 +212,8 @@ class _AiGroupListScreenState extends State<AiGroupListScreen> {
   Future<void> _openGroup(AiGroupConversation group) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => AiGroupChatScreen(
-          repository: _repository,
-          initialGroup: group,
-        ),
+        builder: (_) =>
+            AiGroupChatScreen(repository: _repository, initialGroup: group),
       ),
     );
     if (mounted) _load();
@@ -233,9 +231,8 @@ class _AiGroupListScreenState extends State<AiGroupListScreen> {
         actions: [
           _AiGroupSheetAction(
             label: '标为未读',
-            onTap: () => _runGroupAction(
-              () => _repository.markAiGroupUnread(group.id),
-            ),
+            onTap: () =>
+                _runGroupAction(() => _repository.markAiGroupUnread(group.id)),
           ),
           _AiGroupSheetAction(
             label: group.isPinned ? '取消置顶' : '置顶聊天',
@@ -272,9 +269,9 @@ class _AiGroupListScreenState extends State<AiGroupListScreen> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 }
@@ -424,8 +421,7 @@ class _AiGroupChatScreenState extends State<AiGroupChatScreen> {
                                         message: _messages[index],
                                         userAvatarUrl: _userAvatarSource,
                                         onReply: () => _replyToGroupMessage(
-                                          _messages[index],
-                                        ),
+                                            _messages[index]),
                                         onDelete: () => setState(
                                           () => _messages = [..._messages]
                                             ..removeAt(index),
@@ -469,7 +465,7 @@ class _AiGroupChatScreenState extends State<AiGroupChatScreen> {
       _repository.loadGitBranches().catchError((_) => const <GitBranchInfo>[]),
       _repository
           .loadAiEmployees()
-          .then(_androidGroupMemberCatalog)
+          .then(_mobileGroupMemberCatalog)
           .catchError((_) => const <AiGroupCandidate>[]),
       _repository.loadMe().catchError((_) => MobileMeData.adminFallback()),
     ]);
@@ -594,8 +590,10 @@ class _AiGroupChatScreenState extends State<AiGroupChatScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -915,8 +913,9 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    final picked =
-        _candidates.where((candidate) => _selected.contains(candidate.key));
+    final picked = _candidates.where(
+      (candidate) => _selected.contains(candidate.key),
+    );
     final autoName = picked.map((item) => item.name).join('、').take(40);
     return Scaffold(
       backgroundColor: colors.surface,
@@ -982,8 +981,9 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
                                 ),
                                 itemBuilder: (context, index) {
                                   final candidate = _candidates[index];
-                                  final selected =
-                                      _selected.contains(candidate.key);
+                                  final selected = _selected.contains(
+                                    candidate.key,
+                                  );
                                   final locked = isRequiredAiGroupMember(
                                     candidate.employeeId,
                                   );
@@ -1018,8 +1018,9 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
   }
 
   Future<void> _load() async {
-    final candidates =
-        _androidGroupMemberCatalog(await _repository.loadAiEmployees());
+    final candidates = _mobileGroupMemberCatalog(
+      await _repository.loadAiEmployees(),
+    );
     if (!mounted) return;
     final selected = <String>{};
     for (final candidate in candidates) {
@@ -1038,9 +1039,7 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
     final members = _candidates
         .where((candidate) => _selected.contains(candidate.key))
         .toList(growable: false);
-    final name = _nameController.text.trim().ifEmpty(
-          autoName.ifEmpty('新建群聊'),
-        );
+    final name = _nameController.text.trim().ifEmpty(autoName.ifEmpty('新建群聊'));
     try {
       final group = await _repository.createGroupWithMembers(
         name: name,
@@ -1051,9 +1050,9 @@ class _AiGroupCreateScreenState extends State<AiGroupCreateScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _creating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 }
@@ -1094,7 +1093,8 @@ class _GroupRow extends StatelessWidget {
               children: [
                 GroupGridAvatar(members: group.members),
                 const SizedBox(
-                    width: MessageAvatarLayout.conversationAvatarTextGap),
+                  width: MessageAvatarLayout.conversationAvatarTextGap,
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1344,9 +1344,9 @@ class _GroupMessageBubble extends StatelessWidget {
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body));
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已复制')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已复制')));
         break;
       case 'reply':
         onReply();
@@ -1377,11 +1377,7 @@ class _GroupTypingRow extends StatelessWidget {
             color: colors.divider,
             borderRadius: MessageAvatarLayout.bubbleAvatarRadius,
           ),
-          child: Icon(
-            Icons.group,
-            size: 22,
-            color: colors.textTertiary,
-          ),
+          child: Icon(Icons.group, size: 22, color: colors.textTertiary),
         ),
         const SizedBox(width: MessageAvatarLayout.bubbleAvatarGap),
         Container(
@@ -1564,8 +1560,10 @@ class _GroupInputBar extends StatelessWidget {
               width: double.infinity,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     _ComposerChip(
@@ -1803,8 +1801,9 @@ class _CandidateTile extends StatelessWidget {
         child: Row(
           children: [
             Checkbox(
-                value: selected,
-                onChanged: locked ? null : (_) => onChanged?.call()),
+              value: selected,
+              onChanged: locked ? null : (_) => onChanged?.call(),
+            ),
             const SizedBox(width: 8),
             AppAvatar(
               imageSource: candidate.avatarUrl,
@@ -1817,7 +1816,8 @@ class _CandidateTile extends StatelessWidget {
               contentDescription: candidate.name,
             ),
             const SizedBox(
-                width: MessageAvatarLayout.employeePickerAvatarTextGap),
+              width: MessageAvatarLayout.employeePickerAvatarTextGap,
+            ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2041,10 +2041,7 @@ class _AiGroupSheetAction {
 }
 
 class _AiGroupActionSheet extends StatelessWidget {
-  const _AiGroupActionSheet({
-    required this.title,
-    required this.actions,
-  });
+  const _AiGroupActionSheet({required this.title, required this.actions});
 
   final String title;
   final List<_AiGroupSheetAction> actions;
@@ -2061,8 +2058,10 @@ class _AiGroupActionSheet extends StatelessWidget {
           children: [
             if (title.isNotEmpty) ...[
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: Text(
                   title,
                   maxLines: 1,
@@ -2121,10 +2120,7 @@ class _GroupEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     return Center(
-      child: Text(
-        '暂无群聊，点右上角创建',
-        style: TextStyle(color: colors.textSecondary),
-      ),
+      child: Text('暂无群聊，点右上角创建', style: TextStyle(color: colors.textSecondary)),
     );
   }
 }

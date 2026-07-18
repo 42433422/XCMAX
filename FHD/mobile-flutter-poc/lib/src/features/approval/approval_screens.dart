@@ -6,11 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
 class ApprovalListScreen extends StatefulWidget {
-  const ApprovalListScreen({
-    super.key,
-    this.repository,
-    this.initialItems,
-  });
+  const ApprovalListScreen({super.key, this.repository, this.initialItems});
 
   final MobileRepository? repository;
   final List<ApprovalRequest>? initialItems;
@@ -94,11 +90,12 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
                           children: [
                             for (var i = 0; i < items.length; i++)
                               WeCell(
-                                title:
-                                    items[i].title.ifEmpty('#${items[i].id}'),
-                                subtitle: items[i]
-                                    .subtitle
-                                    .ifEmpty(items[i].applicantName),
+                                title: items[i].title.ifEmpty(
+                                      '#${items[i].id}',
+                                    ),
+                                subtitle: items[i].subtitle.ifEmpty(
+                                      items[i].applicantName,
+                                    ),
                                 showArrow: items[i].id > 0,
                                 showDivider: i < items.length - 1,
                                 trailing: items[i].status.trim().isNotEmpty
@@ -218,8 +215,9 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                               children: [
                                 WeCell(
                                   title: '单号',
-                                  value:
-                                      detail.requestNo.ifEmpty('#${detail.id}'),
+                                  value: detail.requestNo.ifEmpty(
+                                    '#${detail.id}',
+                                  ),
                                   trailing: _StatusChip(detail.status),
                                 ),
                                 WeCell(

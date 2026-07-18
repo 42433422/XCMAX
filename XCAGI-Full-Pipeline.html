@@ -657,7 +657,7 @@
         <div class="node-head"><span class="node-name">3. 四渠道构建打包</span><span class="node-tag partial">部分</span></div>
         <div class="node-desc">2 SKU · Windows · macOS · Android · iOS（待建）</div>
         <div class="node-dept-staff">P-S 软件部 · 主责 <code>pack-registrar</code> · <code>deploy-release-officer</code> · 协作 <code>mobile-android-release-officer</code></div>
-        <div class="node-ok">✅ release-desktop.yml：Windows + macOS (Intel/Apple Silicon)<br>✅ ci-mobile-android.yml + release-android.yml：双 applicationId APK<br>✅ build-all-skus.ps1 · stage-sku-download-folders.ps1<br>✅ Android APP 备案已通过（工信部 · 2026-06）<br>🟡 iOS App Store 工程 + release-ios.yml 待建<br>ℹ️ release-web / Docker / K8s 仅开发内测，非 C 端发布渠道</div>
+        <div class="node-ok">✅ release-desktop.yml：Windows + macOS (Intel/Apple Silicon)<br>✅ ci-mobile-flutter.yml：Flutter Android + iOS 统一 CI<br>✅ release-android.yml：签名 APK/AAB<br>✅ release-ios.yml：TestFlight / App Store<br>✅ Android APP 备案已通过（工信部 · 2026-06）<br>ℹ️ release-web / Docker 仅开发内测，非 C 端发布渠道</div>
       </div>
     </div>
     <div class="node-connector">→</div>
@@ -1285,7 +1285,7 @@
     <ul class="emp-wf-list">
       <li><b>P-W</b> · <code>prod_web</code> / 获客网站步骤主责</li>
       <li><b>P-S</b> · <code>prod_software</code> / 软件与 MOD 核心</li>
-      <li><b>P-App</b> · <code>mobile-android/ios-release-officer</code> / 移动打包 · 渠道发布 · WebView</li>
+      <li><b>P-App</b> · <code>Flutter Android/iOS release officers</code> / 移动打包 · 渠道发布 · WebView</li>
       <li><b>S-R</b> · <code>shared_retention</code> / 归档与 TTL</li>
     </ul>
   </div>

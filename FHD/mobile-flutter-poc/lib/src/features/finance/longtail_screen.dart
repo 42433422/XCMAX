@@ -6,11 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
 class LongTailScreen extends StatefulWidget {
-  const LongTailScreen({
-    super.key,
-    this.repository,
-    this.initialDetail = '',
-  });
+  const LongTailScreen({super.key, this.repository, this.initialDetail = ''});
 
   final MobileRepository? repository;
   final String initialDetail;
@@ -79,9 +75,9 @@ class _LongTailScreenState extends State<LongTailScreen> {
                               subtitle: '查看应收、应付与交易记录',
                               icon: Icons.receipt_long,
                               iconColor: colors.success,
-                              iconBg: Theme.of(context)
-                                  .colorScheme
-                                  .secondaryContainer,
+                              iconBg: Theme.of(
+                                context,
+                              ).colorScheme.secondaryContainer,
                               onTap: () => _showMessage('请在电脑端打开完整财务看板'),
                             ),
                             WeCell(
@@ -125,9 +121,9 @@ class _LongTailScreenState extends State<LongTailScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

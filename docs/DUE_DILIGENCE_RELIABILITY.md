@@ -35,7 +35,7 @@
 | FHD 前端 Vitest | `cd FHD/frontend && npm test` | `frontend-unit.yml` |
 | FHD Playwright | `cd FHD/frontend && npm run test:e2e` | `e2e.yml` |
 | MODstore market | `cd 成都修茈科技有限公司/MODstore_deploy/market && npm run test:coverage && npm run test:e2e` | `ci-market.yml` |
-| Android | `cd FHD/mobile-android && ./gradlew testPersonalDebugUnitTest` | `ci-mobile-android.yml` |
+| Flutter Android+iOS | `cd FHD/mobile-flutter-poc && flutter test` | `fhd-ci-mobile-flutter.yml` |
 
 API 层移动契约：`FHD/tests/test_mobile_api.py`（非 UI 替代）。
 

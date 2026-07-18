@@ -6,6 +6,6 @@ if [ -x "${FHD_ROOT}/.tools/jdk-17/Contents/Home/bin/java" ]; then
 elif [ -z "${JAVA_HOME:-}" ]; then
   export JAVA_HOME="${FHD_ROOT}/.tools/jdk-17/Contents/Home"
 fi
-export ANDROID_HOME="${ANDROID_HOME:-${FHD_ROOT}/mobile-android/.toolchain/android-sdk}"
+export ANDROID_HOME="${ANDROID_HOME:-${FHD_ROOT}/mobile-flutter-poc/.toolchain/android-sdk}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
 export PATH="${JAVA_HOME}/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/emulator:${PATH}"

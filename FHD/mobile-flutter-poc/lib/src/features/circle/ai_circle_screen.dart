@@ -4,7 +4,7 @@ import '../../api/mobile_models.dart';
 import '../../data/ai_employee_profile.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
-import '../../policy/android_error_policy.dart';
+import '../../policy/mobile_error_policy.dart';
 import '../../policy/avatar_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_avatar.dart';
@@ -101,12 +101,8 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
       _repository.loadAiEmployees().catchError(
             (_) => const <AiEmployeeProfile>[],
           ),
-      _repository.loadMe().catchError(
-            (_) => MobileMeData.adminFallback(),
-          ),
-      _repository.loadAiCirclePosts().catchError(
-            (_) => const <AiCirclePost>[],
-          ),
+      _repository.loadMe().catchError((_) => MobileMeData.adminFallback()),
+      _repository.loadAiCirclePosts().catchError((_) => const <AiCirclePost>[]),
     ]);
     return _AiCircleData(
       employees: results[0] as List<AiEmployeeProfile>,
@@ -134,8 +130,10 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
                 (item) => item.id == post.id
                     ? item.copyWith(
                         likedByMe: liked,
-                        likeCount: (item.likeCount + (liked ? 1 : -1))
-                            .clamp(0, 999999),
+                        likeCount: (item.likeCount + (liked ? 1 : -1)).clamp(
+                          0,
+                          999999,
+                        ),
                       )
                     : item,
               )
@@ -153,7 +151,7 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(androidProductErrorMessage(error.toString(), '点赞失败')),
+            content: Text(mobileProductErrorMessage(error.toString(), '点赞失败')),
           ),
         );
       }
@@ -168,7 +166,7 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(androidProductErrorMessage(error.toString(), '评论失败')),
+            content: Text(mobileProductErrorMessage(error.toString(), '评论失败')),
           ),
         );
       }
@@ -282,8 +280,9 @@ class _AiCircleHeader extends StatelessWidget {
                           imageSource: account.avatarSource,
                           size: 50,
                           borderRadius: BorderRadius.circular(6),
-                          contentDescription:
-                              account.displayName.ifEmpty('当前账号'),
+                          contentDescription: account.displayName.ifEmpty(
+                            '当前账号',
+                          ),
                         ),
                       ),
                     ],
@@ -629,10 +628,7 @@ class _CircleComments extends StatelessWidget {
 }
 
 class _CircleCommentInput extends StatelessWidget {
-  const _CircleCommentInput({
-    required this.controller,
-    required this.onSend,
-  });
+  const _CircleCommentInput({required this.controller, required this.onSend});
 
   final TextEditingController controller;
   final VoidCallback onSend;

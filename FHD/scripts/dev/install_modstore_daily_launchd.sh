@@ -148,7 +148,7 @@ if [[ "${MODSTORE_DAILY_FORCE_ANDROID_SDK_SYNC:-0}" == "1" || ! -x "${RUNTIME_AN
   log "同步 Android SDK → ${RUNTIME_ANDROID_SDK_ROOT}"
   rm -rf "${RUNTIME_ANDROID_SDK_ROOT}"
   mkdir -p "$(dirname "${RUNTIME_ANDROID_SDK_ROOT}")"
-  /usr/bin/ditto "${FHD_ROOT}/mobile-android/.toolchain/android-sdk" "${RUNTIME_ANDROID_SDK_ROOT}"
+  /usr/bin/ditto "${FHD_ROOT}/mobile-flutter-poc/.toolchain/android-sdk" "${RUNTIME_ANDROID_SDK_ROOT}"
 else
   log "Android SDK 已存在 → ${RUNTIME_ANDROID_SDK_ROOT}"
 fi
