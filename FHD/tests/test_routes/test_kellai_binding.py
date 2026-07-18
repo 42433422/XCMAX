@@ -51,6 +51,11 @@ def test_kellai_loopback_requests_bypass_environment_proxies(monkeypatch: pytest
             return sentinel
 
     monkeypatch.setattr(kellai_binding, "_DIRECT_LOOPBACK_OPENER", DirectOpener())
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: pytest.fail("fixed loopback traffic must not use global urlopen"),
+    )
 
     assert kellai_binding._open_kellai_request(request, timeout=3) is sentinel
     assert calls == [(request, 3)]

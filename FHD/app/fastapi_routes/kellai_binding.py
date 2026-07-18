@@ -15,7 +15,6 @@ from app.application import kellai_binding_app_service as kellai_binding_app
 router = APIRouter(prefix="/api/kellai/binding", tags=["kellai-binding"])
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 _KELLAI_BASE = "http://127.0.0.1:8793"
-_DEFAULT_URLOPEN = urllib.request.urlopen
 _DIRECT_LOOPBACK_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -86,9 +85,7 @@ def _client_actor(request: Request) -> int | None:
 
 
 def _open_kellai_request(request: urllib.request.Request, *, timeout: float):
-    """Open the fixed loopback hop directly, while preserving test monkeypatches."""
-    if urllib.request.urlopen is not _DEFAULT_URLOPEN:
-        return urllib.request.urlopen(request, timeout=timeout)
+    """Open the fixed loopback hop directly, independent of process proxy hooks."""
     return _DIRECT_LOOPBACK_OPENER.open(request, timeout=timeout)
 
 
