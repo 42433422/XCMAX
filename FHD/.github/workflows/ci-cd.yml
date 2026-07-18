@@ -126,6 +126,9 @@ jobs:
           python scripts/dev/count_type_debt.py --max-type-ignore 69 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
+      - name: Big files ratchet (巨文件只减不增)
+        run: python scripts/dev/count_big_files.py
+
       - name: Route integrity tests
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
