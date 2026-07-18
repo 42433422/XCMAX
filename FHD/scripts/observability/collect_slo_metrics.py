@@ -37,6 +37,28 @@ QUERIES = {
         "sum(rate(neurobus_events_lost_total[{w}]))) / "
         "clamp_min(sum(rate(neurobus_events_published_total[{w}])),1)"
     ),
+    # --- 业务 SLO（SLO-BIZ-01..05）---
+    # 指标定义见 app/utils/metrics.py "业务 SLI 指标" 段；目标值与 docs/SLO.md 一致。
+    "SLO-BIZ-01": (
+        "histogram_quantile(0.95, sum by (le) "
+        "(rate(customer_op_duration_seconds_bucket[{w}]))) * 1000"
+    ),
+    "SLO-BIZ-02": (
+        'sum(rate(customer_op_total{{status="error"}}[{w}])) '
+        "/ clamp_min(sum(rate(customer_op_total[{w}])),1)"
+    ),
+    "SLO-BIZ-03": (
+        "histogram_quantile(0.95, sum by (le) "
+        "(rate(doc_recognition_duration_seconds_bucket[{w}]))) * 1000"
+    ),
+    "SLO-BIZ-04": (
+        "histogram_quantile(0.95, sum by (le) "
+        "(rate(export_task_duration_seconds_bucket[{w}]))) * 1000"
+    ),
+    "SLO-BIZ-05": (
+        '1 - sum(rate(mod_install_total{{status="error"}}[{w}])) '
+        "/ clamp_min(sum(rate(mod_install_total[{w}])),1)"
+    ),
 }
 
 TARGETS = {
@@ -45,6 +67,12 @@ TARGETS = {
     "SLO-API-03": ("error_rate", 0.001, "lt"),
     "SLO-AI-01": ("ai_chat_p95_ms", 1500, "lt"),
     "SLO-BUS-01": ("neurobus_delivery", 0.9995, "ge"),
+    # --- 业务 SLO 目标 ---
+    "SLO-BIZ-01": ("customer_op_p95_ms", 800, "lt"),
+    "SLO-BIZ-02": ("customer_op_error_rate", 0.005, "lt"),
+    "SLO-BIZ-03": ("doc_recognition_p95_ms", 5000, "lt"),
+    "SLO-BIZ-04": ("export_task_p95_ms", 30000, "lt"),
+    "SLO-BIZ-05": ("mod_install_success_rate", 0.99, "ge"),
 }
 
 
