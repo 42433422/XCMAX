@@ -5,7 +5,7 @@ import 'dart:io';
 import '../api/mobile_api.dart';
 import '../api/mobile_models.dart';
 import '../models/conversation.dart';
-import '../policy/android_runtime_policy.dart';
+import '../policy/mobile_runtime_policy.dart';
 import '../policy/avatar_policy.dart';
 import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
@@ -46,9 +46,7 @@ class MobileRepository {
   Future<MobileMeData> cachedMe() async {
     final session = await _client.loadSession();
     if (!session.hasIdentity) {
-      return MobileMeData.adminFallback(
-        avatarUrl: session.localAvatarSource,
-      );
+      return MobileMeData.adminFallback(avatarUrl: session.localAvatarSource);
     }
     final username = session.username.ifEmpty('admin');
     return MobileMeData(
@@ -132,9 +130,7 @@ class MobileRepository {
     if (adminMode) {
       final response = await _client.adminHome();
       if (!response.success) {
-        throw MobileRepositoryException(
-          response.message.ifEmpty('移动数据加载失败'),
-        );
+        throw MobileRepositoryException(response.message.ifEmpty('移动数据加载失败'));
       }
 
       final home = response.data ?? AdminMobileHomeData.empty();
@@ -179,7 +175,7 @@ class MobileRepository {
         mods.map(_modInfoToCacheJson).toList(growable: false),
       );
     } catch (_) {
-      // Match Android: cache write failure must not block the live UI.
+      // Cache write failure must not block the live Flutter UI.
     }
   }
 
@@ -498,9 +494,7 @@ class MobileRepository {
     }
     final parsed = parsePairingPayload(text);
     if (parsed != null && parsed.version >= 3 && parsed.relayId.isNotEmpty) {
-      throw const MobileRepositoryException(
-        '云中继绑定请先登录账号，登录后将自动完成绑定',
-      );
+      throw const MobileRepositoryException('云中继绑定请先登录账号，登录后将自动完成绑定');
     }
 
     final code = _pairingExchangeCode(parsed, text);
@@ -540,7 +534,7 @@ class MobileRepository {
       try {
         await _client.relayBindAccount(relayId);
       } catch (_) {
-        // Android leaves relay binding cleared when account relay bind fails.
+        // Leave relay binding cleared when account relay bind fails.
       }
     }
   }
@@ -550,10 +544,7 @@ class MobileRepository {
     if (hostWithPort.isEmpty) return;
     final session = await _client.loadSession();
     await _client.saveSession(
-      session.copyWith(
-        fhdHost: hostWithPort,
-        serverMode: 'lan',
-      ),
+      session.copyWith(fhdHost: hostWithPort, serverMode: 'lan'),
     );
   }
 
@@ -577,9 +568,7 @@ class MobileRepository {
       return _discoverLanBaseUrlForShortCode(shortCode);
     }
     if (raw.startsWith('{')) {
-      throw const MobileRepositoryException(
-        '二维码内容无法识别，请在电脑端刷新二维码后重试',
-      );
+      throw const MobileRepositoryException('二维码内容无法识别，请在电脑端刷新二维码后重试');
     }
     return '';
   }
@@ -594,10 +583,7 @@ class MobileRepository {
     for (final baseUrl in candidates) {
       try {
         final lookup = await _client
-            .pairingLookup(
-              code: cleanCode,
-              baseUrl: baseUrl,
-            )
+            .pairingLookup(code: cleanCode, baseUrl: baseUrl)
             .timeout(_lanPairingProbeTimeout);
         if (lookup.success) return baseUrl;
       } on TimeoutException {
@@ -609,7 +595,9 @@ class MobileRepository {
     return '';
   }
 
-  Future<List<String>> _lanPairingCandidateBaseUrls(String configuredHost) async {
+  Future<List<String>> _lanPairingCandidateBaseUrls(
+    String configuredHost,
+  ) async {
     const lanPorts = [5011, 5100, 17500, 5001, 5000];
     final hostPorts = <String>[];
     final configured = _normalizePairingHost(configuredHost);
@@ -624,7 +612,9 @@ class MobileRepository {
     }
 
     try {
-      final ifaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      final ifaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+      );
       for (final iface in ifaces) {
         for (final addr in iface.addresses) {
           final ip = addr.address;
@@ -660,7 +650,11 @@ class MobileRepository {
     return '';
   }
 
-  String _pairingExchangeNonce(PairingPayload? parsed, String raw, String code) {
+  String _pairingExchangeNonce(
+    PairingPayload? parsed,
+    String raw,
+    String code,
+  ) {
     if (parsed != null) {
       if (parsed.version >= 2 && code.isEmpty) {
         return parsed.nonce.ifEmpty(parsed.token);
@@ -803,7 +797,7 @@ class MobileRepository {
       accountKind = '';
     }
     final mods = await _loadModInfosOrCache(
-      adminMode: AndroidConversationRuntimePolicy.isAdminAccountKind(
+      adminMode: MobileConversationRuntimePolicy.isAdminAccountKind(
         accountKind,
       ),
     );
@@ -840,10 +834,7 @@ class MobileRepository {
     }
 
     if (tool != null) {
-      final reply = await streamMessage(
-        conversation: conversation,
-        body: text,
-      );
+      final reply = await streamMessage(conversation: conversation, body: text);
       return _assistantMessage(conversation.id, reply);
     }
 
@@ -859,10 +850,7 @@ class MobileRepository {
       return _assistantMessage(conversation.id, reply.ifEmpty('已收到。'));
     }
 
-    final response = await _client.chat(
-      text,
-      sessionId: conversation.id,
-    );
+    final response = await _client.chat(text, sessionId: conversation.id);
     final reply = _assistantReplyFromMap(response).ifEmpty('已收到。');
     return _assistantMessage(conversation.id, reply);
   }
@@ -883,11 +871,7 @@ class MobileRepository {
     }
 
     if (tool != null) {
-      await _cacheChatMessage(
-        conversation.id,
-        role: ChatRole.user,
-        body: text,
-      );
+      await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       if (localBaseUrl.isNotEmpty) {
         // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）
@@ -973,11 +957,7 @@ class MobileRepository {
 
     final employeeRef = _employeeConversationRef(conversation.id);
     if (employeeRef != null) {
-      await _cacheChatMessage(
-        conversation.id,
-        role: ChatRole.user,
-        body: text,
-      );
+      await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
       final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
       final reply = await _client.streamEmployeeChat(
         message: text,
@@ -996,11 +976,7 @@ class MobileRepository {
       return reply;
     }
 
-    await _cacheChatMessage(
-      conversation.id,
-      role: ChatRole.user,
-      body: text,
-    );
+    await _cacheChatMessage(conversation.id, role: ChatRole.user, body: text);
     final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
     final reply = await _client.streamChat(
       text,
@@ -1035,11 +1011,13 @@ class MobileRepository {
     }
     final kind = relayKindForConversation(conversationId);
     final toolLabel = toolLabelForRelayKind(kind ?? 'codex.invoke');
-    onStatus?.call(RelayTaskProgress(
-      taskId: taskId,
-      status: 'resuming',
-      toolLabel: toolLabel,
-    ));
+    onStatus?.call(
+      RelayTaskProgress(
+        taskId: taskId,
+        status: 'resuming',
+        toolLabel: toolLabel,
+      ),
+    );
     onToken?.call('思考中...');
     final reply = await _pollRelayTask(
       taskId: taskId,
@@ -1074,8 +1052,9 @@ class MobileRepository {
     ];
     if (rows.isEmpty) return;
 
-    final index =
-        rows.indexWhere((row) => _cachedChatTimestampMs(row) == targetTs);
+    final index = rows.indexWhere(
+      (row) => _cachedChatTimestampMs(row) == targetTs,
+    );
     if (index < 0) return;
     rows.removeAt(index);
 
@@ -1318,8 +1297,9 @@ class MobileRepository {
         'detail': branch,
       });
     }
-    final verifyMatch =
-        RegExp(r'验证[：:]\s*(通过|未通过)[（(]([^)）]*)').firstMatch(text);
+    final verifyMatch = RegExp(
+      r'验证[：:]\s*(通过|未通过)[（(]([^)）]*)',
+    ).firstMatch(text);
     if (verifyMatch != null) {
       final ok = verifyMatch.group(1) == '通过';
       final detail = verifyMatch.group(2) ?? '';
@@ -1367,8 +1347,9 @@ class MobileRepository {
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('超级员工回复失败'));
     }
-    return _assistantReplyFromMap(response.data ?? response.raw)
-        .ifEmpty('已收到，我会继续处理。');
+    return _assistantReplyFromMap(
+      response.data ?? response.raw,
+    ).ifEmpty('已收到，我会继续处理。');
   }
 
   Future<String> _superEmployeeLanBaseUrl() async {
@@ -1381,9 +1362,9 @@ class MobileRepository {
     final host = session.fhdHost.trim();
     if (host.isEmpty) return '';
     // 后端 loopback 监听 17500 时手机不可达，需改用 vite proxy 端口 5011。
-    return AndroidServerRouter(
+    return MobileServerRouter(
       fhdHost: host,
-      mode: AndroidServerMode.lan,
+      mode: MobileServerMode.lan,
     ).lanReachableBaseUrl();
   }
 
@@ -1415,11 +1396,9 @@ class MobileRepository {
     }
     await _setInflightRelayTask(conversationId, taskId);
     final toolLabel = toolLabelForRelayKind(relayKind);
-    onStatus?.call(RelayTaskProgress(
-      taskId: taskId,
-      status: 'queued',
-      toolLabel: toolLabel,
-    ));
+    onStatus?.call(
+      RelayTaskProgress(taskId: taskId, status: 'queued', toolLabel: toolLabel),
+    );
     onToken?.call('思考中...');
     return _pollRelayTask(
       taskId: taskId,
@@ -1452,11 +1431,13 @@ class MobileRepository {
       final currentStatus = _stringField(current, 'status');
       _throwIfCancelled(isCancelled);
       if (currentStatus.isNotEmpty && currentStatus != lastStatus) {
-        onStatus?.call(RelayTaskProgress(
-          taskId: taskId,
-          status: currentStatus,
-          toolLabel: toolLabel,
-        ));
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: taskId,
+            status: currentStatus,
+            toolLabel: toolLabel,
+          ),
+        );
         switch (currentStatus) {
           case 'running':
           case 'assigned':
@@ -1470,28 +1451,30 @@ class MobileRepository {
       }
       if (currentStatus == 'done' || currentStatus == 'completed') {
         await _setInflightRelayTask(conversationId, '');
-        onStatus?.call(RelayTaskProgress(
-          taskId: taskId,
-          status: 'completed',
-          toolLabel: toolLabel,
-        ));
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: taskId,
+            status: 'completed',
+            toolLabel: toolLabel,
+          ),
+        );
         return _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。');
       }
       if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
         await _setInflightRelayTask(conversationId, '');
-        onStatus?.call(RelayTaskProgress(
-          taskId: taskId,
-          status: currentStatus,
-          toolLabel: toolLabel,
-        ));
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: taskId,
+            status: currentStatus,
+            toolLabel: toolLabel,
+          ),
+        );
         throw MobileRepositoryException(
           _relayTaskResultText(current).ifEmpty('电脑工具执行失败'),
         );
       }
     }
-    throw const MobileRepositoryException(
-      '电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。',
-    );
+    throw const MobileRepositoryException('电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。');
   }
 
   Future<List<OnboardingIndustry>> loadOnboardingIndustries() async {
@@ -1507,13 +1490,7 @@ class MobileRepository {
         .toList(growable: false);
     if (items.isNotEmpty) return items;
     return _stringList(data['open_industry_ids'])
-        .map(
-          (id) => OnboardingIndustry(
-            id: id,
-            title: id,
-            subtitle: '可选行业',
-          ),
-        )
+        .map((id) => OnboardingIndustry(id: id, title: id, subtitle: '可选行业'))
         .toList(growable: false);
   }
 
@@ -1546,10 +1523,13 @@ class MobileRepository {
         throw MobileRepositoryException(seed.message.ifEmpty('行业包安装失败'));
       }
     }
-    for (final modId
-        in _stringList(baseline['missing_account_custom_mod_ids'])) {
-      final install =
-          await _client.installMod(modId: modId, industryId: industry);
+    for (final modId in _stringList(
+      baseline['missing_account_custom_mod_ids'],
+    )) {
+      final install = await _client.installMod(
+        modId: modId,
+        industryId: industry,
+      );
       if (!install.success) {
         throw MobileRepositoryException(install.message.ifEmpty('$modId 安装失败'));
       }
@@ -1561,7 +1541,8 @@ class MobileRepository {
       );
       if (!seed.success) {
         throw MobileRepositoryException(
-            seed.message.ifEmpty('$modId 交付数据安装失败'));
+          seed.message.ifEmpty('$modId 交付数据安装失败'),
+        );
       }
     }
     final after = await loadIndustryBaseline(industry);
@@ -1648,8 +1629,10 @@ class MobileRepository {
     return _checkoutResultText(response.data ?? response.raw);
   }
 
-  Future<void> installMarketMod(String modId,
-      {String industryId = '通用'}) async {
+  Future<void> installMarketMod(
+    String modId, {
+    String industryId = '通用',
+  }) async {
     if (modId.trim().isEmpty) {
       throw const MobileRepositoryException('缺少 Mod ID');
     }
@@ -1707,9 +1690,7 @@ class MobileRepository {
       employeeId: employeeId,
     );
     if (!response.success) {
-      throw MobileRepositoryException(
-        response.message.ifEmpty('加载员工提问失败'),
-      );
+      throw MobileRepositoryException(response.message.ifEmpty('加载员工提问失败'));
     }
     final data = response.data ?? const <String, Object?>{};
     final rows = _firstObjectList([data['items']]);
@@ -1750,13 +1731,13 @@ class MobileRepository {
     final session = await _client.loadSession();
     final host = session.fhdHost.trim();
     final mode = session.serverMode.trim().toLowerCase() == 'lan'
-        ? AndroidServerMode.lan
-        : AndroidServerMode.cloud;
-    return AndroidServerRouter(
+        ? MobileServerMode.lan
+        : MobileServerMode.cloud;
+    return MobileServerRouter(
       fhdHost: host.isNotEmpty ? host : '127.0.0.1',
       mode: mode,
-      enterpriseFhdBaseUrlRaw: MobileAndroidBuild.enterpriseFhdBaseUrl,
-      modstoreBaseUrlRaw: MobileAndroidBuild.modstoreBaseUrl,
+      enterpriseFhdBaseUrlRaw: MobileBuildConfig.enterpriseFhdBaseUrl,
+      modstoreBaseUrlRaw: MobileBuildConfig.modstoreBaseUrl,
     ).fhdImWebSocketUrl(sessionId);
   }
 
@@ -1840,11 +1821,13 @@ class MobileRepository {
     final raw = data['items'] ?? data['data'];
     if (raw is List) {
       return raw
-          .map((item) => BusinessListItem(
-                id: item.toString(),
-                title: item.toString(),
-                subtitle: '',
-              ))
+          .map(
+            (item) => BusinessListItem(
+              id: item.toString(),
+              title: item.toString(),
+              subtitle: '',
+            ),
+          )
           .toList(growable: false);
     }
     return const <BusinessListItem>[];
@@ -1934,9 +1917,9 @@ class MobileRepository {
     try {
       final response = await _client.relayDesktops();
       if (!response.success) return storedRelayId;
-      final rows = _relayDesktopRows(response.data)
-          .where(_relayDesktopIsDispatchable)
-          .toList(growable: false);
+      final rows = _relayDesktopRows(
+        response.data,
+      ).where(_relayDesktopIsDispatchable).toList(growable: false);
       // API 正常但账号下尚无 paired 桌面：不要误用 build 注入/历史 relay_id 去排队。
       if (rows.isEmpty) return '';
 
@@ -1959,9 +1942,9 @@ class MobileRepository {
         );
       }
 
-      freshRows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
-            _relayDesktopSortKey(b),
-          ));
+      freshRows.sort(
+        (a, b) => _relayDesktopSortKey(a).compareTo(_relayDesktopSortKey(b)),
+      );
       final latest = freshRows.last;
       final latestRelayId = _stringField(latest, 'relay_id');
       if (latestRelayId.isEmpty) return '';
@@ -2068,9 +2051,7 @@ class MobileRepository {
   }
 }
 
-Map<String, Object?> _superEmployeeRelayContext({
-  String conversationId = '',
-}) {
+Map<String, Object?> _superEmployeeRelayContext({String conversationId = ''}) {
   return {
     'source': 'mobile_chat',
     'client_surface': 'mobile',
@@ -2276,10 +2257,7 @@ Map<String, Object?> _modInfoToCacheJson(ModInfo mod) {
     'primary': mod.primary,
     'industry': mod.industry == null
         ? null
-        : {
-            'id': mod.industry!.id,
-            'name': mod.industry!.name,
-          },
+        : {'id': mod.industry!.id, 'name': mod.industry!.name},
     'workflow_employees': mod.workflowEmployees
         .map(
           (employee) => {
@@ -2338,10 +2316,7 @@ String _relayTaskResultText(Map<String, Object?> task) {
 }
 
 class AuthQrPayload {
-  const AuthQrPayload({
-    required this.qrId,
-    required this.accountKind,
-  });
+  const AuthQrPayload({required this.qrId, required this.accountKind});
 
   final String qrId;
   final String accountKind;
@@ -2703,7 +2678,7 @@ String _pairingLanBaseUrlFromHostPort(String hostWithPort) {
   if (parts.length > 1) {
     port = (int.tryParse(parts.last.trim()) ?? 0).takeIfValidPort();
   }
-  final cleanPort = port > 0 ? port : MobileAndroidBuild.fhdDefaultPort;
+  final cleanPort = port > 0 ? port : MobileBuildConfig.fhdDefaultPort;
   return 'http://$host:$cleanPort/';
 }
 
@@ -2846,8 +2821,10 @@ List<AiGroupMessage> _parseAiGroupMessages(Object? value) {
   final raw = data['messages'] ?? data['items'] ?? data['data'] ?? value;
   return _objectList(raw)
       .map(_aiGroupMessageFromJson)
-      .where((message) =>
-          message.id.trim().isNotEmpty || message.body.trim().isNotEmpty)
+      .where(
+        (message) =>
+            message.id.trim().isNotEmpty || message.body.trim().isNotEmpty,
+      )
       .toList(growable: false);
 }
 
@@ -2938,9 +2915,10 @@ List<CsMessage> _parseCsMessages(Object? value) {
   return _objectList(raw)
       .map(
         (json) => CsMessage(
-          messageId: _stringField(json, 'message_id').ifEmpty(
-            _stringField(json, 'id'),
-          ),
+          messageId: _stringField(
+            json,
+            'message_id',
+          ).ifEmpty(_stringField(json, 'id')),
           sender: _stringField(json, 'sender'),
           body: _firstNonBlank([
             _stringField(json, 'body'),
@@ -2995,9 +2973,10 @@ List<AdminCsInboxItem> _parseAdminCsInbox(Object? value) {
             _stringField(json, 'updated_at'),
             _stringField(json, 'created_at'),
           ]),
-          unreadCount: _intField(json, 'unreadCount').ifZero(
-            _intField(json, 'unread_count'),
-          ),
+          unreadCount: _intField(
+            json,
+            'unreadCount',
+          ).ifZero(_intField(json, 'unread_count')),
         ),
       )
       .where((item) => item.conversationId > 0)
@@ -3098,11 +3077,7 @@ Map<String, Object?> _nestedDataMap(Map<String, Object?> data) {
 
 List<BusinessListItem> _businessItemsFromData(Map<String, Object?>? body) {
   final data = _nestedDataMap(body ?? const <String, Object?>{});
-  final rows = _firstObjectList([
-    data['items'],
-    data['results'],
-    data['data'],
-  ]);
+  final rows = _firstObjectList([data['items'], data['results'], data['data']]);
   return rows
       .map(BusinessListItem.fromJson)
       .where((item) => item.title.trim().isNotEmpty)
@@ -3120,13 +3095,12 @@ List<BusinessListItem> _bridgeItemsFromData(Map<String, Object?>? body) {
   return rows
       .map(BusinessListItem.fromJson)
       .where(
-          (item) => item.id.trim().isNotEmpty || item.title.trim().isNotEmpty)
+        (item) => item.id.trim().isNotEmpty || item.title.trim().isNotEmpty,
+      )
       .toList(growable: false);
 }
 
-OnboardingIndustry? _onboardingIndustryFromPackage(
-  Map<String, Object?> json,
-) {
+OnboardingIndustry? _onboardingIndustryFromPackage(Map<String, Object?> json) {
   final industryId = _stringField(json, 'industry_id');
   if (industryId.isEmpty) return null;
   return OnboardingIndustry(
@@ -3365,10 +3339,7 @@ List<ConversationItem> _sortConversationItems(List<ConversationItem> items) {
 }
 
 class _IndexedConversationItem {
-  const _IndexedConversationItem({
-    required this.index,
-    required this.item,
-  });
+  const _IndexedConversationItem({required this.index, required this.item});
 
   final int index;
   final ConversationItem item;
@@ -3524,10 +3495,7 @@ class _ConversationListState {
       _stringField(json, 'body'),
     ]);
     if (timestamp <= 0 && preview.isEmpty) return null;
-    return _ConversationListState(
-      preview: preview,
-      timestampMs: timestamp,
-    );
+    return _ConversationListState(preview: preview, timestampMs: timestamp);
   }
 }
 
@@ -3637,15 +3605,17 @@ ChatMessage? _chatMessageFromCache(Map<String, Object?> json) {
           : ChatDeliveryStatus.sent;
   final conversationId = _stringField(json, 'conversation_id');
   return ChatMessage(
-    id: _stringField(json, 'id').ifEmpty(
-      'cache-${conversationId.hashCode}-${body.hashCode}',
-    ),
+    id: _stringField(
+      json,
+      'id',
+    ).ifEmpty('cache-${conversationId.hashCode}-${body.hashCode}'),
     conversationId: conversationId,
     role: role,
     body: body,
-    timeText: _stringField(json, 'time_text').ifEmpty(
-      _stringField(json, 'created_at'),
-    ),
+    timeText: _stringField(
+      json,
+      'time_text',
+    ).ifEmpty(_stringField(json, 'created_at')),
     hasEmployeeProfile: _boolField(
       json,
       'has_employee_profile',

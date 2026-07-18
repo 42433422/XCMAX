@@ -100,9 +100,9 @@ class ConnectScreen extends StatelessWidget {
       callback();
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ScanQrScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ScanQrScreen()));
   }
 
   void _back(BuildContext context) {

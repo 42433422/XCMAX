@@ -1,18 +1,8 @@
 # Android 发版员技能
 
-职责：P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。
+1. 检查 Flutter 测试、Android Runner、Bundle ID、版本与签名配置。
+2. 运行统一 Flutter CI 与 `release-android.yml` 的等价本地门禁。
+3. 核对 APK/AAB 签名、版本和真实安装启动结果。
+4. 输出结论、证据、风险和下一步；没有真实证据时标记为未验证。
 
-## 执行步骤
-
-1. 检查 Gradle 变体、签名占位、版本号和 APK/AAB 产物。
-2. 运行允许的构建与单测门禁。
-3. 发布或签名动作必须经人工确认，禁止暴露密钥。
-
-## 输出契约
-
-- summary：结论。
-- evidence：真实文件、接口、记录或测试证据。
-- risks：风险与不确定项。
-- next_actions：下一步、负责人和是否需要人工确认。
-
-没有真实证据时必须返回未验证，不得把计划、回显或合成事件计为成功。
+禁止恢复独立 Kotlin 产品实现，禁止暴露签名密钥。

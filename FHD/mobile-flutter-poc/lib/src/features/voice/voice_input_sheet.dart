@@ -270,11 +270,7 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
                       ),
                       const SizedBox(height: 6),
                       _VoiceStatusPill(
-                        text: _voiceStatusLabel(
-                          _state,
-                          _errorText,
-                          _hasResult,
-                        ),
+                        text: _voiceStatusLabel(_state, _errorText, _hasResult),
                         palette: palette,
                       ),
                     ],

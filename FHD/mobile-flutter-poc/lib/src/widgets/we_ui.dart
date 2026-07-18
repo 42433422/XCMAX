@@ -58,10 +58,7 @@ class WeTopBar extends StatelessWidget {
               else
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: actions,
-                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: actions),
                 ),
             ],
           ),
@@ -96,9 +93,7 @@ class WeSectionCaption extends StatelessWidget {
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: textTheme.labelSmall?.copyWith(
-              color: colors.textSecondary,
-            ),
+            style: textTheme.labelSmall?.copyWith(color: colors.textSecondary),
           ),
         ),
       ),
@@ -260,10 +255,9 @@ class WeCell extends StatelessWidget {
                       key: ValueKey('we_cell_arrow_$title'),
                       Icons.chevron_right,
                       size: 16,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant
-                          .withValues(alpha: 0.62),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.62),
                     ),
                 ],
               ),
@@ -323,15 +317,15 @@ class WeField extends StatelessWidget {
         minLines: 1,
         maxLines: singleLine ? 1 : 4,
         onChanged: onChanged,
-        style: textTheme.bodyLarge?.copyWith(
-          color: colors.textPrimary,
-        ),
+        style: textTheme.bodyLarge?.copyWith(color: colors.textPrimary),
         decoration: InputDecoration(
           counterText: '',
           isDense: true,
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
           hintText: placeholder,
           hintStyle: textTheme.bodyLarge?.copyWith(
             color: colors.textSecondary.withValues(alpha: 0.6),
@@ -461,8 +455,10 @@ class WeDialog extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 22,
+                  ),
                   child: Column(
                     children: [
                       Text(
@@ -570,11 +566,7 @@ class _WeDialogButton extends StatelessWidget {
 }
 
 class WeRedActionCell extends StatelessWidget {
-  const WeRedActionCell({
-    super.key,
-    required this.text,
-    required this.onTap,
-  });
+  const WeRedActionCell({super.key, required this.text, required this.onTap});
 
   final String text;
   final VoidCallback onTap;

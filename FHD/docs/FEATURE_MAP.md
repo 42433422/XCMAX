@@ -21,7 +21,7 @@
 | [mods/](../mods/) | 模块包（**唯一编辑源**） | 行业包与 bridge Mod；**日常只改此处**。本地 dev 与 Vite 优先加载。 |
 | [XCAGI/mods/](../XCAGI/mods/) | Mod 导出副本 | 由 `scripts/dev/mods_ssot.py sync` 从 `mods/` 同步；供 Docker/打包路径，**禁止手改**。 |
 | [MODstore/](../MODstore/) | 独立产品子线 | MOD 市场,单独部署,不是主应用的一部分。 |
-| [mobile-android/](../mobile-android/) | 独立客户端 | Kotlin + Compose 原生 App;调 FHD `/api/mobile/v1` 与 MODstore 公网 API。见 [guides/MOBILE_ANDROID.md](./guides/MOBILE_ANDROID.md)。 |
+| [mobile-flutter-poc/](../mobile-flutter-poc/) | 移动端唯一实现 | Flutter Android+iOS；`lib/` 共用业务，平台 Runner 只做系统能力与发版。见 [guides/MOBILE_FLUTTER.md](./guides/MOBILE_FLUTTER.md)。 |
 | [rasa/](../rasa/) | NLU 训练数据 | 训练 Rasa 模型用,非运行时代码。 |
 | [scripts/](../scripts/) | 运维/开发脚本 | `dev/` 开发调试,`launchers/` 辅助启动,`backend-legacy/` 历史脚本。 |
 | [tests/](../tests/) | 正式测试 | `pytest.ini testpaths=tests`。 |

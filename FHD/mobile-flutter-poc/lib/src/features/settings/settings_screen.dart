@@ -7,18 +7,18 @@ import '../../api/mobile_session_store.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
-import '../update/android_package_update_installer.dart';
-import '../update/android_update_check.dart';
+import '../update/package_update_installer.dart';
+import '../update/app_update_check.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.api,
-    this.updateInstaller = const MethodChannelAndroidPackageUpdateInstaller(),
+    this.updateInstaller = const MethodChannelPackageUpdateInstaller(),
   });
 
   final MobileApiClient? api;
-  final AndroidPackageUpdateInstaller updateInstaller;
+  final PackageUpdateInstaller updateInstaller;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -117,8 +117,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         subtitle: _themeLabel(_themeMode),
                         icon: Icons.palette,
                         iconColor: colors.success,
-                        iconBg:
-                            Theme.of(context).colorScheme.secondaryContainer,
+                        iconBg: Theme.of(
+                          context,
+                        ).colorScheme.secondaryContainer,
                         showArrow: false,
                         showDivider: false,
                       ),
@@ -199,8 +200,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         subtitle: '获取企业版移动端最新构建',
                         icon: Icons.system_update,
                         iconColor: colors.success,
-                        iconBg:
-                            Theme.of(context).colorScheme.secondaryContainer,
+                        iconBg: Theme.of(
+                          context,
+                        ).colorScheme.secondaryContainer,
                         showDivider: false,
                         onTap: _checkingUpdate ? null : _checkForUpdate,
                       ),
@@ -227,16 +229,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _lanModeSubtitle = _lanModeDescription(session);
       });
     } catch (_) {
-      // Keep Android defaults when local settings storage is unavailable.
+      // Keep the mobile defaults when local settings storage is unavailable.
     }
   }
 
   void _setLanModeEnabled(bool value) {
     setState(() {
       _lanModeEnabled = value;
-      _lanModeSubtitle = value
-          ? '优先局域网直连超级员工（需电脑 FHD 在线）'
-          : '关闭时超级员工经云中继执行';
+      _lanModeSubtitle = value ? '优先局域网直连超级员工（需电脑 FHD 在线）' : '关闭时超级员工经云中继执行';
     });
     unawaited(_persistLanMode(value));
   }
@@ -280,9 +280,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       _feedbackController.clear();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('感谢您的反馈，我们会尽快处理')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('感谢您的反馈，我们会尽快处理')));
     } catch (error) {
       if (!mounted) return;
       final message = error is MobileApiException
@@ -300,11 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_checkingUpdate) return;
     setState(() => _checkingUpdate = true);
     try {
-      await runAndroidUpdateCheck(
-        context,
-        _api,
-        installer: widget.updateInstaller,
-      );
+      await runAppUpdateCheck(context, _api, installer: widget.updateInstaller);
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
     }
@@ -312,11 +308,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _WeSwitch extends StatelessWidget {
-  const _WeSwitch({
-    super.key,
-    required this.checked,
-    required this.onChanged,
-  });
+  const _WeSwitch({super.key, required this.checked, required this.onChanged});
 
   final bool checked;
   final ValueChanged<bool> onChanged;

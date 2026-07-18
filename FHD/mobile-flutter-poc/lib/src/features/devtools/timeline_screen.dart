@@ -109,7 +109,11 @@ class _TimelineScreenState extends State<TimelineScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.history, size: 48, color: AppTheme.colors(context).textTertiary),
+            Icon(
+              Icons.history,
+              size: 48,
+              color: AppTheme.colors(context).textTertiary,
+            ),
             const SizedBox(height: 12),
             Text(
               '暂无工具调用记录',
@@ -142,11 +146,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
       final call = _calls[i];
       final isLast = i == _calls.length - 1;
       widgets.add(
-        _TimelineEntry(
-          call: call,
-          isLast: isLast,
-          accentColor: colors.brand,
-        ),
+        _TimelineEntry(call: call, isLast: isLast, accentColor: colors.brand),
       );
     }
     return widgets;
@@ -167,8 +167,12 @@ class _TimelineEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    final icon = _resolveIcon(call['icon'] as String?, call['action'] as String?);
-    final label = (call['label'] as String?) ?? (call['action'] as String?) ?? '';
+    final icon = _resolveIcon(
+      call['icon'] as String?,
+      call['action'] as String?,
+    );
+    final label =
+        (call['label'] as String?) ?? (call['action'] as String?) ?? '';
     final detail = (call['detail'] as String?) ?? '';
     final success = call['success'] as bool?;
     final iconColor = success == false
@@ -229,7 +233,11 @@ class _TimelineEntry extends StatelessWidget {
                         ),
                       ),
                       if (success == true)
-                        Icon(Icons.check_circle, size: 16, color: colors.success)
+                        Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: colors.success,
+                        )
                       else if (success == false)
                         Icon(Icons.error, size: 16, color: colors.danger),
                     ],

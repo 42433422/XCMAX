@@ -41,8 +41,9 @@ class OcrScreen extends StatelessWidget {
                         subtitle: '识别票据、表格截图与文档图片',
                         icon: Icons.photo_library,
                         iconColor: colors.success,
-                        iconBg:
-                            Theme.of(context).colorScheme.secondaryContainer,
+                        iconBg: Theme.of(
+                          context,
+                        ).colorScheme.secondaryContainer,
                         onTap: () =>
                             _showMessage(context, '移动端相册识别正在接入，请先使用电脑端 OCR'),
                       ),
@@ -66,8 +67,9 @@ class OcrScreen extends StatelessWidget {
                         subtitle: '等待移动端上传链路接入',
                         icon: Icons.cloud_done,
                         iconColor: colors.success,
-                        iconBg:
-                            Theme.of(context).colorScheme.secondaryContainer,
+                        iconBg: Theme.of(
+                          context,
+                        ).colorScheme.secondaryContainer,
                         showArrow: false,
                         showDivider: false,
                       ),
@@ -83,7 +85,8 @@ class OcrScreen extends StatelessWidget {
   }
 
   static void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

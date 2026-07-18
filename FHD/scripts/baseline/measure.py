@@ -179,20 +179,16 @@ def _desktop_package() -> dict[str, Any]:
 def _mobile_package() -> dict[str, Any]:
     apk = first_glob(
         str(REPO_ROOT / "release" / "**" / "*Android*.apk"),
-        str(FHD_ROOT / "mobile-android" / "artifacts" / "*release*.apk"),
+        str(FHD_ROOT / "mobile-flutter-poc" / "build" / "app" / "outputs" / "flutter-apk" / "*.apk"),
         str(REPO_ROOT / "release" / "**" / "*.apk"),
     )
-    hap = first_glob(str(REPO_ROOT / "release" / "**" / "*.hap"))
     out: dict[str, Any] = {}
-    if not apk and not hap:
-        return {"status": "missing", "hint": "先构建手机包:FHD/mobile-android gradlew assembleEnterpriseRelease"}
+    if not apk:
+        return {"status": "missing", "hint": "先在 FHD/mobile-flutter-poc 运行 flutter build apk"}
     if apk:
         b = apk.stat().st_size
         out["android_apk"] = {"path": str(apk.relative_to(REPO_ROOT)), "bytes": b, "human": human(b),
                               "breakdown": _apk_breakdown(apk)}
-    if hap:
-        b = hap.stat().st_size
-        out["harmony_hap"] = {"path": str(hap.relative_to(REPO_ROOT)), "bytes": b, "human": human(b)}
     out["status"] = "ok"
     return out
 

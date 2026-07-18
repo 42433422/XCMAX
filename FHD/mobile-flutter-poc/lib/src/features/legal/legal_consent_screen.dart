@@ -93,8 +93,10 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                 onTap: () => setState(() => _checked = !_checked),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -109,11 +111,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                         ),
                         alignment: Alignment.center,
                         child: _checked
-                            ? Icon(
-                                Icons.check,
-                                size: 14,
-                                color: colors.brand,
-                              )
+                            ? Icon(Icons.check, size: 14, color: colors.brand)
                             : null,
                       ),
                       const SizedBox(width: 8),

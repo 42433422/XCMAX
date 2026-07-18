@@ -164,7 +164,7 @@ def _write_cache(lane: str, payload: dict[str, Any]) -> None:
 
 
 def _adb_has_device() -> bool:
-    adb = _FHD_ROOT / "mobile-android" / ".toolchain" / "android-sdk" / "platform-tools" / "adb"
+    adb = _FHD_ROOT / "mobile-flutter-poc" / ".toolchain" / "android-sdk" / "platform-tools" / "adb"
     if not adb.is_file():
         return False
     try:

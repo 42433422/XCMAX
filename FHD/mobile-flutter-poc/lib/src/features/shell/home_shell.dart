@@ -8,7 +8,7 @@ import '../../api/mobile_session_store.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../models/conversation.dart';
-import '../../policy/android_runtime_policy.dart';
+import '../../policy/mobile_runtime_policy.dart';
 import '../../theme/app_theme.dart';
 import '../contacts/contacts_screen.dart';
 import '../discover/discover_screen.dart';
@@ -27,9 +27,7 @@ const _bottomNavItems = [
 @visibleForTesting
 List<Map<String, String>> flutterHomeShellBottomNavItemsForTest() {
   return List.unmodifiable(
-    _bottomNavItems.map(
-      (item) => {'route': item.route, 'label': item.label},
-    ),
+    _bottomNavItems.map((item) => {'route': item.route, 'label': item.label}),
   );
 }
 
@@ -113,8 +111,8 @@ class _HomeShellState extends State<HomeShell> {
                 groups: const [],
                 conversations: _repository.fallbackConversations(
                   adminMode: false,
-                  enterpriseMode: AndroidProductSkuConfig.showsEnterpriseNav(
-                    buildSku: MobileAndroidBuild.productSku,
+                  enterpriseMode: MobileProductSkuConfig.showsEnterpriseNav(
+                    buildSku: MobileBuildConfig.productSku,
                   ),
                 ),
                 account: MobileMeData.adminFallback(
@@ -139,10 +137,7 @@ class _HomeShellState extends State<HomeShell> {
         },
       ),
       AiEmployeesScreen(repository: _repository),
-      DiscoverScreen(
-        repository: _repository,
-        onOpenWork: () => _selectTab(1),
-      ),
+      DiscoverScreen(repository: _repository, onOpenWork: () => _selectTab(1)),
       ProfileScreen(api: _repository.client),
     ];
 
@@ -173,7 +168,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<List<ConversationItem>> _loadConversationsWithCacheFallback(
-    AndroidConversationRuntime runtime,
+    MobileConversationRuntime runtime,
   ) async {
     try {
       return await _repository.loadConversations(
@@ -219,13 +214,13 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  Future<AndroidConversationRuntime> _conversationRuntime() async {
+  Future<MobileConversationRuntime> _conversationRuntime() async {
     final session = await _repository.client.loadSession().catchError(
           (_) => MobileSessionData.empty,
         );
-    return AndroidConversationRuntimePolicy.resolve(
+    return MobileConversationRuntimePolicy.resolve(
       accountKind: session.accountKind,
-      buildSku: MobileAndroidBuild.productSku,
+      buildSku: MobileBuildConfig.productSku,
     );
   }
 
@@ -259,9 +254,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openScan() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ScanQrScreen(repository: _repository),
-      ),
+      MaterialPageRoute(builder: (_) => ScanQrScreen(repository: _repository)),
     );
   }
 
@@ -277,10 +270,8 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _openGroups() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => AiGroupListScreen(
-          repository: _repository,
-          initialGroups: const [],
-        ),
+        builder: (_) =>
+            AiGroupListScreen(repository: _repository, initialGroups: const []),
       ),
     );
     if (mounted) await _refreshHomeData();

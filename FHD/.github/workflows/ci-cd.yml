@@ -152,7 +152,7 @@ jobs:
       - name: Coverage ratchet check (行/分支只升不降)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: python scripts/dev/coverage_ratchet.py --check --require-backend
+        run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is

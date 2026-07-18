@@ -37,7 +37,6 @@ defaults:
 WORKFLOW_RENAMES = {
     "ci-cd.yml": "fhd-ci-cd.yml",
     "release-gate-ci.yml": "fhd-release-gate-ci.yml",
-    "ci-mobile-android.yml": "fhd-ci-mobile-android.yml",
     "ci-mobile-flutter.yml": "fhd-ci-mobile-flutter.yml",
     "release-desktop.yml": "fhd-release-desktop.yml",
     "release-web.yml": "fhd-release-web.yml",
@@ -66,6 +65,11 @@ def _insert_defaults(content: str, defaults: str) -> str:
 
 
 def _prefix_fhd_paths(content: str, out_name: str) -> str:
+    source_workflow = out_name.removeprefix("fhd-")
+    content = content.replace(
+        f".github/workflows/{source_workflow}",
+        f".github/workflows/{out_name}",
+    )
     for wf in (
         "release-desktop.yml",
         "release-web.yml",
@@ -83,11 +87,6 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
             rf"\1fhd-{wf}",
             content,
         )
-    content = content.replace(
-        ".github/workflows/ci-mobile-android.yml",
-        f".github/workflows/{out_name}",
-    )
-
     def repl_path(m: re.Match[str]) -> str:
         indent = m.group(1)
         raw = m.group(2)
@@ -121,10 +120,6 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     content = content.replace(
         "working-directory: frontend",
         "working-directory: FHD/frontend",
-    )
-    content = content.replace(
-        "working-directory: mobile-android",
-        "working-directory: FHD/mobile-android",
     )
     content = content.replace(
         "working-directory: mobile-flutter-poc",

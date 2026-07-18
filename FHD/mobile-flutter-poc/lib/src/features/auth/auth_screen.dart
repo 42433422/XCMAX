@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../api/mobile_api.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
-import '../../policy/android_runtime_policy.dart';
+import '../../policy/mobile_runtime_policy.dart';
 import '../../platform/external_url_launcher.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
@@ -70,8 +70,8 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final canLogin = _canLogin;
     final colors = AppTheme.colors(context);
-    final isEnterprise = AndroidProductSkuConfig.isEnterprise(
-      buildSku: MobileAndroidBuild.productSku,
+    final isEnterprise = MobileProductSkuConfig.isEnterprise(
+      buildSku: MobileBuildConfig.productSku,
     );
     return Scaffold(
       backgroundColor: colors.surface,
@@ -152,8 +152,10 @@ class _AuthScreenState extends State<AuthScreen> {
                 suffix: IconButton(
                   onPressed: () =>
                       setState(() => _passwordVisible = !_passwordVisible),
-                  constraints:
-                      const BoxConstraints.tightFor(width: 40, height: 40),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 40,
+                  ),
                   padding: EdgeInsets.zero,
                   icon: Icon(
                     _passwordVisible ? Icons.visibility_off : Icons.visibility,
@@ -333,7 +335,7 @@ class _AuthScreenState extends State<AuthScreen> {
         }
       });
     } catch (_) {
-      // Android keeps the login form usable when local credential storage fails.
+      // Keep the login form usable when local credential storage fails.
     }
   }
 
@@ -454,10 +456,7 @@ class _LoginTab extends StatelessWidget {
 }
 
 class _AccountKindSegment extends StatelessWidget {
-  const _AccountKindSegment({
-    required this.adminMode,
-    required this.onChanged,
-  });
+  const _AccountKindSegment({required this.adminMode, required this.onChanged});
 
   final bool adminMode;
   final ValueChanged<bool> onChanged;
@@ -747,8 +746,9 @@ class _OtpCodeFieldState extends State<_OtpCodeField> {
                         if (next != value) {
                           widget.controller.value = TextEditingValue(
                             text: next,
-                            selection:
-                                TextSelection.collapsed(offset: next.length),
+                            selection: TextSelection.collapsed(
+                              offset: next.length,
+                            ),
                           );
                         }
                         setState(() {});
@@ -771,10 +771,7 @@ class _OtpCodeFieldState extends State<_OtpCodeField> {
 }
 
 class _OtpCell extends StatelessWidget {
-  const _OtpCell({
-    required this.char,
-    required this.focused,
-  });
+  const _OtpCell({required this.char, required this.focused});
 
   final String char;
   final bool focused;
@@ -832,11 +829,7 @@ class _ScanButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.qr_code_scanner,
-              size: 18,
-              color: colors.brand,
-            ),
+            Icon(Icons.qr_code_scanner, size: 18, color: colors.brand),
             const SizedBox(width: 8),
             Text(
               '扫码绑定/登录',
@@ -906,11 +899,7 @@ class _LoginCheckbox extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _CheckBoxMark(
-            checked: checked,
-            size: 18,
-            radius: 3,
-          ),
+          _CheckBoxMark(checked: checked, size: 18, radius: 3),
           const SizedBox(width: 6),
           Text(
             label,
@@ -948,11 +937,7 @@ class _AgreementRow extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onToggle,
-            child: _CheckBoxMark(
-              checked: agreed,
-              size: 20,
-              radius: 4,
-            ),
+            child: _CheckBoxMark(checked: agreed, size: 20, radius: 4),
           ),
           const SizedBox(width: 8),
           Text(
@@ -1013,11 +998,7 @@ class _CheckBoxMark extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: checked
-          ? Icon(
-              Icons.check,
-              size: size == 20 ? 13 : 12,
-              color: Colors.white,
-            )
+          ? Icon(Icons.check, size: size == 20 ? 13 : 12, color: Colors.white)
           : null,
     );
   }
@@ -1042,9 +1023,9 @@ class _AgreementLink extends StatelessWidget {
       onTap: () async {
         final opened = await openExternalUrl(Uri.parse(url));
         if (!context.mounted || opened) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法打开$label')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('无法打开$label')));
       },
       child: Text(
         label,
