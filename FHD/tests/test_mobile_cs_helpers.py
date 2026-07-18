@@ -63,20 +63,20 @@ class TestSafeUserId:
         user = SimpleNamespace()
         assert _safe_user_id(user) == 0
 
-    def test_falls_back_to_dict_id_when_getattr_raises(self):
-        # getattr 抛 AttributeError → 回退到 __dict__.id
-        class BadAttr:
-            id = "abc"  # 先让 int() 失败
-            __dict__ = {"id": 99}
+    def test_falls_back_to_dict_id_when_int_raises(self):
+        # 让 getattr 返回 int 不能处理的对象 → TypeError → 回退到 __dict__.id
+        bad_obj = object()  # int(object()) raises TypeError
 
-            def __getattribute__(self, name):
-                if name == "id":
-                    raise AttributeError("no id")
-                return object.__getattribute__(self, name)
+        class CustomUser:
+            @property
+            def id(self):  # data descriptor 优先于 instance __dict__
+                return bad_obj
 
-        user = BadAttr()
-        # getattr(user, "id", None) 抛 AttributeError 被 try 捕获
-        # 回退到 __dict__.get("id") = 99 → int(99) = 99
+        user = CustomUser()
+        user.__dict__["id"] = 99  # instance __dict__，与 property 分离
+        # getattr(user, "id", None) → property getter → bad_obj
+        # int(bad_obj or 0) → int(bad_obj) → TypeError → except
+        # getattr(user, "__dict__", {}).get("id") → 99 → int(99) = 99
         assert _safe_user_id(user) == 99
 
     def test_uses_sqlalchemy_identity_when_dict_empty(self):
@@ -294,8 +294,9 @@ class TestStripMarkdownJsonFence:
     def test_returns_text_when_no_fence(self):
         assert _strip_markdown_json_fence("plain text") == "plain text"
 
-    def test_returns_text_when_no_codefence_marker(self):
-        assert _strip_markdown_json_fence("```not starting") == "```not starting"
+    def test_strips_single_line_starting_with_fence(self):
+        # 单行以 ``` 开头 → 第一行被剥离 → 剩空 → 返回 ""
+        assert _strip_markdown_json_fence("```not starting") == ""
 
     def test_strips_opening_fence_only(self):
         text = "```json\n{\"key\": \"value\"}"
@@ -382,8 +383,8 @@ class TestCoerceCsReplyBody:
         assert _coerce_cs_reply_body('{"message_text": "msg", "reply": "rep"}') == "msg"
 
     def test_converts_non_string_to_string(self):
-        # int 0 → "0" → strip → "0" → 非 empty → 继续
-        assert _coerce_cs_reply_body(0) == "0"
+        # 0 是 falsy → 0 or "" = "" → str("") → "" → 返回 ""
+        assert _coerce_cs_reply_body(0) == ""
 
     def test_converts_int_to_string(self):
         assert _coerce_cs_reply_body(123) == "123"
