@@ -1,5 +1,7 @@
 # Flutter Android 渠道指南
 
+本文是 Flutter Android 渠道构建、签名和发布的 SSOT。
+
 Android 与 iOS 共用 [`FHD/mobile-flutter-poc/`](../../mobile-flutter-poc/) 的 Flutter 业务代码。
 `android/` 目录只承担 Flutter Runner、Manifest、平台通道、签名和打包，不是独立产品实现。
 
