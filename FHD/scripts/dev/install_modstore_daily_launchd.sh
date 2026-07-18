@@ -472,7 +472,7 @@ _install_launchd
 api_sched="?"
 for _ in $(seq 1 75); do
   if curl --noproxy '*' -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
-    api_sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
+    api_sched="$(curl --noproxy '*' -sf "http://127.0.0.1:8788/api/health" | "${FHD_ROOT}/.venv/bin/python" -c "import json,sys; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
     if [[ "${api_sched}" == "False" || "${api_sched}" == "false" ]]; then
       break
     fi
@@ -487,7 +487,7 @@ fi
 sched="false"
 for _ in $(seq 1 75); do
   if curl --noproxy '*' -sf "http://127.0.0.1:8789/api/health" >/dev/null 2>&1; then
-    sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8789/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
+    sched="$(curl --noproxy '*' -sf "http://127.0.0.1:8789/api/health" | "${FHD_ROOT}/.venv/bin/python" -c "import json,sys; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
     if [[ "${sched}" == "True" || "${sched}" == "true" ]]; then
       break
     fi
