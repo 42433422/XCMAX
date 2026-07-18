@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
+from pathlib import Path
 
 from app.application import onboarding_seed_mapper as osm
 
@@ -270,3 +271,67 @@ class TestBuildProductRow:
         profile = osm.resolve_onboarding_seed_profile("行业")
         row = osm.build_product_row(tenant_id=1, profile=profile)
         assert row["price"] == Decimal("99.00")  # text 映射非 Decimal → 兜底
+
+
+# ── _resolve_mod_manifest_root ────────────────────────────────────────────
+
+
+class TestResolveModManifestRoot:
+    """覆盖 _resolve_mod_manifest_root 双路径 fallback 逻辑。
+
+    铁律 3 禁止只测 happy path；铁律 6 分支覆盖 ≠ 行覆盖。
+    真实集成测试：用 FHD/mods/ 与 FHD/XCAGI/mods/ 真实目录（不 mock 被测函数）。
+    """
+
+    def test_mod_in_fhd_mods_returns_fhd_mods(self):
+        """coating-industry 在 FHD/mods/ → 返回 FHD/mods 路径（编辑源优先）。"""
+        result = osm._resolve_mod_manifest_root("coating-industry")
+        assert result is not None
+        assert result.name == "mods"
+        assert result.parent.name == "FHD"
+        assert (result / "coating-industry" / "manifest.json").is_file()
+
+    def test_mod_only_in_xcagi_mods_returns_xcagi_mods(self):
+        """attendance-industry 已迁移至 XCAGI/mods/ → fallback 到 FHD/XCAGI/mods。
+
+        commit a34114a0a 的核心回归测试：FHD/mods/ 找不到时必须 fallback。
+        """
+        result = osm._resolve_mod_manifest_root("attendance-industry")
+        assert result is not None
+        assert result.name == "mods"
+        assert result.parent.name == "XCAGI"
+        assert (result / "attendance-industry" / "manifest.json").is_file()
+
+    def test_mod_not_found_returns_none(self):
+        """两个候选路径都不存在 → 返回 None。"""
+        result = osm._resolve_mod_manifest_root("nonexistent-mod-xyz-99999")
+        assert result is None
+
+    def test_empty_mod_id_returns_none(self):
+        """空 mod_id → 两个候选路径下 manifest.json 都不存在 → 返回 None。"""
+        result = osm._resolve_mod_manifest_root("")
+        assert result is None
+
+    def test_load_industry_manifest_uses_fallback_for_attendance(self):
+        """load_industry_manifest 通过 _resolve_mod_manifest_root 找到 attendance-industry。
+
+        验证 _resolve_mod_manifest_root 被 load_industry_manifest 正确调用（而非仅 _fhd_mods_root 单路径）。
+        这是 commit a34114a0a 的端到端回归测试。
+        """
+        baseline_path = (
+            Path(osm.__file__).resolve().parents[2] / "config" / "industry_baseline.json"
+        )
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        attendance_iid = next(
+            (
+                iid
+                for iid, spec in (baseline.get("industry_packages") or {}).items()
+                if isinstance(spec, dict) and spec.get("mod_id") == "attendance-industry"
+            ),
+            None,
+        )
+        assert attendance_iid is not None, "baseline 缺少 attendance-industry 映射"
+
+        data = osm.load_industry_manifest(attendance_iid)
+        assert data is not None
+        assert str(data.get("id") or "") == "attendance-industry"
