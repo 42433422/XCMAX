@@ -91,7 +91,7 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 
 <!-- BEGIN GENERATED SSOT DOMAIN INVENTORY -->
 > 本段由 `scripts/dev/generate_ssot_framework.py` 从 `config/ssot.yaml` 生成；请勿手改。
-> 当前共 **17** 个域：**16** 个启用、**1** 个禁用。
+> 当前共 **18** 个域：**17** 个启用、**1** 个禁用。
 
 | 领域 | 启用 | owner | 模式 | SSOT | 派生件数 | check | sync |
 |---|---:|---|---|---|---:|---|---|
@@ -106,6 +106,7 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | deps | 是 | backend | sync+verify | FHD/pyproject.toml | 2 | `python scripts/dev/ssot_plugins/deps.py check` | `—` |
 | error-codes | 是 | backend | lint | FHD/app/http/error_codes.py | 0 | `python scripts/dev/ssot_plugins/error_codes.py check` | `—` |
 | employee-roster | 是 | hr-platform | sync | FHD/config/duty_roster.json | 7 | `python ../scripts/dev/sync_duty_roster.py --check` | `python ../scripts/dev/sync_duty_roster.py --generate` |
+| employee-capabilities | 是 | ai-runtime | generate+verify | FHD/config/employee_capability_contract.yaml | 2 | `python scripts/dev/employee_capabilities_ssot.py --check` | `python scripts/dev/employee_capabilities_ssot.py --apply` |
 | db-schema | 是 | backend | verify | FHD/alembic/versions/ | 1 | `python ../scripts/guard_alembic_single_head.py` | `—` |
 | service-topology | 是 | devops | sync+verify | FHD/config/service_topology.yaml | 4 | `python scripts/dev/service_topology_ssot.py check` | `python scripts/dev/service_topology_ssot.py generate --apply` |
 | deployment-modes | 是 | platform-runtime | sync+verify | FHD/config/deployment_modes.yaml | 3 | `python3 scripts/dev/deployment_modes_ssot.py check` | `python3 scripts/dev/deployment_modes_ssot.py generate --apply` |

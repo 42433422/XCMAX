@@ -25,6 +25,7 @@
 | auth（授权市场） | [guides/AUTH_MARKET_CONTRACT.md](guides/AUTH_MARKET_CONTRACT.md) | 授权与市场契约 |
 | compliance（合规） | [evidence/compliance-tier2/00-control-matrix.md](evidence/compliance-tier2/00-control-matrix.md) | Tier2 合规控制矩阵 |
 | ssot-framework（SSOT 框架） | [SSOT_FRAMEWORK.md](SSOT_FRAMEWORK.md) | 统一注册表 ssot.yaml + ssot_cli 编排器 |
+| employee-capabilities（员工有效能力） | [../config/employee_capability_contract.yaml](../config/employee_capability_contract.yaml) | 能力/技能多来源的优先级、合并规则与生成清单 |
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-publication（覆盖率发布快照） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 带采集时间的对外快照；不得替代当前 CI 的临时实测产物 |
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全；**定价文档 SSOT** |

@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 # 让 tests 能 import scripts.dev.ssot_plugins
@@ -49,3 +50,16 @@ def test_run_command_returns_exit_code():
     assert code == 0
     code = run_command(["python", "-c", "import sys; sys.exit(3)"], cwd=ROOT)
     assert code == 3
+
+
+def test_load_registry_rejects_duplicate_yaml_keys(tmp_path):
+    from scripts.dev.ssot_plugins.base import load_registry
+
+    registry = tmp_path / "ssot.yaml"
+    registry.write_text(
+        "version: 1\ndomains:\n  - name: duplicate\n    enabled: true\n    enabled: false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate YAML key 'enabled'"):
+        load_registry(registry)

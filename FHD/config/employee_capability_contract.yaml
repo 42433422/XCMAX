@@ -1,0 +1,28 @@
+# AI 员工有效能力解析契约 SSOT。
+# manifest 中 capability（职责能力）与 skill（可执行技能）语义不同，运行时按这里的顺序合并。
+schema_version: 1
+domain: employee-capabilities
+
+inputs:
+  manifest_root: FHD/mods/_employees
+  manifest_glob: "*/manifest.json"
+
+resolution:
+  merge_strategy: ordered_union_first_definition_wins
+  key_normalization:
+    trim: true
+    lowercase: true
+    spaces_to_underscore: true
+  sources:
+    - name: declared_capabilities
+      path: employee.capabilities
+      label_field: label
+      description_field: description
+    - name: executable_skills
+      path: employee_config_v2.cognition.skills
+      label_field: name
+      description_field: brief
+
+generated:
+  python_contract: FHD/app/domain/employee/capability_contract_generated.py
+  effective_registry: FHD/metrics/employee-capability-registry.generated.json

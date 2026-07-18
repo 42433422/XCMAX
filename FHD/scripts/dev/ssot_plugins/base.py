@@ -1,4 +1,5 @@
 """SSOT plugin 基础设施：注册表加载 + 命令执行。"""
+
 from __future__ import annotations
 
 import subprocess
@@ -11,6 +12,38 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
+class UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects ambiguous duplicate mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: UniqueKeySafeLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[Any, Any]:
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            line = key_node.start_mark.line + 1
+            raise ValueError(f"duplicate YAML key {key!r} at line {line}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
+def load_yaml_document(path: Path) -> dict[str, Any]:
+    """Load a mapping document without allowing duplicate-key ambiguity."""
+    with path.open(encoding="utf-8") as fh:
+        data = yaml.load(fh, Loader=UniqueKeySafeLoader)
+    if not isinstance(data, dict):
+        raise ValueError(f"YAML root must be a mapping: {path}")
+    return data
+
+
 def load_registry(path: Path | None = None, *, enabled_only: bool = False) -> list[dict[str, Any]]:
     """加载 ssot.yaml 注册表，返回域列表。
 
@@ -20,8 +53,7 @@ def load_registry(path: Path | None = None, *, enabled_only: bool = False) -> li
     """
     if path is None:
         path = ROOT / "config" / "ssot.yaml"
-    with path.open(encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
+    data = load_yaml_document(path)
     domains = data.get("domains", [])
     if enabled_only:
         domains = [d for d in domains if d.get("enabled", True)]

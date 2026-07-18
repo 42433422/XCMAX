@@ -8,13 +8,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 FHD_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = FHD_ROOT / "config" / "ssot.yaml"
 FRAMEWORK = FHD_ROOT / "docs" / "SSOT_FRAMEWORK.md"
 BEGIN = "<!-- BEGIN GENERATED SSOT DOMAIN INVENTORY -->"
 END = "<!-- END GENERATED SSOT DOMAIN INVENTORY -->"
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
+
+from scripts.dev.ssot_plugins.base import load_registry  # noqa: E402
 
 
 def _cell(value: object) -> str:
@@ -63,8 +65,7 @@ def replace_inventory(document: str, inventory: str) -> str:
 
 
 def load_domains() -> list[dict[str, Any]]:
-    data = yaml.safe_load(REGISTRY.read_text(encoding="utf-8")) or {}
-    return list(data.get("domains") or [])
+    return load_registry(REGISTRY)
 
 
 def main(argv: list[str] | None = None) -> int:

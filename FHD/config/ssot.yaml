@@ -176,6 +176,21 @@ domains:
     check: python ../scripts/dev/sync_duty_roster.py --check
     sync: python ../scripts/dev/sync_duty_roster.py --generate
 
+  - name: employee-capabilities
+    owner: ai-runtime
+    enabled: true
+    # 能力解析契约 SSOT：声明多来源字段的语义、优先级与合并规则；员工 manifest 是声明输入。
+    ssot: FHD/config/employee_capability_contract.yaml
+    input_sources:
+      - FHD/mods/_employees/*/manifest.json#employee.capabilities
+      - FHD/mods/_employees/*/manifest.json#employee_config_v2.cognition.skills
+    derived:
+      - FHD/app/domain/employee/capability_contract_generated.py
+      - FHD/metrics/employee-capability-registry.generated.json
+    mode: generate+verify
+    check: python scripts/dev/employee_capabilities_ssot.py --check
+    sync: python scripts/dev/employee_capabilities_ssot.py --apply
+
   - name: db-schema
     owner: backend
     enabled: true

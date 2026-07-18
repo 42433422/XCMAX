@@ -1,0 +1,1698 @@
+{
+  "_generated": "Do not edit; run employee_capabilities_ssot.py --apply.",
+  "schema_version": 1,
+  "contract": "FHD/config/employee_capability_contract.yaml",
+  "contract_sha256": "59d88b99c44f8718ebef960ec969109c7382e15780e02a82250da5a6b91fc46f",
+  "merge_strategy": "ordered_union_first_definition_wins",
+  "summary": {
+    "employee_count": 69,
+    "effective_capability_count": 144,
+    "source_declaration_counts": {
+      "declared_capabilities": 140,
+      "executable_skills": 120
+    }
+  },
+  "employees": [
+    {
+      "employee_id": "artifact-generator",
+      "manifest": "FHD/mods/_employees/artifact-generator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-artifact-generation",
+          "label": "skill-artifact-generation",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "change-request-auditor",
+      "manifest": "FHD/mods/_employees/change-request-auditor/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-static-audit",
+          "label": "skill-static-audit",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-risk-gate",
+          "label": "skill-risk-gate",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "code-validator",
+      "manifest": "FHD/mods/_employees/code-validator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-code-validation",
+          "label": "skill-code-validation",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "csv-full-read-employee",
+      "manifest": "FHD/mods/_employees/csv-full-read-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "data.csv_read",
+          "label": "data.csv_read",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "data.json_export",
+          "label": "data.json_export",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "csv-generate-employee",
+      "manifest": "FHD/mods/_employees/csv-generate-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "data.json_read",
+          "label": "data.json_read",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "data.csv_write",
+          "label": "data.csv_write",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "daily-orchestrator",
+      "manifest": "FHD/mods/_employees/daily-orchestrator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-daily-orchestrator",
+          "label": "skill-daily-orchestrator",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "dbops-engineer",
+      "manifest": "FHD/mods/_employees/dbops-engineer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-schema-migration",
+          "label": "skill-schema-migration",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-slow-sql-triage",
+          "label": "skill-slow-sql-triage",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-backup-restore-advice",
+          "label": "skill-backup-restore-advice",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "delivery-receipt-officer",
+      "manifest": "FHD/mods/_employees/delivery-receipt-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "deploy-release-officer",
+      "manifest": "FHD/mods/_employees/deploy-release-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-deploy-pipeline",
+          "label": "skill-deploy-pipeline",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "doc-knowledge-curator",
+      "manifest": "FHD/mods/_employees/doc-knowledge-curator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-doc-sync",
+          "label": "skill-doc-sync",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ecosystem-delivery-reporter",
+      "manifest": "FHD/mods/_employees/ecosystem-delivery-reporter/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ecosystem-investor-portal-officer",
+      "manifest": "FHD/mods/_employees/ecosystem-investor-portal-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ecosystem-joint-catalog-officer",
+      "manifest": "FHD/mods/_employees/ecosystem-joint-catalog-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ecosystem-partner-onboard-officer",
+      "manifest": "FHD/mods/_employees/ecosystem-partner-onboard-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ecosystem-revenue-share-reconciler",
+      "manifest": "FHD/mods/_employees/ecosystem-revenue-share-reconciler/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "employee-interview-assistant",
+      "manifest": "FHD/mods/_employees/employee-interview-assistant/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-employee-intake",
+          "label": "skill-employee-intake",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "employee-pack-curator",
+      "manifest": "FHD/mods/_employees/employee-pack-curator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-employee-pack-export",
+          "label": "skill-employee-pack-export",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-eskill-solidify",
+          "label": "skill-eskill-solidify",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-doc-ownership",
+          "label": "skill-doc-ownership",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "employee-pack-quality-interviewer",
+      "manifest": "FHD/mods/_employees/employee-pack-quality-interviewer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-xcemp-interview-rubric",
+          "label": "skill-xcemp-interview-rubric",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "employee-planner",
+      "manifest": "FHD/mods/_employees/employee-planner/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-employee-planning",
+          "label": "skill-employee-planning",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "enterprise-adoption-officer",
+      "manifest": "FHD/mods/_employees/enterprise-adoption-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "excel-full-read-employee",
+      "manifest": "FHD/mods/_employees/excel-full-read-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "excel.full_read",
+          "label": "excel.full_read",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "data.json_export",
+          "label": "data.json_export",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "excel-generate-employee",
+      "manifest": "FHD/mods/_employees/excel-generate-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "data.json_read",
+          "label": "data.json_read",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "excel.write",
+          "label": "excel.write",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "excel-qc-employee",
+      "manifest": "FHD/mods/_employees/excel-qc-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "excel.qc_report",
+          "label": "excel.qc_report",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "excel.plan_audit",
+          "label": "excel.plan_audit",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "excel-rules-map-employee",
+      "manifest": "FHD/mods/_employees/excel-rules-map-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "excel.rules_infer",
+          "label": "excel.rules_infer",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "excel.plan_compile",
+          "label": "excel.plan_compile",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "excel-template-write-employee",
+      "manifest": "FHD/mods/_employees/excel-template-write-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "excel.template_write",
+          "label": "excel.template_write",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "excel.plan_execute",
+          "label": "excel.plan_execute",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "fhd-core-maintainer",
+      "manifest": "FHD/mods/_employees/fhd-core-maintainer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-fhd-app-patch",
+          "label": "skill-fhd-app-patch",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "flask-entry-keeper",
+      "manifest": "FHD/mods/_employees/flask-entry-keeper/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-flask-route-health",
+          "label": "skill-flask-route-health",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "github-pr-gatekeeper",
+      "manifest": "FHD/mods/_employees/github-pr-gatekeeper/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-pr-review",
+          "label": "skill-pr-review",
+          "description": "GitHub PR 审查：CI 状态聚合、变更范围分析、自动 approve 低风险 PR",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-dependabot-merge",
+          "label": "skill-dependabot-merge",
+          "description": "Dependabot PR 自动合并：patch/minor + 测试通过自动 merge，major 派发验证",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-github-api",
+          "label": "skill-github-api",
+          "description": "GitHub API 调用：review/approve/merge/comment",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "hex-quality-assessor",
+      "manifest": "FHD/mods/_employees/hex-quality-assessor/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-hex-quality-assessment",
+          "label": "skill-hex-quality-assessment",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "host-checker",
+      "manifest": "FHD/mods/_employees/host-checker/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-host-check",
+          "label": "skill-host-check",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "intake-dispatcher",
+      "manifest": "FHD/mods/_employees/intake-dispatcher/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-intake-normalize",
+          "label": "skill-intake-normalize",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "intent-analyst",
+      "manifest": "FHD/mods/_employees/intent-analyst/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-intent-analysis",
+          "label": "skill-intent-analysis",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "java-payment-bridge-officer",
+      "manifest": "FHD/mods/_employees/java-payment-bridge-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "legacy-archive-curator",
+      "manifest": "FHD/mods/_employees/legacy-archive-curator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "llm-ops-engineer",
+      "manifest": "FHD/mods/_employees/llm-ops-engineer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-llm-key-healthcheck",
+          "label": "skill-llm-key-healthcheck",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-token-usage-metering",
+          "label": "skill-token-usage-metering",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-model-cost-comparison",
+          "label": "skill-model-cost-comparison",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-provider-failover-advice",
+          "label": "skill-provider-failover-advice",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-model-routing-strategy",
+          "label": "skill-model-routing-strategy",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "log-monitor-incident",
+      "manifest": "FHD/mods/_employees/log-monitor-incident/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-log-triage",
+          "label": "skill-log-triage",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-doc-ownership",
+          "label": "skill-doc-ownership",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "market-frontend-dev",
+      "manifest": "FHD/mods/_employees/market-frontend-dev/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-vue-view-update",
+          "label": "skill-vue-view-update",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-api-ts-sync",
+          "label": "skill-api-ts-sync",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "marketing-site-builder",
+      "manifest": "FHD/mods/_employees/marketing-site-builder/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-marketing-site-build",
+          "label": "skill-marketing-site-build",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "miniapp-builder",
+      "manifest": "FHD/mods/_employees/miniapp-builder/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-miniapp-build",
+          "label": "skill-miniapp-build",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "mobile-android-release-officer",
+      "manifest": "FHD/mods/_employees/mobile-android-release-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "llm.markdown",
+          "label": "llm.markdown",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "mobile-ios-release-officer",
+      "manifest": "FHD/mods/_employees/mobile-ios-release-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "task.analyze",
+          "label": "task.analyze",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "ios.release.audit",
+          "label": "ios.release.audit",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "ios.provisioning.profile.manage",
+          "label": "ios.provisioning.profile.manage",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "ios.signing.secret.sync",
+          "label": "ios.signing.secret.sync",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "workflow.assist",
+          "label": "workflow.assist",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "mods-and-eskill-curator",
+      "manifest": "FHD/mods/_employees/mods-and-eskill-curator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-mod-review",
+          "label": "skill-mod-review",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-eskill-prototype-promote",
+          "label": "skill-eskill-prototype-promote",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-xcemp-audit",
+          "label": "skill-xcemp-audit",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "modstore-backend-api",
+      "manifest": "FHD/mods/_employees/modstore-backend-api/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-api-health-check",
+          "label": "skill-api-health-check",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-flask-blueprint-update",
+          "label": "skill-flask-blueprint-update",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "nginx-config-engineer",
+      "manifest": "FHD/mods/_employees/nginx-config-engineer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-nginx-config-check",
+          "label": "skill-nginx-config-check",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "pack-registrar",
+      "manifest": "FHD/mods/_employees/pack-registrar/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-pack-registration",
+          "label": "skill-pack-registration",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "payment-billing-reconciler",
+      "manifest": "FHD/mods/_employees/payment-billing-reconciler/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-payment-reconcile",
+          "label": "skill-payment-reconcile",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "pdf-full-read-employee",
+      "manifest": "FHD/mods/_employees/pdf-full-read-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "pdf.native_text",
+          "label": "pdf.native_text",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "pdf.image_extract",
+          "label": "pdf.image_extract",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "vision.vlm",
+          "label": "vision.vlm",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "pdf.full_read",
+          "label": "pdf.full_read",
+          "description": "上传 pdf，原生文字 + 图片分类目录 + VLM sidecar。",
+          "sources": [
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "pdf-generate-employee",
+      "manifest": "FHD/mods/_employees/pdf-generate-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "pdf.parse",
+          "label": "pdf.parse",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "pdf.write",
+          "label": "pdf.write",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "pdf.polish_optional",
+          "label": "pdf.polish_optional",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "pdf.generate",
+          "label": "pdf.generate",
+          "description": "上传 pdf → JSON → 写 generated pdf，可选润色。",
+          "sources": [
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ppt-full-read-employee",
+      "manifest": "FHD/mods/_employees/ppt-full-read-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "ppt.parse",
+          "label": "ppt.parse",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "ppt.notes_generate",
+          "label": "ppt.notes_generate",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "vision.vlm",
+          "label": "vision.vlm",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "ppt.full_read",
+          "label": "ppt.full_read",
+          "description": "上传 pptx → JSON 中介 + 演讲备注 + 图片 VLM。",
+          "sources": [
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "ppt-generate-employee",
+      "manifest": "FHD/mods/_employees/ppt-generate-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "ppt.write",
+          "label": "ppt.write",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "ppt.ooxml",
+          "label": "ppt.ooxml",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "data.json_read",
+          "label": "data.json_read",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "llm.plan",
+          "label": "llm.plan",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "ppt.generate",
+          "label": "ppt.generate",
+          "description": "plan → compose/enhance → output.pptx。",
+          "sources": [
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "push-update-context-officer",
+      "manifest": "FHD/mods/_employees/push-update-context-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-push-update-context",
+          "label": "skill-push-update-context",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-yuangon-resync",
+          "label": "skill-yuangon-resync",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "quality-validator",
+      "manifest": "FHD/mods/_employees/quality-validator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-quality-validation",
+          "label": "skill-quality-validation",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "retention-officer",
+      "manifest": "FHD/mods/_employees/retention-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-disk-retention",
+          "label": "skill-disk-retention",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "sandbox-tester",
+      "manifest": "FHD/mods/_employees/sandbox-tester/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-sandbox-testing",
+          "label": "skill-sandbox-testing",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "script-binder",
+      "manifest": "FHD/mods/_employees/script-binder/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-script-binding",
+          "label": "skill-script-binding",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "security-secrets-guard",
+      "manifest": "FHD/mods/_employees/security-secrets-guard/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-secret-audit",
+          "label": "skill-secret-audit",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "self-checker",
+      "manifest": "FHD/mods/_employees/self-checker/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-self-check",
+          "label": "skill-self-check",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "seo-sitemap-curator",
+      "manifest": "FHD/mods/_employees/seo-sitemap-curator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-sitemap-update",
+          "label": "skill-sitemap-update",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "site-content-editor",
+      "manifest": "FHD/mods/_employees/site-content-editor/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-static-page-update",
+          "label": "skill-static-page-update",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "task-router-officer",
+      "manifest": "FHD/mods/_employees/task-router-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-route-task",
+          "label": "skill-route-task",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-arbitrate-overlap",
+          "label": "skill-arbitrate-overlap",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "test-qa-runner",
+      "manifest": "FHD/mods/_employees/test-qa-runner/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-pytest-run",
+          "label": "skill-pytest-run",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-playwright-e2e",
+          "label": "skill-playwright-e2e",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "top-architect",
+      "manifest": "FHD/mods/_employees/top-architect/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-top-architecture-advice",
+          "label": "skill-top-architecture-advice",
+          "description": "全局架构答疑、架构学习路径、升级方案、ADR 与跨端影响评审。",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "user-customer-service-officer",
+      "manifest": "FHD/mods/_employees/user-customer-service-officer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-demand-intake",
+          "label": "skill-demand-intake",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-wechat-relay",
+          "label": "skill-wechat-relay",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "vibe-coding-maintainer",
+      "manifest": "FHD/mods/_employees/vibe-coding-maintainer/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-vibe-core-test",
+          "label": "skill-vibe-core-test",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-nl-parsing-update",
+          "label": "skill-nl-parsing-update",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-doc-sync-vibe",
+          "label": "skill-doc-sync-vibe",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-agent-layer-test",
+          "label": "skill-agent-layer-test",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-security-harden",
+          "label": "skill-security-harden",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-workflow-engine-update",
+          "label": "skill-workflow-engine-update",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "skill-adapter-compat-check",
+          "label": "skill-adapter-compat-check",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "word-full-read-employee",
+      "manifest": "FHD/mods/_employees/word-full-read-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "doc.full_extract",
+          "label": "doc.full_extract",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "doc.tables",
+          "label": "doc.tables",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "doc.images",
+          "label": "doc.images",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "doc.metadata",
+          "label": "doc.metadata",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "doc.styles",
+          "label": "doc.styles",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "word-generate-employee",
+      "manifest": "FHD/mods/_employees/word-generate-employee/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "doc.generate",
+          "label": "doc.generate",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        },
+        {
+          "key": "doc.template_merge",
+          "label": "doc.template_merge",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        },
+        {
+          "key": "doc.styles",
+          "label": "doc.styles",
+          "description": "",
+          "sources": [
+            "declared_capabilities"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "workbench-ux-stylist",
+      "manifest": "FHD/mods/_employees/workbench-ux-stylist/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-workbench-component-fix",
+          "label": "skill-workbench-component-fix",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "workflow-automator",
+      "manifest": "FHD/mods/_employees/workflow-automator/manifest.json",
+      "effective_capabilities": [
+        {
+          "key": "skill-workflow-automation",
+          "label": "skill-workflow-automation",
+          "description": "",
+          "sources": [
+            "declared_capabilities",
+            "executable_skills"
+          ]
+        }
+      ]
+    },
+    {
+      "employee_id": "xcagi-host-foundation-employee",
+      "manifest": "FHD/mods/_employees/xcagi-host-foundation-employee/manifest.json",
+      "effective_capabilities": []
+    }
+  ]
+}
