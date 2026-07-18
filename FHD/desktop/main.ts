@@ -1604,6 +1604,13 @@ function bootstrap(): void {
             appVersion: app.getVersion(),
             buildSha: readLocalBuildSha(),
             configPath: null,
+            // Phase 1：注入 backend 重启 / 版本回滚闭包（与 main.ts 现有逻辑共存）
+            // restartBackend 调用 startBackend()；backend exit 时 backendProcess 已被清空，可直接 spawn
+            restartBackend: async () => { await startBackend() },
+            // triggerRollback 复用现有 triggerRollbackSafe 吞错语义
+            triggerRollback: async () => { await triggerRollbackSafe('autonomy_controller_triggered') },
+            // knownGoodConfigContent 当前为 null（main.ts 暂无配置文件概念，repair_config 自动拒绝）
+            knownGoodConfigContent: null,
           })
           autonomyController = new AutonomyController(
             adapter,

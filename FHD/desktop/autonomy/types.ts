@@ -125,6 +125,12 @@ export interface RuntimeTruthSnapshot {
     circuit_open: boolean
     dlq_size: number
   }
+  /** Phase 1 新增：磁盘剩余 MB（< 500 派生 disk_low 信号） */
+  disk_free_mb?: number
+  /** Phase 1 新增：数据库完整性检查结果（'fail' 派生 db_corrupt 信号） */
+  db_integrity?: 'ok' | 'warn' | 'fail' | 'unknown'
+  /** Phase 1 新增：网络连通性（外网 API 探测，最近一次成功 ts；超过 5min 派生 network_down） */
+  last_network_ok_ts?: number | null
   /** 自定义扩展字段（服务器/CI 端可补充） */
   extra?: Record<string, unknown>
 }
@@ -158,6 +164,8 @@ export interface AutonomyAdapter {
   executeAction(action: Action): Promise<ActionResult>
   /** 写审计条目（同步、不抛错） */
   audit(entry: AuditEntry): void
+  /** Phase 4 新增：跨端门禁查询其他端状态。未实现时 controller fail-open（不阻断） */
+  getRemoteState?(): Promise<Record<string, unknown> | null>
 }
 
 /** 控制器选项 */

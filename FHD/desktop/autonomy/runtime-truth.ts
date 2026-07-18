@@ -35,7 +35,7 @@ export function computeConfigFingerprint(configPath: string | null): string {
     let sum = content.length
     for (let i = 0; i < head.length; i += 1) sum += head.charCodeAt(i)
     for (let i = 0; i < tail.length; i += 1) sum += tail.charCodeAt(i)
-    return sum.toString(16).padStart(8, '0').slice(-12)
+    return sum.toString(16).padStart(12, '0').slice(-12)
   } catch {
     return ''
   }
@@ -96,6 +96,12 @@ export function computeRuntimeTruth(ctx: {
   buildSha: string
   restartCount: number
   desktopStatus?: unknown
+  /** Phase 1 新增：磁盘剩余 MB（可选，未提供则不派生 disk_low 信号） */
+  diskFreeMb?: number
+  /** Phase 1 新增：数据库完整性（可选） */
+  dbIntegrity?: 'ok' | 'warn' | 'fail' | 'unknown'
+  /** Phase 1 新增：网络最近成功 ts（可选） */
+  lastNetworkOkTs?: number | null
 }): RuntimeTruthSnapshot {
   const backupsDir = path.join(ctx.userDataDir, 'backups')
   const currentFingerprint = computeConfigFingerprint(ctx.configPath)
@@ -104,7 +110,7 @@ export function computeRuntimeTruth(ctx: {
     currentFingerprint &&
     currentFingerprint !== ctx.knownGoodFingerprint,
   )
-  return {
+  const truth: RuntimeTruthSnapshot = {
     ts: Date.now(),
     backend: ctx.backend,
     port_in_use: ctx.portInUse,
@@ -117,7 +123,16 @@ export function computeRuntimeTruth(ctx: {
     restart_count: ctx.restartCount,
     neurobus: resolveNeurobus(ctx.desktopStatus),
   }
+  if (ctx.diskFreeMb !== undefined) truth.disk_free_mb = ctx.diskFreeMb
+  if (ctx.dbIntegrity !== undefined) truth.db_integrity = ctx.dbIntegrity
+  if (ctx.lastNetworkOkTs !== undefined) truth.last_network_ok_ts = ctx.lastNetworkOkTs
+  return truth
 }
+
+/** 网络断线判定窗口：5 分钟 */
+const NETWORK_DOWN_THRESHOLD_MS = 5 * 60 * 1000
+/** 磁盘剩余空间低位阈值：500MB */
+const DISK_LOW_THRESHOLD_MB = 500
 
 /**
  * 从 truth 派生信号：每 tick 调用，将 truth 异常转为信号。
@@ -164,6 +179,41 @@ export function deriveSignalsFromTruth(truth: RuntimeTruthSnapshot): Signal[] {
       ts: now,
       payload: { dlq_size: truth.neurobus.dlq_size },
     })
+  }
+  // Phase 1 新增：磁盘剩余空间低位（区别于 disk_usage_percent>=90 的 disk_full 信号）
+  if (truth.disk_free_mb !== undefined && truth.disk_free_mb < DISK_LOW_THRESHOLD_MB) {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'disk_low',
+      severity: 'crit',
+      detail: `磁盘剩余 ${truth.disk_free_mb}MB 低于 ${DISK_LOW_THRESHOLD_MB}MB 阈值`,
+      ts: now,
+      payload: { disk_free_mb: truth.disk_free_mb },
+    })
+  }
+  // Phase 1 新增：数据库完整性失败
+  if (truth.db_integrity === 'fail') {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'db_corrupt',
+      severity: 'fatal',
+      detail: '数据库完整性检查失败',
+      ts: now,
+      payload: { db_integrity: truth.db_integrity },
+    })
+  }
+  // Phase 1 新增：网络断线（最近成功 > 5min 或从未成功）
+  if (truth.last_network_ok_ts !== undefined && truth.last_network_ok_ts !== null) {
+    if (now - truth.last_network_ok_ts > NETWORK_DOWN_THRESHOLD_MS) {
+      signals.push({
+        source: 'runtime_truth',
+        kind: 'network_down',
+        severity: 'warn',
+        detail: `网络断线超过 ${NETWORK_DOWN_THRESHOLD_MS / 60000} 分钟`,
+        ts: now,
+        payload: { last_network_ok_ts: truth.last_network_ok_ts },
+      })
+    }
   }
   return signals
 }

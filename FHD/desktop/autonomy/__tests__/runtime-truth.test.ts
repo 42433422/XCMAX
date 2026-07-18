@@ -297,6 +297,152 @@ describe('deriveSignalsFromTruth', () => {
     expect(signals.some(s => s.kind === 'NEURO_BUS_DLQ_FULL')).toBe(false)
   })
 
+  // Phase 1 新增：disk_low / db_corrupt / network_down 信号派生
+  it('disk_free_mb < 500 派生 disk_low 信号', () => {
+    const truth: RuntimeTruthSnapshot = {
+      ts: Date.now(),
+      backend: { pid: 1, running: true, startedAt: Date.now() },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      disk_free_mb: 200,
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'disk_low' && s.severity === 'crit')).toBe(true)
+  })
+
+  it('disk_free_mb >= 500 不派生 disk_low', () => {
+    const truth: RuntimeTruthSnapshot = {
+      ts: Date.now(),
+      backend: { pid: 1, running: true, startedAt: Date.now() },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      disk_free_mb: 1000,
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'disk_low')).toBe(false)
+  })
+
+  it('disk_free_mb 未设置时不派生 disk_low', () => {
+    const truth: RuntimeTruthSnapshot = {
+      ts: Date.now(),
+      backend: { pid: 1, running: true, startedAt: Date.now() },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'disk_low')).toBe(false)
+  })
+
+  it('db_integrity=fail 派生 db_corrupt 信号（fatal）', () => {
+    const truth: RuntimeTruthSnapshot = {
+      ts: Date.now(),
+      backend: { pid: 1, running: true, startedAt: Date.now() },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      db_integrity: 'fail',
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'db_corrupt' && s.severity === 'fatal')).toBe(true)
+  })
+
+  it('db_integrity=ok 不派生 db_corrupt', () => {
+    const truth: RuntimeTruthSnapshot = {
+      ts: Date.now(),
+      backend: { pid: 1, running: true, startedAt: Date.now() },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      db_integrity: 'ok',
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'db_corrupt')).toBe(false)
+  })
+
+  it('last_network_ok_ts 超过 5min 派生 network_down 信号', () => {
+    const now = Date.now()
+    const truth: RuntimeTruthSnapshot = {
+      ts: now,
+      backend: { pid: 1, running: true, startedAt: now },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      last_network_ok_ts: now - 10 * 60 * 1000, // 10 分钟前
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'network_down' && s.severity === 'warn')).toBe(true)
+  })
+
+  it('last_network_ok_ts 在 5min 内不派生 network_down', () => {
+    const now = Date.now()
+    const truth: RuntimeTruthSnapshot = {
+      ts: now,
+      backend: { pid: 1, running: true, startedAt: now },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      last_network_ok_ts: now - 60 * 1000, // 1 分钟前
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'network_down')).toBe(false)
+  })
+
+  it('last_network_ok_ts=null 不派生 network_down（从未成功不算断线）', () => {
+    const truth: RuntimeTruthSnapshot = {
+      ts: Date.now(),
+      backend: { pid: 1, running: true, startedAt: Date.now() },
+      port_in_use: true,
+      disk_usage_percent: 50,
+      config_fingerprint_changed: false,
+      pending_rollback_marker: false,
+      last_backup_ts: null,
+      app_version: '',
+      build_sha: '',
+      restart_count: 0,
+      last_network_ok_ts: null,
+    }
+    const signals = deriveSignalsFromTruth(truth)
+    expect(signals.some(s => s.kind === 'network_down')).toBe(false)
+  })
+
   it('一切正常时不派生任何信号', () => {
     const truth: RuntimeTruthSnapshot = {
       ts: Date.now(),

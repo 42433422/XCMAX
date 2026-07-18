@@ -25,6 +25,7 @@ import type {
 } from './types.js'
 import { deriveSignalsFromTruth } from './runtime-truth.js'
 import { predict } from './impact-predictor.js'
+import { checkBeforeAction, isEnabled as crossTierGateEnabled } from './cross-tier-gate.js'
 
 /** 默认配置 */
 const DEFAULTS = {
@@ -88,9 +89,12 @@ export class AutonomyController {
     this.pruneSignals()
   }
 
-  /** 单次 tick：采集 truth → 派生信号 → 决策 → 执行 */
+  /** 单次 tick：采集 truth → 派生信号 → 决策 → 执行
+   *
+   * 注：enabled 检查由 start() 负责（不启动定时器）；
+   * 直接调用 tick() 始终执行，便于单元测试与"手动触发一次决策"的运维场景。
+   */
   async tick(): Promise<void> {
-    if (!this.opts.enabled) return
     try {
       this.latestTruth = await this.adapter.collectTruth()
     } catch (e) {
@@ -178,6 +182,37 @@ export class AutonomyController {
           action: { type: 'skipped', reasons: prediction.reasons },
           result: null,
           truth_snapshot: truth,
+        })
+        return
+      }
+    }
+    // CrossTierGate 跨端门禁（默认禁用，env XCAGI_CROSS_TIER_GATE=1 启用）
+    if (crossTierGateEnabled()) {
+      let remoteState: Record<string, unknown> | null = null
+      try {
+        remoteState = (await this.adapter.getRemoteState?.()) ?? null
+      } catch (e) {
+        // 查询失败：fail-open，记 audit 但不阻断
+        const detail = e instanceof Error ? e.message : String(e)
+        this.adapter.audit({
+          ts: new Date().toISOString(),
+          source_signal: sourceSignal,
+          diagnosis,
+          action: { type: 'skipped', reasons: [`cross_tier_query_failed: ${detail}`] },
+          result: null,
+          truth_snapshot: truth ?? undefined,
+        })
+        remoteState = null
+      }
+      const gateResult = checkBeforeAction('desktop', action.type, remoteState)
+      if (!gateResult.allow) {
+        this.adapter.audit({
+          ts: new Date().toISOString(),
+          source_signal: sourceSignal,
+          diagnosis,
+          action: { type: 'skipped', reasons: gateResult.reasons },
+          result: null,
+          truth_snapshot: truth ?? undefined,
         })
         return
       }

@@ -69,8 +69,9 @@ export function predict(action: Action, truth: RuntimeTruthSnapshot): Prediction
     }
     case 'clear_cache': {
       // 风险：磁盘未紧张时清理无意义（且可能误删用户临时文件）
-      if (truth.disk_usage_percent < DISK_CLEAN_THRESHOLD) {
-        reasons.push(`磁盘占用 ${truth.disk_usage_percent}% < 阈值 ${DISK_CLEAN_THRESHOLD}%，无需清理`)
+      // 注：<= 而非 <，边界值（= 阈值）也拒绝，仅 > 阈值时允许清理
+      if (truth.disk_usage_percent <= DISK_CLEAN_THRESHOLD) {
+        reasons.push(`磁盘占用 ${truth.disk_usage_percent}% <= 阈值 ${DISK_CLEAN_THRESHOLD}%，无需清理`)
       }
       break
     }
