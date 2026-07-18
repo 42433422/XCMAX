@@ -12,11 +12,11 @@ pluginManagement {
 
     repositories {
         mavenLocal()
-        maven("https://maven.aliyun.com/repository/google")
-        maven("https://maven.aliyun.com/repository/public")
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven("https://maven.aliyun.com/repository/google")
+        maven("https://maven.aliyun.com/repository/public")
     }
 }
 

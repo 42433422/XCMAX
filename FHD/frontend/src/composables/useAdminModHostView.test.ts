@@ -55,4 +55,38 @@ describe('useAdminModHostView', () => {
     expect(() => useAdminModHostView('mod-2', 'View2', 'Title2')).not.toThrow()
     expect(() => useAdminModHostView('', '', '')).not.toThrow()
   })
+
+  it('loads every registered admin Mod physical view', async () => {
+    const { modRuntimeViewLoaders, useAdminModHostView } = await import('./useAdminModHostView')
+    const registered = Object.entries(modRuntimeViewLoaders)
+
+    expect(registered.length).toBeGreaterThan(0)
+    const results = await Promise.allSettled(registered.map(([, load]) => load()))
+    expect(results).toHaveLength(registered.length)
+    expect(results.some((result) => result.status === 'fulfilled')).toBe(true)
+
+    const fulfilledIndex = results.findIndex((result) => result.status === 'fulfilled')
+    const matched = registered[fulfilledIndex][0].match(
+      /mods-admin-runtime\/([^/]+)\/frontend\/views\/([^/]+)\.vue$/,
+    )
+    expect(matched).not.toBeNull()
+    const fulfilled = results[fulfilledIndex]
+    if (fulfilled.status !== 'fulfilled') throw new Error('expected fulfilled Mod view loader')
+    const { View } = useAdminModHostView(matched![1], matched![2], 'Registered view')
+    await vi.waitFor(() => expect(View.value).toBe(fulfilled.value.default))
+  })
+
+  it('keeps the fallback view when a registered loader rejects', async () => {
+    const { modRuntimeViewLoaders, useAdminModHostView } = await import('./useAdminModHostView')
+    const key = '../../../mods-admin-runtime/test-rejection/frontend/views/MainView.vue'
+    modRuntimeViewLoaders[key] = vi.fn().mockRejectedValue(new Error('load failed'))
+
+    const { View } = useAdminModHostView('test-rejection', 'MainView', 'Rejected view')
+    const fallback = View.value
+    await nextTick()
+    await Promise.resolve()
+
+    expect(View.value).toBe(fallback)
+    delete modRuntimeViewLoaders[key]
+  })
 })

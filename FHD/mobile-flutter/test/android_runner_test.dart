@@ -20,6 +20,9 @@ void main() {
       'android/app/src/main/res/xml/file_paths.xml',
     ).readAsStringSync();
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final settingsGradle = File(
+      'android/settings.gradle.kts',
+    ).readAsStringSync();
     final mainDart = File('lib/main.dart').readAsStringSync();
     final startupShell = File(
       'lib/src/app/mobile_startup_shell.dart',
@@ -101,6 +104,22 @@ void main() {
     expect(manifest, contains('@xml/update_file_paths'));
     expect(gradle, contains('androidx.biometric:biometric'));
     expect(gradle, contains('androidx.work:work-runtime-ktx'));
+    expect(
+      settingsGradle.indexOf('google()'),
+      lessThan(settingsGradle.indexOf('maven.aliyun.com/repository/google')),
+    );
+    expect(
+      settingsGradle.indexOf('mavenCentral()'),
+      lessThan(settingsGradle.indexOf('maven.aliyun.com/repository/public')),
+    );
+    expect(
+      gradle.indexOf('google()'),
+      lessThan(gradle.indexOf('maven.aliyun.com/repository/google')),
+    );
+    expect(
+      gradle.indexOf('mavenCentral()'),
+      lessThan(gradle.indexOf('maven.aliyun.com/repository/public')),
+    );
     expect(backgroundWork, contains('PeriodicWorkRequestBuilder'));
     expect(backgroundWork, contains('xcagi_mobile_sync'));
     expect(backgroundWork, contains('xcagi_push_poll'));

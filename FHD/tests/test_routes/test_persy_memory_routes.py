@@ -111,7 +111,9 @@ def test_persy_memory_routes_cover_review_query_graph_and_delete(tmp_path) -> No
     assert query.json()["chunks"][0]["metadata"]["memory_id"] == memory_id
     assert unified_query.status_code == 200
     assert unified_query.json()["persy_memory"]["count"] == 1
-    assert any(chunk["metadata"].get("memory_id") == memory_id for chunk in unified_query.json()["chunks"])
+    assert any(
+        chunk["metadata"].get("memory_id") == memory_id for chunk in unified_query.json()["chunks"]
+    )
     assert any(chunk["metadata"].get("document_id") for chunk in unified_query.json()["chunks"])
     assert "已确认的长期记忆" in unified_query.json()["answer"]
     assert graph.status_code == 200

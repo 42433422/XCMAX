@@ -59,7 +59,9 @@ def _make_signal(kind: str, ts: int = 1_000_000) -> Signal:
     )
 
 
-def _make_completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
+def _make_completed(
+    returncode: int = 0, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
@@ -195,9 +197,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=True
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=True)
 
         assert len(audits) == 1
         # audit 中 action 应为 skipped
@@ -233,9 +233,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         # audit action 应为 skipped（predict deny）
@@ -271,13 +269,12 @@ class TestExecutePlan:
         state = WatcherState()
 
         # 第 1 次执行：失败 + 耗尽 → 立即 escalate
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         # 应有 escalate audit（原始 action audit 已通过 adapter.audit 写入）
         escalate_audits = [
-            a for a in audits
+            a
+            for a in audits
             if a.action is not None
             and not isinstance(a.action, dict)
             and a.action.type == ActionType.ESCALATE
@@ -313,9 +310,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         assert audits[0].result is not None
@@ -345,9 +340,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         assert audits[0].result is not None
@@ -412,6 +405,7 @@ class TestTick:
         tmp_audit_dir: Path,
     ) -> None:
         """truth 采集失败 → tick 抛错 + 写 audit。"""
+
         def _fail_collect() -> RuntimeTruthSnapshot:
             raise RuntimeError("docker unavailable")
 
@@ -436,9 +430,7 @@ class TestTick:
         adapter_for_test._compose_status_probe = lambda root: ("exited", True)
         state = WatcherState()
 
-        truth, signals, plans, audits = tick(
-            adapter_for_test, ALL_POLICIES, state, dry_run=True
-        )
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state, dry_run=True)
 
         # 派生信号 + 匹配 policy
         assert len(signals) > 0
@@ -517,11 +509,16 @@ class TestCli:
 
     def test_parse_args_custom_paths(self) -> None:
         """--deploy-root / --manifest-path / --audit-dir 自定义。"""
-        args = parse_args([
-            "--deploy-root", "/custom/deploy",
-            "--manifest-path", "/custom/manifest.json",
-            "--audit-dir", "/custom/audit",
-        ])
+        args = parse_args(
+            [
+                "--deploy-root",
+                "/custom/deploy",
+                "--manifest-path",
+                "/custom/manifest.json",
+                "--audit-dir",
+                "/custom/audit",
+            ]
+        )
 
         assert args.deploy_root == "/custom/deploy"
         assert args.manifest_path == "/custom/manifest.json"
@@ -555,11 +552,16 @@ class TestCli:
 
         monkeypatch.setattr(watcher_mod.CvmAutonomyAdapter, "__init__", _patched_init)
 
-        exit_code = main([
-            "--deploy-root", str(deploy_root),
-            "--manifest-path", str(manifest_path),
-            "--audit-dir", str(audit_dir),
-        ])
+        exit_code = main(
+            [
+                "--deploy-root",
+                str(deploy_root),
+                "--manifest-path",
+                str(manifest_path),
+                "--audit-dir",
+                str(audit_dir),
+            ]
+        )
 
         assert exit_code == 0
 
@@ -576,10 +578,15 @@ class TestCli:
 
         monkeypatch.setattr(watcher_mod.CvmAutonomyAdapter, "collect_truth", _fail_collect)
 
-        exit_code = main([
-            "--deploy-root", str(tmp_path),
-            "--manifest-path", str(tmp_path / "manifest.json"),
-            "--audit-dir", str(tmp_path / "audit"),
-        ])
+        exit_code = main(
+            [
+                "--deploy-root",
+                str(tmp_path),
+                "--manifest-path",
+                str(tmp_path / "manifest.json"),
+                "--audit-dir",
+                str(tmp_path / "audit"),
+            ]
+        )
 
         assert exit_code == 1

@@ -236,9 +236,7 @@ class TestTemplateApplicationServiceCompatibility:
         assert service.save_template_file("source.xlsx", "target.xlsx") == {"success": True}
         store.list_by_type.assert_called_once_with("发货单", active_only=True)
         store.get_default_for_type.assert_called_once_with("发货单")
-        store.save_template_file.assert_called_once_with(
-            "source.xlsx", "target.xlsx", False
-        )
+        store.save_template_file.assert_called_once_with("source.xlsx", "target.xlsx", False)
 
 
 class TestCustomerApplicationService:

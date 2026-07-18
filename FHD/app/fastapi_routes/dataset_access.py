@@ -166,6 +166,7 @@ def _trusted_dataset_headers_enabled(request: Request) -> bool:
         return False
     return _is_local_request(request)
 
+
 def _local_default_access_enabled(request: Request) -> bool:
     if deployment_is_test() or is_desktop_mode():
         return True

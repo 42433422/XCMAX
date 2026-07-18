@@ -10,6 +10,7 @@
 - _coerce_cs_reply_body: 空 / 无 fence / json dict / json 非 dict / 非 json
 - _service_request_to_cs_messages: 各分支（extra_data dict / 非法 json / response / ai_reply / timestamps）
 """
+
 import json
 from datetime import datetime
 from types import SimpleNamespace
@@ -298,12 +299,12 @@ class TestStripMarkdownJsonFence:
         assert _strip_markdown_json_fence("```not starting") == ""
 
     def test_strips_opening_fence_only(self):
-        text = "```json\n{\"key\": \"value\"}"
+        text = '```json\n{"key": "value"}'
         result = _strip_markdown_json_fence(text)
         assert result == '{"key": "value"}'
 
     def test_strips_opening_and_closing_fence(self):
-        text = "```json\n{\"key\": \"value\"}\n```"
+        text = '```json\n{"key": "value"}\n```'
         result = _strip_markdown_json_fence(text)
         assert result == '{"key": "value"}'
 
@@ -544,7 +545,7 @@ class TestServiceRequestToCsMessages:
             title="t",
             description="d",
             response="回复",
-            extra_data='[1, 2, 3]',  # json list, not dict
+            extra_data="[1, 2, 3]",  # json list, not dict
             created_at=None,
             updated_at=None,
         )

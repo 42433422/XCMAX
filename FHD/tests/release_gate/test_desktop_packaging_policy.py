@@ -271,9 +271,7 @@ def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
 
 
 def test_desktop_package_includes_customer_service_contract_runtime() -> None:
-    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
-        encoding="utf-8"
-    )
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
 
     assert '"app.services.service_contract_fill"' in spec
 

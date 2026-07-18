@@ -90,7 +90,9 @@ class TestDegradationPaths:
     def test_predict_action_index_returns_minus1_when_no_policy(self, reset_policy_globals):
         assert predict_action_index([0.1] * FEATURE_DIM) == -1
 
-    def test_predict_action_index_returns_minus1_with_mask_when_no_policy(self, reset_policy_globals):
+    def test_predict_action_index_returns_minus1_with_mask_when_no_policy(
+        self, reset_policy_globals
+    ):
         assert predict_action_index([0.1] * FEATURE_DIM, mask=[True, False, True]) == -1
 
     def test_predict_with_confidence_returns_default_when_no_policy(self, reset_policy_globals):
@@ -240,9 +242,7 @@ class TestLoadActivePolicy:
             result = load_active_policy()
         assert result is mock_model
 
-    def test_policies_none_treated_as_empty(
-        self, mock_torch_nn, reset_policy_globals, tmp_path
-    ):
+    def test_policies_none_treated_as_empty(self, mock_torch_nn, reset_policy_globals, tmp_path):
         manifest = tmp_path / "manifest.json"
         _write_manifest(manifest, {"active_version": "0", "policies": None})
         with patch.object(policy_nn, "_manifest_path", return_value=manifest):
@@ -316,9 +316,7 @@ class TestPredictActionIndex:
 
 
 class TestPredictWithConfidence:
-    def test_returns_idx_and_confidence_without_mask(
-        self, mock_torch_nn, reset_policy_globals
-    ):
+    def test_returns_idx_and_confidence_without_mask(self, mock_torch_nn, reset_policy_globals):
         fake_torch, _ = mock_torch_nn
         fake_torch.isinf.return_value.all.return_value.item.return_value = 0
         fake_torch.argmax.return_value.item.return_value = 1

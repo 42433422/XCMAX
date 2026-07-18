@@ -1708,7 +1708,24 @@ class TestUploadDatasetDocument:
             )
         assert resp.status_code == 400
         assert "25 MB" in resp.json()["message"]
+        assert resp.json()["error_code"] == "dataset_upload_too_large"
         mock_run.assert_not_called()
+
+    def test_dataset_id_never_controls_upload_path(self, tmp_path):
+        client = _build_client()
+        with (
+            patch("app.utils.path_utils.get_upload_dir", return_value=str(tmp_path)),
+            patch.object(kv, "_run_dataset_rag_agent") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(status_code=200, body=b"{}")
+            client.post(
+                "/api/knowledge/v1/datasets/customer-secret/documents/upload",
+                files={"file": ("doc.txt", b"safe", "text/plain")},
+            )
+
+        saved_path = Path(mock_run.call_args.kwargs["params"]["file_path"])
+        assert saved_path.parent == tmp_path.resolve() / "knowledge"
+        assert saved_path.suffix == ".txt"
 
     def test_agent_failure_cleans_up_file(self, tmp_path):
         client = _build_client()

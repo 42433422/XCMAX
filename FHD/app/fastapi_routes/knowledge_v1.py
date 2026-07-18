@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import threading
 import uuid
 from pathlib import Path
@@ -39,6 +38,27 @@ _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000
 _DATASET_METADATA_MAX_BYTES = 64 * 1024
 _PERSY_DATASET_ID = "persy-knowledge"
+
+
+def _safe_dataset_upload_suffix(filename: str) -> str | None:
+    """Return only literal suffixes that are safe to use in a server-owned path."""
+
+    requested = Path(filename).suffix.lower()
+    if requested == ".pdf":
+        return ".pdf"
+    if requested == ".docx":
+        return ".docx"
+    if requested == ".txt":
+        return ".txt"
+    if requested == ".md":
+        return ".md"
+    if requested == ".csv":
+        return ".csv"
+    if requested == ".json":
+        return ".json"
+    if requested == ".log":
+        return ".log"
+    return None
 
 
 def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
@@ -175,6 +195,7 @@ class DatasetQueryRequest(BaseModel):
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+
     @field_validator("metadata_filter")
     @classmethod
     def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
@@ -654,18 +675,19 @@ async def upload_dataset_document(
     chunk_strategy: str = Form("semantic"),
 ) -> JSONResponse:
     raw_name = Path(str(file.filename or "document")).name
-    suffix = Path(raw_name).suffix.lower()
-    stem_limit = max(1, 240 - len(suffix))
-    original_name = f"{Path(raw_name).stem[:stem_limit]}{suffix}"
-    if suffix not in _DATASET_UPLOAD_EXTENSIONS:
+    requested_suffix = Path(raw_name).suffix.lower()
+    suffix = _safe_dataset_upload_suffix(raw_name)
+    if suffix is None:
         return JSONResponse(
             {
                 "success": False,
-                "message": f"不支持的资料类型: {suffix or '无扩展名'}",
+                "message": f"不支持的资料类型: {requested_suffix or '无扩展名'}",
                 "allowed_extensions": sorted(_DATASET_UPLOAD_EXTENSIONS),
             },
             status_code=400,
         )
+    stem_limit = max(1, 240 - len(suffix))
+    original_name = f"{Path(raw_name).stem[:stem_limit]}{suffix}"
     source_label = str(source or original_name).strip() or original_name
     if len(source_label) > 300:
         return JSONResponse(
@@ -683,23 +705,43 @@ async def upload_dataset_document(
 
     from app.utils.path_utils import get_upload_dir
 
-    safe_dataset = re.sub(r"[^A-Za-z0-9._-]+", "_", str(dataset_id or "default"))[:100]
-    upload_dir = Path(get_upload_dir()).resolve() / "knowledge" / (safe_dataset or "default")
+    upload_dir = Path(get_upload_dir()).resolve() / "knowledge"
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
     size = 0
+    too_large = False
     try:
         with saved_path.open("wb") as target:
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
                 if size > _DATASET_UPLOAD_MAX_BYTES:
-                    raise ValueError("资料文件不能超过 25 MB")
+                    too_large = True
+                    break
                 target.write(chunk)
-    except (OSError, ValueError) as exc:
+    except OSError:
+        logger.exception("Failed to persist Persy dataset upload")
         saved_path.unlink(missing_ok=True)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "无法保存上传资料",
+                "error_code": "dataset_upload_persist_failed",
+            },
+            status_code=500,
+        )
     finally:
         await file.close()
+
+    if too_large:
+        saved_path.unlink(missing_ok=True)
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "资料文件不能超过 25 MB",
+                "error_code": "dataset_upload_too_large",
+            },
+            status_code=400,
+        )
 
     response = _run_dataset_rag_agent(
         request=request,

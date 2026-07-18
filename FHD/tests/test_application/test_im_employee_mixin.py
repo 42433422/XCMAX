@@ -39,8 +39,9 @@ def _make_user(user_id=1, display_name="Alice", username="alice", is_active=True
     return u
 
 
-def _make_profile(employee_id="emp1", user_id=10, mod_id="m1", display_name="Emp1",
-                  avatar_url="", owner_user_id=0):
+def _make_profile(
+    employee_id="emp1", user_id=10, mod_id="m1", display_name="Emp1", avatar_url="", owner_user_id=0
+):
     p = MagicMock()
     p.employee_id = employee_id
     p.user_id = user_id
@@ -160,7 +161,10 @@ class TestEnsureEmployeeUser:
 
         svc = ImApplicationService(db)
         result = svc.ensure_employee_user(
-            "emp1", mod_id="m1", display_name="Alice", avatar_url="http://x",
+            "emp1",
+            mod_id="m1",
+            display_name="Alice",
+            avatar_url="http://x",
             owner_user_id=5,
         )
         assert result == 100
@@ -247,16 +251,23 @@ class TestEnsureEmployeeUser:
         ret1 = MagicMock()
         ret1.scalars.return_value.first.return_value = existing_user
         existing_profile = _make_profile(
-            employee_id="emp6", user_id=53, display_name="OldName",
-            mod_id="oldmod", avatar_url="old.jpg", owner_user_id=0,
+            employee_id="emp6",
+            user_id=53,
+            display_name="OldName",
+            mod_id="oldmod",
+            avatar_url="old.jpg",
+            owner_user_id=0,
         )
         ret2 = MagicMock()
         ret2.scalars.return_value.first.return_value = existing_profile
         db.execute.side_effect = [ret1, ret2]
         svc = ImApplicationService(db)
         svc.ensure_employee_user(
-            "emp6", mod_id="newmod", display_name="NewName",
-            avatar_url="new.jpg", owner_user_id=7,
+            "emp6",
+            mod_id="newmod",
+            display_name="NewName",
+            avatar_url="new.jpg",
+            owner_user_id=7,
         )
         assert existing_profile.user_id == 53
         assert existing_profile.mod_id == "newmod"
@@ -270,7 +281,10 @@ class TestEnsureEmployeeUser:
         ret1 = MagicMock()
         ret1.scalars.return_value.first.return_value = existing_user
         existing_profile = _make_profile(
-            employee_id="emp7", user_id=54, mod_id="keepmod", avatar_url="keep.jpg",
+            employee_id="emp7",
+            user_id=54,
+            mod_id="keepmod",
+            avatar_url="keep.jpg",
         )
         ret2 = MagicMock()
         ret2.scalars.return_value.first.return_value = existing_profile
@@ -286,7 +300,9 @@ class TestEnsureEmployeeUser:
         ret1 = MagicMock()
         ret1.scalars.return_value.first.return_value = existing_user
         existing_profile = _make_profile(
-            employee_id="emp8", user_id=55, owner_user_id=9,
+            employee_id="emp8",
+            user_id=55,
+            owner_user_id=9,
         )
         ret2 = MagicMock()
         ret2.scalars.return_value.first.return_value = existing_profile
@@ -451,6 +467,7 @@ class TestEmployeeImSummary:
 
     def test_populates_out_with_last_message_and_iso_timestamp(self):
         from datetime import datetime
+
         db = MagicMock()
         profile = _make_profile(employee_id="e1", user_id=20)
         ret_profiles = MagicMock()
@@ -686,18 +703,33 @@ class TestSendEmployeeMessage:
         svc = ImApplicationService(db)
         with (
             patch.object(svc, "ensure_employee_user", return_value=20) as mock_ensure,
-            patch.object(svc, "get_or_create_direct", return_value={"id": 100, "created": True}) as mock_gocd,
-            patch.object(svc, "send_message", return_value={
-                "message": {"id": 500, "body": "hi"},
-                "member_user_ids": [10, 20],
-            }) as mock_send,
+            patch.object(
+                svc, "get_or_create_direct", return_value={"id": 100, "created": True}
+            ) as mock_gocd,
+            patch.object(
+                svc,
+                "send_message",
+                return_value={
+                    "message": {"id": 500, "body": "hi"},
+                    "member_user_ids": [10, 20],
+                },
+            ) as mock_send,
         ):
             result = svc.send_employee_message(
-                10, "emp1", "hi", mod_id="m1", display_name="E1",
-                avatar_url="url", owner_user_id=5,
+                10,
+                "emp1",
+                "hi",
+                mod_id="m1",
+                display_name="E1",
+                avatar_url="url",
+                owner_user_id=5,
             )
         mock_ensure.assert_called_once_with(
-            "emp1", mod_id="m1", display_name="E1", avatar_url="url", owner_user_id=5,
+            "emp1",
+            mod_id="m1",
+            display_name="E1",
+            avatar_url="url",
+            owner_user_id=5,
         )
         mock_gocd.assert_called_once_with(10, 20)
         mock_send.assert_called_once_with(100, 20, "hi")
@@ -789,6 +821,7 @@ class TestListCsInbox:
 
     def test_includes_iso_timestamp_when_present(self):
         from datetime import datetime
+
         db = MagicMock()
         ret_ids = MagicMock()
         ret_ids.all.return_value = [(100,)]

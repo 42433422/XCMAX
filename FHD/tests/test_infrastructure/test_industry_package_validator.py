@@ -69,9 +69,7 @@ class TestIterIndustryPackageManifestsBoundary:
 
     def test_empty_when_both_mods_roots_missing(self, monkeypatch, tmp_path):
         """两个 mods_root 都不存在 → 全部 continue 分支，返回空列表。"""
-        monkeypatch.setattr(
-            ipv, "_MODS_ROOTS", (tmp_path / "no_fhd", tmp_path / "no_xcagi")
-        )
+        monkeypatch.setattr(ipv, "_MODS_ROOTS", (tmp_path / "no_fhd", tmp_path / "no_xcagi"))
         assert ipv.iter_industry_package_manifests() == []
 
     def test_empty_when_first_missing_second_has_no_industry(self, monkeypatch, tmp_path):

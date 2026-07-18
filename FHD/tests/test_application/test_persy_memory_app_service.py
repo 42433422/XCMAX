@@ -154,6 +154,20 @@ def test_user_memory_is_private_while_tenant_memory_is_shared() -> None:
     assert other_rows == []
 
 
+def test_list_memories_does_not_expose_storage_exception_details() -> None:
+    memory_service = MagicMock()
+    memory_service.list_memories.side_effect = ValueError("internal storage traceback")
+    service = PersyMemoryApplicationService(memory_service)
+
+    result = service.list_memories(access_context=_access())
+
+    assert result == {
+        "success": False,
+        "message": "invalid memory filter",
+        "error_code": "persy_memory_invalid_filter",
+    }
+
+
 def test_mutation_is_limited_to_current_user_and_tenant_owners() -> None:
     service = _service()
     captured = service.capture_conversation_turn(

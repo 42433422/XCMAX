@@ -6,7 +6,6 @@ customer-message write capability and stores no copy of the source transcript.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import secrets
@@ -15,6 +14,24 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.application.kellai_customer_copilot_contracts import (
+    KellaiCopilotError,
+)
+from app.application.kellai_customer_copilot_contracts import (
+    content_from_completion as _content_from_completion,
+)
+from app.application.kellai_customer_copilot_contracts import (
+    conversation_input as _conversation_input,
+)
+from app.application.kellai_customer_copilot_contracts import (
+    parse_json_content as _parse_json_content,
+)
+from app.application.kellai_customer_copilot_contracts import (
+    public_draft as _public_draft,
+)
+from app.application.kellai_customer_copilot_contracts import (
+    public_follow_up_task as _public_follow_up_task,
+)
 from app.desktop_runtime.paths import ensure_desktop_dirs
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -22,10 +39,6 @@ _LOCK = threading.Lock()
 _MAX_STORED_DRAFTS = 200
 _ALLOWED_RISKS = {"low", "medium", "high", "critical"}
 _TERMINAL_STATUSES = {"approved_for_manual_send", "rejected"}
-
-
-class KellaiCopilotError(RuntimeError):
-    """A safe client-facing copilot error."""
 
 
 def _now_iso() -> str:
@@ -69,45 +82,6 @@ def _write(value: dict[str, Any]) -> None:
         pass
 
 
-def _public_draft(value: Any) -> dict[str, Any] | None:
-    if not isinstance(value, dict):
-        return None
-    return {
-        "draft_id": str(value.get("draft_id") or ""),
-        "customer_id": int(value.get("customer_id") or 0),
-        "summary": str(value.get("summary") or ""),
-        "intent": str(value.get("intent") or ""),
-        "risk_level": str(value.get("risk_level") or "medium"),
-        "next_action": str(value.get("next_action") or ""),
-        "reply_draft": str(value.get("reply_draft") or ""),
-        "evidence_message_ids": list(value.get("evidence_message_ids") or []),
-        "status": str(value.get("status") or "pending_approval"),
-        "created_at": str(value.get("created_at") or ""),
-        "decided_at": str(value.get("decided_at") or ""),
-        "decision_note": str(value.get("decision_note") or ""),
-        "model": str(value.get("model") or ""),
-    }
-
-
-def _public_follow_up_task(value: Any) -> dict[str, Any] | None:
-    if not isinstance(value, dict):
-        return None
-    return {
-        "task_id": str(value.get("task_id") or ""),
-        "customer_id": int(value.get("customer_id") or 0),
-        "source_draft_id": str(value.get("source_draft_id") or ""),
-        "title": str(value.get("title") or ""),
-        "description": str(value.get("description") or ""),
-        "priority": str(value.get("priority") or "normal"),
-        "status": str(value.get("status") or "open"),
-        "due_at": str(value.get("due_at") or ""),
-        "created_at": str(value.get("created_at") or ""),
-        "completed_at": str(value.get("completed_at") or ""),
-        "cancelled_at": str(value.get("cancelled_at") or ""),
-        "outcome_result": str(value.get("outcome_result") or ""),
-    }
-
-
 def _audit(*, actor: int | str | None, action: str, payload: dict[str, Any]) -> None:
     try:
         from app.mod_sdk.audit import write_audit_event
@@ -117,65 +91,6 @@ def _audit(*, actor: int | str | None, action: str, payload: dict[str, Any]) -> 
         # Draft persistence remains authoritative even if the shared audit DB
         # is temporarily unavailable during desktop fast-start.
         return
-
-
-def _content_from_completion(result: Any) -> str:
-    if not isinstance(result, dict):
-        return ""
-    choices = result.get("choices")
-    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-        message = choices[0].get("message")
-        if isinstance(message, dict):
-            return str(message.get("content") or "").strip()
-    return str(result.get("content") or "").strip()
-
-
-def _parse_json_content(content: str) -> dict[str, Any]:
-    text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines:
-            lines = lines[1:]
-        if lines and lines[-1].strip().startswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    start = text.find("{")
-    end = text.rfind("}")
-    if start < 0 or end <= start:
-        raise KellaiCopilotError("AI 没有返回可用的结构化草稿，请重试")
-    try:
-        value = json.loads(text[start : end + 1])
-    except json.JSONDecodeError as exc:
-        raise KellaiCopilotError("AI 草稿格式无效，请重试") from exc
-    if not isinstance(value, dict):
-        raise KellaiCopilotError("AI 草稿格式无效，请重试")
-    return value
-
-
-def _conversation_input(messages: list[dict[str, Any]]) -> tuple[str, list[str], str]:
-    usable: list[dict[str, Any]] = []
-    for message in messages[-24:]:
-        if not isinstance(message, dict):
-            continue
-        content = str(message.get("content") or "").strip()
-        if not content:
-            continue
-        usable.append(
-            {
-                "id": str(message.get("id") or ""),
-                "direction": "我方" if str(message.get("direction") or "") == "outbound" else "客户",
-                "content": content[:1200],
-                "created_at": str(message.get("created_at") or ""),
-            }
-        )
-    if not usable:
-        raise KellaiCopilotError("该客户还没有可用于分析的真实会话")
-    fingerprint_source = "\n".join(
-        f"{item['id']}|{item['direction']}|{item['created_at']}|{item['content']}" for item in usable
-    )
-    fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
-    evidence_ids = [item["id"] for item in usable[-8:] if item["id"]]
-    return json.dumps(usable, ensure_ascii=False), evidence_ids, fingerprint
 
 
 async def generate_draft(
@@ -204,7 +119,9 @@ async def generate_draft(
 输出严格 JSON，字段如下：
 {"summary":"不超过120字的事实摘要","intent":"客户当前意图","risk_level":"low|medium|high|critical","next_action":"建议的下一步","reply_draft":"可供人工审核的中文回复草稿"}
 要求：回复草稿不得声称已经执行任何动作；涉及退款、合同、价格、付款、法律、安全或明确承诺时 risk_level 至少为 high。"""
-    system_prompt += "\n若提供 recent_follow_up_outcomes，请参考结果调整建议，避免重复已失败或无效的动作。"
+    system_prompt += (
+        "\n若提供 recent_follow_up_outcomes，请参考结果调整建议，避免重复已失败或无效的动作。"
+    )
     user_prompt = json.dumps(
         {"customer_context": customer_context, "conversation": json.loads(transcript)},
         ensure_ascii=False,
@@ -367,9 +284,7 @@ def create_follow_up_task(
             raise KellaiCopilotError("已拒绝的草稿不能创建跟进任务")
 
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         existing = next(
             (
@@ -436,9 +351,7 @@ def list_follow_up_tasks(customer_id: int) -> list[dict[str, Any]]:
     with _LOCK:
         state = _read()
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         matching = [
             item
@@ -482,7 +395,9 @@ def decide_follow_up_task(
     target_status = (
         "failed"
         if decision == "complete" and outcome_result == "failed"
-        else "completed" if decision == "complete" else "cancelled"
+        else "completed"
+        if decision == "complete"
+        else "cancelled"
     )
     timestamp_field = "completed_at" if decision == "complete" else "cancelled_at"
     actor_field = "completed_by" if decision == "complete" else "cancelled_by"
@@ -490,9 +405,7 @@ def decide_follow_up_task(
     with _LOCK:
         state = _read()
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         record = tasks.get(str(task_id))
         if not isinstance(record, dict):
@@ -540,9 +453,7 @@ def purge_all(*, actor: int | str | None = None) -> dict[str, int]:
         state = _read()
         drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         counts = {"drafts_deleted": len(drafts), "tasks_deleted": len(tasks)}
         path = _store_path()

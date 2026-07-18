@@ -1,7 +1,7 @@
 import { shallowRef, type Component } from 'vue'
 import ModRequiredView from '@/components/ModRequiredView.vue'
 
-const modRuntimeViewLoaders = import.meta.glob(
+export const modRuntimeViewLoaders = import.meta.glob(
   '../../../mods-admin-runtime/*/frontend/views/*.vue',
 ) as Record<string, () => Promise<{ default: Component }>>
 

@@ -33,7 +33,9 @@ from scripts.autonomy.types import ActionType, Plan, RiskLevel, Signal
 # --------------------------------------------------------------------------- #
 
 
-def _make_signal(kind: str, ts: int = 1_000_000, detail: str = "test", severity: str = "crit") -> Signal:
+def _make_signal(
+    kind: str, ts: int = 1_000_000, detail: str = "test", severity: str = "crit"
+) -> Signal:
     return Signal(
         source="runtime_truth",
         kind=kind,

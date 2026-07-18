@@ -157,9 +157,7 @@ def _read_cache(lane: str) -> dict[str, Any] | None:
     return _read_cache_path(_cache_file(lane))
 
 
-def read_surface_audit_cache(
-    lane: str, *, include_stale: bool = True
-) -> dict[str, Any] | None:
+def read_surface_audit_cache(lane: str, *, include_stale: bool = True) -> dict[str, Any] | None:
     """Read an existing audit cache without starting Playwright.
 
     Read-only API endpoints use this helper when a remote surface is missing.  A

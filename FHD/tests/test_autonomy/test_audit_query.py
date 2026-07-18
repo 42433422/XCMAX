@@ -36,7 +36,13 @@ def make_entry(
         "ts": ts,
         "source_signal": {"kind": kind, "ts": 0, "detail": "test"},
         "diagnosis": {"root_cause": root_cause, "confidence": 0.8, "detail": "d", "evidence": []},
-        "action": {"type": action_type, "params": {}, "idempotency_key": "k", "max_attempts": 1, "risk": "low"},
+        "action": {
+            "type": action_type,
+            "params": {},
+            "idempotency_key": "k",
+            "max_attempts": 1,
+            "risk": "low",
+        },
         "result": {"action": {}, "ok": ok, "detail": "ok", "ts": 0},
         "truth_snapshot": {"ts": 0},
     }
@@ -116,8 +122,14 @@ class TestMatchesFilter:
 
     def test_multiple_filters_all_must_match(self):
         entry = AuditEntry.from_dict(make_entry(action_type="restart_service", ok=True))
-        assert matches_filter(entry, [("action.type", "restart_service"), ("result.ok", "True")]) is True
-        assert matches_filter(entry, [("action.type", "restart_service"), ("result.ok", "False")]) is False
+        assert (
+            matches_filter(entry, [("action.type", "restart_service"), ("result.ok", "True")])
+            is True
+        )
+        assert (
+            matches_filter(entry, [("action.type", "restart_service"), ("result.ok", "False")])
+            is False
+        )
 
 
 class TestLoadEntries:
@@ -159,10 +171,13 @@ class TestQuery:
 
     def test_filter(self, tmp_path):
         path = tmp_path / "audit.jsonl"
-        write_jsonl(path, [
-            make_entry(action_type="restart_service"),
-            make_entry(action_type="rollback"),
-        ])
+        write_jsonl(
+            path,
+            [
+                make_entry(action_type="restart_service"),
+                make_entry(action_type="rollback"),
+            ],
+        )
         entries = query("desktop", None, [("action.type", "rollback")], 0, path)
         assert len(entries) == 1
         assert entries[0].action["type"] == "rollback"
@@ -210,7 +225,14 @@ class TestFormatEntry:
         assert "True" in out
 
     def test_format_with_none_fields(self):
-        entry = AuditEntry(ts="2026", source_signal=None, diagnosis=None, action=None, result=None, truth_snapshot=None)
+        entry = AuditEntry(
+            ts="2026",
+            source_signal=None,
+            diagnosis=None,
+            action=None,
+            result=None,
+            truth_snapshot=None,
+        )
         out = format_entry(entry, 1)
         assert "?" in out
 
@@ -234,14 +256,23 @@ class TestMain:
 
     def test_main_filter(self, tmp_path, capsys):
         path = tmp_path / "audit.jsonl"
-        write_jsonl(path, [
-            make_entry(action_type="restart_service"),
-            make_entry(action_type="rollback"),
-        ])
-        rc = main([
-            "--source", "desktop", "--path", str(path),
-            "--filter", "action.type=rollback",
-        ])
+        write_jsonl(
+            path,
+            [
+                make_entry(action_type="restart_service"),
+                make_entry(action_type="rollback"),
+            ],
+        )
+        rc = main(
+            [
+                "--source",
+                "desktop",
+                "--path",
+                str(path),
+                "--filter",
+                "action.type=rollback",
+            ]
+        )
         assert rc == 0
         captured = capsys.readouterr()
         assert "rollback" in captured.out
