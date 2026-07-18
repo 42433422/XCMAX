@@ -36,7 +36,7 @@ jobs:
     runs-on: macos-26
     defaults:
       run:
-        working-directory: mobile-flutter-poc
+        working-directory: mobile-flutter
     env:
       CI: "true"
       APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -84,7 +84,7 @@ jobs:
           ruby-version: "3.2"
 
       - name: Install pinned Fastlane
-        working-directory: mobile-flutter-poc/ios
+        working-directory: mobile-flutter/ios
         run: |
           bundle config set path vendor/bundle
           bundle install --jobs 4 --retry 3
@@ -104,7 +104,7 @@ jobs:
 
       - name: Bootstrap existing signing assets into match
         if: ${{ inputs.bootstrap_match }}
-        working-directory: mobile-flutter-poc/ios
+        working-directory: mobile-flutter/ios
         env:
           IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
@@ -164,7 +164,7 @@ jobs:
             --build-number "${IOS_BUILD_NUMBER}"
 
       - name: Build signed IPA with match
-        working-directory: mobile-flutter-poc/ios
+        working-directory: mobile-flutter/ios
         env:
           IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
           IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
@@ -174,7 +174,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-flutter-ios-${{ steps.version.outputs.marketing_version }}-${{ steps.version.outputs.build_number }}
-          path: mobile-flutter-poc/build/ios/ipa/*.ipa
+          path: mobile-flutter/build/ios/ipa/*.ipa
           if-no-files-found: error
 
       - name: Decode App Store Connect API key
@@ -191,7 +191,7 @@ jobs:
           echo "APP_STORE_CONNECT_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
 
       - name: Upload to TestFlight or submit for review
-        working-directory: mobile-flutter-poc/ios
+        working-directory: mobile-flutter/ios
         env:
           IOS_MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
           IOS_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}

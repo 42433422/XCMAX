@@ -1161,7 +1161,7 @@ class TestMobileTools:
         assert r["ok"] is False
 
     async def test_android_gradle_no_flutter_project(self, tmp_path):
-        android_dir = tmp_path / "mobile-flutter-poc"
+        android_dir = tmp_path / "mobile-flutter"
         android_dir.mkdir()
         with patch.object(module, "_FHD_ROOT", tmp_path):
             r = await tool_android_gradle_build({"confirm": True}, {})
@@ -1169,7 +1169,7 @@ class TestMobileTools:
         assert "pubspec.yaml" in r["error"]
 
     async def test_android_gradle_success(self, tmp_path):
-        android_dir = tmp_path / "mobile-flutter-poc"
+        android_dir = tmp_path / "mobile-flutter"
         android_dir.mkdir()
         (android_dir / "pubspec.yaml").write_text("name: test", encoding="utf-8")
         with patch.object(module, "_FHD_ROOT", tmp_path):

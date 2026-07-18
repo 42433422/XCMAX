@@ -34,7 +34,7 @@ def test_flutter_android_package_staging_has_no_legacy_native_inputs() -> None:
     stage_script = STAGE_SCRIPT.read_text()
 
     assert 'bash FHD/scripts/mobile/stage-release-packages.sh "${args[@]}"' in workflow
-    assert "mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" in workflow
-    assert "mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" in stage_script
+    assert "mobile-flutter/build/app/outputs/flutter-apk/app-release.apk" in workflow
+    assert "mobile-flutter/build/app/outputs/flutter-apk/app-release.apk" in stage_script
     assert "mobile-android" not in stage_script
     assert "harmony" not in stage_script.lower()

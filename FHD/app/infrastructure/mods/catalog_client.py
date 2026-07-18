@@ -75,7 +75,10 @@ async def _http_get_json(url: str) -> dict[str, Any]:
     timeout = httpx.Timeout(5.0, read=15.0, write=5.0, connect=5.0)
     for attempt in range(1, max_attempts + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            # Catalog 与下载链路都不继承宿主代理。桌面用户常设置 ALL_PROXY
+            # 为 socks5；冻结包若未带 socksio，httpx 会在发请求前直接 ImportError。
+            # xiu-ci.com 是产品自有服务，使用直连也避免环境代理篡改信任边界。
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                 resp = await client.get(url, headers=_catalog_headers())
         except httpx.RequestError as exc:
             # 网络层错误（含 SSL 握手超时）：最后一次直接抛，中间次退避后重试

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
+import time
+from functools import lru_cache, wraps
 from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Request, UploadFile
@@ -16,6 +17,7 @@ from app.schemas.ocr_schema import (
     OcrRecognizeResponse,
     OcrTestResponse,
 )
+from app.utils.metrics import record_doc_recognition
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.upload_helpers import save_upload_file
 
@@ -24,6 +26,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff", "webp"}
+
+
+def _track_doc_recognition(doc_type: str):
+    """文档识别 SLI 埋点装饰器（SLO-BIZ-03）。fail-open。"""
+
+    def decorator(func):
+        import asyncio
+
+        if asyncio.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start = time.time()
+                status = "success"
+                try:
+                    return await func(*args, **kwargs)
+                except Exception:
+                    status = "error"
+                    raise
+                finally:
+                    record_doc_recognition(doc_type, status, time.time() - start)
+
+            return async_wrapper
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            start = time.time()
+            status = "success"
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                status = "error"
+                raise
+            finally:
+                record_doc_recognition(doc_type, status, time.time() - start)
+
+        return sync_wrapper
+
+    return decorator
 
 
 @lru_cache(maxsize=1)
@@ -128,6 +169,7 @@ async def _resolve_ocr_path(
 
 
 @router.post("/recognize", response_model=OcrRecognizeResponse)
+@_track_doc_recognition("ocr")
 async def ocr_recognize(
     request: Request,
     file_path: str | None = Form(default=None),
@@ -156,6 +198,7 @@ async def ocr_recognize(
 
 
 @router.post("/extract", response_model=OcrExtractResponse)
+@_track_doc_recognition("ocr")
 def ocr_extract(request: Request, data: dict = Body(default_factory=dict)):
     try:
         text = data.get("text", "")
@@ -176,6 +219,7 @@ def ocr_extract(request: Request, data: dict = Body(default_factory=dict)):
 
 
 @router.post("/analyze", response_model=OcrAnalyzeResponse)
+@_track_doc_recognition("ocr")
 def ocr_analyze(request: Request, data: dict = Body(default_factory=dict)):
     try:
         text = data.get("text", "")
@@ -196,6 +240,7 @@ def ocr_analyze(request: Request, data: dict = Body(default_factory=dict)):
 
 
 @router.post("/recognize-and-extract", response_model=OcrRecognizeAndExtractResponse)
+@_track_doc_recognition("ocr")
 async def ocr_recognize_and_extract(
     request: Request,
     file_path: str | None = Form(default=None),

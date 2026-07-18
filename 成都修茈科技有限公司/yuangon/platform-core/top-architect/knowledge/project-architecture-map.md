@@ -7,7 +7,7 @@
 | 区域 | 作用 | 关键路径 |
 |------|------|----------|
 | XCMAX 根仓 | 总仓、CI、桌面/移动/网站/员工体系汇合点 | `.github/**`、`docs/**`、`scripts/dev/**` |
-| FHD | XCAGI 主应用：FastAPI 后端、Vue 前端、Electron 桌面、移动端主线、员工 SSOT | `FHD/app/**`、`FHD/frontend/src/**`、`FHD/desktop/**`、`FHD/mobile-flutter-poc/**` |
+| FHD | XCAGI 主应用：FastAPI 后端、Vue 前端、Electron 桌面、移动端主线、员工 SSOT | `FHD/app/**`、`FHD/frontend/src/**`、`FHD/desktop/**`、`FHD/mobile-flutter/**` |
 | MODstore_deploy | Mod/员工包/工作流/支付/市场平台 | `成都修茈科技有限公司/MODstore_deploy/**` |
 | yuangon | 管理端员工岗位包说明、runbook、skill、prompt | `成都修茈科技有限公司/yuangon/**` |
 
@@ -32,10 +32,10 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 | 主题 | SSOT/入口 |
 |------|-----------|
 | 移动统一策略 | `FHD/docs/mobile_tri_platform_ssot.md` |
-| Flutter 主实现 | `FHD/mobile-flutter-poc/**` |
+| Flutter 主实现 | `FHD/mobile-flutter/**` |
 | 契约 | `FHD/contracts/openapi.json` |
 | FastAPI 移动接口 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` |
-| Flutter 收敛边界 | `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md` |
+| Flutter 收敛边界 | `FHD/mobile-flutter/FLUTTER_UNIFICATION.md` |
 
 原则：Flutter 只做交互、展示、缓存和端侧适配；账号、权限、员工、聊天、支付、审批、同步、数据写入都归 FastAPI。
 
@@ -54,7 +54,7 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 - `FHD/frontend/src/domain/yuangonDutyRoster.ts`
 - `成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster.ts`
 - `成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_roster.py`
-- `FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart`
+- `FHD/mobile-flutter/lib/src/data/duty_roster_ssot.dart`
 - `FHD/app/infrastructure/mods/catalog_visibility.py`
 - `FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts`
 
@@ -92,7 +92,7 @@ MODstore 是 Mod、AI 员工包、工作流、支付/钱包/权益的平台。�
 
 1. 先读 `FHD/docs/PROJECT_STATE.md`，理解项目真实完成度和风险。
 2. 再读 `FHD/docs/ARCHITECTURE.md`，理解 Neuro-DDD、桌面/Web 形态和目录结构。
-3. 读 `FHD/docs/mobile_tri_platform_ssot.md` 与 `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md`，理解 Flutter 唯一移动主线。
+3. 读 `FHD/docs/mobile_tri_platform_ssot.md` 与 `FHD/mobile-flutter/FLUTTER_UNIFICATION.md`，理解 Flutter 唯一移动主线。
 4. 读 `FHD/config/duty_roster.json` 与 `scripts/dev/sync_duty_roster.py`，理解管理端员工体系怎么生成到三端。
 5. 读 `成都修茈科技有限公司/MODstore_deploy/docs/ARCHITECTURE.md`，理解 MODstore 和支付边界。
 6. 最后按任务进入源码：FastAPI 路由、应用服务、Vue 页面、Flutter 页面、员工 manifest。

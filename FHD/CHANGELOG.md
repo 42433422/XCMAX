@@ -27,7 +27,7 @@
 - **fix(mobile-flutter)**：探索 Tab 增加审批入口；通知页去掉假数据 fallback（空态诚实）
 - **fix(backend)**：审批驳回与 AI 工作流驳回均 `notify_mobile_user`，对齐通过路径
 - **fix(modstore)**：商品履约同步写入 `user_mods`（`pkg_id`），打通支付→桌面 entitlement
-- **ci(mobile)**：发版/门禁切到 `mobile-flutter-poc`（`ci-mobile-flutter` / `fhd-release-android` / `android-build`）；归档 Kotlin CI 改为走 Flutter
+- **ci(mobile)**：发版/门禁切到 `mobile-flutter`（`ci-mobile-flutter` / `fhd-release-android` / `android-build`）；归档 Kotlin CI 改为走 Flutter
 - **docs(evidence)**：v10-B 终稿签字 — `v10-b-store-desktop-acceptance-2026-07-11-final.md`；`specs/tasks.md` **PL2 已勾选**
 - **docs(evidence)**：v10-C 底稿 `v10-c-mobile-acceptance-2026-07-11.md`（真机/正式签名未签，PL3 暂不勾）
 

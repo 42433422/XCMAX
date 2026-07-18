@@ -19,10 +19,14 @@ except ModuleNotFoundError:
     IntentRecognitionService = None  # type: ignore[assignment,misc]
 
 from app.application.customer_app_service import CustomerApplicationService
-from app.application.extract_log_app_service import ExtractLogApplicationService
+from app.application.extract_log_app_service import (
+    ExtractLogApplicationService,
+    get_extract_log_app_service,
+)
 from app.application.material_app_service import MaterialApplicationService
 from app.application.product_app_service import ProductApplicationService
 from app.application.shipment_app_service import ShipmentApplicationService
+from app.application.template_app_service import TemplateApplicationService
 from app.domain.services.pricing_engine import CustomerType, PricingEngine
 from app.domain.services.product_import_validator import ProductImportValidator, ValidationResult
 from app.domain.services.shipment_rules_engine import ShipmentRulesEngine
@@ -207,6 +211,34 @@ class TestExtractLogApplicationService:
 
         assert result["success"] is True
         assert result["deleted_count"] == 5
+
+    def test_compat_getter_uses_registered_legacy_contract(self):
+        legacy_service = Mock()
+        registry = Mock()
+        registry.extract_log_service = legacy_service
+
+        with patch("app.di.registry.get_service_registry", return_value=registry):
+            resolved = get_extract_log_app_service()
+
+        assert resolved is legacy_service
+
+
+class TestTemplateApplicationServiceCompatibility:
+    def test_excel_http_contract_delegates_to_template_store(self):
+        store = Mock()
+        store.list_by_type.return_value = [{"id": "shipment"}]
+        store.get_default_for_type.return_value = {"id": "shipment"}
+        store.save_template_file.return_value = {"success": True}
+        service = TemplateApplicationService(store)
+
+        assert service.list_by_type("发货单") == [{"id": "shipment"}]
+        assert service.get_default_for_type("发货单") == {"id": "shipment"}
+        assert service.save_template_file("source.xlsx", "target.xlsx") == {"success": True}
+        store.list_by_type.assert_called_once_with("发货单", active_only=True)
+        store.get_default_for_type.assert_called_once_with("发货单")
+        store.save_template_file.assert_called_once_with(
+            "source.xlsx", "target.xlsx", False
+        )
 
 
 class TestCustomerApplicationService:

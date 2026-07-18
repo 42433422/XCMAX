@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="${MODSTORE_DAILY_FHD_ROOT:-${XCAGI_FHD_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}}"
-SDK="${XCAGI_ANDROID_SDK_ROOT:-${ANDROID_SDK_ROOT:-${FHD_ROOT}/mobile-flutter-poc/.toolchain/android-sdk}}"
+SDK="${XCAGI_ANDROID_SDK_ROOT:-${ANDROID_SDK_ROOT:-${FHD_ROOT}/mobile-flutter/.toolchain/android-sdk}}"
 AVD_NAME="${XCAGI_ANDROID_AVD:-xcagi_surface_audit}"
 ADB="${SDK}/platform-tools/adb"
 EMULATOR="${SDK}/emulator/emulator"

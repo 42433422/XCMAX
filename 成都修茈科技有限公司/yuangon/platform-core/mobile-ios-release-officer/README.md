@@ -4,8 +4,8 @@
 
 核心范围：
 
-- `FHD/mobile-flutter-poc/ios/**`
-- `FHD/mobile-flutter-poc/fastlane/**`
+- `FHD/mobile-flutter/ios/**`
+- `FHD/mobile-flutter/fastlane/**`
 - `FHD/.github/workflows/release-ios.yml`
 
 独立 SwiftUI 产品工程已经退役，不得恢复。岗位 manifest 位于

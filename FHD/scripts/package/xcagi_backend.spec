@@ -100,6 +100,8 @@ hiddenimports.extend(
         "app.application.chat_business_safety",
         "app.services.ai_action_audit_service",
         "app.services.ocr_service",
+        # 客服桥合同路由使用函数内懒导入，PyInstaller 静态分析看不到。
+        "app.services.service_contract_fill",
         "app.runtime_integrity",
     ]
 )

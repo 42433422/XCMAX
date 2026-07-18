@@ -5,6 +5,7 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -17,6 +18,28 @@ from app.services.mod_zip_normalize import normalize_package_zip_path
 
 def test_catalog_base_url_default():
     assert catalog_client.catalog_base_url().startswith("http")
+
+
+@pytest.mark.asyncio
+async def test_catalog_http_client_ignores_environment_proxy():
+    import app.infrastructure.mods.catalog_client as catalog_client_impl
+
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"items": []}
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=client)
+    context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "app.infrastructure.mods.catalog_client.httpx.AsyncClient",
+        return_value=context,
+    ) as constructor:
+        result = await catalog_client_impl._http_get_json("https://xiu-ci.com/api/market/catalog")
+
+    assert result == {"items": []}
+    assert constructor.call_args.kwargs["trust_env"] is False
 
 
 def test_normalize_package_zip_passes_through_when_manifest_at_root(tmp_path: Path):

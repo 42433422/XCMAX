@@ -270,6 +270,14 @@ def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
     assert workflow.count("--verify-frozen-critical-runtime") == 2
 
 
+def test_desktop_package_includes_customer_service_contract_runtime() -> None:
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"app.services.service_contract_fill"' in spec
+
+
 def test_frozen_excel_temp_files_use_writable_app_data() -> None:
     modules = [
         REPO_ROOT / "app" / "application" / "excel_template_http_app_service.py",

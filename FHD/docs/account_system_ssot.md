@@ -16,7 +16,7 @@
 | 网站 | 官网 / AI 市场 / 软件下载页 | Web | personal / enterprise / admin | 唯一公开注册与购买入口；个人账号仅能在网站使用；**管理端（`/admin`）仅网页** |
 | 桌面端软件 | 软件下载 / 企业交付包 | Windows / macOS | **仅 enterprise** | 必须绑定企业会话；**禁止** personal / **禁止管理员登录与本地 `/admin` 运维台**；管理员请走网页管理端 |
 
-| 手机 App | 应用商店 / 企业分发 | **Flutter**（`mobile-flutter-poc`，覆盖 Android/iOS） | enterprise / admin | 企业移动工作台；账号能力跟随企业授权；**完整管理后台仍以网页为准** |
+| 手机 App | 应用商店 / 企业分发 | **Flutter**（`mobile-flutter`，覆盖 Android/iOS） | enterprise / admin | 企业移动工作台；账号能力跟随企业授权；**完整管理后台仍以网页为准** |
 
 产品端只决定可进入的运行环境，不决定账号身份。账号身份仍以 `User.tier` 与市场身份提升规则为准。
 

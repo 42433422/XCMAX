@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
+from functools import wraps
 from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
@@ -12,11 +14,51 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
+from app.utils.metrics import record_export_task
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["materials"])
+
+
+def _track_export_task(export_type: str):
+    """数据导出 SLI 埋点装饰器（SLO-BIZ-04）。fail-open。"""
+
+    def decorator(func):
+        import asyncio
+
+        if asyncio.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start = time.time()
+                status = "success"
+                try:
+                    return await func(*args, **kwargs)
+                except Exception:
+                    status = "error"
+                    raise
+                finally:
+                    record_export_task(export_type, status, time.time() - start)
+
+            return async_wrapper
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            start = time.time()
+            status = "success"
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                status = "error"
+                raise
+            finally:
+                record_export_task(export_type, status, time.time() - start)
+
+        return sync_wrapper
+
+    return decorator
 
 
 def _svc():
@@ -302,6 +344,7 @@ def get_low_stock_materials(threshold: float | None = Query(default=None)):
 
 
 @router.get("/api/materials/export")
+@_track_export_task("excel")
 def export_materials(
     search: str | None = Query(default=None),
     category: str | None = Query(default=None),

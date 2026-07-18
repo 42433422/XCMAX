@@ -695,7 +695,7 @@
       "id": "mobile-android-release-officer",
       "area": "platform-core",
       "scope_globs": [
-        "FHD/mobile-flutter-poc/**",
+        "FHD/mobile-flutter/**",
         "FHD/.github/workflows/ci-mobile-flutter.yml",
         "FHD/.github/workflows/release-android.yml",
         "release-apk/**"
@@ -713,8 +713,8 @@
       "id": "mobile-ios-release-officer",
       "area": "platform-core",
       "scope_globs": [
-        "FHD/mobile-flutter-poc/ios/**",
-        "FHD/mobile-flutter-poc/fastlane/**",
+        "FHD/mobile-flutter/ios/**",
+        "FHD/mobile-flutter/fastlane/**",
         "FHD/.github/workflows/release-ios.yml",
         "FHD/XCAGI/resources/**"
       ],
@@ -787,7 +787,7 @@
         "FHD/config/**",
         "FHD/app/**",
         "FHD/frontend/src/**",
-        "FHD/mobile-flutter-poc/**",
+        "FHD/mobile-flutter/**",
         "FHD/mods/_employees/**",
         "FHD/contracts/openapi.json",
         "scripts/dev/**",

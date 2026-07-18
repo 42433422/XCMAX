@@ -100,7 +100,7 @@
         "FHD/config/**",
         "FHD/app/**",
         "FHD/frontend/src/**",
-        "FHD/mobile-flutter-poc/**",
+        "FHD/mobile-flutter/**",
         "FHD/mods/_employees/**",
         "FHD/contracts/openapi.json",
         "scripts/dev/**",

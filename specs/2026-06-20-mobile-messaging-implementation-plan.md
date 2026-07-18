@@ -1,5 +1,10 @@
 # 移动端消息系统实现计划
 
+> **⚠️ DEPRECATED (2026-07-18)**：本计划针对已删除的独立 Kotlin `FHD/mobile-android/` 实现，
+> 已被 Flutter 主线 `FHD/mobile-flutter/` 替代（见 [FHD/mobile-flutter/FLUTTER_UNIFICATION.md](../FHD/mobile-flutter/FLUTTER_UNIFICATION.md)）。
+> 下方所有 `FHD/mobile-android/...` 路径在 git 历史中已不可达，仅保留作历史参考。
+> 当前移动端消息系统实现以 Flutter `lib/src/features/messages/` + `lib/src/im/im_websocket_client.dart` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让老板在手机端收到 AI 员工/IM/审批的推送通知(含国内 JPush),和 AI 员工有持久化会话历史,离线再上线 AI 对话历史自动补拉,IM WebSocket 稳定(心跳+重连)。

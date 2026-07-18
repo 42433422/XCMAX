@@ -6,6 +6,8 @@ import dataclasses
 import logging
 import os
 import tempfile
+import time
+from functools import wraps
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
@@ -23,11 +25,49 @@ from app.application.mod_store_catalog_app import (
     sync_modstore_library_to_local,
 )
 from app.shell.mods_catalog import list_mod_items
+from app.utils.metrics import record_mod_install
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mod-store"])
+
+
+def _track_mod_install(operation: str):
+    """MOD 安装/卸载 SLI 埋点装饰器（SLO-BIZ-05）。fail-open。"""
+
+    def decorator(func):
+        import asyncio
+
+        if asyncio.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                status = "success"
+                try:
+                    return await func(*args, **kwargs)
+                except Exception:
+                    status = "error"
+                    raise
+                finally:
+                    record_mod_install(operation, status)
+
+            return async_wrapper
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            status = "success"
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                status = "error"
+                raise
+            finally:
+                record_mod_install(operation, status)
+
+        return sync_wrapper
+
+    return decorator
 
 
 class ModStoreCatalogPayload(BaseModel):
@@ -584,6 +624,7 @@ async def mod_store_upload() -> ModStoreNotImplementedResponse:
 
 
 @router.post("/install", response_model=ModStoreInstallResult)
+@_track_mod_install("install")
 async def mod_store_install(request: Request) -> ModStoreInstallResult:
     payload = await _request_payload(request)
     pkg_id = _safe_text(payload.get("pkg_id") or payload.get("mod_id"))
@@ -681,6 +722,7 @@ async def mod_store_reload_employees(request: Request) -> ModStoreSimpleResponse
 
 
 @router.post("/uninstall", response_model=ModStoreSimpleResponse)
+@_track_mod_install("uninstall")
 async def mod_store_uninstall(request: Request) -> ModStoreSimpleResponse:
     mod_id = await _body_value(request, "mod_id")
     if not mod_id:

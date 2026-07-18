@@ -2,13 +2,13 @@
 
 本文是 Flutter Android 渠道构建、签名和发布的 SSOT。
 
-Android 与 iOS 共用 [`FHD/mobile-flutter-poc/`](../../mobile-flutter-poc/) 的 Flutter 业务代码。
+Android 与 iOS 共用 [`FHD/mobile-flutter/`](../../mobile-flutter/) 的 Flutter 业务代码。
 `android/` 目录只承担 Flutter Runner、Manifest、平台通道、签名和打包，不是独立产品实现。
 
 ## 本地验证
 
 ```bash
-cd FHD/mobile-flutter-poc
+cd FHD/mobile-flutter
 flutter pub get
 flutter test
 flutter build apk --debug
@@ -31,8 +31,8 @@ workflow 日志、APK/AAB、签名证书摘要和真实安装启动证据。
 
 ## 边界
 
-- 唯一移动实现：`FHD/mobile-flutter-poc/lib/`
-- Android Runner：`FHD/mobile-flutter-poc/android/`
+- 唯一移动实现：`FHD/mobile-flutter/lib/`
+- Android Runner：`FHD/mobile-flutter/android/`
 - 统一 CI：`FHD/.github/workflows/ci-mobile-flutter.yml`
 - Android 发布：`FHD/.github/workflows/release-android.yml`
 - 禁止恢复独立 Kotlin 产品工程或重复 Android CI。

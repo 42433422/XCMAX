@@ -775,9 +775,9 @@ async def tool_android_gradle_build(params: dict[str, Any], ctx: dict[str, Any])
     """Flutter Android debug 构建检查（外部工具名为兼容既有调用保留）。"""
     if not params.get("confirm"):
         return _err("android_gradle_build 需 confirm=true 确认", requires_confirm=True)
-    flutter_dir = _FHD_ROOT / "mobile-flutter-poc"
+    flutter_dir = _FHD_ROOT / "mobile-flutter"
     if not (flutter_dir / "pubspec.yaml").is_file():
-        return _err("mobile-flutter-poc/pubspec.yaml 不存在")
+        return _err("mobile-flutter/pubspec.yaml 不存在")
     flutter = shutil.which("flutter")
     if not flutter:
         return _ok("flutter 未安装（跳过）", skipped=True)

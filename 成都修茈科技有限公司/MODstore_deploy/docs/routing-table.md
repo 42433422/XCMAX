@@ -41,8 +41,8 @@ and re-run this script (or push, the git hook + push-update-context-officer take
 | platform-core | **fhd-core-maintainer** (FHD 核心应用维护员) | `FHD/app/**`<br>`FHD/tests/**`<br>`FHD/pyproject.toml` | `telemetry.backlog.created`, `employee.task.failed:test-qa-runner` |
 | platform-core | **github-pr-gatekeeper** (GitHub PR 守门员) | `.github/dependabot.yml`<br>`.github/workflows/gitleaks.yml`<br>`.github/workflows/codeql.yml` | `dependabot.pr.opened`, `dependabot.autofix.triggered` |
 | platform-core | **intake-dispatcher** (需求接入员) | `contact-intake.js`<br>`MODstore_deploy/modstore_server/eventing/intake/**`<br>`MODstore_deploy/modstore_server/api/intake_api.py` | `ops.intake.user_request`, `employee.task.done:wechat-contacts-ai-employee`, `ops.intake.customer_ticket`, `ops.intake.candidate_pack` |
-| platform-core | **mobile-android-release-officer** (Android 发版员) | `FHD/mobile-flutter-poc/**`<br>`FHD/.github/workflows/ci-mobile-flutter.yml`<br>`FHD/.github/workflows/release-android.yml` | — |
-| platform-core | **mobile-ios-release-officer** (iOS 发版员) | `FHD/mobile-flutter-poc/ios/**`<br>`FHD/mobile-flutter-poc/fastlane/**`<br>`FHD/.github/workflows/release-ios.yml` | — |
+| platform-core | **mobile-android-release-officer** (Android 发版员) | `FHD/mobile-flutter/**`<br>`FHD/.github/workflows/ci-mobile-flutter.yml`<br>`FHD/.github/workflows/release-android.yml` | — |
+| platform-core | **mobile-ios-release-officer** (iOS 发版员) | `FHD/mobile-flutter/ios/**`<br>`FHD/mobile-flutter/fastlane/**`<br>`FHD/.github/workflows/release-ios.yml` | — |
 | platform-core | **mods-and-eskill-curator** (Mods/ESkill 策展员) | `mods/**`<br>`FHD/mods/**`<br>`eskill-prototype/**` | `employee.task.done:employee-pack-curator`, `change_request.applied` |
 | platform-core | **task-router-officer** (任务派发员) | `MODstore_deploy/modstore_server/eventing/router/**`<br>`MODstore_deploy/modstore_server/api/router_api.py`<br>`MODstore_deploy/modstore_server/scripts/build_routing_table.py` | `ops.intake.task.queued`, `ops.yuangon.resync.done` |
 | platform-core | **top-architect** (顶级架构师员工) | `FHD/docs/**`<br>`FHD/config/**`<br>`FHD/app/**` | `architecture.question.created`, `employee.task.failed:fhd-core-maintainer`, `employee.task.failed:mobile-ios-release-officer`, `employee.task.failed:modstore-backend-api` |
@@ -616,7 +616,7 @@ and re-run this script (or push, the git hook + push-update-context-officer take
 - domain: Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。
 - depends_on: `test-qa-runner`, `deploy-release-officer`
 - scope_globs:
-  - `FHD/mobile-flutter-poc/**`
+  - `FHD/mobile-flutter/**`
   - `FHD/.github/workflows/ci-mobile-flutter.yml`
   - `FHD/.github/workflows/release-android.yml`
   - `release-apk/**`
@@ -629,8 +629,8 @@ and re-run this script (or push, the git hook + push-update-context-officer take
 - domain: Flutter iOS 渠道发布：Runner、Fastlane match、签名、TestFlight / App Store Connect 上传与 release 门禁。
 - depends_on: `deploy-release-officer`, `mobile-android-release-officer`
 - scope_globs:
-  - `FHD/mobile-flutter-poc/ios/**`
-  - `FHD/mobile-flutter-poc/fastlane/**`
+  - `FHD/mobile-flutter/ios/**`
+  - `FHD/mobile-flutter/fastlane/**`
   - `FHD/.github/workflows/release-ios.yml`
   - `FHD/XCAGI/resources/**`
 - forbidden_globs:
@@ -687,7 +687,7 @@ and re-run this script (or push, the git hook + push-update-context-officer take
   - `FHD/config/**`
   - `FHD/app/**`
   - `FHD/frontend/src/**`
-  - `FHD/mobile-flutter-poc/**`
+  - `FHD/mobile-flutter/**`
   - `FHD/mods/_employees/**`
   - `FHD/contracts/openapi.json`
   - `scripts/dev/**`

@@ -1,6 +1,6 @@
 # Flutter mobile unification
 
-> **2026-07-18**：`mobile-flutter-poc` 是唯一移动端实现与交付主线。Android 和 iOS
+> **2026-07-18**：`mobile-flutter` 是唯一移动端实现与交付主线。Android 和 iOS
 > 共用 `lib/` 业务代码；`android/` 与 `ios/` 只承担 Flutter Runner、签名、平台通道和商店发布。
 
 移动端的长期真相源是 Flutter + OpenAPI + FastAPI +

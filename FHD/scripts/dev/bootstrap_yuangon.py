@@ -58,7 +58,7 @@ HANDOFF_HUB_DOCS: dict[str, str] = {
 - **触发条件**：Flutter Android APK/AAB 产物就绪 + `verify_version_anchors.py` 绿
 - **输入**：`release-apk/` 产物路径、Flutter `pubspec.yaml` 版本锚点、smoke 通过报告
 - **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；产品版本必须与 1.0.0.0 SSOT 对齐
-- **当前状态**：`FHD/mobile-flutter-poc/` 是唯一移动实现；`release-ios.yml` 负责 Flutter iOS 构建、签名和上传
+- **当前状态**：`FHD/mobile-flutter/` 是唯一移动实现；`release-ios.yml` 负责 Flutter iOS 构建、签名和上传
 """,
     "security-secrets-guard": """\
 ### handoff: security-secrets-guard → 本岗
@@ -95,7 +95,7 @@ def _make_employee_yaml(pkg_id: str, mf: dict) -> str:
 
     ios_note = ""
     if pkg_id == "mobile-ios-release-officer":
-        ios_note = "# NOTE: scope FHD/mobile-flutter-poc/** 为唯一移动实现，release-ios.yml 为 iOS 发版入口\n"
+        ios_note = "# NOTE: scope FHD/mobile-flutter/** 为唯一移动实现，release-ios.yml 为 iOS 发版入口\n"
 
     def _quote_if_needed(s: str) -> str:
         """Quote glob strings that contain YAML-special characters."""
@@ -176,7 +176,7 @@ def _make_readme(pkg_id: str, mf: dict) -> str:
 
     ios_warning = ""
     if pkg_id == "mobile-ios-release-officer":
-        ios_warning = "\n> **发版入口**：`FHD/mobile-flutter-poc/` 是唯一移动实现，`FHD/.github/workflows/release-ios.yml` 负责 Flutter iOS 构建、签名、TestFlight 与 App Store Connect 上传。\n"
+        ios_warning = "\n> **发版入口**：`FHD/mobile-flutter/` 是唯一移动实现，`FHD/.github/workflows/release-ios.yml` 负责 Flutter iOS 构建、签名、TestFlight 与 App Store Connect 上传。\n"
 
     return textwrap.dedent(f"""\
         # {name} (`{pkg_id}`)
@@ -246,7 +246,7 @@ def _make_runbook(pkg_id: str, mf: dict) -> str:
 
 ## Flutter iOS 发版状态
 
-`FHD/mobile-flutter-poc/` 是唯一移动端实现。本岗当前职责：
+`FHD/mobile-flutter/` 是唯一移动端实现。本岗当前职责：
 
 1. 维护 Flutter `ios/Runner`、Bundle ID、entitlements、版本号与 AppIcon。
 2. 维护 Fastlane match 和 `FHD/.github/workflows/release-ios.yml` 的签名、IPA、TestFlight 与 App Store Connect 门禁。

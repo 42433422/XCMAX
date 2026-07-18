@@ -65,7 +65,7 @@ repos:
       - id: ssot-service-topology
         name: Service topology SSOT in sync
         # 改 SSOT 源或派生产物时，校验 Python/TS/Dart 常量与 JSON 未漂移
-        files: '^FHD/config/service_topology\.yaml$|^FHD/scripts/dev/service_topology_ssot\.py$|^FHD/app/infrastructure/topology\.py$|^FHD/frontend/src/constants/topology\.ts$|^FHD/mobile-flutter-poc/lib/src/data/service_topology_ssot\.dart$|^FHD/config/topology\.generated\.json$'
+        files: '^FHD/config/service_topology\.yaml$|^FHD/scripts/dev/service_topology_ssot\.py$|^FHD/app/infrastructure/topology\.py$|^FHD/frontend/src/constants/topology\.ts$|^FHD/mobile-flutter/lib/src/data/service_topology_ssot\.dart$|^FHD/config/topology\.generated\.json$'
         entry: bash -c 'cd FHD && python3 scripts/dev/service_topology_ssot.py check'
         language: system
         pass_filenames: false
@@ -76,7 +76,7 @@ repos:
         # 改了 SSOT 或任一派生件就强制对账；漂移时本地拦截，须先跑
         # `python scripts/dev/sync_duty_roster.py --generate` 重生再提交。
         # 这是 main blocking SSOT gate 反复变红的两大根因之一（roster 改了不重生）。
-        files: '^FHD/config/duty_roster\.json$|^FHD/frontend/src/domain/yuangonDutyRoster\.ts$|^成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster\.ts$|^FHD/frontend/src/constants/enterpriseWorkflowEstablishment\.ts$|^FHD/MODstore/modstore_server/duty_roster\.py$|^FHD/app/infrastructure/mods/catalog_visibility\.py$|^FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot\.dart$'
+        files: '^FHD/config/duty_roster\.json$|^FHD/frontend/src/domain/yuangonDutyRoster\.ts$|^成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster\.ts$|^FHD/frontend/src/constants/enterpriseWorkflowEstablishment\.ts$|^FHD/MODstore/modstore_server/duty_roster\.py$|^FHD/app/infrastructure/mods/catalog_visibility\.py$|^FHD/mobile-flutter/lib/src/data/duty_roster_ssot\.dart$'
         entry: python3 scripts/dev/sync_duty_roster.py --check
         language: system
         pass_filenames: false

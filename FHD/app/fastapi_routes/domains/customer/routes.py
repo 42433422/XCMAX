@@ -5,6 +5,7 @@ XCAGI 前端兼容 API — 客户管理路由。
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
@@ -33,10 +34,51 @@ from app.neuro_bus.route_event_publisher import (
     publish_route_event,
     publish_simple_event,
 )
+from app.utils.metrics import record_customer_op
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
+
+
+def _track_customer_op(operation: str):
+    """客户 CRUD SLI 埋点装饰器（SLO-BIZ-01/02）。fail-open，不改变函数语义。"""
+
+    def decorator(func):
+        import asyncio
+        from functools import wraps
+
+        if asyncio.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start = time.time()
+                status = "success"
+                try:
+                    return await func(*args, **kwargs)
+                except Exception:
+                    status = "error"
+                    raise
+                finally:
+                    record_customer_op(operation, status, time.time() - start)
+
+            return async_wrapper
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            start = time.time()
+            status = "success"
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                status = "error"
+                raise
+            finally:
+                record_customer_op(operation, status, time.time() - start)
+
+        return sync_wrapper
+
+    return decorator
 
 
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
@@ -210,6 +252,7 @@ def _execute_customers_route_action(action: str, params: dict[str, Any]) -> dict
 @router.get("/customers", response_model=None)
 @router.get("/customers/", response_model=None, include_in_schema=False)
 @publish_route_event(RouteEvents.DB_QUERY, domain="customers")
+@_track_customer_op("query")
 def customers_all(
     request: Request,
     keyword: str | None = Query(default=None),
@@ -338,6 +381,7 @@ def customers_list(
 
 @router.get("/customers/{customer_id}", response_model=None)
 @router.get("/customers/{customer_id}/", response_model=None, include_in_schema=False)
+@_track_customer_op("query")
 def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse:
     try:
         from app.mod_sdk.erp_customers_facade import customers_get as customers_get_via_service
@@ -358,6 +402,7 @@ def customers_get_one(request: Request, customer_id: int) -> dict | JSONResponse
 @router.post("/customers")
 @router.post("/customers/", include_in_schema=False)
 @publish_route_event(RouteEvents.DB_QUERY, domain="customers")
+@_track_customer_op("create")
 def customers_create(request: Request, body: dict = Body(default_factory=dict)) -> dict:
     try:
         from app.mod_sdk.erp_customers_facade import (
@@ -406,6 +451,7 @@ def customers_create(request: Request, body: dict = Body(default_factory=dict)) 
 
 @router.put("/customers/{customer_id}")
 @router.put("/customers/{customer_id}/", include_in_schema=False)
+@_track_customer_op("update")
 def customers_update(
     request: Request, customer_id: int, body: dict = Body(default_factory=dict)
 ) -> dict:
@@ -444,6 +490,7 @@ def customers_update(
 
 @router.delete("/customers/{customer_id}")
 @router.delete("/customers/{customer_id}/", include_in_schema=False)
+@_track_customer_op("delete")
 def customers_delete(request: Request, customer_id: int) -> dict:
     try:
         from app.mod_sdk.erp_customers_facade import (

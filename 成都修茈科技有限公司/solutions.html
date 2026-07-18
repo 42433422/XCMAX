@@ -1,54 +1,315 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>解决方案 | 成都修茈科技有限公司</title><meta name="description" content="修茈科技解决方案覆盖制造贸易单据处理、园区服务协同、教育移动服务和企业 AI 工作流。" /><link rel="stylesheet" href="./styles.css?v=20260619" /></head>
-<body>
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="brand-mark" href="/index.html">
-      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
-      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
-    </a>
-    <nav class="nav" aria-label="站点导航">
-      <div class="nav-menu">
-        <a href="/index.html">首页</a>
-        <a href="/about.html">关于修茈</a>
-        <a href="/services.html">产品中心</a>
-        <a class="active" href="/solutions.html">解决方案</a>
-        <a href="/cases.html">客户案例</a>
-        <a class="nav-optional" href="/news.html">新闻资讯</a>
-        <a class="nav-optional" href="/honors.html">资质与能力</a>
-        <a href="/contact.html">联系我们</a>
-        <a href="/developer.html">开发者门户</a>
-      </div>
-      <div class="nav-actions">
-        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
-        <a class="nav-action nav-action--outline" href="/download">软件下载</a>
-      </div>
-    </nav>
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
-  </div>
-</header>
-<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
-<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link">首页</a>
-  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
-  <a href="/services.html" class="mobile-menu-link">产品中心</a>
-  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
-  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
-  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
-  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
-  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
-  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
-  <div class="mobile-menu-actions">
-    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
-    <a href="/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
-  </div>
-</nav>
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>解决方案 | 成都修茈科技有限公司</title>
+    <meta name="description" content="XCAGI 行业 Mod 解决方案：考勤行业包、涂料行业包、通用行业包。装一个 Mod，桌面变成你们的行业系统。" />
+    <link rel="stylesheet" href="./styles.css?v=20260619" />
+    <style>
+      .solution-hero {
+        background: linear-gradient(135deg, #07111f 0%, #0d2746 56%, #07111f 100%);
+        color: #fff;
+        padding: 80px 0 60px;
+        text-align: center;
+      }
+      .solution-hero h1 {
+        font-size: clamp(36px, 5vw, 56px);
+        margin: 16px 0;
+        letter-spacing: -0.03em;
+      }
+      .solution-hero p {
+        max-width: 720px;
+        margin: 0 auto;
+        color: rgba(255,255,255,.78);
+        font-size: 18px;
+      }
+      .mod-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        gap: 2rem;
+        margin: 3rem 0;
+      }
+      .mod-card {
+        background: var(--panel);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--line);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .mod-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-strong);
+      }
+      .mod-card img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+      }
+      .mod-body {
+        padding: 1.5rem;
+      }
+      .mod-tag {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        background: var(--bg-soft);
+        color: var(--blue);
+        border-radius: 100px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+      }
+      .mod-tag.custom {
+        background: #fff3e0;
+        color: #e65100;
+      }
+      .mod-body h3 {
+        margin: 0 0 0.5rem;
+        font-size: 1.25rem;
+      }
+      .mod-body p {
+        margin: 0 0 1rem;
+        color: var(--text-soft);
+        line-height: 1.6;
+      }
+      .mod-features {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1rem;
+      }
+      .mod-features li {
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--line);
+        color: var(--text-soft);
+        font-size: 0.95rem;
+      }
+      .mod-features li:last-child {
+        border-bottom: none;
+      }
+      .mod-link {
+        color: var(--blue);
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .mod-link:hover {
+        text-decoration: underline;
+      }
+      .process-section {
+        background: var(--bg);
+        padding: 4rem 0;
+      }
+      .process-steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 2rem;
+        margin-top: 2rem;
+      }
+      .process-step {
+        text-align: center;
+        padding: 1.5rem;
+      }
+      .step-num {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--blue);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.2rem;
+        margin: 0 auto 1rem;
+      }
+      .process-step h4 {
+        margin: 0 0 0.5rem;
+        font-size: 1.1rem;
+      }
+      .process-step p {
+        margin: 0;
+        color: var(--text-soft);
+        font-size: 0.95rem;
+      }
+      .cta-section {
+        padding: 4rem 0;
+        text-align: center;
+      }
+    </style>
+  </head>
+<body data-page="solutions">
+<div id="site-header"></div>
 
-<main><section class="page-hero"><div class="container page-hero-inner"><div><span class="eyebrow">Solutions</span><h1>解决方案</h1><p>围绕行业场景拆解流程，把 AI 能力落到文件、系统、人员和协作节点上。</p></div><div class="page-hero-side"><p>方案交付遵循“诊断场景 → 梳理数据 → 建立流程 → 试运行优化”的路径。</p></div></div></section>
-<section class="section"><div class="container"><div class="section-head reveal"><div><p class="section-kicker">Industry</p><h2>行业场景</h2></div><p>选择最容易产生 ROI 的场景先启动。</p></div><div class="grid grid-3"><article class="card reveal"><h3>制造与贸易</h3><p>出货单、收货单、采购单、库存和标签打印联动。</p><ul class="card-list"><li>减少录入</li><li>提升追溯</li><li>统一数据口径</li></ul><a class="card-link" href="/case-manufacture.html">制造案例详情 →</a></article><article class="card reveal" data-delay="80"><h3>园区服务</h3><p>企业信息、事项申报、统计报表和驾驶舱一体化。</p><ul class="card-list"><li>服务入口统一</li><li>流程可追踪</li><li>数据可分析</li></ul><a class="card-link" href="/case-park.html">园区案例详情 →</a></article><article class="card reveal" data-delay="160"><h3>教育协同</h3><p>通知、审批、师生服务和移动端查询集中管理。</p><ul class="card-list"><li>移动服务</li><li>审批流转</li><li>数据沉淀</li></ul><a class="card-link" href="/case-edu.html">教育案例详情 →</a></article></div></div></section>
-<section class="section section-dark"><div class="container"><div class="section-head reveal"><div><p class="section-kicker">Method</p><h2>落地路径</h2></div><p>用小步快跑降低试错成本。</p></div><div class="grid grid-4"><article class="card reveal"><h3>1. 诊断</h3><p>识别重复劳动和数据断点。</p></article><article class="card reveal" data-delay="80"><h3>2. 建模</h3><p>确定字段、规则和流程节点。</p></article><article class="card reveal" data-delay="160"><h3>3. 试运行</h3><p>以真实样本验证准确率和效率。</p></article><article class="card reveal" data-delay="240"><h3>4. 扩展</h3><p>连接更多系统和业务部门。</p></article></div></div></section>
-<section class="section"><div class="container cta-band reveal"><div><h2>把方案做成可执行清单</h2><p>告诉我们你的行业和当前流程，我们先给出拆解建议。</p></div><a class="btn btn-primary" href="/contact.html">提交需求</a></div></section></main>
-<footer class="site-footer"><div class="container footer-inner"><div><a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span></a><p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p><p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p></div><div class="footer-links"><a href="/about.html">关于修茈</a><a href="/services.html">产品中心</a><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a><a href="/honors.html">资质与能力</a><a href="/contact.html">联系我们</a></div></div></footer>
-<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<main>
+  <!-- Hero -->
+  <section class="solution-hero">
+    <div class="container">
+      <span class="eyebrow">Industry Mod</span>
+      <h1>行业 Mod 解决方案</h1>
+      <p>不是定制开发，是安装即用。装一个 Mod，空壳宿主秒变你们的行业系统。</p>
+    </div>
+  </section>
+
+  <!-- 行业 Mod -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Ready-to-use</p><h2>开箱即用行业包</h2></div>
+        <p>真实交付的行业 Mod 包，来自首家客户定制实现。</p>
+      </div>
+
+      <div class="mod-grid">
+        <!-- 考勤行业包 -->
+        <article class="mod-card reveal">
+          <img src="/assets/screenshots/transform-attendance.png" alt="考勤行业包变身后" />
+          <div class="mod-body">
+            <span class="mod-tag">已交付 · 首家</span>
+            <h3>考勤行业包</h3>
+            <p>为珠宝包装行业太阳鸟客户定制实现的考勤管理系统。包含花名册、考勤模板、定制 Mod 侧库。</p>
+            <ul class="mod-features">
+              <li>员工花名册管理</li>
+              <li>考勤规则配置</li>
+              <li>考勤数据导入导出</li>
+              <li>定制报表模板</li>
+            </ul>
+            <a class="mod-link" href="/cases.html">查看太阳鸟案例 →</a>
+          </div>
+        </article>
+
+        <!-- 涂料行业包 -->
+        <article class="mod-card reveal" data-delay="80">
+          <img src="/assets/screenshots/transform-coating.png" alt="涂料行业包变身后" />
+          <div class="mod-body">
+            <span class="mod-tag">已交付 · 首家</span>
+            <h3>涂料行业包</h3>
+            <p>为涂料行业奇士美客户定制实现的行业管理系统。适配涂料行业特定业务流程和数据结构。</p>
+            <ul class="mod-features">
+              <li>涂料产品管理</li>
+              <li>配方与批次追踪</li>
+              <li>行业定制报表</li>
+              <li>客户订单管理</li>
+            </ul>
+            <a class="mod-link" href="/cases.html">查看奇士美案例 →</a>
+          </div>
+        </article>
+
+        <!-- 通用行业包 -->
+        <article class="mod-card reveal" data-delay="160">
+          <img src="/assets/screenshots/mod-store.png" alt="Mod 市场" />
+          <div class="mod-body">
+            <span class="mod-tag custom">可定制</span>
+            <h3>通用行业包</h3>
+            <p>基于 XCAGI 空壳宿主，为你的行业定制专属 Mod 包。从业务对象到组织管理，快速适配。</p>
+            <ul class="mod-features">
+              <li>业务对象自定义</li>
+              <li>组织架构适配</li>
+              <li>行业流程配置</li>
+              <li>专属模板开发</li>
+            </ul>
+            <a class="mod-link" href="/contact.html">定制你的行业包 →</a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 交付流程 -->
+  <section class="process-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">How It Works</p><h2>Mod 交付流程</h2></div>
+        <p>从需求到上线，标准化交付流程。</p>
+      </div>
+
+      <div class="process-steps">
+        <div class="process-step reveal">
+          <div class="step-num">1</div>
+          <h4>需求诊断</h4>
+          <p>了解你的行业特性和业务流程</p>
+        </div>
+
+        <div class="process-step reveal" data-delay="80">
+          <div class="step-num">2</div>
+          <h4>Mod 定制</h4>
+          <p>基于空壳宿主开发行业专属 Mod</p>
+        </div>
+
+        <div class="process-step reveal" data-delay="160">
+          <div class="step-num">3</div>
+          <h4>数据迁移</h4>
+          <p>导入现有数据，配置业务规则</p>
+        </div>
+
+        <div class="process-step reveal" data-delay="240">
+          <div class="step-num">4</div>
+          <h4>上线运行</h4>
+          <p>安装 Mod，桌面变身行业系统</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 变身对比 -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Before & After</p><h2>变身前后对比</h2></div>
+        <p>同一个 XCAGI 桌面，安装不同 Mod 后的真实界面。</p>
+      </div>
+
+      <div class="mod-grid">
+        <div class="mod-card reveal">
+          <img src="/assets/screenshots/transform-empty.png" alt="空宿主桌面" />
+          <div class="mod-body">
+            <span class="mod-tag">变身前</span>
+            <h3>空壳宿主</h3>
+            <p>基础 AI 助手界面，包含智能对话、员工工作台等核心入口，等待安装行业 Mod。</p>
+          </div>
+        </div>
+
+        <div class="mod-card reveal" data-delay="80">
+          <img src="/assets/screenshots/transform-attendance.png" alt="考勤行业包" />
+          <div class="mod-body">
+            <span class="mod-tag">安装考勤包</span>
+            <h3>考勤系统</h3>
+            <p>自动变身为完整考勤管理系统，包含花名册、考勤规则、报表模板等行业功能。</p>
+          </div>
+        </div>
+
+        <div class="mod-card reveal" data-delay="160">
+          <img src="/assets/screenshots/transform-coating.png" alt="涂料行业包" />
+          <div class="mod-body">
+            <span class="mod-tag">安装涂料包</span>
+            <h3>涂料 ERP</h3>
+            <p>自动变身为涂料行业管理系统，适配产品管理、配方追踪、订单处理等业务流程。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-band reveal">
+        <div>
+          <h2>你的行业也可以变身</h2>
+          <p>告诉我们你的行业和业务痛点，我们为你定制专属 Mod 包。</p>
+        </div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          <a class="btn btn-primary" href="/contact.html">定制行业 Mod</a>
+          <a class="btn btn-secondary" href="/download">先下载试用</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="/partials/loader.js"></script>
 <script src="./main.js?v=20260619"></script>
 
 <div id="xc-corp-butler-root"></div>

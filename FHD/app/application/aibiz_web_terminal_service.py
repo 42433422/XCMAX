@@ -334,6 +334,17 @@ async def _local_lane_pages(lane: str) -> list[Any]:
     return local.get("pages") if isinstance(local.get("pages"), list) else []
 
 
+async def _cached_lane_pages(lane: str) -> list[Any]:
+    """Return cached pages only; never launch a surface capture from a GET fallback."""
+    from app.application.surface_audit_service import read_surface_audit_cache
+
+    local = await asyncio.to_thread(read_surface_audit_cache, lane)
+    if not isinstance(local, dict):
+        return []
+    pages = local.get("pages")
+    return pages if isinstance(pages, list) else []
+
+
 def _load_local_lane_surface(lane: str) -> dict[str, Any]:
     from app.application.surface_audit_service import run_surface_audit_lane
 
@@ -516,12 +527,38 @@ async def fetch_surface_page_payload(
         return cast("dict[str, Any] | JSONResponse", surface_raw["_error_response"])
     if surface_raw.get("success") and isinstance(surface_raw.get("data"), dict):
         return {"success": True, "data": surface_raw["data"]}
+
+    # 远端单页接口可能尚未部署或当天还没有巡检数据；聚合接口已经支持本地
+    # 缓存回退，单页接口也应保持相同策略，而不是直接把“无数据”升级成 502。
+    local_pages = await _cached_lane_pages(lane)
+    if index < len(local_pages) and isinstance(local_pages[index], dict):
+        page = local_pages[index]
+        return {
+            "success": True,
+            "data": {
+                "lane": lane,
+                "index": index,
+                "total": len(local_pages),
+                **{
+                    k: page.get(k)
+                    for k in (
+                        "name",
+                        "url",
+                        "status",
+                        "title",
+                        "viewport",
+                        "screenshot_b64",
+                        "screenshot_saved",
+                    )
+                },
+            },
+        }
     return JSONResponse(
         {
             "success": False,
-            "message": str(surface_raw.get("message") or "surface page unavailable"),
+            "message": str(surface_raw.get("message") or "surface page not captured"),
         },
-        status_code=502,
+        status_code=404,
     )
 
 

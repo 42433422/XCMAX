@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: FHD/mobile-flutter-poc
+        working-directory: FHD/mobile-flutter
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -134,7 +134,7 @@ jobs:
           args=(
             --version "${{ steps.release_version.outputs.version }}"
             --android-version "${{ steps.release_version.outputs.version }}"
-            --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk"
+            --apk-path "${{ github.workspace }}/FHD/mobile-flutter/build/app/outputs/flutter-apk/app-release.apk"
           )
           bash FHD/scripts/mobile/stage-release-packages.sh "${args[@]}"
       - name: Upload mobile package artifacts
@@ -142,7 +142,7 @@ jobs:
         with:
           name: xcagi-enterprise-mobile-release-packages
           path: |
-            FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/*.apk
+            FHD/mobile-flutter/build/app/outputs/flutter-apk/*.apk
             release/packages-v${{ steps.release_version.outputs.version }}/enterprise/
             release/packages-v${{ steps.release_version.outputs.version }}/企业版/
             release/XCAGI-Enterprise-Mobile-Packages-v${{ steps.release_version.outputs.version }}.zip

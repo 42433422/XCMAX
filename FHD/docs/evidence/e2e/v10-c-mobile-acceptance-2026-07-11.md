@@ -2,7 +2,7 @@
 
 > **状态：真机终验已签 → 见 [`v10-c-mobile-acceptance-2026-07-11-final.md`](./v10-c-mobile-acceptance-2026-07-11-final.md)**  
 > **版本锚点**：10.0.0  
-> **主线**：`FHD/mobile-flutter-poc`（Kotlin/iOS 原生已归档）
+> **主线**：`FHD/mobile-flutter`（Kotlin/iOS 原生已归档）
 
 ## 已落地（代码 / CI）
 

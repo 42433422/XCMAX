@@ -4,134 +4,255 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>新闻资讯 | 成都修茈科技有限公司</title>
-  <meta name="description" content="修茈科技新闻资讯与行业观察：企业 AI 自动化、单据处理、Agent 趋势与中小企业数字化。" />
+  <meta name="description" content="XCAGI 真实更新日志：macOS 公证、Windows 真机验收、太阳鸟/奇士美交付、支付宝支付闭环、NeuroBus 事件总线。" />
   <link rel="stylesheet" href="./styles.css?v=20260619" />
+  <style>
+    .news-hero {
+      background: linear-gradient(135deg, #07111f 0%, #0d2746 56%, #07111f 100%);
+      color: #fff;
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .news-hero h1 {
+      font-size: clamp(36px, 5vw, 56px);
+      margin: 16px 0;
+      letter-spacing: -0.03em;
+    }
+    .news-hero p {
+      max-width: 720px;
+      margin: 0 auto;
+      color: rgba(255,255,255,.78);
+      font-size: 18px;
+    }
+    .news-list {
+      display: grid;
+      gap: 1.5rem;
+      margin: 3rem 0;
+    }
+    .news-item {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+      background: var(--panel);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--line);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .news-item:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-strong);
+    }
+    .news-date {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--blue);
+      padding: 0.4rem 0.8rem;
+      background: var(--bg-soft);
+      border-radius: var(--radius-sm);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .news-content h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.15rem;
+    }
+    .news-content p {
+      margin: 0 0 0.75rem;
+      color: var(--text-soft);
+      line-height: 1.6;
+    }
+    .news-tag {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      background: var(--bg);
+      color: var(--text-soft);
+      border-radius: 100px;
+      font-size: 0.8rem;
+      margin-right: 0.5rem;
+    }
+    .news-tag.release { background: #e8f5e9; color: #2e7d32; }
+    .news-tag.fix { background: #fff3e0; color: #e65100; }
+    .news-tag.feat { background: #e3f2fd; color: #1565c0; }
+    .news-tag.docs { background: #f3e5f5; color: #7b1fa2; }
+    .news-tag.perf { background: #e0f7fa; color: #00838f; }
+    .news-tag.ci { background: #efebe9; color: #4e342e; }
+    .cta-section {
+      padding: 4rem 0;
+      text-align: center;
+    }
+  </style>
 </head>
-<body>
-
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="brand-mark" href="/index.html">
-      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
-      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
-    </a>
-    <nav class="nav" aria-label="站点导航">
-      <div class="nav-menu">
-        <a href="/index.html">首页</a>
-        <a href="/about.html">关于修茈</a>
-        <a href="/services.html">产品中心</a>
-        <a href="/solutions.html">解决方案</a>
-        <a href="/cases.html">客户案例</a>
-        <a class="nav-optional active" href="/news.html">新闻资讯</a>
-        <a class="nav-optional" href="/honors.html">资质与能力</a>
-        <a href="/contact.html">联系我们</a>
-        <a href="/developer.html">开发者门户</a>
-      </div>
-      <div class="nav-actions">
-        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
-        <a class="nav-action nav-action--outline" href="/download">软件下载</a>
-      </div>
-    </nav>
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
-  </div>
-</header>
-<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
-<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link">首页</a>
-  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
-  <a href="/services.html" class="mobile-menu-link">产品中心</a>
-  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
-  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
-  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
-  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
-  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
-  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
-  <div class="mobile-menu-actions">
-    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
-    <a href="/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
-  </div>
-</nav>
+<body data-page="news">
+<div id="site-header"></div>
 
 <main>
-  <section class="page-hero">
-    <div class="container page-hero-inner">
-      <div>
-        <span class="eyebrow">News</span>
-        <h1>新闻资讯</h1>
-        <p>记录修茈科技的产品动态、公司公告与对 AI 自动化、Agent 与职场协作的行业观察。</p>
+  <!-- Hero -->
+  <section class="news-hero">
+    <div class="container">
+      <span class="eyebrow">Changelog</span>
+      <h1>真实更新日志</h1>
+      <p>不是营销稿，是 XCAGI 真实开发进度。基于 CHANGELOG.md 提取，每条都可追溯。</p>
+    </div>
+  </section>
+
+  <!-- 更新日志 -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Real Updates</p><h2>产品更新</h2></div>
+        <p>按时间倒序排列，来自 FHD/CHANGELOG.md。</p>
       </div>
-      <div class="page-hero-side">
-        <p>资讯列表在构建时从数据文件生成，便于统一维护与审阅；更新流程见站内编辑说明。</p>
+
+      <div class="news-list">
+        <!-- 2026-07-12 -->
+        <article class="news-item reveal">
+          <div class="news-date">2026-07-12</div>
+          <div class="news-content">
+            <h3>v1.0.0.0 稳定上线</h3>
+            <p>对外产品版本统一为 1.0.0.0；Windows/macOS/Android/Harmony/Web 五端发布链统一；自动更新、Mod 兼容、下载清单全部就绪。历史 10.0.0 制品保留为历史事实，新稳定制品重新构建、签名、公证、上传并通过端到端验收。</p>
+            <span class="news-tag release">release</span>
+            <span class="news-tag docs">docs</span>
+          </div>
+        </article>
+
+        <article class="news-item reveal" data-delay="80">
+          <div class="news-date">2026-07-12</div>
+          <div class="news-content">
+            <h3>macOS 公证 CDN 闭环</h3>
+            <p>main Release Desktop 产出 Developer ID + 公证 staple 的 mac personal/enterprise 安装包；本机 rsync 上架 xiu-ci.com/releases/stable/{enterprise,personal}/；公网下载/SHA512/Ed25519/Gatekeeper 复测全部 PASS。</p>
+            <span class="news-tag release">release</span>
+            <span class="news-tag docs">evidence</span>
+          </div>
+        </article>
+
+        <!-- 2026-07-11 -->
+        <article class="news-item reveal" data-delay="160">
+          <div class="news-date">2026-07-11</div>
+          <div class="news-content">
+            <h3>v10-B 终稿签字</h3>
+            <p>Flutter 移动端落地 preferCloudIfLanUnreachable + session LAN/云 base 路由；探索 Tab 增加审批入口；通知页去掉假数据 fallback（空态诚实）；审批驳回与 AI 工作流驳回均 notify_mobile_user；ModStore 商品履约同步写入 user_mods，打通支付到桌面授权。</p>
+            <span class="news-tag fix">fix</span>
+            <span class="news-tag ci">ci</span>
+            <span class="news-tag docs">docs</span>
+          </div>
+        </article>
+
+        <!-- 2026-07-09 -->
+        <article class="news-item reveal" data-delay="240">
+          <div class="news-date">2026-07-09</div>
+          <div class="news-content">
+            <h3>v10-A Windows 真机验收</h3>
+            <p>Win A5 deliverable=true + A9 migrate_exit=0；PyInstaller 打包强制 hiddenimports 修复缺模块；win_v10a_hotfix_deploy.ps1 纯 ASCII 轮询 health/deliverable；add_data 单文件改用父目录 dest 避免嵌套；OTA migrate-only 在 frozen 环境改走 alembic.command API。</p>
+            <span class="news-tag fix">fix</span>
+            <span class="news-tag docs">evidence</span>
+          </div>
+        </article>
+
+        <!-- 2026-07-08 -->
+        <article class="news-item reveal" data-delay="320">
+          <div class="news-date">2026-07-08</div>
+          <div class="news-content">
+            <h3>桌面冷启性能优化（第三轮）</h3>
+            <p>Splash 先出窗再 spawn 后端；主应用等待 appRoutesReady（ping + deferred 路由挂载完成）；fast-start 仅注册 bootstrap 路由，业务路由并行 deferred；lifespan 跳过 mods_deferred_bootstrap 重复同步；PyInstaller 默认关闭 UPX。</p>
+            <span class="news-tag perf">perf</span>
+          </div>
+        </article>
+
+        <article class="news-item reveal" data-delay="400">
+          <div class="news-date">2026-07-08</div>
+          <div class="news-content">
+            <h3>OTA 代理绕过 + 更新站域名修复</h3>
+            <p>session.defaultSession.setProxy 显式配置 proxyBypassRules；Windows 系统代理场景改用 PAC——更新站 DIRECT，其余 PROXY; DIRECT 回退；OTA 专用 netSession 直连；检查更新期间临时切直连；启动时探测系统代理端口，不可达则全程直连。</p>
+            <span class="news-tag fix">fix</span>
+          </div>
+        </article>
+
+        <article class="news-item reveal" data-delay="480">
+          <div class="news-date">2026-07-08</div>
+          <div class="news-content">
+            <h3>桌面侧栏版本 + 配对码 SSOT</h3>
+            <p>侧栏「系统正常」右侧显示 v10.0.0（非管理端从 /api/health 读取）；移动端配对 QR 与 6 位设备码统一 normalizePairingPayload SSOT。</p>
+            <span class="news-tag fix">fix</span>
+          </div>
+        </article>
+
+        <article class="news-item reveal" data-delay="560">
+          <div class="news-date">2026-07-08</div>
+          <div class="news-content">
+            <h3>桌面 LAN 配对 + 云中继直连</h3>
+            <p>后端默认绑定 0.0.0.0:17500，手机同 WiFi 可连局域网 IP；proxy-bypass-list 对 xiu-ci.com 直连；死系统代理不可达时启动前追加 --no-proxy-server；v10 同版本迭代 OTA — latest.yml 写入 buildSha，build-info.json 比对后仍可拉取新包。</p>
+            <span class="news-tag fix">fix</span>
+          </div>
+        </article>
+
+        <!-- 2026-07-07 -->
+        <article class="news-item reveal" data-delay="640">
+          <div class="news-date">2026-07-07</div>
+          <div class="news-content">
+            <h3>Flutter 移动端主线统一</h3>
+            <p>mobile-relay-* 会话 validate 不再误 401；preferCloudIfLanUnreachable + session 路由 LAN/云；employee-ssot client；移动统一 Flutter 主线；mobile-android / mobile-ios 归档；MOBILE_FLUTTER.md + SSOT 登记完成。</p>
+            <span class="news-tag fix">fix</span>
+            <span class="news-tag docs">docs</span>
+          </div>
+        </article>
+
+        <!-- 2026-07 -->
+        <article class="news-item reveal" data-delay="720">
+          <div class="news-date">2026-07</div>
+          <div class="news-content">
+            <h3>太阳鸟 + 奇士美行业包交付</h3>
+            <p>考勤行业包（太阳鸟 PRO）和涂料行业包（奇士美 PRO）首家客户定制实现交付。产品引导按行业展示对应 Mod；考勤包包含花名册、定制 Mod 侧库、考勤模板；涂料包适配行业特定业务流程。</p>
+            <span class="news-tag feat">feat</span>
+            <span class="news-tag docs">delivery</span>
+          </div>
+        </article>
+
+        <!-- 2026-06 -->
+        <article class="news-item reveal" data-delay="800">
+          <div class="news-date">2026-06</div>
+          <div class="news-content">
+            <h3>NeuroBus 12 域事件总线</h3>
+            <p>DEDUP + CIRCUIT + RATE_LIMIT + TRACE + LIFELINE + DLQ_AUTO + SLA_LOG 全部启用；12 域事件总线覆盖全平台；租户隔离 34 模型 27 测试通过。</p>
+            <span class="news-tag feat">feat</span>
+          </div>
+        </article>
+
+        <article class="news-item reveal" data-delay="880">
+          <div class="news-date">2026-06</div>
+          <div class="news-content">
+            <h3>支付宝支付闭环上线</h3>
+            <p>MODstore 支付链路完整闭环：当面付、订单码支付、App 支付、JSAPI 支付、手机网站支付、电脑网站支付、预授权支付、商家扣款全场景覆盖；支付到桌面授权自动同步。</p>
+            <span class="news-tag feat">feat</span>
+          </div>
+        </article>
       </div>
     </div>
   </section>
-  <section class="section">
+
+  <!-- CTA -->
+  <section class="cta-section">
     <div class="container">
-      <div class="grid grid-3">
-        
-        <article class="news-card reveal" >
-          <span class="news-label">行业洞察</span>
-          <h3>可执行 Agent 正在改变工作流编排方式</h3>
-          <p>当模型与工具调用、知识与队列结合，自动化从单次问答延伸至可验收的任务链路；企业要优先补齐权限、熔断与审计，而不是堆砌模型参数。</p>
-          
-          <p class="footer-meta">2026-05-07</p>
-          
-        </article>
-        
-        <article class="news-card reveal" data-delay="80">
-          <span class="news-label">行业洞察</span>
-          <h3>组织能力转向“人机分工”新常态</h3>
-          <p>重复性、可被规则验收的工作逐步交给系统处理，团队把注意力放在客户关系与判断；成功与否取决于流程拆解是否清晰与质量度量是否闭环。</p>
-          
-          <p class="footer-meta">2026-05-05</p>
-          
-        </article>
-        
-        <article class="news-card reveal" data-delay="160">
-          <span class="news-label">通知公告</span>
-          <h3>关于系统维护期间服务暂停的公告</h3>
-          <p>为保障系统稳定运行，计划于近期对部分系统进行升级维护，维护期间相关服务将暂时不可用。</p>
-          
-          <p class="footer-meta">2026-04-12</p>
-          
-        </article>
-        
-        <article class="news-card reveal" data-delay="0">
-          <span class="news-label">公司新闻</span>
-          <h3>修茈科技与多家企业签署数字化合作协议</h3>
-          <p>围绕平台建设、业务协同与持续运维服务展开合作，进一步拓展行业服务能力。</p>
-          
-          <p class="footer-meta">2026-03-08</p>
-          
-        </article>
-        
-        <article class="news-card reveal" data-delay="80">
-          <span class="news-label">公司新闻</span>
-          <h3>公司召开年度发展规划专题会议</h3>
-          <p>围绕产品能力、行业方向、客户服务与交付质量进行系统部署，明确年度重点工作。</p>
-          
-          <p class="footer-meta">2026-02-25</p>
-          
-        </article>
-        
+      <div class="cta-band reveal">
+        <div>
+          <h2>查看最新版本</h2>
+          <p>下载 XCAGI v1.0.0.0，体验最新功能。</p>
+        </div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          <a class="btn btn-primary" href="/download">下载最新版</a>
+          <a class="btn btn-secondary" href="/services.html">查看产品中心</a>
+        </div>
       </div>
     </div>
   </section>
 </main>
-<footer class="site-footer">
-  <div class="container footer-inner">
-    <div>
-      <a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span></a>
-      <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
-      <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p>
-    </div>
-    <div class="footer-links">
-      <a href="/about.html">关于修茈</a><a href="/services.html">产品中心</a><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a><a href="/developer.html">开发者门户</a><a href="/honors.html">资质与能力</a><a href="/contact.html">联系我们</a>
-    </div>
-  </div>
-</footer>
-<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+
+<div id="site-footer"></div>
+<script src="/partials/loader.js"></script>
 <script src="./main.js?v=20260619"></script>
+
 <div id="xc-corp-butler-root"></div>
 <link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
 <script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>

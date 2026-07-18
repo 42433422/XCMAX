@@ -38,6 +38,19 @@ class TestLiveness:
 
 
 class TestReadiness:
+    def test_desktop_without_redis_url_disables_external_redis(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.fastapi_routes.health_k8s import _check_redis
+
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.delenv("REDIS_URL", raising=False)
+
+        assert _check_redis() == {
+            "status": "disabled",
+            "reason": "desktop_local_queue",
+        }
+
     def test_all_healthy_returns_200(self, client: TestClient) -> None:
         with (
             patch(

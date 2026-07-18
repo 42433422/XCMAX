@@ -1,7 +1,7 @@
 # Flutter 手机 App 显示名单一真相源（SSOT）
 #
 # 改这里的 display_name，再把 Flutter Android/iOS Runner 同步成同一值；
-# 一致性由 FHD/mobile-flutter-poc/scripts/verify_app_name.py 守卫。
+# 一致性由 FHD/mobile-flutter/scripts/verify_app_name.py 守卫。
 #
 # 企业版是当前唯一在产发行版(个人版已停产)。
 
@@ -12,8 +12,8 @@ enterprise:
 # 派生位置（改 display_name 后必须同步；verify 脚本对拍）
 derived:
   android:
-    file: FHD/mobile-flutter-poc/android/app/src/main/res/values/strings.xml
+    file: FHD/mobile-flutter/android/app/src/main/res/values/strings.xml
     key: 'string[@name="app_name"]'
   ios:
-    file: FHD/mobile-flutter-poc/ios/Runner/Info.plist
+    file: FHD/mobile-flutter/ios/Runner/Info.plist
     key: CFBundleDisplayName

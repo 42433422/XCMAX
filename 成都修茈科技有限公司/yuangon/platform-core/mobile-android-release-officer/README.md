@@ -4,7 +4,7 @@
 
 核心范围：
 
-- `FHD/mobile-flutter-poc/**`
+- `FHD/mobile-flutter/**`
 - `FHD/.github/workflows/ci-mobile-flutter.yml`
 - `FHD/.github/workflows/release-android.yml`
 - `release-apk/**`

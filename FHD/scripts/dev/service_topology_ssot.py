@@ -177,7 +177,7 @@ def render_json(m: dict[str, Any]) -> str:
 TARGETS: list[tuple[str, str, Any]] = [
     ("python", "app/infrastructure/topology.py", render_python),
     ("ts", "frontend/src/constants/topology.ts", render_ts),
-    ("dart", "mobile-flutter-poc/lib/src/data/service_topology_ssot.dart", render_dart),
+    ("dart", "mobile-flutter/lib/src/data/service_topology_ssot.dart", render_dart),
     ("json", "config/topology.generated.json", render_json),
 ]
 

@@ -7,7 +7,7 @@
 # 派生产物（请勿手改，改这里再 generate）:
 #   - app/infrastructure/topology.py                         (Python 常量)
 #   - frontend/src/constants/topology.ts                     (TypeScript)
-#   - mobile-flutter-poc/lib/src/data/service_topology_ssot.dart    (Dart)
+#   - mobile-flutter/lib/src/data/service_topology_ssot.dart    (Dart)
 #   - config/topology.generated.json                         (机器可读，健康探针消费)
 #
 # 边界: nginx / compose / systemd 不自动生成，仅由 check 做 verify-only 校验。

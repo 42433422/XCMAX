@@ -20,12 +20,12 @@ FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
 FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
 FASTAPI_MOBILE_AI_GROUPS = ROOT / "app/fastapi_routes/mobile_extensions/routes_ai_groups.py"
 
-FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
-FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/FLUTTER_UNIFICATION.md"
-FLUTTER_API = ROOT / "mobile-flutter-poc/lib/src/api/mobile_api.dart"
-FLUTTER_MODELS = ROOT / "mobile-flutter-poc/lib/src/api/mobile_models.dart"
-FLUTTER_REPOSITORY = ROOT / "mobile-flutter-poc/lib/src/data/mobile_repository.dart"
-FLUTTER_THEME = ROOT / "mobile-flutter-poc/lib/src/theme/app_theme.dart"
+FLUTTER_README = ROOT / "mobile-flutter/README.md"
+FLUTTER_UNIFICATION = ROOT / "mobile-flutter/FLUTTER_UNIFICATION.md"
+FLUTTER_API = ROOT / "mobile-flutter/lib/src/api/mobile_api.dart"
+FLUTTER_MODELS = ROOT / "mobile-flutter/lib/src/api/mobile_models.dart"
+FLUTTER_REPOSITORY = ROOT / "mobile-flutter/lib/src/data/mobile_repository.dart"
+FLUTTER_THEME = ROOT / "mobile-flutter/lib/src/theme/app_theme.dart"
 
 REQUIRED_DOC_SNIPPETS = (
     "唯一真相源",
@@ -115,12 +115,12 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/app/fastapi_routes/mobile_api.py",
         "FHD/app/fastapi_routes/mobile_api_extensions.py",
         "FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py",
-        "FHD/mobile-flutter-poc/README.md",
-        "FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md",
-        "FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart",
-        "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
-        "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
-        "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
+        "FHD/mobile-flutter/README.md",
+        "FHD/mobile-flutter/FLUTTER_UNIFICATION.md",
+        "FHD/mobile-flutter/lib/src/api/mobile_api.dart",
+        "FHD/mobile-flutter/lib/src/api/mobile_models.dart",
+        "FHD/mobile-flutter/lib/src/data/mobile_repository.dart",
+        "FHD/mobile-flutter/lib/src/theme/app_theme.dart",
     ):
         if rel not in derived:
             errors.append(f"mobile-tri-platform.derived 缺少 {rel}")

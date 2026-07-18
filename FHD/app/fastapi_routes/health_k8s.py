@@ -32,7 +32,16 @@ def _check_redis() -> dict[str, Any]:
     try:
         import redis
 
-        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+        redis_url = (os.environ.get("REDIS_URL") or "").strip()
+        if not redis_url:
+            from app.desktop_runtime.paths import is_desktop_mode
+
+            if is_desktop_mode():
+                return {
+                    "status": "disabled",
+                    "reason": "desktop_local_queue",
+                }
+            redis_url = "redis://localhost:6379"
         client = redis.from_url(redis_url)
         client.ping()
         return {"status": "healthy", "latency_ms": 0}

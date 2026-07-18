@@ -9,8 +9,8 @@ subzone: build-release
 also_serves: []
 
 scope_globs:
-  - FHD/mobile-flutter-poc/ios/**
-  - FHD/mobile-flutter-poc/fastlane/**
+  - FHD/mobile-flutter/ios/**
+  - FHD/mobile-flutter/fastlane/**
   - FHD/.github/workflows/release-ios.yml
   - FHD/XCAGI/resources/**
 

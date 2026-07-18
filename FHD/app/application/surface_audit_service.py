@@ -157,6 +157,33 @@ def _read_cache(lane: str) -> dict[str, Any] | None:
     return _read_cache_path(_cache_file(lane))
 
 
+def read_surface_audit_cache(
+    lane: str, *, include_stale: bool = True
+) -> dict[str, Any] | None:
+    """Read an existing audit cache without starting Playwright.
+
+    Read-only API endpoints use this helper when a remote surface is missing.  A
+    cache miss must stay cheap; starting a 10-20 minute capture from a GET request
+    makes the endpoint look dead and can exhaust the desktop worker pool.
+    """
+    cached = _read_cache(lane)
+    if cached:
+        cached["from_cache"] = True
+        return cached
+    if not include_stale:
+        return None
+
+    prior_path = _most_recent_prior_cache(lane)
+    prior = _read_cache_path(prior_path) if prior_path is not None else None
+    if not prior:
+        return None
+    prior["from_cache"] = True
+    prior["stale_cache"] = True
+    matched = _DATE_JSON_RE.match(prior_path.name)
+    prior["stale_cache_date"] = matched.group(1) if matched else ""
+    return prior
+
+
 def _write_cache(lane: str, payload: dict[str, Any]) -> None:
     path = _cache_file(lane)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,7 +191,7 @@ def _write_cache(lane: str, payload: dict[str, Any]) -> None:
 
 
 def _adb_has_device() -> bool:
-    adb = _FHD_ROOT / "mobile-flutter-poc" / ".toolchain" / "android-sdk" / "platform-tools" / "adb"
+    adb = _FHD_ROOT / "mobile-flutter" / ".toolchain" / "android-sdk" / "platform-tools" / "adb"
     if not adb.is_file():
         return False
     try:

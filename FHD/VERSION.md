@@ -26,7 +26,7 @@
 | **前端 SPA** | `1.0.0` | `frontend/package.json` |
 | **桌面壳 npm** | `1.0.0` | `desktop/package.json` |
 | **根级 npm** | `1.0.0` | `package.json` |
-| **Flutter / Apple 市场版本** | `1.0.0` | `mobile-flutter-poc/pubspec.yaml`、`ios/Flutter/Version.xcconfig` |
+| **Flutter / Apple 市场版本** | `1.0.0` | `mobile-flutter/pubspec.yaml`、`ios/Flutter/Version.xcconfig` |
 
 > 独立子工程保留自己的包版本；其产品下载路径和发布清单仍必须引用稳定产品版本 `1.0.0.0`。
 

@@ -86,3 +86,26 @@ def test_work_mode_feed_facade_treats_unconfigured_source_as_empty_feed():
     assert payload["success"] is True
     assert payload["feed"] == []
     assert payload["unavailable_reason"] == "wechat-decrypt not configured"
+
+
+def test_wechat_contacts_search_empty_query_does_not_leak_fastapi_query_default():
+    from fastapi import APIRouter, FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
+    ssot_mod_dir = Path(__file__).resolve().parents[1] / "mods" / "xcagi-erp-domain-bridge"
+    mod = import_mod_backend_py(
+        str(ssot_mod_dir),
+        "xcagi-erp-domain-bridge-search-test",
+        "wechat_contacts_routes",
+    )
+    router = APIRouter()
+    mod.mount_wechat_contacts_routes(router)
+    app = FastAPI()
+    app.include_router(router, prefix="/api/mod/search-test")
+
+    response = TestClient(app).get("/api/mod/search-test/wechat_contacts/search")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True

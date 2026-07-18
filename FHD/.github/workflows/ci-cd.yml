@@ -212,6 +212,37 @@ jobs:
           path: frontend/coverage/
           retention-days: 7
 
+  # Flutter 移动端主线测试（与 path-scoped ci-mobile-flutter.yml 并行守护，
+  # 确保每次 FHD push 都跑 Flutter unit test，避免移动端回归漏检）
+  flutter-test:
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Flutter test
+        run: flutter test
+
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
   # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 8 pass / 6 skip
   # (smoke 3 pass + 1 skip, critical-paths 5 pass, plan2026-skeleton 5 skip w/o E2E_FULL_STACK).
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).

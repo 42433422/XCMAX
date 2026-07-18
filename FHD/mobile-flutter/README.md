@@ -10,7 +10,7 @@ Android + iOS 单代码库，对接 `/api/mobile/v1/*` 与 OpenAPI 契约。`lib
 ## 本地命令
 
 ```bash
-cd FHD/mobile-flutter-poc
+cd FHD/mobile-flutter
 flutter pub get
 flutter test
 flutter run

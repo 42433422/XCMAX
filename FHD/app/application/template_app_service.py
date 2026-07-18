@@ -44,6 +44,20 @@ class TemplateApplicationService:
         """
         return cast("dict[str, Any]", self._template_service.get_template(template_id))
 
+    def list_by_type(self, template_type: str, active_only: bool = True) -> list[dict[str, Any]]:
+        """按类型列出模板，保持 Excel 兼容路由的既有契约。"""
+        return cast(
+            "list[dict[str, Any]]",
+            self._template_service.list_by_type(template_type, active_only=active_only),
+        )
+
+    def get_default_for_type(self, template_type: str) -> dict[str, Any] | None:
+        """返回指定类型的默认模板。"""
+        return cast(
+            "dict[str, Any] | None",
+            self._template_service.get_default_for_type(template_type),
+        )
+
     def save_template(self, template_data: dict[str, Any]) -> dict[str, Any]:
         """
         保存模板用例
@@ -55,6 +69,18 @@ class TemplateApplicationService:
             保存结果
         """
         return cast("dict[str, Any]", self._template_service.save_template(template_data))
+
+    def save_template_file(
+        self,
+        source_name: str,
+        target_name: str,
+        overwrite: bool = False,
+    ) -> dict[str, Any]:
+        """保存模板文件，供旧 Excel 模板 HTTP 门面使用。"""
+        return cast(
+            "dict[str, Any]",
+            self._template_service.save_template_file(source_name, target_name, overwrite),
+        )
 
     def update_template(self, template_id: int, template_data: dict[str, Any]) -> dict[str, Any]:
         """

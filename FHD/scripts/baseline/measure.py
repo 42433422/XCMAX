@@ -179,12 +179,12 @@ def _desktop_package() -> dict[str, Any]:
 def _mobile_package() -> dict[str, Any]:
     apk = first_glob(
         str(REPO_ROOT / "release" / "**" / "*Android*.apk"),
-        str(FHD_ROOT / "mobile-flutter-poc" / "build" / "app" / "outputs" / "flutter-apk" / "*.apk"),
+        str(FHD_ROOT / "mobile-flutter" / "build" / "app" / "outputs" / "flutter-apk" / "*.apk"),
         str(REPO_ROOT / "release" / "**" / "*.apk"),
     )
     out: dict[str, Any] = {}
     if not apk:
-        return {"status": "missing", "hint": "先在 FHD/mobile-flutter-poc 运行 flutter build apk"}
+        return {"status": "missing", "hint": "先在 FHD/mobile-flutter 运行 flutter build apk"}
     if apk:
         b = apk.stat().st_size
         out["android_apk"] = {"path": str(apk.relative_to(REPO_ROOT)), "bytes": b, "human": human(b),

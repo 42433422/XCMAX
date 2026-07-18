@@ -122,12 +122,16 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: FHD/frontend",
     )
     content = content.replace(
-        "working-directory: mobile-flutter-poc",
-        "working-directory: FHD/mobile-flutter-poc",
+        "working-directory: mobile-flutter\n",
+        "working-directory: FHD/mobile-flutter\n",
     )
     content = content.replace(
-        "path: mobile-flutter-poc/build/",
-        "path: FHD/mobile-flutter-poc/build/",
+        "path: mobile-flutter/build/",
+        "path: FHD/mobile-flutter/build/",
+    )
+    content = content.replace(
+        "mobile-flutter/ios",
+        "FHD/mobile-flutter/ios",
     )
     # desktop-build-smoke job runs from repo root (no workflow-level defaults),
     # so working-directory: desktop must be rewritten to FHD/desktop.

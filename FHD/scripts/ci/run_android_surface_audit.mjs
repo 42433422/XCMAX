@@ -12,13 +12,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FHD_ROOT = path.resolve(__dirname, '../..')
 const CONFIG_PATH = path.join(FHD_ROOT, 'config/surface_audit_pages.json')
 
-const DEFAULT_ADB = path.join(FHD_ROOT, 'mobile-flutter-poc/.toolchain/android-sdk/platform-tools/adb')
+const DEFAULT_ADB = path.join(FHD_ROOT, 'mobile-flutter/.toolchain/android-sdk/platform-tools/adb')
 const PACKAGE =
   process.env.SURFACE_AUDIT_ANDROID_PACKAGE ||
   'com.xiuci.xcagi.mobile.enterprise'
 const APK_CANDIDATES = [
-  path.join(FHD_ROOT, 'mobile-flutter-poc/build/app/outputs/flutter-apk/app-debug.apk'),
-  path.join(FHD_ROOT, 'mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk'),
+  path.join(FHD_ROOT, 'mobile-flutter/build/app/outputs/flutter-apk/app-debug.apk'),
+  path.join(FHD_ROOT, 'mobile-flutter/build/app/outputs/flutter-apk/app-release.apk'),
 ]
 
 const outArgIdx = process.argv.indexOf('--out')

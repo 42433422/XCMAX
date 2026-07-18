@@ -14,7 +14,7 @@ def test_android_marked_contract_grade_in_version_md() -> None:
 
 
 def test_flutter_mobile_readme_declares_only_delivery_line() -> None:
-    text = (ROOT / "mobile-flutter-poc" / "README.md").read_text(encoding="utf-8")
+    text = (ROOT / "mobile-flutter" / "README.md").read_text(encoding="utf-8")
     assert "唯一移动端实现与交付主线" in text
     assert "Android + iOS 单代码库" in text
 
@@ -27,7 +27,7 @@ def test_android_version_anchor_in_gradle() -> None:
     import re
 
     gradle = (
-        ROOT / "mobile-flutter-poc" / "android" / "app" / "build.gradle.kts"
+        ROOT / "mobile-flutter" / "android" / "app" / "build.gradle.kts"
     ).read_text(encoding="utf-8")
     version_md = (ROOT / "VERSION.md").read_text(encoding="utf-8")
     # versionName 跟随四段产品版本；versionCode 是商店要求的独立单调递增构建号，

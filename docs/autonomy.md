@@ -373,6 +373,77 @@ mv fhd-manifest.json.hold fhd-manifest.json
 curl -sf https://xiu-ci.com/fhd-api/api/health
 ```
 
+### 7.3 ai-self-heal PR SLA 处置流程
+
+> **设计源**：[proposals/ai-self-heal-merge-sla.md](proposals/ai-self-heal-merge-sla.md)
+> **实现**：[`FHD/scripts/ci/ai_self_heal_sla.py`](../FHD/scripts/ci/ai_self_heal_sla.py) + [`fhd-ai-self-heal-auto-merge.yml`](../.github/workflows/fhd-ai-self-heal-auto-merge.yml)
+> **运行节奏**：每日 01:00 UTC（09:00 北京时间）扫描所有 `label:ai-self-heal` 的 open PR
+
+#### 7.3.1 风险分级与标签语义
+
+`ai_self_heal.py` 在创建 PR 时按错误类型计算最高风险等级，打 `risk:r0` / `risk:r1` / `risk:r2` / `risk:r3` 标签：
+
+| 等级 | 含义 | 触发场景 | 处置路径 |
+|------|------|---------|---------|
+| `r0` | 极低（机械修复） | ruff F401/F811/E501（删除未用 import / 截断超长行） | 24h 二次守卫通过 → **auto-merge** |
+| `r1` | 低（语义可校验） | ruff F841（未使用局部变量） | 72h 二次守卫通过 → **auto-merge** |
+| `r2` | 中（需人工 review） | ruff 其他 / mypy 类型错误 | 7d stale 提醒 / 14d 自动关闭 |
+| `r3` | 高（永不自动合并） | bandit 安全告警 / pytest 失败 / LLM 修复 | 7d stale 提醒 / 30d 自动关闭 |
+
+`needs-human` 标签：当 `max_risk ∈ {r2, r3}` 时附加，提示人工 review 必要性。`r0` / `r1` 不带 `needs-human`，进入 auto-merge 候选池。
+
+#### 7.3.2 二次守卫（R0/R1 auto-merge 前置）
+
+`check_second_guard()` 在 auto-merge 前依次检查，任一不通过即升级到 `r2`：
+
+| 检查项 | 阈值 | 失败后果 |
+|--------|------|---------|
+| CI 全绿 | 所有 check_runs conclusion ∈ {success, neutral, skipped} | 升级 r2 |
+| PR 体量 | changed_files ≤ 3 且 additions + deletions ≤ 50 | 升级 r2 |
+| 文件类型 | 仅 `.py` / `.md` | 升级 r2 |
+| 禁止路径 | 不触碰 `app/db/migrations/` / `app/fastapi_app/` / `scripts/deploy/` / `.github/workflows/` | 升级 r2 |
+| 分支递归 | 不处理非 self-heal 的 `autonomy/*` 分支 | 升级 r2 |
+
+升级动作为 `remove_label(risk:r0/r1) + add_labels(risk:r2, needs-human) + 评论`，并写 `metrics/ai-self-heal-stale.jsonl`。
+
+#### 7.3.3 SLA 时间线
+
+| 等级 | T+0 | T+24h | T+72h | T+7d | T+14d | T+30d |
+|------|-----|-------|-------|------|-------|-------|
+| r0 | 创建 PR | 二次守卫 → auto-merge | — | — | — | — |
+| r1 | 创建 PR | — | 二次守卫 → auto-merge | — | — | — |
+| r2 | 创建 PR + `needs-human` | — | — | stale 提醒 | **自动关闭** | — |
+| r3 | 创建 PR + `needs-human` | — | — | stale 提醒 | — | **自动关闭** |
+
+#### 7.3.4 责任治理 SOP
+
+| 标签组合 | 谁负责 | 处理动作 | 时效要求 |
+|---------|--------|---------|---------|
+| `ai-self-heal` + `risk:r0` | 机器人 | 24h 后 auto-merge（无需人工） | 自动 |
+| `ai-self-heal` + `risk:r1` | 机器人 | 72h 后 auto-merge（无需人工） | 自动 |
+| `ai-self-heal` + `risk:r2` + `needs-human` | 开发者 | review + 合并或关闭 | 7d 内响应，14d 未响应自动关闭 |
+| `ai-self-heal` + `risk:r3` + `needs-human` | 开发者 | 安全/业务/LLM 修复必须人工 review | 7d 内响应，30d 未响应自动关闭 |
+| `ai-review` + `confirmed-high` | 开发者 | 高危问题必须修复后合并 | 阻断合并，无 SLA 上限 |
+| `ai-review` + `needs-human` | 开发者 | LLM 初筛可疑但未达 confirmed-high | 建议响应，不阻断 |
+
+#### 7.3.5 SLI 自测指标（SLO-SELFH）
+
+| ID | 名称 | 目标 | 数据源 |
+|----|------|------|--------|
+| SLO-SELFH-01 | R0/R1 auto-merge 成功率 | ≥ 95% | `ai-self-heal-stale.jsonl` 中 `auto_merged / (auto_merged + ci_not_green)` |
+| SLO-SELFH-02 | R0/R1 二次守卫拦截率 | < 20% | `upgraded_to_r2 / (auto_merged + upgraded)` |
+| SLO-SELFH-03 | R2/R3 stale 关闭率 | < 50% | `closed / (closed + manual_merged)` 月度统计 |
+| SLO-SELFH-04 | 同指纹 24h 去重命中率 | ≥ 80% | `self-heal-fingerprints.jsonl` 去重次数 / 总触发次数 |
+| SLO-SELFH-05 | 自治 PR 合并占比 | ≥ 40% | `auto_merged / total_prs` 月度统计 |
+
+#### 7.3.6 待接入能力（2026-07-18 评估）
+
+| 能力 | 现状 | 接入方案 |
+|------|------|---------|
+| alertmanager → ai-self-heal 触发 | ❌ 仅 workflow_run 失败触发 | alertmanager webhook → `fhd-ai-self-heal.yml` workflow_dispatch（需 Prometheus 接入） |
+| PR merge 后业务 SLI 验证 | ❌ 二次守卫仅查 CI 全绿 | `check_second_guard()` 加 `sli_guard` 步骤：查询最近 30min SLO-BIZ-* 是否达标（需 Prometheus 接入） |
+| 业务 SLI 真实采集 | ⚠️ 已定义 `record_*` 函数，已接入 customer/ocr/mod_store/materials 路由 | 待 Prometheus scrape `/metrics` 后 `collect_slo_metrics.py` 可读 |
+
 ---
 
 ## 8. 故障演练剧本

@@ -5,7 +5,7 @@
 
 ## 0. 结论
 
-- **Flutter 统一前端（唯一交付主线）**：新移动页面、路由、状态、组件、缓存和移动端业务流程 **只** 落到 `FHD/mobile-flutter-poc`。
+- **Flutter 统一前端（唯一交付主线）**：新移动页面、路由、状态、组件、缓存和移动端业务流程 **只** 落到 `FHD/mobile-flutter`。
 - **Android / iOS 均从 Flutter 发版**：统一 CI 验证两端；Android 产出 APK/AAB，iOS 通过 TestFlight / App Store Connect 发布。
 - **独立原生工程已删除**：Kotlin、SwiftUI、HarmonyOS 产品实现及重复 CI 已退出活跃仓库；历史仅可从 Git 取证。
 - **OpenAPI 统一前后端契约**：`FHD/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
@@ -18,9 +18,9 @@
 
 | 范围 | 主线 / SSOT | 派生或对标 |
 |---|---|---|
-| 移动前端主实现 | `FHD/mobile-flutter-poc` | **唯一交付主线**；Android+iOS |
-| Android Runner | `FHD/mobile-flutter-poc/android` | Manifest、平台通道、签名、APK/AAB |
-| iOS Runner | `FHD/mobile-flutter-poc/ios` | entitlements、平台通道、签名、IPA |
+| 移动前端主实现 | `FHD/mobile-flutter` | **唯一交付主线**；Android+iOS |
+| Android Runner | `FHD/mobile-flutter/android` | Manifest、平台通道、签名、APK/AAB |
+| iOS Runner | `FHD/mobile-flutter/ios` | entitlements、平台通道、签名、IPA |
 | 入口文档 | [`guides/MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md) | 日常开发与发版说明 |
 | 前后端契约 | `FHD/contracts/openapi.json` | Flutter `lib/src/api/*` |
 | 后端业务实现 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` 与 `/api/mobile/v1/*` | OpenAPI 导出、移动端 API client |
@@ -64,7 +64,7 @@ Flutter 只能缓存和展示服务端状态。出现端侧与服务端冲突时
 
 ### 准入门槛
 
-- Flutter：`cd FHD/mobile-flutter-poc && flutter pub get && flutter test`
+- Flutter：`cd FHD/mobile-flutter && flutter pub get && flutter test`
 - OpenAPI：`cd FHD && python scripts/dev/export_openapi.py --output contracts/openapi.json && python scripts/tools/check_openapi_consistency.py`
 - FastAPI mobile：`cd FHD && python -m pytest tests/test_routes/test_mobile_api_extensions_cov.py`
 - SSOT：`cd FHD && python scripts/dev/ssot_cli.py check mobile-tri-platform`

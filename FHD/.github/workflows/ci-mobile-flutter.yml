@@ -4,11 +4,11 @@ name: ci-mobile-flutter
 on:
   push:
     paths:
-      - "mobile-flutter-poc/**"
+      - "mobile-flutter/**"
       - ".github/workflows/ci-mobile-flutter.yml"
   pull_request:
     paths:
-      - "mobile-flutter-poc/**"
+      - "mobile-flutter/**"
       - ".github/workflows/ci-mobile-flutter.yml"
 
 concurrency:
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile-flutter-poc
+        working-directory: mobile-flutter
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -41,14 +41,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-flutter-debug-apk
-          path: mobile-flutter-poc/build/app/outputs/flutter-apk/*.apk
+          path: mobile-flutter/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
 
   test-and-ios:
     runs-on: macos-26
     defaults:
       run:
-        working-directory: mobile-flutter-poc
+        working-directory: mobile-flutter
     steps:
       - uses: actions/checkout@v4
       - name: Verify Xcode SDK

@@ -3,8 +3,8 @@
   "source": {
     "policy": "Flutter is the only mobile implementation; this file is the machine-readable design-token contract.",
     "flutter": [
-      "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
-      "FHD/mobile-flutter-poc/lib/src/theme/message_avatar_layout.dart"
+      "FHD/mobile-flutter/lib/src/theme/app_theme.dart",
+      "FHD/mobile-flutter/lib/src/theme/message_avatar_layout.dart"
     ]
   },
   "colors": {

@@ -14,7 +14,7 @@ SOURCE = ROOT / "config" / "deployment_modes.yaml"
 SOURCE_REL = "config/deployment_modes.yaml"
 JSON_TARGET = ROOT / "config" / "deployment_modes.generated.json"
 TS_TARGET = ROOT / "frontend" / "src" / "constants" / "deploymentModes.generated.ts"
-DART_TARGET = ROOT / "mobile-flutter-poc" / "lib" / "src" / "data" / "deployment_modes_ssot.dart"
+DART_TARGET = ROOT / "mobile-flutter" / "lib" / "src" / "data" / "deployment_modes_ssot.dart"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

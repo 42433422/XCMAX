@@ -222,13 +222,13 @@
       "step": "P9"
     },
     {
-      "prefix": "FHD/mobile-flutter-poc/ios/",
+      "prefix": "FHD/mobile-flutter/ios/",
       "department": "prod_software",
       "primary": ["mobile-ios-release-officer"],
       "step": "P5"
     },
     {
-      "prefix": "FHD/mobile-flutter-poc/",
+      "prefix": "FHD/mobile-flutter/",
       "department": "prod_software",
       "primary": ["mobile-android-release-officer", "mobile-ios-release-officer"],
       "step": "P4"

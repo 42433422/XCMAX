@@ -21,7 +21,7 @@ def ssot_name() -> str:
 
 
 def android_name() -> str:
-    path = REPO / "FHD/mobile-flutter-poc/android/app/src/main/res/values/strings.xml"
+    path = REPO / "FHD/mobile-flutter/android/app/src/main/res/values/strings.xml"
     match = re.search(
         r'<string name="app_name">([^<]*)</string>',
         path.read_text(encoding="utf-8"),
@@ -30,7 +30,7 @@ def android_name() -> str:
 
 
 def ios_name() -> str:
-    path = REPO / "FHD/mobile-flutter-poc/ios/Runner/Info.plist"
+    path = REPO / "FHD/mobile-flutter/ios/Runner/Info.plist"
     with path.open("rb") as handle:
         payload = plistlib.load(handle)
     return str(payload.get("CFBundleDisplayName") or "<missing>")

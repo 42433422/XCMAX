@@ -745,6 +745,32 @@ class TestFetchSurfacePagePayload:
 
     @pytest.mark.asyncio
     async def test_remote_lane_no_success(self):
+        from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
+
+        request = MagicMock()
+        with (
+            patch(
+                "app.application.aibiz_web_terminal_service._resolve_market_authorization",
+                new_callable=AsyncMock,
+                return_value="Bearer token",
+            ),
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"success": False, "message": "unavailable"},
+            ),
+            patch(
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=[{"name": "Cached", "url": "/cached"}],
+            ),
+        ):
+            result = await fetch_surface_page_payload(request, terminal="web", index=0)
+        assert result["success"] is True
+        assert result["data"]["name"] == "Cached"
+
+    @pytest.mark.asyncio
+    async def test_remote_lane_no_success_and_no_cache_returns_not_captured(self):
         from fastapi.responses import JSONResponse
 
         from app.application.aibiz_web_terminal_service import fetch_surface_page_payload
@@ -761,10 +787,15 @@ class TestFetchSurfacePagePayload:
                 new_callable=AsyncMock,
                 return_value={"success": False, "message": "unavailable"},
             ),
+            patch(
+                "app.application.aibiz_web_terminal_service._cached_lane_pages",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
         ):
             result = await fetch_surface_page_payload(request, terminal="web", index=0)
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 502
+        assert result.status_code == 404
 
     @pytest.mark.asyncio
     async def test_auth_runtime_error_returns_500(self):

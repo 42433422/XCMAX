@@ -1,53 +1,274 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>客户案例 | 成都修茈科技有限公司</title><meta name="description" content="修茈科技案例中心：制造企业生产协同、园区企业服务平台、校园移动服务与业务协同。" /><link rel="stylesheet" href="/styles.css?v=20260619" /></head>
-<body>
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="brand-mark" href="/index.html">
-      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
-      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
-    </a>
-    <nav class="nav" aria-label="站点导航">
-      <div class="nav-menu">
-        <a href="/index.html">首页</a>
-        <a href="/about.html">关于修茈</a>
-        <a href="/services.html">产品中心</a>
-        <a href="/solutions.html">解决方案</a>
-        <a class="active" href="/cases.html">客户案例</a>
-        <a class="nav-optional" href="/news.html">新闻资讯</a>
-        <a class="nav-optional" href="/honors.html">资质与能力</a>
-        <a href="/contact.html">联系我们</a>
-        <a href="/developer.html">开发者门户</a>
-      </div>
-      <div class="nav-actions">
-        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
-        <a class="nav-action nav-action--outline" href="/download">软件下载</a>
-      </div>
-    </nav>
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
-  </div>
-</header>
-<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
-<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link">首页</a>
-  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
-  <a href="/services.html" class="mobile-menu-link">产品中心</a>
-  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
-  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
-  <a href="/news.html" class="mobile-menu-link">新闻资讯</a>
-  <a href="/honors.html" class="mobile-menu-link">资质与能力</a>
-  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
-  <a href="/developer.html" class="mobile-menu-link">开发者门户</a>
-  <div class="mobile-menu-actions">
-    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
-    <a href="/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
-  </div>
-</nav>
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>客户案例 | 成都修茈科技有限公司</title>
+    <meta name="description" content="XCAGI 真实客户案例：太阳鸟考勤行业包、奇士美涂料行业包。首家客户定制实现，真实交付证据。" />
+    <link rel="stylesheet" href="./styles.css?v=20260619" />
+    <style>
+      .case-hero {
+        background: linear-gradient(135deg, #07111f 0%, #0d2746 56%, #07111f 100%);
+        color: #fff;
+        padding: 80px 0 60px;
+        text-align: center;
+      }
+      .case-hero h1 {
+        font-size: clamp(36px, 5vw, 56px);
+        margin: 16px 0;
+        letter-spacing: -0.03em;
+      }
+      .case-hero p {
+        max-width: 720px;
+        margin: 0 auto;
+        color: rgba(255,255,255,.78);
+        font-size: 18px;
+      }
+      .case-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 2.5rem;
+        margin: 3rem 0;
+      }
+      .case-card {
+        background: var(--panel);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--line);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .case-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-strong);
+      }
+      .case-card img {
+        width: 100%;
+        height: 240px;
+        object-fit: cover;
+      }
+      .case-body {
+        padding: 1.75rem;
+      }
+      .case-label {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        background: var(--bg-soft);
+        color: var(--blue);
+        border-radius: 100px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+      }
+      .case-body h3 {
+        margin: 0 0 0.75rem;
+        font-size: 1.35rem;
+      }
+      .case-body > p {
+        margin: 0 0 1rem;
+        color: var(--text-soft);
+        line-height: 1.6;
+      }
+      .case-details {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1.25rem;
+      }
+      .case-details li {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--line);
+        color: var(--text-soft);
+        font-size: 0.95rem;
+        display: flex;
+        justify-content: space-between;
+      }
+      .case-details li:last-child {
+        border-bottom: none;
+      }
+      .case-details li strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .case-quote {
+        background: var(--bg-soft);
+        border-left: 3px solid var(--blue);
+        padding: 1rem 1.25rem;
+        margin: 1rem 0;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-style: italic;
+        color: var(--text-soft);
+      }
+      .case-link {
+        color: var(--blue);
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .case-link:hover {
+        text-decoration: underline;
+      }
+      .evidence-section {
+        background: var(--bg);
+        padding: 4rem 0;
+      }
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        margin-top: 2rem;
+      }
+      .evidence-card {
+        background: var(--panel);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--line);
+        text-align: center;
+      }
+      .evidence-card img {
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        border-radius: var(--radius-sm);
+        margin-bottom: 1rem;
+      }
+      .evidence-card h4 {
+        margin: 0 0 0.5rem;
+        font-size: 1.1rem;
+      }
+      .evidence-card p {
+        margin: 0;
+        color: var(--text-soft);
+        font-size: 0.95rem;
+      }
+      .cta-section {
+        padding: 4rem 0;
+        text-align: center;
+      }
+    </style>
+  </head>
+<body data-page="cases">
+<div id="site-header"></div>
 
-<main><section class="page-hero"><div class="container page-hero-inner"><div><span class="eyebrow">Cases</span><h1>客户案例</h1><p>以行业场景呈现修茈科技的产品理解与交付方法。案例内容按现有资料整理，具体项目以实际合同与验收为准。</p></div><div class="page-hero-side"><p>制造、园区、教育三个方向代表了“文件多、流程长、协作复杂”的典型需求。</p></div></div></section>
-<section class="section"><div class="container"><div class="grid grid-3"><article class="case-card reveal"><span class="case-label">制造业</span><h3>生产协同与库存管理系统</h3><p>围绕生产任务、物料库存和统计报表建立业务协同系统。</p><a class="card-link" href="/case-manufacture.html">查看详情 →</a></article><article class="case-card reveal" data-delay="80"><span class="case-label">园区服务</span><h3>园区企业综合服务平台</h3><p>统一企业服务、事项办理、统计分析和驾驶舱入口。</p><a class="card-link" href="/case-park.html">查看详情 →</a></article><article class="case-card reveal" data-delay="160"><span class="case-label">教育信息化</span><h3>校园移动服务与业务协同</h3><p>整合通知、审批、服务申请和数据统计能力。</p><a class="card-link" href="/case-edu.html">查看详情 →</a></article></div></div></section>
-<section class="section section-soft"><div class="container cta-band reveal"><div><h2>你的行业也可以从一个流程切入</h2><p>我们优先选择“重复高、数据明确、影响大”的环节试点。</p></div><a class="btn btn-primary" href="/contact.html">沟通案例</a></div></section></main>
-<footer class="site-footer"><div class="container footer-inner"><div><a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span></a><p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p><p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p></div><div class="footer-links"><a href="/about.html">关于修茈</a><a href="/services.html">产品中心</a><a href="/solutions.html">解决方案</a><a href="/news.html">新闻资讯</a><a href="/honors.html">资质与能力</a><a href="/contact.html">联系我们</a></div></div></footer>
-<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<main>
+  <!-- Hero -->
+  <section class="case-hero">
+    <div class="container">
+      <span class="eyebrow">真实客户</span>
+      <h1>首家客户交付证据</h1>
+      <p>不是虚构案例，是真实交付的行业 Mod 包。每个案例都有真实客户品牌、交付内容和界面截图。</p>
+    </div>
+  </section>
+
+  <!-- 真实客户案例 -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Real Customers</p><h2>真实交付案例</h2></div>
+        <p>基于 customer_delivery.json 的真实客户清单，非虚构营销内容。</p>
+      </div>
+
+      <div class="case-grid">
+        <!-- 案例 1：太阳鸟 -->
+        <article class="case-card reveal">
+          <img src="/assets/screenshots/transform-attendance.png" alt="太阳鸟考勤行业包变身后界面" />
+          <div class="case-body">
+            <span class="case-label">考勤行业 · 首家</span>
+            <h3>太阳鸟 PRO</h3>
+            <p>珠宝包装行业首家考勤客户定制实现。通过安装考勤行业 Mod 包，空壳宿主秒变完整考勤系统。</p>
+            
+            <ul class="case-details">
+              <li><span>客户品牌</span><strong>太阳鸟 PRO</strong></li>
+              <li><span>行业</span><strong>珠宝包装</strong></li>
+              <li><span>Mod 包</span><strong>考勤行业包 (attendance-industry)</strong></li>
+              <li><span>交付内容</span><strong>花名册、定制 Mod 侧库、考勤模板</strong></li>
+            </ul>
+
+            <div class="case-quote">
+              "产品引导仅展示「考勤行业包」，首家考勤客户定制实现。"
+            </div>
+
+            <a class="case-link" href="/contact.html">咨询考勤行业方案 →</a>
+          </div>
+        </article>
+
+        <!-- 案例 2：奇士美 -->
+        <article class="case-card reveal" data-delay="100">
+          <img src="/assets/screenshots/transform-coating.png" alt="奇士美涂料行业包变身后界面" />
+          <div class="case-body">
+            <span class="case-label">涂料行业 · 首家</span>
+            <h3>奇士美 PRO</h3>
+            <p>涂料行业首家客户定制实现。通过安装涂料行业 Mod 包，空壳宿主秒变涂料行业管理系统。</p>
+            
+            <ul class="case-details">
+              <li><span>客户品牌</span><strong>奇士美 PRO</strong></li>
+              <li><span>行业</span><strong>涂料</strong></li>
+              <li><span>Mod 包</span><strong>涂料行业包 (coating-industry)</strong></li>
+              <li><span>交付内容</span><strong>涂料行业定制 Mod 包</strong></li>
+            </ul>
+
+            <div class="case-quote">
+              "产品引导仅展示「涂料行业包」，首家涂料客户定制实现。"
+            </div>
+
+            <a class="case-link" href="/contact.html">咨询涂料行业方案 →</a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 交付证据 -->
+  <section class="evidence-section">
+    <div class="container">
+      <div class="section-head reveal">
+        <div><p class="section-kicker">Delivery Evidence</p><h2>真实交付证据</h2></div>
+        <p>每个案例都有真实界面截图，来自运行中的 XCAGI 桌面 app。</p>
+      </div>
+
+      <div class="evidence-grid">
+        <div class="evidence-card reveal">
+          <img src="/assets/screenshots/transform-empty.png" alt="空宿主桌面" />
+          <h4>变身前：空宿主</h4>
+          <p>基础 AI 助手界面，等待安装行业 Mod 包</p>
+        </div>
+
+        <div class="evidence-card reveal" data-delay="80">
+          <img src="/assets/screenshots/mod-store.png" alt="Mod 市场" />
+          <h4>安装：Mod 市场</h4>
+          <p>选择并安装考勤或涂料行业 Mod 包</p>
+        </div>
+
+        <div class="evidence-card reveal" data-delay="160">
+          <img src="/assets/screenshots/transform-attendance.png" alt="变身后：考勤系统" />
+          <h4>变身后：行业系统</h4>
+          <p>桌面自动变身，适配行业特定功能和界面</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-band reveal">
+        <div>
+          <h2>你的行业也可以变身</h2>
+          <p>告诉我们你的行业，我们为你定制专属 Mod 包。</p>
+        </div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          <a class="btn btn-primary" href="/contact.html">定制行业 Mod</a>
+          <a class="btn btn-secondary" href="/services.html">查看产品中心</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="/partials/loader.js"></script>
 <script src="./main.js?v=20260619"></script>
 
 <div id="xc-corp-butler-root"></div>

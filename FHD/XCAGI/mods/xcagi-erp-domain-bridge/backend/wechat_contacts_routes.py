@@ -68,7 +68,9 @@ def mount_wechat_contacts_routes(router: APIRouter) -> None:
     def mod_wechat_contacts_search(q: str = Query(default="")):
         from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_search_compat
 
-        return tag_legacy_response(wechat_contacts_search_compat(q=q))
+        # 直接调用 FastAPI 路由函数时不会执行依赖注入；若不显式传 keyword，
+        # 其默认值仍是 Query 对象，空 q 会在 .strip() 处触发 500。
+        return tag_legacy_response(wechat_contacts_search_compat(q=q, keyword=""))
 
     @router.get("/wechat_contacts/work_mode_feed")
     def mod_wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)):

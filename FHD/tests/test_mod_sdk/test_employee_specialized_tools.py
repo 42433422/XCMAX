@@ -967,7 +967,7 @@ async def test_android_gradle_missing_flutter_project(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_android_gradle_runs(monkeypatch, tmp_path):
-    android = tmp_path / "mobile-flutter-poc"
+    android = tmp_path / "mobile-flutter"
     android.mkdir()
     (android / "pubspec.yaml").write_text("name: test")
     monkeypatch.setattr(est, "_FHD_ROOT", tmp_path)

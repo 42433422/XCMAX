@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from app.application.ports.extract_log_store import ExtractLogStorePort
+    from app.services.extract_log_service import ExtractLogService
 
 
 class ExtractLogApplicationService:
@@ -50,29 +51,37 @@ from app.neuro_bus.neuro_application_instrumentation import instrument_applicati
 
 instrument_application_service_class(ExtractLogApplicationService)
 
-_extract_log_app_service: ExtractLogApplicationService | None = None
+_extract_log_application_service: ExtractLogApplicationService | None = None
 
 
-def get_extract_log_app_service() -> "ExtractLogApplicationService":
-    """获取提取日志应用服务单例"""
-    global _extract_log_app_service
-    if _extract_log_app_service is None:
-        _extract_log_app_service = ExtractLogApplicationService()
-    return _extract_log_app_service
+def get_extract_log_app_service() -> "ExtractLogService":
+    """返回 Excel 提取路由使用的日志服务。
+
+    这些兼容路由仍使用 ``create_log/update_log/get_logs/get_log`` 契约；
+    ``ExtractLogApplicationService`` 则暴露新的 DDD 用例契约。二者之前被
+    误接，导致路由在运行时调用不存在的方法。注册表本来就维护了兼容
+    ``ExtractLogService``，这里应从注册表取它，而不是另建错误单例。
+    """
+    from app.di.registry import get_service_registry
+
+    return get_service_registry().extract_log_service
 
 
 def get_extract_log_application_service() -> "ExtractLogApplicationService":
-    """获取提取日志应用服务单例 (别名)"""
-    return get_extract_log_app_service()
+    """获取 DDD 提取日志应用服务单例。"""
+    global _extract_log_application_service
+    if _extract_log_application_service is None:
+        _extract_log_application_service = ExtractLogApplicationService()
+    return _extract_log_application_service
 
 
 def init_extract_log_application_service(
     store: "ExtractLogStorePort",
 ) -> "ExtractLogApplicationService":
     """初始化提取日志应用服务 (用于依赖注入)"""
-    global _extract_log_app_service
-    _extract_log_app_service = ExtractLogApplicationService(store=store)
-    return _extract_log_app_service
+    global _extract_log_application_service
+    _extract_log_application_service = ExtractLogApplicationService(store=store)
+    return _extract_log_application_service
 
 
 def init_extract_log_app_service(

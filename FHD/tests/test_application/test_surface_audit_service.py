@@ -32,6 +32,7 @@ from app.application.surface_audit_service import (
     _write_cache,
     get_surface_audit_lane,
     list_configured_lanes,
+    read_surface_audit_cache,
     resolve_lane_page_png_path,
     run_surface_audit_lane,
 )
@@ -350,6 +351,51 @@ class TestMostRecentPriorCache:
             assert result is None
 
 
+# ========================= read_surface_audit_cache ======================
+
+
+class TestReadSurfaceAuditCache:
+    def test_current_cache(self):
+        with patch(
+            "app.application.surface_audit_service._read_cache",
+            return_value={"success": True, "pages": [{"id": "home"}]},
+        ):
+            result = read_surface_audit_cache("P-W")
+        assert result is not None
+        assert result["from_cache"] is True
+        assert result.get("stale_cache") is None
+
+    def test_prior_cache(self, tmp_path):
+        prior = tmp_path / "2026-07-17.json"
+        with (
+            patch("app.application.surface_audit_service._read_cache", return_value=None),
+            patch(
+                "app.application.surface_audit_service._most_recent_prior_cache",
+                return_value=prior,
+            ),
+            patch(
+                "app.application.surface_audit_service._read_cache_path",
+                return_value={"success": True, "pages": [{"id": "cached"}]},
+            ),
+        ):
+            result = read_surface_audit_cache("P-W")
+        assert result is not None
+        assert result["stale_cache"] is True
+        assert result["stale_cache_date"] == "2026-07-17"
+
+    def test_cache_miss_does_not_capture(self):
+        with (
+            patch("app.application.surface_audit_service._read_cache", return_value=None),
+            patch(
+                "app.application.surface_audit_service._most_recent_prior_cache",
+                return_value=None,
+            ),
+            patch("subprocess.run") as run,
+        ):
+            assert read_surface_audit_cache("P-W") is None
+        run.assert_not_called()
+
+
 # ========================= _adb_has_device ===============================
 
 
@@ -367,7 +413,7 @@ class TestAdbHasDevice:
             # Create the adb path so is_file() returns True
             adb_path = (
                 tmp_path
-                / "mobile-flutter-poc"
+                / "mobile-flutter"
                 / ".toolchain"
                 / "android-sdk"
                 / "platform-tools"
@@ -387,7 +433,7 @@ class TestAdbHasDevice:
         ):
             adb_path = (
                 tmp_path
-                / "mobile-flutter-poc"
+                / "mobile-flutter"
                 / ".toolchain"
                 / "android-sdk"
                 / "platform-tools"
@@ -407,7 +453,7 @@ class TestAdbHasDevice:
         ):
             adb_path = (
                 tmp_path
-                / "mobile-flutter-poc"
+                / "mobile-flutter"
                 / ".toolchain"
                 / "android-sdk"
                 / "platform-tools"

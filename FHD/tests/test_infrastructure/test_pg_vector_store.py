@@ -63,6 +63,20 @@ class TestVectorStorePortImplementation:
 
 
 class TestExcelVectorAppServiceWiring:
+    def test_desktop_sqlite_url_selects_sqlite_store(self, monkeypatch):
+        import app.application.excel_vector_app_service as mod
+
+        sentinel = object()
+        previous = mod._vector_store_instance
+        monkeypatch.setenv("VECTOR_DB_URL", "sqlite:////tmp/xcagi-test.db")
+        monkeypatch.delenv("ENABLE_SQLITE_VECTOR_FALLBACK", raising=False)
+        monkeypatch.setattr(mod, "get_sqlite_vector_store", lambda: sentinel)
+        mod._vector_store_instance = None
+        try:
+            assert mod.get_vector_store() is sentinel
+        finally:
+            mod._vector_store_instance = previous
+
     def test_default_factory_prefers_pgvector(self, monkeypatch):
         # 确保默认不走 SQLite fallback。
         monkeypatch.delenv("ENABLE_SQLITE_VECTOR_FALLBACK", raising=False)

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SDK="${FHD_ROOT}/mobile-flutter-poc/.toolchain/android-sdk"
+SDK="${FHD_ROOT}/mobile-flutter/.toolchain/android-sdk"
 ADB="${SDK}/platform-tools/adb"
 PID_FILE="${FHD_ROOT}/data/surface_audit/.android-emulator.pid"
 

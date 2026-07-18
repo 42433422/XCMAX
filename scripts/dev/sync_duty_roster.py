@@ -11,7 +11,7 @@ SSOT（单一真相源）:
   3. 成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster.ts (整体生成)
   4. FHD/app/infrastructure/mods/catalog_visibility.py  (改为运行时派生)
   5. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
-  6. FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart (整体生成)
+  6. FHD/mobile-flutter/lib/src/data/duty_roster_ssot.dart (整体生成)
 
 用法:
   python scripts/dev/sync_duty_roster.py --generate   # 生成所有派生文件
@@ -53,7 +53,7 @@ TARGETS = {
     / "constants"
     / "enterpriseWorkflowEstablishment.ts",
     "flutter_poc": FHD
-    / "mobile-flutter-poc"
+    / "mobile-flutter"
     / "lib"
     / "src"
     / "data"
