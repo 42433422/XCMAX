@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.request
 
 import pytest
 from fastapi import FastAPI
@@ -37,6 +38,22 @@ def isolated_store(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
 def local_client(app: FastAPI) -> TestClient:
     return TestClient(app, client=("127.0.0.1", 50000))
+
+
+def test_kellai_loopback_requests_bypass_environment_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
+    request = urllib.request.Request("http://127.0.0.1:8793/health")
+    sentinel = object()
+    calls: list[tuple[urllib.request.Request, float]] = []
+
+    class DirectOpener:
+        def open(self, opened_request, *, timeout):
+            calls.append((opened_request, timeout))
+            return sentinel
+
+    monkeypatch.setattr(kellai_binding, "_DIRECT_LOOPBACK_OPENER", DirectOpener())
+
+    assert kellai_binding._open_kellai_request(request, timeout=3) is sentinel
+    assert calls == [(request, 3)]
 
 
 def test_infrastructure_mount_registers_kellai_binding_routes() -> None:
