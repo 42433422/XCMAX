@@ -36,11 +36,7 @@ class GroupGridAvatar extends StatelessWidget {
         color: colors.divider,
         alignment: Alignment.center,
         child: count == 0
-            ? Icon(
-                Icons.group,
-                size: size * 0.52,
-                color: colors.textTertiary,
-              )
+            ? Icon(Icons.group, size: size * 0.52, color: colors.textTertiary)
             : Padding(
                 padding: const EdgeInsets.all(gap),
                 child: Column(
@@ -52,10 +48,7 @@ class GroupGridAvatar extends StatelessWidget {
                         children: [
                           for (var column = 0; column < columns; column++) ...[
                             _GroupAvatarCell(
-                              member: _memberAt(
-                                shown,
-                                row * columns + column,
-                              ),
+                              member: _memberAt(shown, row * columns + column),
                               size: cell,
                             ),
                             if (column < columns - 1)

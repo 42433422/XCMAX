@@ -16,7 +16,7 @@ final demoConversations = <ConversationItem>[
     id: PinnedIds.codex,
     type: ConversationType.pinnedCodex,
     title: '超级员工-Codex',
-    subtitle: '已读取 Android 头像策略，准备继续执行移动端任务。',
+    subtitle: '已读取 Flutter 头像策略，准备继续执行移动端任务。',
     timestampText: '03:07',
     unreadCount: 8,
     isPinned: true,

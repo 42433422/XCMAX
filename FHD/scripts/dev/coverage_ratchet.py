@@ -318,7 +318,16 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     if failed:
         print("[cov-ratchet] 覆盖率回退被阻断；请补测后再提交。", file=sys.stderr)
+        # 即使回退也记录 history（note=check-fail），让趋势线反映回退事件。
+        if args.record and (be is not None or fe is not None):
+            append_history(be, fe, note="check-fail")
+            print("[cov-ratchet] 已追加快照到 coverage-history.jsonl (note=check-fail)")
         return 1
+    # check 通过时若显式 --record，也写 history（note=check），让趋势线连续。
+    # CI 应传 --record；本地开发者默认不传，避免噪音。
+    if args.record and (be is not None or fe is not None):
+        append_history(be, fe, note="check")
+        print("[cov-ratchet] 已追加快照到 coverage-history.jsonl (note=check)")
     print("[cov-ratchet] OK — 覆盖率未回退")
     return 0
 

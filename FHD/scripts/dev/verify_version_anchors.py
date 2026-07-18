@@ -24,7 +24,6 @@ ANCHORS: list[tuple[str, str, str]] = [
     ("sunbird-console/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
     ("app/fastapi_app/factory.py", r'version="([\d.]+)"', PRODUCT_VERSION),
     ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
-    ("mobile-android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("mobile-flutter-poc/android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("mobile-flutter-poc/pubspec.yaml", r'(?m)^version:\s*([\d.]+)\+\d+', TOOLCHAIN_VERSION),
     ("mobile-flutter-poc/ios/Flutter/Version.xcconfig", r'(?m)^FLUTTER_BUILD_NAME=([\d.]+)', TOOLCHAIN_VERSION),

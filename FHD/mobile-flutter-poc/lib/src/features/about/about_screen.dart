@@ -6,24 +6,24 @@ import '../../platform/external_url_launcher.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
-import '../update/android_package_update_installer.dart';
-import '../update/android_update_check.dart';
+import '../update/package_update_installer.dart';
+import '../update/app_update_check.dart';
 
 class AboutScreen extends StatefulWidget {
   const AboutScreen({
     super.key,
     this.api,
     this.openExternalUrl,
-    this.updateInstaller = const MethodChannelAndroidPackageUpdateInstaller(),
+    this.updateInstaller = const MethodChannelPackageUpdateInstaller(),
   });
 
   final MobileApiClient? api;
   final ExternalUrlLauncher? openExternalUrl;
-  final AndroidPackageUpdateInstaller updateInstaller;
+  final PackageUpdateInstaller updateInstaller;
 
   static const companyName = '成都修茈科技有限公司';
   static const brandUrl = 'https://xiu-ci.com';
-  static const appVersion = MobileAndroidBuild.displayVersion;
+  static const appVersion = MobileBuildConfig.displayVersion;
   static const websiteIcp = '蜀ICP备2026014056号-3A';
   static const appFilingSubtitle = '审核通过 2026-04-08';
 
@@ -137,11 +137,7 @@ class _AboutScreenState extends State<AboutScreen> {
     if (_checkingUpdate) return;
     setState(() => _checkingUpdate = true);
     try {
-      await runAndroidUpdateCheck(
-        context,
-        _api,
-        installer: widget.updateInstaller,
-      );
+      await runAppUpdateCheck(context, _api, installer: widget.updateInstaller);
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
     }
@@ -150,9 +146,9 @@ class _AboutScreenState extends State<AboutScreen> {
   Future<void> _openBrandUrl() async {
     final opened = await _openExternalUrl(Uri.parse(AboutScreen.brandUrl));
     if (!mounted || opened) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('无法打开官网')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('无法打开官网')));
   }
 }
 

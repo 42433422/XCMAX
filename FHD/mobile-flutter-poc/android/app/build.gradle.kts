@@ -44,7 +44,7 @@ android {
     signingConfigs {
         create("release") {
             val keystoreProps = Properties()
-            // Flutter 惯例 key.properties；与 mobile-android 对齐也认 keystore.properties
+            // Flutter 惯例 key.properties；同时兼容既有 keystore.properties
             listOf(
                 rootProject.file("key.properties"),
                 rootProject.file("keystore.properties"),

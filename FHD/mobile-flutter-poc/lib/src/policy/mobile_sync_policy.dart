@@ -1,16 +1,15 @@
 class MobileSyncPolicy {
   const MobileSyncPolicy._();
 
-  static bool shouldSkipAutoSync({
-    required String host,
-    required String mode,
-  }) {
+  static bool shouldSkipAutoSync({required String host, required String mode}) {
     return host.trim().isEmpty && mode.trim().toLowerCase() != 'cloud';
   }
 
   static bool isAdminAccountKind(String accountKind) {
-    return const {'admin', 'admin_portal'}
-        .contains(accountKind.trim().toLowerCase());
+    return const {
+      'admin',
+      'admin_portal',
+    }.contains(accountKind.trim().toLowerCase());
   }
 
   static bool shouldRefreshEmployeeRoster({

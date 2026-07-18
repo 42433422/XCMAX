@@ -14,6 +14,7 @@ export const IM_WS_URL = 'wss://xiu-ci.com/ws/im';
 export const DESKTOP_FHD_LISTEN_PORT = 17500;
 export const FHD_API_LISTEN_PORT = 5000;
 export const FHD_API_UPSTREAM_PORT = 5100;
+export const MOBILE_LAN_PROXY_LISTEN_PORT = 5011;
 export const MODSTORE_LISTEN_PORT = 8765;
 
 export const MUST_RUN_PROCESSES: string[] = ['web', 'modstore-scheduler'];

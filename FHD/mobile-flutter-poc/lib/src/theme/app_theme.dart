@@ -385,8 +385,11 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
     return XcagiThemeColors(
       brand: Color.lerp(brand, other.brand, t)!,
       brandContainer: Color.lerp(brandContainer, other.brandContainer, t)!,
-      brandGradientEnd:
-          Color.lerp(brandGradientEnd, other.brandGradientEnd, t)!,
+      brandGradientEnd: Color.lerp(
+        brandGradientEnd,
+        other.brandGradientEnd,
+        t,
+      )!,
       danger: Color.lerp(danger, other.danger, t)!,
       success: Color.lerp(success, other.success, t)!,
       warning: Color.lerp(warning, other.warning, t)!,
@@ -395,8 +398,11 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
       weChatInputBg: Color.lerp(weChatInputBg, other.weChatInputBg, t)!,
       weChatDivider: Color.lerp(weChatDivider, other.weChatDivider, t)!,
       chatUserBubble: Color.lerp(chatUserBubble, other.chatUserBubble, t)!,
-      chatUserBubbleText:
-          Color.lerp(chatUserBubbleText, other.chatUserBubbleText, t)!,
+      chatUserBubbleText: Color.lerp(
+        chatUserBubbleText,
+        other.chatUserBubbleText,
+        t,
+      )!,
       momentAccent: Color.lerp(momentAccent, other.momentAccent, t)!,
       momentChipBg: Color.lerp(momentChipBg, other.momentChipBg, t)!,
       replyBoxBg: Color.lerp(replyBoxBg, other.replyBoxBg, t)!,
@@ -406,8 +412,11 @@ class XcagiThemeColors extends ThemeExtension<XcagiThemeColors> {
       divider: Color.lerp(divider, other.divider, t)!,
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
-      textStrongSecondary:
-          Color.lerp(textStrongSecondary, other.textStrongSecondary, t)!,
+      textStrongSecondary: Color.lerp(
+        textStrongSecondary,
+        other.textStrongSecondary,
+        t,
+      )!,
       textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
     );
   }

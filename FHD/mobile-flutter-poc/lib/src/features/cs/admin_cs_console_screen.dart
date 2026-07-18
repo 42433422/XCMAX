@@ -10,11 +10,7 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
 
 class AdminCsConsoleScreen extends StatefulWidget {
-  const AdminCsConsoleScreen({
-    super.key,
-    this.repository,
-    this.initialInbox,
-  });
+  const AdminCsConsoleScreen({super.key, this.repository, this.initialInbox});
 
   final MobileRepository? repository;
   final List<AdminCsInboxItem>? initialInbox;
@@ -97,8 +93,9 @@ class _AdminCsConsoleScreenState extends State<AdminCsConsoleScreen> {
                               thickness: 0.5,
                               indent:
                                   MessageAvatarLayout.conversationDividerStart,
-                              color:
-                                  Theme.of(context).colorScheme.outlineVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
                             ),
                             itemBuilder: (context, index) {
                               final item = items[index];
@@ -130,10 +127,7 @@ class _AdminCsConsoleScreenState extends State<AdminCsConsoleScreen> {
 }
 
 class _AdminCsInboxRow extends StatelessWidget {
-  const _AdminCsInboxRow({
-    required this.item,
-    required this.onTap,
-  });
+  const _AdminCsInboxRow({required this.item, required this.onTap});
 
   final AdminCsInboxItem item;
   final VoidCallback onTap;
@@ -339,8 +333,7 @@ class _AdminCsConversationScreenState
                                         const SizedBox(height: 7),
                                     itemBuilder: (context, index) =>
                                         _AdminCsBubble(
-                                      message: _messages[index],
-                                    ),
+                                            message: _messages[index]),
                                   ),
                       ),
                       _AdminCsInputBar(
@@ -593,10 +586,7 @@ class _AdminCsInputBar extends StatelessWidget {
 }
 
 class _CustomerAvatar extends StatelessWidget {
-  const _CustomerAvatar({
-    required this.name,
-    this.size = 44,
-  });
+  const _CustomerAvatar({required this.name, this.size = 44});
 
   final String name;
   final double size;

@@ -38,9 +38,7 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
       _error = null;
     });
     try {
-      final result = await widget.repository.runGitLog(
-        branch: widget.branch,
-      );
+      final result = await widget.repository.runGitLog(branch: widget.branch);
       if (!mounted) return;
       final commits = (result['commits'] as List?) ?? const <Object?>[];
       setState(() {
@@ -75,9 +73,9 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
       await _loadCommits();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败：$e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败：$e')));
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -176,11 +174,7 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final commit = _commits[index];
-        return _CommitRow(
-          commit: commit,
-          isLatest: index == 0,
-          base: _base,
-        );
+        return _CommitRow(commit: commit, isLatest: index == 0, base: _base);
       },
     );
   }
@@ -247,9 +241,11 @@ class _CommitRow extends StatelessWidget {
     final colors = AppTheme.colors(context);
     final sha = (commit['sha'] as String?) ?? (commit['hash'] as String?) ?? '';
     final shortSha = sha.length > 7 ? sha.substring(0, 7) : sha;
-    final message = (commit['message'] as String?) ?? (commit['subject'] as String?) ?? '';
+    final message =
+        (commit['message'] as String?) ?? (commit['subject'] as String?) ?? '';
     final author = (commit['author'] as String?) ?? '';
-    final date = (commit['date'] as String?) ?? (commit['time'] as String?) ?? '';
+    final date =
+        (commit['date'] as String?) ?? (commit['time'] as String?) ?? '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -297,10 +293,7 @@ class _CommitRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     [author, date].where((s) => s.isNotEmpty).join(' · '),
-                    style: TextStyle(
-                      color: colors.textTertiary,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: colors.textTertiary, fontSize: 12),
                   ),
                 ],
               ],

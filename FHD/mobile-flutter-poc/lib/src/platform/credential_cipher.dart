@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
-class AndroidCredentialCipher {
-  const AndroidCredentialCipher({
+class PlatformCredentialCipher {
+  const PlatformCredentialCipher({
     MethodChannel channel = const MethodChannel('xcagi/credential_cipher'),
   }) : _channel = channel;
 

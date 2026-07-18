@@ -14,8 +14,8 @@
 
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
-> 以下 **7 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
-> `android-build.yml`、`archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
+> 以下 **6 个根仓 workflow 为手写**（无生成头，直接在根仓维护）：
+> `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
 > `e2e.yml`、`e2e-playwright-reusable.yml`、`frontend-unit.yml`。
 
 ## 常用 workflow
@@ -27,7 +27,9 @@
 | FHD Release gate | [`fhd-release-gate-ci.yml`](../.github/workflows/fhd-release-gate-ci.yml) |
 | 前端 Vitest | [`frontend-unit.yml`](../.github/workflows/frontend-unit.yml) |
 | Playwright P0 | [`e2e.yml`](../.github/workflows/e2e.yml) → [`e2e-playwright-reusable.yml`](../.github/workflows/e2e-playwright-reusable.yml) |
-| Android assembleDebug | [`android-build.yml`](../.github/workflows/android-build.yml) |
+| Flutter Android+iOS CI | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
+| Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
+| Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
 | MODstore Python CI | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
 | Archive 卫生 | [`archive-hygiene.yml`](../.github/workflows/archive-hygiene.yml) |
 | FHD 服务器 API 发布包校验 | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `pack-verify` |

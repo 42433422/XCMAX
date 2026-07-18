@@ -117,10 +117,9 @@ class AndroidContentUriImageProvider
     AndroidContentUriImageProvider key,
     ImageDecoderCallback decode,
   ) async {
-    final bytes = await key.channel.invokeMethod<Uint8List>(
-      'readBytes',
-      {'uri': key.uri},
-    );
+    final bytes = await key.channel.invokeMethod<Uint8List>('readBytes', {
+      'uri': key.uri,
+    });
     if (bytes == null || bytes.isEmpty) {
       throw StateError('Empty content uri image: ${key.uri}');
     }
@@ -153,10 +152,7 @@ class UnreadBadge extends StatelessWidget {
     return Container(
       width: badgeSize,
       height: badgeSize,
-      decoration: BoxDecoration(
-        color: colors.danger,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: colors.danger, shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Text(
         label,

@@ -33,10 +33,9 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 |------|-----------|
 | 移动统一策略 | `FHD/docs/mobile_tri_platform_ssot.md` |
 | Flutter 主实现 | `FHD/mobile-flutter-poc/**` |
-| Android 行为参照 | `FHD/mobile-android/**` |
 | 契约 | `FHD/contracts/openapi.json` |
 | FastAPI 移动接口 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` |
-| Android-first 对齐 | `FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md` |
+| Flutter 收敛边界 | `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md` |
 
 原则：Flutter 只做交互、展示、缓存和端侧适配；账号、权限、员工、聊天、支付、审批、同步、数据写入都归 FastAPI。
 
@@ -47,7 +46,7 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 1. `FHD/config/duty_roster.json`：岗位归属、部门、区域 SSOT。
 2. `FHD/mods/_employees/<employee-id>/manifest.json`：员工身份、说明、能力、提示词、scope、handler。
 3. `成都修茈科技有限公司/yuangon/<area>/<employee-id>/`：岗位说明、runbook、skill、prompt、知识储备。
-4. `scripts/dev/sync_duty_roster.py --generate`：生成 Web、MODstore、Android、Harmony、Flutter 等派生文件。
+4. `scripts/dev/sync_duty_roster.py --generate`：生成 Web、MODstore、Flutter 等派生文件。
 5. 移动头像/离线快照按端补充映射，避免离线或弱网状态显示退化。
 
 派生目标包括：
@@ -55,8 +54,6 @@ FHD 采用 Neuro-DDD 思路：表现层、应用层、领域层、基础设施�
 - `FHD/frontend/src/domain/yuangonDutyRoster.ts`
 - `成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster.ts`
 - `成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_roster.py`
-- `FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/model/DutyRosterSsot.kt`
-- `FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets`
 - `FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart`
 - `FHD/app/infrastructure/mods/catalog_visibility.py`
 - `FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts`
@@ -95,7 +92,7 @@ MODstore 是 Mod、AI 员工包、工作流、支付/钱包/权益的平台。�
 
 1. 先读 `FHD/docs/PROJECT_STATE.md`，理解项目真实完成度和风险。
 2. 再读 `FHD/docs/ARCHITECTURE.md`，理解 Neuro-DDD、桌面/Web 形态和目录结构。
-3. 读 `FHD/docs/mobile_tri_platform_ssot.md` 与 `FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md`，理解移动端为什么现在以 Flutter 为主线。
+3. 读 `FHD/docs/mobile_tri_platform_ssot.md` 与 `FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md`，理解 Flutter 唯一移动主线。
 4. 读 `FHD/config/duty_roster.json` 与 `scripts/dev/sync_duty_roster.py`，理解管理端员工体系怎么生成到三端。
 5. 读 `成都修茈科技有限公司/MODstore_deploy/docs/ARCHITECTURE.md`，理解 MODstore 和支付边界。
 6. 最后按任务进入源码：FastAPI 路由、应用服务、Vue 页面、Flutter 页面、员工 manifest。
@@ -106,7 +103,7 @@ MODstore 是 Mod、AI 员工包、工作流、支付/钱包/权益的平台。�
 
 - 要改的源头 SSOT 是什么？
 - 哪些派生文件会变化？
-- 影响哪些端：Web、桌面、Flutter、Android、iOS、Harmony、MODstore、后端？
+- 影响哪些端：Web、桌面、Flutter Android/iOS、MODstore、后端？
 - 是否涉及账号、权限、支付、安全、数据库 schema 或发布上架？
 - 应由哪个员工执行？
 - 验证命令是什么？

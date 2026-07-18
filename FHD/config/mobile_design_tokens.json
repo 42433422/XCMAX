@@ -1,11 +1,10 @@
 {
   "version": 1,
   "source": {
-    "policy": "Android is the implementation lead; this file is the cross-platform machine-readable token contract.",
-    "android": [
-      "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt",
-      "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt",
-      "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt"
+    "policy": "Flutter is the only mobile implementation; this file is the machine-readable design-token contract.",
+    "flutter": [
+      "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
+      "FHD/mobile-flutter-poc/lib/src/theme/message_avatar_layout.dart"
     ]
   },
   "colors": {

@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
-class AndroidBiometricGate {
-  const AndroidBiometricGate({
+class PlatformBiometricGate {
+  const PlatformBiometricGate({
     MethodChannel channel = const MethodChannel('xcagi/biometric'),
   }) : _channel = channel;
 

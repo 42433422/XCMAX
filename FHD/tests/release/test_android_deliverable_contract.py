@@ -1,4 +1,4 @@
-"""Android 签约级交付文档契约（不发 APK，只验 SSOT）。"""
+"""Flutter Android 签约级交付契约（不发 APK，只验 SSOT）。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,10 +13,10 @@ def test_android_marked_contract_grade_in_version_md() -> None:
     assert "非签约" not in text.split("Android")[1].split("\n")[0]
 
 
-def test_mobile_android_readme_contract_grade() -> None:
-    text = (ROOT / "mobile-android" / "README.md").read_text(encoding="utf-8")
-    assert "签约级" in text
-    assert "非签约级" not in text
+def test_flutter_mobile_readme_declares_only_delivery_line() -> None:
+    text = (ROOT / "mobile-flutter-poc" / "README.md").read_text(encoding="utf-8")
+    assert "唯一移动端实现与交付主线" in text
+    assert "Android + iOS 单代码库" in text
 
 
 def test_mobile_android_guide_exists() -> None:
@@ -26,7 +26,9 @@ def test_mobile_android_guide_exists() -> None:
 def test_android_version_anchor_in_gradle() -> None:
     import re
 
-    gradle = (ROOT / "mobile-android" / "app" / "build.gradle.kts").read_text(encoding="utf-8")
+    gradle = (
+        ROOT / "mobile-flutter-poc" / "android" / "app" / "build.gradle.kts"
+    ).read_text(encoding="utf-8")
     version_md = (ROOT / "VERSION.md").read_text(encoding="utf-8")
     # versionName 跟随四段产品版本；versionCode 是商店要求的独立单调递增构建号，
     # 不得因产品版本从历史 10.0.0 切到 1.0.0.0 而倒退或强行映射主版本号。

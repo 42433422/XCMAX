@@ -25,6 +25,12 @@ SKIP_FILE_NAMES = frozenset({".DS_Store"})
 # Binary data files ignored by XCAGI/.gitignore (*.xlsx, etc.) — skip in diff check
 SKIP_SUFFIXES = frozenset({".xlsx", ".xls", ".csv.gz"})
 
+# 仅存在于 EXPORT_ROOT（FHD/XCAGI/mods/）的 mod 白名单。
+# 这些 mod 是"运行时副本 SSOT"——有意不放在编辑源 SSOT_ROOT（FHD/mods/），
+# 避免双份漂移。见 commit 6804159c3（attendance-industry 迁移）。
+# 治理工具必须跟上代码意图：双路径查找（a34114a0a）+ 导出副本 SSOT 模型。
+EXPORT_ONLY_MODS = frozenset({"attendance-industry"})
+
 
 def _skip_path(rel: Path) -> bool:
     if rel.name in SKIP_FILE_NAMES:
@@ -139,7 +145,7 @@ def cmd_check(mod_ids: list[str]) -> int:
     for mod_id in targets:
         issues.extend(compare_mod(mod_id))
 
-    export_only = sorted(set(list_mod_ids(EXPORT_ROOT)) - set(list_mod_ids(SSOT_ROOT)))
+    export_only = sorted(set(list_mod_ids(EXPORT_ROOT)) - set(list_mod_ids(SSOT_ROOT)) - EXPORT_ONLY_MODS)
     for mod_id in export_only:
         issues.append(f"{mod_id}: 仅存在于 XCAGI/mods（SSOT 中无此 Mod，应删除或移回 mods/）")
 
