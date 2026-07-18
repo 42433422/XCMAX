@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   downloadUpdate: () => ipcRenderer.invoke('xcagi:download-update'),
   installUpdate: () => ipcRenderer.invoke('xcagi:install-update'),
   getPairingQrPayload: () => ipcRenderer.invoke('xcagi:pairing-qr'),
+  openKellaiDesktop: () => ipcRenderer.invoke('xcagi:open-kellai-desktop'),
   setBadge: (count: number) => ipcRenderer.invoke('xcagi:set-badge', count),
   showNotification: (title: string, body: string) =>
     ipcRenderer.invoke('xcagi:show-notification', { title, body }),

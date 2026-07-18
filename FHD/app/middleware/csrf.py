@@ -65,6 +65,19 @@ def _csrf_exempt_sync_api(scope: Scope) -> bool:
     return path.endswith("/api/xcmax/sync/receive")
 
 
+def _csrf_exempt_kellai_pairing(scope: Scope) -> bool:
+    """客来来桌面端的本机配对回调没有浏览器 Cookie。
+
+    路由层还会验证回环来源和一次性授权密钥；这里额外要求专用请求头，
+    避免普通跨站表单请求绕过 CSRF。
+    """
+    path = (scope.get("path") or "").rstrip("/")
+    if not path.startswith("/api/kellai/binding/"):
+        return False
+    headers = dict(scope.get("headers") or [])
+    return headers.get(b"x-kellai-local-pairing", b"") == b"1"
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -112,6 +125,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_sync_api(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_kellai_pairing(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")

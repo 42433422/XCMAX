@@ -45,6 +45,7 @@ import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediat
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
 
 const APP_NAME = 'XCAGI'
+const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
 const POST_UPDATE_STABILITY_MS = 5_000
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
@@ -1075,6 +1076,25 @@ function configureDesktopMediaPermissions(): void {
   })
 }
 
+function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
+  if (process.platform !== 'darwin') {
+    return shell
+      .openExternal('kellai://messages?source=xcmax')
+      .then(() => ({ ok: true }))
+      .catch(error => ({ ok: false, reason: error instanceof Error ? error.message : String(error) }))
+  }
+
+  return new Promise(resolve => {
+    execFile('open', ['-b', KELLAI_BUNDLE_ID], error => {
+      if (!error) {
+        resolve({ ok: true })
+        return
+      }
+      resolve({ ok: false, reason: '未检测到客来来桌面端，请先安装并打开一次客来来。' })
+    })
+  })
+}
+
 async function stopBackend(): Promise<void> {
   const child = backendProcess
   backendProcess = null
@@ -1490,6 +1510,7 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
