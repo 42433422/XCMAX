@@ -30,8 +30,10 @@ elif [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
 else
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_ARCHIVE_MODSTORE}}"
 fi
-MODSTORE_DAILY_ROLE="${MODSTORE_DAILY_ROLE:-api}"
-MODSTORE_CONTROL_PORT="${MODSTORE_CONTROL_PORT:-8788}"
+MODSTORE_REQUESTED_ROLE="${MODSTORE_DAILY_ROLE:-api}"
+MODSTORE_REQUESTED_CONTROL_PORT="${MODSTORE_CONTROL_PORT:-8788}"
+MODSTORE_DAILY_ROLE="${MODSTORE_REQUESTED_ROLE}"
+MODSTORE_CONTROL_PORT="${MODSTORE_REQUESTED_CONTROL_PORT}"
 MODSTORE_REQUESTED_PORT="${MODSTORE_PORT:-}"
 MARKET_PORT="${MARKET_PORT:-5176}"
 PY="${FHD_ROOT}/.venv/bin/python"
@@ -190,6 +192,8 @@ export MODSTORE_RUNTIME_CONFIG_ROOT
 # - api       :8788，只承载 HTTP 控制面；
 # - scheduler :8789，只承载 APScheduler/事件 outbox/订阅任务。
 # 两个进程共享数据库和状态目录，但长任务不能再占死 HTTP 控制面。
+MODSTORE_DAILY_ROLE="${MODSTORE_REQUESTED_ROLE}"
+MODSTORE_CONTROL_PORT="${MODSTORE_REQUESTED_CONTROL_PORT}"
 case "${MODSTORE_DAILY_ROLE}" in
   api)
     MODSTORE_PORT="${MODSTORE_REQUESTED_PORT:-${MODSTORE_CONTROL_PORT}}"
@@ -460,8 +464,8 @@ except Exception as exc:
 PY
 fi
 
-if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
-  sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
+if curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
+  sched="$(curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
   expected_sched="false"
   [[ "${MODSTORE_DAILY_ROLE}" == "scheduler" ]] && expected_sched="true"
   scheduler_matches_role="false"
@@ -499,8 +503,8 @@ UV_PID=$!
 disown "${UV_PID}" 2>/dev/null || true
 
 for _ in $(seq 1 45); do
-  if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
-    sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '')"
+  if curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
+    sched="$(curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '')"
     log "MODstore 就绪 pid=${UV_PID} scheduler_running=${sched}"
     log "守护日志 ${DAEMON_LOG_PATH}"
     log "手动触发摘要: curl -X POST http://127.0.0.1:5000/api/xcmax/admin/email/digest-now （需 FHD 管理员会话）"

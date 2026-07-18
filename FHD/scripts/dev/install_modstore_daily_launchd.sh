@@ -251,7 +251,7 @@ else
   PARA_DB_FILE="${PARA_DESKTOP_DB_FILE}"
 fi
 if [[ -z "${PARA_API_BASE}" ]]; then
-  if /usr/bin/curl -fsS --max-time 2 "http://127.0.0.1:3001/api/health" >/dev/null 2>&1; then
+  if /usr/bin/curl --noproxy '*' -fsS --max-time 2 "http://127.0.0.1:3001/api/health" >/dev/null 2>&1; then
     PARA_API_BASE="http://127.0.0.1:3001"
   fi
 fi
@@ -300,9 +300,9 @@ if [[ "\${MODSTORE_DAILY_ENV_CLEANROOM:-0}" != "1" ]]; then
     /bin/bash "\$0"
 fi
 export MODSTORE_DAILY_FOREGROUND=1
-export MODSTORE_DAILY_ROLE="${MODSTORE_DAILY_ROLE:-api}"
-export MODSTORE_CONTROL_PORT="${MODSTORE_CONTROL_PORT:-8788}"
-export MODSTORE_PORT="${MODSTORE_PORT:-8788}"
+export MODSTORE_DAILY_ROLE="\${MODSTORE_DAILY_ROLE:-api}"
+export MODSTORE_CONTROL_PORT="\${MODSTORE_CONTROL_PORT:-8788}"
+export MODSTORE_PORT="\${MODSTORE_PORT:-8788}"
 export MODSTORE_DAILY_FHD_ROOT="${RUNTIME_FHD_ROOT}"
 export MODSTORE_DAILY_XCMAX_ROOT="${RUNTIME_ROOT}"
 export MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE="${SCRIPT_DIR}"
@@ -471,7 +471,7 @@ _install_launchd
 # 分别验证 HTTP 控制面与调度执行面。
 api_sched="?"
 for _ in $(seq 1 75); do
-  if curl -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
+  if curl --noproxy '*' -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
     api_sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
     if [[ "${api_sched}" == "False" || "${api_sched}" == "false" ]]; then
       break
@@ -486,7 +486,7 @@ if [[ "${api_sched}" != "False" && "${api_sched}" != "false" ]]; then
 fi
 sched="false"
 for _ in $(seq 1 75); do
-  if curl -sf "http://127.0.0.1:8789/api/health" >/dev/null 2>&1; then
+  if curl --noproxy '*' -sf "http://127.0.0.1:8789/api/health" >/dev/null 2>&1; then
     sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8789/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
     if [[ "${sched}" == "True" || "${sched}" == "true" ]]; then
       break
