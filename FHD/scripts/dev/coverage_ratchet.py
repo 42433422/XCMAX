@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """覆盖率棘轮（ratchet）：行/分支（后端）+ lines/branches/functions/statements（前端），只升不降。
 
 与 ``check_layer_ratchet.py`` / ``count_type_debt.py`` / ``count_raw_sql.py`` 同级，
@@ -154,14 +153,13 @@ def _floor(value: float, margin: float) -> int:
 
 
 # --------------------------------------------------------------------------- #
-# coverage-dual-summary.json 的 branch_floor 读写（SSOT 对外口径）
+# coverage-dual-summary.json 的 branch_floor 派生写入（对外发布快照）
 # --------------------------------------------------------------------------- #
 def read_dual_summary_branch_floor() -> int | None:
-    """从 coverage-dual-summary.json 读取 branch_floor 字段。
+    """从发布快照读取 branch_floor 字段，供兼容性检查使用。
 
-    与 coverage_ratchet_baseline.json 的 backend_branch_floor 同义，但本字段是对外
-    SSOT（coverage-dual-summary.json）。两者应保持一致；本函数返回 None 时由调用方
-    回退到 baseline 文件。
+    门槛层的真相源始终是 coverage_ratchet_baseline.json；发布快照只是派生口径，
+    不能反向决定 CI 门槛。
     """
     if not DUAL_SUMMARY.is_file():
         return None
@@ -235,7 +233,7 @@ def _git_short_sha() -> str | None:
 def append_history(be: dict | None, fe: dict | None, note: str = "") -> None:
     rec = {
         "date": date.today().isoformat(),
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(timezone.utc).isoformat(),  # noqa: UP017 -- Python 3.9 test runtime
         "backend_lines": be["line_pct"] if be else None,
         "backend_branches": be["branch_pct"] if be else None,
         "backend_statements": be["num_statements"] if be else None,
@@ -259,10 +257,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     fe = read_frontend(args.frontend_summary)
     base = load_baseline()
     line_floor = read_fail_under(PYPROJECT)
-    # branch_floor SSOT 优先 coverage-dual-summary.json，回退到 baseline 文件
-    branch_floor = read_dual_summary_branch_floor()
-    if branch_floor is None:
-        branch_floor = base.get("backend_branch_floor")
+    branch_floor = base.get("backend_branch_floor")
     fe_floors = base.get("frontend_floors", {})
 
     failed = False
@@ -352,7 +347,7 @@ def cmd_bump(args: argparse.Namespace) -> int:
                 base["backend_branch_floor"] = new_b
                 print(f"[cov-ratchet] backend 分支 floor {cur_b:g} -> {new_b}")
                 changed = True
-                # 同步 branch_floor 到 coverage-dual-summary.json（对外 SSOT）
+                # 同步到带日期的对外发布快照；它是派生口径，不是门槛输入。
                 if write_dual_summary_branch_floor(new_b):
                     print(f"[cov-ratchet] coverage-dual-summary.json branch_floor -> {new_b}")
 
@@ -404,25 +399,36 @@ def cmd_history(args: argparse.Namespace) -> int:
         except json.JSONDecodeError:
             continue
         print(
-            f"{r.get('date','')} be_line={r.get('backend_lines')}% "
+            f"{r.get('date', '')} be_line={r.get('backend_lines')}% "
             f"be_branch={r.get('backend_branches')}% fe_lines={r.get('frontend_lines')}% "
-            f"fe_func={r.get('frontend_functions')}% {r.get('commit') or ''} {r.get('note','')}"
+            f"fe_func={r.get('frontend_functions')}% {r.get('commit') or ''} {r.get('note', '')}"
         )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="门禁：覆盖率回退则失败（退出码1）")
     mode.add_argument("--bump", action="store_true", help="把当前实测提升为新 floor（只升不降）")
     mode.add_argument("--history", action="store_true", help="打印趋势（配合 --record 追加快照）")
-    parser.add_argument("--coverage-json", type=Path, default=BACKEND_JSON_DEFAULT, help="后端 coverage.json 路径")
     parser.add_argument(
-        "--frontend-summary", type=Path, default=FRONTEND_SUMMARY_DEFAULT, help="前端 coverage-summary.json 路径"
+        "--coverage-json", type=Path, default=BACKEND_JSON_DEFAULT, help="后端 coverage.json 路径"
     )
-    parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN, help="bump 安全余量（pt，默认1）")
-    parser.add_argument("--no-vitest", action="store_true", help="bump 时不同步 vitest.config.js thresholds")
+    parser.add_argument(
+        "--frontend-summary",
+        type=Path,
+        default=FRONTEND_SUMMARY_DEFAULT,
+        help="前端 coverage-summary.json 路径",
+    )
+    parser.add_argument(
+        "--margin", type=float, default=DEFAULT_MARGIN, help="bump 安全余量（pt，默认1）"
+    )
+    parser.add_argument(
+        "--no-vitest", action="store_true", help="bump 时不同步 vitest.config.js thresholds"
+    )
     parser.add_argument("--require-backend", action="store_true", help="check：缺后端数据即失败")
     parser.add_argument("--require-frontend", action="store_true", help="check：缺前端数据即失败")
     parser.add_argument("--record", action="store_true", help="history：先追加当前快照")

@@ -240,9 +240,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
 
-**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `90`，对应 `source=[app]` 全量行覆盖 floor，2026-07-05 bump 自 89）。分支 floor（85）与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`，再由 `coverage_ratchet.py --check` 同时检查行/分支（行 ≥ 90 / 分支 ≥ 85）。旧 `35/58/窄包70/77.4%` 等窄 include 或误报口径已退役，禁止再引用为当前值。
+**覆盖率三层真相契约**：门槛层 = `FHD/pyproject.toml` 的后端行 floor + `FHD/metrics/coverage_ratchet_baseline.json` 的后端分支/前端 floor；实测层 = 本次 CI 生成的 `FHD/coverage.json` 与 `FHD/frontend/coverage/coverage-summary.json`，生产这些文件的 job 必须用 `--require-backend` / `--require-frontend` 校验，缺产物即失败；对外口径层 = 带采集时间的 `FHD/metrics/coverage-dual-summary.json`，只代表已发布快照，不能替代当前 CI 实测。具体数值只从上述文件读取，不在本文重复硬编码。
 
-`FHD/scripts/ci/check_coverage_ssot.py` 在 smoke/full CI 中校验上述三个文件互相一致，并禁止 `pyproject.toml` 复制动态 pytest passed/failed 快照；动态实测只允许出现在 `coverage-dual-summary.json`。
+`FHD/scripts/ci/check_coverage_ssot.py` 在统一 SSOT gate 中校验门槛元数据与发布快照的门槛镜像一致，并禁止 `pyproject.toml` 复制动态 pytest passed/failed 快照；本次动态实测只存在于对应 CI job 的临时产物中。
 
 ## E2E 分层
 
@@ -361,4 +361,3 @@ python scripts/autonomy/audit_query.py --source server --since 1h \
 ```
 
 完整用法与运维剧本见 [autonomy.md](./autonomy.md)。
-

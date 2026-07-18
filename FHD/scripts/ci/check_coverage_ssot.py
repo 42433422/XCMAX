@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validate that coverage status files agree with the configured SSOT floors."""
+"""Validate coverage threshold metadata against the dated publication snapshot.
+
+This check intentionally does not consume live coverage artifacts. Producer jobs must run
+coverage_ratchet.py with --require-backend / --require-frontend so missing CI measurements fail.
+"""
 
 from __future__ import annotations
 
@@ -54,8 +58,21 @@ def main() -> int:
     quality_gate = summary.get("quality_gate", {})
     frontend_floors = baseline.get("frontend_floors", {})
 
-    _expect_equal(errors, "summary.ratchet_floors.backend_line", summary_floors.get("backend_line"), int(line_floor))
-    _expect_equal(errors, "summary.quality_gate.backend_line_floor", quality_gate.get("backend_line_floor"), int(line_floor))
+    _expect_equal(
+        errors, "baseline.backend_lines_floor", baseline.get("backend_lines_floor"), int(line_floor)
+    )
+    _expect_equal(
+        errors,
+        "summary.ratchet_floors.backend_line",
+        summary_floors.get("backend_line"),
+        int(line_floor),
+    )
+    _expect_equal(
+        errors,
+        "summary.quality_gate.backend_line_floor",
+        quality_gate.get("backend_line_floor"),
+        int(line_floor),
+    )
     _expect_equal(
         errors,
         "summary.ratchet_floors.backend_branch",
@@ -66,6 +83,12 @@ def main() -> int:
         errors,
         "summary.quality_gate.backend_branch_floor",
         quality_gate.get("backend_branch_floor"),
+        baseline.get("backend_branch_floor"),
+    )
+    _expect_equal(
+        errors,
+        "summary.ratchet_floors.branch_floor",
+        summary_floors.get("branch_floor"),
         baseline.get("backend_branch_floor"),
     )
     for summary_key, baseline_key in (
@@ -91,8 +114,15 @@ def main() -> int:
         or wip_branch < float(baseline.get("backend_branch_floor", 0) or 0)
     )
     expected_status = "failed" if wip_red else "passed"
-    _expect_equal(errors, "summary.quality_gate.status", quality_gate.get("status"), expected_status)
-    _expect_equal(errors, "summary.quality_gate.wip_backend_line_delta", quality_gate.get("wip_backend_line_delta"), round(wip_line - line_floor, 2))
+    _expect_equal(
+        errors, "summary.quality_gate.status", quality_gate.get("status"), expected_status
+    )
+    _expect_equal(
+        errors,
+        "summary.quality_gate.wip_backend_line_delta",
+        quality_gate.get("wip_backend_line_delta"),
+        round(wip_line - line_floor, 2),
+    )
     _expect_equal(
         errors,
         "summary.quality_gate.wip_backend_branch_delta",
@@ -113,7 +143,10 @@ def main() -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
-    print("Coverage SSOT check passed.")
+    print("Coverage SSOT metadata passed (thresholds ↔ dated publication snapshot).")
+    print(
+        "Live CI measurements are enforced in backend-test/frontend-test with required artifacts."
+    )
     return 0
 
 

@@ -196,6 +196,9 @@ jobs:
         working-directory: frontend
         run: npm run test:coverage
 
+      - name: Require frontend coverage artifact and enforce ratchet
+        run: python3 scripts/dev/coverage_ratchet.py --check --require-frontend
+
       - name: Run vue-tsc
         working-directory: frontend
         run: |
@@ -770,13 +773,3 @@ jobs:
       - name: SSOT drift gate
         working-directory: FHD
         run: python scripts/dev/ssot_cli.py gate
-
-      - name: Workflow sync drift gate
-        shell: bash
-        working-directory: .
-        run: |
-          set -euo pipefail
-          # 校验根仓 .github/workflows/ 与 FHD/MODstore 源一致
-          # 编辑源必须改 FHD/.github/workflows/ 或 MODstore_deploy/.github/workflows/，
-          # 然后跑 python scripts/dev/publish_ci_workflows_to_root.py 同步
-          python scripts/dev/publish_ci_workflows_to_root.py --check

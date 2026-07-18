@@ -1,123 +1,81 @@
 # 覆盖率分阶段提升与守护机制
 
-本文档与 [`pyproject.toml`](../../pyproject.toml) `[tool.coverage.report].fail_under`、
-[`metrics/coverage_ratchet_baseline.json`](../../metrics/coverage_ratchet_baseline.json) 与
-[`frontend/vitest.config.js`](../../frontend/vitest.config.js) thresholds 对齐。
+**最后更新**：2026-07-18
 
-**最后更新**：2026-06-20
+本文是覆盖率治理契约的 SSOT；可变数字仍以各层机器可读文件为准。
 
-## 唯一可复现 SSOT（2026-06-17）
+覆盖率数据分为三层。三层用途不同，禁止互相冒充。
 
-> **唯一对外口径 = 不含 ml extra 的全量 `source=[app]`（后端）/ `src/**`（前端）实测。**
-> 权威数字见 [`metrics/coverage-dual-summary.json`](../../metrics/coverage-dual-summary.json)；
-> 趋势见 [`metrics/coverage-history.jsonl`](../../metrics/coverage-history.jsonl)。
-> 富依赖环境数字（58 / 60.63 / 66.33 / 77.4%）与窄包 70% 门禁**一律退役**，禁止混报。
+## 三层真相契约
 
-### HEAD 已提交（最后全绿 bump · 2026-06-20 · `bb5e15a7`）
+### 1. 门槛层（threshold）
 
-| 维度 | 后端实测 | 后端目标 | 前端实测 | 前端目标 |
-|------|---------:|---------:|---------:|---------:|
-| 行 | **85.07%**（72,547 / 85,261） | ≥90% | **90.03%** | ≥80% |
-| 分支 | **74.22%** | ≥85% | **80.02%** | ≥75% |
-| 函数 | n/a | — | **77.20%** | ≥80% |
-| pytest | **全绿**（bump 前置条件） | 全绿 | — | — |
-| vitest | — | — | **全绿** | 全绿 |
+- 后端行门槛：[`pyproject.toml`](../../pyproject.toml) 的
+  `[tool.coverage.report].fail_under`。
+- 后端分支和前端各项门槛：
+  [`metrics/coverage_ratchet_baseline.json`](../../metrics/coverage_ratchet_baseline.json)。
+- [`frontend/vitest.config.js`](../../frontend/vitest.config.js) 的 thresholds 是前端门槛派生件，
+  由 `coverage_ratchet.py --bump` 同步。
 
-### 工作区 WIP（2026-06-17 · `feat/enterprise-deploy-maturity` · 未提交）
+具体数值只从这些文件读取，不在文档中复制“当前值”。
 
-| 维度 | 后端实测 | 前端实测 | 状态 |
-|------|---------:|---------:|------|
-| 行 | **74.56%**（56,846 / 76,237） | **74.15%** | 覆盖率已拉升 |
-| 分支 | **61.80%** | **69.54%** | 同上 |
-| 函数 | n/a | **65.06%** | 同上 |
-| pytest | **12,675 passed** / **196 failed** / **7 errors** | — | **不可 bump 棘轮** |
+### 2. 实测层（measurement）
 
-WIP 数字仅供内部跟踪；对外材料、棘轮 `--bump`、发版门禁仍以 **HEAD 全绿** 为准，待红灯清零后再 bump。
+- 后端：本次测试生成的 `coverage.json`。
+- 前端：本次测试生成的 `frontend/coverage/coverage-summary.json`。
+- 后端生产 job 必须运行 `coverage_ratchet.py --check --require-backend`。
+- 前端生产 job 必须运行 `coverage_ratchet.py --check --require-frontend`。
 
-### 棘轮 floor（当前 CI 守护）
+实测产物是单次 CI 的临时证据。缺产物必须失败，不能静默跳过，也不能拿历史文件补位。
 
-| 项 | floor | 来源 |
-|----|------:|------|
-| 后端行 | **84%** | `pyproject.toml` `fail_under` |
-| 后端分支 | **73%** | `coverage_ratchet_baseline.json` |
-| 前端 lines / statements | **54%** | `vitest.config.js` + ratchet |
-| 前端 branches | **62%** | 同上 |
-| 前端 functions | **50%** | 同上 |
+### 3. 对外口径层（publication）
 
-详见 [`COVERAGE_GAP.md`](COVERAGE_GAP.md)（Top-N 未覆盖清单）。
+[`metrics/coverage-dual-summary.json`](../../metrics/coverage-dual-summary.json) 是带采集日期的
+已发布快照；[`metrics/coverage-history.jsonl`](../../metrics/coverage-history.jsonl) 保存趋势。
+发布快照可以展示一次已确认的结果，但不得反向决定门槛，也不得冒充当前 CI 实测。
 
-## 铁律6：行/分支独立统计的工程取舍
+## 行/分支独立统计
 
-`coverage.py` 开启 `branch=true` 后，`percent_covered` 变成"行+分支合并"指标，
-不再等于纯行覆盖率。为保持 `fail_under` 仍是**行覆盖率** floor：
+`coverage.py` 开启 `branch=true` 后，`percent_covered` 是行与分支的合并指标。为保持
+`fail_under` 只表达后端行门槛：
 
-- `[tool.coverage.run] branch = true`：一次测量同时拿行+分支数据。
-- 标准命令传 `--cov-fail-under=0`：关掉 coverage 自带的合并指标门禁。
-- `scripts/dev/coverage_ratchet.py --check`：从 `coverage.json` 原始计数分别算
-  行覆盖率与分支覆盖率，各自对 floor 把关。
+- `[tool.coverage.run] branch = true`：一次测量同时生成行与分支原始计数。
+- 标准 pytest 命令传 `--cov-fail-under=0`，关闭 coverage.py 的合并指标门禁。
+- `scripts/dev/coverage_ratchet.py --check` 从 `coverage.json` 原始计数分别计算行和分支，
+  再与门槛层比较。
 
 ## 覆盖率棘轮（只升不降）
 
 ```bash
-# CI 门禁（ci-cd.yml backend-test 已接入）
+# 后端 CI：产物缺失或覆盖率回退都失败
 python scripts/dev/coverage_ratchet.py --check --require-backend
 
-# 本地补测后提升基线（须 pytest 全绿后再执行）
+# 前端 CI：产物缺失或覆盖率回退都失败
+python scripts/dev/coverage_ratchet.py --check --require-frontend
+
+# 全量测试通过后提升门槛，并同步派生件/发布快照元数据
 python scripts/dev/coverage_ratchet.py --bump
 
-# 趋势
+# 查看历史趋势
 python scripts/dev/coverage_ratchet.py --history
 ```
 
-## 复测命令（可复现）
+## 可复现实测
 
 ```bash
-# 后端（.venv = CI 等价依赖）
+# 后端
 cd FHD
 XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m pytest tests/ \
   --cov --cov-branch --cov-fail-under=0 \
   --cov-report=json:coverage.json --cov-report=term-missing -q
+python scripts/dev/coverage_ratchet.py --check --require-backend
 
-# 前端（全量 src/**）
-cd FHD/frontend && CI=true npm run test:coverage
+# 前端
+cd FHD/frontend
+CI=true npm run test:coverage
+cd ..
+python scripts/dev/coverage_ratchet.py --check --require-frontend
 ```
 
-## 分阶段目标（前后端并行）
-
-| Phase | 后端行 | 前端行 | 重点区域 | 状态（2026-06-17） |
-|-------|-------:|-------:|----------|-------------------|
-| 1（P0 核心） | ~55% | 起步 | routes/domains · *_app_service · middleware | **HEAD 已达标** |
-| 2（P1 业务） | ~72% | ~中 | facades · services · infrastructure | **WIP 行覆盖已达标；红灯待清** |
-| 3（P2 完善） | ~85% | ~高 | neuro_bus · mod_sdk · desktop_runtime | 进行中 |
-| 4（P3 长尾） | ≥90% | ≥80% | 零覆盖逐文件 · 变异测试 | 未达 |
-
-每进入下一阶段：本地与 CI 跑全量复测，确认**全绿** + `--check` 通过后再 `--bump`。
-
-## Phase 4 剩余清单（2026-06-17 更新）
-
-HEAD 基线后端行 **85.07%**、分支 **74.22%**；WIP 后端行 **74.56%**、分支 **61.8%**。
-距定版门禁（90/85）仍差约 **5pp**（行）/ **11pp**（分支，按 HEAD 计）。
-
-**WIP 待修红灯（已于 2026-06-20 复核收口）**
-
-- `purchase_service` — ✅ 58 passed
-- `wechat_contact_cache_import` / `wechat_task_service` — ✅ 29 + 57 passed
-- `tools_workflow_registered` — ✅ 59 passed
-- `test_im_sync.py` / `test_im_v0.py` — ✅ 9 + 2 passed（SQLAlchemy 7 errors 已清）
-
-> 2026-06-17 WIP 快照的 196 failed + 7 errors 已在后续 bump（`88e8dddf` / `bb5e15a7`）中收口。
-> 当前工作区有新未提交改动（mobile 相关），需重新跑全量 pytest 确认无新增红灯。
-
-**定版前检查**
-
-- [x] pytest 全绿（WIP 2026-06-17 红灯已于 2026-06-20 复核收口；当前工作区需重新全量测量）
-- [ ] 后端行 ≥90%、分支 ≥85%（`coverage_ratchet.py --check`）
-- [ ] 前端 lines ≥80%（vitest thresholds）
-- [ ] mutmut + Stryker 杀死率 ≥80%
-- [ ] `fail_under` 升至 90（仅整体达标后）
-
-## 历史（已退役口径，仅存档）
-
-- 旧 M1~M4（fail_under 40→55→**70**→80，"full_app **60.63%**"）：窄 include + 富依赖混报，已退役。
-- 周报误报 **77.4% → ≥88%**（2026-06-08 撤回）。
-- Phase 4 起点诚实基线 **36.35%** 行（2026-06-13）— 仅作 ramp 起点记录，非当前值。
+每次提升门槛前必须满足：相关测试全绿、实测产物存在、棘轮检查通过。历史窄包覆盖率、
+富依赖环境数字和未全绿工作区数字仅可作为归档，禁止再作为当前门槛、当前实测或对外口径。

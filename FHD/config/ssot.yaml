@@ -22,20 +22,34 @@ domains:
     derived:
       - .github/workflows/
     mode: generate
-    # publish 脚本无 --check 模式；check = 只读 header 检查（ci_workflows.py）
+    # 统一 gate 内做全内容渲染对比，不再只检查生成头，也不在 workflow 里另设第二道检查。
     check: python scripts/dev/ssot_plugins/ci_workflows.py check
-    sync: python scripts/dev/publish_ci_workflows_to_root.py
+    sync: python scripts/dev/ssot_plugins/ci_workflows.py sync
 
   - name: coverage
     owner: qa
     enabled: true
-    ssot: FHD/metrics/coverage_ratchet_baseline.json
+    # 覆盖率三层真相契约：
+    # 1) threshold = 可执行门槛；2) measurement = 本次 CI 临时实测；3) publication = 对外发布快照。
+    # measurement 由 backend-test/frontend-test 在产出现场用 --require-* 硬校验，不能被历史快照替代。
+    ssot: FHD/pyproject.toml#[tool.coverage.report]fail_under
+    truth_layers:
+      threshold:
+        backend_line: FHD/pyproject.toml#[tool.coverage.report]fail_under
+        backend_branch_and_frontend: FHD/metrics/coverage_ratchet_baseline.json
+      measurement:
+        backend: FHD/coverage.json
+        frontend: FHD/frontend/coverage/coverage-summary.json
+        policy: ephemeral-required-in-ci-producer-jobs
+      publication:
+        snapshot: FHD/metrics/coverage-dual-summary.json
+        policy: dated-committed-snapshot-never-live-ci-evidence
     derived:
-      - FHD/pyproject.toml#[tool.coverage.report]fail_under
       - FHD/frontend/vitest.config.js#thresholds
       - FHD/metrics/coverage-dual-summary.json
     mode: ratchet+verify
-    check: python scripts/dev/coverage_ratchet.py --check
+    # 统一 SSOT gate 校验门槛与发布快照元数据；实时实测在产物生成 job 中强制存在并过棘轮。
+    check: python scripts/ci/check_coverage_ssot.py
     # --bump 会同步更新 vitest.config.js thresholds（除非 --no-vitest）
     sync: python scripts/dev/coverage_ratchet.py --bump
 
@@ -77,10 +91,11 @@ domains:
     owner: docs
     enabled: true
     ssot: FHD/docs/SSOT_INDEX.md
-    derived: []
-    mode: lint
-    check: python scripts/dev/docs_ssot_lint.py
-    sync: null
+    derived:
+      - FHD/docs/SSOT_FRAMEWORK.md
+    mode: generate+lint
+    check: python scripts/dev/ssot_plugins/docs_ssot.py check
+    sync: python scripts/dev/generate_ssot_framework.py --apply
 
   - name: account-system
     owner: product-platform

@@ -1,5 +1,5 @@
 {
-  "_ssot": "FHD 覆盖率唯一对外口径。全量 source=[app] + branch，.venv = CI 等价依赖（不含 ml extra）。棘轮见 pyproject.toml fail_under + coverage_ratchet_baseline.json；趋势见 coverage-history.jsonl。红灯 WIP 不可对外宣称达标。",
+  "_ssot": "FHD 覆盖率对外发布快照（带日期，不是本次 CI 实测）。门槛见 pyproject.toml fail_under + coverage_ratchet_baseline.json；本次实测只认 CI 生成的 coverage.json 与 frontend/coverage/coverage-summary.json，缺产物即失败。",
   "_updated": "2026-07-05",
   "committed_head": {
     "captured_at": "2026-07-05T00:00:00Z",
