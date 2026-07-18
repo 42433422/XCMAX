@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services import kellai_binding_store, kellai_customer_copilot
+from app.application import kellai_binding_store, kellai_customer_copilot
 
 KellaiCopilotError = kellai_customer_copilot.KellaiCopilotError
 

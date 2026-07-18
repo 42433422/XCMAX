@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import kellai_binding
-from app.services import kellai_binding_store
+from app.application import kellai_binding_store
 
 PAIRING_HEADERS = {"X-Kellai-Local-Pairing": "1"}
 XCMAX_HEADERS = {**PAIRING_HEADERS, "X-XCMAX-Client-Shell": "enterprise"}
@@ -24,7 +24,7 @@ def app() -> FastAPI:
 
 @pytest.fixture(autouse=True)
 def isolated_store(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    from app.services import kellai_customer_copilot
+    from app.application import kellai_customer_copilot
 
     store_path = tmp_path / "kellai-binding.json"
     monkeypatch.setattr(kellai_binding_store, "_store_path", lambda: store_path)
@@ -212,7 +212,7 @@ def test_copilot_draft_uses_only_authorized_customer_conversation(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services import kellai_customer_copilot
+    from app.application import kellai_customer_copilot
 
     requested_paths: list[str] = []
 
@@ -306,7 +306,7 @@ def test_copilot_approval_is_explicit_and_client_only(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services import kellai_customer_copilot
+    from app.application import kellai_customer_copilot
 
     decisions: list[dict[str, object]] = []
 
@@ -350,7 +350,7 @@ def test_follow_up_task_routes_stay_in_client_plane(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services import kellai_customer_copilot
+    from app.application import kellai_customer_copilot
 
     task = {
         "task_id": "task-1",

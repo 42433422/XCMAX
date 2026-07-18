@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.services import kellai_customer_copilot as copilot
+from app.application import kellai_customer_copilot as copilot
 
 
 @pytest.fixture(autouse=True)
