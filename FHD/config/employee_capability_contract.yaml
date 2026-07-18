@@ -1,11 +1,21 @@
 # AI 员工有效能力解析契约 SSOT。
 # manifest 中 capability（职责能力）与 skill（可执行技能）语义不同，运行时按这里的顺序合并。
-schema_version: 1
+schema_version: 2
 domain: employee-capabilities
 
 inputs:
   manifest_root: FHD/mods/_employees
   manifest_glob: "*/manifest.json"
+  employee_roster: FHD/config/duty_roster.json
+
+# 员工身份仍以 duty_roster.json 为 SSOT。能力清单的 manifest 只是员工包实现，
+# 不能把所有员工包计作管理端编制员工，也不能与企业端工作流员工混成一个 ID 空间。
+identity_resolution:
+  manifest_scopes:
+    admin_planned_employee: 管理端编制员工；是否上岗仍由编制与本机安装交集在运行时派生
+    unrostered_employee_pack: 未进入管理端编制的支持、兼容或工具员工包
+  enterprise_scope: enterprise_workflow_employee
+  enterprise_relation: separate_identity_space
 
 resolution:
   merge_strategy: ordered_union_first_definition_wins

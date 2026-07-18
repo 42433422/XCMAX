@@ -38,6 +38,23 @@ def load_contract() -> dict[str, Any]:
             source.get(key) for key in ("name", "path", "label_field", "description_field")
         ):
             raise ValueError("each capability source needs name/path/label_field/description_field")
+    inputs = contract.get("inputs")
+    if not isinstance(inputs, dict) or not all(
+        inputs.get(key) for key in ("manifest_root", "manifest_glob", "employee_roster")
+    ):
+        raise ValueError("inputs must define manifest_root, manifest_glob, and employee_roster")
+    identity = contract.get("identity_resolution")
+    if not isinstance(identity, dict):
+        raise ValueError("identity_resolution must be a mapping")
+    if not identity.get("enterprise_scope"):
+        raise ValueError("identity_resolution.enterprise_scope is required")
+    if identity.get("enterprise_relation") != "separate_identity_space":
+        raise ValueError("enterprise employees must remain a separate identity space")
+    scopes = identity.get("manifest_scopes")
+    if not isinstance(scopes, dict) or not all(
+        scopes.get(key) for key in ("admin_planned_employee", "unrostered_employee_pack")
+    ):
+        raise ValueError("identity_resolution.manifest_scopes is incomplete")
     return contract
 
 
@@ -88,16 +105,119 @@ def _source_rows(
     return rows
 
 
+def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid {label} {path}: {exc}") from exc
+    if not isinstance(document, dict):
+        raise ValueError(f"{label} root must be an object: {path}")
+    return document
+
+
+def _collect_admin_memberships(
+    roster: dict[str, Any],
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    area_memberships: dict[str, list[str]] = {}
+    areas = roster.get("areas")
+    if not isinstance(areas, dict) or not areas:
+        raise ValueError("employee roster areas must be a non-empty mapping")
+    for area_id, area in areas.items():
+        if not isinstance(area, dict) or not isinstance(area.get("ids"), list):
+            raise ValueError(f"employee roster area {area_id!r} must define ids")
+        for raw_id in area["ids"]:
+            employee_id = str(raw_id or "").strip()
+            if employee_id:
+                area_memberships.setdefault(employee_id, []).append(str(area_id))
+
+    department_memberships: dict[str, list[str]] = {}
+    departments = roster.get("departments")
+    if not isinstance(departments, dict) or not departments:
+        raise ValueError("employee roster departments must be a non-empty mapping")
+    for department_id, department in departments.items():
+        if not isinstance(department, dict):
+            continue
+        canonical_id = str(department.get("five_line_id") or department_id)
+        subzones = department.get("subzones")
+        if not isinstance(subzones, dict):
+            continue
+        for subzone in subzones.values():
+            if not isinstance(subzone, dict) or not isinstance(subzone.get("ids"), list):
+                continue
+            for raw_id in subzone["ids"]:
+                employee_id = str(raw_id or "").strip()
+                memberships = department_memberships.setdefault(employee_id, [])
+                if employee_id and canonical_id not in memberships:
+                    memberships.append(canonical_id)
+    return area_memberships, department_memberships
+
+
+def _enterprise_employee_rows(
+    roster: dict[str, Any], *, identity_scope: str
+) -> list[dict[str, str]]:
+    raw_layers = roster.get("enterprise_layers")
+    if not isinstance(raw_layers, list) or not raw_layers:
+        raise ValueError("employee roster enterprise_layers must be a non-empty list")
+    layers: dict[str, dict[str, str]] = {}
+    for raw_layer in raw_layers:
+        if not isinstance(raw_layer, dict):
+            continue
+        layer_id = str(raw_layer.get("id") or "").strip()
+        if layer_id:
+            layers[layer_id] = {
+                "id": layer_id,
+                "code": str(raw_layer.get("code") or "").strip(),
+                "label": str(raw_layer.get("label") or layer_id).strip(),
+            }
+    raw_employees = roster.get("enterprise_employees")
+    if not isinstance(raw_employees, dict):
+        raise ValueError("employee roster enterprise_employees must be a mapping")
+    rows: list[dict[str, str]] = []
+    for raw_id, raw_meta in raw_employees.items():
+        employee_id = str(raw_id or "").strip()
+        if not employee_id or not isinstance(raw_meta, dict):
+            raise ValueError("enterprise employee entries need a non-empty id and metadata")
+        layer_id = str(raw_meta.get("enterprise_layer") or "").strip()
+        if layer_id not in layers:
+            raise ValueError(f"enterprise employee {employee_id!r} has unknown layer {layer_id!r}")
+        rows.append(
+            {
+                "employee_id": employee_id,
+                "identity_scope": identity_scope,
+                "label": str(raw_meta.get("label") or employee_id).strip(),
+                "enterprise_layer": layer_id,
+                "enterprise_layer_code": layers[layer_id]["code"],
+                "enterprise_layer_label": layers[layer_id]["label"],
+                "listing": str(raw_meta.get("listing") or "").strip(),
+                "source": str(raw_meta.get("source") or "").strip(),
+                "mod_id": str(raw_meta.get("mod_id") or "").strip(),
+            }
+        )
+    return sorted(rows, key=lambda row: row["employee_id"])
+
+
 def build_effective_registry(contract: dict[str, Any]) -> dict[str, Any]:
     inputs = contract["inputs"]
     resolution = contract["resolution"]
+    identity_resolution = contract["identity_resolution"]
     manifest_root = _repo_path(str(inputs["manifest_root"]))
     manifest_paths = sorted(manifest_root.glob(str(inputs["manifest_glob"])))
     if not manifest_root.is_dir() or not manifest_paths:
         raise ValueError(f"no employee manifests found under {manifest_root}")
     normalization = dict(resolution.get("key_normalization") or {})
     sources = list(resolution["sources"])
-    employees: list[dict[str, Any]] = []
+    roster_path = _repo_path(str(inputs["employee_roster"]))
+    roster = _load_json_object(roster_path, label="employee roster")
+    area_memberships, department_memberships = _collect_admin_memberships(roster)
+    enterprise_scope = str(identity_resolution["enterprise_scope"])
+    enterprise_employees = _enterprise_employee_rows(roster, identity_scope=enterprise_scope)
+    admin_planned_ids = set(area_memberships)
+    enterprise_ids = {row["employee_id"] for row in enterprise_employees}
+    overlap = sorted(admin_planned_ids & enterprise_ids)
+    if overlap:
+        raise ValueError(f"admin and enterprise employee identity spaces overlap: {overlap}")
+
+    employee_packs: list[dict[str, Any]] = []
     employee_ids: set[str] = set()
     source_counts = {str(source["name"]): 0 for source in sources}
     effective_count = 0
@@ -138,27 +258,59 @@ def build_effective_registry(contract: dict[str, Any]) -> dict[str, Any]:
 
         capabilities = list(effective.values())
         effective_count += len(capabilities)
-        employees.append(
+        is_admin_planned = employee_id in admin_planned_ids
+        employee_packs.append(
             {
                 "employee_id": employee_id,
+                "identity_scope": (
+                    "admin_planned_employee" if is_admin_planned else "unrostered_employee_pack"
+                ),
+                "admin_roster": {
+                    "planned": is_admin_planned,
+                    "areas": area_memberships.get(employee_id, []),
+                    "departments": department_memberships.get(employee_id, []),
+                },
                 "manifest": str(manifest_path.relative_to(REPO_ROOT)),
                 "effective_capabilities": capabilities,
             }
         )
 
+    missing_admin_manifests = sorted(admin_planned_ids - employee_ids)
+    if missing_admin_manifests:
+        raise ValueError(
+            "admin planned employees missing employee-pack manifests: "
+            + ", ".join(missing_admin_manifests)
+        )
+
     contract_bytes = CONTRACT.read_bytes()
+    roster_bytes = roster_path.read_bytes()
+    admin_pack_count = sum(
+        row["identity_scope"] == "admin_planned_employee" for row in employee_packs
+    )
     return {
         "_generated": "Do not edit; run employee_capabilities_ssot.py --apply.",
         "schema_version": int(contract.get("schema_version") or 1),
         "contract": str(CONTRACT.relative_to(REPO_ROOT)),
         "contract_sha256": hashlib.sha256(contract_bytes).hexdigest(),
+        "employee_roster": str(roster_path.relative_to(REPO_ROOT)),
+        "employee_roster_sha256": hashlib.sha256(roster_bytes).hexdigest(),
         "merge_strategy": resolution["merge_strategy"],
+        "identity_scope_definitions": dict(identity_resolution["manifest_scopes"])
+        | {
+            str(identity_resolution["enterprise_scope"]): (
+                "企业端四层工作流员工；与管理端编制及员工包 manifest 使用独立身份空间"
+            )
+        },
         "summary": {
-            "employee_count": len(employees),
+            "employee_pack_manifest_count": len(employee_packs),
+            "admin_planned_employee_pack_count": admin_pack_count,
+            "unrostered_employee_pack_count": len(employee_packs) - admin_pack_count,
+            "enterprise_workflow_employee_count": len(enterprise_employees),
             "effective_capability_count": effective_count,
             "source_declaration_counts": source_counts,
         },
-        "employees": employees,
+        "employee_packs": employee_packs,
+        "enterprise_workflow_employees": enterprise_employees,
     }
 
 
