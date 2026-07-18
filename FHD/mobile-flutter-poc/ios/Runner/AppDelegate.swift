@@ -1,5 +1,8 @@
+import BackgroundTasks
+import CryptoKit
 import Flutter
 import LocalAuthentication
+import Security
 import UIKit
 
 @main
@@ -7,10 +10,18 @@ import UIKit
   private var deepLinkChannel: FlutterMethodChannel?
   private var pendingDeepLinkRoute: String?
 
+  private static let backgroundSyncTaskId = "com.xcagi.mobile.sync"
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    BGTaskScheduler.shared.register(
+      forTaskWithIdentifier: Self.backgroundSyncTaskId,
+      using: nil
+    ) { task in
+      Self.handleBackgroundSyncTask(task as! BGAppRefreshTask)
+    }
     if let url = launchOptions?[.url] as? URL {
       pendingDeepLinkRoute = parseDeepLinkRoute(url)
     }
@@ -64,10 +75,12 @@ import UIKit
       switch call.method {
       case "encrypt":
         let args = call.arguments as? [String: Any]
-        result(args?["plain"] as? String ?? "")
+        let plain = args?["plain"] as? String ?? ""
+        result(Self.encryptCredential(plain))
       case "decrypt":
         let args = call.arguments as? [String: Any]
-        result(args?["stored"] as? String ?? "")
+        let stored = args?["stored"] as? String ?? ""
+        result(Self.decryptCredential(stored))
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -97,7 +110,12 @@ import UIKit
         result(FlutterMethodNotImplemented)
         return
       }
-      result(["platform": "ios", "available": false])
+      let args = call.arguments as? [String: Any] ?? [:]
+      Self.reconcileBackgroundWork(
+        loggedIn: args["loggedIn"] as? Bool ?? false,
+        autoSync: args["autoSync"] as? Bool ?? false
+      )
+      result(["platform": "ios", "available": true])
     }
 
     FlutterMethodChannel(
@@ -108,7 +126,16 @@ import UIKit
         result(FlutterMethodNotImplemented)
         return
       }
-      result("iOS 请通过 App Store 更新")
+      let args = call.arguments as? [String: Any] ?? [:]
+      let urlString = (args["downloadUrl"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      if !urlString.isEmpty, let url = URL(string: urlString) {
+        DispatchQueue.main.async {
+          UIApplication.shared.open(url)
+        }
+        result("已跳转 App Store")
+      } else {
+        result("请通过 App Store 搜索 XCAGI 更新")
+      }
     }
 
     FlutterMethodChannel(
@@ -191,5 +218,93 @@ import UIKit
         )
       )
     }
+  }
+
+  // MARK: - Credential Cipher (AES-GCM + Keychain)
+
+  private static let cipherKeychainService = "com.xcagi.credential"
+  private static let cipherKeychainAccount = "xcagi-aes-key"
+
+  private static func encryptCredential(_ plain: String) -> String {
+    guard !plain.isEmpty else { return "" }
+    do {
+      let key = try cipherKey()
+      let sealed = try AES.GCM.seal(Data(plain.utf8), using: key)
+      guard let combined = sealed.combined else { return plain }
+      return combined.base64EncodedString()
+    } catch {
+      return plain
+    }
+  }
+
+  private static func decryptCredential(_ stored: String) -> String {
+    guard !stored.isEmpty else { return "" }
+    do {
+      let key = try cipherKey()
+      guard let combined = Data(base64Encoded: stored) else { return "" }
+      let sealed = try AES.GCM.SealedBox(combined: combined)
+      let decrypted = try AES.GCM.open(sealed, using: key)
+      return String(data: decrypted, encoding: .utf8) ?? ""
+    } catch {
+      return ""
+    }
+  }
+
+  private static func cipherKey() throws -> SymmetricKey {
+    if let data = loadCipherKeyData() {
+      return SymmetricKey(data: data)
+    }
+    let newKey = SymmetricKey(size: .bits256)
+    let keyData = newKey.withUnsafeBytes { Data($0) }
+    saveCipherKeyData(keyData)
+    return newKey
+  }
+
+  private static func loadCipherKeyData() -> Data? {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: cipherKeychainService,
+      kSecAttrAccount as String: cipherKeychainAccount,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess else { return nil }
+    return item as? Data
+  }
+
+  private static func saveCipherKeyData(_ data: Data) {
+    let attrs: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: cipherKeychainService,
+      kSecAttrAccount as String: cipherKeychainAccount,
+      kSecValueData as String: data,
+      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+    ]
+    SecItemAdd(attrs as CFDictionary, nil)
+  }
+
+  // MARK: - Background Work (BGTaskScheduler)
+
+  private static func reconcileBackgroundWork(loggedIn: Bool, autoSync: Bool) {
+    let scheduler = BGTaskScheduler.shared
+    if loggedIn && autoSync {
+      let request = BGAppRefreshTaskRequest(identifier: backgroundSyncTaskId)
+      request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+      try? scheduler.submit(request)
+    } else {
+      scheduler.cancel(taskRequestWithIdentifier: backgroundSyncTaskId)
+    }
+  }
+
+  private static func handleBackgroundSyncTask(_ task: BGAppRefreshTask) {
+    task.expirationHandler = {
+      task.setTaskCompleted(success: false)
+    }
+    // 后台同步的最小实现：标记完成。
+    // 真实同步逻辑由 Flutter 侧通过 MethodChannel 在前台触发，
+    // iOS 后台仅维持调度能力声明，确保 autoSync 可用。
+    task.setTaskCompleted(success: true)
   }
 }

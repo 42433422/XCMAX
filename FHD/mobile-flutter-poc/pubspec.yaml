@@ -1,5 +1,5 @@
 name: xcagi_flutter_poc
-description: Android-first Flutter POC for XCAGI mobile core flows.
+description: XCAGI mobile client for iOS and Android (Flutter).
 publish_to: "none"
 version: 1.0.0+10
 
