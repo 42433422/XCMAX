@@ -1,0 +1,8 @@
+git_url(ENV.fetch("MATCH_GIT_URL", "git@github.com:42433422/xcagi-ios-certificates.git"))
+git_branch("main")
+git_private_key(ENV["MATCH_GIT_PRIVATE_KEY"]) if ENV["MATCH_GIT_PRIVATE_KEY"]
+storage_mode("git")
+type("appstore")
+app_identifier("com.xiuci.xcagi.mobile.enterprise")
+username(ENV["APPLE_ID"]) if ENV["APPLE_ID"]
+team_id(ENV["APPLE_TEAM_ID"] || ENV["IOS_TEAM_ID"])
