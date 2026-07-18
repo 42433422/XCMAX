@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,15 @@ class TestInit:
     def test_default_save_dir(self):
         svc = AnalysisSaveService()
         assert os.path.isdir(svc.save_dir)
+
+    def test_default_save_dir_uses_desktop_user_data(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+
+        svc = AnalysisSaveService()
+
+        assert Path(svc.save_dir) == tmp_path / "saved_analyses"
+        assert Path(svc.save_dir).is_dir()
 
 
 # ---------------------------------------------------------------------------
