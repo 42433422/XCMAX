@@ -353,7 +353,7 @@ for line in out.splitlines():
 sys.exit(1)
 PY
 }
-if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
+if [[ "${MODSTORE_DAILY_ROLE}" == "scheduler" && "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
   if ! _adb_devices_has_online_target "${ADB_BIN}"; then
     if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${ANDROID_SDK_FOR_DAILY}/emulator/emulator" ]]; then
       log "P-App 截图：无在线模拟器，尝试启动 …"
