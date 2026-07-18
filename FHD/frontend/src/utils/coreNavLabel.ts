@@ -24,6 +24,7 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
   chat: '智能对话',
   im: '信息',
   'ai-ecosystem': '智能生态',
+  'persy-knowledge': '知识库',
   brain: '智脑集成',
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',

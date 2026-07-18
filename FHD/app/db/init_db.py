@@ -771,42 +771,53 @@ def ensure_sqlite_auth_bootstrap(
 
 
 def _seed_sqlite_rbac_defaults(real_engine: Engine) -> None:
-    from sqlalchemy import text
+    from sqlalchemy import inspect
     from sqlalchemy.orm import sessionmaker
 
     from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES, Permission, Role
 
-    with real_engine.connect() as conn:
-        perm_count = conn.execute(text("SELECT COUNT(*) FROM permissions")).scalar()
-    if int(perm_count or 0) > 0:
+    # This helper is also called directly by compatibility tests and older
+    # bootstrap paths.  Relationship-backed ORM reads require the complete
+    # RBAC trio; the public bootstrap creates missing tables before invoking us.
+    if not {"permissions", "roles", "role_permissions"}.issubset(
+        set(inspect(real_engine).get_table_names() or [])
+    ):
         return
 
     SessionLocal = sessionmaker(bind=real_engine)
     with SessionLocal() as session:
-        perm_by_code: dict[str, Permission] = {}
+        perm_by_code = {perm.code: perm for perm in session.query(Permission).all()}
         for row in DEFAULT_PERMISSIONS:
-            perm = Permission(
-                name=row["name"],
-                code=row["code"],
-                description=row.get("description", ""),
-                module=row.get("module", ""),
-            )
-            session.add(perm)
-            perm_by_code[row["code"]] = perm
+            perm = perm_by_code.get(row["code"])
+            if perm is None:
+                perm = Permission(
+                    name=row["name"],
+                    code=row["code"],
+                    description=row.get("description", ""),
+                    module=row.get("module", ""),
+                )
+                session.add(perm)
+                perm_by_code[row["code"]] = perm
         session.flush()
+        role_by_name = {role.name: role for role in session.query(Role).all()}
         for role_row in DEFAULT_ROLES:
-            role = Role(
-                name=role_row["name"],
-                description=role_row.get("description", ""),
-                is_system=True,
-            )
+            role = role_by_name.get(role_row["name"])
+            if role is None:
+                role = Role(
+                    name=role_row["name"],
+                    description=role_row.get("description", ""),
+                    is_system=True,
+                )
+                session.add(role)
+                role_by_name[role.name] = role
+            assigned = {permission.code for permission in role.permissions}
             for code in role_row.get("permissions", []):
                 perm = perm_by_code.get(code)
-                if perm is not None:
+                if perm is not None and code not in assigned:
                     role.permissions.append(perm)
-            session.add(role)
+                    assigned.add(code)
         session.commit()
-    logger.info("SQLite RBAC 默认权限/角色已写入")
+    logger.info("SQLite RBAC 默认权限/角色已增量同步")
 
 
 def ensure_sqlite_rbac_bootstrap(
