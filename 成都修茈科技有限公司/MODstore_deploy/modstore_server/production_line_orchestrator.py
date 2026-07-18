@@ -1211,15 +1211,15 @@ FIVE_LINE_DEFINITIONS: tuple[FiveLineDefinition, ...] = (
     FiveLineDefinition(
         line_id=FiveLineId.PROD_SOFTWARE,
         name="通用软件线",
-        subtitle="2 SKU · Win / macOS / Android / iOS 四发布渠道",
+        subtitle="Win / macOS / Flutter Android / Flutter iOS 四发布渠道",
         step_ids=("P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"),
         baseline_automation_rate=68.0,
         release_channels=("windows", "macos", "android", "ios"),
         channel_notes={
             "windows": "release-desktop.yml",
             "macos": "release-desktop.yml + notarize.cjs",
-            "android": "ci-mobile-android.yml + release-android.yml",
-            "ios": "planned — App Store 工程待建",
+            "android": "ci-mobile-flutter.yml + release-android.yml",
+            "ios": "ci-mobile-flutter.yml + release-ios.yml",
         },
     ),
     FiveLineDefinition(

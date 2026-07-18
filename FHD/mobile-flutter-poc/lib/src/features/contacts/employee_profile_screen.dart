@@ -90,7 +90,8 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
                           employee: employee,
                           onOpenChat: () => _openChat(context, employee),
                           onOpenCircle: () => _openCircle(context),
-                          onOpenQuestions: () => _openQuestions(context, employee),
+                          onOpenQuestions: () =>
+                              _openQuestions(context, employee),
                         ),
                 ),
               ],
@@ -131,7 +132,8 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
   void _openCircle(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-          builder: (_) => AiCircleScreen(repository: _repository)),
+        builder: (_) => AiCircleScreen(repository: _repository),
+      ),
     );
   }
 
@@ -167,29 +169,15 @@ class _EmployeeProfileBody extends StatelessWidget {
       children: [
         _ContactHeader(employee: employee),
         const SizedBox(height: 8),
-        _PlainCell(
-          title: '员工资料',
-          subtitle: employee.summary,
-          showArrow: true,
-        ),
+        _PlainCell(title: '员工资料', subtitle: employee.summary, showArrow: true),
         const SizedBox(height: 8),
-        _CirclePreview(
-          employee: employee,
-          onTap: onOpenCircle,
-        ),
+        _CirclePreview(employee: employee, onTap: onOpenCircle),
         const SizedBox(height: 8),
-        _PlainCell(
-          title: '能做什么',
-          subtitle: employee.abilityLabels().join('、'),
-        ),
+        _PlainCell(title: '能做什么', subtitle: employee.abilityLabels().join('、')),
         const SizedBox(height: 8),
         _PlainCell(title: '来源', subtitle: employee.sourceLabel),
         const SizedBox(height: 8),
-        _ActionRow(
-          text: '发消息',
-          icon: Icons.chat,
-          onTap: onOpenChat,
-        ),
+        _ActionRow(text: '发消息', icon: Icons.chat, onTap: onOpenChat),
         const SizedBox(height: 8),
         _ActionRow(
           text: '问他/她的待回答问题',
@@ -197,11 +185,7 @@ class _EmployeeProfileBody extends StatelessWidget {
           onTap: onOpenQuestions,
         ),
         const SizedBox(height: 8),
-        _ActionRow(
-          text: '进入 AI 交流圈',
-          icon: Icons.forum,
-          onTap: onOpenCircle,
-        ),
+        _ActionRow(text: '进入 AI 交流圈', icon: Icons.forum, onTap: onOpenCircle),
       ],
     );
   }
@@ -227,10 +211,7 @@ class _EmployeeNotFoundState extends StatelessWidget {
                 color: colors.surfaceHigh,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(
-                Icons.inbox,
-                color: colors.textSecondary,
-              ),
+              child: Icon(Icons.inbox, color: colors.textSecondary),
             ),
             const SizedBox(height: 16),
             Text(
@@ -419,11 +400,7 @@ class _CirclePreview extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.forum,
-                    size: 20,
-                    color: colors.momentAccent,
-                  ),
+                  Icon(Icons.forum, size: 20, color: colors.momentAccent),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -440,8 +417,11 @@ class _CirclePreview extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right,
-                      size: 20, color: colors.textSecondary),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
                 ],
               ),
               if (abilities.isNotEmpty) ...[

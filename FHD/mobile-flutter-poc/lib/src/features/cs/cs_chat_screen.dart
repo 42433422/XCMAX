@@ -185,11 +185,10 @@ class _CsChatScreenState extends State<CsChatScreen> {
   Future<void> _load() async {
     try {
       final results = await Future.wait<Object>([
-        _repository.loadCsInfo().catchError((_) => const CsInfo(
-              available: false,
-              name: '专属客服',
-              online: false,
-            )),
+        _repository.loadCsInfo().catchError(
+              (_) =>
+                  const CsInfo(available: false, name: '专属客服', online: false),
+            ),
         _repository.loadCsMessages(),
       ]);
       if (!mounted) return;
@@ -314,11 +313,7 @@ class _CsEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.support_agent,
-              size: 48,
-              color: colors.textTertiary,
-            ),
+            Icon(Icons.support_agent, size: 48, color: colors.textTertiary),
             const SizedBox(height: 14),
             Text(
               error == null ? '向专属客服提问' : '客服消息暂时无法加载',
@@ -428,12 +423,14 @@ class _CsBubble extends StatelessWidget {
             contentDescription: '客服',
           ),
           const SizedBox(
-              width: MessageAvatarLayout.customerServiceBubbleAvatarGap),
+            width: MessageAvatarLayout.customerServiceBubbleAvatarGap,
+          ),
         ],
         bubble,
         if (isUser) ...[
           const SizedBox(
-              width: MessageAvatarLayout.customerServiceBubbleAvatarGap),
+            width: MessageAvatarLayout.customerServiceBubbleAvatarGap,
+          ),
           Container(
             width: MessageAvatarLayout.customerServiceBubbleAvatarSize,
             height: MessageAvatarLayout.customerServiceBubbleAvatarSize,
@@ -477,9 +474,9 @@ class _CsBubble extends StatelessWidget {
       case 'copy':
         await Clipboard.setData(ClipboardData(text: message.body));
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已复制')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已复制')));
         break;
       case 'reply':
         onReply();

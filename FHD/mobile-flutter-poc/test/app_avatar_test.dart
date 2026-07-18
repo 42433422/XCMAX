@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/widgets/app_avatar.dart';
 
 void main() {
-  test('AppAvatar resolves local file sources like Android local avatar', () {
+  test('AppAvatar resolves local file sources for mobile avatars', () {
     final provider = appAvatarImageProviderForSource('/tmp/xcagi-avatar.png');
 
     expect(provider, isA<FileImage>());

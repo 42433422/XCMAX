@@ -11,9 +11,6 @@ scope_globs:
   - FHD/app/**
   - FHD/frontend/src/**
   - FHD/mobile-flutter-poc/**
-  - FHD/mobile-android/**
-  - FHD/mobile-ios/**
-  - FHD/mobile-harmony/**
   - FHD/mods/_employees/**
   - FHD/contracts/openapi.json
   - scripts/dev/**

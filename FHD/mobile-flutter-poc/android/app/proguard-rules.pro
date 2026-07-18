@@ -1,5 +1,5 @@
-# Mirrors FHD/mobile-android/app/proguard-rules.pro for the shared Kotlin
-# background workers (WorkManager + Room). Without these keeps the release
+# Flutter Android Runner rules for platform background workers (WorkManager +
+# Room). Without these keeps the release
 # R8 build strips WorkDatabase and the app crashes at startup with
 # "Failed to create an instance of class androidx.work.impl.WorkDatabase".
 

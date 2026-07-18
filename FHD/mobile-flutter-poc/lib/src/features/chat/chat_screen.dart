@@ -6,7 +6,7 @@ import '../../data/ai_employee_profile.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../models/conversation.dart';
-import '../../policy/android_error_policy.dart';
+import '../../policy/mobile_error_policy.dart';
 import '../../policy/avatar_policy.dart';
 import '../../platform/android_record_audio_permission.dart';
 import '../../theme/app_theme.dart';
@@ -136,9 +136,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           relayProgress:
                               isActiveRelay ? _activeRelayProgress : null,
                           cancellingRelay: _cancellingRelay,
-                          onCancelRelay: _cancellingRelay
-                              ? null
-                              : () => _stopChat(),
+                          onCancelRelay:
+                              _cancellingRelay ? null : () => _stopChat(),
                           onReply: () => setState(() => _replyTo = message),
                           onDelete: () => _deleteMessageAt(originalIndex),
                           onResend: message.status == ChatDeliveryStatus.failed
@@ -188,7 +187,7 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() => _messages = remoteMessages);
       }
     } catch (_) {
-      // Keep the Android-like empty state when auth/network is unavailable.
+      // Keep the mobile empty state when auth/network is unavailable.
     } finally {
       if (mounted) setState(() => _loadingRemoteMessages = false);
     }
@@ -312,7 +311,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _employeeProfile = _findEmployeeProfile(employees, ref);
       });
     } catch (_) {
-      // Keep the Android-like chat surface usable while modInfos refresh fails.
+      // Keep the Flutter chat surface usable while modInfos refresh fails.
     }
   }
 
@@ -437,7 +436,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _replaceMessage(
           assistantId,
-          body: androidProductErrorMessage(
+          body: mobileProductErrorMessage(
             error.toString(),
             '当前离线同步不可用，请连接电脑或稍后重试。',
           ),
@@ -574,8 +573,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _insertVoiceText(String text) {
@@ -611,8 +611,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _openProfileOrTools() {
-    final fixedKind =
-        FixedPartnerProfileSpec.kindForConversation(widget.conversation);
+    final fixedKind = FixedPartnerProfileSpec.kindForConversation(
+      widget.conversation,
+    );
     if (fixedKind != null) {
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -693,7 +694,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final result = await repository.runGitOperation(branch: branch, op: op);
       if (!mounted) return;
       _replaceMessageBody(
-          messageId, result.trim().isEmpty ? '电脑工具已完成任务。' : result);
+        messageId,
+        result.trim().isEmpty ? '电脑工具已完成任务。' : result,
+      );
     } catch (error) {
       if (!mounted) return;
       _replaceMessageBody(messageId, '（$error）');
@@ -826,10 +829,8 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _showToolPanel = false);
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => DiffViewerScreen(
-          branch: branch,
-          repository: repository,
-        ),
+        builder: (_) =>
+            DiffViewerScreen(branch: branch, repository: repository),
       ),
     );
   }
@@ -840,10 +841,8 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _showToolPanel = false);
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BranchDetailScreen(
-          branch: branch,
-          repository: repository,
-        ),
+        builder: (_) =>
+            BranchDetailScreen(branch: branch, repository: repository),
       ),
     );
   }
@@ -885,7 +884,9 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, Object?>> _toolCallsFor(ChatMessage message) {
     final repository = _repository;
     if (repository == null) return const <Map<String, Object?>>[];
-    if (message.role != ChatRole.assistant) return const <Map<String, Object?>>[];
+    if (message.role != ChatRole.assistant) {
+      return const <Map<String, Object?>>[];
+    }
     if (!message.body.contains('闭环结果')) return const <Map<String, Object?>>[];
     return repository.parseToolCallsFromBody(
       message.body,
@@ -1183,7 +1184,8 @@ class MessageBubble extends StatelessWidget {
               const SizedBox(width: MessageAvatarLayout.bubbleAvatarGap),
             ] else
               const SizedBox(
-                  width: MessageAvatarLayout.bubbleAvatarReservedWidth),
+                width: MessageAvatarLayout.bubbleAvatarReservedWidth,
+              ),
           ],
           Flexible(
             child: Column(
@@ -1218,8 +1220,9 @@ class MessageBubble extends StatelessWidget {
                           children: [
                             if (quote.isNotEmpty) ...[
                               Container(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 236),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 236,
+                                ),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 6,
@@ -1237,8 +1240,9 @@ class MessageBubble extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: isUser
-                                        ? colors.chatUserBubbleText
-                                            .withValues(alpha: 0.8)
+                                        ? colors.chatUserBubbleText.withValues(
+                                            alpha: 0.8,
+                                          )
                                         : colors.textSecondary,
                                     fontSize: 12,
                                     height: 1.33,
@@ -1265,7 +1269,8 @@ class MessageBubble extends StatelessWidget {
                                 letterSpacing: 0,
                               ),
                             ),
-                            if (toolCalls.isNotEmpty && onShowTimeline != null) ...[
+                            if (toolCalls.isNotEmpty &&
+                                onShowTimeline != null) ...[
                               const SizedBox(height: 10),
                               _MiniTimeline(
                                 calls: toolCalls,
@@ -1335,7 +1340,8 @@ class MessageBubble extends StatelessWidget {
               avatar,
             ] else
               const SizedBox(
-                  width: MessageAvatarLayout.bubbleAvatarReservedWidth),
+                width: MessageAvatarLayout.bubbleAvatarReservedWidth,
+              ),
           ],
         ],
       ),
@@ -1382,11 +1388,7 @@ class _MiniTimeline extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(child: _buildNodes(colors)),
             const SizedBox(width: 6),
-            Icon(
-              Icons.chevron_right,
-              size: 14,
-              color: colors.textTertiary,
-            ),
+            Icon(Icons.chevron_right, size: 14, color: colors.textTertiary),
           ],
         ),
       ),
@@ -1552,9 +1554,9 @@ class _MessageActionMenu extends StatelessWidget {
           case 'copy':
             await Clipboard.setData(ClipboardData(text: text));
             if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('已复制')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('已复制')));
             break;
           case 'reply':
             onReply();
@@ -1609,15 +1611,19 @@ class _RelayProgressCard extends StatelessWidget {
                         valueColor: AlwaysStoppedAnimation(colors.danger),
                       )
                     : (progress.status == 'completed'
-                        ? Icon(Icons.check_circle,
-                            size: 14, color: colors.success)
+                        ? Icon(
+                            Icons.check_circle,
+                            size: 14,
+                            color: colors.success,
+                          )
                         : SizedBox(
                             width: 14,
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation(colors.brand),
+                              valueColor: AlwaysStoppedAnimation(
+                                colors.brand,
+                              ),
                             ),
                           )),
               ),
@@ -1784,11 +1790,7 @@ class _StepRow extends StatelessWidget {
                   color: iconColor,
                 ),
               if (!isLast)
-                Container(
-                  width: 1,
-                  height: 8,
-                  color: colors.divider,
-                ),
+                Container(width: 1, height: 8, color: colors.divider),
             ],
           ),
         ),
@@ -1798,9 +1800,8 @@ class _StepRow extends StatelessWidget {
           style: TextStyle(
             color: labelColor,
             fontSize: 11,
-            fontWeight: state == _StepState.active
-                ? FontWeight.w600
-                : FontWeight.w400,
+            fontWeight:
+                state == _StepState.active ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
       ],
@@ -1809,10 +1810,7 @@ class _StepRow extends StatelessWidget {
 }
 
 class _ReplyPreviewBar extends StatelessWidget {
-  const _ReplyPreviewBar({
-    required this.message,
-    required this.onCancel,
-  });
+  const _ReplyPreviewBar({required this.message, required this.onCancel});
 
   final ChatMessage message;
   final VoidCallback onCancel;
@@ -1938,8 +1936,9 @@ class _Composer extends StatelessWidget {
                             fontSize: 15,
                           ),
                           border: InputBorder.none,
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
                         ),
                       ),
                     ),
@@ -2048,11 +2047,7 @@ class _ChatGitActionBar extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.call_merge,
-                    size: 13,
-                    color: colors.textSecondary,
-                  ),
+                  Icon(Icons.call_merge, size: 13, color: colors.textSecondary),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
@@ -2176,7 +2171,8 @@ class _EmployeeConversationRef {
 }
 
 _EmployeeConversationRef? _parseEmployeeConversationRef(
-    String? conversationId) {
+  String? conversationId,
+) {
   final raw = conversationId?.trim() ?? '';
   if (!raw.startsWith('employee:')) return null;
   final parts = raw.split(':');

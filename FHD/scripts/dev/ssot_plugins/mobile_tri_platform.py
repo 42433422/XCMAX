@@ -21,16 +21,11 @@ FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
 FASTAPI_MOBILE_AI_GROUPS = ROOT / "app/fastapi_routes/mobile_extensions/routes_ai_groups.py"
 
 FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
-FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md"
+FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/FLUTTER_UNIFICATION.md"
 FLUTTER_API = ROOT / "mobile-flutter-poc/lib/src/api/mobile_api.dart"
 FLUTTER_MODELS = ROOT / "mobile-flutter-poc/lib/src/api/mobile_models.dart"
 FLUTTER_REPOSITORY = ROOT / "mobile-flutter-poc/lib/src/data/mobile_repository.dart"
 FLUTTER_THEME = ROOT / "mobile-flutter-poc/lib/src/theme/app_theme.dart"
-
-ANDROID_THEME = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt"
-ANDROID_TYPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt"
-ANDROID_SHAPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt"
-ANDROID_ANALYTICS = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt"
 
 REQUIRED_DOC_SNIPPETS = (
     "唯一真相源",
@@ -121,15 +116,11 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/app/fastapi_routes/mobile_api_extensions.py",
         "FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py",
         "FHD/mobile-flutter-poc/README.md",
-        "FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md",
+        "FHD/mobile-flutter-poc/FLUTTER_UNIFICATION.md",
         "FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart",
         "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
         "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
         "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
-        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt",
-        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt",
-        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt",
-        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt",
     ):
         if rel not in derived:
             errors.append(f"mobile-tri-platform.derived 缺少 {rel}")
@@ -149,11 +140,11 @@ def _check_doc(errors: list[str]) -> None:
 
 def _check_unified_stack(errors: list[str]) -> None:
     flutter_readme = _read_text(FLUTTER_README, errors)
-    if flutter_readme and "Flutter proof of concept" not in flutter_readme:
-        errors.append("Flutter README 未声明 Flutter POC 主线")
+    if flutter_readme and "唯一移动端实现" not in flutter_readme:
+        errors.append("Flutter README 未声明唯一移动端实现")
     flutter_unification = _read_text(FLUTTER_UNIFICATION, errors)
-    if flutter_unification and "Flutter POC exists to converge" not in flutter_unification:
-        errors.append("Flutter ANDROID_FIRST_UNIFICATION.md 未声明收敛移动产品线")
+    if flutter_unification and "唯一移动端实现与交付主线" not in flutter_unification:
+        errors.append("Flutter FLUTTER_UNIFICATION.md 未声明唯一移动主线")
     flutter_api = _read_text(FLUTTER_API, errors)
     if flutter_api:
         for snippet in ("XcagiMobileEndpoints", "api/mobile/v1", "X-XCAGI-Client"):
@@ -217,29 +208,12 @@ def _check_tokens(errors: list[str]) -> None:
         errors.append("mobile_design_tokens.json typography 缺少 display_large/label_small")
 
 
-def _check_platform_files(errors: list[str]) -> None:
-    android_theme = _read_text(ANDROID_THEME, errors)
-    if android_theme and "Color(0xFF6366F1)" not in android_theme:
-        errors.append("Android Theme.kt 未保留 token primary #6366F1")
-    android_type = _read_text(ANDROID_TYPE, errors)
-    if android_type and "displayLarge = TextStyle(fontSize = 28.sp" not in android_type:
-        errors.append("Android Type.kt 未保留 displayLarge 28sp")
-    android_shape = _read_text(ANDROID_SHAPE, errors)
-    if android_shape and "val xl = 20.dp" not in android_shape:
-        errors.append("Android Shape.kt 未保留 Spacing.xl = 20.dp")
-    android_analytics = _read_text(ANDROID_ANALYTICS, errors)
-    if android_analytics and "logPerformanceMetric" not in android_analytics:
-        errors.append("Android XcagiAnalytics.kt 缺少 logPerformanceMetric")
-    # 原生 iOS / Harmony 已归档至 archive/mobile/；产品对外仅 Android，不再 gate 其源码。
-
-
 def check_drift() -> int:
     errors: list[str] = []
     _check_registry(errors)
     _check_doc(errors)
     _check_unified_stack(errors)
     _check_tokens(errors)
-    _check_platform_files(errors)
 
     if errors:
         print(f"mobile-tri-platform: {len(errors)} 处漂移", flush=True)

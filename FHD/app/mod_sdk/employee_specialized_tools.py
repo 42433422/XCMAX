@@ -772,16 +772,18 @@ async def tool_frontend_test(params: dict[str, Any], ctx: dict[str, Any]) -> dic
 
 
 async def tool_android_gradle_build(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
-    """Android Gradle 构建检查（需 confirm）。"""
+    """Flutter Android debug 构建检查（外部工具名为兼容既有调用保留）。"""
     if not params.get("confirm"):
         return _err("android_gradle_build 需 confirm=true 确认", requires_confirm=True)
-    android_dir = _FHD_ROOT / "mobile-android"
-    gradlew = android_dir / "gradlew"
-    if not gradlew.is_file():
-        return _err("mobile-android/gradlew 不存在")
-    r = await _run_cmd(["bash", str(gradlew), "tasks", "--all"], cwd=android_dir, timeout=600)
+    flutter_dir = _FHD_ROOT / "mobile-flutter-poc"
+    if not (flutter_dir / "pubspec.yaml").is_file():
+        return _err("mobile-flutter-poc/pubspec.yaml 不存在")
+    flutter = shutil.which("flutter")
+    if not flutter:
+        return _ok("flutter 未安装（跳过）", skipped=True)
+    r = await _run_cmd([flutter, "build", "apk", "--debug"], cwd=flutter_dir, timeout=900)
     return _ok(
-        f"gradle exit={r['returncode']}",
+        f"flutter build apk exit={r['returncode']}",
         returncode=r["returncode"],
         stdout=r["stdout"][-6000:],
         stderr=r["stderr"][-3000:],

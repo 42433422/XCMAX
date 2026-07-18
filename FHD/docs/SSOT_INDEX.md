@@ -32,9 +32,9 @@
 | pricing-membership（市场会员价） | [../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py) | `init_default_plan_templates()` → `PlanTemplate`；VIP ¥9.9 – SVIP8 ¥4,999 |
 | licensing（许可边界，非定价） | [guides/LICENSING.md](guides/LICENSING.md) | Apache-2.0 vs EULA 触发条件、Mod 分成、Offline 功能差异；**具体金额见上两行 pricing SSOT** |
 | project-state（项目真实状态） | [PROJECT_STATE.md](PROJECT_STATE.md) | 项目健康度/完成度诚实仪表盘，唯一禁止撒谎的状态文档 |
-| mobile-tri-platform（移动统一） | [mobile_tri_platform_ssot.md](mobile_tri_platform_ssot.md) | **Flutter 唯一交付主线**；原生 Android/iOS 归档；OpenAPI + FastAPI 契约 |
+| mobile-tri-platform（移动统一） | [mobile_tri_platform_ssot.md](mobile_tri_platform_ssot.md) | **Flutter 唯一交付主线**；独立原生 Android/iOS/HarmonyOS 已删除；OpenAPI + FastAPI 契约 |
 | mobile-flutter（移动日常入口） | [guides/MOBILE_FLUTTER.md](guides/MOBILE_FLUTTER.md) | Flutter 本地开发、发版与归档规则 |
-| mobile-android（归档） | [guides/MOBILE_ANDROID.md](guides/MOBILE_ANDROID.md) | Kotlin 原生历史文档；Frozen，禁止新功能 |
+| mobile-android（Flutter 渠道） | [guides/MOBILE_ANDROID.md](guides/MOBILE_ANDROID.md) | Flutter Android Runner、本地验证、签名和发布指南 |
 | local-data（本地数据安全） | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | 桌面/Web 本地数据分类、purge CLI、诊断包与上传鉴权策略 |
 | neuro-bus-events（事件契约） | [../config/neuro_bus_events.yaml](../config/neuro_bus_events.yaml) | NeuroBus 三流事件契约统一 SSOT（NeuroBus 域事件 + AgentRun 事件 + 应用桥接），点号命名规范化，派生 Python 常量 + TS 类型 + OpenAPI schema |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |

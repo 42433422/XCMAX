@@ -10,11 +10,7 @@ import '../../widgets/app_avatar.dart';
 import 'employee_profile_screen.dart';
 
 class AiEmployeesScreen extends StatefulWidget {
-  const AiEmployeesScreen({
-    super.key,
-    this.repository,
-    this.onBack,
-  });
+  const AiEmployeesScreen({super.key, this.repository, this.onBack});
 
   final MobileRepository? repository;
   final VoidCallback? onBack;
@@ -112,9 +108,7 @@ class _AiEmployeesScreenState extends State<AiEmployeesScreen> {
     });
   }
 
-  List<AiEmployeeProfile> _filteredEmployees(
-    List<AiEmployeeProfile> source,
-  ) {
+  List<AiEmployeeProfile> _filteredEmployees(List<AiEmployeeProfile> source) {
     final keyword = _query.trim().toLowerCase();
     if (keyword.isEmpty) return source;
     return source.where((employee) {
@@ -273,10 +267,7 @@ class _AiEmployeeSearchBar extends StatelessWidget {
 }
 
 class _AiEmployeeRow extends StatelessWidget {
-  const _AiEmployeeRow({
-    required this.employee,
-    required this.repository,
-  });
+  const _AiEmployeeRow({required this.employee, required this.repository});
 
   final AiEmployeeProfile employee;
   final MobileRepository repository;
@@ -364,11 +355,7 @@ class _AiEmployeeRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: colors.textSecondary,
-              ),
+              Icon(Icons.chevron_right, size: 20, color: colors.textSecondary),
             ],
           ),
         ),
@@ -396,11 +383,7 @@ class _AiEmployeeEmptyState extends StatelessWidget {
                 color: colors.brand.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(
-                Icons.auto_awesome,
-                size: 34,
-                color: colors.brand,
-              ),
+              child: Icon(Icons.auto_awesome, size: 34, color: colors.brand),
             ),
             const SizedBox(height: 16),
             Text(

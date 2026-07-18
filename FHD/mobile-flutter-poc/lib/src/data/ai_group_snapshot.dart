@@ -531,15 +531,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
         employeeId: "mobile-android-release-officer",
         name: "Android 发版员",
         summary:
-            "P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。",
-        avatarUrl: null,
-        avatarKey: "",
-      ),
-      AiGroupMember(
-        employeeId: "mobile-harmony-release-officer",
-        name: "鸿蒙发版员",
-        summary:
-            "P-S 鸿蒙 HarmonyOS 渠道构建与发布：build-hap.sh、publish-release-harmony.sh、HAP/HSP 产出与签名、标准版发版。",
+            "Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。",
         avatarUrl: null,
         avatarKey: "",
       ),
@@ -547,7 +539,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
         employeeId: "mobile-ios-release-officer",
         name: "iOS 发版员",
         summary:
-            "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。",
+            "Flutter iOS 渠道发布：Runner、Fastlane match、签名、TestFlight / App Store Connect 上传与 release 门禁。",
         avatarUrl: null,
         avatarKey: "",
       ),

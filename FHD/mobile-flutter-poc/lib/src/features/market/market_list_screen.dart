@@ -98,7 +98,8 @@ class _MarketListScreenState extends State<MarketListScreen> {
                                 WeCell(
                                   title: industries[i].title,
                                   subtitle: industries[i].subtitle.ifEmpty(
-                                      industryStatus.ifEmpty('装齐行业基础能力')),
+                                        industryStatus.ifEmpty('装齐行业基础能力'),
+                                      ),
                                   icon: Icons.extension,
                                   showArrow: false,
                                   showDivider: i < industries.length - 1,
@@ -155,8 +156,9 @@ class _MarketListScreenState extends State<MarketListScreen> {
                             if (plans.isEmpty)
                               WeCell(
                                 title: '套餐与钱包',
-                                subtitle:
-                                    paymentStatus.ifEmpty('刷新后同步市场套餐与会员状态'),
+                                subtitle: paymentStatus.ifEmpty(
+                                  '刷新后同步市场套餐与会员状态',
+                                ),
                                 icon: Icons.extension,
                                 showArrow: false,
                               )
@@ -273,7 +275,9 @@ class _MarketListScreenState extends State<MarketListScreen> {
 
   Future<void> _bootstrap(OnboardingIndustry industry) async {
     await _runAction(
-        industry.id, () => _repository.bootstrapIndustry(industry.id));
+      industry.id,
+      () => _repository.bootstrapIndustry(industry.id),
+    );
   }
 
   Future<void> _checkout(PaymentPlan plan) async {
@@ -306,8 +310,9 @@ class _MarketListScreenState extends State<MarketListScreen> {
       final message = await action();
       if (!mounted) return;
       setState(() => _status = message);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = error.toString());
@@ -348,10 +353,7 @@ class _MarketViewData {
 }
 
 class _MarketActionButton extends StatelessWidget {
-  const _MarketActionButton({
-    required this.text,
-    required this.onPressed,
-  });
+  const _MarketActionButton({required this.text, required this.onPressed});
 
   final String text;
   final VoidCallback? onPressed;

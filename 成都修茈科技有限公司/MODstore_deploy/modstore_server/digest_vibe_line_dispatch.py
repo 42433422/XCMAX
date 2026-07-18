@@ -37,7 +37,6 @@ SIX_LINE_TO_DISPATCH: Dict[str, str] = {
 APP_LANE_EMPLOYEE_IDS: frozenset[str] = frozenset(
     {
         "mobile-android-release-officer",
-        "mobile-harmony-release-officer",
         "mobile-ios-release-officer",
     }
 )

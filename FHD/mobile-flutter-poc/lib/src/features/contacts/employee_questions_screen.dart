@@ -7,17 +7,14 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
 class EmployeeQuestionsScreen extends StatefulWidget {
-  const EmployeeQuestionsScreen({
-    super.key,
-    this.repository,
-    this.employeeId,
-  });
+  const EmployeeQuestionsScreen({super.key, this.repository, this.employeeId});
 
   final MobileRepository? repository;
   final String? employeeId;
 
   @override
-  State<EmployeeQuestionsScreen> createState() => _EmployeeQuestionsScreenState();
+  State<EmployeeQuestionsScreen> createState() =>
+      _EmployeeQuestionsScreenState();
 }
 
 class _EmployeeQuestionsScreenState extends State<EmployeeQuestionsScreen> {
@@ -96,14 +93,14 @@ class _EmployeeQuestionsScreenState extends State<EmployeeQuestionsScreen> {
         _answerController.clear();
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('回答已发送')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('回答已发送')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -280,8 +277,7 @@ class _QuestionCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
@@ -351,10 +347,10 @@ class _QuestionCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: submitting ||
-                            answerController.text.trim().isEmpty
-                        ? null
-                        : onSubmitAnswer,
+                    onPressed:
+                        submitting || answerController.text.trim().isEmpty
+                            ? null
+                            : onSubmitAnswer,
                     child: Text(submitting ? '发送中' : '发送回答'),
                   ),
                 ],

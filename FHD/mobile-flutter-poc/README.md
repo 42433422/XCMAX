@@ -1,11 +1,11 @@
 # XCAGI 移动客户端（Flutter 主线）
 
-> **2026-07-07**：移动统一交付 **仅** 维护本目录。`../mobile-android/`、`../mobile-ios/` 进入归档，禁止新增产品流程。  
+> **2026-07-18**：本目录是唯一移动端实现与交付主线。独立 Kotlin、SwiftUI、HarmonyOS 产品工程已删除。
+>
 > 文档：[`docs/guides/MOBILE_FLUTTER.md`](../docs/guides/MOBILE_FLUTTER.md) · SSOT：[`docs/mobile_tri_platform_ssot.md`](../docs/mobile_tri_platform_ssot.md)
 
-Android + iOS 单代码库，对接 `/api/mobile/v1/*` 与 OpenAPI 契约。Android-first Flutter proof of concept for the XCAGI mobile core flows.
-
-迁移期行为仍可对齐已归档的 `mobile-android`（Kotlin）实现；**新功能与 UX 修复只在本仓落地**。
+Android + iOS 单代码库，对接 `/api/mobile/v1/*` 与 OpenAPI 契约。`lib/` 是唯一业务实现，
+`android/` 与 `ios/` 只负责 Runner、平台通道、签名和商店发布。
 
 ## 本地命令
 
@@ -18,9 +18,9 @@ flutter run
 
 ## 策略摘要
 
-- 固定联系人 / 员工头像 / 超级员工路由：见 [`ANDROID_FIRST_UNIFICATION.md`](ANDROID_FIRST_UNIFICATION.md)（Android 现为**参照**而非 SSOT）
+- 固定联系人 / 员工头像 / 超级员工路由：见 [`FLUTTER_UNIFICATION.md`](FLUTTER_UNIFICATION.md)
 - 设计 token：`FHD/config/mobile_design_tokens.json`
-- 错误文案：`lib/src/policy/android_error_policy.dart`（`androidProductErrorMessage`）
+- 错误文案：`lib/src/policy/mobile_error_policy.dart`（`mobileProductErrorMessage`）
 
 ## 已覆盖流程（节选）
 
@@ -28,4 +28,4 @@ flutter run
 - 消息列表、聊天 SSE、通讯录、AI 群、超级员工 Codex/Cursor/Claude/Trae
 - IM WebSocket、员工任务中心、设备注册
 
-详见 [`ANDROID_FIRST_UNIFICATION.md`](ANDROID_FIRST_UNIFICATION.md) 各 Stage。
+详见 [`FLUTTER_UNIFICATION.md`](FLUTTER_UNIFICATION.md)。

@@ -9,7 +9,7 @@ import '../../platform/external_url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
-typedef AndroidWebUrlOverride = bool Function(String nextUrl);
+typedef MobileWebUrlOverride = bool Function(String nextUrl);
 
 class DesktopToolWebViewScreen extends StatefulWidget {
   const DesktopToolWebViewScreen({
@@ -26,7 +26,7 @@ class DesktopToolWebViewScreen extends StatefulWidget {
   final String path;
   final MobileApiConfig config;
   final MobileApiClient? api;
-  final AndroidWebUrlOverride? onUrlOverride;
+  final MobileWebUrlOverride? onUrlOverride;
   final ExternalUrlLauncher externalUrlLauncher;
 
   @override
@@ -51,7 +51,7 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
           onNavigationRequest: (request) {
             final handled = widget.onUrlOverride?.call(request.url) ?? false;
             if (handled) return NavigationDecision.prevent;
-            if (_isAndroidWebViewUrlAllowed(request.url)) {
+            if (_isMobileWebViewUrlAllowed(request.url)) {
               return NavigationDecision.navigate;
             }
             final uri = Uri.tryParse(request.url);
@@ -64,10 +64,10 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
             if (mounted) setState(() => _loadingProgress = progress);
           },
           onPageFinished: (_) =>
-              _injectAndroidWebTokens(_controller, uri, widget.config, _api),
+              _injectMobileWebTokens(_controller, uri, widget.config, _api),
         ),
       )
-      ..setUserAgent(_androidUserAgent);
+      ..setUserAgent(_mobileUserAgent);
     _loadRequest(uri);
   }
 
@@ -75,7 +75,7 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
     final session = await _api.loadSession();
     await _controller.loadRequest(
       uri,
-      headers: _androidWebHeaders(widget.config, uri, session: session),
+      headers: _mobileWebHeaders(widget.config, uri, session: session),
     );
   }
 
@@ -147,10 +147,10 @@ class _ModWebViewScreenState extends State<ModWebViewScreen> {
             if (mounted) setState(() => _loadingProgress = progress);
           },
           onPageFinished: (_) =>
-              _injectAndroidWebTokens(_controller, _uri, widget.config, _api),
+              _injectMobileWebTokens(_controller, _uri, widget.config, _api),
         ),
       )
-      ..setUserAgent(_androidUserAgent);
+      ..setUserAgent(_mobileUserAgent);
     _loadRequest();
   }
 
@@ -158,7 +158,7 @@ class _ModWebViewScreenState extends State<ModWebViewScreen> {
     final session = await _api.loadSession();
     await _controller.loadRequest(
       _uri,
-      headers: _androidWebHeaders(widget.config, _uri, session: session),
+      headers: _mobileWebHeaders(widget.config, _uri, session: session),
     );
   }
 
@@ -217,12 +217,12 @@ Uri _resolveDesktopUri(
 }) {
   final trimmed = path.trim();
   final parsed = Uri.tryParse(trimmed);
-  if (parsed != null && parsed.hasScheme) return _withAndroidShell(parsed);
+  if (parsed != null && parsed.hasScheme) return _withMobileShell(parsed);
 
   final base = _normalizedBaseUri(config.baseUrl);
-  if (trimmed.isEmpty) return _withAndroidShell(base);
+  if (trimmed.isEmpty) return _withMobileShell(base);
   final normalized = trimmed.startsWith('/') ? trimmed : '/$trimmed';
-  return _withAndroidShell(base.resolve(normalized.substring(1)));
+  return _withMobileShell(base.resolve(normalized.substring(1)));
 }
 
 Uri _resolveModUri(
@@ -231,8 +231,8 @@ Uri _resolveModUri(
 }) {
   final clean = Uri.encodeComponent(modId.trim());
   final fhdBase = _normalizedBaseUri(config.baseUrl);
-  if (clean.isEmpty) return _withAndroidShell(fhdBase);
-  return _withAndroidShell(fhdBase.resolve('mod/$clean/'));
+  if (clean.isEmpty) return _withMobileShell(fhdBase);
+  return _withMobileShell(fhdBase.resolve('mod/$clean/'));
 }
 
 Uri _normalizedBaseUri(String rawBase) {
@@ -241,13 +241,13 @@ Uri _normalizedBaseUri(String rawBase) {
   return base;
 }
 
-Uri _withAndroidShell(Uri uri) {
+Uri _withMobileShell(Uri uri) {
   final params = Map<String, String>.of(uri.queryParameters);
   params.putIfAbsent('shell', () => '1');
   return uri.replace(queryParameters: params);
 }
 
-Map<String, String> _androidWebHeaders(
+Map<String, String> _mobileWebHeaders(
   MobileApiConfig config,
   Uri uri, {
   MobileSessionData session = MobileSessionData.empty,
@@ -260,7 +260,7 @@ Map<String, String> _androidWebHeaders(
   return headers;
 }
 
-Future<void> _injectAndroidWebTokens(
+Future<void> _injectMobileWebTokens(
   WebViewController controller,
   Uri uri,
   MobileApiConfig config,
@@ -268,8 +268,10 @@ Future<void> _injectAndroidWebTokens(
 ) async {
   final session = await api.loadSession();
   final injectMarket = _shouldInjectMarketTokens(uri) &&
-      _firstNonBlank([config.marketAccessToken, session.marketAccessToken])
-          .isNotEmpty;
+      _firstNonBlank([
+        config.marketAccessToken,
+        session.marketAccessToken,
+      ]).isNotEmpty;
   final injectFhd = _shouldInjectFhdSession(uri) &&
       _firstNonBlank([
         config.accessToken,
@@ -281,13 +283,16 @@ Future<void> _injectAndroidWebTokens(
   await controller.runJavaScript(
     _buildTokenInjectScript(
       accessToken: injectMarket
-          ? _firstNonBlank(
-              [config.marketAccessToken, session.marketAccessToken])
+          ? _firstNonBlank([
+              config.marketAccessToken,
+              session.marketAccessToken,
+            ])
           : '',
       refreshToken: injectMarket
-          ? _firstNonBlank(
-              [config.marketRefreshToken, session.marketRefreshToken],
-            )
+          ? _firstNonBlank([
+              config.marketRefreshToken,
+              session.marketRefreshToken,
+            ])
           : '',
       fhdAccessToken: injectFhd
           ? _firstNonBlank([
@@ -334,16 +339,13 @@ bool _shouldInjectMarketTokens(Uri uri) {
   return uri.toString().toLowerCase().contains('xiu-ci.com');
 }
 
-const _androidWebViewAllowedHosts = {
-  'xiu-ci.com',
-  'www.xiu-ci.com',
-};
+const _mobileWebViewAllowedHosts = {'xiu-ci.com', 'www.xiu-ci.com'};
 
-bool _isAndroidWebViewUrlAllowed(String rawUrl, {String? extraLanHost}) {
+bool _isMobileWebViewUrlAllowed(String rawUrl, {String? extraLanHost}) {
   final uri = Uri.tryParse(rawUrl);
   final host = uri?.host.toLowerCase();
   if (host == null || host.isEmpty) return false;
-  for (final allowed in _androidWebViewAllowedHosts) {
+  for (final allowed in _mobileWebViewAllowedHosts) {
     if (host == allowed || host.endsWith('.$allowed')) return true;
   }
   final lan = extraLanHost?.split(':').first.trim().toLowerCase();
@@ -361,7 +363,7 @@ bool _shouldInjectFhdSession(Uri uri) {
           lower.contains('localhost'));
 }
 
-bool isAndroidRegisterCompleteUrl(String rawUrl) {
+bool isMobileRegisterCompleteUrl(String rawUrl) {
   final uri = Uri.tryParse(rawUrl);
   if (uri == null) return false;
   return uri.path == '/app/mobile-register-complete';
@@ -375,12 +377,12 @@ String _firstNonBlank(List<String> values) {
   return '';
 }
 
-const _androidUserAgent =
+const _mobileUserAgent =
     'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
 @visibleForTesting
-Uri resolveAndroidDesktopWebUriForTest(
+Uri resolveMobileDesktopWebUriForTest(
   String path, {
   MobileApiConfig config = const MobileApiConfig(),
 }) {
@@ -388,7 +390,7 @@ Uri resolveAndroidDesktopWebUriForTest(
 }
 
 @visibleForTesting
-Uri resolveAndroidModWebUriForTest(
+Uri resolveMobileModWebUriForTest(
   String modId, {
   MobileApiConfig config = const MobileApiConfig(),
 }) {
@@ -396,7 +398,7 @@ Uri resolveAndroidModWebUriForTest(
 }
 
 @visibleForTesting
-String buildAndroidTokenInjectScriptForTest({
+String buildMobileTokenInjectScriptForTest({
   required String accessToken,
   required String refreshToken,
   required String fhdAccessToken,
@@ -409,13 +411,13 @@ String buildAndroidTokenInjectScriptForTest({
 }
 
 @visibleForTesting
-Set<String> androidWebViewAllowedHostsForTest() {
-  return Set.unmodifiable(_androidWebViewAllowedHosts);
+Set<String> mobileWebViewAllowedHostsForTest() {
+  return Set.unmodifiable(_mobileWebViewAllowedHosts);
 }
 
 @visibleForTesting
-bool isAndroidWebViewUrlAllowedForTest(String rawUrl, {String? extraLanHost}) {
-  return _isAndroidWebViewUrlAllowed(rawUrl, extraLanHost: extraLanHost);
+bool isMobileWebViewUrlAllowedForTest(String rawUrl, {String? extraLanHost}) {
+  return _isMobileWebViewUrlAllowed(rawUrl, extraLanHost: extraLanHost);
 }
 
 @visibleForTesting
@@ -431,6 +433,6 @@ bool shouldInjectFhdSessionForTest(String rawUrl) {
 }
 
 @visibleForTesting
-bool isAndroidRegisterCompleteUrlForTest(String rawUrl) {
-  return isAndroidRegisterCompleteUrl(rawUrl);
+bool isMobileRegisterCompleteUrlForTest(String rawUrl) {
+  return isMobileRegisterCompleteUrl(rawUrl);
 }

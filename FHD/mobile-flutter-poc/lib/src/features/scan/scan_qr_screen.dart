@@ -11,16 +11,12 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../platform/android_camera_permission.dart';
 import '../../platform/camera_barcode_input.dart';
-import '../../policy/android_error_policy.dart';
+import '../../policy/mobile_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
 class ScanQrScreen extends StatefulWidget {
-  const ScanQrScreen({
-    super.key,
-    this.repository,
-    this.enableCamera = true,
-  });
+  const ScanQrScreen({super.key, this.repository, this.enableCamera = true});
 
   final MobileRepository? repository;
   final bool enableCamera;
@@ -29,7 +25,8 @@ class ScanQrScreen extends StatefulWidget {
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
 
-class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver {
+class _ScanQrScreenState extends State<ScanQrScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   CameraController? _cameraController;
   late final ImagePicker _imagePicker;
@@ -116,8 +113,10 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
             child: Column(
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
@@ -147,8 +146,10 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
                         ),
                       IconButton(
                         onPressed: _pickingAlbum ? null : _pickAlbum,
-                        icon: const Icon(Icons.photo_library,
-                            color: Colors.white),
+                        icon: const Icon(
+                          Icons.photo_library,
+                          color: Colors.white,
+                        ),
                         tooltip: '从相册选择',
                       ),
                     ],
@@ -158,22 +159,27 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (cameraEnabled && scannerReady && _cameraController != null)
+                      if (cameraEnabled &&
+                          scannerReady &&
+                          _cameraController != null)
                         Positioned.fill(
                           child: FittedBox(
                             fit: BoxFit.cover,
                             clipBehavior: Clip.hardEdge,
                             child: SizedBox(
-                              width: _cameraController!.value.previewSize?.height ??
+                              width: _cameraController!
+                                      .value.previewSize?.height ??
                                   MediaQuery.sizeOf(context).width,
-                              height: _cameraController!.value.previewSize?.width ??
-                                  MediaQuery.sizeOf(context).height,
+                              height:
+                                  _cameraController!.value.previewSize?.width ??
+                                      MediaQuery.sizeOf(context).height,
                               child: CameraPreview(_cameraController!),
                             ),
                           ),
                         )
                       else if (cameraEnabled &&
-                          (_checkingCameraPermission || _requestingCameraPermission))
+                          (_checkingCameraPermission ||
+                              _requestingCameraPermission))
                         Center(
                           child: CircularProgressIndicator(color: colors.brand),
                         )
@@ -282,9 +288,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
     final next = !_flashOn;
     setState(() => _flashOn = next);
     try {
-      await controller.setFlashMode(
-        next ? FlashMode.torch : FlashMode.off,
-      );
+      await controller.setFlashMode(next ? FlashMode.torch : FlashMode.off);
     } catch (_) {
       if (mounted) setState(() => _flashOn = !next);
     }
@@ -434,18 +438,18 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
           .firstWhere((value) => value.isNotEmpty, orElse: () => '');
       setState(() => _pickingAlbum = false);
       if (raw.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未识别到二维码')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('未识别到二维码')));
         return;
       }
       _handleScanResult(raw);
     } catch (error) {
       if (!mounted) return;
       setState(() => _pickingAlbum = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('相册扫码失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('相册扫码失败：$error')));
     }
   }
 
@@ -538,8 +542,8 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
   void _showAuthQrConfirm(AuthQrPayload payload) {
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
-    final targetLabel = androidAuthQrTargetLabel(payload.accountKind);
-    final usernameHint = androidAuthQrUsernameHint(payload.accountKind);
+    final targetLabel = mobileAuthQrTargetLabel(payload.accountKind);
+    final usernameHint = mobileAuthQrUsernameHint(payload.accountKind);
     final rootContext = context;
     final colors = AppTheme.colors(rootContext);
     showModalBottomSheet<void>(
@@ -563,9 +567,9 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
                 );
                 if (!mounted || !sheetContext.mounted) return;
                 Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(rootContext).showSnackBar(
-                  const SnackBar(content: Text('已确认登录')),
-                );
+                ScaffoldMessenger.of(
+                  rootContext,
+                ).showSnackBar(const SnackBar(content: Text('已确认登录')));
                 Navigator.of(rootContext).maybePop();
               } catch (error) {
                 if (!sheetContext.mounted) return;
@@ -573,10 +577,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
                 ScaffoldMessenger.of(sheetContext).showSnackBar(
                   SnackBar(
                     content: Text(
-                      androidProductErrorMessage(
-                        error.toString(),
-                        '扫码登录失败，请重试',
-                      ),
+                      mobileProductErrorMessage(error.toString(), '扫码登录失败，请重试'),
                     ),
                   ),
                 );
@@ -680,10 +681,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            androidProductErrorMessage(
-              error.toString(),
-              '设备配对失败，请刷新二维码或输入设备码',
-            ),
+            mobileProductErrorMessage(error.toString(), '设备配对失败，请刷新二维码或输入设备码'),
           ),
         ),
       );
@@ -812,10 +810,7 @@ class _CheckPainter extends CustomPainter {
 }
 
 class _PairingCodeInput extends StatelessWidget {
-  const _PairingCodeInput({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _PairingCodeInput({required this.controller, required this.onChanged});
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -1001,10 +996,7 @@ class _ScannerUnavailable extends StatelessWidget {
                       color: colors.brand,
                     ),
                   )
-                : Text(
-                    '授予相机权限',
-                    style: TextStyle(color: colors.brand),
-                  ),
+                : Text('授予相机权限', style: TextStyle(color: colors.brand)),
           ),
           const SizedBox(height: 12),
           TextButton(
@@ -1026,11 +1018,11 @@ class _ScannerUnavailable extends StatelessWidget {
   }
 }
 
-String androidAuthQrTargetLabel(String accountKind) {
+String mobileAuthQrTargetLabel(String accountKind) {
   return accountKind.trim().toLowerCase() == 'admin' ? '管理端' : '企业端';
 }
 
-String androidAuthQrUsernameHint(String accountKind) {
+String mobileAuthQrUsernameHint(String accountKind) {
   return accountKind.trim().toLowerCase() == 'admin' ? '管理员账号' : '企业账号';
 }
 
@@ -1079,10 +1071,7 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
 }
 
 class _ScannerOverlayPainter extends CustomPainter {
-  const _ScannerOverlayPainter({
-    required this.progress,
-    required this.accent,
-  });
+  const _ScannerOverlayPainter({required this.progress, required this.accent});
 
   final double progress;
   final Color accent;
@@ -1097,10 +1086,7 @@ class _ScannerOverlayPainter extends CustomPainter {
     final maskPaint = Paint()..color = Colors.black.withValues(alpha: 0.55);
 
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, top), maskPaint);
-    canvas.drawRect(
-      Rect.fromLTWH(0, frame.bottom, size.width, top),
-      maskPaint,
-    );
+    canvas.drawRect(Rect.fromLTWH(0, frame.bottom, size.width, top), maskPaint);
     canvas.drawRect(Rect.fromLTWH(0, top, side, frameSize), maskPaint);
     canvas.drawRect(
       Rect.fromLTWH(frame.right, top, side, frameSize),
@@ -1131,7 +1117,11 @@ class _ScannerOverlayPainter extends CustomPainter {
     final glowPaint = Paint()..color = accent.withValues(alpha: 0.08);
     canvas.drawRect(
       Rect.fromLTWH(
-          frame.left, lineY - frameSize * 0.15, frameSize, frameSize * 0.3),
+        frame.left,
+        lineY - frameSize * 0.15,
+        frameSize,
+        frameSize * 0.3,
+      ),
       glowPaint,
     );
     final scanPaint = Paint()

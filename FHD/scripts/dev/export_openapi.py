@@ -6,8 +6,7 @@
 
 生成的 openapi.json 提交到仓库，各平台通过代码生成器消费：
   - frontend: openapi-typescript → src/types/api-generated.ts
-  - Android: openapi-generator kotlin → com.xiuci.xcagi.mobile.api.contract
-  - HarmonyOS: scripts/dev/gen_arkts_models.py → models/api-generated.ets
+  - Flutter: contracts/openapi.json → lib/src/api/ typed mobile client
 """
 
 from __future__ import annotations
@@ -33,6 +32,9 @@ def main() -> int:
     # 使用开发配置避免 SECRET_KEY 等生产环境必需变量
     os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
     os.environ.setdefault("XCAGI_DESKTOP_MODE", "1")
+    # OpenAPI 导出必须同步挂载 deferred 业务路由；桌面 fast-start 只会注册
+    # health/infrastructure bootstrap，导致移动 API 从契约中消失。
+    os.environ.setdefault("XCAGI_DESKTOP_FAST_START", "0")
 
     # 延迟导入，确保环境变量先生效
     from app.config import DevelopmentConfig

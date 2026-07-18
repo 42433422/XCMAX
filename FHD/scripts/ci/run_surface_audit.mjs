@@ -917,7 +917,7 @@ function androidEnabled() {
 }
 
 function adbHasDevice() {
-  const adbPath = path.join(FHD_ROOT, 'mobile-android/.toolchain/android-sdk/platform-tools/adb')
+  const adbPath = path.join(FHD_ROOT, 'mobile-flutter-poc/.toolchain/android-sdk/platform-tools/adb')
   const adbBin = fs.existsSync(adbPath) ? adbPath : 'adb'
   try {
     const proc = spawnSync(adbBin, ['devices'], { encoding: 'utf8', timeout: 8000 })

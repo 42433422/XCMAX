@@ -307,7 +307,6 @@ exclude = [
     "frontend*",
     "mods*",
     "mods-admin-runtime*",
-    "mobile-android*",
     "desktop*",
     "admin-console*",
     "sunbird-console*",

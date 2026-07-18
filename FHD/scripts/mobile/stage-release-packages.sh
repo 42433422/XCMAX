@@ -3,25 +3,20 @@ set -euo pipefail
 
 VERSION="1.0.0.0"
 ANDROID_VERSION="1.0.0.0"
-HARMONY_ARTIFACT=""
 APK_PATH=""
 SKIP_ZIP=0
-ALLOW_MISSING_HARMONY=0
-# Product shipping is Android-only; Harmony is optional (archived under archive/mobile/).
-ANDROID_ONLY=1
 
 usage() {
   cat <<'USAGE'
 Usage: stage-release-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0.0>] \
-  [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--android-only] \
-  [--allow-missing-harmony]
+  [--apk-path <path>] [--skip-zip]
 
 生成企业版移动发布目录（默认仅 Android）：
   - release/packages-v${VERSION}/enterprise/
   - release/packages-v${VERSION}/企业版/
   - release/XCAGI-Enterprise-Mobile-Packages-v${VERSION}.zip（可选）
 
-默认 --android-only。鸿蒙工程已归档；仅在显式传入 --harmony-artifact 时附带 .hap/.hsp。
+唯一输入是 Flutter 构建产出的 Android APK；iOS 由独立 TestFlight/App Store workflow 发布。
 USAGE
   exit 1
 }
@@ -39,24 +34,12 @@ while [[ $# -gt 0 ]]; do
       ANDROID_VERSION="${2:-}"
       shift 2
       ;;
-    --harmony-artifact)
-      HARMONY_ARTIFACT="${2:-}"
-      shift 2
-      ;;
     --apk-path)
       APK_PATH="${2:-}"
       shift 2
       ;;
     --skip-zip)
       SKIP_ZIP=1
-      shift
-      ;;
-    --allow-missing-harmony)
-      ALLOW_MISSING_HARMONY=1
-      shift
-      ;;
-    --android-only)
-      ANDROID_ONLY=1
       shift
       ;;
     *)
@@ -84,8 +67,6 @@ resolve_root() {
   # FHD/scripts/mobile → FHD → repo root
   FHD_ROOT="$(cd "${script_dir}/../.." && pwd)"
   REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
-  # Optional scan root for archived Harmony artifacts
-  MODULE_ROOT="${REPO_ROOT}/archive/mobile/mobile-harmony"
 }
 
 resolve_version() {
@@ -111,77 +92,18 @@ resolve_apk() {
   done <<EOF
 ${FHD_ROOT}/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk
 ${FHD_ROOT}/mobile-flutter-poc/build/app/outputs/apk/release/app-release.apk
-${FHD_ROOT}/mobile-android/app/build/outputs/apk/enterprise/release/app-enterprise-release.apk
-${FHD_ROOT}/mobile-android/app/build/outputs/apk/enterprise/debug/app-enterprise-debug.apk
 EOF
-  return 1
-}
-
-resolve_harmony_artifact() {
-  local explicit="$1"
-  if [[ -n "$explicit" ]]; then
-    if [[ -f "$explicit" ]]; then
-      echo "$explicit"
-      return 0
-    fi
-    log_info "显式鸿蒙路径无效：${explicit}，尝试自动扫描"
-  fi
-
-  if [[ -n "${FHD_HARMONY_HAP_PATH:-}" && -f "${FHD_HARMONY_HAP_PATH}" ]]; then
-    echo "${FHD_HARMONY_HAP_PATH}"
-    return 0
-  fi
-
-  local scan_root
-  local candidate
-  local selected=""
-  local selected_score=-1
-  local selected_mtime=-1
-  local base
-  local score
-  local mtime
-
-  for scan_root in "${MODULE_ROOT}/artifacts" "${MODULE_ROOT}"; do
-    while IFS= read -r -d '' candidate; do
-      if [[ ! -f "$candidate" ]]; then
-        continue
-      fi
-      base="$(basename "$candidate")"
-      score=0
-      if [[ "$base" == *.hap ]]; then
-        score=2
-      else
-        score=1
-      fi
-      if [[ "$base" == *"${VERSION}"* ]]; then
-        score=$((score + 100000))
-      fi
-      mtime="$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$candidate")"
-      if (( score > selected_score || (score == selected_score && mtime > selected_mtime) )); then
-        selected="$candidate"
-        selected_score="$score"
-        selected_mtime="$mtime"
-      fi
-    done < <(find "${scan_root}" -type f \( -name "*.hap" -o -name "*.hsp" \) -print0 2>/dev/null || true)
-  done
-
-  if [[ -n "$selected" && -f "$selected" ]]; then
-    echo "$selected"
-    return 0
-  fi
   return 1
 }
 
 emit_readme() {
   local dir="$1"
-  local harmony_file="$2"
 
   cat <<EOF_README > "${dir}/README.txt"
 XCAGI 企业版 (Enterprise) v${VERSION}
 
-  本目录包含企业版 Android APK（对外发版仅 Android），不含个人版。
+  本目录包含 Flutter 统一移动端的企业版 Android APK，不含个人版。
   Android: XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk
-  鸿蒙（可选）: $(basename "$harmony_file")
   包名: com.xiuci.xcagi.mobile.enterprise
 
   备注：Windows 安装包不在本目录输出。
@@ -190,7 +112,6 @@ EOF_README
 
 emit_mobile_version_note() {
   local dir="$1"
-  local harmony_file="$2"
   local now
   now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -199,7 +120,6 @@ emit_mobile_version_note() {
 
 - 组件版本：v${VERSION}
 - Android：v${ANDROID_VERSION}
-- 鸿蒙（企业版）：${harmony_file}
 - 生成时间（UTC）：${now}
 EOF_VERSION
 }
@@ -224,39 +144,8 @@ cp -f "${APK_SRC}" "${ENTERPRISE_DIR}/XCAGI-Enterprise-Android-${ANDROID_VERSION
 cp -f "${APK_SRC}" "${ENTERPRISE_DIR_ZH}/XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk"
 log_info "已纳入企业版 APK：$(basename "${APK_SRC}")"
 
-HARMONY_SRC="$(resolve_harmony_artifact "${HARMONY_ARTIFACT}")" || true
-HARMONY_TARGET=""
-if [[ -n "${HARMONY_SRC}" && -f "${HARMONY_SRC}" ]]; then
-  harmony_ext="${HARMONY_SRC##*.}"
-  HARMONY_TARGET="XCAGI-Enterprise-Harmony-${VERSION}.${harmony_ext}"
-  cp -f "${HARMONY_SRC}" "${ENTERPRISE_DIR}/${HARMONY_TARGET}"
-  cp -f "${HARMONY_SRC}" "${ENTERPRISE_DIR_ZH}/${HARMONY_TARGET}"
-  log_info "已纳入鸿蒙包（企业版）：${HARMONY_TARGET}"
-else
-  if [[ "${ANDROID_ONLY}" -eq 1 ]]; then
-    HARMONY_TARGET="未纳入（Android-only 发布）"
-    log_info "按 --android-only 生成正式 Android-only 发布包"
-  elif [[ "${ALLOW_MISSING_HARMONY}" -eq 1 ]]; then
-    HARMONY_TARGET="未提供（仅用于临时 Android 分发验证）"
-    log_info "未检测到鸿蒙包，按 --allow-missing-harmony 跳过"
-  else
-    cat >&2 <<EOF_ERROR
-Missing enterprise HarmonyOS artifact.
-
-Provide one of:
-  - --harmony-artifact <path-to-hap-or-hsp>
-  - FHD_HARMONY_HAP_PATH=<path-to-hap-or-hsp>
-  - a .hap/.hsp under ${MODULE_ROOT}/artifacts
-
-Use --android-only for an intentional Android-only release, or
---allow-missing-harmony only for temporary packaging checks.
-EOF_ERROR
-    exit 1
-  fi
-fi
-
-emit_readme "${ENTERPRISE_DIR}" "${HARMONY_TARGET}"
-emit_mobile_version_note "${ENTERPRISE_DIR}" "${HARMONY_TARGET}"
+emit_readme "${ENTERPRISE_DIR}"
+emit_mobile_version_note "${ENTERPRISE_DIR}"
 cp -f "${ENTERPRISE_DIR}/README.txt" "${ENTERPRISE_DIR_ZH}/README.txt"
 cp -f "${ENTERPRISE_DIR}/MOBILE_VERSION.md" "${ENTERPRISE_DIR_ZH}/MOBILE_VERSION.md"
 

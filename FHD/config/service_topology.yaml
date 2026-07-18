@@ -7,8 +7,7 @@
 # 派生产物（请勿手改，改这里再 generate）:
 #   - app/infrastructure/topology.py                         (Python 常量)
 #   - frontend/src/constants/topology.ts                     (TypeScript)
-#   - mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets  (ArkTS)
-#   - mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt (Kotlin)
+#   - mobile-flutter-poc/lib/src/data/service_topology_ssot.dart    (Dart)
 #   - config/topology.generated.json                         (机器可读，健康探针消费)
 #
 # 边界: nginx / compose / systemd 不自动生成，仅由 check 做 verify-only 校验。
@@ -52,6 +51,10 @@ services:
     listen_port: 17500
     runner: electron-local
     role: relay-node             # 桌面端反向注册 + 轮询云端中继
+  mobile-lan-proxy:
+    listen_port: 5011
+    runner: vite-proxy
+    role: mobile-lan-entry       # 手机可达的 0.0.0.0 入口
 
 # nginx path → service 映射（部署侧 verify-only 校验锚点；不生成 nginx 配置）
 nginx_routes:

@@ -91,10 +91,10 @@ class MobileSessionData {
       accountKind.trim().isNotEmpty ||
       localAvatarSource.trim().isNotEmpty;
 
-  bool get canAutoLoginForAndroid =>
+  bool get canAutoLogin =>
       autoLogin && savedUsername.trim().isNotEmpty && savedPassword.isNotEmpty;
 
-  String get androidServerModeLabel {
+  String get mobileServerModeLabel {
     if (relayDesktopId.trim().isNotEmpty) return '云端中继 · 电脑工具';
     final host = fhdHost.trim();
     if (host.isNotEmpty) return 'Agent 控制 · $host';
@@ -198,19 +198,27 @@ class MobileSessionData {
       username: _firstNonBlank(other.username, username),
       accountKind: _firstNonBlank(other.accountKind, accountKind),
       userId: other.userId > 0 ? other.userId : userId,
-      marketAccessToken:
-          _firstNonBlank(other.marketAccessToken, marketAccessToken),
-      marketRefreshToken:
-          _firstNonBlank(other.marketRefreshToken, marketRefreshToken),
-      localAvatarSource:
-          _firstNonBlank(other.localAvatarSource, localAvatarSource),
+      marketAccessToken: _firstNonBlank(
+        other.marketAccessToken,
+        marketAccessToken,
+      ),
+      marketRefreshToken: _firstNonBlank(
+        other.marketRefreshToken,
+        marketRefreshToken,
+      ),
+      localAvatarSource: _firstNonBlank(
+        other.localAvatarSource,
+        localAvatarSource,
+      ),
       fhdHost: _firstNonBlank(other.fhdHost, fhdHost),
       serverMode: _firstNonBlank(other.serverMode, serverMode),
       relayDesktopId: _firstNonBlank(other.relayDesktopId, relayDesktopId),
       relayBaseUrl: _firstNonBlank(other.relayBaseUrl, relayBaseUrl),
       localBaseUrl: _firstNonBlank(other.localBaseUrl, localBaseUrl),
-      relaySessionToken:
-          _firstNonBlank(other.relaySessionToken, relaySessionToken),
+      relaySessionToken: _firstNonBlank(
+        other.relaySessionToken,
+        relaySessionToken,
+      ),
       relayAccountId: _firstNonBlank(other.relayAccountId, relayAccountId),
       relayTenantId: _firstNonBlank(other.relayTenantId, relayTenantId),
       relayPairedAt: _firstNonBlank(other.relayPairedAt, relayPairedAt),
@@ -220,24 +228,22 @@ class MobileSessionData {
       lastSyncAt: _firstNonBlank(other.lastSyncAt, lastSyncAt),
       autoSync: other.autoSync && autoSync,
       setupComplete: other.setupComplete || setupComplete,
-      legalAcceptedVersion:
-          _firstNonBlank(other.legalAcceptedVersion, legalAcceptedVersion),
+      legalAcceptedVersion: _firstNonBlank(
+        other.legalAcceptedVersion,
+        legalAcceptedVersion,
+      ),
       themeMode: _firstNonBlank(other.themeMode, themeMode),
       biometricEnabled: other.biometricEnabled || biometricEnabled,
       savedUsername: _firstNonBlank(other.savedUsername, savedUsername),
       savedPassword: _firstNonBlank(other.savedPassword, savedPassword),
       rememberPassword: other.rememberPassword || rememberPassword,
       autoLogin: other.autoLogin || autoLogin,
-      walletBalanceJson:
-          _firstNonBlank(other.walletBalanceJson, walletBalanceJson),
-      inflightRelayTasks: {
-        ...inflightRelayTasks,
-        ...other.inflightRelayTasks,
-      },
-      cachedChatMessages: {
-        ...cachedChatMessages,
-        ...other.cachedChatMessages,
-      },
+      walletBalanceJson: _firstNonBlank(
+        other.walletBalanceJson,
+        walletBalanceJson,
+      ),
+      inflightRelayTasks: {...inflightRelayTasks, ...other.inflightRelayTasks},
+      cachedChatMessages: {...cachedChatMessages, ...other.cachedChatMessages},
       conversationListStates: {
         ...conversationListStates,
         ...other.conversationListStates,
@@ -538,9 +544,8 @@ List<Map<String, Object?>> _readObjectList(
   return raw
       .whereType<Map>()
       .map(
-        (row) => row.map(
-          (key, value) => MapEntry(key.toString(), value as Object?),
-        ),
+        (row) =>
+            row.map((key, value) => MapEntry(key.toString(), value as Object?)),
       )
       .where((row) => row.isNotEmpty)
       .toList(growable: false);
