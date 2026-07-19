@@ -1906,9 +1906,11 @@ def run_daily_digest_email() -> Dict[str, Any]:
         return {
             "ok": False,
             "skipped": True,
-            "reason": "autonomy_guard_pending_approval"
-            if risk_decision.requires_confirmation
-            else "autonomy_guard_blocked",
+            "reason": (
+                "autonomy_guard_pending_approval"
+                if risk_decision.requires_confirmation
+                else "autonomy_guard_blocked"
+            ),
             "risk_decision": risk_decision.to_dict(),
         }
 

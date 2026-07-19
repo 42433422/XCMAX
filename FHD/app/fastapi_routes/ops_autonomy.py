@@ -158,12 +158,10 @@ async def github_approval_callback(
     review = body.get("review") if isinstance(body.get("review"), dict) else {}
     reviewer = review.get("reviewer") if isinstance(review.get("reviewer"), dict) else {}
     action_id = _validated_action_id(body.get("action_id"), required=True)
-    decision = str(
-        body.get("decision") or review.get("state") or body.get("state") or ""
-    ).strip().lower()
-    approver = str(
-        body.get("approver") or x_github_actor or reviewer.get("login") or ""
-    ).strip()
+    decision = (
+        str(body.get("decision") or review.get("state") or body.get("state") or "").strip().lower()
+    )
+    approver = str(body.get("approver") or x_github_actor or reviewer.get("login") or "").strip()
     approval_id = str(body.get("approval_id") or body.get("deployment_id") or "").strip()
     if not decision or not approver:
         raise HTTPException(status_code=400, detail="action_id, decision and approver are required")
@@ -171,17 +169,22 @@ async def github_approval_callback(
     workflow_action = str(body.get("workflow_action") or "").strip()
     expected = _WORKFLOW_ACTIONS.get(str((current or {}).get("action") or ""))
     try:
-        if expected and decision in {
-            "approved",
-            "approve",
-            "accepted",
-            "executed",
-            "success",
-            "completed",
-            "execution_failed",
-            "failed",
-            "failure",
-        } and not workflow_action:
+        if (
+            expected
+            and decision
+            in {
+                "approved",
+                "approve",
+                "accepted",
+                "executed",
+                "success",
+                "completed",
+                "execution_failed",
+                "failed",
+                "failure",
+            }
+            and not workflow_action
+        ):
             raise ApprovalStateError("workflow_action is required for deploy action callbacks")
         if expected and workflow_action and workflow_action != expected:
             raise ApprovalStateError(

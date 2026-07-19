@@ -41,10 +41,7 @@ def test_deploy_bridge_hard_blocks_prohibited_migration(tmp_path: Path) -> None:
     (deploy_root / "app").symlink_to(FHD_ROOT / "app", target_is_directory=True)
     (deploy_root / "config").symlink_to(FHD_ROOT / "config", target_is_directory=True)
     data_dir = tmp_path / "autonomy"
-    command = (
-        f". {AUTONOMY_BRIDGE!s}; "
-        "autonomy_evaluate_action db_migration migration:test-bridge"
-    )
+    command = f". {AUTONOMY_BRIDGE!s}; autonomy_evaluate_action db_migration migration:test-bridge"
     result = subprocess.run(
         ["bash", "-c", command],
         env={

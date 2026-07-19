@@ -1,3 +1,4 @@
+# CI SSOT: root-only workflow — dispatches backend pending actions into environment review.
 name: FHD autonomy approval dispatcher
 
 on:

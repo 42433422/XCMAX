@@ -3173,9 +3173,11 @@ def _auto_merge_low_risk_branch(
     if not decision.allowed:
         return {
             "ok": False,
-            "reason": "autonomy_guard_pending_approval"
-            if decision.requires_confirmation
-            else "autonomy_guard_blocked",
+            "reason": (
+                "autonomy_guard_pending_approval"
+                if decision.requires_confirmation
+                else "autonomy_guard_blocked"
+            ),
             "risk_decision": decision.to_dict(),
         }
 

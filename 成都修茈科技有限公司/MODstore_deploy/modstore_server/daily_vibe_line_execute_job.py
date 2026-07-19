@@ -70,9 +70,11 @@ def run_daily_vibe_line_execute_job(
             "reason": (
                 "autonomy_guard_rejected_or_terminal"
                 if pending_state in {"rejected", "executed", "execution_failed"}
-                else "autonomy_guard_pending_approval"
-                if risk_decision.requires_confirmation
-                else "autonomy_guard_blocked"
+                else (
+                    "autonomy_guard_pending_approval"
+                    if risk_decision.requires_confirmation
+                    else "autonomy_guard_blocked"
+                )
             ),
             "pending_approval": pending,
             "risk_decision": risk_decision.to_dict(),

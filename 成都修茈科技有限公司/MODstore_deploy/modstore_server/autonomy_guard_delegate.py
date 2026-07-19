@@ -10,12 +10,12 @@ from typing import Any
 
 
 def ensure_fhd_on_path() -> None:
-    if not (os.environ.get("XCAGI_AUTONOMY_DATA_DIR") or "").strip() and not (
-        os.environ.get("XCAGI_DATA_DIR") or ""
-    ).strip():
+    if (
+        not (os.environ.get("XCAGI_AUTONOMY_DATA_DIR") or "").strip()
+        and not (os.environ.get("XCAGI_DATA_DIR") or "").strip()
+    ):
         runtime = Path(
-            os.environ.get("MODSTORE_RUNTIME_DIR")
-            or str(Path.home() / ".xcmax" / "modstore-daily")
+            os.environ.get("MODSTORE_RUNTIME_DIR") or str(Path.home() / ".xcmax" / "modstore-daily")
         ).expanduser()
         os.environ["XCAGI_AUTONOMY_DATA_DIR"] = str(runtime / "autonomy")
     candidates: list[Path] = []

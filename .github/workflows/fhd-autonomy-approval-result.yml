@@ -1,3 +1,4 @@
+# CI SSOT: root-only workflow — records failed or rejected environment reviews.
 name: FHD autonomy approval result
 
 on:

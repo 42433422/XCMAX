@@ -14,9 +14,7 @@ from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_exec
 def isolated_autonomy(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "audit.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
-    monkeypatch.setenv(
-        "XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl")
-    )
+    monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
 

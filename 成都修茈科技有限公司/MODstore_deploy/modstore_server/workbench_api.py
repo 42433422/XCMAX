@@ -5078,8 +5078,7 @@ def _publish_vibe_skill_via_local_modstore(
             "trigger": "explicit_workbench_publish",
         },
         action_id=(
-            f"mod-publish:{user_id}:{pkg_id}:"
-            f"{str(publish_cfg.get('version') or '1.0.0')}"
+            f"mod-publish:{user_id}:{pkg_id}:" f"{str(publish_cfg.get('version') or '1.0.0')}"
         ),
         source="workbench.vibe_code_publish",
     )
