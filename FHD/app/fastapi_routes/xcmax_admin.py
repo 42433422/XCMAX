@@ -62,6 +62,42 @@ def _require_market_admin_session(request: Request) -> JSONResponse | None:
     return None
 
 
+@router.get("/admin/autonomy/audit-log", response_model=None)
+async def autonomy_audit_log(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=1000),
+    risk_level: str | None = None,
+    decision: str | None = None,
+    veto_only: bool = False,
+    since: str | None = None,
+    days: int = Query(default=1, ge=1, le=3650),
+):
+    """Query the append-only autonomy decision and veto trail."""
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.audit_log import (
+        list_autonomy_audit,
+        summarize_autonomy_audit,
+    )
+
+    items = list_autonomy_audit(
+        limit=limit,
+        risk_level=risk_level,
+        decision=decision,
+        veto_only=veto_only,
+        since=since,
+    )
+    return {
+        "success": True,
+        "append_only": True,
+        "items": items,
+        "count": len(items),
+        "summary": summarize_autonomy_audit(days=days),
+    }
+
+
 def _release_train_snapshot() -> dict[str, Any]:
     """读取 release_train SSOT；优先 modstore 模块，回退 FHD/config JSON。"""
     from pathlib import Path

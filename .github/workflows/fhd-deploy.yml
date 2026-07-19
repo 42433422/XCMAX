@@ -3,6 +3,7 @@
 # Automatic CD is fhd-ci-cd.yml → cvm-push-release → server cron fhd-auto-update.sh.
 # This workflow is the manual break-glass: force apply latest manifest or restart compose.
 name: fhd-deploy
+run-name: fhd-deploy ${{ inputs.environment }} ${{ inputs.action }} autonomy:${{ inputs.action_id || 'none' }}
 
 on:
   workflow_dispatch:
@@ -23,6 +24,13 @@ on:
         options:
           - apply-latest
           - restart-only
+          - freeze-manifest
+          - unfreeze-manifest
+      action_id:
+        description: Pending autonomy action id to resume after production approval
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: fhd-deploy-${{ inputs.environment }}
@@ -30,6 +38,7 @@ concurrency:
 
 permissions:
   contents: read
+  deployments: read
 
 jobs:
   cvm-rolling:
@@ -50,6 +59,90 @@ jobs:
             echo "::error::Configure repo Secrets (default host 119.27.178.147)."
             exit 1
           fi
+
+      - name: Sync autonomy runtime configuration
+        if: ${{ inputs.environment == 'production' }}
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "::error::MODSTORE_OPS_INGEST_TOKEN is required for production autonomy callbacks."
+            exit 1
+          fi
+          host="${FHD_PUSH_HOST:-119.27.178.147}"
+          user="${FHD_PUSH_USER:-root}"
+          key_file="${RUNNER_TEMP}/fhd_autonomy_config_key"
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key_file"
+          chmod 600 "$key_file"
+          printf '%s\n' "$AUTONOMY_WEBHOOK_TOKEN" | ssh -i "$key_file" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${user}@${host}" \
+            'set -euo pipefail
+             umask 077
+             IFS= read -r autonomy_token
+             test -n "$autonomy_token"
+             env_file=/root/fhd-full.env
+             tmp_file=$(mktemp /root/fhd-full.env.autonomy.XXXXXX)
+             if [ -f "$env_file" ]; then
+               grep -Ev "^(AUTONOMY_WEBHOOK_TOKEN|XCAGI_AUTONOMY_MEDIUM_RISK_POLICY|XCAGI_AUTONOMY_DATA_DIR)=" "$env_file" > "$tmp_file" || true
+             fi
+             printf "%s\n" \
+               "AUTONOMY_WEBHOOK_TOKEN=$autonomy_token" \
+               "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=require_human" \
+               "XCAGI_AUTONOMY_DATA_DIR=/var/lib/xcagi/autonomy" >> "$tmp_file"
+             install -m 600 "$tmp_file" "$env_file"
+             rm -f "$tmp_file"
+             install -d -m 700 /var/lib/xcagi/autonomy
+             systemctl restart fhd-full.service
+             systemctl is-active --quiet fhd-full.service'
+
+      - name: Resume approved autonomy action
+        id: authorize-autonomy
+        if: ${{ inputs.environment == 'production' && inputs.action_id != '' }}
+        env:
+          ACTION_ID: ${{ inputs.action_id }}
+          APPROVAL_ID: ${{ github.run_id }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "::error::AUTONOMY_CALLBACK_URL and MODSTORE_OPS_INGEST_TOKEN are required when action_id is set."
+            exit 1
+          fi
+          approver=""
+          while IFS= read -r statuses_url; do
+            approver="$(gh api "$statuses_url" | jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
+              [.[]
+                | select((.log_url // "") | contains($needle))
+                | select(.state == "in_progress" or .state == "queued")
+                | .creator.login][0] // empty
+            ')"
+            [ -n "$approver" ] && break
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" --jq '.[].statuses_url')
+          if [ -z "$approver" ]; then
+            echo "::error::Could not resolve the production environment reviewer; refusing to resume."
+            exit 1
+          fi
+          payload="$(jq -nc \
+            --arg action_id "$ACTION_ID" \
+            --arg approval_id "$APPROVAL_ID" \
+            --arg approver "$approver" \
+            --arg workflow_action "${{ inputs.action }}" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,workflow_action:$workflow_action,defer_execution:true,decision:"approved"}')"
+          curl --fail-with-body --silent --show-error \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $approver" \
+            --data "$payload"
+          echo "approver=$approver" >> "$GITHUB_OUTPUT"
 
       - name: SSH rolling restart / apply
         env:
@@ -80,8 +173,15 @@ jobs:
           set -euo pipefail
           export FHD_DEPLOY_ROOT="${DEPLOY_ROOT}"
           export FHD_MANIFEST_PATH="${MANIFEST}"
-          if [ "${ACTION}" = "restart-only" ]; then
-            if [ -f "${DEPLOY_ROOT}/docker-compose.yml" ]; then
+          if [ "${ACTION}" = "freeze-manifest" ]; then
+            touch "${MANIFEST}.frozen"
+          elif [ "${ACTION}" = "unfreeze-manifest" ]; then
+            rm -f "${MANIFEST}.frozen"
+          elif [ "${ACTION}" = "restart-only" ]; then
+            if [ "${TARGET_ENV}" = "production" ] && systemctl cat fhd-full.service >/dev/null 2>&1; then
+              systemctl restart fhd-full.service
+              systemctl is-active --quiet fhd-full.service
+            elif [ -f "${DEPLOY_ROOT}/docker-compose.yml" ]; then
               cd "${DEPLOY_ROOT}" && docker compose restart
             elif [ -f "${DEPLOY_ROOT}/compose.yml" ]; then
               cd "${DEPLOY_ROOT}" && docker compose -f compose.yml restart
@@ -119,3 +219,26 @@ jobs:
           done
           echo "::error::Health check failed after 10 attempts"
           exit 1
+
+      - name: Record completed autonomy action
+        if: ${{ inputs.environment == 'production' && inputs.action_id != '' && success() }}
+        env:
+          ACTION_ID: ${{ inputs.action_id }}
+          APPROVAL_ID: ${{ github.run_id }}
+          APPROVER: ${{ steps.authorize-autonomy.outputs.approver || github.actor }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          payload="$(jq -nc \
+            --arg action_id "$ACTION_ID" \
+            --arg approval_id "$APPROVAL_ID" \
+            --arg approver "$APPROVER" \
+            --arg workflow_action "${{ inputs.action }}" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,workflow_action:$workflow_action,decision:"executed",outcome:{workflow_action:$workflow_action}}')"
+          curl --fail-with-body --silent --show-error \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $APPROVER" \
+            --data "$payload"

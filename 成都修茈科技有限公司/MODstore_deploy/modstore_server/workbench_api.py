@@ -5068,6 +5068,28 @@ def _publish_vibe_skill_via_local_modstore(
     if artifact_kind not in ("mod", "employee_pack"):
         return {"ok": False, "error": f"不支持的 artifact: {artifact_kind}"}
 
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+    risk_decision = evaluate_risk(
+        "mod_auto_publish",
+        {
+            "human_approved": True,
+            "approved_by": f"workbench-user:{user_id}",
+            "trigger": "explicit_workbench_publish",
+        },
+        action_id=(
+            f"mod-publish:{user_id}:{pkg_id}:"
+            f"{str(publish_cfg.get('version') or '1.0.0')}"
+        ),
+        source="workbench.vibe_code_publish",
+    )
+    if not risk_decision.allowed:
+        return {
+            "ok": False,
+            "error": "autonomy_guard blocked publish",
+            "risk_decision": risk_decision.to_dict(),
+        }
+
     try:
         skill = coder.code_store.get_code_skill(skill_id)
     except KeyError:

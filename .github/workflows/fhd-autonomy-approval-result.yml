@@ -1,0 +1,73 @@
+name: FHD autonomy approval result
+
+on:
+  workflow_run:
+    workflows: ["fhd-deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+  deployments: read
+
+jobs:
+  report-rejection:
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark pending action rejected
+        env:
+          RUN_TITLE: ${{ github.event.workflow_run.display_title }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          APPROVAL_ID: ${{ github.event.workflow_run.id }}
+          APPROVER_FALLBACK: ${{ github.event.workflow_run.actor.login }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          action_id="$(printf '%s' "$RUN_TITLE" | sed -n 's/.* autonomy:\([^ ]*\).*/\1/p')"
+          workflow_action="$(printf '%s' "$RUN_TITLE" | awk '{print $3}')"
+          if [ -z "$action_id" ] || [ "$action_id" = "none" ]; then
+            echo "No pending autonomy action attached; nothing to reject."
+            exit 0
+          fi
+          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "::error::Autonomy callback configuration is missing."
+            exit 1
+          fi
+          approver=""
+          entered_execution="false"
+          while IFS= read -r statuses_url; do
+            statuses="$(gh api "$statuses_url")"
+            approver="$(jq -r --arg needle "/actions/runs/${RUN_ID}/" '
+              [.[] | select((.log_url // "") | contains($needle)) | select(.state == "failure") | .creator.login][0] // empty
+            ' <<< "$statuses")"
+            if jq -e --arg needle "/actions/runs/${RUN_ID}/" '
+              any(.[]; select((.log_url // "") | contains($needle)); .state == "in_progress")
+            ' <<< "$statuses" >/dev/null; then
+              entered_execution="true"
+            fi
+            [ -n "$approver" ] && break
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&per_page=100" --jq '.[].statuses_url')
+          approver="${approver:-$APPROVER_FALLBACK}"
+          decision="rejected"
+          reason="GitHub environment review rejected: $CONCLUSION"
+          if [ "$entered_execution" = "true" ]; then
+            decision="execution_failed"
+            reason="Approved workflow execution failed: $CONCLUSION"
+          fi
+          payload="$(jq -nc \
+            --arg action_id "$action_id" \
+            --arg approval_id "$APPROVAL_ID" \
+            --arg approver "$approver" \
+            --arg decision "$decision" \
+            --arg workflow_action "$workflow_action" \
+            --arg reason "$reason" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,decision:$decision,workflow_action:$workflow_action,reason:$reason,outcome:{reason:$reason}}')"
+          curl --fail-with-body --silent --show-error \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $approver" \
+            --data "$payload"

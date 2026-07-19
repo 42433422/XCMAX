@@ -1,0 +1,47 @@
+name: Employee Smoke Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "FHD/app/application/employee_runtime/**"
+      - "FHD/app/domain/autonomy/**"
+      - "FHD/config/risk_actions.registry.json"
+      - "FHD/config/autonomy_boundaries.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "FHD/app/application/employee_runtime/**"
+      - "FHD/app/domain/autonomy/**"
+      - "FHD/config/risk_actions.registry.json"
+      - "FHD/config/autonomy_boundaries.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  employee-smoke-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install server and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+      - name: Run employee risk smoke
+        run: |
+          pytest -q \
+            tests/application/test_employee_runtime_write_approval.py \
+            tests/test_application/test_write_approval_flow.py \
+            tests/domain/test_autonomy_guard.py

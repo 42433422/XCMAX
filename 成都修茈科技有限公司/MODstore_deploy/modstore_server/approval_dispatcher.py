@@ -58,7 +58,11 @@ def _notify_failure(subject: str, html: str) -> None:
         logger.exception("approval notify email failed")
 
 
-def deploy_staged_change(staged_id: int) -> Dict[str, Any]:
+def deploy_staged_change(
+    staged_id: int,
+    *,
+    human_approved_by: str = "",
+) -> Dict[str, Any]:
     """对单条待审记录执行 push + sync + probe（不写 token 状态）。"""
     sf = get_session_factory()
     with sf() as session:
@@ -137,7 +141,7 @@ def deploy_staged_change(staged_id: int) -> Dict[str, Any]:
     )
     if auto_pr:
         try:
-            _maybe_merge_pr(branch)
+            _maybe_merge_pr(branch, human_approved_by=human_approved_by)
         except Exception as _merr:
             logger.warning("auto PR merge failed for branch %s: %s", branch, _merr)
 
@@ -203,7 +207,10 @@ def handle_token_row(token_id: int, *, message_id: str = "") -> Dict[str, Any]:
             if not sid:
                 _finalize_token_audit(token_id, all_audit)
                 return {"ok": False, "error": "missing staged_change_id"}
-            res = deploy_staged_change(sid)
+            res = deploy_staged_change(
+                sid,
+                human_approved_by=f"ops-approval-token:{token_id}",
+            )
             if res.get("audit_ids"):
                 all_audit.extend(res["audit_ids"])
             _finalize_token_audit(token_id, all_audit)
@@ -233,7 +240,10 @@ def handle_token_row(token_id: int, *, message_id: str = "") -> Dict[str, Any]:
                 ids = [r.id for r in pending]
             results: List[Dict[str, Any]] = []
             for sid in ids:
-                res = deploy_staged_change(sid)
+                res = deploy_staged_change(
+                    sid,
+                    human_approved_by=f"ops-approval-token:{token_id}",
+                )
                 results.append(res)
                 if res.get("audit_ids"):
                     all_audit.extend(res["audit_ids"])
@@ -282,12 +292,26 @@ def _finalize_token_audit(token_id: int, audit_ids: List[int]) -> None:
             session.commit()
 
 
-def _maybe_merge_pr(branch: str) -> None:
+def _maybe_merge_pr(branch: str, *, human_approved_by: str = "") -> Dict[str, Any]:
     """尝试 merge 对应分支的 PR（CI 通过后）。"""
     import subprocess
 
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
     from modstore_server.integrations.ops_action_handlers import repo_root
 
+    decision = evaluate_risk(
+        "self_heal_pr_merge",
+        {
+            "human_approved": bool(human_approved_by),
+            "approved_by": human_approved_by,
+            "trigger": "ops_staged_change_merge",
+        },
+        action_id=f"staged-pr-merge:{branch}",
+        source="approval_dispatcher.auto_merge",
+    )
+    if not decision.allowed:
+        logger.info("autonomy_guard blocked PR merge for branch %s: %s", branch, decision.reason)
+        return {"ok": False, "risk_decision": decision.to_dict()}
     root = repo_root()
     proc = subprocess.run(
         ["gh", "pr", "merge", "--merge", "--auto", branch],
@@ -298,6 +322,8 @@ def _maybe_merge_pr(branch: str) -> None:
     )
     if proc.returncode != 0:
         logger.info("auto merge PR for branch %s: %s", branch, proc.stderr[:200])
+        return {"ok": False, "error": proc.stderr[:200], "risk_decision": decision.to_dict()}
+    return {"ok": True, "risk_decision": decision.to_dict()}
 
 
 def handle_incoming_approval_email(*, from_addr: str, body: str, message_id: str) -> Dict[str, Any]:

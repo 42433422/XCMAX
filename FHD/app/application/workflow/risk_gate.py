@@ -1,48 +1,38 @@
+"""Workflow facade; all decisions delegate to domain autonomy_guard."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any
+
+from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk, get_autonomy_guard
 
 from .types import PlanGraph
 
 
-@dataclass
-class RiskDecision:
-    requires_confirmation: bool
-    reason: str
-    blocking_nodes: list[str]
-
-
 class HybridRiskGate:
-    """
-    混合门控：
-    - low 自动执行
-    - medium/high 默认确认
-    - 可通过 context 显式放行（同会话记忆）
-    """
-
     def evaluate(self, plan: PlanGraph, context: dict[str, object]) -> RiskDecision:
-        auto_approve = bool(context.get("workflow_auto_approve_high_risk", False))
-        if auto_approve:
-            return RiskDecision(
-                requires_confirmation=False,
-                reason="用户会话已开启高风险自动执行",
-                blocking_nodes=[],
-            )
-
-        blocking_nodes: list[str] = []
+        node_decisions: list[tuple[str, RiskDecision]] = []
+        runtime_context: dict[str, Any] = dict(context or {})
         for node in plan.nodes:
-            if node.risk in ("medium", "high"):
-                blocking_nodes.append(node.node_id)
-
-        if blocking_nodes:
-            return RiskDecision(
-                requires_confirmation=True,
-                reason="计划包含中高风险写操作",
-                blocking_nodes=blocking_nodes,
+            decision = evaluate_risk(
+                {
+                    "action": f"{node.tool_id}.{node.action}",
+                    "tool_id": node.tool_id,
+                    "operation": node.action,
+                    "risk_level": node.risk,
+                    "action_id": f"{plan.plan_id}:{node.node_id}",
+                },
+                runtime_context,
+                action_id=f"{plan.plan_id}:{node.node_id}",
+                source="workflow",
             )
+            node_decisions.append((node.node_id, decision))
 
-        return RiskDecision(
-            requires_confirmation=False,
-            reason="计划仅包含低风险读操作",
-            blocking_nodes=[],
+        return get_autonomy_guard().aggregate_decisions(
+            node_decisions,
+            action=f"workflow:{plan.plan_id}",
+            action_id=plan.plan_id,
         )
+
+
+__all__ = ["HybridRiskGate", "RiskDecision"]

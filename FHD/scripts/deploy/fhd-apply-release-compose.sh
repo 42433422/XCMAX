@@ -21,6 +21,13 @@ if [[ -f "$SCRIPT_DIR/lib/deploy_emit.sh" ]]; then
 else
   deploy_emit() { echo "[deploy] $*"; }
 fi
+if [[ -f "$SCRIPT_DIR/lib/autonomy_gate.sh" ]]; then
+  # shellcheck source=lib/autonomy_gate.sh
+  . "$SCRIPT_DIR/lib/autonomy_gate.sh"
+else
+  echo "[deploy] ERROR: autonomy gate bridge is missing" >&2
+  exit 78
+fi
 export DEPLOY_SCRIPT_ID="fhd_apply_release_compose"
 
 DEPLOY_ROOT="${FHD_DEPLOY_ROOT:-/opt/fhd-full}"
@@ -64,9 +71,11 @@ resolve_local_image_ref() {
 }
 
 rollback_systemd() {
+  autonomy_evaluate_action "rollback_release" "rollback:systemd:${FHD_GIT_SHA:-unknown}"
   log "回滚至 systemd tarball 模式"
   docker compose "${COMPOSE_OPTS[@]}" down --remove-orphans 2>/dev/null || true
   systemctl enable fhd-full.service 2>/dev/null || true
+  autonomy_evaluate_action "restart_service" "restart:rollback-systemd:${FHD_GIT_SHA:-unknown}"
   systemctl restart fhd-full.service || systemctl start fhd-full.service || true
 }
 
@@ -122,6 +131,7 @@ rollback_compose() {
     log "WARN: 无上一 digest，跳过 compose 回滚"
     return 1
   fi
+  autonomy_evaluate_action "rollback_release" "rollback:compose:${digest:0:16}"
   log "compose 回滚至 digest=${digest:0:19}..."
   export FHD_API_IMAGE_DIGEST="$digest"
   export FHD_API_IMAGE_REF="${FHD_API_IMAGE}@${digest}"

@@ -160,6 +160,9 @@ DEFAULT_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
 
 FIXED_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
     "/api/im",
+    # GitHub Actions has no LAN identity. This ops surface performs its own
+    # fail-closed Bearer-token check on every non-health endpoint.
+    "/api/ops/autonomy",
     "/ws/im",
 )
 

@@ -54,6 +54,30 @@ def run_daily_vibe_line_execute_job(
     if raw in ("0", "false", "no", "off"):
         return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_VIBE_EXECUTE_ENABLED=0"}
 
+    from modstore_server.autonomy_guard_delegate import request_action
+
+    risk_decision, pending = request_action(
+        "daily_vibe_dispatch",
+        action_id=f"daily-vibe-dispatch:{_today_digest_day()}",
+        payload={"record_id": record_id, "force": force},
+        source="daily_vibe_line_execute.cron",
+    )
+    if not risk_decision.allowed:
+        pending_state = str((pending or {}).get("state") or "")
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": (
+                "autonomy_guard_rejected_or_terminal"
+                if pending_state in {"rejected", "executed", "execution_failed"}
+                else "autonomy_guard_pending_approval"
+                if risk_decision.requires_confirmation
+                else "autonomy_guard_blocked"
+            ),
+            "pending_approval": pending,
+            "risk_decision": risk_decision.to_dict(),
+        }
+
     from modstore_server.automation_primary import skip_daily_automation_result
 
     delegated = skip_daily_automation_result(job="daily_vibe_line_execute")
