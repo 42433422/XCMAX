@@ -4,8 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from modstore_server import daily_digest
-from modstore_server import approval_dispatcher
+from modstore_server import approval_dispatcher, daily_digest
 from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_execute_job
 
