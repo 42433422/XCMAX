@@ -21,7 +21,7 @@
     },
     "automation_surface": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 18,
       "component": "automation_surface",
       "evidence_files": [
         ".config/binstaller.yml",
@@ -31,16 +31,16 @@
         "AGENTS.md",
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md",
+        "CONTRIBUTING.ja-JP.md",
         "CONTRIBUTING.md",
+        "CONTRIBUTING.ru-RU.md",
         "Cargo.toml",
-        "HISTORY.md",
-        "README.it.md",
-        "README.ja.md"
+        "GOVERNANCE.md"
       ],
-      "gate_pass_count": 31,
-      "gate_pass_rate": 0.939,
+      "gate_pass_count": 33,
+      "gate_pass_rate": 0.943,
       "ready_for_deep_refactor": true,
-      "run_count": 33,
+      "run_count": 35,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -74,9 +74,11 @@
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 31,
+      "source_count": 32,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -90,6 +92,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
@@ -113,7 +116,7 @@
     },
     "benchmark_eval": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 16,
       "component": "benchmark_eval",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -123,16 +126,16 @@
         "Cargo.toml",
         "HISTORY.md",
         "README.it.md",
+        "README.ja-JP.md",
         "README.md",
-        "README_swebench.md",
-        "__tests__/prompts.test.ts",
-        "__tests__/reviewer.test.ts",
-        "action/encoder.json"
+        "README.ru-RU.md",
+        "README.zh-CN.md",
+        "README_swebench.md"
       ],
-      "gate_pass_count": 29,
-      "gate_pass_rate": 0.935,
+      "gate_pass_count": 31,
+      "gate_pass_rate": 0.939,
       "ready_for_deep_refactor": true,
-      "run_count": 31,
+      "run_count": 33,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -164,9 +167,11 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 29,
+      "source_count": 30,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -180,6 +185,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
@@ -201,7 +207,7 @@
     },
     "codebase_graph": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 14,
       "component": "codebase_graph",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -213,14 +219,14 @@
         "apps/dashboard/src/app/page.tsx",
         "biome.json",
         "docs/module-finder-archive/mf_35.py",
-        "frontend/package-lock.json",
-        "lib/graph.js",
-        "lm_eval/tasks/_yaml_loader.py"
+        "extensions/vscode/tsconfig.json",
+        "extensions/vscode/tsconfig.webview.json",
+        "frontend/package-lock.json"
       ],
-      "gate_pass_count": 12,
+      "gate_pass_count": 14,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 14,
       "run_ids": [
         "20260627204837-5df07f797f",
         "20260627205735-8afcde3e86",
@@ -233,14 +239,17 @@
         "20260627220056-7db1f7d16a",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 12,
+      "source_count": 13,
       "sources": [
         "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/PyCQA/bandit",
         "https://github.com/Review-scope/ReviewScope",
         "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/jaygaha/local-ai-pr-reviewer",
         "https://github.com/pahen/madge",
@@ -253,7 +262,7 @@
     },
     "command_contract": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 18,
       "component": "command_contract",
       "evidence_files": [
         ".config/binstaller.yml",
@@ -263,16 +272,16 @@
         "AGENTS.md",
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md",
+        "CONTRIBUTING.ja-JP.md",
         "CONTRIBUTING.md",
+        "CONTRIBUTING.ru-RU.md",
         "Cargo.toml",
-        "HISTORY.md",
-        "README.it.md",
-        "README.ja.md"
+        "GOVERNANCE.md"
       ],
-      "gate_pass_count": 31,
-      "gate_pass_rate": 0.939,
+      "gate_pass_count": 33,
+      "gate_pass_rate": 0.943,
       "ready_for_deep_refactor": true,
-      "run_count": 33,
+      "run_count": 35,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -306,9 +315,11 @@
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 31,
+      "source_count": 32,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -322,6 +333,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
@@ -375,7 +387,7 @@
     },
     "context_localization": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 17,
+      "code_graph_proof_count": 19,
       "component": "context_localization",
       "evidence_files": [
         ".goreleaser.yml",
@@ -384,17 +396,17 @@
         "AGENTS.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
+        "GOVERNANCE.md",
         "README.it.md",
+        "README.ja-JP.md",
         "README.ja.md",
         "README.md",
-        "README.zh-CN.md",
-        "README.zh-TW.md",
-        "README_swebench.md"
+        "README.ru-RU.md"
       ],
-      "gate_pass_count": 29,
-      "gate_pass_rate": 0.906,
+      "gate_pass_count": 31,
+      "gate_pass_rate": 0.912,
       "ready_for_deep_refactor": true,
-      "run_count": 32,
+      "run_count": 34,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -427,9 +439,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 29,
+      "source_count": 30,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -443,6 +457,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/bobbyroe/threejs-earth",
@@ -494,9 +509,10 @@
     },
     "context_partitioning": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 14,
       "component": "context_partitioning",
       "evidence_files": [
+        ".claude-plugin/marketplace.json",
         ".github/CONTRIBUTING.md",
         ".github/workflows/coverage.yml",
         ".github/workflows/quality.yml",
@@ -507,13 +523,12 @@
         "__tests__/prompts.test.ts",
         "action.yml",
         "apps/worker/src/lib/validation.ts",
-        "docs/ARCHITECTURE.md",
-        "docs/cli.md"
+        "docs/ARCHITECTURE.md"
       ],
-      "gate_pass_count": 18,
-      "gate_pass_rate": 0.947,
+      "gate_pass_count": 20,
+      "gate_pass_rate": 0.952,
       "ready_for_deep_refactor": true,
-      "run_count": 19,
+      "run_count": 21,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
@@ -533,15 +548,18 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 17,
+      "source_count": 18,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/PyCQA/bandit",
         "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/hevinbryant/ai-pr-reviewer",
@@ -558,7 +576,7 @@
     },
     "diff_hunk_review": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 8,
+      "code_graph_proof_count": 10,
       "component": "diff_hunk_review",
       "evidence_files": [
         ".github/CONTRIBUTING.md",
@@ -574,10 +592,10 @@
         "benchmarks/hybridgym_issuelocalize/eval_infer.py",
         "cli/src/semgrep/test.py"
       ],
-      "gate_pass_count": 17,
-      "gate_pass_rate": 0.895,
+      "gate_pass_count": 19,
+      "gate_pass_rate": 0.905,
       "ready_for_deep_refactor": true,
-      "run_count": 19,
+      "run_count": 21,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627171646-762694f28f",
@@ -597,15 +615,18 @@
         "20260627213722-6cc7a9e742",
         "20260627214507-0dc2a6fa81",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 17,
+      "source_count": 18,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
         "https://github.com/OpenHands/benchmarks",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -622,9 +643,10 @@
     },
     "diff_locality": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 14,
       "component": "diff_locality",
       "evidence_files": [
+        ".claude-plugin/marketplace.json",
         ".github/CONTRIBUTING.md",
         ".github/workflows/coverage.yml",
         ".github/workflows/quality.yml",
@@ -635,13 +657,12 @@
         "__tests__/prompts.test.ts",
         "action.yml",
         "apps/worker/src/lib/validation.ts",
-        "docs/ARCHITECTURE.md",
-        "docs/cli.md"
+        "docs/ARCHITECTURE.md"
       ],
-      "gate_pass_count": 18,
-      "gate_pass_rate": 0.947,
+      "gate_pass_count": 20,
+      "gate_pass_rate": 0.952,
       "ready_for_deep_refactor": true,
-      "run_count": 19,
+      "run_count": 21,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
@@ -661,15 +682,18 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 17,
+      "source_count": 18,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/OpenHands/software-agent-sdk",
         "https://github.com/PyCQA/bandit",
         "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/hevinbryant/ai-pr-reviewer",
@@ -703,7 +727,7 @@
     },
     "evaluation_loop": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 13,
+      "code_graph_proof_count": 15,
       "component": "evaluation_loop",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -713,16 +737,16 @@
         "Cargo.toml",
         "HISTORY.md",
         "README.it.md",
+        "README.ja-JP.md",
         "README.md",
-        "README_swebench.md",
-        "__tests__/prompts.test.ts",
-        "__tests__/reviewer.test.ts",
-        "agentless/test/run_reproduction_tests.py"
+        "README.ru-RU.md",
+        "README.zh-CN.md",
+        "README_swebench.md"
       ],
-      "gate_pass_count": 28,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 30,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 30,
+      "run_count": 32,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -753,9 +777,11 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 28,
+      "source_count": 29,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -769,6 +795,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -789,9 +816,10 @@
     },
     "file_grouping": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 16,
       "component": "file_grouping",
       "evidence_files": [
+        ".claude-plugin/marketplace.json",
         ".claude/plugins/repomix-explorer/agents/explorer.md",
         ".continue/agents/error-message-quality.md",
         ".continue/checks/update-agents-md.md",
@@ -802,13 +830,12 @@
         ".github/workflows/coverage.yml",
         ".github/workflows/quality.yml",
         ".github/workflows/testsuite.yml",
-        "AGENTS.md",
-        "CONTRIBUTING.md"
+        "AGENTS.md"
       ],
-      "gate_pass_count": 22,
-      "gate_pass_rate": 0.917,
+      "gate_pass_count": 24,
+      "gate_pass_rate": 0.923,
       "ready_for_deep_refactor": true,
-      "run_count": 24,
+      "run_count": 26,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -833,9 +860,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 22,
+      "source_count": 23,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -844,6 +873,7 @@
         "https://github.com/PyCQA/bandit",
         "https://github.com/Review-scope/ReviewScope",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
@@ -863,7 +893,7 @@
     },
     "impact_tracing": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 8,
+      "code_graph_proof_count": 10,
       "component": "impact_tracing",
       "evidence_files": [
         ".github/workflows/check-dist.yml",
@@ -871,18 +901,18 @@
         "AGENTS.md",
         "CHANGELOG.md",
         "CLAUDE.md",
+        "CONTRIBUTING.ja-JP.md",
+        "CONTRIBUTING.ko-KR.md",
         "CONTRIBUTING.md",
+        "CONTRIBUTING.ru-RU.md",
         "README.md",
         "__tests__/prompts.test.ts",
-        "action.yml",
-        "apps/dashboard/README.md",
-        "docker/mosaico/README.md",
-        "docker/mosaico/docker-compose.pr-agent.yml"
+        "action.yml"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 10,
       "run_ids": [
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
@@ -891,12 +921,15 @@
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/hevinbryant/ai-pr-reviewer",
         "https://github.com/semgrep/semgrep",
@@ -924,7 +957,7 @@
     },
     "model_adapter": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 18,
       "component": "model_adapter",
       "evidence_files": [
         ".github/FUNDING.YML",
@@ -932,18 +965,18 @@
         "AGENTS.md",
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md",
+        "CODE_OF_CONDUCT.md",
+        "CONTRIBUTING.ja-JP.md",
         "CONTRIBUTING.md",
+        "CONTRIBUTING.ru-RU.md",
         "HISTORY.md",
         "README.it.md",
-        "README.ja.md",
-        "README.md",
-        "README.zh-TW.md",
-        "README_swebench.md"
+        "README.ja-JP.md"
       ],
-      "gate_pass_count": 32,
-      "gate_pass_rate": 0.889,
+      "gate_pass_count": 34,
+      "gate_pass_rate": 0.895,
       "ready_for_deep_refactor": true,
-      "run_count": 36,
+      "run_count": 38,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -980,9 +1013,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 33,
+      "source_count": 34,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -996,6 +1031,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/bobbyroe/threejs-earth",
@@ -1038,7 +1074,7 @@
     },
     "provider_boundary": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 18,
       "component": "provider_boundary",
       "evidence_files": [
         ".github/FUNDING.YML",
@@ -1046,18 +1082,18 @@
         "AGENTS.md",
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md",
+        "CODE_OF_CONDUCT.md",
+        "CONTRIBUTING.ja-JP.md",
         "CONTRIBUTING.md",
+        "CONTRIBUTING.ru-RU.md",
         "HISTORY.md",
         "README.it.md",
-        "README.ja.md",
-        "README.md",
-        "README.zh-TW.md",
-        "README_swebench.md"
+        "README.ja-JP.md"
       ],
-      "gate_pass_count": 32,
-      "gate_pass_rate": 0.889,
+      "gate_pass_count": 34,
+      "gate_pass_rate": 0.895,
       "ready_for_deep_refactor": true,
-      "run_count": 36,
+      "run_count": 38,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1094,9 +1130,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 33,
+      "source_count": 34,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1110,6 +1148,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/bobbyroe/threejs-earth",
@@ -1135,7 +1174,7 @@
     },
     "regression_oracle": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 13,
+      "code_graph_proof_count": 15,
       "component": "regression_oracle",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -1145,16 +1184,16 @@
         "Cargo.toml",
         "HISTORY.md",
         "README.it.md",
+        "README.ja-JP.md",
         "README.md",
-        "README_swebench.md",
-        "__tests__/prompts.test.ts",
-        "__tests__/reviewer.test.ts",
-        "agentless/test/run_reproduction_tests.py"
+        "README.ru-RU.md",
+        "README.zh-CN.md",
+        "README_swebench.md"
       ],
-      "gate_pass_count": 28,
-      "gate_pass_rate": 0.933,
+      "gate_pass_count": 30,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 30,
+      "run_count": 32,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1185,9 +1224,11 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 28,
+      "source_count": 29,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1201,6 +1242,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -1253,7 +1295,7 @@
     },
     "review_pipeline": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 17,
+      "code_graph_proof_count": 19,
       "component": "review_pipeline",
       "evidence_files": [
         ".devcontainer/devcontainer.json",
@@ -1266,13 +1308,13 @@
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md",
         "CODE_OF_CONDUCT.md",
-        "CONTRIBUTING.md",
-        "HISTORY.md"
+        "CONTRIBUTING.ja-JP.md",
+        "CONTRIBUTING.md"
       ],
-      "gate_pass_count": 32,
-      "gate_pass_rate": 0.889,
+      "gate_pass_count": 34,
+      "gate_pass_rate": 0.895,
       "ready_for_deep_refactor": true,
-      "run_count": 36,
+      "run_count": 38,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1309,9 +1351,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 33,
+      "source_count": 34,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1325,6 +1369,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/bobbyroe/threejs-earth",
@@ -1350,26 +1395,26 @@
     },
     "risk_rule_engine": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 7,
+      "code_graph_proof_count": 9,
       "component": "risk_rule_engine",
       "evidence_files": [
         ".github/SECURITY.md",
         "AGENTS.md",
+        "ASSURANCE_CASE.md",
         "CHANGELOG.md",
+        "GOVERNANCE.md",
         "README.md",
         "Readme.md",
         "SECURITY.md",
         "apps/dashboard/src/app/page.tsx",
         "docs/ARCHITECTURE.md",
         "docs/USER_GUIDE.md",
-        "docs/docs/tools/review.md",
-        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
-        "frontend/src/components/ServicesSection.tsx"
+        "docs/docs/tools/review.md"
       ],
-      "gate_pass_count": 7,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 7,
+      "run_count": 9,
       "run_ids": [
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
@@ -1377,13 +1422,16 @@
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
-        "20260627235555-f62954c70a"
+        "20260627235555-f62954c70a",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 7,
+      "source_count": 8,
       "sources": [
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/Review-scope/ReviewScope",
         "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/semgrep/semgrep",
         "https://github.com/yamadashy/repomix",
@@ -1392,7 +1440,7 @@
     },
     "safety_policy": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 17,
+      "code_graph_proof_count": 19,
       "component": "safety_policy",
       "evidence_files": [
         ".github/CODE_OF_CONDUCT.md",
@@ -1408,10 +1456,10 @@
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md"
       ],
-      "gate_pass_count": 33,
-      "gate_pass_rate": 0.943,
+      "gate_pass_count": 35,
+      "gate_pass_rate": 0.946,
       "ready_for_deep_refactor": true,
-      "run_count": 35,
+      "run_count": 37,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1447,9 +1495,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 33,
+      "source_count": 34,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1463,6 +1513,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/continuedev/continue",
@@ -1507,7 +1558,7 @@
     },
     "semantic_index": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 8,
+      "code_graph_proof_count": 10,
       "component": "semantic_index",
       "evidence_files": [
         ".github/workflows/check-dist.yml",
@@ -1515,18 +1566,18 @@
         "AGENTS.md",
         "CHANGELOG.md",
         "CLAUDE.md",
+        "CONTRIBUTING.ja-JP.md",
+        "CONTRIBUTING.ko-KR.md",
         "CONTRIBUTING.md",
+        "CONTRIBUTING.ru-RU.md",
         "README.md",
         "__tests__/prompts.test.ts",
-        "action.yml",
-        "apps/dashboard/README.md",
-        "docker/mosaico/README.md",
-        "docker/mosaico/docker-compose.pr-agent.yml"
+        "action.yml"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 10,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 10,
       "run_ids": [
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
@@ -1535,12 +1586,15 @@
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 8,
+      "source_count": 9,
       "sources": [
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/hevinbryant/ai-pr-reviewer",
         "https://github.com/semgrep/semgrep",
@@ -1551,26 +1605,26 @@
     },
     "static_analysis": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 7,
+      "code_graph_proof_count": 9,
       "component": "static_analysis",
       "evidence_files": [
         ".github/SECURITY.md",
         "AGENTS.md",
+        "ASSURANCE_CASE.md",
         "CHANGELOG.md",
+        "GOVERNANCE.md",
         "README.md",
         "Readme.md",
         "SECURITY.md",
         "docs/ARCHITECTURE.md",
         "docs/USER_GUIDE.md",
         "docs/docs/tools/review.md",
-        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
-        "frontend/src/components/ServicesSection.tsx",
-        "metrics.md"
+        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md"
       ],
-      "gate_pass_count": 7,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 7,
+      "run_count": 9,
       "run_ids": [
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
@@ -1578,13 +1632,16 @@
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
-        "20260627235555-f62954c70a"
+        "20260627235555-f62954c70a",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 7,
+      "source_count": 8,
       "sources": [
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/Review-scope/ReviewScope",
         "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/semgrep/semgrep",
         "https://github.com/yamadashy/repomix",
@@ -1593,26 +1650,26 @@
     },
     "static_analysis_gate": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 7,
+      "code_graph_proof_count": 9,
       "component": "static_analysis_gate",
       "evidence_files": [
         ".github/SECURITY.md",
         "AGENTS.md",
+        "ASSURANCE_CASE.md",
         "CHANGELOG.md",
+        "GOVERNANCE.md",
         "README.md",
         "Readme.md",
         "SECURITY.md",
         "apps/dashboard/src/app/page.tsx",
         "docs/ARCHITECTURE.md",
         "docs/USER_GUIDE.md",
-        "docs/docs/tools/review.md",
-        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
-        "frontend/src/components/ServicesSection.tsx"
+        "docs/docs/tools/review.md"
       ],
-      "gate_pass_count": 7,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 7,
+      "run_count": 9,
       "run_ids": [
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
@@ -1620,13 +1677,16 @@
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
-        "20260627235555-f62954c70a"
+        "20260627235555-f62954c70a",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 7,
+      "source_count": 8,
       "sources": [
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/Review-scope/ReviewScope",
         "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/semgrep/semgrep",
         "https://github.com/yamadashy/repomix",
@@ -1635,7 +1695,7 @@
     },
     "workflow_ci": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 17,
+      "code_graph_proof_count": 19,
       "component": "workflow_ci",
       "evidence_files": [
         ".github/workflows/static.yml",
@@ -1651,10 +1711,10 @@
         "BUILD_DEPENDENCIES.md",
         "CHANGELOG.md"
       ],
-      "gate_pass_count": 33,
-      "gate_pass_rate": 0.892,
+      "gate_pass_count": 35,
+      "gate_pass_rate": 0.897,
       "ready_for_deep_refactor": true,
-      "run_count": 37,
+      "run_count": 39,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1692,9 +1752,11 @@
         "20260627222436-02cbea1e01",
         "20260627224409-8893c01ae8",
         "20260627235555-f62954c70a",
-        "20260628002727-95b76ebf47"
+        "20260628002727-95b76ebf47",
+        "20260719151233-f7cfdfd7bc",
+        "20260719151907-f7cfdfd7bc"
       ],
-      "source_count": 34,
+      "source_count": 35,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1708,6 +1770,7 @@
         "https://github.com/Sourish-19/ai-pr-reviewer",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/alibaba/open-code-review",
         "https://github.com/anc95/ChatGPT-CodeReview",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/bobbyroe/threejs-earth",
@@ -1744,9 +1807,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.892,
+      "gate_pass_rate": 0.897,
       "priority": "P0",
-      "supporting_source_count": 34,
+      "supporting_source_count": 35,
       "task_id": "retort-architecture-workflow-ci",
       "title": "Implement cumulative architecture pattern: workflow_ci"
     },
@@ -1760,9 +1823,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.889,
+      "gate_pass_rate": 0.895,
       "priority": "P0",
-      "supporting_source_count": 33,
+      "supporting_source_count": 34,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -1776,9 +1839,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.889,
+      "gate_pass_rate": 0.895,
       "priority": "P0",
-      "supporting_source_count": 33,
+      "supporting_source_count": 34,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -1792,9 +1855,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.889,
+      "gate_pass_rate": 0.895,
       "priority": "P0",
-      "supporting_source_count": 33,
+      "supporting_source_count": 34,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
     },
@@ -1808,9 +1871,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.943,
+      "gate_pass_rate": 0.946,
       "priority": "P0",
-      "supporting_source_count": 33,
+      "supporting_source_count": 34,
       "task_id": "retort-architecture-safety-policy",
       "title": "Implement cumulative architecture pattern: safety_policy"
     },
@@ -1824,9 +1887,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.939,
+      "gate_pass_rate": 0.943,
       "priority": "P0",
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -1840,9 +1903,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.939,
+      "gate_pass_rate": 0.943,
       "priority": "P0",
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "task_id": "retort-architecture-command-contract",
       "title": "Implement cumulative architecture pattern: command_contract"
     },
@@ -1856,9 +1919,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.935,
+      "gate_pass_rate": 0.939,
       "priority": "P0",
-      "supporting_source_count": 29,
+      "supporting_source_count": 30,
       "task_id": "retort-architecture-benchmark-eval",
       "title": "Implement cumulative architecture pattern: benchmark_eval"
     },
@@ -1872,9 +1935,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.906,
+      "gate_pass_rate": 0.912,
       "priority": "P0",
-      "supporting_source_count": 29,
+      "supporting_source_count": 30,
       "task_id": "retort-architecture-context-localization",
       "title": "Implement cumulative architecture pattern: context_localization"
     },
@@ -1888,9 +1951,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 28,
+      "supporting_source_count": 29,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -1904,9 +1967,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 28,
+      "supporting_source_count": 29,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -1920,9 +1983,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.917,
+      "gate_pass_rate": 0.923,
       "priority": "P0",
-      "supporting_source_count": 22,
+      "supporting_source_count": 23,
       "task_id": "retort-architecture-file-grouping",
       "title": "Implement cumulative architecture pattern: file_grouping"
     },
@@ -1936,9 +1999,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.947,
+      "gate_pass_rate": 0.952,
       "priority": "P0",
-      "supporting_source_count": 17,
+      "supporting_source_count": 18,
       "task_id": "retort-architecture-context-partitioning",
       "title": "Implement cumulative architecture pattern: context_partitioning"
     },
@@ -1952,9 +2015,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.895,
+      "gate_pass_rate": 0.905,
       "priority": "P0",
-      "supporting_source_count": 17,
+      "supporting_source_count": 18,
       "task_id": "retort-architecture-diff-hunk-review",
       "title": "Implement cumulative architecture pattern: diff_hunk_review"
     },
@@ -1968,9 +2031,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.947,
+      "gate_pass_rate": 0.952,
       "priority": "P0",
-      "supporting_source_count": 17,
+      "supporting_source_count": 18,
       "task_id": "retort-architecture-diff-locality",
       "title": "Implement cumulative architecture pattern: diff_locality"
     },
@@ -1986,7 +2049,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 12,
+      "supporting_source_count": 13,
       "task_id": "retort-architecture-codebase-graph",
       "title": "Implement cumulative architecture pattern: codebase_graph"
     },
@@ -2002,7 +2065,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-impact-tracing",
       "title": "Implement cumulative architecture pattern: impact_tracing"
     },
@@ -2018,7 +2081,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 8,
+      "supporting_source_count": 9,
       "task_id": "retort-architecture-semantic-index",
       "title": "Implement cumulative architecture pattern: semantic_index"
     },
@@ -2034,7 +2097,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 7,
+      "supporting_source_count": 8,
       "task_id": "retort-architecture-risk-rule-engine",
       "title": "Implement cumulative architecture pattern: risk_rule_engine"
     },
@@ -2050,7 +2113,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 7,
+      "supporting_source_count": 8,
       "task_id": "retort-architecture-static-analysis",
       "title": "Implement cumulative architecture pattern: static_analysis"
     },
@@ -2066,7 +2129,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 7,
+      "supporting_source_count": 8,
       "task_id": "retort-architecture-static-analysis-gate",
       "title": "Implement cumulative architecture pattern: static_analysis_gate"
     },
@@ -11622,12 +11685,955 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_review_policy.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_review_policy.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_review_rank_weights.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_review_rank_weights.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_hunk_semantic_rules.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_hunk_semantic_rules.py"
+      ],
+      "code_graph_proof": {
+        "changed_behavior_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_hunk_semantic_rules.py",
+          "retort_engine/absorbed_review_policy.py",
+          "retort_engine/absorbed_review_rank_weights.py",
+          "retort_engine/review_context_bias.py"
+        ],
+        "changed_focus_files": [
+          "retort_engine/absorbed_capabilities.py"
+        ],
+        "changed_hotspots": [],
+        "dependency_impact": {
+          "changed_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorbed_hunk_semantic_rules.py",
+            "retort_engine/absorbed_review_policy.py",
+            "retort_engine/absorbed_review_rank_weights.py",
+            "retort_engine/review_context_bias.py"
+          ],
+          "direct_dependencies": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/absorption_quality.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": [],
+            "retort_engine/absorbed_hunk_semantic_rules.py": [],
+            "retort_engine/absorbed_review_policy.py": [],
+            "retort_engine/absorbed_review_rank_weights.py": [],
+            "retort_engine/review_context_bias.py": []
+          },
+          "direct_dependents": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_capabilities.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": [],
+            "retort_engine/absorbed_hunk_semantic_rules.py": [
+              "tests/test_absorbed_hunk_semantic_rules.py"
+            ],
+            "retort_engine/absorbed_review_policy.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_review_policy.py"
+            ],
+            "retort_engine/absorbed_review_rank_weights.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_review_rank_weights.py"
+            ],
+            "retort_engine/review_context_bias.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_behavior_matrix_density.py",
+              "tests/test_review_context_bias.py"
+            ]
+          },
+          "impacted_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorbed_hunk_semantic_rules.py",
+            "retort_engine/absorbed_review_policy.py",
+            "retort_engine/absorbed_review_rank_weights.py",
+            "retort_engine/absorption_quality.py",
+            "retort_engine/pr_review.py",
+            "retort_engine/review_context_bias.py",
+            "tests/test_absorbed_capabilities.py",
+            "tests/test_absorbed_hunk_semantic_rules.py",
+            "tests/test_absorbed_review_policy.py",
+            "tests/test_absorbed_review_rank_weights.py",
+            "tests/test_behavior_matrix_density.py",
+            "tests/test_review_context_bias.py"
+          ],
+          "touched_cycles": []
+        },
+        "evidence": {
+          "max_files": 400,
+          "project": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine",
+          "run_id": "20260719151233-f7cfdfd7bc",
+          "scope": "per_real_absorption_run",
+          "style": "deterministic_post_absorption_code_graph"
+        },
+        "focus_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/capability_audit.py",
+          "retort_engine/cli.py",
+          "retort_engine/llm_absorption_evidence.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/review_pipeline.py",
+          "tests/test_core_review_score_matrix.py",
+          "tests/test_pr_review.py",
+          "tests/test_real_absorption_helpers.py"
+        ],
+        "hotspot_files": [
+          "retort_engine/absorption.py",
+          "retort_engine/cli.py",
+          "retort_engine/contracts.py",
+          "retort_engine/core.py",
+          "retort_engine/cross_domain_absorption_replay.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/service.py",
+          "tests/test_retort_engine.py"
+        ],
+        "passed": true,
+        "per_run_required": true,
+        "run_id": "20260719151233-f7cfdfd7bc",
+        "status": "proved",
+        "summary": {
+          "changed_behavior_file_count": 6,
+          "changed_file_count": 13,
+          "changed_focus_file_count": 1,
+          "changed_hotspot_count": 0,
+          "dependency_cycle_touch_count": 0,
+          "dependency_impact_file_count": 14,
+          "graph_status": "ready"
+        }
+      },
+      "code_graph_proved": true,
+      "components": [
+        {
+          "component": "context_localization",
+          "depth_score": 75,
+          "evidence_files": [
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "ROADMAP.md",
+            "extensions/vscode/tsconfig.json",
+            "extensions/vscode/tsconfig.webview.json",
+            "internal/config/rules/rule_docs/python.md"
+          ],
+          "signals": [
+            "codebase_graph",
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 67,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "codebase_graph",
+          "depth_score": 61,
+          "evidence_files": [
+            "extensions/vscode/tsconfig.json",
+            "extensions/vscode/tsconfig.webview.json",
+            "internal/config/rules/rule_docs/python.md",
+            "internal/config/template/scan_template.json",
+            "pages/README.md",
+            "pages/src/content/docs/index.ts"
+          ],
+          "signals": [
+            "codebase_graph"
+          ]
+        },
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "static_analysis_gate",
+          "depth_score": 58,
+          "evidence_files": [
+            "ASSURANCE_CASE.md",
+            "GOVERNANCE.md",
+            "SECURITY.md",
+            "internal/diff/gitignore.go",
+            "internal/scan/provider.go"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "static_analysis",
+          "depth_score": 58,
+          "evidence_files": [
+            "ASSURANCE_CASE.md",
+            "GOVERNANCE.md",
+            "SECURITY.md",
+            "internal/diff/gitignore.go",
+            "internal/scan/provider.go"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "semantic_index",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ko-KR.md",
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.md"
+          ],
+          "signals": [
+            "semantic_index"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "risk_rule_engine",
+          "depth_score": 58,
+          "evidence_files": [
+            "ASSURANCE_CASE.md",
+            "GOVERNANCE.md",
+            "SECURITY.md",
+            "internal/diff/gitignore.go",
+            "internal/scan/provider.go"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "README.zh-CN.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "impact_tracing",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ko-KR.md",
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.md"
+          ],
+          "signals": [
+            "semantic_index"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 58,
+          "evidence_files": [
+            ".claude-plugin/marketplace.json",
+            "README.md",
+            "internal/agent/agent.go",
+            "internal/scan/agent.go",
+            "internal/viewer/store_load_test.go"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "README.zh-CN.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 58,
+          "evidence_files": [
+            ".claude-plugin/marketplace.json",
+            "README.md",
+            "internal/diff/hunk.go",
+            "internal/diff/resolver.go",
+            "internal/diff/resolver_test.go"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_hunk_review",
+          "depth_score": 58,
+          "evidence_files": [
+            "action.yml",
+            "internal/diff/hunk.go",
+            "internal/diff/resolver.go",
+            "internal/diff/resolver_test.go",
+            "plugins/open-code-review/skills/open-code-review/SKILL.md"
+          ],
+          "signals": [
+            "diff_hunk_review"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 58,
+          "evidence_files": [
+            ".claude-plugin/marketplace.json",
+            "README.md",
+            "internal/diff/hunk.go",
+            "internal/diff/resolver.go",
+            "internal/diff/resolver_test.go"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "README.zh-CN.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        }
+      ],
+      "created_at": "2026-07-19T15:13:45Z",
+      "external_file_count": 518,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review",
+      "gate_count": 14,
+      "gates_passed": true,
+      "git_revision": "41620dc723ef447324e72cc8c2000be2857aaaa3",
+      "run_id": "20260719151233-f7cfdfd7bc",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "codebase_graph",
+        "plugin_surface",
+        "multi_provider",
+        "safety_policy",
+        "static_analysis",
+        "semantic_index",
+        "atmosphere_shader",
+        "procedural_surface",
+        "webgl_scene",
+        "elevation_bump_map",
+        "specular_ocean"
+      ],
+      "source": "https://github.com/alibaba/open-code-review",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "diff_hunk_review",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_review_policy.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_review_rank_weights.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_review_rank_weights.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_hunk_semantic_rules.py",
+        "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_hunk_semantic_rules.py"
+      ],
+      "code_graph_proof": {
+        "changed_behavior_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_hunk_semantic_rules.py",
+          "retort_engine/absorbed_review_policy.py",
+          "retort_engine/absorbed_review_rank_weights.py",
+          "retort_engine/review_context_bias.py"
+        ],
+        "changed_focus_files": [
+          "retort_engine/absorbed_capabilities.py"
+        ],
+        "changed_hotspots": [],
+        "dependency_impact": {
+          "changed_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorbed_hunk_semantic_rules.py",
+            "retort_engine/absorbed_review_policy.py",
+            "retort_engine/absorbed_review_rank_weights.py",
+            "retort_engine/review_context_bias.py"
+          ],
+          "direct_dependencies": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/absorption_quality.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": [],
+            "retort_engine/absorbed_hunk_semantic_rules.py": [],
+            "retort_engine/absorbed_review_policy.py": [],
+            "retort_engine/absorbed_review_rank_weights.py": [],
+            "retort_engine/review_context_bias.py": []
+          },
+          "direct_dependents": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_capabilities.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": [],
+            "retort_engine/absorbed_hunk_semantic_rules.py": [
+              "tests/test_absorbed_hunk_semantic_rules.py"
+            ],
+            "retort_engine/absorbed_review_policy.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_review_policy.py"
+            ],
+            "retort_engine/absorbed_review_rank_weights.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_review_rank_weights.py"
+            ],
+            "retort_engine/review_context_bias.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_behavior_matrix_density.py",
+              "tests/test_review_context_bias.py"
+            ]
+          },
+          "impacted_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorbed_hunk_semantic_rules.py",
+            "retort_engine/absorbed_review_policy.py",
+            "retort_engine/absorbed_review_rank_weights.py",
+            "retort_engine/absorption_quality.py",
+            "retort_engine/pr_review.py",
+            "retort_engine/review_context_bias.py",
+            "tests/test_absorbed_capabilities.py",
+            "tests/test_absorbed_hunk_semantic_rules.py",
+            "tests/test_absorbed_review_policy.py",
+            "tests/test_absorbed_review_rank_weights.py",
+            "tests/test_behavior_matrix_density.py",
+            "tests/test_review_context_bias.py"
+          ],
+          "touched_cycles": []
+        },
+        "evidence": {
+          "max_files": 400,
+          "project": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine",
+          "run_id": "20260719151907-f7cfdfd7bc",
+          "scope": "per_real_absorption_run",
+          "style": "deterministic_post_absorption_code_graph"
+        },
+        "focus_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/capability_audit.py",
+          "retort_engine/cli.py",
+          "retort_engine/llm_absorption_evidence.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/review_pipeline.py",
+          "tests/test_core_review_score_matrix.py",
+          "tests/test_pr_review.py",
+          "tests/test_real_absorption_helpers.py"
+        ],
+        "hotspot_files": [
+          "retort_engine/absorption.py",
+          "retort_engine/cli.py",
+          "retort_engine/contracts.py",
+          "retort_engine/core.py",
+          "retort_engine/cross_domain_absorption_replay.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/service.py",
+          "tests/test_retort_engine.py"
+        ],
+        "passed": true,
+        "per_run_required": true,
+        "run_id": "20260719151907-f7cfdfd7bc",
+        "status": "proved",
+        "summary": {
+          "changed_behavior_file_count": 6,
+          "changed_file_count": 10,
+          "changed_focus_file_count": 1,
+          "changed_hotspot_count": 0,
+          "dependency_cycle_touch_count": 0,
+          "dependency_impact_file_count": 14,
+          "graph_status": "ready"
+        }
+      },
+      "code_graph_proved": true,
+      "components": [
+        {
+          "component": "context_localization",
+          "depth_score": 75,
+          "evidence_files": [
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "ROADMAP.md",
+            "extensions/vscode/tsconfig.json",
+            "extensions/vscode/tsconfig.webview.json",
+            "internal/config/rules/rule_docs/python.md"
+          ],
+          "signals": [
+            "codebase_graph",
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 67,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "codebase_graph",
+          "depth_score": 61,
+          "evidence_files": [
+            "extensions/vscode/tsconfig.json",
+            "extensions/vscode/tsconfig.webview.json",
+            "internal/config/rules/rule_docs/python.md",
+            "internal/config/template/scan_template.json",
+            "pages/README.md",
+            "pages/src/content/docs/index.ts"
+          ],
+          "signals": [
+            "codebase_graph"
+          ]
+        },
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "static_analysis_gate",
+          "depth_score": 58,
+          "evidence_files": [
+            "ASSURANCE_CASE.md",
+            "GOVERNANCE.md",
+            "SECURITY.md",
+            "internal/diff/gitignore.go",
+            "internal/scan/provider.go"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "static_analysis",
+          "depth_score": 58,
+          "evidence_files": [
+            "ASSURANCE_CASE.md",
+            "GOVERNANCE.md",
+            "SECURITY.md",
+            "internal/diff/gitignore.go",
+            "internal/scan/provider.go"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "semantic_index",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ko-KR.md",
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.md"
+          ],
+          "signals": [
+            "semantic_index"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "risk_rule_engine",
+          "depth_score": 58,
+          "evidence_files": [
+            "ASSURANCE_CASE.md",
+            "GOVERNANCE.md",
+            "SECURITY.md",
+            "internal/diff/gitignore.go",
+            "internal/scan/provider.go"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "README.zh-CN.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "impact_tracing",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ko-KR.md",
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.ru-RU.md",
+            "README.md"
+          ],
+          "signals": [
+            "semantic_index"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 58,
+          "evidence_files": [
+            ".claude-plugin/marketplace.json",
+            "README.md",
+            "internal/agent/agent.go",
+            "internal/scan/agent.go",
+            "internal/viewer/store_load_test.go"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "README.zh-CN.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 58,
+          "evidence_files": [
+            ".claude-plugin/marketplace.json",
+            "README.md",
+            "internal/diff/hunk.go",
+            "internal/diff/resolver.go",
+            "internal/diff/resolver_test.go"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_hunk_review",
+          "depth_score": 58,
+          "evidence_files": [
+            "action.yml",
+            "internal/diff/hunk.go",
+            "internal/diff/resolver.go",
+            "internal/diff/resolver_test.go",
+            "plugins/open-code-review/skills/open-code-review/SKILL.md"
+          ],
+          "signals": [
+            "diff_hunk_review"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 58,
+          "evidence_files": [
+            ".claude-plugin/marketplace.json",
+            "README.md",
+            "internal/diff/hunk.go",
+            "internal/diff/resolver.go",
+            "internal/diff/resolver_test.go"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            "README.ja-JP.md",
+            "README.md",
+            "README.ru-RU.md",
+            "README.zh-CN.md",
+            "ROADMAP.md"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "CONTRIBUTING.ja-JP.md",
+            "CONTRIBUTING.ru-RU.md",
+            "GOVERNANCE.md",
+            "README.ja-JP.md",
+            "README.ru-RU.md"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        }
+      ],
+      "created_at": "2026-07-19T15:20:26Z",
+      "external_file_count": 518,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review",
+      "gate_count": 14,
+      "gates_passed": true,
+      "git_revision": "41620dc723ef447324e72cc8c2000be2857aaaa3",
+      "run_id": "20260719151907-f7cfdfd7bc",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "codebase_graph",
+        "plugin_surface",
+        "multi_provider",
+        "safety_policy",
+        "static_analysis",
+        "semantic_index",
+        "atmosphere_shader",
+        "procedural_surface",
+        "webgl_scene",
+        "elevation_bump_map",
+        "specular_ocean"
+      ],
+      "source": "https://github.com/alibaba/open-code-review",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "diff_hunk_review",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 29,
-    "gate_passed_run_count": 33,
+    "gate_passed_run_count": 35,
     "ready_component_count": 24,
     "ready_components": [
       "workflow_ci",
@@ -11640,7 +12646,7 @@
       "repo_map_context"
     ],
     "repeated_component_count": 26,
-    "run_count": 37,
-    "source_count": 34
+    "run_count": 39,
+    "source_count": 35
   }
 }
