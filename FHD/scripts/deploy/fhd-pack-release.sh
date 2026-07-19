@@ -76,7 +76,7 @@ RSYNC_EXCLUDES=(
   --exclude '.env.*'
 )
 
-for item in app XCAGI alembic alembic.ini mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
   src="$FHD_ROOT/$item"
   if [[ -e "$src" ]]; then
     rsync -a "${RSYNC_EXCLUDES[@]}" "$src" "$STAGING/"
@@ -91,7 +91,9 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
   "$SCRIPT_DIR/online_update_daemon.py" \
   "$STAGING/scripts/deploy/"
-cp "$SCRIPT_DIR/lib/deploy_emit.sh" "$STAGING/scripts/deploy/lib/"
+cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
+  "$SCRIPT_DIR/lib/autonomy_gate.sh" \
+  "$STAGING/scripts/deploy/lib/"
 cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
 
 COPYFILE_DISABLE=1 tar -C "$STAGING" -czf "$TARBALL" .
