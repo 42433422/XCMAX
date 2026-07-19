@@ -50,6 +50,7 @@ server-api = [
     "email-validator>=2.0.0",
     "passlib[bcrypt]>=1.7.4",
     "PyJWT>=2.8.0",
+    "PyYAML>=6.0.2",
     # OpenTelemetry (NeuroBus tracer 底层)
     "opentelemetry-api>=1.24.0",
     "opentelemetry-sdk>=1.24.0",

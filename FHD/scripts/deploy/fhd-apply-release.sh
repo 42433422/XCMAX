@@ -18,6 +18,13 @@ if [[ -f "$SCRIPT_DIR/lib/deploy_emit.sh" ]]; then
 else
   deploy_emit() { echo "[deploy] $*"; }
 fi
+if [[ -f "$SCRIPT_DIR/lib/autonomy_gate.sh" ]]; then
+  # shellcheck source=lib/autonomy_gate.sh
+  . "$SCRIPT_DIR/lib/autonomy_gate.sh"
+else
+  echo "[deploy] ERROR: autonomy gate bridge is missing" >&2
+  exit 78
+fi
 export DEPLOY_SCRIPT_ID="fhd_apply_release"
 
 DEPLOY_ROOT="${FHD_DEPLOY_ROOT:-/opt/fhd-full}"
@@ -63,7 +70,7 @@ mkdir -p "$BACKUP_ROOT"
 BACKUP="$BACKUP_ROOT/pre-$TS"
 mkdir -p "$BACKUP"
 
-for item in app XCAGI alembic alembic.ini mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$DEPLOY_ROOT/$item" ]]; then
     rsync -a "$DEPLOY_ROOT/$item" "$BACKUP/"
   fi
@@ -74,12 +81,14 @@ fi
 log "已备份至 $BACKUP"
 
 rollback_from_backup() {
+  autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
   log "执行回滚: $BACKUP"
-  for item in app XCAGI alembic alembic.ini mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+  for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
       rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/"
     fi
   done
+  autonomy_evaluate_action "restart_service" "restart:rollback:${TARBALL_SHA256:0:16}"
   systemctl restart "$SERVICE" || true
 }
 
@@ -87,7 +96,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/fhd-apply.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 tar -xzf "$TARBALL" -C "$TMP"
 
-for item in app XCAGI alembic alembic.ini mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
@@ -119,17 +128,16 @@ if [[ "${FHD_SKIP_PIP:-0}" != "1" ]]; then
 fi
 
 if [[ "${FHD_RUN_MIGRATIONS:-0}" == "1" && -f "$DEPLOY_ROOT/alembic.ini" ]]; then
-  deploy_emit migrate started
-  # shellcheck disable=SC1091
-  . "$VENV/bin/activate"
-  (cd "$DEPLOY_ROOT" && alembic upgrade head) || {
-    log "WARN: alembic upgrade 失败，请人工检查"
-    deploy_emit migrate failed
-  }
-  deploy_emit migrate ok
+  log "ERROR: autonomous db migration requested; autonomy boundary must block it"
+  if autonomy_evaluate_action "db_migration" "migration:${TARBALL_SHA256:0:16}"; then
+    log "ERROR: prohibited db_migration unexpectedly passed autonomy_guard"
+  fi
+  deploy_emit migrate failed "prohibited_by_autonomy_boundary"
+  exit 77
 fi
 
 deploy_emit restart started "service=$SERVICE"
+autonomy_evaluate_action "restart_service" "restart:release:${TARBALL_SHA256:0:16}"
 systemctl restart "$SERVICE"
 sleep "${FHD_HEALTH_INITIAL_SLEEP:-15}"
 

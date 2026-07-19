@@ -496,6 +496,9 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: read
     concurrency:
       group: cvm-push-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
       cancel-in-progress: true
@@ -510,6 +513,43 @@ jobs:
         with:
           name: fhd-server-release-with-image
           path: FHD/dist/deploy
+
+      - name: Stamp production environment approval into manifest
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') || (github.event_name == 'push' && contains(github.ref, '-rc'))) == false }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVAL_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          approver=""
+          while IFS= read -r statuses_url; do
+            approver="$(gh api "$statuses_url" | jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
+              [.[] | select((.log_url // "") | contains($needle)) | select(.state == "in_progress" or .state == "queued") | .creator.login][0] // empty
+            ')"
+            [ -n "$approver" ] && break
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" --jq '.[].statuses_url')
+          if [ -z "$approver" ]; then
+            echo "::error::Could not resolve the production environment reviewer."
+            exit 1
+          fi
+          python3 - <<'PY' "dist/deploy/fhd-manifest.json" "$approver" "$APPROVAL_ID"
+          import json
+          import sys
+
+          path, approver, approval_id = sys.argv[1:4]
+          with open(path, encoding="utf-8") as stream:
+              doc = json.load(stream)
+          doc["autonomy_approval"] = {
+              "approved_by": approver,
+              "approval_id": approval_id,
+              "environment": "production",
+              "source": "github_environment",
+          }
+          with open(path, "w", encoding="utf-8") as stream:
+              json.dump(doc, stream, ensure_ascii=False, indent=2)
+              stream.write("\n")
+          print(f"Stamped production approval by {approver}.")
+          PY
 
       - name: Push to CVM update server
         env:

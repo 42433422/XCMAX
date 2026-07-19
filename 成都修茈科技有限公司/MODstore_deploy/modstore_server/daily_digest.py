@@ -168,6 +168,21 @@ def count_on_duty_employees() -> int:
     return len(all_planned_employee_ids())
 
 
+def autonomy_decisions_digest_html() -> str:
+    """Render the last 24h autonomy/veto summary from the shared append-only store."""
+
+    try:
+        from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+        ensure_fhd_on_path()
+        from app.domain.autonomy.audit_log import autonomy_daily_digest_html
+
+        return autonomy_daily_digest_html(days=1)
+    except Exception:
+        logger.debug("daily digest: FHD autonomy audit summary unavailable", exc_info=True)
+        return ""
+
+
 def count_catalog_employee_packs(session) -> int:
     """Catalog 库内 employee_pack 条目总数（含市场/工作流包，可大于编制数）。"""
     return int(
@@ -297,6 +312,7 @@ def _render_digest_document(
     kpi_cards_html: str = "",
     imap_block: str = "",
     audit_block: str = "",
+    autonomy_block: str = "",
     consistency_block: str = "",
     tls_cert_section_html: str = "",
     staged_section_html: str = "",
@@ -333,6 +349,7 @@ def _render_digest_document(
 
 {imap_block}
 {audit_block}
+{autonomy_block}
 
 <div style="padding:14px 16px 4px">
   {kpi_cards_html}
@@ -1650,6 +1667,15 @@ def build_digest_html(
 </div>
 """
 
+    autonomy_html = autonomy_decisions_digest_html()
+    autonomy_block = ""
+    if autonomy_html:
+        autonomy_block = f"""
+<div style="padding:10px 16px 0">
+  {autonomy_html}
+</div>
+"""
+
     meeting_block = ""
     if (meeting_minutes_html or "").strip():
         meeting_block = f"""
@@ -1674,6 +1700,7 @@ def build_digest_html(
         kpi_cards_html=kpi_cards_html,
         imap_block=imap_block,
         audit_block=audit_block,
+        autonomy_block=autonomy_block,
         consistency_block=consistency_block,
         tls_cert_section_html=tls_cert_section_html,
         staged_section_html=staged_section_html,
@@ -1867,6 +1894,25 @@ def run_daily_digest_email() -> Dict[str, Any]:
     if raw in ("0", "false", "no", "off"):
         logger.info("daily digest disabled by MODSTORE_DAILY_DIGEST_ENABLED")
         return {"ok": True, "skipped": True, "reason": "MODSTORE_DAILY_DIGEST_ENABLED=0"}
+
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+    risk_decision = evaluate_risk(
+        "daily_digest",
+        action_id=f"daily-digest:{datetime.now(timezone.utc).date().isoformat()}",
+        source="daily_digest.cron",
+    )
+    if not risk_decision.allowed:
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": (
+                "autonomy_guard_pending_approval"
+                if risk_decision.requires_confirmation
+                else "autonomy_guard_blocked"
+            ),
+            "risk_decision": risk_decision.to_dict(),
+        }
 
     from modstore_server.automation_primary import skip_daily_automation_result
 

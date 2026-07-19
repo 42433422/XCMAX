@@ -1,0 +1,255 @@
+"""Authenticated approval callbacks for autonomous actions."""
+
+from __future__ import annotations
+
+import hmac
+import os
+import re
+from typing import Any
+
+from fastapi import APIRouter, Header, HTTPException, Request
+
+from app.application.autonomy.approval_resume import (
+    ApprovalStateError,
+    complete_action,
+    get_action_state,
+    list_pending_actions,
+    mark_approval_requested,
+    reject_action,
+    request_action,
+    resume_action,
+)
+from app.domain.autonomy.autonomy_guard import ProhibitedActionError, evaluate_risk
+
+router = APIRouter(prefix="/api/ops/autonomy", tags=["ops-autonomy"])
+
+_WORKFLOW_ACTIONS = {
+    "apply_release_to_cvm": "apply-latest",
+    "restart_service": "restart-only",
+    "freeze_manifest": "freeze-manifest",
+    "unfreeze_manifest": "unfreeze-manifest",
+}
+_ACTION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+
+def _validated_action_id(value: Any, *, required: bool = False) -> str | None:
+    action_id = str(value or "").strip()
+    if not action_id and not required:
+        return None
+    if not _ACTION_ID_RE.fullmatch(action_id):
+        raise HTTPException(
+            status_code=400,
+            detail="action_id must be 1-128 characters from A-Z a-z 0-9 . _ : -",
+        )
+    return action_id
+
+
+def _expected_token() -> str:
+    return (
+        os.environ.get("AUTONOMY_WEBHOOK_TOKEN")
+        or os.environ.get("MODSTORE_OPS_INGEST_TOKEN")
+        or ""
+    ).strip()
+
+
+def _auth(authorization: str | None, x_autonomy_token: str | None) -> None:
+    expected = _expected_token()
+    supplied = str(x_autonomy_token or "").strip()
+    bearer = str(authorization or "").strip()
+    if bearer.lower().startswith("bearer "):
+        supplied = bearer[7:].strip()
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="invalid autonomy webhook token")
+
+
+@router.get("/health")
+async def autonomy_approval_health() -> dict[str, Any]:
+    return {"ok": True, "service": "ops-autonomy-approval"}
+
+
+@router.get("/actions/pending")
+async def pending_autonomy_actions(
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+) -> dict[str, Any]:
+    _auth(authorization, x_autonomy_token)
+    items = list_pending_actions()
+    return {"ok": True, "count": len(items), "items": items}
+
+
+@router.post("/actions/evaluate")
+async def evaluate_autonomy_action(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+) -> dict[str, Any]:
+    """Evaluate a proposed action without invoking an executor."""
+
+    _auth(authorization, x_autonomy_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    action = str(body.get("action") or "").strip()
+    if not action:
+        raise HTTPException(status_code=400, detail="action is required")
+    try:
+        result = evaluate_risk(
+            action,
+            action_id=_validated_action_id(body.get("action_id")),
+            source="ops_autonomy.evaluate",
+        )
+    except ProhibitedActionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {"ok": True, "decision": result.to_dict()}
+
+
+@router.post("/actions/request")
+async def request_autonomy_action(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+) -> dict[str, Any]:
+    """Persist a deploy action for the GitHub environment dispatcher."""
+
+    _auth(authorization, x_autonomy_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    action = str(body.get("action") or "").strip()
+    workflow_action = _WORKFLOW_ACTIONS.get(action)
+    if not workflow_action:
+        raise HTTPException(status_code=400, detail="action has no GitHub deploy executor")
+    action_id = _validated_action_id(body.get("action_id"))
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    decision, pending = request_action(
+        action,
+        action_id=action_id,
+        payload={**payload, "workflow_action": workflow_action},
+        source="ops_autonomy.request",
+        executor_name="github_deploy",
+    )
+    if pending is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"action does not require GitHub approval: {decision.decision}",
+        )
+    return {
+        "ok": True,
+        "state": pending["state"],
+        "action_id": pending["action_id"],
+        "workflow_action": workflow_action,
+        "decision": decision.to_dict(),
+    }
+
+
+@router.post("/github-approval")
+async def github_approval_callback(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+    x_github_actor: str | None = Header(default=None, alias="X-GitHub-Actor"),
+) -> dict[str, Any]:
+    """Resume or reject a persisted action after environment review."""
+
+    _auth(authorization, x_autonomy_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    review = body.get("review") if isinstance(body.get("review"), dict) else {}
+    reviewer = review.get("reviewer") if isinstance(review.get("reviewer"), dict) else {}
+    action_id = _validated_action_id(body.get("action_id"), required=True)
+    decision = (
+        str(body.get("decision") or review.get("state") or body.get("state") or "").strip().lower()
+    )
+    approver = str(body.get("approver") or x_github_actor or reviewer.get("login") or "").strip()
+    approval_id = str(body.get("approval_id") or body.get("deployment_id") or "").strip()
+    if not decision or not approver:
+        raise HTTPException(status_code=400, detail="action_id, decision and approver are required")
+    current = get_action_state(action_id)
+    workflow_action = str(body.get("workflow_action") or "").strip()
+    expected = _WORKFLOW_ACTIONS.get(str((current or {}).get("action") or ""))
+    try:
+        if (
+            expected
+            and decision
+            in {
+                "approved",
+                "approve",
+                "accepted",
+                "executed",
+                "success",
+                "completed",
+                "execution_failed",
+                "failed",
+                "failure",
+            }
+            and not workflow_action
+        ):
+            raise ApprovalStateError("workflow_action is required for deploy action callbacks")
+        if expected and workflow_action and workflow_action != expected:
+            raise ApprovalStateError(
+                f"workflow action mismatch: pending={expected} callback={workflow_action}"
+            )
+        if decision in {"approved", "approve", "accepted"}:
+            item = resume_action(
+                action_id,
+                approver=approver,
+                approval_id=approval_id,
+                defer_execution=bool(body.get("defer_execution")),
+            )
+        elif decision in {"approval_requested", "requested", "dispatched"}:
+            item = mark_approval_requested(
+                action_id,
+                approval_id=approval_id,
+                source="github_dispatcher",
+            )
+        elif decision in {"rejected", "reject", "denied"}:
+            item = reject_action(
+                action_id,
+                approver=approver,
+                approval_id=approval_id,
+                reason=str(body.get("reason") or "GitHub environment review rejected"),
+            )
+        elif decision in {"executed", "success", "completed"}:
+            item = complete_action(
+                action_id,
+                success=True,
+                approver=approver,
+                approval_id=approval_id,
+                outcome=body.get("outcome") if isinstance(body.get("outcome"), dict) else {},
+            )
+        elif decision in {"execution_failed", "failed", "failure"}:
+            item = complete_action(
+                action_id,
+                success=False,
+                approver=approver,
+                approval_id=approval_id,
+                outcome=body.get("outcome") if isinstance(body.get("outcome"), dict) else {},
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"unsupported decision: {decision}")
+    except ApprovalStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": True, "action": item}
+
+
+@router.post("/actions/{action_id}/resume")
+async def resume_autonomy_action(
+    action_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+) -> dict[str, Any]:
+    _auth(authorization, x_autonomy_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    try:
+        item = resume_action(
+            action_id,
+            approver=str(body.get("approver") or ""),
+            approval_id=str(body.get("approval_id") or ""),
+        )
+    except ApprovalStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": True, "action": item}

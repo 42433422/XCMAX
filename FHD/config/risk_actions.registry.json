@@ -1,5 +1,130 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "medium_risk_policy": "require_human",
+  "autonomous_actions": {
+    "apply_release_to_cvm": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "rollback_release",
+      "entrypoints": [".github/workflows/fhd-deploy.yml", "scripts/deploy/fhd-auto-update.sh"]
+    },
+    "rollback_release": {
+      "risk": "MEDIUM",
+      "allow_auto_execute": true,
+      "rollback_path": "reapply_previous_release",
+      "entrypoints": [
+        "scripts/deploy/fhd-apply-release.sh",
+        "scripts/deploy/fhd-apply-release-compose.sh"
+      ]
+    },
+    "freeze_manifest": {
+      "risk": "MEDIUM",
+      "allow_auto_execute": true,
+      "rollback_path": "unfreeze_manifest",
+      "entrypoints": [".github/workflows/fhd-deploy.yml"]
+    },
+    "unfreeze_manifest": {
+      "risk": "MEDIUM",
+      "allow_auto_execute": true,
+      "rollback_path": "freeze_manifest",
+      "entrypoints": [".github/workflows/fhd-deploy.yml"]
+    },
+    "restart_service": {
+      "risk": "LOW",
+      "allow_auto_execute": true,
+      "rollback_path": "restart_previous_service_revision",
+      "entrypoints": [
+        ".github/workflows/fhd-deploy.yml",
+        "scripts/deploy/fhd-apply-release.sh",
+        "scripts/deploy/fhd-apply-release-compose.sh"
+      ]
+    },
+    "self_heal_pr_merge": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "revert_merge_commit",
+      "entrypoints": ["modstore_server/approval_dispatcher.py"]
+    },
+    "self_maintenance_l1_merge": {
+      "risk": "LOW",
+      "allow_auto_execute": true,
+      "rollback_path": "revert_merge_commit",
+      "entrypoints": ["modstore_server/self_maintenance_loop_runner.py"],
+      "scope": "L1 allowlisted paths only; runner path policy is authoritative"
+    },
+    "mod_auto_publish": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "unpublish_mod_version",
+      "entrypoints": ["modstore_server/workbench_api.py"]
+    },
+    "daily_digest": {
+      "risk": "LOW",
+      "allow_auto_execute": true,
+      "rollback_path": "supersede_digest_record",
+      "entrypoints": ["modstore_server/daily_digest.py"]
+    },
+    "daily_vibe_dispatch": {
+      "risk": "MEDIUM",
+      "allow_auto_execute": true,
+      "rollback_path": "cancel_dispatched_subtasks",
+      "entrypoints": ["modstore_server/daily_vibe_line_execute_job.py"]
+    },
+    "archive_historical_loop_debt": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_loop_memory_snapshot",
+      "entrypoints": ["modstore_server/self_maintenance_loop_runner.py"]
+    },
+    "employee_execute": {
+      "risk": "MEDIUM",
+      "allow_auto_execute": true,
+      "rollback_path": "employee_compensating_action",
+      "entrypoints": ["app/application/employee_runtime/agent.py"]
+    },
+    "code_write": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "git_revert_commit",
+      "entrypoints": ["app/application/employee_runtime/agent.py"]
+    },
+    "db_migration": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_database_snapshot",
+      "entrypoints": ["scripts/deploy/fhd-apply-release.sh", "alembic/versions"]
+    },
+    "delete_user_data": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_encrypted_backup",
+      "entrypoints": ["app/fastapi_routes"]
+    },
+    "rotate_encryption_root_key": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_previous_root_key",
+      "entrypoints": ["manual_only"]
+    },
+    "disable_audit_logging": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "reenable_audit_logging",
+      "entrypoints": ["manual_only"]
+    },
+    "bypass_risk_gate": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "remove_bypass_and_reaudit",
+      "entrypoints": ["manual_only"]
+    },
+    "rewrite_audit_history": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_append_only_audit_store",
+      "entrypoints": ["manual_only"]
+    }
+  },
   "action_classes": {
     "business_db.write": {
       "risk": "medium",

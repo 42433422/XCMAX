@@ -3163,6 +3163,24 @@ def _auto_merge_low_risk_branch(
     if not policy.get("ok"):
         return policy
 
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+    decision = evaluate_risk(
+        "self_maintenance_l1_merge",
+        action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+        source="self_maintenance_loop.auto_merge",
+    )
+    if not decision.allowed:
+        return {
+            "ok": False,
+            "reason": (
+                "autonomy_guard_pending_approval"
+                if decision.requires_confirmation
+                else "autonomy_guard_blocked"
+            ),
+            "risk_decision": decision.to_dict(),
+        }
+
     _run_cmd(["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace)
     merge_sha = _run_cmd(["git", "rev-parse", "HEAD"], cwd=workspace)
     # Push 到 origin 可能因认证/权限失败（如 GitHub https 需 token）。

@@ -1,0 +1,15 @@
+schema_version: 1
+default_unknown_action: blocked
+prohibited_actions:
+  - action: db_migration
+    reason: Schema migrations require an operator-reviewed backup and maintenance window.
+  - action: delete_user_data
+    reason: User data deletion requires an authenticated human request and retention review.
+  - action: rotate_encryption_root_key
+    reason: Root-key rotation must follow the manual key-custody runbook.
+  - action: disable_audit_logging
+    reason: Autonomy may never suppress its own audit trail.
+  - action: bypass_risk_gate
+    reason: No autonomous path may bypass the risk SSOT.
+  - action: rewrite_audit_history
+    reason: Autonomy audit history is append-only and immutable.
