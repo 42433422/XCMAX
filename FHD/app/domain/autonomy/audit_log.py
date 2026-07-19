@@ -176,7 +176,7 @@ def list_autonomy_audit(
     if action_id:
         clauses.append("action_id = ?")
         params.append(str(action_id))
-    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
     params.append(max(1, min(int(limit), 1000)))
     with _LOCK, _connect() as conn:
         rows = conn.execute(
@@ -257,14 +257,15 @@ def summarize_autonomy_audit(*, days: int = 1) -> dict[str, Any]:
             or 0
         )
         marks = ",".join("?" for _ in _VETO_DECISIONS)
+        unique_veto_query = (
+            "SELECT COUNT(DISTINCT action_id) "
+            "FROM autonomy_audit_log "
+            "WHERE timestamp >= ? AND event_type IN ('decision', 'approval') "
+            "AND decision IN (" + marks + ")"
+        )
         unique_veto = int(
             conn.execute(
-                f"""
-                SELECT COUNT(DISTINCT action_id)
-                FROM autonomy_audit_log
-                WHERE timestamp >= ? AND event_type IN ('decision', 'approval')
-                  AND decision IN ({marks})
-                """,
+                unique_veto_query,
                 (since, *sorted(_VETO_DECISIONS)),
             ).fetchone()[0]
             or 0
