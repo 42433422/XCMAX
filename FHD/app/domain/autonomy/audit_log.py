@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,7 @@ _FHD_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_DB_PATH = _FHD_ROOT / "metrics" / "autonomy-audit.sqlite3"
 _DEFAULT_JSONL_PATH = _FHD_ROOT / "metrics" / "autonomy-audit-log.jsonl"
 _LOCK = threading.RLock()
+UTC = timezone.utc  # noqa: UP017 - shared module must import on Python 3.10
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS autonomy_audit_log (

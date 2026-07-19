@@ -6,7 +6,7 @@ import json
 import os
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,6 +16,7 @@ from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_LEDGER_PATH = _FHD_ROOT / "metrics" / "autonomy-approval-ledger.jsonl"
 _LOCK = threading.RLock()
+UTC = timezone.utc  # noqa: UP017 - shared module must import on Python 3.10
 _EXECUTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
 _ACTION_EXECUTORS: dict[str, Callable[[dict[str, Any]], Any]] = {}
 _TERMINAL_STATES = frozenset({"executed", "rejected", "execution_failed"})
@@ -56,7 +57,7 @@ def _safe_payload(value: Any) -> Any:
         return [_safe_payload(item) for item in value]
     if isinstance(value, tuple):
         return [_safe_payload(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str | int | float | bool) or value is None:
         return value
     return str(value)
 

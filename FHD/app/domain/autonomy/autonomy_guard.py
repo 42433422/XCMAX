@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import os
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -24,6 +24,8 @@ from app.domain.autonomy.risk_types import (
     parse_risk_level,
     truthy,
 )
+
+UTC = timezone.utc  # noqa: UP017 - MODstore imports this module on Python 3.10
 
 
 class AutonomyGuard:
