@@ -94,3 +94,15 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '55m' || '15m' }}"
         ) in workflow
+
+
+def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
+
+    sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[1].split(
+        "- name: Resume approved autonomy action", 1
+    )[0]
+    assert "systemctl restart fhd-full.service" in sync_step
+    assert "for attempt in $(seq 1 30)" in sync_step
+    assert ('curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health') in sync_step
+    assert "did not become HTTP-ready after autonomy config sync" in sync_step
