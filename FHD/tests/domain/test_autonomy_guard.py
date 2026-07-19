@@ -29,6 +29,7 @@ from app.domain.autonomy.autonomy_guard import (
     RiskLevel,
     reload_autonomy_guard,
 )
+from app.domain.autonomy.risk_policy import RiskPolicyCatalog
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = FHD_ROOT / "config" / "risk_actions.registry.json"
@@ -157,6 +158,128 @@ def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
         assert spec["risk"] in {"LOW", "MEDIUM", "HIGH", "BLOCKED"}
         if spec["risk"] == "BLOCKED":
             assert spec["allow_auto_execute"] is False
+
+
+def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) -> None:
+    registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+
+    with pytest.raises(FileNotFoundError, match="risk registry not found"):
+        RiskPolicyCatalog(
+            registry_path=tmp_path / "missing-registry.json",
+            boundaries_path=BOUNDARIES,
+        )
+
+    invalid_registries: list[object] = [
+        [],
+        {key: value for key, value in registry.items() if key != "autonomous_actions"},
+    ]
+    missing_action = json.loads(json.dumps(registry))
+    missing_action["autonomous_actions"].pop("restart_service")
+    invalid_registries.append(missing_action)
+    missing_class = json.loads(json.dumps(registry))
+    missing_class["action_classes"].pop("business_db.write")
+    invalid_registries.append(missing_class)
+    no_tools = json.loads(json.dumps(registry))
+    no_tools["tools"] = {}
+    invalid_registries.append(no_tools)
+    malformed_action = json.loads(json.dumps(registry))
+    malformed_action["autonomous_actions"]["restart_service"] = "LOW"
+    invalid_registries.append(malformed_action)
+    missing_rollback = json.loads(json.dumps(registry))
+    missing_rollback["autonomous_actions"]["restart_service"]["rollback_path"] = ""
+    invalid_registries.append(missing_rollback)
+    auto_blocked = json.loads(json.dumps(registry))
+    auto_blocked["autonomous_actions"]["db_migration"]["allow_auto_execute"] = True
+    invalid_registries.append(auto_blocked)
+
+    for index, invalid in enumerate(invalid_registries):
+        registry_path = tmp_path / f"invalid-registry-{index}.json"
+        registry_path.write_text(json.dumps(invalid), encoding="utf-8")
+        with pytest.raises(ValueError):
+            RiskPolicyCatalog(registry_path=registry_path, boundaries_path=BOUNDARIES)
+
+    valid_registry_path = tmp_path / "valid-registry.json"
+    valid_registry_path.write_text(json.dumps(registry), encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="autonomy boundaries not found"):
+        RiskPolicyCatalog(
+            registry_path=valid_registry_path,
+            boundaries_path=tmp_path / "missing-boundaries.yaml",
+        )
+
+    invalid_boundaries: list[object] = [
+        [],
+        {},
+        {"prohibited_actions": []},
+        {"prohibited_actions": ["db_migration"]},
+        {"prohibited_actions": [{"action": "db_migration"}]},
+    ]
+    for index, invalid in enumerate(invalid_boundaries):
+        boundaries_path = tmp_path / f"invalid-boundaries-{index}.yaml"
+        boundaries_path.write_text(yaml.safe_dump(invalid), encoding="utf-8")
+        with pytest.raises(ValueError):
+            RiskPolicyCatalog(
+                registry_path=valid_registry_path,
+                boundaries_path=boundaries_path,
+            )
+
+    assert boundaries["prohibited_actions"]
+
+
+def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "not-a-policy")
+    catalog = RiskPolicyCatalog()
+    assert catalog.medium_risk_policy is MediumRiskPolicy.REQUIRE_HUMAN
+    assert catalog.canonical_action("rollback_version") == "rollback_release"
+    assert catalog.canonical_action("custom_action") == "custom_action"
+
+    registry_snapshot = catalog.registry_snapshot()
+    registry_snapshot["medium_risk_policy"] = "mutated"
+    assert catalog.registry["medium_risk_policy"] == "require_human"
+    boundaries_snapshot = catalog.boundaries_snapshot()
+    boundaries_snapshot.clear()
+    assert catalog.boundaries
+    assert "restart_service" in catalog.autonomous_action_names()
+    assert catalog.autonomous_action_spec("missing") is None
+    assert catalog.list_code_write_tools() == frozenset({"patch_file", "write_file"})
+
+    customer_create = catalog.get_action_spec("customers", "create")
+    assert customer_create and customer_create["requires_write_approval"] is True
+    assert catalog.get_action_spec("missing", "create") is None
+    catalog.registry["tools"]["broken"] = {"actions": {"execute": "invalid"}}
+    catalog.registry["tools"]["not-an-object"] = "invalid"
+    assert catalog.get_action_spec("broken", "execute") is None
+    assert catalog.requires_write_approval("patch_file") is True
+    assert catalog.requires_write_approval("customers", "query") is False
+    assert catalog.requires_write_approval_for_spec({"requires_write_approval": True}) is True
+    assert catalog.requires_write_approval_for_spec({"action_class": "business_db.write"}) is True
+    assert catalog.requires_write_approval_for_spec({"action_class": "im.send"}) is False
+    write_tools = catalog.list_write_tools()
+    assert {"customers", "products", "patch_file", "write_file"} <= write_tools
+
+    declared, declared_reason = catalog.assess_employee_risk(
+        {"employee_config_v2": {"risk_level": "high"}}, ["agent"]
+    )
+    inferred_high, _ = catalog.assess_employee_risk({}, ["shell_exec"])
+    inferred_medium, _ = catalog.assess_employee_risk({}, ["agent"])
+    inferred_low, _ = catalog.assess_employee_risk({}, [])
+    code_write, code_reason = catalog.assess_employee_risk(
+        {"employee_config_v2": "invalid"}, [], {"tool": "write_file"}
+    )
+    assert declared is RiskLevel.HIGH and "manifest declared" in declared_reason
+    assert inferred_high is RiskLevel.HIGH
+    assert inferred_medium is RiskLevel.MEDIUM
+    assert inferred_low is RiskLevel.LOW
+    assert code_write is RiskLevel.HIGH and "forces high risk" in code_reason
+
+    assert catalog.resolve_spec("restart_service", "", "")
+    assert catalog.resolve_spec("custom", "customers", "create")
+    assert catalog.resolve_spec("customers.create", "", "")
+    assert catalog.resolve_spec("custom", "", "") is None
+    assert catalog.rollback_path("restart_service") != "not_applicable"
+    assert catalog.rollback_path("custom") == "not_applicable"
 
 
 def test_append_only_table_rejects_update_and_delete(tmp_path: Path) -> None:
