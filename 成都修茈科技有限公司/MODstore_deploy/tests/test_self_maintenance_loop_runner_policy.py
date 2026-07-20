@@ -26,6 +26,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _historical_rollback_rate,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
+    _matches_focused_test_command,
     _qa_task_text,
     _reject_and_retry_kb_schema_failure,
     _resume_review_qa_candidate,
@@ -717,6 +718,46 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
     ]
 
     assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+
+
+def test_focused_command_matcher_fails_closed_on_malformed_quotes():
+    focused = "runtime-python -m pytest focused.py -q"
+
+    assert not _matches_focused_test_command(
+        "python3 -m pytest 'focused.py -q",
+        focused,
+    )
+    assert not _matches_focused_test_command(
+        "python3 -m pytest focused.py -q",
+        "runtime-python -m pytest 'focused.py -q",
+    )
+
+
+def test_focused_command_matcher_preserves_parentheses_in_test_path():
+    focused = "runtime-python -m pytest 'tests/test_(special).py' -q"
+
+    assert _matches_focused_test_command(
+        "python3 -m pytest 'tests/test_(special).py' -q (target branch)",
+        focused,
+    )
+
+
+def test_focused_command_matcher_ignores_trailing_note_targets():
+    focused = "runtime-python -m pytest focused.py -q"
+
+    assert not _matches_focused_test_command(
+        "python3 -m pytest other.py -q (see focused.py )",
+        focused,
+    )
+
+
+def test_focused_command_matcher_requires_target_in_same_shell_segment():
+    focused = "runtime-python -m pytest focused.py -q"
+
+    assert not _matches_focused_test_command(
+        "python3 -m pytest other.py -q && echo focused.py",
+        focused,
+    )
 
 
 def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypatch):

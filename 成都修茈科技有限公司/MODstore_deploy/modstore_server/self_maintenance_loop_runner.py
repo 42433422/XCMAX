@@ -2310,6 +2310,64 @@ def _structured_report_from_step(
     return None
 
 
+def _safe_command_tokens(command: str) -> Optional[List[str]]:
+    """Tokenize a reported command without guessing past malformed quoting."""
+
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return None
+
+
+def _shell_command_segments(tokens: List[str]) -> List[List[str]]:
+    segments: List[List[str]] = [[]]
+    for token in tokens:
+        if token in {"&&", "||", ";"}:
+            if segments[-1]:
+                segments.append([])
+            continue
+        segments[-1].append(token)
+    return [segment for segment in segments if segment]
+
+
+def _trim_trailing_qa_note(tokens: List[str]) -> List[str]:
+    """Drop only a balanced, trailing ``(...)`` report annotation.
+
+    This intentionally operates on tokens instead of deleting every parenthesized
+    substring from the command, so quoted paths and pytest expressions containing
+    parentheses remain intact.
+    """
+
+    for index, token in enumerate(tokens):
+        suffix = " ".join(tokens[index:])
+        if (
+            token.startswith("(")
+            and suffix.endswith(")")
+            and suffix.count("(") == suffix.count(")")
+        ):
+            return tokens[:index]
+    return tokens
+
+
+def _pytest_target_names(tokens: List[str]) -> set[str]:
+    trimmed = _trim_trailing_qa_note(tokens)
+    names: set[str] = set()
+    for token in trimmed:
+        target = token.split("::", 1)[0]
+        if target.endswith(".py"):
+            names.add(Path(target).name)
+    return names
+
+
+def _focused_pytest_target_names(tokens: List[str]) -> set[str]:
+    names: set[str] = set()
+    for segment in _shell_command_segments(tokens):
+        for index in range(len(segment) - 1):
+            if segment[index : index + 2] == ["-m", "pytest"]:
+                names.update(_pytest_target_names(segment[index + 2 :]))
+    return names
+
+
 def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
     """Accept the focused pytest target across different worker runtimes.
 
@@ -2322,27 +2380,24 @@ def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
     raw = str(command or "").strip()
     if not raw:
         return False
+    tokens = _safe_command_tokens(raw)
+    focused_tokens = _safe_command_tokens(str(focused_command or "").strip())
+    if tokens is None or focused_tokens is None:
+        return False
     if raw == focused_command:
         return True
-    try:
-        tokens = shlex.split(raw)
-    except ValueError:
+
+    target_names = _focused_pytest_target_names(focused_tokens)
+    if not target_names:
         return False
-    target_name = "test_self_maintenance_loop_runner_policy.py"
-    if not any(Path(token).name == target_name for token in tokens):
-        return False
-    shell_operators = {"&&", "||", ";"}
-    for index in range(1, len(tokens) - 1):
-        if tokens[index : index + 2] != ["-m", "pytest"]:
+
+    python_name = re.compile(r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE)
+    for segment in _shell_command_segments(tokens):
+        if len(segment) < 4 or segment[1:3] != ["-m", "pytest"]:
             continue
-        python_index = index - 1
-        if not Path(tokens[python_index]).name.lower().startswith("python"):
+        if python_name.fullmatch(Path(segment[0]).name) is None:
             continue
-        segment_start = 0
-        for operator_index, token in enumerate(tokens[:python_index]):
-            if token in shell_operators:
-                segment_start = operator_index + 1
-        if python_index == segment_start:
+        if target_names <= _pytest_target_names(segment[3:]):
             return True
     return False
 
@@ -4043,16 +4098,14 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
-            row = conn.execute(
-                """
+            row = conn.execute("""
                 select id, email
                 from users
                 where email = 'guest@devfleet.local'
                    or (email like 'guest_%@devfleet.local')
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
-                """
-            ).fetchone()
+                """).fetchone()
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint",

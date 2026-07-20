@@ -11,7 +11,7 @@
 #   - incident issue 由 watcher 兜底创建（前置 remediation action 失败时）
 #   - 标签含 ai-implement + incident + auto-incident + auto-generated
 #   - 命中 ^incident$ 跳过 owner 确认，ai-issue-implement.yml workflow 自动生成修复 PR
-#   - 修复 PR 仍标 needs-human 待人工 review 合并（不绕过人工审核）
+#   - 修复 PR 标 ai-generated + risk:r0（命中 allowlist 即低风险），由 ai-self-heal-auto-merge SLA 二次守卫后 auto-merge
 
 version: 1
 enabled: true
@@ -22,3 +22,10 @@ label_patterns:
   - "^refactor-.*"
   - "^tech-debt-.*"
   - "^incident$"
+
+# trusted_authors: ai-self-heal-auto-merge.yml 普通 PR 三重门禁的 author allowlist
+# 见 FHD/scripts/ci/ai_self_heal_sla.py:load_trusted_authors
+# 普通 PR（无 ai-self-heal / ai-generated label）须 author ∈ trusted_authors 才允许 auto-merge
+trusted_authors:
+  - "42433422"
+  - "github-actions[XCAGI]"
