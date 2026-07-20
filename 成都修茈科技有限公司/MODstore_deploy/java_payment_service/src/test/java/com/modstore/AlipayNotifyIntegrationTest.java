@@ -4,6 +4,7 @@ import com.modstore.model.Order;
 import com.modstore.model.User;
 import com.modstore.model.Wallet;
 import com.modstore.repository.OrderRepository;
+import com.modstore.repository.TransactionRepository;
 import com.modstore.repository.UserRepository;
 import com.modstore.repository.WalletRepository;
 import com.modstore.service.AlipayService;
@@ -74,6 +75,9 @@ class AlipayNotifyIntegrationTest {
     @Autowired
     WalletRepository walletRepository;
 
+    @Autowired
+    TransactionRepository transactionRepository;
+
     @MockBean
     AlipayService alipayService;
 
@@ -84,10 +88,12 @@ class AlipayNotifyIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        transactionRepository.deleteAll();
         orderRepository.deleteAll();
         walletRepository.deleteAll();
         userRepository.deleteAll();
         user = new User();
+        user.setId(900001L);
         user.setUsername("notify-user");
         user.setEmail("notify@example.com");
         user.setPasswordHash("hash");
