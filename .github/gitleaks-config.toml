@@ -19,8 +19,8 @@ paths = [
     '''FHD/tests/.*fixture.*''',
     '''FHD/tests/.*mock.*''',
     '''FHD/tests/.*stub.*''',
-    # CI 自治脚本测试：用 AWS 文档示例 key / 假 ghp token 验证 high-risk rule 命中
-    '''FHD/tests/test_ci/test_ai_review\.py''',
+    # CI 自治脚本测试中的 mock token (AKIAIOSFODNN7EXAMPLE / ghp_aBcD... 等文档示例)
+    '''FHD/tests/test_ci/.*''',
     # 文档中的示例密钥
     '''docs/.*\.md''',
     '''\.md$''',
