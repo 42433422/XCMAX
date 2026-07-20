@@ -40,29 +40,19 @@ authorize_production_release() {
   if ! decision_json="$(
     PYTHONPATH="$DEPLOY_ROOT" \
       XCAGI_AUTONOMY_DATA_DIR="$AUTONOMY_DATA_DIR" \
-      "$AUTONOMY_PYTHON" - <<'PY' "$MANIFEST" "$release_id"
+      "$AUTONOMY_PYTHON" - <<'PY' "$release_id"
 import json
 import sys
 
 from app.domain.autonomy.autonomy_guard import evaluate_risk
 
-manifest_path, release_id = sys.argv[1:3]
-with open(manifest_path, encoding="utf-8") as stream:
-    manifest = json.load(stream)
-approval = manifest.get("autonomy_approval") or {}
-approver = str(approval.get("approved_by") or "").strip()
-valid = (
-    approval.get("environment") == "production"
-    and approval.get("source") == "github_environment"
-    and bool(approver)
-)
+release_id = sys.argv[1]
 decision = evaluate_risk(
     "apply_release_to_cvm",
     {
-        "human_approved": valid,
-        "approved_by": approver,
-        "approval_id": str(approval.get("approval_id") or ""),
         "trigger": "fhd_auto_update",
+        "execution_mode": "automatic",
+        "release_id": release_id,
     },
     action_id=f"release:{release_id}",
     source="fhd_auto_update.cron",
@@ -86,27 +76,23 @@ audit_production_release_outcome() {
   fi
   PYTHONPATH="$DEPLOY_ROOT" \
     XCAGI_AUTONOMY_DATA_DIR="$AUTONOMY_DATA_DIR" \
-    "$AUTONOMY_PYTHON" - <<'PY' "$MANIFEST" "$release_id" "$outcome"
-import json
+    "$AUTONOMY_PYTHON" - <<'PY' "$release_id" "$outcome"
 import sys
 
 from app.domain.autonomy.audit_log import append_autonomy_audit
 
-manifest_path, release_id, outcome = sys.argv[1:4]
-with open(manifest_path, encoding="utf-8") as stream:
-    manifest = json.load(stream)
-approval = manifest.get("autonomy_approval") or {}
+release_id, outcome = sys.argv[1:3]
 append_autonomy_audit(
     {
         "action_id": f"release:{release_id}",
         "action": "apply_release_to_cvm",
         "risk_level": "HIGH",
         "decision": outcome,
-        "approver": str(approval.get("approved_by") or ""),
+        "approver": None,
         "outcome": outcome,
         "event_type": "action_outcome",
         "source": "fhd_auto_update.cron",
-        "metadata": {"approval_id": str(approval.get("approval_id") or "")},
+        "metadata": {"execution_mode": "automatic"},
     }
 )
 PY
@@ -128,7 +114,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 0
 fi
 
-IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL APPROVED_BY APPROVAL_ID <<<"$(
+IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -141,8 +127,6 @@ values = [
     str(doc.get("image", "")),
     str(doc.get("image_digest", "")),
     str(doc.get("channel", "")),
-    str((doc.get("autonomy_approval") or {}).get("approved_by") or ""),
-    str((doc.get("autonomy_approval") or {}).get("approval_id") or ""),
 ]
 if any("|" in value or "\n" in value for value in values):
     raise SystemExit("manifest contains an invalid field delimiter")
@@ -177,8 +161,6 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   log "发现新镜像 version=$VERSION sha=$GIT_SHA digest=${IMAGE_DIGEST:0:19}...，开始 compose 应用"
   if FHD_API_IMAGE="$IMAGE" \
       FHD_API_IMAGE_DIGEST="$IMAGE_DIGEST" \
-      FHD_AUTONOMY_APPROVED_BY="$APPROVED_BY" \
-      FHD_AUTONOMY_APPROVAL_ID="$APPROVAL_ID" \
       FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
       FHD_ARTIFACT_DIR="$ARTIFACT_DIR" \
       bash "$APPLY_COMPOSE"; then
@@ -236,8 +218,6 @@ fi
 log "发现新版本 version=$VERSION sha=$GIT_SHA，开始 tarball 应用"
 if FHD_RELEASE_TARBALL="$TARBALL" \
     FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
-    FHD_AUTONOMY_APPROVED_BY="$APPROVED_BY" \
-    FHD_AUTONOMY_APPROVAL_ID="$APPROVAL_ID" \
     FHD_EXPECTED_SHA256="$REMOTE_SHA" \
     FHD_SKIP_PIP="${FHD_SKIP_PIP:-1}" \
     bash "$APPLY_TARBALL"; then
