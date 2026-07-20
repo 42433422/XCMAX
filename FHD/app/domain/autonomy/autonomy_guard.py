@@ -7,12 +7,12 @@ handling, approval validation, hard boundaries and audit writes live here.
 from __future__ import annotations
 
 import copy
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from app.domain.autonomy.approval_policy import approval_evidence, human_approval_evidence
 from app.domain.autonomy.risk_policy import RiskPolicyCatalog
 from app.domain.autonomy.risk_types import (
     MediumRiskPolicy,
@@ -22,7 +22,6 @@ from app.domain.autonomy.risk_types import (
     aggregate_risk_decisions,
     enum_value,
     parse_risk_level,
-    truthy,
 )
 
 UTC = timezone.utc  # noqa: UP017 - MODstore imports this module on Python 3.10
@@ -205,7 +204,7 @@ class AutonomyGuard:
         )
         veto_reason = self._veto_boundaries.get(action_name)
         if veto_reason:
-            approved, approver = self._human_approval_evidence(ctx)
+            approved, approver = human_approval_evidence(ctx)
             if approved:
                 return self._decision(
                     action=action_name,
@@ -232,7 +231,7 @@ class AutonomyGuard:
                 source=source,
                 context=ctx,
             )
-        approved, approver = self._approval_evidence(ctx, risk)
+        approved, approver = approval_evidence(ctx, risk)
 
         if risk == RiskLevel.BLOCKED:
             return self._decision(
@@ -366,33 +365,6 @@ class AutonomyGuard:
 
     def _rollback_path(self, action: str) -> str:
         return self._policy.rollback_path(action)
-
-    def _approval_evidence(self, context: dict[str, Any], risk: RiskLevel) -> tuple[bool, str]:
-        approved, approver = self._human_approval_evidence(context)
-        if approved:
-            return approved, approver
-        approver = str(context.get("approved_by") or context.get("approver") or "").strip()
-        if risk == RiskLevel.MEDIUM and truthy(context.get("allow_medium_risk")):
-            return True, approver or "legacy_explicit_runtime_approval"
-        if risk == RiskLevel.HIGH and truthy(context.get("workflow_auto_approve_high_risk")):
-            return True, approver or "explicit_workflow_session_override"
-        if risk == RiskLevel.HIGH and truthy(context.get("allow_high_risk_real_run")):
-            configured = (
-                os.environ.get("FHD_RISK_HIGH_GATE_TOKEN")
-                or os.environ.get("MODSTORE_RISK_HIGH_GATE_TOKEN")
-                or ""
-            ).strip()
-            supplied = str(context.get("high_risk_gate_token") or "").strip()
-            if not configured or (supplied and supplied == configured):
-                return True, approver or "legacy_high_risk_gate"
-        return False, ""
-
-    @staticmethod
-    def _human_approval_evidence(context: dict[str, Any]) -> tuple[bool, str]:
-        approver = str(context.get("approved_by") or context.get("approver") or "").strip()
-        if truthy(context.get("human_approved")) and approver:
-            return True, approver
-        return False, ""
 
     def _cooldown_active(self, action: str) -> bool:
         if self._audit_sink is not None:
