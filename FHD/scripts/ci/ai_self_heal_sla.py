@@ -200,11 +200,25 @@ FORBIDDEN_PATH_PREFIXES = (
     "FHD/.github/workflows/",
 )
 
-ALLOWED_FILE_SUFFIXES = (".py", ".md")
+# 各 PR kind 的二次守卫配置
+GUARD_CONFIG = {
+    "self_heal": {
+        "max_changed_files": 3,
+        "max_diff_lines": 50,
+        "allowed_suffixes": (".py", ".md"),
+    },
+    "ai_generated": {
+        "max_changed_files": 5,   # allowlist 域已预过滤低风险，放宽
+        "max_diff_lines": 100,
+        "allowed_suffixes": (".py", ".md", ".ts", ".vue", ".js", ".json", ".yaml", ".yml"),
+    },
+}
 
 
 def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
     """二次守卫：返回 (passed, reason)。任一不通过即拦截 auto-merge。"""
+    config = GUARD_CONFIG.get(pr.kind, GUARD_CONFIG["self_heal"])
+
     # 1. CI 全绿
     head_sha = client.get_pr_head_sha(pr.number)
     ci_ok, ci_reason = client.get_pr_check_runs(pr.number, head_sha)
@@ -212,15 +226,15 @@ def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
         return False, f"ci:{ci_reason}"
 
     # 2. 体量
-    if pr.changed_files > 3:
-        return False, f"too_many_files:{pr.changed_files}"
-    if pr.additions + pr.deletions > 50:
-        return False, f"diff_too_large:{pr.additions + pr.deletions}"
+    if pr.changed_files > config["max_changed_files"]:
+        return False, f"too_many_files:{pr.changed_files}>{config['max_changed_files']}"
+    if pr.additions + pr.deletions > config["max_diff_lines"]:
+        return False, f"diff_too_large:{pr.additions + pr.deletions}>{config['max_diff_lines']}"
 
     # 3. 文件类型
     files = client.get_pr_files(pr.number)
     for f in files:
-        if not f.endswith(ALLOWED_FILE_SUFFIXES):
+        if not f.endswith(config["allowed_suffixes"]):
             return False, f"forbidden_file_type:{f}"
 
     # 4. 禁止路径
@@ -269,14 +283,16 @@ def process_pr(
     age_hours = (now - pr.created_at) / 3600
     age_days = age_hours / 24
 
-    # 提取风险等级
-    risk = "r3"
+    # 提取风险等级；ai-generated PR 无 risk 标签时默认 r0（allowlist 已预过滤低风险）
+    risk = ""
     for lab in pr.labels:
         if lab.startswith("risk:"):
             risk = lab.split(":", 1)[1]
             break
+    if not risk:
+        risk = "r0" if pr.kind == "ai_generated" else "r3"
 
-    print(f"[PR #{pr.number}] risk={risk} age={age_days:.1f}d files={pr.changed_files}")
+    print(f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}")
 
     # ===== R0 / R1: auto-merge 候选 =====
     if risk in {"r0", "r1"}:
@@ -296,19 +312,15 @@ def process_pr(
                     f"⚠️ 二次守卫未通过（`{reason}`），自动升级为 `risk:r2`，"
                     f"转 stale→close 流程（7d 提醒 / 14d 关闭）。",
                 )
-                _append_stale(
-                    {"pr": pr.number, "risk": risk, "action": "upgraded_to_r2", "reason": reason}
-                )
+                _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": "upgraded_to_r2", "reason": reason})
             return "upgraded"
 
-        print(f"  二次守卫通过，auto-merge ({risk} {threshold}h)")
+        print(f"  二次守卫通过，auto-merge ({pr.kind} {risk} {threshold}h)")
         if not dry_run:
             ok = client.merge_pr(pr.number, method="squash")
             if ok:
-                client.comment(
-                    pr.number, f"✅ 二次守卫通过，{risk} 等级 {threshold}h 到期，自动合并。"
-                )
-                _append_stale({"pr": pr.number, "risk": risk, "action": "auto_merged"})
+                client.comment(pr.number, f"✅ 二次守卫通过，{pr.kind} {risk} 等级 {threshold}h 到期，自动合并。")
+                _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": "auto_merged"})
                 return "auto_merged"
             else:
                 client.comment(pr.number, "❌ 自动合并失败（可能冲突），请人工处理。")
@@ -329,7 +341,7 @@ def process_pr(
                 f"指纹已记录，如需重新触发请推送新提交。",
             )
             client.close_pr(pr.number)
-            _append_stale({"pr": pr.number, "risk": risk, "action": f"closed_{close_threshold}d"})
+            _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": f"closed_{close_threshold}d"})
         return "closed"
 
     if age_days >= stale_threshold:
@@ -340,9 +352,7 @@ def process_pr(
                 f"⏰ 该 PR 已 stale {int(age_days)} 天（risk:{risk}），"
                 f"将于 {close_threshold} 天后自动关闭，请尽快 review。",
             )
-            _append_stale(
-                {"pr": pr.number, "risk": risk, "action": f"stale_warned_{stale_threshold}d"}
-            )
+            _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": f"stale_warned_{stale_threshold}d"})
         return "stale_warned"
 
     print(f"  skip: 未达 stale 阈值 ({age_days:.1f}d < {stale_threshold}d)")
@@ -357,8 +367,8 @@ def process_pr(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ai-self-heal PR SLA 处理")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
-    parser.add_argument("--auto-merge-r0-hours", type=int, default=24)
-    parser.add_argument("--auto-merge-r1-hours", type=int, default=72)
+    parser.add_argument("--auto-merge-r0-hours", type=int, default=12)
+    parser.add_argument("--auto-merge-r1-hours", type=int, default=48)
     parser.add_argument("--stale-r2-days", type=int, default=7)
     parser.add_argument("--close-r2-days", type=int, default=14)
     parser.add_argument("--stale-r3-days", type=int, default=7)
@@ -377,7 +387,10 @@ def main(argv: list[str] | None = None) -> int:
 
     client = GitHubClient(args.repo, token)
     prs = client.list_self_heal_prs()
-    print(f"[sla] 发现 {len(prs)} 个 ai-self-heal open PR")
+    by_kind = {"self_heal": 0, "ai_generated": 0}
+    for pr in prs:
+        by_kind[pr.kind] = by_kind.get(pr.kind, 0) + 1
+    print(f"[sla] 发现 {len(prs)} 个 open PR (ai-self-heal={by_kind['self_heal']} ai-generated={by_kind['ai_generated']})")
 
     stats = {"auto_merged": 0, "upgraded": 0, "stale_warned": 0, "closed": 0, "skipped": 0}
     for pr in prs:
@@ -394,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
             )
             stats[action] = stats.get(action, 0) + 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
             print(f"[error] PR #{pr.number} 处理失败: {e}", file=sys.stderr)
 
     print(f"[sla] 处理完成: {stats}")
