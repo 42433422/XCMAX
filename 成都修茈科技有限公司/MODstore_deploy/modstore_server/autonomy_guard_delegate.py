@@ -27,6 +27,42 @@ def _prepend_package_path(module_name: str, package_path: Path, *, create: bool)
         search_path.append(str(package_path))
 
 
+def _candidate_fhd_roots() -> list[Path]:
+    """Resolve FHD roots that may contain autonomy_guard SSOT.
+
+    Daily runtime often sets ``XCAGI_FHD_ROOT`` / ``XCMAX_MONOREPO_ROOT`` to a
+    mirrored tree that can lag the workspace. Prefer explicit runtime overrides,
+    then env roots, then ``MODSTORE_GIT_REPO_ROOT`` (source checkout), then
+    layout-relative guesses for both runtime and monorepo checkouts.
+    """
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        text = str(path.expanduser())
+        if not text or text in seen:
+            return
+        seen.add(text)
+        candidates.append(Path(text))
+
+    for key in ("XCAGI_FHD_RUNTIME_ROOT", "XCAGI_FHD_ROOT", "MODSTORE_DAILY_FHD_ROOT"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw:
+            add(Path(raw))
+    for key in ("XCMAX_MONOREPO_ROOT", "MODSTORE_GIT_REPO_ROOT", "MODSTORE_DAILY_XCMAX_ROOT"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw:
+            add(Path(raw) / "FHD")
+    here = Path(__file__).resolve()
+    # Runtime: <runtime>/MODstore_deploy/modstore_server → parents[2]/FHD
+    # Workspace: <repo>/成都修茈.../MODstore_deploy/modstore_server → parents[3]/FHD
+    if len(here.parents) > 2:
+        add(here.parents[2] / "FHD")
+    if len(here.parents) > 3:
+        add(here.parents[3] / "FHD")
+    return candidates
+
+
 def ensure_fhd_on_path() -> None:
     if (
         not (os.environ.get("XCAGI_AUTONOMY_DATA_DIR") or "").strip()
@@ -36,15 +72,7 @@ def ensure_fhd_on_path() -> None:
             os.environ.get("MODSTORE_RUNTIME_DIR") or str(Path.home() / ".xcmax" / "modstore-daily")
         ).expanduser()
         os.environ["XCAGI_AUTONOMY_DATA_DIR"] = str(runtime / "autonomy")
-    candidates: list[Path] = []
-    runtime_fhd = (os.environ.get("XCAGI_FHD_RUNTIME_ROOT") or "").strip()
-    if runtime_fhd:
-        candidates.append(Path(runtime_fhd).expanduser())
-    configured = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
-    if configured:
-        candidates.append(Path(configured).expanduser() / "FHD")
-    candidates.append(Path(__file__).resolve().parents[3] / "FHD")
-    for candidate in candidates:
+    for candidate in _candidate_fhd_roots():
         if (candidate / "app/domain/autonomy/autonomy_guard.py").is_file():
             text = str(candidate)
             if text not in sys.path:
@@ -68,6 +96,11 @@ def ensure_fhd_on_path() -> None:
             _prepend_package_path(
                 "app.application.employee_runtime",
                 candidate / "app" / "application" / "employee_runtime",
+                create=True,
+            )
+            _prepend_package_path(
+                "app.application.autonomy",
+                candidate / "app" / "application" / "autonomy",
                 create=True,
             )
             return
