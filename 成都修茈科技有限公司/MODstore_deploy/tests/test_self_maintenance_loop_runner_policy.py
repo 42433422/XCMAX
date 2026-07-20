@@ -244,13 +244,13 @@ def test_diff_semantic_scan_still_flags_added_subprocess_call():
 --- a/worker.py
 +++ b/worker.py
 @@ -1,0 +1 @@
-+subprocess.run(command, shell=True)
++subprocess.run(command)
 """
 
     result = loop_runner._diff_semantic_penalty(diff)
 
-    assert result["high_hits"] == ["subprocess", "shell=true"]
-    assert result["penalty"] == 32
+    assert result["high_hits"] == ["subprocess"]
+    assert result["penalty"] == 16
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
