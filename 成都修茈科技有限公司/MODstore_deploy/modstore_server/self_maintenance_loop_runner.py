@@ -806,6 +806,23 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         ]
     # Max-retry exhaustion is an automatic terminal hold, not an approval request.
     if escalated_items:
+        # Enqueue all escalated items to human uncertainty queue
+        try:
+            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
+            for item in escalated_items:
+                enqueue_uncertain_item(
+                    context={
+                        "failed_run_id": item.get("run_id"),
+                        "failed_steps": item.get("steps", []),
+                        "retry_count": item.get("retry_count"),
+                        "branch": item.get("branch"),
+                        "para_task_id": item.get("para_task_id"),
+                    },
+                    decision={"action": "await_human_strategy_approval", "reason": "max_retries_exceeded"},
+                    reason=f"self-maintenance step {item.get('steps')} failed {item.get('retry_count')} times, exceeded max retries",
+                )
+        except Exception as exc:
+            logger.warning("failed to enqueue escalated item to human queue: %s", exc)
         return None
 
     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
@@ -927,6 +944,16 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "reason": "resume_safety_score_remediation",
                 }
             continue
+        if reason in {
+            "no_loop_participants_detected",
+            "out_of_roster_participants_detected",
+            "in_roster_but_not_registered_duty_employee",
+            "duty_roster_load_error",
+            "duty_employee_registry_load_error",
+        }:
+            # Roster gate failures require fresh code step to fix participant evidence,
+            # no existing branch/task to resume
+            return None
         if reason not in {
             "changed_files_match_forbidden_globs",
             "changed_files_outside_dynamic_low_risk_scope",
@@ -1899,6 +1926,36 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
     )
     last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
     score_remediation = ""
+    roster_remediation = ""
+    # Check for roster gate failures in open items
+    open_items = memory.get("open_items") if isinstance(memory, dict) else []
+    roster_failure_reason = None
+    if isinstance(open_items, list):
+        for item in open_items:
+            if (
+                isinstance(item, dict)
+                and item.get("kind") == "automated_remediation"
+                and str(item.get("reason") or "") in {
+                    "no_loop_participants_detected",
+                    "out_of_roster_participants_detected",
+                    "in_roster_but_not_registered_duty_employee",
+                    "duty_roster_load_error",
+                    "duty_employee_registry_load_error",
+                }
+            ):
+                roster_failure_reason = str(item.get("reason") or "")
+                break
+    if roster_failure_reason:
+        roster_remediation = (
+            "\n\n=== ROSTER GATE FAILURE REMEDIATION ===\n"
+            f"Roster gate failed with reason: {roster_failure_reason}. "
+            "Fix the root cause by ensuring loop participant evidence is properly recorded: "
+            "1. Check _loop_steps_roster_gate() correctly extracts employee_id/actor/assignee "
+            "from step ledgers and runtime context; "
+            "2. Ensure all loop steps write employee_id of the executing participant to the run timeline/ledger; "
+            "3. Verify duty roster and employee registry load correctly without errors. "
+            "This is a code fix to make gating executable, not a marker-only change."
+        )
     if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
         "auto_merge_safety_score_v2_too_low",
         "auto_merge_safety_score_v3_too_low",
@@ -2014,6 +2071,7 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"{score_remediation}"
+        f"{roster_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
