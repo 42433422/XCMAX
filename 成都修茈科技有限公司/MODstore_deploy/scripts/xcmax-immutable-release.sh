@@ -39,6 +39,57 @@ if [[ "$TARGET_SHA" != "$REMOTE_MAIN_SHA" && "${XCMAX_ALLOW_NON_HEAD_SHA:-0}" !=
   fail "target SHA is not current origin/main (target=$TARGET_SHA origin_main=$REMOTE_MAIN_SHA)"
 fi
 
+migrate_env_file() {
+  local destination="$1"
+  shift
+  [[ -f "$destination" ]] && return 0
+  local candidate
+  for candidate in "$@"; do
+    if [[ -f "$candidate" ]]; then
+      install -m 600 "$candidate" "$destination"
+      log "migrated protected runtime environment to $destination"
+      return 0
+    fi
+  done
+  return 1
+}
+
+read_env_value() {
+  local source="$1"
+  local key="$2"
+  python3 - "$source" "$key" <<'PY'
+import shlex
+import sys
+
+path, expected_key = sys.argv[1:]
+for raw in open(path, encoding="utf-8"):
+    line = raw.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    if key.strip() != expected_key:
+        continue
+    parsed = shlex.split(value.strip(), comments=False, posix=True)
+    print(" ".join(parsed))
+    break
+PY
+}
+
+# The build imports the production app before promotion. Load only the required
+# secret from the protected environment so fail-closed startup validation is real
+# without sourcing arbitrary EnvironmentFile content into the deployment shell.
+migrate_env_file "$ENV_FILE" \
+  "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env" \
+  "$SITE_LINK/MODstore_deploy/.env" \
+  || fail "no production environment file was found"
+migrate_env_file "$SCHEDULER_ENV_FILE" \
+  "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env.scheduler" \
+  "$SITE_LINK/MODstore_deploy/.env.scheduler" \
+  || install -m 600 /dev/null "$SCHEDULER_ENV_FILE"
+BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"
+[[ -n "$BUILD_JWT_SECRET" ]] || fail "protected production env is missing MODSTORE_JWT_SECRET"
+[[ ${#BUILD_JWT_SECRET} -ge 32 ]] || fail "protected production MODSTORE_JWT_SECRET is shorter than 32 characters"
+
 FINAL_ROOT="${RELEASE_BASE}/releases/${TARGET_SHA}"
 if [[ -f "$FINAL_ROOT/.xcmax-release.json" ]]; then
   EXISTING_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$FINAL_ROOT/.xcmax-release.json")"
@@ -61,7 +112,12 @@ else
   python3 -m venv "$DEPLOY_DIR/.venv"
   "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
   (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge]')
-  "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, uvicorn, modstore_server.app'
+  mkdir -p "$BUILD_ROOT/.runtime-build"
+  MODSTORE_ENV=production \
+    MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \
+    MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build" \
+    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, uvicorn, modstore_server.app'
+  rm -rf -- "$BUILD_ROOT/.runtime-build"
 
   if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
     command -v npm >/dev/null 2>&1 || fail "npm is required to build the market"
@@ -100,34 +156,11 @@ PY
   mv "$BUILD_ROOT" "$FINAL_ROOT"
   trap - EXIT
 fi
+unset BUILD_JWT_SECRET
 
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
-
-migrate_env_file() {
-  local destination="$1"
-  shift
-  [[ -f "$destination" ]] && return 0
-  local candidate
-  for candidate in "$@"; do
-    if [[ -f "$candidate" ]]; then
-      install -m 600 "$candidate" "$destination"
-      log "migrated protected runtime environment to $destination"
-      return 0
-    fi
-  done
-  return 1
-}
-
-migrate_env_file "$ENV_FILE" \
-  "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env" \
-  "$SITE_LINK/MODstore_deploy/.env" \
-  || fail "no production environment file was found"
-migrate_env_file "$SCHEDULER_ENV_FILE" \
-  "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env.scheduler" \
-  "$SITE_LINK/MODstore_deploy/.env.scheduler" \
-  || install -m 600 /dev/null "$SCHEDULER_ENV_FILE"
 
 # Move the legacy inline SECRET_KEY into the protected environment without logging it.
 LEGACY_SECRET_DROPIN="/etc/systemd/system/modstore.service.d/zz-secret-key.conf"

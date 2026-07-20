@@ -75,6 +75,13 @@ def test_compat_health_returns_ok_status() -> None:
     assert body["success"] is True
     assert body["data"]["status"] == "ok"
     assert "timestamp" in body["data"]
+    assert body["build"] == body["data"]["build"]
+    assert set(body["build"]) == {
+        "artifact_sha256",
+        "built_at",
+        "git_sha",
+        "image_digest",
+    }
 
 
 def test_compat_health_api_alias_returns_ok_status() -> None:
@@ -84,6 +91,7 @@ def test_compat_health_api_alias_returns_ok_status() -> None:
     body = resp.json()
     assert body["success"] is True
     assert body["data"]["status"] == "ok"
+    assert body["build"] == body["data"]["build"]
 
 
 # ---------------------------------------------------------------------------
