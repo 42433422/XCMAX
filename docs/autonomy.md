@@ -493,7 +493,7 @@ XCAGI_DESKTOP_TEST=1 XCAGI_CROSS_TIER_GATE=1 npx vitest run autonomy/__tests__/c
 
 ## 11. 相关文档
 
-- [CI_SSOT.md](./CI_SSOT.md) — CI/CD 唯一真相源，含"自治闭环"章节
+- [CI_SSOT.md](./CI_SSOT.md) — CI/CD 流水线文档，含"自治闭环"章节
 - [cicd-e2e-prompt.md](../.trae/rules/cicd-e2e-prompt.md) — AI 决策矩阵
 - 代码：
   - 桌面：`FHD/desktop/autonomy/`

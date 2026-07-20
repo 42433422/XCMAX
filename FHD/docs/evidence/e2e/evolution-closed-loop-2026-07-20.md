@@ -241,7 +241,7 @@ Distinct trace_ids: 2
 2. `/Users/a4243342/Desktop/XCMAX/FHD/scripts/dev/audit_evolution.py` — owner 审计 CLI（spec Task 13 交付物）
 3. `/Users/a4243342/Desktop/XCMAX/FHD/scripts/dev/append_evolution_event.py` — 通用 ledger 写入 CLI（spec Task 13 交付物）
 4. `/Users/a4243342/Desktop/XCMAX/FHD/.github/workflows/evolution-aggregator.yml` — FHD workflow 源（每周一 05:00 UTC）
-5. `/Users/a4243342/Desktop/XCMAX/.github/workflows/fhd-evolution-aggregator.yml` — 根仓 SSOT 副本（由 `publish_ci_workflows_to_root.py` 同步生成）
+5. `/Users/a4243342/Desktop/XCMAX/.github/workflows/fhd-evolution-aggregator.yml` — 根仓 workflow 副本（由 `publish_ci_workflows_to_root.py` 同步生成）
 6. `/Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/evolution-closed-loop-2026-07-20.md` — 本 evidence 文档
 
 ### 修改
