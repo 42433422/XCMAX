@@ -412,14 +412,39 @@ def summarize_autonomy_audit(*, days: int = 1, include_synthetic: bool = False) 
 
 
 def autonomy_daily_digest_html(*, days: int = 1) -> str:
+    from app.domain.autonomy.operating_metrics import (
+        autonomy_boundary_review_status,
+        evaluate_autonomy_window,
+    )
+
     summary = summarize_autonomy_audit(days=days)
-    tone = "#b91c1c" if summary["veto_count"] else "#047857"
+    windows = [evaluate_autonomy_window(window) for window in (30, 90)]
+    attention = {"failed", "needs_review", "needs_tuning"}
+    tone = (
+        "#b91c1c"
+        if summary["veto_count"] or any(item.get("status") in attention for item in windows)
+        else "#047857"
+    )
+    window_rows = "".join(
+        '<div style="margin-top:4px;font-size:12px;color:#475569">'
+        f"{item['window_days']}天 · {item['status']} · "
+        f"已观察 {item['observed_days']}/{item['window_days']} 天 · "
+        f"veto {item['veto_rate']}%"
+        "</div>"
+        for item in windows
+    )
+    boundary = windows[-1]["boundary_review"] if windows else autonomy_boundary_review_status()
     return (
         '<div style="padding:12px 16px;border:1px solid #e2e8f0;border-radius:10px">'
         "<strong>Autonomy 决策</strong>"
         f'<span style="margin-left:10px;color:{tone}">'
         f"{summary['total']} 次 · veto {summary['veto_rate']}% · "
-        f"自动通过 {summary['auto_pass_rate']}%</span></div>"
+        f"自动通过 {summary['auto_pass_rate']}%</span>"
+        f"{window_rows}"
+        '<div style="margin-top:4px;font-size:12px;color:#475569">'
+        f"边界复盘 revision {boundary['boundary_revision']} · "
+        f"下次 {boundary['next_review_at'] or 'unknown'} · {boundary['status']}"
+        "</div></div>"
     )
 
 

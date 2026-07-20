@@ -17,6 +17,7 @@ from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_exec
 def isolated_autonomy(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "audit.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("XCAGI_AUTONOMY_METRICS_LOG_PATH", str(tmp_path / "metrics.jsonl"))
     monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
@@ -135,6 +136,21 @@ def test_daily_digest_cron_passes_through_low_risk_guard(monkeypatch) -> None:
     )
     result = daily_digest.run_daily_digest_email()
     assert result["reason"] == "test-after-guard"
+
+
+def test_autonomy_metrics_snapshot_is_low_risk_and_idempotent() -> None:
+    from modstore_server.autonomy_metrics_job import run_autonomy_metrics_snapshot
+
+    first = run_autonomy_metrics_snapshot()
+    second = run_autonomy_metrics_snapshot()
+
+    assert first["ok"] is True and first["skipped"] is False
+    assert [item["window_days"] for item in first["snapshots"]] == [30, 90]
+    assert all(item["recorded"] for item in first["snapshots"])
+    assert all(not item["recorded"] for item in second["snapshots"])
+    assert first["risk_decision"]["risk_level"] == "low"
+    assert first["risk_decision"]["decision"] == "allow"
+    assert first["risk_decision"]["approver"] is None
 
 
 def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> None:
