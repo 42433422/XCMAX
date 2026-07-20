@@ -21,6 +21,42 @@ PUBLIC_HEALTH_URL="${MODSTORE_PUBLIC_HEALTH_URL:-https://xiu-ci.com/api/health}"
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
 
+resolve_java_home() {
+  local candidate=""
+  local java_bin=""
+
+  if [[ -n "${JAVA_HOME:-}" && -x "${JAVA_HOME}/bin/java" ]]; then
+    export PATH="${JAVA_HOME}/bin:${PATH}"
+    return 0
+  fi
+
+  for candidate in \
+    /usr/lib/jvm/java-17-openjdk-17.0.17.0.10-1.tl3.x86_64 \
+    /usr/lib/jvm/java-17-* \
+    /usr/lib/jvm/java-17-openjdk*; do
+    if [[ -x "${candidate}/bin/java" ]]; then
+      export JAVA_HOME="$candidate"
+      export PATH="${JAVA_HOME}/bin:${PATH}"
+      log "resolved Java 17 runtime at $JAVA_HOME"
+      return 0
+    fi
+  done
+
+  java_bin="$(command -v java 2>/dev/null || true)"
+  if [[ -n "$java_bin" ]]; then
+    java_bin="$(readlink -f "$java_bin" 2>/dev/null || printf '%s' "$java_bin")"
+    candidate="$(dirname "$(dirname "$java_bin")")"
+    if [[ -x "${candidate}/bin/java" ]]; then
+      export JAVA_HOME="$candidate"
+      export PATH="${JAVA_HOME}/bin:${PATH}"
+      log "resolved Java runtime from PATH at $JAVA_HOME"
+      return 0
+    fi
+  fi
+
+  fail "Java 17 runtime is required by the active payment service"
+}
+
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
 [[ -d "$SOURCE_ROOT/.git" ]] || fail "source Git mirror not found: $SOURCE_ROOT"
 [[ "$RELEASE_BASE" == /opt/xcmax || "${XCMAX_ALLOW_CUSTOM_RELEASE_BASE:-0}" == 1 ]] \
@@ -90,6 +126,14 @@ BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"
 [[ -n "$BUILD_JWT_SECRET" ]] || fail "protected production env is missing MODSTORE_JWT_SECRET"
 [[ ${#BUILD_JWT_SECRET} -ge 32 ]] || fail "protected production MODSTORE_JWT_SECRET is shorter than 32 characters"
 
+PAYMENT_SERVICE_PRESENT=0
+PAYMENT_JAVA_BIN=/usr/bin/java
+if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+  PAYMENT_SERVICE_PRESENT=1
+  resolve_java_home
+  PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"
+fi
+
 FINAL_ROOT="${RELEASE_BASE}/releases/${TARGET_SHA}"
 if [[ -f "$FINAL_ROOT/.xcmax-release.json" ]]; then
   EXISTING_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$FINAL_ROOT/.xcmax-release.json")"
@@ -136,7 +180,7 @@ else
     [[ -f "$DEPLOY_DIR/market/dist/index.html" ]] || fail "market build produced no index.html"
   fi
 
-  if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+  if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
     command -v mvn >/dev/null 2>&1 || fail "mvn is required by the active payment service"
     log "building and testing the Java payment service"
     (cd "$DEPLOY_DIR/java_payment_service" && mvn -B -q test package)
@@ -284,7 +328,7 @@ ExecStart=
 ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990 --workers 1
 EOF
 
-  if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+  if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
     cat > /etc/systemd/system/modstore-payment.service <<EOF
 [Unit]
 Description=MODstore Java Payment immutable release
@@ -295,7 +339,7 @@ Type=simple
 WorkingDirectory=${CURRENT_LINK}/${MODSTORE_SUBDIR}/java_payment_service
 EnvironmentFile=-${ENV_FILE}
 EnvironmentFile=-${release_env}
-ExecStart=/usr/bin/java -jar ${CURRENT_LINK}/${MODSTORE_SUBDIR}/java_payment_service/target/payment-service-1.0.0.jar
+ExecStart=${PAYMENT_JAVA_BIN} -jar ${CURRENT_LINK}/${MODSTORE_SUBDIR}/java_payment_service/target/payment-service-1.0.0.jar
 Restart=always
 RestartSec=5
 [Install]
@@ -379,7 +423,7 @@ if ! systemctl restart modstore.service modstore-scheduler.service; then
   rollback
   fail "MODstore services failed to restart"
 fi
-if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
   if ! systemctl restart modstore-payment.service; then
     rollback
     fail "payment service failed to restart"
@@ -406,7 +450,7 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]] \
   rollback
   fail "exact-SHA public health verification failed"
 fi
-if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
   for _ in $(seq 1 60); do
     curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8080/actuator/health >/dev/null && break
     sleep 2
