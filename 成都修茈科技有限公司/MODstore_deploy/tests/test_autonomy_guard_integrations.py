@@ -63,6 +63,30 @@ def test_delegate_accepts_deployed_fhd_runtime_root(tmp_path, monkeypatch) -> No
     sys.path.remove(str(runtime_fhd))
 
 
+def test_delegate_falls_back_to_git_repo_fhd_when_runtime_mirror_lags(
+    tmp_path, monkeypatch
+) -> None:
+    """Daily env points XCAGI_FHD_ROOT at a stale mirror missing autonomy/."""
+    stale_runtime = tmp_path / "stale-runtime-fhd"
+    (stale_runtime / "app" / "domain").mkdir(parents=True)
+    source_fhd = tmp_path / "source-checkout" / "FHD"
+    guard_path = source_fhd / "app" / "domain" / "autonomy" / "autonomy_guard.py"
+    guard_path.parent.mkdir(parents=True)
+    guard_path.write_text("# source guard probe\n", encoding="utf-8")
+
+    monkeypatch.delenv("XCAGI_FHD_RUNTIME_ROOT", raising=False)
+    monkeypatch.setenv("XCAGI_FHD_ROOT", str(stale_runtime))
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(tmp_path / "stale-monorepo"))
+    monkeypatch.setenv("MODSTORE_GIT_REPO_ROOT", str(tmp_path / "source-checkout"))
+
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+    ensure_fhd_on_path()
+
+    assert str(source_fhd) in sys.path
+    sys.path.remove(str(source_fhd))
+
+
 def test_delegate_repairs_an_existing_app_namespace() -> None:
     modstore_root = Path(__file__).resolve().parents[1]
     fhd_root = Path(__file__).resolve().parents[3] / "FHD"
