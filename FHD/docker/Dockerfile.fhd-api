@@ -22,6 +22,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 FROM python:3.11-slim AS production
 
+ARG XCAGI_GIT_SHA=""
+
 LABEL org.opencontainers.image.title="xcagi-fhd-api" \
     org.opencontainers.image.description="XCAGI FastAPI production image (PostgreSQL + Redis via env)"
 
@@ -31,7 +33,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONUTF8=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \

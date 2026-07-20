@@ -49,9 +49,15 @@ WORKFLOW_RENAMES = {
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
 }
 
+# These workflows use only absolute/remote commands.  Injecting the normal FHD
+# working directory before checkout makes their first preflight step fail.
+FHD_NO_DEFAULTS = {"cvm-autonomy-watcher.yml"}
+MOD_NO_DEFAULTS = {"prod-deploy.yml"}
+
 MOD_RENAMES = {
     "ci-backend-python.yml": "modstore-ci-backend-python.yml",
     "market-e2e.yml": "modstore-market-e2e.yml",
+    "prod-deploy.yml": "modstore-prod-deploy.yml",
 }
 
 
@@ -221,7 +227,8 @@ def _render_fhd(src: Path) -> tuple[str, str] | None:
         body,
     )
     out_name = WORKFLOW_RENAMES.get(src.name, f"fhd-{src.name}")
-    body = _insert_defaults(body, DEFAULTS_FHD)
+    if src.name not in FHD_NO_DEFAULTS:
+        body = _insert_defaults(body, DEFAULTS_FHD)
     body = _prefix_fhd_paths(body, out_name)
     header = (
         f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — DO NOT edit here.\n"
@@ -236,7 +243,8 @@ def _render_mod(src: Path) -> tuple[str, str] | None:
     if not body or "jobs:" not in body:
         return None
     out_name = MOD_RENAMES.get(src.name, f"modstore-{src.name}")
-    body = _insert_defaults(body, DEFAULTS_MOD)
+    if src.name not in MOD_NO_DEFAULTS:
+        body = _insert_defaults(body, DEFAULTS_MOD)
     body = _prefix_mod_paths(body, out_name)
     header = (
         f"# CI SSOT: generated from MODstore_deploy/.github/workflows/{src.name} "

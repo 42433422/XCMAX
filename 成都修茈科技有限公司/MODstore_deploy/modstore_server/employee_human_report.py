@@ -92,7 +92,7 @@ def _format_changed_files(result: Dict[str, Any], path_guard: Optional[Dict[str,
     violations = pg.get("violations") or []
     if violations:
         vlist = "\n".join(
-            f"  - ❌ {v.get('path','')}（{v.get('reason','')}）"
+            f"  - ❌ {v.get('path', '')}（{v.get('reason', '')}）"
             for v in violations[:5]
             if isinstance(v, dict)
         )
@@ -360,7 +360,7 @@ def build_human_report(
         evo_fail = evo.get("fail_count", 0)
         remainders.append(
             f"- ⚠️ 学习信号触发：最近 {evo.get('lookback_hours', 24)}h 失败 {evo_fail} 次，"
-            f"建议运行 prompt evolution（admin API: {evo.get('evolution_api','')}）"
+            f"建议运行 prompt evolution（admin API: {evo.get('evolution_api', '')}）"
         )
     # handoff 任务转交
     ho = result.get("handoff") if isinstance(result, dict) else None

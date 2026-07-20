@@ -13,12 +13,17 @@
 #   FHD_PUSH_SSH_KEY             SSH 私钥路径（默认 ~/.ssh/id_rsa 等）
 #   FHD_RELEASE_OUT_DIR          与 pack 脚本一致
 #   FHD_PUSH_IMAGE_TAR           auto（仅 image 模式）| 1（强制）| 0（跳过）
+#   FHD_PUSH_APPLY_NOW           1 上传后立刻远端应用并验证；strict CI 默认 1
+#   FHD_PUSH_REMOTE_DEPLOY_ROOT  默认 /opt/fhd-full
+#   FHD_PUSH_HEALTH_URL          远端本机健康地址，默认 http://127.0.0.1:5100/api/health?lite=true
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 # shellcheck source=lib/deploy_emit.sh
 . "$SCRIPT_DIR/lib/deploy_emit.sh"
+# shellcheck source=lib/verify_release_identity.sh
+. "$SCRIPT_DIR/lib/verify_release_identity.sh"
 export DEPLOY_SCRIPT_ID="fhd_push_release"
 
 OUT_DIR="${FHD_RELEASE_OUT_DIR:-$FHD_ROOT/dist/deploy}"
@@ -45,6 +50,21 @@ fi
 REMOTE="${USER}@${HOST}"
 SSH=(ssh "${SSH_OPTS[@]}")
 SCP=(scp "${SCP_OPTS[@]}")
+
+APPLY_NOW="${FHD_PUSH_APPLY_NOW:-}"
+if [[ -z "$APPLY_NOW" ]]; then
+  case "${FHD_CVM_PUSH_STRICT:-false}" in
+    1 | true | TRUE | yes | YES) APPLY_NOW=1 ;;
+    *) APPLY_NOW=0 ;;
+  esac
+fi
+case "$APPLY_NOW" in
+  0 | 1) ;;
+  *)
+    echo "[err] FHD_PUSH_APPLY_NOW 须为 0 或 1，当前: $APPLY_NOW" >&2
+    exit 1
+    ;;
+esac
 
 deploy_emit bootstrap started "host=$HOST channel=$CHANNEL remote_dir=$REMOTE_DIR"
 
@@ -166,15 +186,50 @@ elif [[ -f "$IMAGE_TAR" ]]; then
   echo "[notice] 跳过可选镜像归档；设置 FHD_PUSH_IMAGE_TAR=1 可显式上传"
 fi
 
+if [[ "$APPLY_NOW" == "1" ]]; then
+  REMOTE_DEPLOY_ROOT="${FHD_PUSH_REMOTE_DEPLOY_ROOT:-/opt/fhd-full}"
+  REMOTE_AUTO_UPDATE="${FHD_PUSH_REMOTE_AUTO_UPDATE:-${REMOTE_DEPLOY_ROOT}/scripts/deploy/fhd-auto-update.sh}"
+  REMOTE_HEALTH_URL="${FHD_PUSH_HEALTH_URL:-http://127.0.0.1:5100/api/health?lite=true}"
+  REMOTE_MANIFEST="${REMOTE_DIR}/fhd-manifest.json"
+  printf -v APPLY_COMMAND \
+    'test -x %q && FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash %q' \
+    "$REMOTE_AUTO_UPDATE" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT" "$REMOTE_AUTO_UPDATE"
+
+  deploy_emit apply started "host=$HOST git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
+  if ! "${SSH[@]}" "$REMOTE" "$APPLY_COMMAND"; then
+    deploy_emit apply failed "remote_auto_update_failed"
+    echo "[err] 远端自动应用失败；发布未通过" >&2
+    exit 1
+  fi
+
+  deploy_emit verify started "url=$REMOTE_HEALTH_URL git_sha=$GIT_SHA"
+  printf -v HEALTH_COMMAND 'curl --noproxy "*" -fsS --max-time 10 %q' "$REMOTE_HEALTH_URL"
+  if ! REMOTE_HEALTH_PAYLOAD="$("${SSH[@]}" "$REMOTE" "$HEALTH_COMMAND")"; then
+    deploy_emit verify failed "remote_health_unreachable"
+    echo "[err] 远端健康检查不可达；发布未通过" >&2
+    exit 1
+  fi
+  if ! verify_release_identity_payload \
+      "$REMOTE_HEALTH_PAYLOAD" \
+      "$GIT_SHA" \
+      "${IMAGE_DIGEST:-}" \
+      "$SHA256"; then
+    deploy_emit verify failed "remote_identity_mismatch"
+    echo "[err] 远端运行版本与本次发布身份不一致；发布未通过" >&2
+    exit 1
+  fi
+  deploy_emit verify ok "git_sha=$GIT_SHA"
+  deploy_emit apply ok "host=$HOST git_sha=$GIT_SHA"
+fi
+
 deploy_emit push ok "channel=$CHANNEL version=$VERSION git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
 echo "[ok] 已发布至 ${HOST}:${REMOTE_DIR}/ (channel=$CHANNEL)"
 echo "[ok] artifact=$ARTIFACT sha256=${SHA256:0:16}... deploy_mode=${DEPLOY_MODE:-tarball}"
 if [[ -n "${IMAGE:-}" && -n "${IMAGE_DIGEST:-}" ]]; then
   echo "[ok] image=$IMAGE digest=${IMAGE_DIGEST:0:19}..."
 fi
-echo "[hint] 服务器 cron 将在 5 分钟内自动应用；或手动:"
-if [[ "${DEPLOY_MODE:-tarball}" == "image" ]]; then
-  echo "       FHD_API_IMAGE=$IMAGE FHD_API_IMAGE_DIGEST=$IMAGE_DIGEST bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh"
+if [[ "$APPLY_NOW" == "1" ]]; then
+  echo "[ok] 远端已应用并通过 exact-SHA 健康验证 git_sha=$GIT_SHA"
 else
-  echo "       FHD_RELEASE_TARBALL=${REMOTE_DIR}/${ARTIFACT} bash /opt/fhd-full/scripts/deploy/fhd-apply-release.sh"
+  echo "[hint] 服务器 cron 将在 5 分钟内自动应用；或设置 FHD_PUSH_APPLY_NOW=1 立即应用并验证"
 fi

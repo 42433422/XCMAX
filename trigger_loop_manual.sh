@@ -1,76 +1,56 @@
 #!/usr/bin/env bash
-# Manual trigger of self_maintenance_loop for 2026-07-21 P0 fix verification
-# Usage: bash ~/Desktop/XCMAX/trigger_loop_manual.sh
-set -uo pipefail
+# Force one auditable local self-maintenance loop from the installed exact runtime.
+set -euo pipefail
 
-LOG_FILE="$HOME/Library/Logs/XCMAX/loop-trigger-manual-$(date +%Y%m%d-%H%M%S).log"
+RUNTIME_ROOT="${MODSTORE_LOCAL_RUNTIME_ROOT:-/Users/a4243342/XCMAX-runtime/modstore-daily}"
+STATE_ROOT="${MODSTORE_LOCAL_STATE_ROOT:-/Users/a4243342/Library/Application Support/XCMAX/modstore-daily}"
+ENV_SNAPSHOT="${MODSTORE_LOCAL_ENV_FILE:-/Users/a4243342/Library/Application Support/XCMAX/modstore-daily.env}"
+MANIFEST="$RUNTIME_ROOT/.xcmax-runtime-provenance.json"
+LOG_DIR="${MODSTORE_LOCAL_LOG_DIR:-/Users/a4243342/Library/Logs/XCMAX}"
+LOG_FILE="$LOG_DIR/loop-trigger-manual-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$LOG_DIR"
 echo "[trigger] log: $LOG_FILE"
+exec >"$LOG_FILE" 2>&1
+
+if [[ -f "$ENV_SNAPSHOT" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_SNAPSHOT"
+  set +a
+fi
+[[ -f "$MANIFEST" ]] || { echo "[trigger] runtime provenance manifest missing" >&2; exit 2; }
+RUNTIME_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$MANIFEST")"
+[[ "$RUNTIME_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "[trigger] invalid runtime SHA" >&2; exit 2; }
+
 export PYTHONUNBUFFERED=1
-exec > "$LOG_FILE" 2>&1
-
-# 1. Load env snapshot, strip single quotes
-set -a
-while IFS= read -r line; do
-  [[ -z "$line" || "$line" =~ ^# ]] && continue
-  key="${line%%=*}"
-  val="${line#*=}"
-  val="${val//\'/}"
-  export "$key=$val"
-done < "$HOME/Library/Application Support/XCMAX/modstore-daily.env"
-set +a
-
-# 2. Override critical env vars (mirror run-modstore-daily.sh)
 export MODSTORE_DAILY_ENV_CLEANROOM=1
 export MODSTORE_DAILY_ROLE=scheduler
-export MODSTORE_CONTROL_PORT=8788
-export MODSTORE_PORT=8789
-export MODSTORE_DAILY_FHD_ROOT="$HOME/XCMAX-runtime/modstore-daily/FHD"
-export MODSTORE_DAILY_XCMAX_ROOT="$HOME/XCMAX-runtime/modstore-daily"
-export MODSTORE_RUNTIME_ROOT="$HOME/XCMAX-runtime/modstore-daily"
-export MODSTORE_RUNTIME_STATE_ROOT="$HOME/Library/Application Support/XCMAX/modstore-daily"
-export MODSTORE_RUNTIME_DB_PATH="$HOME/Library/Application Support/XCMAX/modstore-daily/modstore.db"
-export MODSTORE_RUNTIME_DIR="$HOME/Library/Application Support/XCMAX/modstore-daily/runtime"
-export MODSTORE_DEPLOY_ROOT="$HOME/XCMAX-runtime/modstore-daily/MODstore_deploy"
-export MODSTORE_REPO_ROOT="$HOME/XCMAX-runtime/modstore-daily/MODstore_deploy"
-export MODSTORE_DB_PATH="$HOME/Library/Application Support/XCMAX/modstore-daily/modstore.db"
-export DATABASE_URL="sqlite:////Users/a4243342/Library/Application Support/XCMAX/modstore-daily/modstore.db"
-# 注意：sqlite URL 必须 4 个 slash 才是绝对路径，3 个 slash 会变成相对路径连到空 DB
-export PYTHONPATH="$HOME/XCMAX-runtime/modstore-daily/MODstore_deploy:$HOME/XCMAX-runtime/modstore-daily/packages/xcagi_common"
-export XCAGI_FHD_ROOT="$HOME/XCMAX-runtime/modstore-daily/FHD"
-export XCMAX_MONOREPO_ROOT="$HOME/XCMAX-runtime/modstore-daily"
-# Source checkout (complete FHD SSOT). ensure_fhd_on_path falls back here when
-# the runtime FHD mirror lags (e.g. missing app/domain/autonomy/).
-export MODSTORE_GIT_REPO_ROOT="$HOME/Desktop/XCMAX"
-export MODSTORE_DAILY_XCMAX_ROOT="$HOME/Desktop/XCMAX"
-export XCAGI_FHD_RUNTIME_ROOT="$HOME/Desktop/XCMAX/FHD"
+export MODSTORE_RUNTIME_ROOT="$RUNTIME_ROOT"
+export MODSTORE_RUNTIME_STATE_ROOT="$STATE_ROOT"
+export MODSTORE_RUNTIME_DB_PATH="$STATE_ROOT/modstore.db"
+export MODSTORE_RUNTIME_DIR="$STATE_ROOT/runtime"
+export MODSTORE_DEPLOY_ROOT="$RUNTIME_ROOT/MODstore_deploy"
+export MODSTORE_REPO_ROOT="$RUNTIME_ROOT/MODstore_deploy"
+export MODSTORE_DB_PATH="$STATE_ROOT/modstore.db"
+export DATABASE_URL="sqlite:///$MODSTORE_RUNTIME_DB_PATH"
+export PYTHONPATH="$RUNTIME_ROOT/MODstore_deploy:$RUNTIME_ROOT/packages/xcagi_common"
+export XCAGI_FHD_ROOT="$RUNTIME_ROOT/FHD"
+export XCAGI_FHD_RUNTIME_ROOT="$RUNTIME_ROOT/FHD"
+export XCMAX_MONOREPO_ROOT="$RUNTIME_ROOT"
+export MODSTORE_GIT_SHA="$RUNTIME_SHA"
+export MODSTORE_EXPECTED_GIT_SHA="$RUNTIME_SHA"
+export MODSTORE_RELEASE_MANIFEST="$MANIFEST"
+export MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME=1
 
-cd "$HOME/XCMAX-runtime/modstore-daily/MODstore_deploy"
+cd "$RUNTIME_ROOT/MODstore_deploy"
+"$RUNTIME_ROOT/MODstore_deploy/.venv/bin/python" <<'PY'
+import json
+from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] trigger start"
-echo "[trigger] env: MODSTORE_RUNTIME_DIR=$MODSTORE_RUNTIME_DIR"
-echo "[trigger] env: DATABASE_URL=$DATABASE_URL"
-echo "[trigger] env: PYTHONPATH=$PYTHONPATH"
-echo "[trigger] env: MODSTORE_RUNTIME_DB_PATH=$MODSTORE_RUNTIME_DB_PATH"
-
-"$HOME/XCMAX-runtime/modstore-daily/MODstore_deploy/.venv/bin/python" <<'PYEOF'
-import json, sys, traceback, os
-try:
-    print(f"[python] MODSTORE_RUNTIME_DIR={os.environ.get('MODSTORE_RUNTIME_DIR')}")
-    print(f"[python] DATABASE_URL={os.environ.get('DATABASE_URL')}")
-    from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
-    print("[python] module imported OK, calling run_self_maintenance_loop(force=True)...")
-    result = run_self_maintenance_loop(
-        triggered_by="manual",
-        force=True,
-        reason="manual verify 2026-07-21 P0 employee quality prompt fix"
-    )
-    print("===RESULT===")
-    print(json.dumps(result, default=str, indent=2, ensure_ascii=False))
-except Exception:
-    print("===EXCEPTION===")
-    traceback.print_exc()
-    sys.exit(1)
-PYEOF
-EXIT=$?
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] trigger end (exit=$EXIT)"
-echo "[trigger] full log saved to: $LOG_FILE"
+result = run_self_maintenance_loop(
+    triggered_by="manual",
+    force=True,
+    reason="manual exact-runtime self-maintenance verification",
+)
+print(json.dumps(result, default=str, ensure_ascii=False, indent=2))
+PY

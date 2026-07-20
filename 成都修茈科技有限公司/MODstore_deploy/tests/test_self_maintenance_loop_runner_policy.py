@@ -20,7 +20,6 @@ from modstore_server.self_maintenance_loop_runner import (
     _find_pr_number_for_branch,
     _focused_test_command,
     _gh_pr_add_label,
-    _gh_pr_comment,
     _guest_auth_headers,
     _has_high_risk_report,
     _historical_rollback_rate,
@@ -163,6 +162,47 @@ def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> 
 
     assert _historical_rollback_rate(memory) == 0.5
     assert _historical_rollback_rate_v3(memory) == 0.5
+
+
+def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90():
+    steps = [
+        {
+            "step": "review",
+            "report_excerpt": (
+                f"{loop_runner.STRUCTURED_REVIEW_MARKER}: "
+                '{"max_severity":"none","blocking_findings":[],"risk_class":"low",'
+                '"target_branch_available":true,"tested_commands":[]}'
+            ),
+        },
+        {
+            "step": "qa",
+            "report_excerpt": (
+                f"{loop_runner.STRUCTURED_QA_MARKER}: "
+                '{"verdict":"PASS","blocking_findings":[],"tested_commands":['
+                '{"command":"pytest focused.py -q","exit_code":0,"status":"passed"}],'
+                '"target_branch_available":true,"test_delta":{"baseline_id":"base",'
+                '"new_failures":[],"new_errors":[]},"changed_files_scope":"low",'
+                '"risk_class":"low"}'
+            ),
+        },
+    ]
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+    ]
+
+    result = loop_runner._auto_merge_safety_score_v2(
+        files,
+        _stats(line_changes=60),
+        diff_excerpt="narrow scheduling guard with focused regression coverage",
+        memory={"recent_runs": []},
+        steps=steps,
+    )
+
+    assert result["score"] >= 90
+    assert result["risk_class"] == "low"
+    assert result["components"]["semantic_llm_penalty"] == 0
+    assert result["components"]["rollback_penalty"] == 2
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
@@ -1637,7 +1677,7 @@ def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(monkeypatch, t
     monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
     monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
 
-    final = _reject_and_retry_kb_schema_failure(
+    _reject_and_retry_kb_schema_failure(
         run_id="run-kb-no-pr",
         branch="devfleet/codex/kb-no-pr",
         para_task_id=None,
@@ -1683,6 +1723,12 @@ def test_code_task_text_includes_strict_kb_schema_example_and_validate_instructi
 
     # 4. 强调 executable_template 必须是 object（cedde773 的失败原因）
     assert "executable_template MUST be an object" in text
+
+    # 5. 质量门必须显式出现在真正派发给 code 员工的 prompt 中
+    assert "OUTPUT QUALITY REQUIREMENTS" in text
+    assert "safety_score_v2 target of at least 90" in text
+    assert "smallest production change" in text
+    assert "independent report-only employees" in text
 
 
 def test_gh_pr_add_label_is_best_effort_and_returns_false_on_failure(monkeypatch):

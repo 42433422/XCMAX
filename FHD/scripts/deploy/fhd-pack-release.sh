@@ -42,10 +42,11 @@ PY
 
 GIT_SHA="local"
 if command -v git >/dev/null 2>&1 && git -C "$FHD_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  GIT_SHA="$(git -C "$FHD_ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo local)"
+  GIT_SHA="$(git -C "$FHD_ROOT" rev-parse HEAD 2>/dev/null || echo local)"
 fi
 
-ARTIFACT="fhd-full-${VERSION}-${GIT_SHA}.tar.gz"
+GIT_SHORT="${GIT_SHA:0:12}"
+ARTIFACT="fhd-full-${VERSION}-${GIT_SHORT}.tar.gz"
 TARBALL="$OUT_DIR/$ARTIFACT"
 STAGING="$(mktemp -d "${TMPDIR:-/tmp}/fhd-pack.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
@@ -93,8 +94,31 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$STAGING/scripts/deploy/"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \
+  "$SCRIPT_DIR/lib/verify_release_identity.sh" \
   "$STAGING/scripts/deploy/lib/"
 cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
+
+BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+python3 - <<'PY' "$STAGING/.build-identity.json" "$VERSION" "$GIT_SHA" "$BUILT_AT" "$CHANNEL"
+import json, sys
+path, version, git_sha, built_at, channel = sys.argv[1:6]
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(
+        {
+            "artifact_sha256": "",
+            "built_at": built_at,
+            "channel": channel,
+            "git_sha": git_sha,
+            "image_digest": "",
+            "version": version,
+        },
+        fh,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    fh.write("\n")
+PY
 
 COPYFILE_DISABLE=1 tar -C "$STAGING" -czf "$TARBALL" .
 SHA256="$(python3 - <<'PY' "$TARBALL"
@@ -107,7 +131,6 @@ print(h.hexdigest())
 PY
 )"
 
-BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 MANIFEST="$OUT_DIR/fhd-manifest.json"
 
 python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$CHANNEL"

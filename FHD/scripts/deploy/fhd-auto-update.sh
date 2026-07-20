@@ -155,12 +155,14 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   fi
 
   if ! authorize_production_release "$CHANNEL" "${GIT_SHA:-$IMAGE_DIGEST}"; then
-    exit 0
+    exit 77
   fi
 
   log "发现新镜像 version=$VERSION sha=$GIT_SHA digest=${IMAGE_DIGEST:0:19}...，开始 compose 应用"
   if FHD_API_IMAGE="$IMAGE" \
       FHD_API_IMAGE_DIGEST="$IMAGE_DIGEST" \
+      FHD_ARTIFACT_SHA256="$REMOTE_SHA" \
+      FHD_GIT_SHA="$GIT_SHA" \
       FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
       FHD_ARTIFACT_DIR="$ARTIFACT_DIR" \
       bash "$APPLY_COMPOSE"; then
@@ -191,7 +193,7 @@ if [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]; then
 fi
 
 if ! authorize_production_release "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}"; then
-  exit 0
+  exit 77
 fi
 
 TARBALL="$ARTIFACT_DIR/$ARTIFACT"
@@ -219,6 +221,7 @@ log "发现新版本 version=$VERSION sha=$GIT_SHA，开始 tarball 应用"
 if FHD_RELEASE_TARBALL="$TARBALL" \
     FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
     FHD_EXPECTED_SHA256="$REMOTE_SHA" \
+    FHD_GIT_SHA="$GIT_SHA" \
     FHD_SKIP_PIP="${FHD_SKIP_PIP:-1}" \
     bash "$APPLY_TARBALL"; then
   audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}" "executed"
