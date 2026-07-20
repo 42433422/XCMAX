@@ -33,6 +33,37 @@ function wordItem(overrides: Partial<ChatOfficeDockingReviewItem> = {}): ChatOff
   }
 }
 
+function excelItem(overrides: Partial<ChatOfficeDockingReviewItem> = {}): ChatOfficeDockingReviewItem {
+  return {
+    id: 'excel-1',
+    fileName: '考勤表.xlsx',
+    employeeId: 'excel-mapper-employee',
+    employeeLabel: 'Excel 入库员',
+    kindLabel: 'Excel',
+    status: 'ready',
+    commitStatus: '',
+    intentId: 'attendance',
+    intentLabel: '考勤表入库',
+    intentSummary: '识别成功，可入库',
+    databaseTargetLabel: '考勤数据库',
+    databaseAction: 'insert',
+    databaseDisabledReason: '',
+    selectedKnowledge: false,
+    selectedDatabase: true,
+    summary: '已识别 30 行',
+    warnings: [],
+    error: '',
+    outputFiles: [],
+    knowledgeText: '',
+    excelAnalysis: { columns: [{ name: '员工姓名' }] },
+    fieldNames: ['员工姓名', '日期', '上班时间', '下班时间', '工时'],
+    sampleRows: [{ 员工姓名: '张三', 日期: '2026-07-01', 上班时间: '09:00', 下班时间: '18:00', 工时: 9 }],
+    rowCount: 30,
+    textPreview: '',
+    ...overrides,
+  }
+}
+
 describe('ChatOfficeDockingReview', () => {
   it('shows a compact Word excerpt and clearly states knowledge-only behavior', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
@@ -66,5 +97,206 @@ describe('ChatOfficeDockingReview', () => {
     })
     expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.office-docking-review__head').text()).toContain('待确认 0 个')
+  })
+
+  it('shows sample row preview for Excel items with sampleRows', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem()], processing: false },
+    })
+    const snippet = wrapper.get('.office-docking-review__preview-snippet')
+    expect(snippet.text()).toContain('共 30 行')
+    expect(snippet.text()).toContain('员工姓名')
+  })
+
+  it('opens detailed preview for Excel items', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem()], processing: false },
+    })
+    const details = wrapper.get('.office-docking-review__preview-details')
+    expect(details.attributes('open')).toBeUndefined()
+    await details.get('summary').trigger('click')
+    // Opening details is a browser-native behavior; we just confirm the element renders
+    expect(details.find('pre.office-docking-review__preview').exists()).toBe(true)
+  })
+
+  it('emits toggleTarget when knowledge checkbox is toggled', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem({ selectedKnowledge: true })], processing: false },
+    })
+    const checkbox = wrapper.findAll('input[type="checkbox"]')[0]
+    checkbox.element.checked = false
+    await checkbox.trigger('change')
+    expect(wrapper.emitted('toggleTarget')).toEqual([['word-1', 'knowledge', false]])
+  })
+
+  it('emits toggleTarget when database checkbox is toggled', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ selectedDatabase: false, databaseAction: 'insert' })], processing: false },
+    })
+    const checkbox = wrapper.findAll('input[type="checkbox"]')[1]
+    checkbox.element.checked = true
+    await checkbox.trigger('change')
+    expect(wrapper.emitted('toggleTarget')).toEqual([['excel-1', 'database', true]])
+  })
+
+  it('emits close when cancel button is clicked', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: false },
+    })
+    const cancel = wrapper.findAll('button').find((b) => b.text().includes('取消'))!
+    await cancel.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('emits close when icon close button is clicked', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: false },
+    })
+    await wrapper.get('.office-docking-review__icon-btn').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('emits confirm when primary button is clicked', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: false },
+    })
+    await wrapper.get('button.btn-primary').trigger('click')
+    expect(wrapper.emitted('confirm')).toHaveLength(1)
+  })
+
+  it('shows processing state in header when processing=true', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: true },
+    })
+    expect(wrapper.get('.office-docking-review__head').text()).toContain('员工识别中')
+  })
+
+  it('disables confirm button when processing=true', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: true },
+    })
+    expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
+  })
+
+  it('shows committing label and disables buttons when commitStatus=committing', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ commitStatus: 'committing', selectedDatabase: true })], processing: false },
+    })
+    expect(wrapper.get('button.btn-primary').text()).toBe('正在提交...')
+    expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
+  })
+
+  it('shows failed status text when commitStatus=failed', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ commitStatus: 'failed' })], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('提交失败')
+  })
+
+  it('shows running status text when status=running', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ status: 'running' })], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('识别中')
+  })
+
+  it('shows error status text and error message when status=error', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ status: 'error', error: '解析失败' })], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('识别失败')
+    expect(wrapper.get('.office-docking-review__error').text()).toBe('解析失败')
+  })
+
+  it('shows field chips for items with fieldNames', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem()], processing: false },
+    })
+    const chips = wrapper.findAll('.office-docking-review__chips span')
+    expect(chips.length).toBe(5)
+    expect(chips[0].text()).toBe('员工姓名')
+  })
+
+  it('shows database target label in selection hint when database selected', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ selectedDatabase: true })], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__selection-hint').text()).toContain('考勤数据库')
+  })
+
+  it('shows confirm label with database target when only database selected', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ selectedKnowledge: false, selectedDatabase: true })], processing: false },
+    })
+    expect(wrapper.get('button.btn-primary').text()).toBe('确认写入考勤数据库')
+  })
+
+  it('shows generic confirm label when both targets selected', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ selectedKnowledge: true, selectedDatabase: true })], processing: false },
+    })
+    expect(wrapper.get('button.btn-primary').text()).toBe('确认按所选方式写入')
+  })
+
+  it('shows database disabled reason hint when no databaseAction', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__hint').text()).toContain('该文件不是可入库表格')
+  })
+
+  it('shows intent summary with database target label', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem()], processing: false },
+    })
+    const intent = wrapper.get('.office-docking-review__intent')
+    expect(intent.text()).toContain('考勤表入库')
+    expect(intent.text()).toContain('考勤数据库')
+  })
+
+  it('opens detailed preview for long Word text', async () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: false },
+    })
+    const details = wrapper.get('.office-docking-review__preview-details')
+    expect(details.find('summary').text()).toBe('查看原文摘录')
+  })
+
+  it('omits detailed preview when Word text is short', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: {
+        items: [wordItem({ textPreview: '短文本' })],
+        processing: false,
+      },
+    })
+    expect(wrapper.find('.office-docking-review__preview-details').exists()).toBe(false)
+  })
+
+  it('shows summary line when summary is present', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ summary: '已识别 50 行' })], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__summary').text()).toBe('已识别 50 行')
+  })
+
+  it('omits summary when empty', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [excelItem({ summary: '' })], processing: false },
+    })
+    expect(wrapper.find('.office-docking-review__summary').exists()).toBe(false)
+  })
+
+  it('shows committed status text', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem({ commitStatus: 'committed' })], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('已提交')
+  })
+
+  it('shows pending status text by default', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: { items: [wordItem()], processing: false },
+    })
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('待确认')
   })
 })

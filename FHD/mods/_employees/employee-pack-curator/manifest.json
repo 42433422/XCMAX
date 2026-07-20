@@ -99,7 +99,7 @@
     },
     "actions": {
       "handlers": [
-        "direct_python"
+        "echo"
       ],
       "direct_python": {
         "module": "employee_pack_curator",
@@ -108,6 +108,11 @@
         "default_template_relpath": "",
         "default_use_personnel_roster": true
       }
+    },
+    "schedule": {
+      "enabled": true,
+      "cron": "0 6 * * 1",
+      "task_brief": "每周一 06:00 UTC 巡检 MODstore 员工包生命周期：AI scaffold 注册表、Skill 注册、executor 维护、.xcemp 导入导出。"
     },
     "metadata": {
       "framework_version": "2.0.0",

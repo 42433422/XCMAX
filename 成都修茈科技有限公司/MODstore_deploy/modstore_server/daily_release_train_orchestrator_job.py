@@ -295,6 +295,20 @@ def run_daily_release_train_orchestrator_job(
     )
     _record_time_rail_runtime(result)
 
+    # daily-digest 完成后触发战略层集成（失败 review / installer+major 战略复盘）
+    try:
+        from modstore_server.digest_daily_line_chain import trigger_strategic_layer_dispatch
+
+        result["strategic_layer"] = trigger_strategic_layer_dispatch(
+            rid,
+            release_kind=kind,
+            release_train=rt_after,
+            result=result,
+        )
+    except Exception:
+        logger.exception("release_train orchestrator: strategic_layer dispatch failed")
+        result["strategic_layer"] = {"ok": False, "error": "strategic_layer failed"}
+
     return result
 
 

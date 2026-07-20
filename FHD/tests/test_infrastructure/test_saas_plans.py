@@ -24,10 +24,19 @@ def test_pricing_plans_for_budget_returns_trial_and_permanent() -> None:
     sp.load_saas_plans_config.cache_clear()
     plans = sp.pricing_plans_for_budget("10–50 万")
     ids = [p["id"] for p in plans]
-    assert ids == ["saas-trial-30", "saas-permanent-max"]
+    assert ids == [
+        "saas-trial-30",
+        "saas-permanent-starter",
+        "saas-permanent-growth",
+        "saas-permanent-max",
+        "saas-permanent-ultra",
+    ]
     assert plans[0]["quota_cents"] == 10_000
     assert plans[0]["expires_behavior"] == "freeze"
-    assert plans[1]["account_tier"] == "max"
+    recommended = [p for p in plans if p.get("recommended")]
+    assert len(recommended) == 1
+    assert recommended[0]["id"] == "saas-permanent-max"
+    assert recommended[0]["account_tier"] == "max"
 
 
 def test_normalize_budget_range_aliases() -> None:

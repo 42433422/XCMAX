@@ -1,0 +1,94 @@
+# CI SSOT: generated from FHD/.github/workflows/cvm-autonomy-watcher.yml
+# Phase 2：服务器端自治 watcher（cron 每 10 分钟 SSH 触发）
+# 与 fhd-deploy.yml break-glass 模式一致：SSH 到 CVM 执行 watcher，不常驻 systemd
+# open_incident_issue action 通过 CVM_INCIDENT_PAT 在 CVM 上调 GitHub API 创建 issue
+name: cvm-autonomy-watcher
+
+on:
+  schedule:
+    # 每 10 分钟触发一次（初始频率；稳定后可降频到每 30 分钟以节省 Actions 配额）
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只采集 + 派生 + 决策，不执行 action'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: cvm-autonomy-watcher
+  cancel-in-progress: false
+
+# issues: write 仅供 runner-side 调用 GitHub API 时使用（如未来扩展）；
+# 实际 issue 创建在 CVM 上通过 CVM_INCIDENT_PAT 完成（Actions GITHUB_TOKEN 不能跨 runner）
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watcher-tick:
+    name: CVM autonomy watcher tick
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require CVM SSH secrets
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY:-}" ]; then
+            echo "::error::FHD_PUSH_HOST and FHD_PUSH_SSH_KEY are required for cvm-autonomy-watcher."
+            echo "::error::Configure repo Secrets (default host 119.27.178.147)."
+            exit 1
+          fi
+
+      - name: SSH trigger watcher tick
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          # CVM_INCIDENT_PAT 是 GitHub PAT（scope: issues:write），用于在 CVM 上创建 incident issue
+          # 未配置时 watcher 自动跳过 open_incident_issue action（adapter 检测 token=None 返回 ok=False）
+          CVM_INCIDENT_PAT: ${{ secrets.CVM_INCIDENT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          HOST="${FHD_PUSH_HOST:-119.27.178.147}"
+          USER="${FHD_PUSH_USER:-root}"
+          KEY_FILE="${RUNNER_TEMP}/cvm_autonomy_key"
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          DEPLOY_ROOT="/opt/fhd-full"
+          MANIFEST="/var/www/update/releases/stable/server/fhd-manifest.json"
+          AUDIT_DIR="${DEPLOY_ROOT}/autonomy"
+
+          DRY_FLAG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+
+          # 通过 SSH env 把 GITHUB_TOKEN (PAT) + GITHUB_REPOSITORY 传到 CVM
+          # 仅当前 shell 中有效，不写入 CVM 持久化文件（最小暴露面）
+          # 注：使用 SendEnv 接收需 sshd 配置 AcceptEnv；这里改用 env 前缀注入更通用
+          REMOTE_CMD=$(cat <<EOF
+          set -euo pipefail
+          cd "${DEPLOY_ROOT}"
+          GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
+          GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
+          python3 "${DEPLOY_ROOT}/scripts/autonomy/cvm_autonomy_watcher.py" \
+            --deploy-root "${DEPLOY_ROOT}" \
+            --manifest-path "${MANIFEST}" \
+            --audit-dir "${AUDIT_DIR}" \
+            ${DRY_FLAG}
+          EOF
+          )
+
+          ssh -i "$KEY_FILE" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${USER}@${HOST}" \
+            "bash -s" <<< "$REMOTE_CMD"

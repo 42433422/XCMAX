@@ -77,7 +77,6 @@ const isMyTab = computed(() => String(route.name || '') === 'workbench-materials
 const isPageScrollRoute = computed(() => {
   const n = String(route.name || '')
   return (
-    n === 'workbench-download' ||
     n === 'workbench-employees' ||
     n === 'workbench-materials' ||
     n === 'workbench-script-workflows' ||

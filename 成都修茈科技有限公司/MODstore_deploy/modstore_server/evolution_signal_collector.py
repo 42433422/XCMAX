@@ -289,3 +289,81 @@ __all__ = [
     "collect_evolution_signals",
     "format_evolution_signals_for_prompt",
 ]
+
+
+# --------------------------------------------------------------------------- #
+# 扫描类 workflow JSON 报告聚合器（演化闭环）
+# --------------------------------------------------------------------------- #
+
+_INTENT_ACCURACY_THRESHOLD = 0.80
+_LEGACY_RATIO_THRESHOLD = 0.25
+_SLO_AVAILABILITY_THRESHOLD = 0.99
+_SLO_ERROR_RATE_THRESHOLD = 0.01
+
+
+def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
+    path_str = os.environ.get(env_var, "")
+    if not path_str:
+        return None
+    p = Path(path_str)
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def aggregate_signals() -> Dict[str, Any]:
+    """聚合 3 个扫描类 workflow 的 JSON 报告。
+
+    返回每个源的信号强度（signal_score）+ 是否触发提议（below_threshold）。
+    signal_score > 0 表示值得进入 LLM 提议器。
+    """
+    legacy = _read_json_report("MODSTORE_LEGACY_REPORT_PATH") or {}
+    intent = _read_json_report("MODSTORE_INTENT_REPORT_PATH") or {}
+    slo = _read_json_report("MODSTORE_SLO_REPORT_PATH") or {}
+
+    # Intent benchmark: 准确率 < 0.80 触发
+    intent_acc = float(intent.get("accuracy") or 1.0)
+    intent_below = intent_acc < _INTENT_ACCURACY_THRESHOLD
+    intent_score = max(0.0, _INTENT_ACCURACY_THRESHOLD - intent_acc) if intent_below else 0.0
+
+    # Legacy usage: legacy_ratio > 0.25 触发
+    legacy_ratio = float(legacy.get("legacy_ratio") or 0.0)
+    legacy_below = legacy_ratio > _LEGACY_RATIO_THRESHOLD
+    legacy_score = max(0.0, legacy_ratio - _LEGACY_RATIO_THRESHOLD) if legacy_below else 0.0
+
+    # SLO: availability < 0.99 或 error_rate > 0.01 触发
+    slo_avail = float(slo.get("availability") or 1.0)
+    slo_err = float(slo.get("error_rate") or 0.0)
+    slo_below = (slo_avail < _SLO_AVAILABILITY_THRESHOLD) or (slo_err > _SLO_ERROR_RATE_THRESHOLD)
+    slo_score = 0.0
+    if slo_below:
+        slo_score = max(
+            _SLO_AVAILABILITY_THRESHOLD - slo_avail,
+            slo_err - _SLO_ERROR_RATE_THRESHOLD,
+        )
+
+    signals_to_propose = sum(1 for s in (intent_score, legacy_score, slo_score) if s > 0)
+
+    return {
+        "legacy_usage": {
+            "report": legacy,
+            "below_threshold": legacy_below,
+            "signal_score": legacy_score,
+        },
+        "intent_benchmark": {
+            "report": intent,
+            "accuracy": intent_acc,
+            "below_threshold": intent_below,
+            "signal_score": intent_score,
+        },
+        "slo_metrics": {
+            "report": slo,
+            "below_threshold": slo_below,
+            "signal_score": slo_score,
+        },
+        "total_score": intent_score + legacy_score + slo_score,
+        "signals_to_propose": signals_to_propose,
+    }

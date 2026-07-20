@@ -340,10 +340,7 @@ const topLevelRouterCacheKey = computed(() =>
 
 const isAccountPage = computed(() => route.name === 'account')
 const isPublicLayoutRoute = computed(() => route.meta.layout === 'public')
-const isDownloadPage = computed(() => {
-  const n = String(route.name || '')
-  return n === 'download' || n === 'workbench-download'
-})
+const isDownloadPage = computed(() => false)
 const isWorkbenchHome = computed(() => {
   const n = String(route.name || '')
   const p = route.path
@@ -400,7 +397,7 @@ const isEmployeeWorkbench = ref(
   initialPath.startsWith('/workbench/mod/'),
 )
 
-const BUTLER_EXCLUDED_PATHS = ['/about', '/download', '/login', '/login-email', '/forgot-password', '/register']
+const BUTLER_EXCLUDED_PATHS = ['/about', '/login', '/login-email', '/forgot-password', '/register']
 const shouldShowButler = computed(() => {
   const p = route.path || ''
   if (!isLoggedIn.value) return false

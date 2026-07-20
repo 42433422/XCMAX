@@ -2,6 +2,7 @@
 export const SIDEBAR_ROUTE_NAME_MAP: Record<string, string> = {
   '/': 'chat',
   '/ai-ecosystem': 'ai-ecosystem',
+  '/persy/knowledge': 'persy-knowledge',
   '/brain': 'brain',
   '/model-payment': 'model-payment',
   '/kitten-finance': 'kitten-finance',

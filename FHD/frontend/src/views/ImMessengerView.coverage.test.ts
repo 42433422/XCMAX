@@ -3,6 +3,10 @@ import { ref, nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import ImMessengerView from './ImMessengerView.vue'
 
+vi.mock('@/components/im/KellaiCustomerInbox.vue', () => ({
+  default: { template: '<section class="kellai-inbox-stub">客来来客户会话（只读）</section>' },
+}))
+
 // ===== Mock 数据 =====
 const enterpriseCsContact = {
   id: 99,
