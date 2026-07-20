@@ -1,12 +1,20 @@
 import json
 import sqlite3
+from types import SimpleNamespace
 
+from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server.autonomous_risk_gate import (
+    _historical_rollback_rate as _historical_rollback_rate_v3,
+)
 from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     _assess_branch_auto_merge_policy,
+    _code_task_text,
     _employee_result_ok,
+    _focused_test_command,
     _guest_auth_headers,
     _has_high_risk_report,
+    _historical_rollback_rate,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _qa_task_text,
@@ -32,6 +40,75 @@ def _stats(line_changes=12, binary_files=None):
     }
 
 
+def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True, "reason": "structured_reports_passed"},
+    )
+    risk_calls = []
+    monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda action, **kwargs: (
+            risk_calls.append((action, kwargs))
+            or SimpleNamespace(allowed=True, to_dict=lambda: {"decision": "allow"})
+        ),
+    )
+    merge_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-risk-gate",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[{"step": "review"}, {"step": "qa"}],
+    )
+
+    assert result["ok"] is True
+    assert result["merge_requested"] is True
+    assert risk_calls[0][0] == "self_maintenance_l1_merge"
+    assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
+    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
+
+
+def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda *args, **kwargs: SimpleNamespace(
+            allowed=False,
+            to_dict=lambda: {"decision": "blocked"},
+        ),
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("merge request bypassed SSOT")),
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-risk-block",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[],
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "autonomy_guard_blocked"
+
+
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
@@ -47,6 +124,33 @@ def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypa
 
     assert result["ok"] is True
     assert result["reason"] == "dynamic_low_risk_policy_passed"
+
+
+def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> None:
+    memory = {
+        "recent_runs": [
+            {
+                "status": "completed_merged",
+                "policy_decision": {
+                    "action": "auto_merged_low_risk",
+                    "merge_result": {
+                        "autonomy_risk_decision": {"rollback_path": "revert_merge_commit"},
+                        "reason": "merged_low_risk_branch",
+                    },
+                },
+            },
+            {
+                "status": "completed_rolled_back",
+                "policy_decision": {
+                    "action": "auto_merged_low_risk",
+                    "merge_result": {"reason": "merged_low_risk_branch"},
+                },
+            },
+        ]
+    }
+
+    assert _historical_rollback_rate(memory) == 0.5
+    assert _historical_rollback_rate_v3(memory) == 0.5
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
@@ -332,7 +436,32 @@ def test_resume_review_qa_candidate_uses_human_strategy_branch():
         "failed_run_id": "r2",
         "failed_steps": ["qa"],
         "para_task_id": "task-2",
-        "reason": "resume_human_strategy_candidate",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_review_qa_candidate_retries_nonportable_focused_command():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/trae/sub-1",
+                "kind": "human_strategy_approval",
+                "reason": "structured_qa_focused_command_not_passed",
+                "run_id": "r-platform",
+                "task_id": "task-platform",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/trae/sub-1",
+        "failed_run_id": "r-platform",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-platform",
+        "reason": "resume_automated_remediation_candidate",
     }
 
 
@@ -360,6 +489,10 @@ def test_resume_review_qa_candidate_stops_when_latest_policy_has_real_risk():
 def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "feat/base")
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "verified-python -m pytest focused.py -q",
+    )
 
     review = _review_task_text("run-1", "devfleet/codex/sub-1", {})
     qa = _qa_task_text("run-1", "devfleet/codex/sub-1", {})
@@ -369,6 +502,21 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Do not inspect your own report-only task branch" in review
     assert "Do not inspect your own report-only task branch" in qa
     assert "file:///tmp/repo.git" in qa
+    assert "`verified-python -m pytest focused.py -q`" in qa
+
+    code = _code_task_text("run-1", {}, {})
+    assert "`verified-python -m pytest focused.py -q`" in code
+    assert "executable_template object" in code
+    assert "validate_kb_payload" in code
+
+
+def test_focused_test_command_prefers_explicit_command(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+
+    assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
 def test_high_risk_report_detects_standalone_qa_fail():
@@ -386,7 +534,9 @@ def test_high_risk_report_detects_standalone_qa_fail():
     assert _has_high_risk_report(steps) is True
 
 
-def test_structured_report_gate_requires_qa_json_pass():
+def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
     steps = [
         {
             "step": "review",
@@ -400,7 +550,7 @@ def test_structured_report_gate_requires_qa_json_pass():
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"pytest focused","exit_code":0,"status":"passed"}],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -411,7 +561,11 @@ def test_structured_report_gate_requires_qa_json_pass():
     assert _structured_report_gate(steps)["ok"] is True
 
 
-def test_structured_report_gate_blocks_missing_or_failed_qa_json():
+def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
     missing = [{"step": "qa", "report_excerpt": "PASS in prose only"}]
     failed = [
         {
@@ -427,6 +581,98 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json():
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":2,"status":"failed"}}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["ok"] is False
+    assert result["reason"] == "structured_qa_focused_command_not_passed"
+    assert result["focused_command"] == focused
+
+
+def test_structured_report_gate_accepts_platform_equivalent_focused_command(
+    monkeypatch,
+):
+    focused = (
+        "'/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.venv/bin/python' "
+        "-m pytest '成都修茈科技有限公司/MODstore_deploy/tests/"
+        "test_self_maintenance_loop_runner_policy.py' -q"
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                '"tested_commands":['
+                f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
+                '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
+                'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
+                '"exit_code":0,"status":"passed (27 tests passed)"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["ok"] is True
+
+
+def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                '"tested_commands":[{"command":"python3 -m pytest tests/test_other.py -q",'
+                '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+
+
+def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                "Prompt says output SELF_MAINTENANCE_QA_JSON: with schema ...\n"
+                "SELF_MAINTENANCE_QA_JSON: "
+                '{"verdict":"PASS","blocking_findings":[],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["ok"] is True
 
 
 def test_ensure_clean_baseline_writes_default_file(monkeypatch, tmp_path):

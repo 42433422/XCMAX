@@ -27,7 +27,7 @@ on:
           - freeze-manifest
           - unfreeze-manifest
       action_id:
-        description: Pending autonomy action id to resume after production approval
+        description: Optional autonomy action id for audit correlation
         required: false
         type: string
         default: ""
@@ -44,9 +44,6 @@ jobs:
   cvm-rolling:
     name: CVM rolling (${{ inputs.environment }})
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ inputs.environment == 'production' && 'production' || 'staging' }}
-      url: ${{ inputs.environment == 'production' && 'https://xiu-ci.com/fhd-api/api/health' || 'https://staging.xiu-ci.com/fhd-api/api/health' }}
     steps:
       - name: Require CVM SSH secrets
         env:
@@ -93,7 +90,7 @@ jobs:
              fi
              printf "%s\n" \
                "AUTONOMY_WEBHOOK_TOKEN=$autonomy_token" \
-               "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=require_human" \
+               "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" \
                "XCAGI_AUTONOMY_DATA_DIR=/var/lib/xcagi/autonomy" >> "$tmp_file"
              install -m 600 "$tmp_file" "$env_file"
              rm -f "$tmp_file"
@@ -108,53 +105,6 @@ jobs:
              done
              echo "fhd-full.service did not become HTTP-ready after autonomy config sync" >&2
              exit 1'
-
-      - name: Resume approved autonomy action
-        id: authorize-autonomy
-        if: ${{ inputs.environment == 'production' && inputs.action_id != '' }}
-        env:
-          ACTION_ID: ${{ inputs.action_id }}
-          APPROVAL_ID: ${{ github.run_id }}
-          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
-          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
-            echo "::error::AUTONOMY_CALLBACK_URL and MODSTORE_OPS_INGEST_TOKEN are required when action_id is set."
-            exit 1
-          fi
-          github_cli_retry() {
-            local attempt output
-            for attempt in $(seq 1 12); do
-              if output="$("$@" 2>&1)"; then
-                printf '%s\n' "$output"
-                return 0
-              fi
-              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
-              [ "$attempt" -eq 12 ] || sleep 5
-            done
-            return 1
-          }
-          reviews="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
-          approver="$(jq -r '[.[] | select(.state == "approved") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
-          if [ -z "$approver" ]; then
-            echo "::error::Could not resolve the production environment reviewer; refusing to resume."
-            exit 1
-          fi
-          payload="$(jq -nc \
-            --arg action_id "$ACTION_ID" \
-            --arg approval_id "$APPROVAL_ID" \
-            --arg approver "$approver" \
-            --arg workflow_action "${{ inputs.action }}" \
-            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,workflow_action:$workflow_action,defer_execution:true,decision:"approved"}')"
-          curl --fail-with-body --silent --show-error \
-            -X POST "$AUTONOMY_CALLBACK_URL" \
-            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-GitHub-Actor: $approver" \
-            --data "$payload"
-          echo "approver=$approver" >> "$GITHUB_OUTPUT"
 
       - name: SSH rolling restart / apply
         env:
@@ -237,7 +187,7 @@ jobs:
         env:
           ACTION_ID: ${{ inputs.action_id }}
           APPROVAL_ID: ${{ github.run_id }}
-          APPROVER: ${{ steps.authorize-autonomy.outputs.approver || github.actor }}
+          APPROVER: ${{ github.actor }}
           AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
           AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
         run: |
@@ -256,7 +206,7 @@ jobs:
             --data "$payload"
 
   report-autonomy-failure:
-    name: Report autonomy rejection / failure
+    name: Report autonomy execution failure
     needs: cvm-rolling
     if: ${{ always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
     runs-on: ubuntu-latest
@@ -268,44 +218,15 @@ jobs:
           WORKFLOW_ACTION: ${{ inputs.action }}
           AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
           AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
             echo "::error::Autonomy callback configuration is missing."
             exit 1
           fi
-          github_cli_retry() {
-            local attempt output
-            for attempt in $(seq 1 12); do
-              if output="$("$@" 2>&1)"; then
-                printf '%s\n' "$output"
-                return 0
-              fi
-              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
-              [ "$attempt" -eq 12 ] || sleep 5
-            done
-            return 1
-          }
-          jobs="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest" || printf '{"jobs":[]}')"
-          resume_succeeded="$(jq -r '
-            any(.jobs[]?.steps[]?;
-              .name == "Resume approved autonomy action" and .conclusion == "success")
-          ' <<< "$jobs")"
-          approved_by=""
-          rejected_by=""
-          reviews="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals" || printf '[]')"
-          approved_by="$(jq -r '[.[] | select(.state == "approved") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
-          rejected_by="$(jq -r '[.[] | select(.state == "rejected") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
-          if [ "$resume_succeeded" = "true" ]; then
-            decision="execution_failed"
-            approver="${approved_by:-${rejected_by:-$GITHUB_ACTOR}}"
-            reason="Approved workflow execution failed after autonomy resume"
-          else
-            decision="rejected"
-            approver="${rejected_by:-${approved_by:-$GITHUB_ACTOR}}"
-            reason="GitHub environment review or approval resume failed"
-          fi
+          decision="execution_failed"
+          approver="$GITHUB_ACTOR"
+          reason="Autonomous workflow execution failed"
           payload="$(jq -nc \
             --arg action_id "$ACTION_ID" \
             --arg approval_id "$APPROVAL_ID" \

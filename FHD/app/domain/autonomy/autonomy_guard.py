@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from app.domain.autonomy.approval_policy import approval_evidence, human_approval_evidence
 from app.domain.autonomy.risk_policy import RiskPolicyCatalog
 from app.domain.autonomy.risk_types import (
     MediumRiskPolicy,
@@ -22,7 +23,6 @@ from app.domain.autonomy.risk_types import (
     aggregate_risk_decisions,
     enum_value,
     parse_risk_level,
-    truthy,
 )
 
 UTC = timezone.utc  # noqa: UP017 - MODstore imports this module on Python 3.10
@@ -45,6 +45,7 @@ class AutonomyGuard:
         # Retain private aliases for compatibility with diagnostic callers.
         self._registry = self._policy.registry
         self._boundaries = self._policy.boundaries
+        self._veto_boundaries = self._policy.veto_boundaries
         self.medium_risk_policy = self._policy.medium_risk_policy
         self._audit_sink = audit_sink
         self._record_config_state()
@@ -90,6 +91,9 @@ class AutonomyGuard:
 
     def boundaries_snapshot(self) -> dict[str, str]:
         return self._policy.boundaries_snapshot()
+
+    def veto_boundaries_snapshot(self) -> dict[str, str]:
+        return self._policy.veto_boundaries_snapshot()
 
     def autonomous_action_names(self) -> frozenset[str]:
         return self._policy.autonomous_action_names()
@@ -184,7 +188,7 @@ class AutonomyGuard:
         risk = parse_risk_level(
             (spec or {}).get("risk"), default=explicit_level or RiskLevel.BLOCKED
         )
-        if explicit_level is not None and not isinstance(autonomous_spec, dict):
+        if explicit_level is not None:
             rank = {
                 RiskLevel.LOW: 0,
                 RiskLevel.MEDIUM: 1,
@@ -196,11 +200,41 @@ class AutonomyGuard:
         rollback_path = str(
             (spec or {}).get("rollback_path") or metadata.get("rollback_path") or ""
         )
-        allow_auto = bool(
-            (spec or {}).get("allow_auto_execute", risk in {RiskLevel.LOW, RiskLevel.MEDIUM})
+        default_auto = (
+            risk in {RiskLevel.LOW, RiskLevel.MEDIUM}
+            if isinstance(autonomous_spec, dict)
+            else risk == RiskLevel.LOW
         )
-        approved, approver = self._approval_evidence(ctx, risk)
-
+        allow_auto = bool((spec or {}).get("allow_auto_execute", default_auto))
+        veto_reason = self._veto_boundaries.get(action_name)
+        if veto_reason:
+            approved, approver = human_approval_evidence(ctx)
+            if approved:
+                return self._decision(
+                    action=action_name,
+                    action_id=resolved_action_id,
+                    risk=risk,
+                    decision="approved",
+                    allowed=True,
+                    requires_confirmation=False,
+                    reason=f"requires_veto accepted by human ({approver}): {veto_reason}",
+                    rollback_path=rollback_path,
+                    source=source,
+                    context=ctx,
+                    approver=approver,
+                )
+            return self._decision(
+                action=action_name,
+                action_id=resolved_action_id,
+                risk=risk,
+                decision="require_human",
+                allowed=False,
+                requires_confirmation=True,
+                reason=f"requires_veto boundary: {veto_reason}",
+                rollback_path=rollback_path,
+                source=source,
+                context=ctx,
+            )
         if risk == RiskLevel.BLOCKED:
             return self._decision(
                 action=action_name,
@@ -215,6 +249,50 @@ class AutonomyGuard:
                 context=ctx,
             )
 
+        automatic_reason = ""
+        automatic_decision = "auto_approve"
+        if risk == RiskLevel.LOW and allow_auto:
+            automatic_decision = "allow"
+            automatic_reason = "LOW risk action is registered for automatic execution"
+        elif risk == RiskLevel.MEDIUM and allow_auto:
+            if self.medium_risk_policy == MediumRiskPolicy.AUTO_APPROVE:
+                automatic_reason = "medium_risk_policy=auto_approve"
+            elif self.medium_risk_policy == MediumRiskPolicy.COOLDOWN_60MIN:
+                if self._cooldown_active(action_name):
+                    return self._decision(
+                        action=action_name,
+                        action_id=resolved_action_id,
+                        risk=risk,
+                        decision="cooldown",
+                        allowed=False,
+                        requires_confirmation=True,
+                        reason="medium_risk_policy=cooldown_60min; repeat requires human approval",
+                        rollback_path=rollback_path,
+                        source=source,
+                        context=ctx,
+                    )
+                automatic_reason = "medium_risk_policy=cooldown_60min; first action in window"
+        elif risk == RiskLevel.HIGH and allow_auto:
+            automatic_reason = "HIGH risk action is registered for automatic execution"
+        if automatic_reason:
+            return self._decision(
+                action=action_name,
+                action_id=resolved_action_id,
+                risk=risk,
+                decision=automatic_decision,
+                allowed=True,
+                requires_confirmation=False,
+                reason=automatic_reason,
+                rollback_path=rollback_path,
+                source=source,
+                context=ctx,
+            )
+
+        # Compatibility approval evidence only applies when the registry/policy
+        # did not already authorize automatic execution. Registered automatic
+        # actions must remain observable as auto decisions, never as a forged
+        # or synthetic human approval.
+        approved, approver = approval_evidence(ctx, risk)
         if approved:
             return self._decision(
                 action=action_name,
@@ -229,61 +307,6 @@ class AutonomyGuard:
                 context=ctx,
                 approver=approver,
             )
-
-        if risk == RiskLevel.LOW and allow_auto:
-            return self._decision(
-                action=action_name,
-                action_id=resolved_action_id,
-                risk=risk,
-                decision="allow",
-                allowed=True,
-                requires_confirmation=False,
-                reason="LOW risk action is registered for automatic execution",
-                rollback_path=rollback_path,
-                source=source,
-                context=ctx,
-            )
-
-        if risk == RiskLevel.MEDIUM and allow_auto:
-            if self.medium_risk_policy == MediumRiskPolicy.AUTO_APPROVE:
-                return self._decision(
-                    action=action_name,
-                    action_id=resolved_action_id,
-                    risk=risk,
-                    decision="auto_approve",
-                    allowed=True,
-                    requires_confirmation=False,
-                    reason="medium_risk_policy=auto_approve",
-                    rollback_path=rollback_path,
-                    source=source,
-                    context=ctx,
-                )
-            if self.medium_risk_policy == MediumRiskPolicy.COOLDOWN_60MIN:
-                if not self._cooldown_active(action_name):
-                    return self._decision(
-                        action=action_name,
-                        action_id=resolved_action_id,
-                        risk=risk,
-                        decision="auto_approve",
-                        allowed=True,
-                        requires_confirmation=False,
-                        reason="medium_risk_policy=cooldown_60min; first action in window",
-                        rollback_path=rollback_path,
-                        source=source,
-                        context=ctx,
-                    )
-                return self._decision(
-                    action=action_name,
-                    action_id=resolved_action_id,
-                    risk=risk,
-                    decision="cooldown",
-                    allowed=False,
-                    requires_confirmation=True,
-                    reason="medium_risk_policy=cooldown_60min; repeat requires human approval",
-                    rollback_path=rollback_path,
-                    source=source,
-                    context=ctx,
-                )
 
         return self._decision(
             action=action_name,
@@ -333,25 +356,6 @@ class AutonomyGuard:
 
     def _rollback_path(self, action: str) -> str:
         return self._policy.rollback_path(action)
-
-    def _approval_evidence(self, context: dict[str, Any], risk: RiskLevel) -> tuple[bool, str]:
-        approver = str(context.get("approved_by") or context.get("approver") or "").strip()
-        if truthy(context.get("human_approved")) and approver:
-            return True, approver
-        if risk == RiskLevel.MEDIUM and truthy(context.get("allow_medium_risk")):
-            return True, approver or "legacy_explicit_runtime_approval"
-        if risk == RiskLevel.HIGH and truthy(context.get("workflow_auto_approve_high_risk")):
-            return True, approver or "explicit_workflow_session_override"
-        if risk == RiskLevel.HIGH and truthy(context.get("allow_high_risk_real_run")):
-            configured = (
-                os.environ.get("FHD_RISK_HIGH_GATE_TOKEN")
-                or os.environ.get("MODSTORE_RISK_HIGH_GATE_TOKEN")
-                or ""
-            ).strip()
-            supplied = str(context.get("high_risk_gate_token") or "").strip()
-            if not configured or (supplied and supplied == configured):
-                return True, approver or "legacy_high_risk_gate"
-        return False, ""
 
     def _cooldown_active(self, action: str) -> bool:
         if self._audit_sink is not None:
@@ -449,18 +453,26 @@ class AutonomyGuard:
 
 
 _GUARD: AutonomyGuard | None = None
+_GUARD_POLICY_ENV = ""
+
+
+def _medium_policy_env_marker() -> str:
+    return str(os.environ.get("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY") or "").strip().lower()
 
 
 def get_autonomy_guard() -> AutonomyGuard:
-    global _GUARD
-    if _GUARD is None:
+    global _GUARD, _GUARD_POLICY_ENV
+    marker = _medium_policy_env_marker()
+    if _GUARD is None or marker != _GUARD_POLICY_ENV:
         _GUARD = AutonomyGuard()
+        _GUARD_POLICY_ENV = marker
     return _GUARD
 
 
 def reload_autonomy_guard() -> AutonomyGuard:
-    global _GUARD
+    global _GUARD, _GUARD_POLICY_ENV
     _GUARD = AutonomyGuard()
+    _GUARD_POLICY_ENV = _medium_policy_env_marker()
     return _GUARD
 
 

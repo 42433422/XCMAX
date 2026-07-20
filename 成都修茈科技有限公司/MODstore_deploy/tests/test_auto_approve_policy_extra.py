@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from modstore_server.auto_approve_policy import evaluate_risk
+from modstore_server.auto_approve_policy import classify_change_risk
 
 
 def test_high_risk_when_path_matches_builtin_pattern():
-    risk, reason = evaluate_risk(".env.production", "TOKEN=xxx\n")
+    risk, reason = classify_change_risk(".env.production", "TOKEN=xxx\n")
     assert risk == "high"
     assert "高风险" in reason or "forbidden" in reason
 
 
 def test_high_risk_when_path_matches_forbidden_glob():
-    risk, _ = evaluate_risk(
+    risk, _ = classify_change_risk(
         "modstore_server/services/llm.py",
         "x = 1\n",
         forbidden_globs=["modstore_server/services/*"],
@@ -21,7 +21,7 @@ def test_high_risk_when_path_matches_forbidden_glob():
 
 
 def test_medium_when_outside_scope_globs():
-    risk, _ = evaluate_risk(
+    risk, _ = classify_change_risk(
         "modstore_server/playground/foo.py",
         "x = 1\n",
         scope_globs=["modstore_server/services/*"],
@@ -30,7 +30,7 @@ def test_medium_when_outside_scope_globs():
 
 
 def test_medium_when_approval_required_glob_hits():
-    risk, _ = evaluate_risk(
+    risk, _ = classify_change_risk(
         "modstore_server/services/llm.py",
         "x = 1\n",
         scope_globs=["modstore_server/services/*"],
@@ -40,7 +40,7 @@ def test_medium_when_approval_required_glob_hits():
 
 
 def test_low_when_inside_scope_and_short():
-    risk, reason = evaluate_risk(
+    risk, reason = classify_change_risk(
         "modstore_server/services/dummy.py",
         "x = 1\n",
         scope_globs=["modstore_server/services/*"],
@@ -52,7 +52,7 @@ def test_low_when_inside_scope_and_short():
 def test_high_when_lines_exceed_4x_threshold(monkeypatch):
     monkeypatch.setenv("MODSTORE_AUTO_APPROVE_MAX_LINES", "5")
     big = "\n".join(f"line {i}" for i in range(60))
-    risk, reason = evaluate_risk(
+    risk, reason = classify_change_risk(
         "modstore_server/services/dummy.py",
         big,
         scope_globs=["modstore_server/services/*"],

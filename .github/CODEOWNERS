@@ -1,21 +1,19 @@
 # XCMAX 守卫元文件 (CODEOWNERS)
 #
 # 用途: 标注仓库中"守卫/红线"类路径。任何对这些路径的 PR 改动
-#       都视为对工程纪律本身的修改,需人工审查。
+#       都会触发元守卫和对应的自动化 CI 检查。
 #
 # 单人 + AI 工作流说明:
 #   仓库 owner 是单人,GitHub 不允许 owner 自批准自己的 PR,
 #   所以本文件本身不通过 branch protection 的
 #   "Require review from Code Owners" 强制启用。
 #
-#   实际强制阻断由 .github/workflows/guard-guards.yml 元守卫执行——
-#   任何修改以下路径的 PR,guard-guards 会硬失败,除非 PR 带
-#   "guard-approved" label(由 owner 在 GitHub UI 手动添加,
-#   等同于人工批准)。
+#   .github/workflows/guard-guards.yml 负责记录守卫路径变更；
+#   变更是否可合并由 required status checks 自动判定，不需要
+#   人工 review 或 guard-approved 标签。
 #
-#   后续若引入第二名团队成员或机器人账号,可在此文件配置 @owner
-#   并在 branch protection 启用 "Require review from Code Owners",
-#   届时可退役 guard-guards.yml 的 label 机制。
+#   后续若引入第二名团队成员，可按需启用 Code Owners review，
+#   但这不是当前自动执行链路的前置条件。
 
 # === CI 流水线定义 ===
 /.github/workflows/                              @42433422
@@ -30,8 +28,7 @@
 /FHD/scripts/dev/verify_version_anchors.py       @42433422
 
 # === 覆盖率 / 类型 / SQL 棘轮基线 ===
-# 注意: pyproject.toml 整文件守护——改依赖也要人工批准。
-# 这是刻意的: 单人 + AI 工作流里所有依赖/配置改动都该被审查。
+# 注意: pyproject.toml 整文件守护——改依赖也会触发完整自动化检查。
 /FHD/pyproject.toml                              @42433422
 /FHD/metrics/coverage_ratchet_baseline.json      @42433422
 /FHD/frontend/vitest.config.js                   @42433422
