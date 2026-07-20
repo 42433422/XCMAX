@@ -19,6 +19,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _load_loop_memory,
     _qa_task_text,
     _resume_review_qa_candidate,
+    _resume_steps,
     _review_task_text,
     _self_maintenance_actor_user_id,
     _structured_report_gate,
@@ -413,6 +414,14 @@ def test_resume_review_qa_candidate_uses_failed_review_branch():
         "para_task_id": "task-1",
         "reason": "resume_failed_review_or_qa",
     }
+
+
+def test_resume_steps_rerun_failed_step_and_downstream_chain():
+    assert _resume_steps(None) == {"code", "review", "qa"}
+    assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
+    assert _resume_steps({"failed_steps": ["review"]}) == {"review", "qa"}
+    assert _resume_steps({"failed_steps": ["qa"]}) == {"qa"}
+    assert _resume_steps({"failed_steps": []}) == set()
 
 
 def test_resume_review_qa_candidate_uses_human_strategy_branch():
