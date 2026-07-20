@@ -848,6 +848,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "changed_files_outside_low_risk_globs",
             "missing_report_only_evidence",
             "max_retries_exceeded",
+            "structured_qa_focused_command_not_passed",
         }:
             continue
         branch = str(item.get("branch") or "").strip()

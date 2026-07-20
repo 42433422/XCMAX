@@ -369,6 +369,31 @@ def test_resume_review_qa_candidate_uses_human_strategy_branch():
     }
 
 
+def test_resume_review_qa_candidate_retries_nonportable_focused_command():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/trae/sub-1",
+                "kind": "human_strategy_approval",
+                "reason": "structured_qa_focused_command_not_passed",
+                "run_id": "r-platform",
+                "task_id": "task-platform",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/trae/sub-1",
+        "failed_run_id": "r-platform",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-platform",
+        "reason": "resume_human_strategy_candidate",
+    }
+
+
 def test_resume_review_qa_candidate_stops_when_latest_policy_has_real_risk():
     memory = {
         "last_policy_decision": {
