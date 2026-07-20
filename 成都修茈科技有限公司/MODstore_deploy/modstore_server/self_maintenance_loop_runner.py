@@ -55,7 +55,8 @@ DEFAULT_CLEAN_BASELINE_NAME = "self_maintenance_clean_baseline.json"
 DEFAULT_PARA_AUTH_CACHE_NAME = "para_guest_auth_cache.json"
 DEFAULT_MERGE_WORKSPACE_ROOT = "self_maintenance_merge_workspaces"
 DEFAULT_STATUS_FILE = (
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/" "self_maintenance_loop_status.py"
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
+    "self_maintenance_loop_status.py"
 )
 DEFAULT_AUTO_MERGE_GLOBS = [DEFAULT_STATUS_FILE]
 DEFAULT_AUTO_MERGE_SCOPE_GLOBS = [
@@ -216,7 +217,9 @@ def clean_baseline_path() -> Path:
     raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_CLEAN_BASELINE")
     if raw:
         return Path(raw)
-    kb_root = os.environ.get("XCMAX_SELF_EVOLUTION_KB_ROOT") or os.environ.get("XCMAX_KB_ROOT")
+    kb_root = os.environ.get("XCMAX_SELF_EVOLUTION_KB_ROOT") or os.environ.get(
+        "XCMAX_KB_ROOT"
+    )
     if kb_root:
         return Path(kb_root).expanduser() / "metrics" / DEFAULT_CLEAN_BASELINE_NAME
     return _runtime_dir() / DEFAULT_CLEAN_BASELINE_NAME
@@ -284,7 +287,8 @@ def ensure_clean_baseline() -> Dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(baseline, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(baseline, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     tmp.replace(path)
     return baseline
@@ -411,12 +415,16 @@ def record_governance_audit_review(
     }
 
 
-def _governance_audit_summary(rows: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _governance_audit_summary(
+    rows: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     items = rows if isinstance(rows, list) else _read_governance_audit(10)
     success_count = sum(
         1 for item in items if isinstance(item, dict) and item.get("ok") is not False
     )
-    failure_count = sum(1 for item in items if isinstance(item, dict) and item.get("ok") is False)
+    failure_count = sum(
+        1 for item in items if isinstance(item, dict) and item.get("ok") is False
+    )
     consecutive_failures = 0
     for item in reversed(items):
         if isinstance(item, dict) and item.get("ok") is False:
@@ -428,7 +436,9 @@ def _governance_audit_summary(rows: Optional[List[Dict[str, Any]]] = None) -> Di
         "success_count": success_count,
         "failure_count": failure_count,
         "consecutive_failures": consecutive_failures,
-        "health": "bad" if consecutive_failures >= 2 else ("warn" if failure_count else "ok"),
+        "health": "bad"
+        if consecutive_failures >= 2
+        else ("warn" if failure_count else "ok"),
     }
 
 
@@ -440,7 +450,9 @@ def _governance_audit_gate() -> Dict[str, Any]:
         "ok": ok,
         "blocking": not ok,
         "action": "allow" if ok else "hold_for_governance_review",
-        "reason": "governance_audit_healthy" if ok else "governance_audit_consecutive_failures",
+        "reason": "governance_audit_healthy"
+        if ok
+        else "governance_audit_consecutive_failures",
         "summary": summary,
         "policy": "consecutive_governance_action_failures_pause_auto_continue_and_auto_merge",
     }
@@ -536,7 +548,9 @@ def _memory_context(memory: Dict[str, Any]) -> str:
     recent_runs = memory.get("recent_runs") if isinstance(memory, dict) else []
     open_items = memory.get("open_items") if isinstance(memory, dict) else []
     closed_items = memory.get("closed_items") if isinstance(memory, dict) else []
-    last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    last_decision = (
+        memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    )
     payload = {
         "closed_items": closed_items[-8:] if isinstance(closed_items, list) else [],
         "last_policy_decision": last_decision,
@@ -661,13 +675,19 @@ def close_loop_memory_items(
     }
 
 
-def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]) -> Dict[str, Any]:
+def _close_items_resolved_by_final(
+    memory: Dict[str, Any], final: Dict[str, Any]
+) -> Dict[str, Any]:
     decision = final.get("policy_decision")
     if not isinstance(decision, dict):
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if action not in {"auto_merged_low_risk", "auto_continue"} and status != "completed_merged":
+    if action not in {
+        "auto_merged_low_risk",
+        "auto_merge_requested_low_risk",
+        "auto_continue",
+    } and status not in {"completed_merged", "completed_merge_requested"}:
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
@@ -699,7 +719,9 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         memory,
         actor="self_maintenance_loop",
         branches=branches,
-        resolution_reason=str(decision.get("reason") or status or "resolved_by_successful_loop"),
+        resolution_reason=str(
+            decision.get("reason") or status or "resolved_by_successful_loop"
+        ),
         run_ids=run_ids,
         task_ids=task_ids,
     )
@@ -723,7 +745,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 item["escalated"] = True
                 escalated_items.append(item)
                 logger.warning(
-                    "open_item run_id=%s exceeded max_retries=%d, escalating to human review",
+                    "open_item run_id=%s exceeded max_retries=%d, pausing automated retries",
                     item.get("run_id"),
                     max_retries,
                 )
@@ -739,35 +761,18 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 and "code" not in (item.get("steps") or [])
             )
         ]
-    # If there are escalated items, do not resume - return None so loop stops for human intervention
+    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
     if escalated_items:
-        # Enqueue all escalated items to human uncertainty queue
-        try:
-            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-
-            for item in escalated_items:
-                enqueue_uncertain_item(
-                    context={
-                        "failed_run_id": item.get("run_id"),
-                        "failed_steps": item.get("steps", []),
-                        "retry_count": item.get("retry_count"),
-                        "branch": item.get("branch"),
-                        "para_task_id": item.get("para_task_id"),
-                    },
-                    decision={
-                        "action": "await_human_strategy_approval",
-                        "reason": "max_retries_exceeded",
-                    },
-                    reason=f"self-maintenance step {item.get('steps')} failed {item.get('retry_count')} times, exceeded max retries",
-                )
-        except Exception as exc:
-            logger.warning("failed to enqueue escalated item to human queue: %s", exc)
         return None
 
     last_decision = memory.get("last_policy_decision")
-    last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
+    last_reason = (
+        str(last_decision.get("reason") or "")
+        if isinstance(last_decision, dict)
+        else ""
+    )
     if last_reason == "review_or_qa_reported_risk":
-        # 真实风险必须由人工介入，禁止自动重试
+        # Real risk remains blocked; removing approval must never turn it into a bypass.
         return None
     if last_reason in {"employee_step_failed", "loop_not_completed"}:
         # Allow resumption for incomplete loops or step failures (e.g., code step can retry)
@@ -839,7 +844,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             }
 
     for item in reversed(open_items):
-        if not isinstance(item, dict) or item.get("kind") != "human_strategy_approval":
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
             continue
         reason = str(item.get("reason") or "")
         if reason not in {
@@ -852,7 +860,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         }:
             continue
         branch = str(item.get("branch") or "").strip()
-        para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        para_task_id = str(
+            item.get("task_id") or item.get("para_task_id") or ""
+        ).strip()
         run_id = str(item.get("run_id") or "").strip()
         if branch and para_task_id:
             return {
@@ -860,7 +870,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "failed_run_id": run_id,
                 "failed_steps": ["qa"],
                 "para_task_id": para_task_id,
-                "reason": "resume_human_strategy_candidate",
+                "reason": "resume_automated_remediation_candidate",
             }
     return None
 
@@ -975,7 +985,11 @@ def _recent_incident_signals(lookback_hours: int, *, limit: int = 8) -> Dict[str
                     "summary": str(payload.get("summary") or "")[:500],
                 }
             )
-        return {"count": int(count), "events": incidents, "lookback_hours": lookback_hours}
+        return {
+            "count": int(count),
+            "events": incidents,
+            "lookback_hours": lookback_hours,
+        }
     except Exception:
         logger.exception("failed to read recent incident signals")
         return {"count": 1, "events": [], "error": "incident_signal_query_failed"}
@@ -1104,7 +1118,9 @@ def should_run_self_maintenance_loop(
     threshold = _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1)
     # incident 触发用独立更短冷却，避免 6 小时冷却导致信号被全部跳过
     if triggered_by == "incident_event":
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
+        cooldown_minutes = _env_int(
+            "MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60
+        )
     else:
         cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
     last_started = _last_started_at()
@@ -1198,7 +1214,9 @@ def _extract_failure_reason(
                     if detail:
                         parts.append(f"detail={str(detail)[:120]}")
                     inner_outputs_failure = (
-                        "output_failed: " + " ".join(parts) if parts else "output ok=False"
+                        "output_failed: " + " ".join(parts)
+                        if parts
+                        else "output ok=False"
                     )
                     break
 
@@ -1211,12 +1229,14 @@ def _extract_failure_reason(
         if isinstance(pg, dict) and pg.get("checked") and not pg.get("ok"):
             violations = pg.get("violations") or []
             vstr = "; ".join(
-                f"{v.get('path','')}({v.get('reason','')})"
+                f"{v.get('path', '')}({v.get('reason', '')})"
                 for v in violations[:5]
                 if isinstance(v, dict)
             )
             path_guard_failure = (
-                f"path_guard_violation: {vstr}"[:300] if vstr else "path_guard_violation"
+                f"path_guard_violation: {vstr}"[:300]
+                if vstr
+                else "path_guard_violation"
             )
 
     # handler_failed 顶层标记
@@ -1298,7 +1318,9 @@ def _extract_para_meta(result: Dict[str, Any]) -> Dict[str, Any]:
         "error": output.get("error") if isinstance(output, dict) else None,
         "para_status": para_result.get("status"),
         "subtask_id": first_subtask.get("id") or response.get("subtaskId"),
-        "task_id": para_result.get("task_id") or para_result.get("id") or response.get("taskId"),
+        "task_id": para_result.get("task_id")
+        or para_result.get("id")
+        or response.get("taskId"),
     }
 
 
@@ -1444,7 +1466,9 @@ def _fetch_para_task_report_excerpt(
     try:
         headers = _guest_auth_headers(api_base)
         with httpx.Client(timeout=20.0, trust_env=False, verify=False) as client:
-            resp = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
+            resp = client.get(
+                f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers
+            )
             resp.raise_for_status()
             task = (resp.json() or {}).get("task") or {}
     except Exception:
@@ -1473,7 +1497,9 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         # vibe-coding-maintainer 的 agent handler 在 Para 未启用 fallback 时需要
         # project_root 才能分析文件；para_delegate 模式会忽略此字段。
         # 默认指向生产仓库根目录，可用 MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT 覆盖。
-        "project_root": (os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"),
+        "project_root": (
+            os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"
+        ),
     }
     if extra:
         data.update(extra)
@@ -1506,11 +1532,15 @@ def _focused_test_command() -> str:
     and expose explicit overrides for production or isolated runners.
     """
 
-    command_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
+    command_override = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", ""
+    ).strip()
     if command_override:
         return command_override
 
-    test_python_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
+    test_python_override = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", ""
+    ).strip()
     deploy_root = Path(
         os.environ.get("MODSTORE_DEPLOY_ROOT") or Path(__file__).resolve().parent.parent
     )
@@ -1519,7 +1549,11 @@ def _focused_test_command() -> str:
         Path(test_python_override).expanduser() if test_python_override else None,
         deploy_root / ".venv" / "bin" / "python",
         (
-            Path(runtime_root).expanduser() / "MODstore_deploy" / ".venv" / "bin" / "python"
+            Path(runtime_root).expanduser()
+            / "MODstore_deploy"
+            / ".venv"
+            / "bin"
+            / "python"
             if runtime_root
             else None
         ),
@@ -1534,12 +1568,15 @@ def _focused_test_command() -> str:
         Path(sys.executable),
     )
     test_path = (
-        "成都修茈科技有限公司/MODstore_deploy/tests/" "test_self_maintenance_loop_runner_policy.py"
+        "成都修茈科技有限公司/MODstore_deploy/tests/"
+        "test_self_maintenance_loop_runner_policy.py"
     )
     return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
 
 
-def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
+def _code_task_text(
+    run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]
+) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
     focused_test_command = _focused_test_command()
     evolution_context_dict = build_self_evolution_context(
@@ -1563,7 +1600,9 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
             f"  fix_diff (first 1500 chars):\n{fix_diff}"
         )
     fix_digest = (
-        "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
+        "\n\n".join(fix_digest_parts)
+        if fix_digest_parts
+        else "(no historical fixes matched)"
     )
     return (
         "Run a real MODstore self-maintenance improvement task. "
@@ -1597,7 +1636,9 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
     )
 
 
-def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
+def _review_task_text(
+    run_id: str, branch: Optional[str], memory: Dict[str, Any]
+) -> str:
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     return (
@@ -1681,7 +1722,9 @@ def _json_after_marker(text: str, marker: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
+def _structured_report_from_step(
+    step: Dict[str, Any], marker: str
+) -> Optional[Dict[str, Any]]:
     report = str(step.get("report_excerpt") or "")
     parsed = _json_after_marker(report, marker)
     if parsed is not None:
@@ -1743,7 +1786,9 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
     if review_steps:
-        review_json = _structured_report_from_step(review_steps[-1], STRUCTURED_REVIEW_MARKER)
+        review_json = _structured_report_from_step(
+            review_steps[-1], STRUCTURED_REVIEW_MARKER
+        )
         if not review_json:
             return {"ok": False, "reason": "missing_structured_review_result"}
         severity = str(review_json.get("max_severity") or "high").lower()
@@ -1766,21 +1811,38 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     if qa_steps:
         qa_json = _structured_report_from_step(qa_steps[-1], STRUCTURED_QA_MARKER)
         if not qa_json:
-            return {"ok": False, "reason": "missing_structured_qa_result", "review": review_json}
+            return {
+                "ok": False,
+                "reason": "missing_structured_qa_result",
+                "review": review_json,
+            }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
-            return {"ok": False, "reason": "structured_qa_verdict_not_pass", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_verdict_not_pass",
+                "qa": qa_json,
+            }
         if qa_json.get("target_branch_available") is not True:
-            return {"ok": False, "reason": "structured_qa_target_branch_unavailable", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_target_branch_unavailable",
+                "qa": qa_json,
+            }
         blocking = qa_json.get("blocking_findings")
         if isinstance(blocking, list) and blocking:
-            return {"ok": False, "reason": "structured_qa_blocking_findings", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_blocking_findings",
+                "qa": qa_json,
+            }
         tested_commands = qa_json.get("tested_commands")
         focused_command = _focused_test_command()
         if not isinstance(tested_commands, list) or not any(
             isinstance(item, dict)
             and _matches_focused_test_command(item.get("command"), focused_command)
-            and int(item.get("exit_code") if item.get("exit_code") is not None else -1) == 0
+            and int(item.get("exit_code") if item.get("exit_code") is not None else -1)
+            == 0
             and str(item.get("status") or "").lower().startswith("passed")
             for item in tested_commands
         ):
@@ -1791,7 +1853,9 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "qa": qa_json,
             }
         test_delta = (
-            qa_json.get("test_delta") if isinstance(qa_json.get("test_delta"), dict) else {}
+            qa_json.get("test_delta")
+            if isinstance(qa_json.get("test_delta"), dict)
+            else {}
         )
         for key in ("new_failures", "new_errors"):
             values = test_delta.get(key)
@@ -1813,7 +1877,9 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _allowed_auto_merge_globs() -> List[str]:
-    return _env_list("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_GLOBS", DEFAULT_AUTO_MERGE_GLOBS)
+    return _env_list(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_GLOBS", DEFAULT_AUTO_MERGE_GLOBS
+    )
 
 
 def _auto_merge_scope_globs() -> List[str]:
@@ -1879,7 +1945,9 @@ def _run_cmd(args: List[str], cwd: Optional[Path] = None, timeout: int = 120) ->
     )
     output = (proc.stdout or "").strip()
     if proc.returncode != 0:
-        raise RuntimeError(f"command failed ({proc.returncode}): {' '.join(args)}\n{output}")
+        raise RuntimeError(
+            f"command failed ({proc.returncode}): {' '.join(args)}\n{output}"
+        )
     return output
 
 
@@ -1917,7 +1985,12 @@ def _changed_files_for_branch(
             if _sp_run.returncode == 0:
                 # 把 FETCH_HEAD 创建为 origin/{branch} 引用，让后续 diff/numstat 统一用 origin/{branch}。
                 _run_cmd(
-                    ["git", "update-ref", f"refs/remotes/origin/{branch}", "FETCH_HEAD"],
+                    [
+                        "git",
+                        "update-ref",
+                        f"refs/remotes/origin/{branch}",
+                        "FETCH_HEAD",
+                    ],
                     cwd=workspace,
                 )
                 branch_ref = f"origin/{branch}"
@@ -1926,7 +1999,9 @@ def _changed_files_for_branch(
                     branch,
                     bare_repo,
                 )
-    _run_cmd(["git", "checkout", "-B", base_branch, f"origin/{base_branch}"], cwd=workspace)
+    _run_cmd(
+        ["git", "checkout", "-B", base_branch, f"origin/{base_branch}"], cwd=workspace
+    )
     if not branch_ref:
         logger.warning(
             "auto_merge: branch %s not on remote or bareRepo — Para may not have pushed it",
@@ -1947,7 +2022,9 @@ def _changed_files_for_branch(
     return [line.strip() for line in diff.splitlines() if line.strip()]
 
 
-def _diff_numstat_for_branch(*, base_branch: str, branch: str, workspace: Path) -> Dict[str, Any]:
+def _diff_numstat_for_branch(
+    *, base_branch: str, branch: str, workspace: Path
+) -> Dict[str, Any]:
     diff = _run_cmd(
         [
             "git",
@@ -2017,7 +2094,13 @@ def _validate_kb_json_changes_for_auto_merge(
         checked.append(normalized)
         try:
             raw = _run_cmd(
-                ["git", "-c", "core.quotePath=false", "show", f"origin/{branch}:{normalized}"],
+                [
+                    "git",
+                    "-c",
+                    "core.quotePath=false",
+                    "show",
+                    f"origin/{branch}:{normalized}",
+                ],
                 cwd=workspace,
                 timeout=60,
             )
@@ -2047,19 +2130,31 @@ def _diff_stats_changed_files_consistency(
     files: List[str],
     diff_stats: Dict[str, Any],
 ) -> Dict[str, Any]:
-    if not isinstance(diff_stats, dict) or diff_stats.get("source") != "git_diff_numstat":
-        return {"ok": True, "reason": "diff_stats_consistency_not_enforced_for_legacy_input"}
+    if (
+        not isinstance(diff_stats, dict)
+        or diff_stats.get("source") != "git_diff_numstat"
+    ):
+        return {
+            "ok": True,
+            "reason": "diff_stats_consistency_not_enforced_for_legacy_input",
+        }
     expected = {_normalize_repo_path(file_name) for file_name in files if file_name}
     stats_changed = diff_stats.get("changed_files")
     if not isinstance(stats_changed, list):
-        file_stats = diff_stats.get("files") if isinstance(diff_stats.get("files"), dict) else {}
+        file_stats = (
+            diff_stats.get("files") if isinstance(diff_stats.get("files"), dict) else {}
+        )
         binary_files = (
             diff_stats.get("binary_files")
             if isinstance(diff_stats.get("binary_files"), list)
             else []
         )
         stats_changed = list(file_stats.keys()) + binary_files
-    actual = {_normalize_repo_path(str(file_name)) for file_name in stats_changed if str(file_name)}
+    actual = {
+        _normalize_repo_path(str(file_name))
+        for file_name in stats_changed
+        if str(file_name)
+    }
     missing_from_numstat = sorted(expected - actual)
     extra_in_numstat = sorted(actual - expected)
     if missing_from_numstat or extra_in_numstat:
@@ -2093,16 +2188,24 @@ def _files_match_allowed_globs(files: List[str], globs: List[str]) -> bool:
 
 
 def _auto_merge_max_risk_score() -> int:
-    return max(0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_RISK_SCORE", 40), 100))
+    return max(
+        0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_RISK_SCORE", 40), 100)
+    )
 
 
 def _auto_merge_min_safety_score_v2() -> int:
     return max(
-        0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90), 100)
+        0,
+        min(
+            _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90),
+            100,
+        ),
     )
 
 
-def _historical_auto_merge_success_rate(memory: Optional[Dict[str, Any]]) -> Optional[float]:
+def _historical_auto_merge_success_rate(
+    memory: Optional[Dict[str, Any]],
+) -> Optional[float]:
     if not isinstance(memory, dict):
         return None
     recent_runs = memory.get("recent_runs")
@@ -2118,7 +2221,11 @@ def _historical_auto_merge_success_rate(memory: Optional[Dict[str, Any]]) -> Opt
             continue
         action = str(decision.get("action") or "")
         reason = str(decision.get("reason") or "")
-        if action == "auto_merged_low_risk" or "auto_merge" in reason or "low_risk" in reason:
+        if (
+            action == "auto_merged_low_risk"
+            or "auto_merge" in reason
+            or "low_risk" in reason
+        ):
             considered += 1
             status = str(run.get("status") or "")
             if action == "auto_merged_low_risk" or status == "completed_merged":
@@ -2175,7 +2282,9 @@ def _historical_rollback_rate(memory: Optional[Dict[str, Any]]) -> Optional[floa
             for record in rollback_records:
                 if not isinstance(record, dict):
                     continue
-                status = str(record.get("status") or record.get("outcome") or "").lower()
+                status = str(
+                    record.get("status") or record.get("outcome") or ""
+                ).lower()
                 if record.get("executed") is True or status in {
                     "completed",
                     "executed",
@@ -2199,13 +2308,27 @@ def _file_type_risk(file_name: str) -> int:
         return 10
     if "/tests/" in lower or lower.startswith("tests/"):
         return 12
-    if any(part in lower for part in ("/scripts/dev/", "self_maintenance", "self_evolution")):
+    if any(
+        part in lower
+        for part in ("/scripts/dev/", "self_maintenance", "self_evolution")
+    ):
         return 18
-    if any(part in lower for part in ("/api/", "routes", "scheduler", "workflow", "employee")):
+    if any(
+        part in lower
+        for part in ("/api/", "routes", "scheduler", "workflow", "employee")
+    ):
         return 32
     if any(
         part in lower
-        for part in ("models.py", "/models/", "migration", "alembic", "payment", "auth", "security")
+        for part in (
+            "models.py",
+            "/models/",
+            "migration",
+            "alembic",
+            "payment",
+            "auth",
+            "security",
+        )
     ):
         return 55
     if lower.endswith((".py", ".ts", ".tsx", ".js", ".jsx")):
@@ -2225,10 +2348,13 @@ def _auto_merge_risk_score_v1(
     sensitive keywords and historical same-loop merge success rate.
     """
 
-    normalized_files = [_normalize_repo_path(file_name) for file_name in files if file_name]
+    normalized_files = [
+        _normalize_repo_path(file_name) for file_name in files if file_name
+    ]
     line_changes = int((diff_stats or {}).get("line_changes") or 0)
     per_file_scores = [
-        {"file": file_name, "score": _file_type_risk(file_name)} for file_name in normalized_files
+        {"file": file_name, "score": _file_type_risk(file_name)}
+        for file_name in normalized_files
     ]
     file_score = max([int(item["score"]) for item in per_file_scores] or [0])
     line_score = min(25, line_changes // 20)
@@ -2281,23 +2407,35 @@ def _auto_merge_risk_score_v1(
     }
 
 
-def _semantic_review_qa_analysis(steps: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
+def _semantic_review_qa_analysis(
+    steps: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
     if not isinstance(steps, list):
         return {"available": False, "penalty": 8, "reason": "no_structured_llm_reports"}
     penalty = 0
     reports: Dict[str, Any] = {}
     review_steps = [
-        step for step in steps if isinstance(step, dict) and step.get("step") == "review"
+        step
+        for step in steps
+        if isinstance(step, dict) and step.get("step") == "review"
     ]
-    qa_steps = [step for step in steps if isinstance(step, dict) and step.get("step") == "qa"]
+    qa_steps = [
+        step for step in steps if isinstance(step, dict) and step.get("step") == "qa"
+    ]
     if review_steps:
-        review_json = _structured_report_from_step(review_steps[-1], STRUCTURED_REVIEW_MARKER)
+        review_json = _structured_report_from_step(
+            review_steps[-1], STRUCTURED_REVIEW_MARKER
+        )
         if isinstance(review_json, dict):
             reports["review"] = review_json
             severity = str(review_json.get("max_severity") or "medium").lower()
-            penalty += {"none": 0, "low": 2, "medium": 8, "high": 30, "critical": 50}.get(
-                severity, 15
-            )
+            penalty += {
+                "none": 0,
+                "low": 2,
+                "medium": 8,
+                "high": 30,
+                "critical": 50,
+            }.get(severity, 15)
             if review_json.get("blocking_findings"):
                 penalty += 40
         else:
@@ -2363,9 +2501,15 @@ def _auto_merge_safety_score_v2(
     diff_semantic = _diff_semantic_penalty(diff_excerpt)
     rollback_rate = _historical_rollback_rate(memory)
     rollback_penalty = 4 if rollback_rate is None else int(round(rollback_rate * 35))
-    file_penalty = min(25, int((risk_v1.get("components") or {}).get("file_score") or 0) // 2)
-    line_penalty = min(18, int((risk_v1.get("components") or {}).get("line_score") or 0))
-    keyword_penalty = min(18, int((risk_v1.get("components") or {}).get("keyword_score") or 0))
+    file_penalty = min(
+        25, int((risk_v1.get("components") or {}).get("file_score") or 0) // 2
+    )
+    line_penalty = min(
+        18, int((risk_v1.get("components") or {}).get("line_score") or 0)
+    )
+    keyword_penalty = min(
+        18, int((risk_v1.get("components") or {}).get("keyword_score") or 0)
+    )
     total_penalty = (
         file_penalty
         + line_penalty
@@ -2428,7 +2572,9 @@ def _auto_merge_safety_score_v3(
     except Exception as exc:
         return {
             "error": str(exc)[:500],
-            "min_allowed": _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V3", 95),
+            "min_allowed": _env_int(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V3", 95
+            ),
             "ok": False,
             "reason": "risk_score_v3_unavailable",
             "schema_version": 3,
@@ -2447,7 +2593,9 @@ def _assess_branch_auto_merge_policy(
     steps: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     allowed = _allowed_auto_merge_globs()
-    normalized_files = [_normalize_repo_path(file_name) for file_name in files if file_name]
+    normalized_files = [
+        _normalize_repo_path(file_name) for file_name in files if file_name
+    ]
     risk_score = _auto_merge_risk_score_v1(normalized_files, diff_stats, memory=memory)
     safety_score_v2 = _auto_merge_safety_score_v2(
         normalized_files,
@@ -2554,7 +2702,9 @@ def _assess_branch_auto_merge_policy(
             }
         )
 
-    binary_files = diff_stats.get("binary_files") if isinstance(diff_stats, dict) else []
+    binary_files = (
+        diff_stats.get("binary_files") if isinstance(diff_stats, dict) else []
+    )
     if binary_files:
         return _decision(
             {
@@ -2565,7 +2715,9 @@ def _assess_branch_auto_merge_policy(
             }
         )
 
-    if _env_bool("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", True) and safety_score_v3.get("ok"):
+    if _env_bool(
+        "MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", True
+    ) and safety_score_v3.get("ok"):
         return _decision(
             {
                 "changed_files": normalized_files,
@@ -2618,7 +2770,9 @@ def _assess_branch_auto_merge_policy(
         )
 
     if _env_bool("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", True):
-        if int(safety_score_v2.get("score") or 0) < int(safety_score_v2.get("min_allowed") or 90):
+        if int(safety_score_v2.get("score") or 0) < int(
+            safety_score_v2.get("min_allowed") or 90
+        ):
             return _decision(
                 {
                     "changed_files": normalized_files,
@@ -2701,7 +2855,9 @@ def _assess_branch_auto_merge_policy(
 
 def _guest_auth_headers(api_base: str) -> Dict[str, str]:
     env_token = (
-        os.environ.get("MODSTORE_PARA_AUTH_TOKEN") or os.environ.get("DEVFLEET_AUTH_TOKEN") or ""
+        os.environ.get("MODSTORE_PARA_AUTH_TOKEN")
+        or os.environ.get("DEVFLEET_AUTH_TOKEN")
+        or ""
     ).strip()
     if env_token:
         return {"Authorization": f"Bearer {env_token}"}
@@ -2785,7 +2941,9 @@ def _write_para_guest_auth_file(api_base: str, token: str, expires_at: float) ->
         "api_base": api_base.rstrip("/"),
         "created_at": _utc_now().isoformat(),
         "expires_at": expires_at,
-        "expires_at_iso": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(),
+        "expires_at_iso": datetime.fromtimestamp(
+            expires_at, tz=timezone.utc
+        ).isoformat(),
         "token": token,
     }
     try:
@@ -2833,7 +2991,8 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
                 """).fetchone()
     except Exception:
         logger.warning(
-            "failed to read Para guest user from sqlite for local auth mint", exc_info=True
+            "failed to read Para guest user from sqlite for local auth mint",
+            exc_info=True,
         )
         return None
     if not row:
@@ -2860,7 +3019,9 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
     )
     unsigned = f"{header}.{payload}"
     signature = _base64url_bytes(
-        hmac.new(secret.encode("utf-8"), unsigned.encode("ascii"), hashlib.sha256).digest()
+        hmac.new(
+            secret.encode("utf-8"), unsigned.encode("ascii"), hashlib.sha256
+        ).digest()
     )
     token = f"{unsigned}.{signature}"
     cache_key = api_base.rstrip("/")
@@ -2948,7 +3109,9 @@ def _para_db_file() -> Optional[Path]:
     return path if path.exists() else None
 
 
-def _clear_stale_para_current_task(*, device_id: str, current_task: str) -> Dict[str, Any]:
+def _clear_stale_para_current_task(
+    *, device_id: str, current_task: str
+) -> Dict[str, Any]:
     db_file = _para_db_file()
     if db_file is None:
         return {"cleared": False, "reason": "para_db_file_missing"}
@@ -3041,7 +3204,9 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
     if not api_base or not device_id:
         return {"online": False, "reason": "missing_para_api_base_or_device_id"}
 
-    timeout_sec = max(0, _env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC", 60))
+    timeout_sec = max(
+        0, _env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC", 60)
+    )
     poll_sec = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_POLL_SEC", 5))
     deadline = time.monotonic() + timeout_sec
     last_status: Dict[str, Any] = {}
@@ -3054,7 +3219,9 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
             if headers is None:
                 headers = _guest_auth_headers(api_base)
             with httpx.Client(timeout=15.0, trust_env=False, verify=False) as client:
-                resp = client.get(f"{api_base.rstrip('/')}/api/devices", headers=headers)
+                resp = client.get(
+                    f"{api_base.rstrip('/')}/api/devices", headers=headers
+                )
                 if resp.status_code in {401, 403}:
                     headers = None
                     _PARA_GUEST_AUTH_CACHE.pop(api_base.rstrip("/"), None)
@@ -3078,7 +3245,10 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                 tools = target.get("tools")
                 if isinstance(tools, list):
                     for tool in tools:
-                        if isinstance(tool, dict) and str(tool.get("toolName") or "") == "codex":
+                        if (
+                            isinstance(tool, dict)
+                            and str(tool.get("toolName") or "") == "codex"
+                        ):
                             codex_tool = tool
                             break
                 tool_status = str(codex_tool.get("status") or "").lower()
@@ -3098,7 +3268,10 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                             "stale_clear": stale_clear,
                             "status": target.get("status"),
                         }
-                        return {**last_status, "reason": "online_after_stale_current_task_clear"}
+                        return {
+                            **last_status,
+                            "reason": "online_after_stale_current_task_clear",
+                        }
                 if online and current_task:
                     last_status = {
                         "codex_tool": codex_tool,
@@ -3148,7 +3321,9 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
         time.sleep(poll_sec)
 
 
-def _mark_para_task_merged(*, api_base: str, task_id: str, merge_sha: str) -> Dict[str, Any]:
+def _mark_para_task_merged(
+    *, api_base: str, task_id: str, merge_sha: str
+) -> Dict[str, Any]:
     headers = _guest_auth_headers(api_base)
     with httpx.Client(timeout=30.0, trust_env=False, verify=False) as client:
         resp = client.post(
@@ -3158,6 +3333,36 @@ def _mark_para_task_merged(*, api_base: str, task_id: str, merge_sha: str) -> Di
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def _request_para_task_merge(*, api_base: str, task_id: str) -> Dict[str, Any]:
+    """Queue the already-pushed Para workspace only after loop gates pass.
+
+    The CVM cannot reach GitHub directly, while the Para worker on the Mac can.
+    Keeping this request here makes review, QA and ``autonomy_guard`` the sole
+    authorization path; the device agent only prepares and pushes the branch.
+    """
+
+    workspace_root = (
+        os.environ.get("MODSTORE_PARA_WORKSPACE_ROOT")
+        or "/Users/a4243342/XCMAX-runtime/para-main-agent/workspace"
+    ).strip()
+    workspace_path = str(Path(workspace_root).expanduser() / task_id)
+    headers = _guest_auth_headers(api_base)
+    with httpx.Client(timeout=30.0, trust_env=False, verify=False) as client:
+        resp = client.post(
+            f"{api_base.rstrip('/')}/api/tasks/{task_id}/request-merge",
+            headers=headers,
+            json={"workspace_path": workspace_path, "auto_merge": True},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    return {
+        "ok": True,
+        "para_response": payload,
+        "reason": "merge_requested_after_loop_risk_gate",
+        "workspace_path": workspace_path,
+    }
 
 
 def _loop_steps_roster_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3210,9 +3415,15 @@ def _loop_steps_roster_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
             "policy": "only_registered_duty_roster_participants_can_pass_self_maintenance_policy",
             "reason": "duty_employee_registry_load_error",
         }
-    in_roster_ids = sorted(emp_id for emp_id in participant_ids if emp_id in planned_ids)
-    out_of_roster_ids = sorted(emp_id for emp_id in participant_ids if emp_id not in planned_ids)
-    not_deployed_ids = sorted(emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids)
+    in_roster_ids = sorted(
+        emp_id for emp_id in participant_ids if emp_id in planned_ids
+    )
+    out_of_roster_ids = sorted(
+        emp_id for emp_id in participant_ids if emp_id not in planned_ids
+    )
+    not_deployed_ids = sorted(
+        emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids
+    )
     if out_of_roster_ids:
         return {
             "action": "isolate",
@@ -3273,8 +3484,8 @@ def _auto_merge_low_risk_branch(
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     api_base = os.environ.get("MODSTORE_PARA_API_BASE", "").strip()
     # Security guard: by default only local file:// repos allow auto-merge.
-    # Operators can opt-in to remote https:// repos by setting
-    # MODSTORE_AUTO_MERGE_ALLOW_REMOTE=1 (e.g. for trusted GitHub forks).
+    # Trusted remote repos use the Para worker, but the request is emitted only
+    # after review, QA and the autonomy SSOT have all passed.
     allow_remote = _env_bool("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", False)
     if not repo_url.startswith("file://") and not (
         allow_remote and repo_url.startswith(("http://", "https://"))
@@ -3284,6 +3495,48 @@ def _auto_merge_low_risk_branch(
         return {"ok": False, "reason": "missing_base_branch"}
     if not api_base:
         return {"ok": False, "reason": "missing_api_base"}
+
+    if repo_url.startswith(("http://", "https://")):
+        report_gate = _structured_report_gate(steps or [])
+        if not report_gate.get("ok"):
+            return {
+                "ok": False,
+                "reason": report_gate.get("reason") or "structured_reports_not_passed",
+                "structured_report_gate": report_gate,
+            }
+
+        from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+        decision = evaluate_risk(
+            "self_maintenance_l1_merge",
+            action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+            source="self_maintenance_loop.remote_merge_request",
+        )
+        if not decision.allowed:
+            return {
+                "ok": False,
+                "reason": "autonomy_guard_blocked",
+                "risk_decision": decision.to_dict(),
+            }
+        try:
+            request_result = _request_para_task_merge(
+                api_base=api_base, task_id=task_id
+            )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc)[:500],
+                "reason": "para_merge_request_failed",
+                "risk_decision": decision.to_dict(),
+            }
+        return {
+            "ok": True,
+            "merge_requested": True,
+            "para_request": request_result,
+            "reason": "merge_requested_after_loop_risk_gate",
+            "risk_decision": decision.to_dict(),
+            "structured_report_gate": report_gate,
+        }
 
     workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / run_id
     files = _changed_files_for_branch(
@@ -3349,15 +3602,13 @@ def _auto_merge_low_risk_branch(
     if not decision.allowed:
         return {
             "ok": False,
-            "reason": (
-                "autonomy_guard_pending_approval"
-                if decision.requires_confirmation
-                else "autonomy_guard_blocked"
-            ),
+            "reason": "autonomy_guard_blocked",
             "risk_decision": decision.to_dict(),
         }
 
-    _run_cmd(["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace)
+    _run_cmd(
+        ["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace
+    )
     merge_sha = _run_cmd(["git", "rev-parse", "HEAD"], cwd=workspace)
     # Push 到 origin 可能因认证/权限失败（如 GitHub https 需 token）。
     # 失败时降级为 await_human，不让整个 auto_merge 崩溃。
@@ -3376,7 +3627,9 @@ def _auto_merge_low_risk_branch(
             "push_stderr": (_push_proc.stderr or "")[:500],
             "branch": branch,
         }
-    para_update = _mark_para_task_merged(api_base=api_base, task_id=task_id, merge_sha=merge_sha)
+    para_update = _mark_para_task_merged(
+        api_base=api_base, task_id=task_id, merge_sha=merge_sha
+    )
     return {
         **policy,
         "diff_excerpt": diff_excerpt,
@@ -3398,33 +3651,12 @@ def _decide_post_loop_policy(
     status: str,
     steps: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    def _await_human(reason: str, **extra: Any) -> Dict[str, Any]:
-        decision = {
-            "action": "await_human_strategy_approval",
+    def _hold_for_remediation(reason: str, **extra: Any) -> Dict[str, Any]:
+        return {
+            "action": "hold_for_automated_remediation",
             "reason": reason,
             **extra,
         }
-        try:
-            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-
-            decision["uncertainty_queue"] = enqueue_uncertain_item(
-                context={
-                    "branch": branch,
-                    "active_gates": extra.get("active_gates"),
-                    "evolution_gate": extra.get("evolution_gate"),
-                    "gate": gate,
-                    "governance_gate": extra.get("governance_gate"),
-                    "para_task_id": para_task_id,
-                    "roster_gate": extra.get("roster_gate"),
-                    "run_id": run_id,
-                    "status": status,
-                },
-                decision=decision,
-                reason=reason,
-            )
-        except Exception as exc:
-            decision["uncertainty_queue"] = {"queued": False, "error": str(exc)[:300]}
-        return decision
 
     if status != "completed":
         return {"action": "stop", "reason": "loop_not_completed"}
@@ -3437,7 +3669,9 @@ def _decide_post_loop_policy(
     try:
         evolution_gate = evolution_metrics_gate()
     except Exception as exc:
-        logger.exception("failed to evaluate evolution metrics gate for policy active gates")
+        logger.exception(
+            "failed to evaluate evolution metrics gate for policy active gates"
+        )
         evolution_gate = {
             "pause": False,
             "reason": "metrics_gate_error",
@@ -3453,7 +3687,7 @@ def _decide_post_loop_policy(
         structured_gate=structured_gate,
     )
     if not structured_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             structured_gate.get("reason") or "structured_report_gate_failed",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3462,7 +3696,7 @@ def _decide_post_loop_policy(
             structured_gate=structured_gate,
         )
     if report_only_missing:
-        return _await_human(
+        return _hold_for_remediation(
             "missing_report_only_evidence",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3470,7 +3704,7 @@ def _decide_post_loop_policy(
             roster_gate=roster_gate,
         )
     if not roster_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             roster_gate.get("reason") or "roster_gate_failed",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3478,14 +3712,14 @@ def _decide_post_loop_policy(
             roster_gate=roster_gate,
         )
     if not governance_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             governance_gate.get("reason") or "governance_gate_failed",
             active_gates=active_gates,
             governance_gate=governance_gate,
             roster_gate=roster_gate,
         )
     if bool(evolution_gate.get("pause")):
-        return _await_human(
+        return _hold_for_remediation(
             evolution_gate.get("reason") or "evolution_metrics_pause",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3502,7 +3736,7 @@ def _decide_post_loop_policy(
             "roster_gate": roster_gate,
         }
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", True):
-        return _await_human(
+        return _hold_for_remediation(
             "auto_merge_disabled",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3517,17 +3751,26 @@ def _decide_post_loop_policy(
         steps=steps,
     )
     if merge_result.get("ok"):
+        merge_requested = bool(merge_result.get("merge_requested"))
         return {
-            "action": "auto_merged_low_risk",
+            "action": (
+                "auto_merge_requested_low_risk"
+                if merge_requested
+                else "auto_merged_low_risk"
+            ),
             "active_gates": active_gates,
             "evolution_gate": evolution_gate,
             "gate": gate,
             "governance_gate": governance_gate,
             "merge_result": merge_result,
-            "reason": "low_risk_policy_passed",
+            "reason": (
+                "low_risk_merge_requested"
+                if merge_requested
+                else "low_risk_policy_passed"
+            ),
             "roster_gate": roster_gate,
         }
-    return _await_human(
+    return _hold_for_remediation(
         merge_result.get("reason") or "auto_merge_not_allowed",
         gate=gate,
         active_gates=active_gates,
@@ -3599,7 +3842,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             para_task_id = str(final.get("para_task_id") or "").strip()
             if branch or para_task_id:
                 for idx, item in reversed(list(enumerate(open_items))):
-                    if not (isinstance(item, dict) and item.get("kind") == "failed_steps"):
+                    if not (
+                        isinstance(item, dict) and item.get("kind") == "failed_steps"
+                    ):
                         continue
                     item_branch = str(item.get("branch") or "").strip()
                     item_task_id = str(
@@ -3634,14 +3879,14 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             if final.get("para_task_id"):
                 new_item["para_task_id"] = final.get("para_task_id")
             open_items.append(new_item)
-    if decision.get("action") == "await_human_strategy_approval":
+    if decision.get("action") == "hold_for_automated_remediation":
         open_items.append(
             {
                 "branch": final.get("branch"),
                 "active_gates": decision.get("active_gates"),
                 "created_at": _iso(_utc_now()),
                 "evolution_gate": decision.get("evolution_gate"),
-                "kind": "human_strategy_approval",
+                "kind": "automated_remediation",
                 "governance_gate": decision.get("governance_gate"),
                 "reason": decision.get("reason"),
                 "roster_gate": decision.get("roster_gate"),
@@ -3670,7 +3915,8 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             para_workspace=para_workspace, run_id=final.get("run_id")
         )
         if salvage_summary and (
-            salvage_summary.get("salvaged_fixes") or salvage_summary.get("salvaged_patterns")
+            salvage_summary.get("salvaged_fixes")
+            or salvage_summary.get("salvaged_patterns")
         ):
             logger.info(
                 "kb salvage run_id=%s salvaged_fixes=%s salvaged_patterns=%s",
@@ -3683,12 +3929,16 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 "phase": "kb_salvage",
                 "run_id": final.get("run_id"),
                 "para_task_id": final.get("para_task_id"),
-                "salvaged_fixes": salvage_summary.get("salvaged_fixes") if salvage_summary else 0,
+                "salvaged_fixes": salvage_summary.get("salvaged_fixes")
+                if salvage_summary
+                else 0,
                 "salvaged_patterns": (
                     salvage_summary.get("salvaged_patterns") if salvage_summary else 0
                 ),
                 "skipped": salvage_summary.get("skipped") if salvage_summary else 0,
-                "workspace": salvage_summary.get("workspace") if salvage_summary else None,
+                "workspace": salvage_summary.get("workspace")
+                if salvage_summary
+                else None,
                 "timestamp": _iso(_utc_now()),
             }
         )
@@ -3742,13 +3992,17 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             "roster_gate_out_of_roster_ids": (
                 decision.get("roster_gate", {}).get("out_of_roster_ids")
                 if isinstance(decision.get("roster_gate"), dict)
-                and isinstance(decision.get("roster_gate", {}).get("out_of_roster_ids"), list)
+                and isinstance(
+                    decision.get("roster_gate", {}).get("out_of_roster_ids"), list
+                )
                 else []
             ),
             "roster_gate_not_deployed_ids": (
                 decision.get("roster_gate", {}).get("not_deployed_ids")
                 if isinstance(decision.get("roster_gate"), dict)
-                and isinstance(decision.get("roster_gate", {}).get("not_deployed_ids"), list)
+                and isinstance(
+                    decision.get("roster_gate", {}).get("not_deployed_ids"), list
+                )
                 else []
             ),
             "run_id": final.get("run_id"),
@@ -3824,7 +4078,9 @@ def run_self_maintenance_loop(
     para_task_id: Optional[str] = (
         str(resume_candidate.get("para_task_id")) if resume_candidate else None
     )
-    code_branch: Optional[str] = str(resume_candidate.get("branch")) if resume_candidate else None
+    code_branch: Optional[str] = (
+        str(resume_candidate.get("branch")) if resume_candidate else None
+    )
 
     plan = []
     if not resume_candidate:
@@ -3974,8 +4230,10 @@ def run_self_maintenance_loop(
         final_status = "completed"
         if policy_decision.get("action") == "auto_merged_low_risk":
             final_status = "completed_merged"
-        elif policy_decision.get("action") == "await_human_strategy_approval":
-            final_status = "completed_waiting_human_strategy"
+        elif policy_decision.get("action") == "auto_merge_requested_low_risk":
+            final_status = "completed_merge_requested"
+        elif policy_decision.get("action") == "hold_for_automated_remediation":
+            final_status = "completed_held_for_remediation"
 
         final = {
             "branch": code_branch,
@@ -4076,8 +4334,12 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         gate = {"should_run": False, "reason": "gate_error", "error": str(exc)}
 
     trigger = cron_trigger_for_self_maintenance()
-    open_items = memory.get("open_items") if isinstance(memory.get("open_items"), list) else []
-    recent_runs = memory.get("recent_runs") if isinstance(memory.get("recent_runs"), list) else []
+    open_items = (
+        memory.get("open_items") if isinstance(memory.get("open_items"), list) else []
+    )
+    recent_runs = (
+        memory.get("recent_runs") if isinstance(memory.get("recent_runs"), list) else []
+    )
 
     try:
         from modstore_server.duty_roster import all_planned_employee_ids
@@ -4185,7 +4447,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         if run_id and run_id not in cur["run_ids"]:
             cur["run_ids"].append(run_id)
         at = str(
-            row.get("created_at") or row.get("completed_at") or row.get("started_at") or ""
+            row.get("created_at")
+            or row.get("completed_at")
+            or row.get("started_at")
+            or ""
         ).strip()
         if at and (not cur["latest_at"] or at > str(cur["latest_at"])):
             cur["latest_at"] = at
@@ -4204,7 +4469,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ):
                 if key in value:
                     _add_participant(str(value.get(key) or ""), value, source)
-            for key in ("steps", "nodes", "result", "employee_results", "reports", "items"):
+            for key in (
+                "steps",
+                "nodes",
+                "result",
+                "employee_results",
+                "reports",
+                "items",
+            ):
                 if key in value:
                     _collect_participants(value.get(key), source)
         elif isinstance(value, list):
@@ -4259,17 +4531,26 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                 row.get("status") or row.get("action") or row.get("reason") or ""
             ).strip(),
             "created_at": str(
-                row.get("created_at") or row.get("completed_at") or row.get("started_at") or ""
+                row.get("created_at")
+                or row.get("completed_at")
+                or row.get("started_at")
+                or ""
             ).strip(),
             "para_task_id": str(row.get("para_task_id") or "").strip(),
             "branch": str(row.get("branch") or row.get("target_branch") or "").strip(),
             "qa_verdict": str(qa.get("verdict") or "").strip() if qa else "",
             "qa_blocking_findings": qa.get("blocking_findings") if qa else [],
             "qa_tested_commands": qa.get("tested_commands") if qa else [],
-            "qa_target_branch_available": qa.get("target_branch_available") if qa else None,
+            "qa_target_branch_available": qa.get("target_branch_available")
+            if qa
+            else None,
             "qa_risk_class": str(qa.get("risk_class") or "").strip() if qa else "",
-            "review_verdict": str(review.get("verdict") or "").strip() if review else "",
-            "review_max_severity": str(review.get("max_severity") or "").strip() if review else "",
+            "review_verdict": str(review.get("verdict") or "").strip()
+            if review
+            else "",
+            "review_max_severity": str(review.get("max_severity") or "").strip()
+            if review
+            else "",
             "review_findings": review.get("findings") if review else [],
             "reason": str(row.get("reason") or "").strip(),
         }
@@ -4301,7 +4582,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                     continue
                 sub_ids = subzone.get("ids")
                 if isinstance(sub_ids, list):
-                    ids.extend(str(item).strip() for item in sub_ids if str(item).strip())
+                    ids.extend(
+                        str(item).strip() for item in sub_ids if str(item).strip()
+                    )
         return list(dict.fromkeys(ids))
 
     def _department_lookup() -> Dict[str, Dict[str, str]]:
@@ -4324,7 +4607,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         try:
             planned_ids = set(all_planned_employee_ids())
         except Exception as exc:
-            logger.exception("failed to load duty roster ids for self-maintenance status")
+            logger.exception(
+                "failed to load duty roster ids for self-maintenance status"
+            )
             planned_ids = set()
             load_error = str(exc)[:300]
         else:
@@ -4332,16 +4617,22 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         try:
             deployed_ids = set(duty_employee_records().keys())
         except Exception as exc:
-            logger.exception("failed to load duty employee registry for self-maintenance status")
+            logger.exception(
+                "failed to load duty employee registry for self-maintenance status"
+            )
             deployed_ids = set()
             deployed_error = str(exc)[:300]
         else:
             deployed_error = ""
         participant_ids = sorted(participants_by_id.keys())
         in_roster_ids = [emp_id for emp_id in participant_ids if emp_id in planned_ids]
-        out_of_roster_ids = [emp_id for emp_id in participant_ids if emp_id not in planned_ids]
+        out_of_roster_ids = [
+            emp_id for emp_id in participant_ids if emp_id not in planned_ids
+        ]
         in_deployed_ids = [emp_id for emp_id in in_roster_ids if emp_id in deployed_ids]
-        not_deployed_ids = [emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids]
+        not_deployed_ids = [
+            emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids
+        ]
         in_roster_set = set(in_roster_ids)
         coverage: List[Dict[str, Any]] = []
         covered_ids: set[str] = set()
@@ -4349,7 +4640,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             if not isinstance(dept, dict):
                 continue
             dept_ids = [
-                emp_id for emp_id in _department_employee_ids(dept) if emp_id in planned_ids
+                emp_id
+                for emp_id in _department_employee_ids(dept)
+                if emp_id in planned_ids
             ]
             hits = [emp_id for emp_id in dept_ids if emp_id in in_roster_set]
             if not hits:
@@ -4364,7 +4657,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                     "ids": hits,
                 }
             )
-        ungrouped_ids = [emp_id for emp_id in in_roster_ids if emp_id not in covered_ids]
+        ungrouped_ids = [
+            emp_id for emp_id in in_roster_ids if emp_id not in covered_ids
+        ]
         if ungrouped_ids:
             coverage.append(
                 {
@@ -4531,15 +4826,25 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         qa = value.get("qa") if isinstance(value.get("qa"), dict) else {}
         review = value.get("review") if isinstance(value.get("review"), dict) else {}
         final = value.get("final") if isinstance(value.get("final"), dict) else {}
-        roster_gate = value.get("roster_gate") if isinstance(value.get("roster_gate"), dict) else {}
+        roster_gate = (
+            value.get("roster_gate")
+            if isinstance(value.get("roster_gate"), dict)
+            else {}
+        )
         governance_gate = (
-            value.get("governance_gate") if isinstance(value.get("governance_gate"), dict) else {}
+            value.get("governance_gate")
+            if isinstance(value.get("governance_gate"), dict)
+            else {}
         )
         active_gates = (
-            value.get("active_gates") if isinstance(value.get("active_gates"), dict) else {}
+            value.get("active_gates")
+            if isinstance(value.get("active_gates"), dict)
+            else {}
         )
         evolution_gate = (
-            value.get("evolution_gate") if isinstance(value.get("evolution_gate"), dict) else {}
+            value.get("evolution_gate")
+            if isinstance(value.get("evolution_gate"), dict)
+            else {}
         )
         return {
             "action": str(value.get("action") or "").strip(),
@@ -4574,7 +4879,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             memory=memory if isinstance(memory, dict) else {},
         )
         kb_search = (
-            kb_context.get("kb_search") if isinstance(kb_context.get("kb_search"), dict) else {}
+            kb_context.get("kb_search")
+            if isinstance(kb_context.get("kb_search"), dict)
+            else {}
         )
         fix_hits = (
             kb_context.get("fix_knowledge_hits")
@@ -4595,7 +4902,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "top_fix_hits": [
                 {
                     "symptom": str(
-                        item.get("symptom") or item.get("summary") or item.get("id") or ""
+                        item.get("symptom")
+                        or item.get("summary")
+                        or item.get("id")
+                        or ""
                     )[:180],
                     "root_cause": str(item.get("root_cause") or "")[:180],
                     "fix_diff": str(item.get("fix_diff") or "")[:2000],
@@ -4608,12 +4918,16 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                         item.get("executable_template", {}).get("required_tests")
                         if isinstance(item.get("executable_template"), dict)
                         and isinstance(
-                            item.get("executable_template", {}).get("required_tests"), list
+                            item.get("executable_template", {}).get("required_tests"),
+                            list,
                         )
                         else []
                     ),
                     "rollback_plan": (
-                        str(item.get("executable_template", {}).get("rollback_plan") or "")[:1000]
+                        str(
+                            item.get("executable_template", {}).get("rollback_plan")
+                            or ""
+                        )[:1000]
                         if isinstance(item.get("executable_template"), dict)
                         else ""
                     ),
@@ -4625,11 +4939,16 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "top_pattern_hits": [
                 {
                     "pattern": str(
-                        item.get("pattern") or item.get("summary") or item.get("id") or ""
+                        item.get("pattern")
+                        or item.get("summary")
+                        or item.get("id")
+                        or ""
                     )[:180],
                     "summary": str(item.get("summary") or "")[:180],
                     "applicability": str(
-                        item.get("applicability") or item.get("applicability_check") or ""
+                        item.get("applicability")
+                        or item.get("applicability_check")
+                        or ""
                     )[:1000],
                     "patch_strategy": str(item.get("patch_strategy") or "")[:1000],
                     "path": item.get("_path"),
@@ -4659,7 +4978,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "history_count": 0,
         }
     metric_windows = (
-        metrics_gate.get("windows") if isinstance(metrics_gate.get("windows"), list) else []
+        metrics_gate.get("windows")
+        if isinstance(metrics_gate.get("windows"), list)
+        else []
     )
     evolution_metrics_summary = {
         "pause": bool(metrics_gate.get("pause")),
@@ -4688,7 +5009,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         "policy": "consecutive_governance_action_failures_pause_auto_continue_and_auto_merge",
     }
     roster_gate_current = (
-        roster_alignment.get("gate") if isinstance(roster_alignment.get("gate"), dict) else {}
+        roster_alignment.get("gate")
+        if isinstance(roster_alignment.get("gate"), dict)
+        else {}
     )
     active_gate_items = [
         {
@@ -4738,7 +5061,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
 
     def _ui_bridge_summary() -> Dict[str, Any]:
         gate_info = (
-            roster_alignment.get("gate") if isinstance(roster_alignment.get("gate"), dict) else {}
+            roster_alignment.get("gate")
+            if isinstance(roster_alignment.get("gate"), dict)
+            else {}
         )
         remediation_info = (
             roster_alignment.get("remediation")
@@ -4755,7 +5080,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         participant_count = len(participants_by_id)
         open_count = len(open_run_ids)
         governance_health = str(governance_audit_summary.get("health") or "").strip()
-        governance_consecutive = int(governance_audit_summary.get("consecutive_failures") or 0)
+        governance_consecutive = int(
+            governance_audit_summary.get("consecutive_failures") or 0
+        )
 
         state = "ready"
         tone = "ok"
@@ -4770,18 +5097,21 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             state = "requires_duty_registration"
             tone = "bad"
             title = "编制员工未登记上岗"
-            detail = (
-                "Loop 参与者命中编制基线但未完成 duty registry 上岗登记，必须先在编制图谱补登记。"
-            )
+            detail = "Loop 参与者命中编制基线但未完成 duty registry 上岗登记，必须先在编制图谱补登记。"
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "register_duty_employees"
-            next_actions = ["register_duty_employees", "refresh_self_maintenance_status"]
+            next_actions = [
+                "register_duty_employees",
+                "refresh_self_maintenance_status",
+            ]
         elif gate_action == "isolate":
             state = "requires_roster_isolation"
             tone = "bad"
             title = "Loop 混入非编制员工"
-            detail = "检测到非编制 employee_id，必须在编制图谱隔离，不能进入上岗员工执行面。"
+            detail = (
+                "检测到非编制 employee_id，必须在编制图谱隔离，不能进入上岗员工执行面。"
+            )
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "isolate_out_of_roster_participants"
@@ -4803,7 +5133,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             primary_surface = "self_evolution_loop"
             primary_view = "loop"
             primary_action = "inspect_governance_audit"
-            next_actions = ["inspect_governance_audit", "review_failed_governance_actions"]
+            next_actions = [
+                "inspect_governance_audit",
+                "review_failed_governance_actions",
+            ]
         elif not participant_count:
             state = "waiting_for_loop_participants"
             tone = "warn"
@@ -4920,7 +5253,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "governance_health": governance_audit_summary,
             "next_actions": next_actions,
             "handoff_path": [
-                {"surface": "self_evolution_loop", "role": "runtime_overview", "view": "loop"},
+                {
+                    "surface": "self_evolution_loop",
+                    "role": "runtime_overview",
+                    "view": "loop",
+                },
                 {
                     "surface": "duty_roster_graph",
                     "role": "governance_surface",
@@ -4934,19 +5271,25 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ],
             "employee_space": {
                 "role": "execution_surface",
-                "title": title if primary_surface == "employee_space" else "员工空间只展示执行现场",
+                "title": title
+                if primary_surface == "employee_space"
+                else "员工空间只展示执行现场",
                 "detail": (
                     detail
                     if primary_surface == "employee_space"
                     else "补登记、隔离、数据源修复统一在编制图谱处理，避免工位页绕过上岗门禁。"
                 ),
-                "cta": "看执行现场" if primary_surface == "employee_space" else "去编制图谱处理",
+                "cta": "看执行现场"
+                if primary_surface == "employee_space"
+                else "去编制图谱处理",
             },
             "duty_roster_graph": {
                 "role": "governance_surface",
                 "title": title,
                 "detail": detail,
-                "cta": "执行治理动作" if primary_surface == "duty_roster_graph" else "查看编制准入",
+                "cta": "执行治理动作"
+                if primary_surface == "duty_roster_graph"
+                else "查看编制准入",
             },
         }
 
@@ -4981,7 +5324,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "governance_audit",
             "merge_decision",
         ],
-        "surfaces": ["employee_space", "duty_roster_graph", "self_evolution_loop_runtime"],
+        "surfaces": [
+            "employee_space",
+            "duty_roster_graph",
+            "self_evolution_loop_runtime",
+        ],
         "identity_dependencies": ["participants", "roster_alignment", "ui_bridge"],
         "gate_dependencies": [
             "active_gates",
@@ -4990,7 +5337,12 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "merge_decision",
             "evolution_metrics_summary",
         ],
-        "truth_dependencies": ["source", "evidence", "governance_audit", "run_timelines"],
+        "truth_dependencies": [
+            "source",
+            "evidence",
+            "governance_audit",
+            "run_timelines",
+        ],
         "required_nested": [
             "active_gates.items",
             "governance_audit.summary",
@@ -5041,16 +5393,24 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             else False
         ),
         "roster_alignment.gate": (
-            bool(roster_alignment.get("gate")) if isinstance(roster_alignment, dict) else False
+            bool(roster_alignment.get("gate"))
+            if isinstance(roster_alignment, dict)
+            else False
         ),
         "ui_bridge.employee_space": (
-            bool(ui_bridge.get("employee_space")) if isinstance(ui_bridge, dict) else False
+            bool(ui_bridge.get("employee_space"))
+            if isinstance(ui_bridge, dict)
+            else False
         ),
         "ui_bridge.duty_roster_graph": (
-            bool(ui_bridge.get("duty_roster_graph")) if isinstance(ui_bridge, dict) else False
+            bool(ui_bridge.get("duty_roster_graph"))
+            if isinstance(ui_bridge, dict)
+            else False
         ),
         "ui_bridge.governance_action": (
-            bool(ui_bridge.get("governance_action")) if isinstance(ui_bridge, dict) else False
+            bool(ui_bridge.get("governance_action"))
+            if isinstance(ui_bridge, dict)
+            else False
         ),
     }
     contract_missing_nested = [
@@ -5087,7 +5447,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             return bool(contract_nested_presence.get(name))
         return name in runtime_top_level_keys
 
-    def _contract_surface_remediation(surface: str, missing: List[str]) -> Dict[str, Any]:
+    def _contract_surface_remediation(
+        surface: str, missing: List[str]
+    ) -> Dict[str, Any]:
         if not missing:
             return {
                 "action": "observe",
@@ -5122,7 +5484,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                 "executable": False,
             }
         if surface == "duty_roster_graph":
-            if "governance_audit.summary" in missing or "governance_gate.summary" in missing:
+            if (
+                "governance_audit.summary" in missing
+                or "governance_gate.summary" in missing
+            ):
                 return {
                     "action": "inspect_governance_audit",
                     "title": "Inspect governance audit contract",
@@ -5156,7 +5521,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
 
     contract_surface_readiness = {}
     for surface, requirements in contract_surface_requirements.items():
-        missing = [name for name in requirements if not _contract_dependency_present(name)]
+        missing = [
+            name for name in requirements if not _contract_dependency_present(name)
+        ]
         remediation = _contract_surface_remediation(surface, missing)
         contract_surface_readiness[surface] = {
             "ok": not missing,
@@ -5182,7 +5549,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "severity": readiness.get("severity") or "bad",
             "action": readiness.get("action") or "inspect_runtime_contract",
             "title": readiness.get("title") or "Surface contract blocked",
-            "detail": readiness.get("detail") or "Surface runtime dependencies are missing.",
+            "detail": readiness.get("detail")
+            or "Surface runtime dependencies are missing.",
             "target_surface": readiness.get("target_surface") or surface,
             "target_view": readiness.get("target_view") or "loop",
             "requires_admin": readiness.get("requires_admin") is True,
@@ -5217,23 +5585,38 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         "status": "blocked" if contract_surface_incidents else "clear",
         "total": len(contract_surface_incidents),
         "surfaces": sorted(
-            {str(item.get("surface")) for item in contract_surface_incidents if item.get("surface")}
+            {
+                str(item.get("surface"))
+                for item in contract_surface_incidents
+                if item.get("surface")
+            }
         ),
         "actions": sorted(
-            {str(item.get("action")) for item in contract_surface_incidents if item.get("action")}
+            {
+                str(item.get("action"))
+                for item in contract_surface_incidents
+                if item.get("action")
+            }
         ),
         "by_severity": {
             severity: sum(
-                1 for item in contract_surface_incidents if item.get("severity") == severity
+                1
+                for item in contract_surface_incidents
+                if item.get("severity") == severity
             )
             for severity in sorted(
-                {str(item.get("severity") or "unknown") for item in contract_surface_incidents}
+                {
+                    str(item.get("severity") or "unknown")
+                    for item in contract_surface_incidents
+                }
             )
         },
         "requires_admin_count": sum(
             1 for item in contract_surface_incidents if item.get("requires_admin")
         ),
-        "executable_count": sum(1 for item in contract_surface_incidents if item.get("executable")),
+        "executable_count": sum(
+            1 for item in contract_surface_incidents if item.get("executable")
+        ),
         "admin_required": any(
             bool(item.get("requires_admin")) for item in contract_surface_incidents
         ),
@@ -5278,9 +5661,13 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         "all_surfaces_ok": contract_all_surfaces_ok,
         "primary_action": contract_surface_incident_summary.get("primary_action"),
         "primary_surface": contract_surface_incident_summary.get("primary_surface"),
-        "primary_target_surface": contract_surface_incident_summary.get("primary_target_surface"),
+        "primary_target_surface": contract_surface_incident_summary.get(
+            "primary_target_surface"
+        ),
         "surface_incident_total": contract_surface_incident_summary.get("total", 0),
-        "admin_required": contract_surface_incident_summary.get("admin_required", False),
+        "admin_required": contract_surface_incident_summary.get(
+            "admin_required", False
+        ),
         "executable_available": contract_surface_incident_summary.get(
             "executable_available", False
         ),
@@ -5293,11 +5680,18 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                 if isinstance(contract_primary_incident, dict)
                 else "loop"
             ),
-            "action": contract_surface_incident_summary.get("primary_action") or "observe",
-            "requires_admin": contract_surface_incident_summary.get("admin_required", False),
-            "executable": contract_surface_incident_summary.get("executable_available", False),
+            "action": contract_surface_incident_summary.get("primary_action")
+            or "observe",
+            "requires_admin": contract_surface_incident_summary.get(
+                "admin_required", False
+            ),
+            "executable": contract_surface_incident_summary.get(
+                "executable_available", False
+            ),
             "employee_id": (
-                ui_bridge.get("primary_employee_id") if isinstance(ui_bridge, dict) else None
+                ui_bridge.get("primary_employee_id")
+                if isinstance(ui_bridge, dict)
+                else None
             ),
             "target_employee_ids": (
                 ui_bridge.get("target_employee_ids")
@@ -5367,7 +5761,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "latest_skip": latest_skip,
             "open_run_ids": open_run_ids,
             "recent_rows": rows[-20:],
-            "steps_by_open_run": {run_id: steps_by_run.get(run_id, []) for run_id in open_run_ids},
+            "steps_by_open_run": {
+                run_id: steps_by_run.get(run_id, []) for run_id in open_run_ids
+            },
         },
         "participants": sorted(
             participants_by_id.values(),
@@ -5397,7 +5793,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "run_count": memory.get("run_count"),
         },
         "policy": {
-            "auto_merge_low_risk": _env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", True),
+            "auto_merge_low_risk": _env_bool(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", True
+            ),
             "auto_merge_dynamic_low_risk": _env_bool(
                 "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_DYNAMIC_LOW_RISK", True
             ),
@@ -5411,10 +5809,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                 "MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", True
             ),
             "auto_merge_scope_globs": _auto_merge_scope_globs(),
-            "report_timeout_sec": _env_int("MODSTORE_SELF_MAINTENANCE_REPORT_TIMEOUT_SEC", 1800),
+            "report_timeout_sec": _env_int(
+                "MODSTORE_SELF_MAINTENANCE_REPORT_TIMEOUT_SEC", 1800
+            ),
             "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
-            "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
+            "cooldown_minutes": _env_int(
+                "MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360
+            ),
         },
     }
 

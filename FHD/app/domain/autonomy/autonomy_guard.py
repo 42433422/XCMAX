@@ -199,9 +199,12 @@ class AutonomyGuard:
         rollback_path = str(
             (spec or {}).get("rollback_path") or metadata.get("rollback_path") or ""
         )
-        allow_auto = bool(
-            (spec or {}).get("allow_auto_execute", risk in {RiskLevel.LOW, RiskLevel.MEDIUM})
+        default_auto = (
+            risk in {RiskLevel.LOW, RiskLevel.MEDIUM}
+            if isinstance(autonomous_spec, dict)
+            else risk == RiskLevel.LOW
         )
+        allow_auto = bool((spec or {}).get("allow_auto_execute", default_auto))
         veto_reason = self._veto_boundaries.get(action_name)
         if veto_reason:
             approved, approver = human_approval_evidence(ctx)
@@ -262,60 +265,44 @@ class AutonomyGuard:
                 approver=approver,
             )
 
+        automatic_reason = ""
+        automatic_decision = "auto_approve"
         if risk == RiskLevel.LOW and allow_auto:
-            return self._decision(
-                action=action_name,
-                action_id=resolved_action_id,
-                risk=risk,
-                decision="allow",
-                allowed=True,
-                requires_confirmation=False,
-                reason="LOW risk action is registered for automatic execution",
-                rollback_path=rollback_path,
-                source=source,
-                context=ctx,
-            )
-
-        if risk == RiskLevel.MEDIUM and allow_auto:
+            automatic_decision = "allow"
+            automatic_reason = "LOW risk action is registered for automatic execution"
+        elif risk == RiskLevel.MEDIUM and allow_auto:
             if self.medium_risk_policy == MediumRiskPolicy.AUTO_APPROVE:
-                return self._decision(
-                    action=action_name,
-                    action_id=resolved_action_id,
-                    risk=risk,
-                    decision="auto_approve",
-                    allowed=True,
-                    requires_confirmation=False,
-                    reason="medium_risk_policy=auto_approve",
-                    rollback_path=rollback_path,
-                    source=source,
-                    context=ctx,
-                )
-            if self.medium_risk_policy == MediumRiskPolicy.COOLDOWN_60MIN:
-                if not self._cooldown_active(action_name):
+                automatic_reason = "medium_risk_policy=auto_approve"
+            elif self.medium_risk_policy == MediumRiskPolicy.COOLDOWN_60MIN:
+                if self._cooldown_active(action_name):
                     return self._decision(
                         action=action_name,
                         action_id=resolved_action_id,
                         risk=risk,
-                        decision="auto_approve",
-                        allowed=True,
-                        requires_confirmation=False,
-                        reason="medium_risk_policy=cooldown_60min; first action in window",
+                        decision="cooldown",
+                        allowed=False,
+                        requires_confirmation=True,
+                        reason="medium_risk_policy=cooldown_60min; repeat requires human approval",
                         rollback_path=rollback_path,
                         source=source,
                         context=ctx,
                     )
-                return self._decision(
-                    action=action_name,
-                    action_id=resolved_action_id,
-                    risk=risk,
-                    decision="cooldown",
-                    allowed=False,
-                    requires_confirmation=True,
-                    reason="medium_risk_policy=cooldown_60min; repeat requires human approval",
-                    rollback_path=rollback_path,
-                    source=source,
-                    context=ctx,
-                )
+                automatic_reason = "medium_risk_policy=cooldown_60min; first action in window"
+        elif risk == RiskLevel.HIGH and allow_auto:
+            automatic_reason = "HIGH risk action is registered for automatic execution"
+        if automatic_reason:
+            return self._decision(
+                action=action_name,
+                action_id=resolved_action_id,
+                risk=risk,
+                decision=automatic_decision,
+                allowed=True,
+                requires_confirmation=False,
+                reason=automatic_reason,
+                rollback_path=rollback_path,
+                source=source,
+                context=ctx,
+            )
 
         return self._decision(
             action=action_name,

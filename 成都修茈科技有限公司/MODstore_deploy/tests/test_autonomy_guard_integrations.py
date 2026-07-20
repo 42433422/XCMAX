@@ -17,7 +17,9 @@ from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_exec
 def isolated_autonomy(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "audit.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
-    monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
+    monkeypatch.setenv(
+        "XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl")
+    )
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
 
@@ -27,12 +29,27 @@ def isolated_autonomy(tmp_path, monkeypatch):
     reload_autonomy_guard()
 
 
-def test_daily_vibe_cron_enters_pending_before_dispatch() -> None:
+def test_daily_vibe_cron_auto_approves_before_dispatch(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "modstore_server.automation_primary.skip_daily_automation_result",
+        lambda **kwargs: {
+            "ok": True,
+            "skipped": True,
+            "reason": "test-after-auto-gate",
+        },
+    )
     result = run_daily_vibe_line_execute_job(record_id=42)
-    assert result["ok"] is False
-    assert result["reason"] == "autonomy_guard_pending_approval"
-    assert result["pending_approval"]["state"] == "pending_approval"
-    assert result["risk_decision"]["risk_level"] == "medium"
+    assert result["ok"] is True
+    assert result["reason"] == "test-after-auto-gate"
+
+    from app.application.autonomy.audit_log import list_autonomy_audit
+
+    rows = [
+        row
+        for row in list_autonomy_audit(limit=20)
+        if row["action"] == "daily_vibe_dispatch"
+    ]
+    assert rows and rows[0]["decision"] == "auto_approve"
 
 
 def test_delegate_accepts_deployed_fhd_runtime_root(tmp_path, monkeypatch) -> None:
@@ -93,7 +110,9 @@ def test_employee_executor_fails_closed_when_risk_middleware_errors(
         raise ModuleNotFoundError("risk SSOT unavailable")
 
     monkeypatch.setattr(employee_risk_middleware, "gate_action_or_block", broken_gate)
-    decision = employee_executor._evaluate_employee_risk_gate("worker", {}, ["agent"], {})
+    decision = employee_executor._evaluate_employee_risk_gate(
+        "worker", {}, ["agent"], {}
+    )
 
     assert decision["ok"] is False
     assert decision["blocked"] is True
@@ -102,7 +121,11 @@ def test_employee_executor_fails_closed_when_risk_middleware_errors(
     assert decision["decision"] == "blocked"
 
 
-def test_daily_vibe_rejected_action_is_not_requeued() -> None:
+def test_legacy_manual_policy_rejected_action_is_not_requeued(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    from app.domain.autonomy.autonomy_guard import reload_autonomy_guard
+
+    reload_autonomy_guard()
     first = run_daily_vibe_line_execute_job(record_id=42)
     from app.application.autonomy.approval_resume import reject_action
 
@@ -126,7 +149,9 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/autonomy-test.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:9")
-    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", lambda **kwargs: ["safe.py"])
+    monkeypatch.setattr(
+        loop_runner, "_changed_files_for_branch", lambda **kwargs: ["safe.py"]
+    )
     monkeypatch.setattr(
         loop_runner,
         "_diff_numstat_for_branch",
@@ -165,15 +190,11 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
         branch="autonomy/test",
         steps=[],
     )
-    assert result["reason"] == "autonomy_guard_pending_approval"
+    assert result["reason"] == "autonomy_guard_blocked"
     assert not any(command[:2] == ["git", "merge"] for command in commands)
 
 
-def test_high_risk_pr_merge_requires_and_records_human_approval(monkeypatch, tmp_path) -> None:
-    blocked = approval_dispatcher._maybe_merge_pr("auto/security-fix")
-    assert blocked["ok"] is False
-    assert blocked["risk_decision"]["decision"] == "require_human"
-
+def test_high_risk_pr_merge_auto_approves_and_is_audited(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "modstore_server.integrations.ops_action_handlers.repo_root",
         lambda: tmp_path,
@@ -182,10 +203,7 @@ def test_high_risk_pr_merge_requires_and_records_human_approval(monkeypatch, tmp
         "subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
-    approved = approval_dispatcher._maybe_merge_pr(
-        "auto/security-fix",
-        human_approved_by="ops-approval-token:42",
-    )
+    approved = approval_dispatcher._maybe_merge_pr("auto/security-fix")
     assert approved["ok"] is True
-    assert approved["risk_decision"]["decision"] == "approved"
-    assert approved["risk_decision"]["approver"] == "ops-approval-token:42"
+    assert approved["risk_decision"]["decision"] == "auto_approve"
+    assert approved["risk_decision"]["approver"] is None

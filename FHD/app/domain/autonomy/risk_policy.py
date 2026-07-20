@@ -100,9 +100,11 @@ class RiskPolicyCatalog:
         return data
 
     @staticmethod
-    def _parse_boundary_items(raw: dict[str, Any], field: str) -> dict[str, str]:
+    def _parse_boundary_items(
+        raw: dict[str, Any], field: str, *, allow_empty: bool = False
+    ) -> dict[str, str]:
         items = raw.get(field)
-        if not isinstance(items, list) or not items:
+        if not isinstance(items, list) or (not items and not allow_empty):
             raise ValueError(f"autonomy boundaries must list {field}")
         result: dict[str, str] = {}
         for item in items:
@@ -124,7 +126,7 @@ class RiskPolicyCatalog:
         if not isinstance(raw, dict):
             raise ValueError("autonomy boundaries root must be an object")
         prohibited = self._parse_boundary_items(raw, "prohibited_actions")
-        requires_veto = self._parse_boundary_items(raw, "requires_veto")
+        requires_veto = self._parse_boundary_items(raw, "requires_veto", allow_empty=True)
         overlap = set(prohibited) & set(requires_veto)
         if overlap:
             raise ValueError(

@@ -1,6 +1,8 @@
 import json
 import sqlite3
+from types import SimpleNamespace
 
+from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
 )
@@ -38,9 +40,88 @@ def _stats(line_changes=12, binary_files=None):
     }
 
 
+def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True, "reason": "structured_reports_passed"},
+    )
+    risk_calls = []
+    monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda action, **kwargs: (
+            risk_calls.append((action, kwargs))
+            or SimpleNamespace(allowed=True, to_dict=lambda: {"decision": "allow"})
+        ),
+    )
+    merge_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-risk-gate",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[{"step": "review"}, {"step": "qa"}],
+    )
+
+    assert result["ok"] is True
+    assert result["merge_requested"] is True
+    assert risk_calls[0][0] == "self_maintenance_l1_merge"
+    assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
+    assert merge_calls == [
+        {"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}
+    ]
+
+
+def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(
+        loop_runner, "_structured_report_gate", lambda steps: {"ok": True}
+    )
+    monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda *args, **kwargs: SimpleNamespace(
+            allowed=False,
+            to_dict=lambda: {"decision": "blocked"},
+        ),
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("merge request bypassed SSOT")
+        ),
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-risk-block",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[],
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "autonomy_guard_blocked"
+
+
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
-    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
-    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
+    monkeypatch.delenv(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False
+    )
+    monkeypatch.delenv(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False
+    )
     # 关闭 v2/v3 评分门禁，让流程走到 dynamic_low_risk 策略（本测试验证 dynamic_low_risk 逻辑）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
@@ -63,7 +144,9 @@ def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> 
                 "policy_decision": {
                     "action": "auto_merged_low_risk",
                     "merge_result": {
-                        "autonomy_risk_decision": {"rollback_path": "revert_merge_commit"},
+                        "autonomy_risk_decision": {
+                            "rollback_path": "revert_merge_commit"
+                        },
                         "reason": "merged_low_risk_branch",
                     },
                 },
@@ -83,7 +166,9 @@ def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> 
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
-    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
+    ]
     memory = {
         "open_items": [
             {
@@ -156,8 +241,12 @@ def test_dynamic_low_risk_policy_blocks_name_only_numstat_mismatch():
 
 
 def test_dynamic_low_risk_policy_allows_project_context_followup_files(monkeypatch):
-    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
-    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
+    monkeypatch.delenv(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False
+    )
+    monkeypatch.delenv(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False
+    )
     # 关闭 v2/v3 评分门禁 + 放宽 risk_score_v1 阈值，让流程走到 dynamic_low_risk 策略
     # （本测试验证 dynamic_low_risk 逻辑，不验证 risk_score 评分）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
@@ -176,8 +265,12 @@ def test_dynamic_low_risk_policy_allows_project_context_followup_files(monkeypat
 
 
 def test_dynamic_low_risk_policy_allows_self_evolution_knowledge_files(monkeypatch):
-    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
-    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
+    monkeypatch.delenv(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False
+    )
+    monkeypatch.delenv(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False
+    )
     # 关闭 v2/v3 评分门禁 + 放宽 risk_score_v1 阈值，让流程走到 dynamic_low_risk 策略
     # （本测试验证 dynamic_low_risk 逻辑，不验证 risk_score 评分）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
@@ -310,7 +403,9 @@ def test_employee_result_rejects_e2e_codex_timeout():
             "ok": True,
             "status": "completed",
             "outputs": [
-                {"message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"}
+                {
+                    "message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"
+                }
             ],
         }
     }
@@ -365,7 +460,7 @@ def test_resume_review_qa_candidate_uses_human_strategy_branch():
         "failed_run_id": "r2",
         "failed_steps": ["qa"],
         "para_task_id": "task-2",
-        "reason": "resume_human_strategy_candidate",
+        "reason": "resume_automated_remediation_candidate",
     }
 
 
@@ -390,7 +485,7 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
         "failed_run_id": "r-platform",
         "failed_steps": ["qa"],
         "para_task_id": "task-platform",
-        "reason": "resume_human_strategy_candidate",
+        "reason": "resume_automated_remediation_candidate",
     }
 
 
@@ -419,7 +514,8 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "feat/base")
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
     monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "verified-python -m pytest focused.py -q"
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "verified-python -m pytest focused.py -q",
     )
 
     review = _review_task_text("run-1", "devfleet/codex/sub-1", {})
@@ -440,7 +536,8 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
 
 def test_focused_test_command_prefers_explicit_command(monkeypatch):
     monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "runtime-python -m pytest focused.py -q"
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
     )
 
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
@@ -490,7 +587,8 @@ def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
 
 def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
     monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "runtime-python -m pytest focused.py -q"
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
     )
     missing = [{"step": "qa", "report_excerpt": "PASS in prose only"}]
     failed = [
@@ -532,7 +630,9 @@ def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
     assert result["focused_command"] == focused
 
 
-def test_structured_report_gate_accepts_platform_equivalent_focused_command(monkeypatch):
+def test_structured_report_gate_accepts_platform_equivalent_focused_command(
+    monkeypatch,
+):
     focused = (
         "'/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.venv/bin/python' "
         "-m pytest '成都修茈科技有限公司/MODstore_deploy/tests/"
@@ -575,7 +675,10 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
         }
     ]
 
-    assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+    assert (
+        _structured_report_gate(steps)["reason"]
+        == "structured_qa_focused_command_not_passed"
+    )
 
 
 def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypatch):
@@ -600,7 +703,9 @@ def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypat
 
 
 def test_ensure_clean_baseline_writes_default_file(monkeypatch, tmp_path):
-    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_CLEAN_BASELINE", str(tmp_path / "baseline.json"))
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_CLEAN_BASELINE", str(tmp_path / "baseline.json")
+    )
 
     baseline = ensure_clean_baseline()
 

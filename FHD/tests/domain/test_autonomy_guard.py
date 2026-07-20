@@ -94,7 +94,7 @@ def _registry_with_policy(tmp_path: Path, policy: str) -> Path:
     return path
 
 
-def test_four_risk_levels_have_allow_approval_and_hard_block_branches() -> None:
+def test_four_risk_levels_have_automatic_allow_and_hard_block_branches() -> None:
     audit: list[dict] = []
     guard = AutonomyGuard(audit_sink=audit.append)
 
@@ -103,8 +103,10 @@ def test_four_risk_levels_have_allow_approval_and_hard_block_branches() -> None:
     high = guard.evaluate("apply_release_to_cvm", action_id="high")
 
     assert low.risk_level is RiskLevel.LOW and low.allowed
-    assert medium.risk_level is RiskLevel.MEDIUM and medium.requires_confirmation
-    assert high.risk_level is RiskLevel.HIGH and high.requires_confirmation
+    assert medium.risk_level is RiskLevel.MEDIUM and medium.allowed
+    assert medium.requires_confirmation is False
+    assert high.risk_level is RiskLevel.HIGH and high.allowed
+    assert high.requires_confirmation is False
     with pytest.raises(ProhibitedActionError):
         guard.evaluate("db_migration", action_id="blocked")
     assert {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.BLOCKED} == set(RiskLevel)
@@ -164,33 +166,11 @@ def test_every_boundary_item_raises_prohibited_action() -> None:
             )
 
 
-def test_every_requires_veto_item_rejects_legacy_bypass_and_accepts_human() -> None:
+def test_default_boundaries_have_no_human_veto_items() -> None:
     items = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))["requires_veto"]
     guard = AutonomyGuard(audit_sink=lambda row: row)
-    assert items
-    for item in items:
-        action = item["action"]
-        blocked = guard.evaluate(
-            action,
-            {
-                "workflow_auto_approve_high_risk": True,
-                "allow_high_risk_real_run": True,
-            },
-            action_id=f"veto:blocked:{action}",
-        )
-        assert blocked.allowed is False
-        assert blocked.requires_confirmation is True
-        assert blocked.decision == "require_human"
-        assert "requires_veto boundary" in blocked.reason
-
-        approved = guard.evaluate(
-            action,
-            {"human_approved": True, "approved_by": "boundary-reviewer"},
-            action_id=f"veto:approved:{action}",
-        )
-        assert approved.allowed is True
-        assert approved.decision == "approved"
-        assert approved.approver == "boundary-reviewer"
+    assert items == []
+    assert guard.veto_boundaries_snapshot() == {}
 
 
 def test_requires_veto_overrides_medium_auto_approve(tmp_path: Path) -> None:
@@ -250,12 +230,12 @@ def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
 @pytest.mark.parametrize(
     ("action", "expected_risk", "expected_decision"),
     [
-        ("apply_release_to_cvm", RiskLevel.HIGH, "require_human"),
-        ("rollback_release", RiskLevel.MEDIUM, "require_human"),
-        ("freeze_manifest", RiskLevel.MEDIUM, "require_human"),
+        ("apply_release_to_cvm", RiskLevel.HIGH, "auto_approve"),
+        ("rollback_release", RiskLevel.MEDIUM, "auto_approve"),
+        ("freeze_manifest", RiskLevel.MEDIUM, "auto_approve"),
         ("restart_service", RiskLevel.LOW, "allow"),
-        ("self_heal_pr_merge", RiskLevel.HIGH, "require_human"),
-        ("mod_auto_publish", RiskLevel.HIGH, "require_human"),
+        ("self_heal_pr_merge", RiskLevel.HIGH, "auto_approve"),
+        ("mod_auto_publish", RiskLevel.HIGH, "auto_approve"),
     ],
 )
 def test_required_automatic_actions_are_evaluated_by_ssot(
@@ -374,7 +354,7 @@ def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) 
             )
 
     assert boundaries["prohibited_actions"]
-    assert boundaries["requires_veto"]
+    assert boundaries["requires_veto"] == []
 
 
 def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
@@ -388,14 +368,14 @@ def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
 
     registry_snapshot = catalog.registry_snapshot()
     registry_snapshot["medium_risk_policy"] = "mutated"
-    assert catalog.registry["medium_risk_policy"] == "require_human"
+    assert catalog.registry["medium_risk_policy"] == "auto_approve"
     boundaries_snapshot = catalog.boundaries_snapshot()
     boundaries_snapshot.clear()
     assert catalog.boundaries
     veto_snapshot = catalog.veto_boundaries_snapshot()
     veto_snapshot.clear()
-    assert catalog.veto_boundaries
-    assert catalog.veto_reason("apply_release_to_cvm")
+    assert catalog.veto_boundaries == {}
+    assert catalog.veto_reason("apply_release_to_cvm") is None
     assert catalog.veto_reason("restart_service") is None
     assert "restart_service" in catalog.autonomous_action_names()
     assert catalog.autonomous_action_spec("missing") is None
@@ -518,7 +498,9 @@ def test_audit_summary_separates_synthetic_probes_and_counts_human_veto() -> Non
     assert summary["veto_rate"] == 50.0
 
 
-def test_pending_approval_resumes_and_rejection_never_retries() -> None:
+def test_pending_approval_resumes_and_rejection_never_retries(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     executed: list[dict] = []
     decision, pending = request_action(
         "rollback_release",
@@ -559,7 +541,9 @@ def test_pending_approval_resumes_and_rejection_never_retries() -> None:
     assert summary["veto_count"] > 0
 
 
-def test_deferred_workflow_only_marks_executed_after_real_outcome() -> None:
+def test_deferred_workflow_only_marks_executed_after_real_outcome(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     decision, pending = request_action(
         "freeze_manifest",
         action_id="deferred-freeze",
