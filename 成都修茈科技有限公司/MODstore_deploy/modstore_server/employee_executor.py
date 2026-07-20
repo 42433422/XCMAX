@@ -2231,14 +2231,14 @@ def execute_employee_task(
                     _handoff_intended = None
                     if isinstance(_parsed_llm, dict):
                         _exhausted_flag = _parsed_llm.get("exhausted")
-                        _handoff_intended = (
-                            _parsed_llm.get("handoff_to") or _parsed_llm.get("delegate_to")
+                        _handoff_intended = _parsed_llm.get("handoff_to") or _parsed_llm.get(
+                            "delegate_to"
                         )
                     if _exhausted_flag is None and isinstance(reasoning, dict):
                         _exhausted_flag = reasoning.get("exhausted")
                     if _handoff_intended is None and isinstance(reasoning, dict):
-                        _handoff_intended = (
-                            reasoning.get("handoff_to") or reasoning.get("delegate_to")
+                        _handoff_intended = reasoning.get("handoff_to") or reasoning.get(
+                            "delegate_to"
                         )
                     if _exhausted_flag is True or (
                         isinstance(_exhausted_flag, str) and _exhausted_flag.strip()
@@ -2246,7 +2246,11 @@ def execute_employee_task(
                         # 失败耗尽：不问老板，标记给进化扫描接手
                         reasoning["_exhausted"] = {
                             "failure_summary": str(
-                                (_parsed_llm.get("failure_summary") if isinstance(_parsed_llm, dict) else "")
+                                (
+                                    _parsed_llm.get("failure_summary")
+                                    if isinstance(_parsed_llm, dict)
+                                    else ""
+                                )
                                 or reasoning.get("failure_summary", "")
                             )[:500],
                             "skipped_ask_human": True,
@@ -2257,8 +2261,7 @@ def execute_employee_task(
                             str(task)[:200],
                         )
                     elif _handoff_intended and (
-                        _ask_human is True
-                        or (isinstance(_ask_human, str) and _ask_human.strip())
+                        _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip())
                     ):
                         # 超职责：handoff_to 通道会处理，不问老板
                         reasoning["_ask_human_suppressed_by_handoff"] = True

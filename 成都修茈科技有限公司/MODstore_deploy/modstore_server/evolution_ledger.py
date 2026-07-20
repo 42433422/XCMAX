@@ -23,7 +23,15 @@ def _ledger_path() -> Path:
     if env_val:
         return Path(env_val)
     from modstore_server.evolution_signal_collector import _repo_root
-    return Path(_repo_root()) / "成都修茈科技有限公司" / "MODstore_deploy" / "modstore_server" / "data" / LEDGER_FILENAME
+
+    return (
+        Path(_repo_root())
+        / "成都修茈科技有限公司"
+        / "MODstore_deploy"
+        / "modstore_server"
+        / "data"
+        / LEDGER_FILENAME
+    )
 
 
 def append_event(event: Dict[str, Any]) -> Dict[str, Any]:

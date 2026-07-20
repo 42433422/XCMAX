@@ -63,8 +63,7 @@ def test_update_loop_memory_auto_evicts_5_stuck_open_items(monkeypatch, tmp_path
 
     stuck_age = LOOP_EVICT_STUCK_AGE_SECONDS + 60  # 24h+
     open_items = [
-        _stuck_failed_step(f"run-stuck-{i}", age_seconds=stuck_age, retry_count=3)
-        for i in range(5)
+        _stuck_failed_step(f"run-stuck-{i}", age_seconds=stuck_age, retry_count=3) for i in range(5)
     ]
     _seed_memory_file(memory_path, open_items=open_items)
 
@@ -218,9 +217,7 @@ def test_evict_caps_evicted_items_at_max(monkeypatch, tmp_path):
     assert len(memory["evicted_items"]) == 100  # 95 + 10, capped at 100
     # The newest 100 should be kept (95 existing + 5 newest evictions).
     # The 5 oldest existing entries should be dropped.
-    evicted_run_ids = [
-        entry["original_item"].get("run_id") for entry in memory["evicted_items"]
-    ]
+    evicted_run_ids = [entry["original_item"].get("run_id") for entry in memory["evicted_items"]]
     # All 10 newly evicted run IDs are present
     for i in range(10):
         assert f"run-new-{i}" in evicted_run_ids
@@ -279,7 +276,9 @@ def test_evict_does_not_raise_when_audit_write_fails(monkeypatch, tmp_path):
     """If the governance audit write throws, eviction still returns the summary."""
     memory_path = tmp_path / "loop_memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
-    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT", str(tmp_path / "missing" / "audit.jsonl"))
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT", str(tmp_path / "missing" / "audit.jsonl")
+    )
 
     item = _stuck_failed_step(
         "run-audit-fail",

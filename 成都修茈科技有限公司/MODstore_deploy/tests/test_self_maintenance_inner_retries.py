@@ -46,9 +46,7 @@ def _patch_dispatch(monkeypatch, sequence: List[Dict[str, Any]]):
     calls: List[Dict[str, Any]] = []
 
     def _fake_dispatch(employee_id, task_text, input_data, *, user_id):
-        calls.append(
-            {"employee_id": employee_id, "task_text": task_text, "user_id": user_id}
-        )
+        calls.append({"employee_id": employee_id, "task_text": task_text, "user_id": user_id})
         if len(calls) > len(sequence):
             raise AssertionError(
                 f"dispatch called {len(calls)} times but only {len(sequence)} results queued"

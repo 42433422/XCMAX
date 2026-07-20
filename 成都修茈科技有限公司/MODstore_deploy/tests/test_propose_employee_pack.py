@@ -48,7 +48,14 @@ def test_propose_employee_pack_returns_valid_schema():
             "estimated_tokens": 45000,
         }
         proposal = propose_employee_pack(signals)
-    assert proposal["department"] in {"engineering", "quality", "ops", "growth", "support", "security"}
+    assert proposal["department"] in {
+        "engineering",
+        "quality",
+        "ops",
+        "growth",
+        "support",
+        "security",
+    }
     assert proposal["estimated_files"] <= 5
     assert proposal["estimated_tokens"] <= 100000
     assert "prompt_template" in proposal["employee_pack"]
@@ -59,7 +66,13 @@ def test_validate_proposal_rejects_too_many_files():
     bad_proposal = {
         "proposal_id": "x",
         "department": "engineering",
-        "employee_pack": {"name": "x", "prompt_template": "x", "skills": [], "tools": [], "acceptance_criteria": []},
+        "employee_pack": {
+            "name": "x",
+            "prompt_template": "x",
+            "skills": [],
+            "tools": [],
+            "acceptance_criteria": [],
+        },
         "estimated_files": 7,
         "estimated_tokens": 10000,
     }
@@ -71,7 +84,13 @@ def test_validate_proposal_rejects_high_token_budget():
     bad_proposal = {
         "proposal_id": "x",
         "department": "engineering",
-        "employee_pack": {"name": "x", "prompt_template": "x", "skills": [], "tools": [], "acceptance_criteria": []},
+        "employee_pack": {
+            "name": "x",
+            "prompt_template": "x",
+            "skills": [],
+            "tools": [],
+            "acceptance_criteria": [],
+        },
         "estimated_files": 3,
         "estimated_tokens": 200000,
     }
@@ -83,7 +102,13 @@ def test_validate_proposal_rejects_invalid_department():
     bad_proposal = {
         "proposal_id": "x",
         "department": "marketing",
-        "employee_pack": {"name": "x", "prompt_template": "x", "skills": [], "tools": [], "acceptance_criteria": []},
+        "employee_pack": {
+            "name": "x",
+            "prompt_template": "x",
+            "skills": [],
+            "tools": [],
+            "acceptance_criteria": [],
+        },
         "estimated_files": 3,
         "estimated_tokens": 10000,
     }

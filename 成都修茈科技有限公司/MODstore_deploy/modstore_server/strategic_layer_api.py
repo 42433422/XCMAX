@@ -51,9 +51,16 @@ router = APIRouter(prefix="/api/xcmax/strategic", tags=["strategic-layer"])
 
 class ProposeDecisionRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="决策标题")
-    action: str = Field(..., min_length=1, max_length=500, description="操作描述（用于自治边界匹配）")
+    action: str = Field(
+        ..., min_length=1, max_length=500, description="操作描述（用于自治边界匹配）"
+    )
     rationale: str = Field("", max_length=2000, description="提议理由")
-    actor: str = Field(..., min_length=1, max_length=128, description="提议人 ID（ai-strategist/user/<employee_id>）")
+    actor: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="提议人 ID（ai-strategist/user/<employee_id>）",
+    )
     payload: Dict[str, Any] = Field(default_factory=dict, description="决策附加上下文")
     decision_type: str = Field("operational", description="strategic/tactical/operational")
     scope: str = Field("global", description="global/release_train/module/employee/incident")
@@ -86,7 +93,9 @@ class ReviewDecisionRequest(BaseModel):
 
 
 class ScheduleMeetingRequest(BaseModel):
-    meeting_type: str = Field("ad_hoc", description="daily_standup/weekly_review/monthly_strategy/ad_hoc/incident_review")
+    meeting_type: str = Field(
+        "ad_hoc", description="daily_standup/weekly_review/monthly_strategy/ad_hoc/incident_review"
+    )
     title: str = Field(..., min_length=1, max_length=200)
     scheduled_at: str = Field(..., description="开始时间 ISO 字符串")
     chair: str = Field("", max_length=128, description="主持人 ID")
@@ -114,7 +123,9 @@ class CancelMeetingRequest(BaseModel):
 
 
 class UpdateActionItemRequest(BaseModel):
-    status: Optional[str] = Field(None, description="pending/in_progress/completed/blocked/cancelled")
+    status: Optional[str] = Field(
+        None, description="pending/in_progress/completed/blocked/cancelled"
+    )
     result: Optional[Dict[str, Any]] = Field(None, description="执行结果 JSON")
     block_reason: Optional[str] = Field(None, max_length=2000, description="阻塞原因")
     completed_at: Optional[str] = Field(None, description="完成时间 ISO 字符串")
@@ -617,6 +628,7 @@ def _parse_date(s: Optional[str]):
         return None
     try:
         from datetime import date as _date
+
         return _date.fromisoformat(s.strip()[:10])
     except ValueError as exc:
         raise HTTPException(400, f"invalid ISO date: {s}") from exc

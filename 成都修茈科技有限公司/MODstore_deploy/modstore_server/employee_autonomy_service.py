@@ -1402,6 +1402,7 @@ def _call_llm(prompt: str) -> Dict[str, Any]:
     """
     try:
         from modstore_server.platform_llm_scope import platform_llm_scoped
+
         response_text = platform_llm_scoped(prompt, scope="evolution_proposal")
         if isinstance(response_text, dict):
             return response_text

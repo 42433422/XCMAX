@@ -14,28 +14,43 @@ from modstore_server.evolution_signal_collector import aggregate_signals
 def tmp_reports(tmp_path, monkeypatch):
     """伪造 3 个扫描 workflow 的 JSON 报告。"""
     legacy = tmp_path / "legacy_usage_report.json"
-    legacy.write_text(json.dumps({
-        "generated_at": "2026-07-20T08:00:00Z",
-        "total_files": 120,
-        "legacy_files": 35,
-        "legacy_ratio": 0.29,
-    }), encoding="utf-8")
+    legacy.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-07-20T08:00:00Z",
+                "total_files": 120,
+                "legacy_files": 35,
+                "legacy_ratio": 0.29,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     intent = tmp_path / "intent_benchmark_report.json"
-    intent.write_text(json.dumps({
-        "generated_at": "2026-07-20T03:00:00Z",
-        "accuracy": 0.72,
-        "test_cases": 200,
-        "failures": 56,
-    }), encoding="utf-8")
+    intent.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-07-20T03:00:00Z",
+                "accuracy": 0.72,
+                "test_cases": 200,
+                "failures": 56,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     slo = tmp_path / "slo_metrics.json"
-    slo.write_text(json.dumps({
-        "window": "30d",
-        "availability": 0.987,
-        "p95_latency_ms": 450,
-        "error_rate": 0.013,
-    }), encoding="utf-8")
+    slo.write_text(
+        json.dumps(
+            {
+                "window": "30d",
+                "availability": 0.987,
+                "p95_latency_ms": 450,
+                "error_rate": 0.013,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv("MODSTORE_LEGACY_REPORT_PATH", str(legacy))
     monkeypatch.setenv("MODSTORE_INTENT_REPORT_PATH", str(intent))
@@ -61,12 +76,17 @@ def test_aggregate_intent_below_threshold(tmp_reports):
 def test_aggregate_slo_above_threshold_no_signal(tmp_reports, monkeypatch):
     """SLO 正常时不触发 signal。"""
     slo_path = tmp_reports / "slo_metrics.json"
-    slo_path.write_text(json.dumps({
-        "window": "30d",
-        "availability": 0.999,
-        "p95_latency_ms": 200,
-        "error_rate": 0.001,
-    }), encoding="utf-8")
+    slo_path.write_text(
+        json.dumps(
+            {
+                "window": "30d",
+                "availability": 0.999,
+                "p95_latency_ms": 200,
+                "error_rate": 0.001,
+            }
+        ),
+        encoding="utf-8",
+    )
     out = aggregate_signals()
     assert out["slo_metrics"]["signal_score"] == 0
 
@@ -91,11 +111,16 @@ def test_aggregate_total_score(tmp_reports):
 def test_aggregate_legacy_high_ratio_triggers_signal(tmp_reports, monkeypatch):
     """legacy ratio > 0.25 触发 signal。"""
     legacy_path = tmp_reports / "legacy_usage_report.json"
-    legacy_path.write_text(json.dumps({
-        "total_files": 100,
-        "legacy_files": 50,
-        "legacy_ratio": 0.50,
-    }), encoding="utf-8")
+    legacy_path.write_text(
+        json.dumps(
+            {
+                "total_files": 100,
+                "legacy_files": 50,
+                "legacy_ratio": 0.50,
+            }
+        ),
+        encoding="utf-8",
+    )
     out = aggregate_signals()
     assert out["legacy_usage"]["signal_score"] > 0
     assert out["legacy_usage"]["below_threshold"] is True

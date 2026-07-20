@@ -31,7 +31,10 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import desc, select
 
 from modstore_server.db.base import get_session_factory
-from modstore_server.db.strategic import StrategicActionItem, StrategicDecision as StrategicDecisionModel
+from modstore_server.db.strategic import (
+    StrategicActionItem,
+    StrategicDecision as StrategicDecisionModel,
+)
 from modstore_server.strategic_layer.autonomy_boundary import (
     AutonomyAction,
     AutonomyEvaluator,
@@ -414,9 +417,11 @@ class StrategicDecisionLedger:
         """列出最近的决策（按 ``proposed_at`` 倒序）。"""
         session = self._session_factory()()
         try:
-            stmt = select(StrategicDecisionModel).order_by(
-                desc(StrategicDecisionModel.proposed_at)
-            ).limit(max(1, min(limit, 500)))
+            stmt = (
+                select(StrategicDecisionModel)
+                .order_by(desc(StrategicDecisionModel.proposed_at))
+                .limit(max(1, min(limit, 500)))
+            )
             if status is not None:
                 stmt = stmt.where(StrategicDecisionModel.status == status.value)
             if decision_type is not None:
@@ -432,11 +437,15 @@ class StrategicDecisionLedger:
         """列出决策关联的 action items。"""
         session = self._session_factory()()
         try:
-            rows = session.execute(
-                select(StrategicActionItem)
-                .where(StrategicActionItem.decision_id == decision_id)
-                .order_by(StrategicActionItem.created_at)
-            ).scalars().all()
+            rows = (
+                session.execute(
+                    select(StrategicActionItem)
+                    .where(StrategicActionItem.decision_id == decision_id)
+                    .order_by(StrategicActionItem.created_at)
+                )
+                .scalars()
+                .all()
+            )
             return [
                 {
                     "action_id": r.action_id,
@@ -491,7 +500,11 @@ class StrategicDecisionLedger:
                 )
 
             # 终态保护：rejected/withdrawn/completed 不可再变
-            if current in (DecisionStatus.REJECTED, DecisionStatus.WITHDRAWN, DecisionStatus.COMPLETED):
+            if current in (
+                DecisionStatus.REJECTED,
+                DecisionStatus.WITHDRAWN,
+                DecisionStatus.COMPLETED,
+            ):
                 raise DecisionAlreadyDecidedError(
                     f"decision {decision_id} already in terminal status {current.value}"
                 )

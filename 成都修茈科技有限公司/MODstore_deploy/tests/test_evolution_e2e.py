@@ -96,9 +96,7 @@ def test_e2e_full_loop_with_mock_llm(tmp_path, monkeypatch):
     # ---- 4. mock gh CLI 开 issue ----
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
     fake_issue_url = "https://github.com/owner/repo/issues/42"
-    mock_run = MagicMock(
-        return_value=MagicMock(returncode=0, stdout=fake_issue_url + "\n")
-    )
+    mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout=fake_issue_url + "\n"))
     monkeypatch.setattr("modstore_server.gap_to_issue.subprocess.run", mock_run)
 
     issue_url = open_issue_for_proposal(proposal)
@@ -145,15 +143,19 @@ def test_e2e_full_loop_with_mock_llm(tmp_path, monkeypatch):
         rel = rel_path.split(f"{pack_id}/", 1)[1]
         return (pack_src_dir / rel).read_text(encoding="utf-8")
 
-    with patch(
-        "modstore_server.build_employee_pack._get_commit_diff_files",
-        return_value=diff_files,
-    ), patch(
-        "modstore_server.build_employee_pack._read_pack_file",
-        side_effect=fake_read_pack_file,
-    ), patch(
-        "modstore_server.build_employee_pack.evaluate_employee_pack",
-        return_value=("low", "auto-approved"),
+    with (
+        patch(
+            "modstore_server.build_employee_pack._get_commit_diff_files",
+            return_value=diff_files,
+        ),
+        patch(
+            "modstore_server.build_employee_pack._read_pack_file",
+            side_effect=fake_read_pack_file,
+        ),
+        patch(
+            "modstore_server.build_employee_pack.evaluate_employee_pack",
+            return_value=("low", "auto-approved"),
+        ),
     ):
         result = build_pack_from_commit(commit_sha="abc123", repo_root=tmp_path)
 
@@ -199,9 +201,7 @@ def test_e2e_retries_3_times_then_escalates(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "modstore_server.gap_to_issue.subprocess.run",
         MagicMock(
-            return_value=MagicMock(
-                returncode=0, stdout="https://github.com/owner/repo/issues/42\n"
-            )
+            return_value=MagicMock(returncode=0, stdout="https://github.com/owner/repo/issues/42\n")
         ),
     )
     issue_url = open_issue_for_proposal(proposal)
@@ -228,9 +228,7 @@ def test_e2e_retries_3_times_then_escalates(tmp_path, monkeypatch):
 
     # ---- ledger 末尾是 implement_failed，final_status=needs_human ----
     all_events = list_events()
-    implement_failed_events = [
-        e for e in all_events if e["event_type"] == "implement_failed"
-    ]
+    implement_failed_events = [e for e in all_events if e["event_type"] == "implement_failed"]
     # 3 次重试 + 1 次最终升级 = 4 个 implement_failed 事件
     assert len(implement_failed_events) == 4
     last_event = all_events[-1]
