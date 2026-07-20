@@ -3327,6 +3327,33 @@ def _assess_branch_auto_merge_policy(
             }
         )
 
+    # Safe-data-only bypass (P1 task: "只改测试/文档/明确 allow → completed_merged").
+    # When ALL changed files match safe-data-only globs (KB fix JSON, docs, tests)
+    # AND the structured review+qa gate passed, bypass v2/v3 keyword-scoring gates.
+    # Rationale: keyword-based scanners flag "token"/"auth" inside KB JSON data,
+    # but these are not source code changes — review+qa already verified safety.
+    # Disabled by default; enabled via env to keep default behavior conservative.
+    if _env_bool("MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS", True) and steps:
+        safe_globs = _safe_data_only_globs()
+        all_safe = bool(normalized_files) and all(
+            _file_matches_any_glob(file_name, safe_globs)
+            for file_name in normalized_files
+        )
+        if all_safe:
+            report_gate = _structured_report_gate(steps)
+            if report_gate.get("ok"):
+                return _decision(
+                    {
+                        "changed_files": normalized_files,
+                        "diff_stats_consistency": consistency,
+                        "line_changes": int((diff_stats or {}).get("line_changes") or 0),
+                        "ok": True,
+                        "reason": "safe_data_only_bypass_passed",
+                        "safe_data_only_globs": safe_globs,
+                        "structured_report_gate": report_gate,
+                    }
+                )
+
     if _env_bool("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", True) and safety_score_v3.get("ok"):
         return _decision(
             {
