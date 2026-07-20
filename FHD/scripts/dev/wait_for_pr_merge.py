@@ -13,18 +13,13 @@ from typing import Optional
 def is_pr_merged(*, pr_number: int, repo: Optional[str] = None) -> bool:
     """检查 PR 是否已合并。返回 True/False。"""
     repo = repo or os.environ.get("GITHUB_REPO", "")
-    if not repo:
-        raise RuntimeError("GITHUB_REPO env var not set")
-    cmd = ["gh", "pr", "view", str(pr_number), "--repo", repo, "--json", "state"]
+    cmd = ["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"]
+    if repo:
+        cmd.extend(["--repo", repo])
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         return False
-    import json
-    try:
-        data = json.loads(result.stdout)
-        return data.get("state") == "MERGED"
-    except json.JSONDecodeError:
-        return False
+    return result.stdout.strip() == "MERGED"
 
 
 def main() -> int:
