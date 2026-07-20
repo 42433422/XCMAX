@@ -3276,12 +3276,10 @@ class TestMSRemoteToModInfo:
 class TestMSRoutesBasic:
     """Cover simple route endpoints."""
 
-    def test_upload_route_returns_not_implemented(self, mod_store_client) -> None:
+    def test_upload_route_requires_file(self, mod_store_client) -> None:
+        """POST /upload 无 file → 422（FastAPI 校验：file 必填）。"""
         resp = mod_store_client.post("/upload")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is False
-        assert "上传" in data["detail"]
+        assert resp.status_code == 422
 
     def test_validate_route_returns_not_implemented(self, mod_store_client) -> None:
         resp = mod_store_client.get("/validate")
