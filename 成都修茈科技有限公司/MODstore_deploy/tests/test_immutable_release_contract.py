@@ -33,6 +33,9 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
+    assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
+    assert "node scripts/install-native-bindings.mjs" in script
+    assert script.index("--ignore-scripts") < script.index("npm run build")
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
