@@ -19,6 +19,8 @@ paths = [
     '''FHD/tests/.*fixture.*''',
     '''FHD/tests/.*mock.*''',
     '''FHD/tests/.*stub.*''',
+    # CI 自治脚本测试中的 mock token (AKIAIOSFODNN7EXAMPLE / ghp_aBcD... 等文档示例)
+    '''FHD/tests/test_ci/.*''',
     # 文档中的示例密钥
     '''docs/.*\.md''',
     '''\.md$''',
