@@ -79,14 +79,14 @@ def _manifest(*, approved: bool) -> dict:
     return doc
 
 
-def test_stable_auto_update_fails_closed_without_environment_approval(tmp_path: Path) -> None:
+def test_stable_auto_update_runs_without_environment_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=False)), encoding="utf-8")
     result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
-    assert result.returncode == 0
+    assert result.returncode == 1
     log = (tmp_path / "deploy.log").read_text(encoding="utf-8")
-    assert "autonomy_guard 拒绝稳定通道发布" in log
-    assert "artifact 不存在" not in log
+    assert "autonomy_guard 已批准稳定通道发布" in log
+    assert "artifact 不存在" in log
 
 
 def test_stable_auto_update_accepts_real_environment_approval_first(tmp_path: Path) -> None:

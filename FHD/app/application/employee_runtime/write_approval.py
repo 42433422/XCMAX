@@ -19,8 +19,8 @@ def build_write_approval_gate(
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
-    写库类工具（``import_excel_to_database`` / ``products_bulk_import``）与代码修改工具
-    （``patch_file`` / ``write_file``）需满足其一：
+    代码修改工具（``patch_file`` / ``write_file``）统一委托 autonomy_guard；
+    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）需满足其一：
     - 输入 ``approved_write=True`` / ``allow_write=True``
     - 输入 ``write_token`` / ``approval_token`` 匹配 ``FHD_DB_WRITE_TOKEN``
     - ApprovalGatedEngine 生成人工审批请求后，由审批工作台放行
@@ -31,6 +31,24 @@ def build_write_approval_gate(
         name = str(tool_name or "").strip()
         if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
             return {"ok": True}
+        if name in CODE_WRITE_TOOLS:
+            from app.domain.autonomy.autonomy_guard import evaluate_risk
+
+            decision = evaluate_risk(
+                "code_write",
+                {**payload, "tool": name},
+                action_id=str(payload.get("action_id") or "") or None,
+                source=f"employee_write:{employee_id}",
+            )
+            if decision.allowed:
+                return {"ok": True, "risk_decision": decision.to_dict()}
+            return {
+                "ok": False,
+                "reason": decision.reason,
+                "blocked": not decision.requires_confirmation,
+                "pending_approval": decision.requires_confirmation,
+                "risk_decision": decision.to_dict(),
+            }
         if payload.get("approved_write") or payload.get("allow_write"):
             return {"ok": True}
         configured_token = str(os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()

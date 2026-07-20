@@ -1972,6 +1972,29 @@ def _handler_failure_detail(result: Dict[str, Any]) -> str:
     return "one or more handlers returned ok=False"
 
 
+def _evaluate_employee_risk_gate(
+    employee_id: str,
+    manifest: Dict[str, Any],
+    handler_list: List[str],
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    try:
+        from modstore_server.employee_risk_middleware import gate_action_or_block
+
+        return gate_action_or_block(employee_id, manifest, handler_list, payload)
+    except Exception as exc:  # noqa: BLE001 - guard failure must fail closed
+        logger.exception("risk middleware unavailable; blocking employee execution")
+        return {
+            "ok": False,
+            "blocked": True,
+            "pending_approval": False,
+            "risk_level": "blocked",
+            "decision": "blocked",
+            "reason": "risk middleware unavailable; fail-closed",
+            "detail": f"risk middleware error ({type(exc).__name__})",
+        }
+
+
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -2019,15 +2042,7 @@ def execute_employee_task(
                 )
                 handler_list = list((actions_inner or {}).get("handlers") or [])
 
-                try:
-                    from modstore_server.employee_risk_middleware import gate_action_or_block
-
-                    gate = gate_action_or_block(employee_id, manifest, handler_list, payload)
-                except Exception:
-                    logger.exception(
-                        "risk middleware error; default to allow for backwards compatibility"
-                    )
-                    gate = {"ok": True, "risk_level": "unknown", "reason": "middleware error"}
+                gate = _evaluate_employee_risk_gate(employee_id, manifest, handler_list, payload)
 
                 if not gate.get("ok"):
                     duration_ms = round((time.perf_counter() - t0) * 1000, 3)

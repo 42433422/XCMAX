@@ -21,21 +21,30 @@ if str(ROOT) not in sys.path:
 from app.application.autonomy.audit_log import summarize_autonomy_audit  # noqa: E402
 
 
-def evaluate_window(days: int) -> dict[str, object]:
-    summary = summarize_autonomy_audit(days=days)
+def evaluate_window(days: int, *, include_synthetic: bool = False) -> dict[str, object]:
+    summary = summarize_autonomy_audit(days=days, include_synthetic=include_synthetic)
     observed = float(summary.get("observed_days") or 0.0)
     veto_rate = float(summary.get("veto_rate") or 0.0)
     total = int(summary.get("total") or 0)
     complete = total > 0 and observed >= days
-    if not complete:
+    if summary.get("has_prohibited_miss"):
+        status = "failed"
+        reason = "BLOCKED action execution evidence requires immediate incident review"
+    elif not complete:
         status = "collecting"
         reason = f"observed {observed:.2f}/{days} days"
     elif days >= 90 and 1.0 <= veto_rate <= 5.0:
         status = "passed"
         reason = "90-day veto rate is within 1-5%"
-    elif days >= 30 and veto_rate <= 5.0:
+    elif 30 <= days < 90 and veto_rate <= 5.0:
         status = "passed"
         reason = "30-day veto rate is at most 5%"
+    elif veto_rate > 10.0:
+        status = "needs_tuning"
+        reason = "veto rate above 10%; review whether medium-risk boundaries are too strict"
+    elif days >= 90 and veto_rate < 1.0:
+        status = "needs_tuning"
+        reason = "veto rate below 1%; audit for missed or under-classified risk"
     else:
         status = "needs_tuning"
         reason = "veto rate is outside the target window"
@@ -45,11 +54,14 @@ def evaluate_window(days: int) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, choices=(30, 90), default=30)
+    parser.add_argument("--include-synthetic", action="store_true")
     parser.add_argument("--strict", action="store_true")
     args = parser.parse_args(argv)
-    report = evaluate_window(args.days)
+    report = evaluate_window(args.days, include_synthetic=args.include_synthetic)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
-    if args.strict and report["complete"] and report["status"] != "passed":
+    if args.strict and (
+        report["status"] == "failed" or (report["complete"] and report["status"] != "passed")
+    ):
         return 1
     return 0
 
