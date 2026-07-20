@@ -47,6 +47,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
