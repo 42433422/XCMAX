@@ -1,5 +1,6 @@
 # 成都修茈科技有限公司/MODstore_deploy/tests/test_gap_to_issue.py
 """gap_to_issue 单元测试。"""
+
 from __future__ import annotations
 
 import json

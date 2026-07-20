@@ -174,9 +174,7 @@ def _inject_synthetic_delivery_validation(
     }
 
 
-def _collect_samples(
-    ledger_path: Path, max_samples: int
-) -> List[Dict[str, Any]]:
+def _collect_samples(ledger_path: Path, max_samples: int) -> List[Dict[str, Any]]:
     """读取 ledger，筛选 failed + completed_waiting_human_strategy 记录。
 
     每条记录展开为 per-step 样本（取第一个 ok=False 的 step；若无，取最后一个 step）。
@@ -239,9 +237,7 @@ def _collect_samples(
     return samples
 
 
-def _extract_from_sample(
-    sample: Dict[str, Any], inject_dv: bool = False
-) -> Dict[str, Any]:
+def _extract_from_sample(sample: Dict[str, Any], inject_dv: bool = False) -> Dict[str, Any]:
     """对单条样本重建 result 并调用 _extract_failure_reason。"""
     step = sample["step"]
     result, para_meta = _rebuild_result_from_step(step)
@@ -296,12 +292,16 @@ def _print_summary(
     print(f"总样本数:                     {total}")
     print(f"提取成功数 (有意义原因):       {meaningful}")
     print(f"提取成功率:                   {success_pct:.2f}%")
-    print(f"验收阈值 (成功率 ≥ 20%):      {'PASS' if success_pct >= SUCCESS_THRESHOLD_PCT else 'FAIL'}")
+    print(
+        f"验收阈值 (成功率 ≥ 20%):      {'PASS' if success_pct >= SUCCESS_THRESHOLD_PCT else 'FAIL'}"
+    )
     print()
     print(f"failed 记录样本数:            {failed_total}")
     print(f"failed 提取成功数:            {failed_meaningful}")
     print(f"failed 成功率:                {failed_pct:.2f}%")
-    print(f"验收阈值 (failed ≥ 8):        {'PASS' if failed_meaningful >= FAILED_MIN_SUCCESS else 'FAIL'}")
+    print(
+        f"验收阈值 (failed ≥ 8):        {'PASS' if failed_meaningful >= FAILED_MIN_SUCCESS else 'FAIL'}"
+    )
     print()
     print(f"注入合成 DV 样本数:           {injected_total}")
     print(f"注入后提取成功数:             {injected_meaningful}")
@@ -351,9 +351,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # 选取待注入 DV 的样本：优先选 baseline 为 unknown_reason 的 failed 记录，
     # 这样能清晰证明 DV 修复把"未知失败"变成"已知失败"。
-    candidates_for_injection = [
-        s for s in samples if s["record_status"] == "failed"
-    ]
+    candidates_for_injection = [s for s in samples if s["record_status"] == "failed"]
     inject_targets = candidates_for_injection[: args.synthetic_dv_count]
 
     inject_line_set = {s["line_no"] for s in inject_targets}

@@ -4,6 +4,7 @@
 每个演化事件（signal_detected / proposal_generated / issue_opened / ... / pack_listed）
 都写一行。owner 用 audit_evolution.py 查询。
 """
+
 from __future__ import annotations
 
 import json
