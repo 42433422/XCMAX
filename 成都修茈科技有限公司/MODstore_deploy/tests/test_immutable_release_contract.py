@@ -28,7 +28,9 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert script.index('migrate_env_file "$ENV_FILE"') < script.index(
         "import fastapi, uvicorn, modstore_server.app"
     )
-    assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    assert (
+        'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    )
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
@@ -44,13 +46,18 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
     ) < script.index("mvn -B -q -DskipTests package")
 
-    source_ci = yaml.safe_load((ROOT / ".github/workflows/ci-backend-python.yml").read_text())
+    source_ci = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-backend-python.yml").read_text()
+    )
     published_ci = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/modstore-ci-backend-python.yml").read_text()
     )
     source_java_job = source_ci["jobs"]["java-payment-test"]
     published_java_job = published_ci["jobs"]["java-payment-test"]
-    assert source_java_job["defaults"]["run"]["working-directory"] == "java_payment_service"
+    assert (
+        source_java_job["defaults"]["run"]["working-directory"]
+        == "java_payment_service"
+    )
     assert published_java_job["defaults"]["run"]["working-directory"] == (
         "成都修茈科技有限公司/MODstore_deploy/java_payment_service"
     )

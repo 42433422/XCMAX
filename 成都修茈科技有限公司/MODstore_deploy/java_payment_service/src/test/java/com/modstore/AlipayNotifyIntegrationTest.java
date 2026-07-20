@@ -88,6 +88,7 @@ class AlipayNotifyIntegrationTest {
         walletRepository.deleteAll();
         userRepository.deleteAll();
         user = new User();
+        user.setId(900001L);
         user.setUsername("notify-user");
         user.setEmail("notify@example.com");
         user.setPasswordHash("hash");

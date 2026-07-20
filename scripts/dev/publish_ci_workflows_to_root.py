@@ -93,6 +93,7 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
             rf"\1fhd-{wf}",
             content,
         )
+
     def repl_path(m: re.Match[str]) -> str:
         indent = m.group(1)
         raw = m.group(2)
