@@ -161,7 +161,7 @@ jobs:
             exit 1
           fi
           echo "✅ Neuro Bus 7 switches verified (all =1) in \$ENV_FILE"
-NEURO_EOF
+          NEURO_EOF
 
           REMOTE_CMD=$(cat <<EOF
           set -euo pipefail
