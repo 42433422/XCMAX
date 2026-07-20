@@ -9,7 +9,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-
 AVATAR_TYPES: Dict[str, Dict[str, Any]] = {
     "real_person": {
         "label": "真人头像",
@@ -117,7 +116,11 @@ PROMPT_PRESETS: Dict[str, Dict[str, Any]] = {
             "头肩近景、脸占主体、干净留白分隔，方便裁成移动端联系人头像。角色要有不同发型、表情、"
             "眼镜/耳机、现代工作服和微小岗位徽章；禁止文字、字母、水印、Logo、重复脸和遮脸手势。"
         ),
-        "postprocess": ["按 4x3 网格裁切", "每格缩放到 256x256 或 512x512", "保留圆角/圆形裁切安全边距"],
+        "postprocess": [
+            "按 4x3 网格裁切",
+            "每格缩放到 256x256 或 512x512",
+            "保留圆角/圆形裁切安全边距",
+        ],
     },
     "xiaoc_human_aquatic": {
         "label": "小 C 人形鱼系助理头像",
@@ -171,7 +174,11 @@ PROMPT_PRESETS: Dict[str, Dict[str, Any]] = {
             "脸占主体、现代工作服、干净渐变背景、圆形裁切安全、小尺寸 48px 仍清晰。禁止文字、字母、Logo、"
             "水印、照搬角色、明星脸和遮脸手势。"
         ),
-        "postprocess": ["缩放为 256x256/512x512", "列表页 48px 预览检查", "圆形和圆角裁切均不切掉脸"],
+        "postprocess": [
+            "缩放为 256x256/512x512",
+            "列表页 48px 预览检查",
+            "圆形和圆角裁切均不切掉脸",
+        ],
     },
 }
 
@@ -258,12 +265,11 @@ def _format_preset_text(template: str, values: Dict[str, str]) -> str:
 
 
 def _select_prompt_preset(payload: Dict[str, Any], employee_name: str, avatar_type: str) -> str:
-    raw = str(
-        payload.get("prompt_preset")
-        or payload.get("preset")
-        or payload.get("template")
-        or ""
-    ).strip().lower()
+    raw = (
+        str(payload.get("prompt_preset") or payload.get("preset") or payload.get("template") or "")
+        .strip()
+        .lower()
+    )
     text = "\n".join([raw, employee_name, _text_blob(payload)]).lower()
     for preset_id, spec in PROMPT_PRESETS.items():
         if raw == preset_id or raw.replace("-", "_") == preset_id:
@@ -338,7 +344,9 @@ def build_avatar_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
     department = _first(payload, "department", "team", default="XC AGI")
     personality = _first(payload, "personality", "persona", default="可靠、聪明、清爽、有辨识度")
     palette = _first(payload, "color_palette", "palette", "colors", default="blue, violet, white")
-    target_platform = _first(payload, "target_platform", "platform", default="AI 员工头像 / 移动端圆形头像")
+    target_platform = _first(
+        payload, "target_platform", "platform", default="AI 员工头像 / 移动端圆形头像"
+    )
     style = _style_modifier(avatar_type, _first(payload, "style", "art_style", default=""))
     role_text = f"{employee_role} {department} {_text_blob(payload)}"
     symbol = _first(payload, "symbol", "icon", default=_role_symbol(role_text))
@@ -410,7 +418,9 @@ def _image_credentials(provider: str) -> Tuple[str, str, str]:
     if provider == "doubao":
         return (
             os.environ.get("DOUBAO_API_KEY") or os.environ.get("ARK_API_KEY") or "",
-            (os.environ.get("DOUBAO_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3").rstrip("/"),
+            (
+                os.environ.get("DOUBAO_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3"
+            ).rstrip("/"),
             "doubao-seedream-5-0-260128",
         )
     if provider == "openai":
@@ -432,7 +442,9 @@ def _write_data_url(data_url: str, output_path: Path, index: int) -> str:
     return str(img_path)
 
 
-async def _generate_images(profile: Dict[str, Any], payload: Dict[str, Any], output_path: Path) -> Dict[str, Any]:
+async def _generate_images(
+    profile: Dict[str, Any], payload: Dict[str, Any], output_path: Path
+) -> Dict[str, Any]:
     provider = _first(payload, "provider", "image_provider", default="doubao").lower()
     key, base_url, default_model = _image_credentials(provider)
     model = _first(payload, "model", "image_model", default=default_model)
@@ -483,7 +495,9 @@ async def _generate_images(profile: Dict[str, Any], payload: Dict[str, Any], out
             images.append({"url": url, "local_path": ""})
         elif b64:
             data_url = f"data:image/png;base64,{b64}"
-            images.append({"url": data_url, "local_path": _write_data_url(data_url, output_path, idx)})
+            images.append(
+                {"url": data_url, "local_path": _write_data_url(data_url, output_path, idx)}
+            )
     return {"ok": bool(images), "images": images, "provider": provider, "model": model, "raw": data}
 
 
@@ -519,8 +533,12 @@ async def convert_avatar_profile(
         },
         "warnings": warnings,
     }
-    if _as_bool(payload.get("require_image"), default=False) and not (image_result.get("images") or []):
+    if _as_bool(payload.get("require_image"), default=False) and not (
+        image_result.get("images") or []
+    ):
         result["ok"] = False
         result["summary"] = "已生成头像提示词，但未生成图片。"
-    output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return result

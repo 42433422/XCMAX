@@ -1,5 +1,6 @@
 # 成都修茈科技有限公司/MODstore_deploy/tests/test_evolution_ledger.py
 """演化决策 ledger 单元测试。"""
+
 from __future__ import annotations
 
 import json
