@@ -565,6 +565,9 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Do not inspect your own report-only task branch" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
+    assert "platform-equivalent local `python -m pytest` command" in qa
+    assert "same focused test file" in qa
+    assert "Do not fail solely because the scheduler's absolute Python path" in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
