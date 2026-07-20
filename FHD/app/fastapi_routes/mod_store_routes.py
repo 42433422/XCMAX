@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.mod_store_catalog_app import (
@@ -576,11 +576,81 @@ async def mod_store_details(mod_id: str) -> ModStoreDetailResponse:
     raise HTTPException(status_code=404, detail="未找到该 MOD")
 
 
-@router.post("/upload", response_model=ModStoreNotImplementedResponse)
-async def mod_store_upload() -> ModStoreNotImplementedResponse:
-    return ModStoreNotImplementedResponse(
-        detail="上传 尚未在本后端实现；请将 Mod 包放入 XCAGI/mods 或通过 MODstore 工具链。"
-    )
+@router.post("/upload", response_model=ModStoreInstallResult)
+async def mod_store_upload(
+    file: UploadFile = File(..., description="Mod 包文件 (.xcemp 或 .zip)"),
+    activate: bool = Query(True, description="安装后是否立即激活"),
+) -> ModStoreInstallResult:
+    """上传 Mod 包到本机并自动安装。
+
+    进化状态闭环（2026-07-20）：
+      - 接受 multipart/form-data 文件上传（最大 100MB）
+      - 校验文件扩展名（.xcemp / .zip）
+      - 落地到临时文件后调用 ``mod_manager.install_mod_package``
+      - 返回安装结果（含 manifest 元数据）
+    """
+    # 文件大小限制：100MB（防止恶意大文件）
+    MAX_UPLOAD_SIZE = 100 * 1024 * 1024
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xcemp") or filename.endswith(".zip")):
+        raise HTTPException(
+            status_code=400,
+            detail="仅支持 .xcemp 或 .zip 格式的 Mod 包",
+        )
+
+    tmp = tempfile.NamedTemporaryFile(prefix="xcagi-upload-", suffix=".zip", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+    total_size = 0
+    try:
+        with open(tmp_path, "wb") as out:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"文件过大（>{MAX_UPLOAD_SIZE // (1024 * 1024)}MB）",
+                    )
+                out.write(chunk)
+        if total_size == 0:
+            raise HTTPException(status_code=400, detail="上传文件为空")
+
+        # 复用 /install 的安装逻辑：读 manifest → 解压 → 注册
+        normalized_path = normalize_package_zip_path(tmp_path)
+        from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+        from app.infrastructure.mods.artifact_package import peek_artifact
+
+        if peek_artifact(normalized_path) == ARTIFACT_EMPLOYEE_PACK:
+            from app.infrastructure.mods.employee_registry import get_employee_registry
+
+            ok, message = get_employee_registry().install_from_package(
+                normalized_path, verify_signature=False
+            )
+            return ModStoreInstallResult(success=bool(ok), message=message, data=None)
+
+        from app.infrastructure.mods.mod_manager import get_mod_manager
+
+        ok, message, metadata = get_mod_manager().install_mod_package(
+            normalized_path,
+            verify_signature=False,
+            activate=activate,
+        )
+        data = (
+            dataclasses.asdict(metadata)
+            if metadata and dataclasses.is_dataclass(metadata)
+            else None
+        )
+        return ModStoreInstallResult(success=bool(ok), message=message, data=data)
+    finally:
+        for p in {tmp_path}:
+            try:
+                if p and os.path.exists(p):
+                    os.unlink(p)
+            except OSError:
+                logger.warning("无法删除上传临时文件: %s", p)
 
 
 @router.post("/install", response_model=ModStoreInstallResult)

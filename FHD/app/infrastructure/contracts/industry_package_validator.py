@@ -9,7 +9,10 @@ from typing import Any
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 _SCHEMA_PATH = _FHD_ROOT / "contracts" / "industry_package.schema.json"
 _BASELINE_PATH = _FHD_ROOT / "config" / "industry_baseline.json"
-_MODS_ROOT = _FHD_ROOT / "mods"
+# 编辑源与导出副本双路径：FHD/mods/ 为 SSOT 编辑源，FHD/XCAGI/mods/ 为运行时导出副本。
+# 与 app/infrastructure/mods/mod_manager.py "开发树常见双份 mods" 双份查找一致。
+# 部分 industry 包（如 attendance-industry）已迁移至 XCAGI/mods/，需双路径扫描。
+_MODS_ROOTS = (_FHD_ROOT / "mods", _FHD_ROOT / "XCAGI" / "mods")
 
 
 def _load_json(path: Path) -> Any:
@@ -68,18 +71,25 @@ def validate_industry_manifest(path: Path | str) -> list[str]:
 
 
 def iter_industry_package_manifests() -> list[Path]:
-    """Discover neutral industry package manifests under mods/."""
+    """Discover neutral industry package manifests under mods/ (编辑源 + 导出副本).
+
+    双路径扫描避免 industry 包在 FHD/mods/ → FHD/XCAGI/mods/ 迁移期间漏检。
+    同名包以编辑源 (FHD/mods/) 优先，导出副本仅补齐编辑源缺失的包。
+    """
     out: list[Path] = []
-    if not _MODS_ROOT.is_dir():
-        return out
-    for child in sorted(_MODS_ROOT.iterdir()):
-        if not child.is_dir():
+    seen: set[str] = set()
+    for mods_root in _MODS_ROOTS:
+        if not mods_root.is_dir():
             continue
-        manifest = child / "manifest.json"
-        if not manifest.is_file():
-            continue
-        if child.name.endswith("-industry"):
-            out.append(manifest)
+        for child in sorted(mods_root.iterdir()):
+            if not child.is_dir() or child.name in seen:
+                continue
+            manifest = child / "manifest.json"
+            if not manifest.is_file():
+                continue
+            if child.name.endswith("-industry"):
+                out.append(manifest)
+                seen.add(child.name)
     return out
 
 

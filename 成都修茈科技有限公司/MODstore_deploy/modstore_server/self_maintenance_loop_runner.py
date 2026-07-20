@@ -15,13 +15,15 @@ import json
 import logging
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -282,7 +284,8 @@ def ensure_clean_baseline() -> Dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(baseline, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(baseline, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     tmp.replace(path)
     return baseline
@@ -409,7 +412,9 @@ def record_governance_audit_review(
     }
 
 
-def _governance_audit_summary(rows: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _governance_audit_summary(
+    rows: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     items = rows if isinstance(rows, list) else _read_governance_audit(10)
     success_count = sum(
         1 for item in items if isinstance(item, dict) and item.get("ok") is not False
@@ -665,7 +670,11 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if action not in {"auto_merged_low_risk", "auto_continue"} and status != "completed_merged":
+    if action not in {
+        "auto_merged_low_risk",
+        "auto_merge_requested_low_risk",
+        "auto_continue",
+    } and status not in {"completed_merged", "completed_merge_requested"}:
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
@@ -721,7 +730,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 item["escalated"] = True
                 escalated_items.append(item)
                 logger.warning(
-                    "open_item run_id=%s exceeded max_retries=%d, escalating to human review",
+                    "open_item run_id=%s exceeded max_retries=%d, pausing automated retries",
                     item.get("run_id"),
                     max_retries,
                 )
@@ -737,35 +746,34 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 and "code" not in (item.get("steps") or [])
             )
         ]
-    # If there are escalated items, do not resume - return None so loop stops for human intervention
+    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
     if escalated_items:
-        # Enqueue all escalated items to human uncertainty queue
-        try:
-            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-
-            for item in escalated_items:
-                enqueue_uncertain_item(
-                    context={
-                        "failed_run_id": item.get("run_id"),
-                        "failed_steps": item.get("steps", []),
-                        "retry_count": item.get("retry_count"),
-                        "branch": item.get("branch"),
-                        "para_task_id": item.get("para_task_id"),
-                    },
-                    decision={
-                        "action": "await_human_strategy_approval",
-                        "reason": "max_retries_exceeded",
-                    },
-                    reason=f"self-maintenance step {item.get('steps')} failed {item.get('retry_count')} times, exceeded max retries",
-                )
-        except Exception as exc:
-            logger.warning("failed to enqueue escalated item to human queue: %s", exc)
         return None
+
+    # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
+    # return None to trigger a fresh code step. The employee will see the
+    # previous KB schema errors in loop memory (via _memory_context) and
+    # should produce a corrected branch. Escalated items (retry_count >=
+    # KB_SCHEMA_RETRY_MAX) are skipped so the loop waits for human review.
+    if isinstance(open_items_raw, list):
+        for item in reversed(open_items_raw):
+            if not isinstance(item, dict):
+                continue
+            if item.get("kind") != "kb_schema_retry":
+                continue
+            if item.get("escalated"):
+                continue
+            logger.info(
+                "kb_schema_retry: resuming fresh code step for run_id=%s retry_count=%d",
+                item.get("run_id"),
+                int(item.get("retry_count") or 0),
+            )
+            return None
 
     last_decision = memory.get("last_policy_decision")
     last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
     if last_reason == "review_or_qa_reported_risk":
-        # 真实风险必须由人工介入，禁止自动重试
+        # Real risk remains blocked; removing approval must never turn it into a bypass.
         return None
     if last_reason in {"employee_step_failed", "loop_not_completed"}:
         # Allow resumption for incomplete loops or step failures (e.g., code step can retry)
@@ -837,7 +845,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             }
 
     for item in reversed(open_items):
-        if not isinstance(item, dict) or item.get("kind") != "human_strategy_approval":
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
             continue
         reason = str(item.get("reason") or "")
         if reason not in {
@@ -846,6 +857,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "changed_files_outside_low_risk_globs",
             "missing_report_only_evidence",
             "max_retries_exceeded",
+            "structured_qa_focused_command_not_passed",
         }:
             continue
         branch = str(item.get("branch") or "").strip()
@@ -857,9 +869,24 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "failed_run_id": run_id,
                 "failed_steps": ["qa"],
                 "para_task_id": para_task_id,
-                "reason": "resume_human_strategy_candidate",
+                "reason": "resume_automated_remediation_candidate",
             }
     return None
+
+
+def _resume_steps(resume_candidate: Optional[Dict[str, Any]]) -> set[str]:
+    """Return the failed step and every downstream step that must be rerun."""
+
+    if not resume_candidate:
+        return {"code", "review", "qa"}
+    failed = {str(item) for item in (resume_candidate.get("failed_steps") or [])}
+    if "code" in failed:
+        return {"code", "review", "qa"}
+    if "review" in failed:
+        return {"review", "qa"}
+    if "qa" in failed:
+        return {"qa"}
+    return set()
 
 
 def _parse_iso(value: Any) -> Optional[datetime]:
@@ -972,7 +999,11 @@ def _recent_incident_signals(lookback_hours: int, *, limit: int = 8) -> Dict[str
                     "summary": str(payload.get("summary") or "")[:500],
                 }
             )
-        return {"count": int(count), "events": incidents, "lookback_hours": lookback_hours}
+        return {
+            "count": int(count),
+            "events": incidents,
+            "lookback_hours": lookback_hours,
+        }
     except Exception:
         logger.exception("failed to read recent incident signals")
         return {"count": 1, "events": [], "error": "incident_signal_query_failed"}
@@ -1045,6 +1076,7 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
     rows = _read_ledger(limit=300)
     started: Dict[str, Dict[str, Any]] = {}
     terminal: Dict[str, Dict[str, Any]] = {}
+    steps_by_run: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
         run_id = str(row.get("run_id") or "")
         if not run_id:
@@ -1054,8 +1086,13 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
             started[run_id] = row
         elif phase in {"complete", "skip"}:
             terminal[run_id] = row
+        elif phase in {"step", "step_retry"}:
+            steps_by_run.setdefault(run_id, []).append(row)
 
-    stale_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_STALE_RUN_MINUTES", 90)
+    # 默认 180 分钟：3 step × 30 分钟 + 内层重试 + dispatch 延迟的余量。
+    # 旧默认 90 分钟刚好卡在 (wait_timeout_sec=1800 × 3) 边界，加任何 dispatch
+    # 延迟就超时 → abandoned_stale。提到 180 给足余量。
+    stale_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_STALE_RUN_MINUTES", 180)
     cutoff = _utc_now() - timedelta(minutes=stale_minutes)
     reconciled: List[str] = []
     for run_id, start in started.items():
@@ -1064,6 +1101,26 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
         started_at = _parse_iso(start.get("started_at") or start.get("created_at"))
         if started_at is None or started_at > cutoff:
             continue
+
+        # 找该 run 最后一个 step 终态；如果只有 step_retry 没有 phase=step，
+        # 说明某个 step 的内层重试还没收敛就超时了——补一条 step 终态记录，
+        # 让下游查询能看到完整 step 链路。
+        run_steps = steps_by_run.get(run_id) or []
+        last_step_phase = str(run_steps[-1].get("phase") or "") if run_steps else ""
+        if last_step_phase == "step_retry":
+            last_step = run_steps[-1]
+            step_terminal = {
+                "employee_id": last_step.get("employee_id"),
+                "error": "step abandoned during inner retry before stale timeout",
+                "ok": False,
+                "phase": "step",
+                "run_id": run_id,
+                "status": "abandoned_stale",
+                "step": last_step.get("step"),
+                "timestamp": _iso(_utc_now()),
+            }
+            _append_ledger(step_terminal)
+
         final = {
             "completed_at": _iso(_utc_now()),
             "error": "run did not write a terminal record before stale timeout",
@@ -1166,6 +1223,31 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
     return True
 
 
+def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, Any]]:
+    """递归查找 result 里的 delivery_validation dict（Para 远端返回）。
+
+    delivery_validation 不在本地代码产出，由 Para 平台返回时嵌在
+    result.result.outputs[].response / para_result 等任意层级，故需递归。
+    限制深度 6 / 列表前 12 项，避免大对象全遍历。
+    """
+    if depth > 6 or not isinstance(obj, (dict, list)):
+        return None
+    if isinstance(obj, dict):
+        dv = obj.get("delivery_validation")
+        if isinstance(dv, dict):
+            return dv
+        for value in obj.values():
+            found = _find_delivery_validation(value, depth + 1)
+            if found is not None:
+                return found
+    else:
+        for item in obj[:12]:
+            found = _find_delivery_validation(item, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
 def _extract_failure_reason(
     result: Dict[str, Any], para_meta: Optional[Dict[str, Any]] = None
 ) -> str:
@@ -1208,7 +1290,7 @@ def _extract_failure_reason(
         if isinstance(pg, dict) and pg.get("checked") and not pg.get("ok"):
             violations = pg.get("violations") or []
             vstr = "; ".join(
-                f"{v.get('path','')}({v.get('reason','')})"
+                f"{v.get('path', '')}({v.get('reason', '')})"
                 for v in violations[:5]
                 if isinstance(v, dict)
             )
@@ -1232,6 +1314,31 @@ def _extract_failure_reason(
         return path_guard_failure
     if inner_outputs_failure:
         return inner_outputs_failure
+
+    # delivery_validation 失败：员工交付了代码（change_delivery.ok=true）但验证命令
+    # （测试/lint）失败。这是 code step 最常见的静默失败来源——_employee_result_ok
+    # 判 False 但其他分支都提不到原因。delivery_validation 由 Para 远端返回，嵌在
+    # result 任意层级，用 _find_delivery_validation 递归定位。
+    dv = _find_delivery_validation(result)
+    if isinstance(dv, dict):
+        cmds = dv.get("commands")
+        if isinstance(cmds, list):
+            failed_cmds = [
+                c for c in cmds if isinstance(c, dict) and c.get("exit_code") not in (0, None)
+            ]
+            if failed_cmds:
+                parts: List[str] = []
+                for c in failed_cmds[:3]:
+                    ec = c.get("exit_code")
+                    cmd = str(c.get("command") or "")[:80]
+                    tail = str(c.get("output_tail") or c.get("output") or "")[:120]
+                    seg = f"exit={ec}"
+                    if cmd:
+                        seg += f" cmd={cmd}"
+                    if tail:
+                        seg += f" tail={tail}"
+                    parts.append(seg)
+                return "delivery_validation_failed: " + " | ".join(parts)[:300]
 
     # para 层错误（走 Para bridge 时）
     if isinstance(para_meta, dict):
@@ -1430,6 +1537,138 @@ def _execute_employee_task_with_retries(
     return result
 
 
+def _run_step_with_inner_retries(
+    *,
+    employee_id: str,
+    step_name: str,
+    task_text: str,
+    extra: Dict[str, Any],
+    user_id: int,
+    run_id: str,
+) -> Tuple[Dict[str, Any], bool, str, Dict[str, Any], str, int, int]:
+    """Run a single step with inner fix-retry (code) or marker-retry (review/qa).
+
+    返回 (result, ok, failure_reason, para_meta, report_excerpt,
+           code_fix_retry_rounds, marker_retry_rounds)。
+
+    内层重试边界：
+    - code step: MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES (默认 2) 额外轮数。
+      失败时把 failure_reason 反馈给员工，强制其重新跑测试/lint 直到通过再交付。
+      攻克 30/37 静默失败：员工代码测试不过 → loop 不再立即终止，而是给员工
+      N 次修代码机会，failure_reason 直接拼进 task_text 让 LLM 看到具体错误。
+    - review/qa step: MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES (默认 1) 额外轮数。
+      dispatch 成功但缺 SELF_MAINTENANCE_*_JSON marker 时，提醒员工按格式
+      重新输出，gate 标准不变。攻克 13 条 waiting_human_strategy 中因 marker
+      缺失而误判的部分。
+
+    每次内层尝试写一条 phase=step_retry 的 ledger 记录（最终结论由调用方写
+    phase=step），保证内层痕迹可观测但不污染 steps 列表。
+    """
+    if step_name == "code":
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
+        retry_kind = "code_fix"
+    else:
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 1) + 1)
+        retry_kind = "marker"
+    marker = STRUCTURED_REVIEW_MARKER if step_name == "review" else STRUCTURED_QA_MARKER
+
+    last_task_text = task_text
+    result: Dict[str, Any] = {}
+    ok = False
+    failure_reason = ""
+    para_meta: Dict[str, Any] = {}
+    report_excerpt = ""
+    code_fix_retry_rounds = 0
+    marker_retry_rounds = 0
+
+    for attempt in range(1, inner_max + 1):
+        input_data = _base_para_input(extra)
+        result = _execute_employee_task_with_retries(
+            employee_id,
+            last_task_text,
+            input_data,
+            user_id=user_id,
+        )
+        ok = _employee_result_ok(result)
+        para_meta = _extract_para_meta(result)
+        report_excerpt = _extract_report_excerpt(result)
+        para_report_excerpt = _fetch_para_task_report_excerpt(
+            para_meta.get("task_id"),
+            para_meta.get("subtask_id"),
+        )
+        if para_report_excerpt:
+            report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
+        failure_reason = "" if ok else _extract_failure_reason(result, para_meta)
+
+        is_final = attempt >= inner_max
+
+        # 决定是否需要内层重试
+        should_retry = False
+        if not ok and not is_final:
+            # code step: dispatch/code 失败 → 反馈原因让员工修代码再交付
+            # review/qa step: dispatch 失败不重试内层（_execute_employee_task_with_retries
+            #                 已重试过瞬态失败），让外层走 _decide_post_loop_policy
+            if retry_kind == "code_fix":
+                should_retry = True
+        elif ok and retry_kind == "marker" and not is_final:
+            # dispatch 成功但 marker 缺失 → 提醒员工按格式重新输出
+            marker_obj = _structured_report_from_step({"report_excerpt": report_excerpt}, marker)
+            if marker_obj is None:
+                should_retry = True
+
+        # 写非最终的 step_retry trace（最终 step 由调用方写）
+        # 只在确实要重试时才写 trace，避免 should_retry=False 时误写一条悬空 step_retry
+        if not is_final and should_retry:
+            trace_record = {
+                "employee_id": employee_id,
+                "error": failure_reason,
+                "inner_attempt": attempt,
+                "ok": ok,
+                "para": para_meta,
+                "phase": "step_retry",
+                "report_excerpt": report_excerpt,
+                "retry_attempts": result.get("self_maintenance_retry_attempts"),
+                "run_id": run_id,
+                "status": "success" if ok else "failed",
+                "step": step_name,
+                "timestamp": _iso(_utc_now()),
+            }
+            _append_ledger(trace_record)
+
+        if not should_retry:
+            break
+
+        if retry_kind == "code_fix":
+            last_task_text = (
+                task_text
+                + f"\n\n=== PREVIOUS ATTEMPT FAILED (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"failure_reason: {failure_reason}\n"
+                + "MANDATORY: Address the failure reason above. Re-run the failing "
+                + "command locally, fix until it passes, then deliver again. Do not "
+                + "report completion unless the previously failing command now exits 0."
+            )
+            code_fix_retry_rounds = attempt
+        else:  # marker
+            last_task_text = (
+                task_text
+                + f"\n\n=== PREVIOUS REPORT MISSING REQUIRED MARKER (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"Your previous report did not include the required JSON marker {marker}. "
+                + f"Re-emit your report with exactly one JSON object after the marker {marker}. "
+                + "Schema and other requirements unchanged."
+            )
+            marker_retry_rounds = attempt
+
+    return (
+        result,
+        ok,
+        failure_reason,
+        para_meta,
+        report_excerpt,
+        code_fix_retry_rounds,
+        marker_retry_rounds,
+    )
+
+
 def _fetch_para_task_report_excerpt(
     task_id: Optional[str], subtask_id: Optional[str], limit: int = 8000
 ) -> str:
@@ -1477,8 +1716,68 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return data
 
 
+def _python_supports_focused_tests(candidate: Path) -> bool:
+    """Return whether a Python executable has the loop's test dependencies."""
+
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        return False
+    try:
+        probe = subprocess.run(
+            [str(candidate), "-c", "import apscheduler, pytest"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+def _focused_test_command() -> str:
+    """Resolve one executable QA command from the running MODstore environment.
+
+    The scheduler may itself run from the lighter FHD venv, which intentionally
+    does not install pytest.  Prefer the MODstore venv used for repository tests
+    and expose explicit overrides for production or isolated runners.
+    """
+
+    command_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
+    if command_override:
+        return command_override
+
+    test_python_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
+    deploy_root = Path(
+        os.environ.get("MODSTORE_DEPLOY_ROOT") or Path(__file__).resolve().parent.parent
+    )
+    runtime_root = os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
+    candidates = [
+        Path(test_python_override).expanduser() if test_python_override else None,
+        deploy_root / ".venv" / "bin" / "python",
+        (
+            Path(runtime_root).expanduser() / "MODstore_deploy" / ".venv" / "bin" / "python"
+            if runtime_root
+            else None
+        ),
+        Path(sys.executable),
+    ]
+    test_python = next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate and _python_supports_focused_tests(candidate)
+        ),
+        Path(sys.executable),
+    )
+    test_path = (
+        "成都修茈科技有限公司/MODstore_deploy/tests/" "test_self_maintenance_loop_runner_policy.py"
+    )
+    return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
+
+
 def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
+    focused_test_command = _focused_test_command()
     evolution_context_dict = build_self_evolution_context(
         run_id=run_id, evaluation=evaluation, memory=memory
     )
@@ -1512,15 +1811,55 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "Only when no historical fix applies may you reason from scratch. "
         "If there is no bug gap, choose one proactive task from performance, coverage, or tech_debt signals. "
         "When you fix a bug, write the symptom/root_cause/fix_diff triad under FHD/XCAGI/kb/fixes; "
+        "every changed fix JSON MUST conform to the EXACT schema below (all fields required, no extras that break validation):\n"
+        "```json\n"
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "kind": "fix",\n'
+        '  "created_at": "2026-07-20T12:00:00+00:00",\n'
+        '  "symptom": "<non-empty string: observed symptom>",\n'
+        '  "root_cause": "<non-empty string: root cause>",\n'
+        '  "fix_diff": "<non-empty string: diff or description>",\n'
+        '  "metadata": {"component": "...", "files": ["..."]},\n'
+        '  "executable_template": {\n'
+        '    "applicability_check": "<non-empty string>",\n'
+        '    "patch_strategy": "<non-empty string>",\n'
+        '    "rollback_plan": "<non-empty string>",\n'
+        '    "required_tests": ["test_a.py", "test_b.py"]\n'
+        "  }\n"
+        "}\n"
+        "```\n"
+        "CRITICAL: executable_template MUST be an object (the executable_template object "
+        "must not be a string, null, or omitted) with non-empty string fields "
+        "applicability_check/patch_strategy/rollback_plan AND a "
+        "string-list required_tests. Common failure: writing fix_diff as a description but "
+        "forgetting executable_template, or setting executable_template to a string. "
+        "MANDATORY PRE-PUSH VALIDATION: Before committing/pushing any KB JSON file, you MUST "
+        'run `python -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
+        "import json; validate_kb_payload('fixes', json.load(open('FHD/XCAGI/kb/fixes/<file>.json')))\"` "
+        "(or 'patterns' for pattern files) and require it to return without raising. If validation "
+        "raises ValueError, FIX the JSON before pushing — the loop will reject KB-schema-invalid "
+        "branches with a `kb-schema-failed` PR label and retry up to 2 times before escalating to "
+        "human review. Validate each changed KB JSON with "
+        "self_evolution_knowledge.validate_kb_payload before reporting completion. "
         "when review/QA approves a reusable change, write the pattern under FHD/XCAGI/kb/patterns. "
         "Do not create marker-only/status-only changes as proof of completion. "
         "Prefer changes that make scheduler gating, loop memory, report-only review/QA, "
         "or policy decisions more directly executable. "
+        f"Before reporting completion, execute `{focused_test_command}` in the target branch "
+        "and require exit code 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
         "NO_ACTION_REASON explaining why no source change was safe. "
         "Do not edit runtime-only, ignored, .devfleet, or .trae files. "
+        "MANDATORY SELF-VERIFICATION: Before reporting completion, you MUST run the "
+        "relevant tests/lint/type-check commands for the files you changed and paste "
+        "the passing output (exit code 0) in your report. If any command fails, fix "
+        "your changes and retry — do NOT report completion with failing tests. The "
+        "loop will reject your delivery if delivery_validation shows exit_code != 0, "
+        "and you will be given the failure_reason to fix; save everyone a round by "
+        "self-verifying first. "
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
@@ -1554,6 +1893,7 @@ def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]
 def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    focused_test_command = _focused_test_command()
     return (
         "MODSTORE_REPORT_ONLY=1. Report-only QA task. "
         "Do not change files, do not commit, and do not push. "
@@ -1565,6 +1905,13 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "and compare `origin/<base>...origin/<target>` or the local equivalent. "
         "If fetch/branch resolution fails, report that exact failure as target_branch_unavailable. "
         "Evaluate the target branch, tests, changed files, and previous loop memory as merge-readiness evidence. "
+        f"You MUST execute the focused verification command `{focused_test_command}` and include its "
+        "exact command, real exit code, and status in tested_commands. If that command's absolute Python "
+        "path does not exist on this worker, also run a platform-equivalent local `python -m pytest` command "
+        "against the same focused test file, and include both attempts in tested_commands. The equivalent "
+        "command is valid evidence only when it executes the same pytest target successfully; a syntax-only "
+        "check or a different test target is not a substitute. Do not fail solely because the scheduler's "
+        "absolute Python path is unavailable when the equivalent focused command passes. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
         "FAIL only for new failures, missing target branch, blocking findings, or unsafe evidence. "
         "Do not fail only because the final terminal ledger record for this in-flight run does not exist yet; "
@@ -1585,18 +1932,27 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
 
 
 def _json_after_marker(text: str, marker: str) -> Optional[Dict[str, Any]]:
-    idx = (text or "").find(marker)
-    if idx < 0:
-        return None
-    tail = text[idx + len(marker) :]
-    tail = tail.lstrip(" \t\r\n:=`")
-    if tail.startswith("json"):
-        tail = tail[4:].lstrip(" \t\r\n")
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(tail)
-        return obj if isinstance(obj, dict) else None
-    except Exception:
-        return None
+    report = text or ""
+    positions: List[int] = []
+    start = 0
+    while True:
+        idx = report.find(marker, start)
+        if idx < 0:
+            break
+        positions.append(idx)
+        start = idx + len(marker)
+    for idx in reversed(positions):
+        tail = report[idx + len(marker) :]
+        tail = tail.lstrip(" \t\r\n:=`")
+        if tail.startswith("json"):
+            tail = tail[4:].lstrip(" \t\r\n")
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(tail)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
 
 
 def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
@@ -1618,6 +1974,43 @@ def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[
             if marker == STRUCTURED_REVIEW_MARKER and "max_severity" in obj:
                 return obj
     return None
+
+
+def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
+    """Accept the focused pytest target across different worker runtimes.
+
+    Para workers may run on a different operating system from the scheduler, so
+    the scheduler's absolute Python path is not portable.  Keep exact matching
+    as the fast path, then accept only a real ``python -m pytest`` invocation
+    of the same focused test file.
+    """
+
+    raw = str(command or "").strip()
+    if not raw:
+        return False
+    if raw == focused_command:
+        return True
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        return False
+    target_name = "test_self_maintenance_loop_runner_policy.py"
+    if not any(Path(token).name == target_name for token in tokens):
+        return False
+    shell_operators = {"&&", "||", ";"}
+    for index in range(1, len(tokens) - 1):
+        if tokens[index : index + 2] != ["-m", "pytest"]:
+            continue
+        python_index = index - 1
+        if not Path(tokens[python_index]).name.lower().startswith("python"):
+            continue
+        segment_start = 0
+        for operator_index, token in enumerate(tokens[:python_index]):
+            if token in shell_operators:
+                segment_start = operator_index + 1
+        if python_index == segment_start:
+            return True
+    return False
 
 
 def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1647,15 +2040,46 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     if qa_steps:
         qa_json = _structured_report_from_step(qa_steps[-1], STRUCTURED_QA_MARKER)
         if not qa_json:
-            return {"ok": False, "reason": "missing_structured_qa_result", "review": review_json}
+            return {
+                "ok": False,
+                "reason": "missing_structured_qa_result",
+                "review": review_json,
+            }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
-            return {"ok": False, "reason": "structured_qa_verdict_not_pass", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_verdict_not_pass",
+                "qa": qa_json,
+            }
         if qa_json.get("target_branch_available") is not True:
-            return {"ok": False, "reason": "structured_qa_target_branch_unavailable", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_target_branch_unavailable",
+                "qa": qa_json,
+            }
         blocking = qa_json.get("blocking_findings")
         if isinstance(blocking, list) and blocking:
-            return {"ok": False, "reason": "structured_qa_blocking_findings", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_blocking_findings",
+                "qa": qa_json,
+            }
+        tested_commands = qa_json.get("tested_commands")
+        focused_command = _focused_test_command()
+        if not isinstance(tested_commands, list) or not any(
+            isinstance(item, dict)
+            and _matches_focused_test_command(item.get("command"), focused_command)
+            and int(item.get("exit_code") if item.get("exit_code") is not None else -1) == 0
+            and str(item.get("status") or "").lower().startswith("passed")
+            for item in tested_commands
+        ):
+            return {
+                "ok": False,
+                "reason": "structured_qa_focused_command_not_passed",
+                "focused_command": focused_command,
+                "qa": qa_json,
+            }
         test_delta = (
             qa_json.get("test_delta") if isinstance(qa_json.get("test_delta"), dict) else {}
         )
@@ -1783,7 +2207,12 @@ def _changed_files_for_branch(
             if _sp_run.returncode == 0:
                 # 把 FETCH_HEAD 创建为 origin/{branch} 引用，让后续 diff/numstat 统一用 origin/{branch}。
                 _run_cmd(
-                    ["git", "update-ref", f"refs/remotes/origin/{branch}", "FETCH_HEAD"],
+                    [
+                        "git",
+                        "update-ref",
+                        f"refs/remotes/origin/{branch}",
+                        "FETCH_HEAD",
+                    ],
                     cwd=workspace,
                 )
                 branch_ref = f"origin/{branch}"
@@ -1883,7 +2312,13 @@ def _validate_kb_json_changes_for_auto_merge(
         checked.append(normalized)
         try:
             raw = _run_cmd(
-                ["git", "-c", "core.quotePath=false", "show", f"origin/{branch}:{normalized}"],
+                [
+                    "git",
+                    "-c",
+                    "core.quotePath=false",
+                    "show",
+                    f"origin/{branch}:{normalized}",
+                ],
                 cwd=workspace,
                 timeout=60,
             )
@@ -1905,6 +2340,444 @@ def _validate_kb_json_changes_for_auto_merge(
     }
 
 
+KB_SCHEMA_RETRY_MAX = 2
+KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
+NEEDS_HUMAN_LABEL = "needs-human"
+
+
+def _early_kb_validation_for_branch(
+    *,
+    run_id: str,
+    branch: str,
+) -> Dict[str, Any]:
+    """Early KB JSON schema validation for a code-step branch.
+
+    Clones the repo (best-effort), fetches the branch, gets the changed-files
+    list, and runs ``_validate_kb_json_changes_for_auto_merge`` against any KB
+    JSON files in the diff. Returns a dict with::
+
+        {
+          "ok": bool,                           # True if validation passed (or no KB files / clone failed)
+          "reason": str,                        # "kb_json_schema_validation_failed" on failure
+          "kb_validation": {...},               # raw _validate_kb_json_changes_for_auto_merge result
+          "files": [...],                       # changed-files list (empty if clone failed)
+          "workspace": str,                     # workspace path used (for cleanup/debug)
+          "clone_error": str | None,            # set if clone/fetch failed (ok=True, non-blocking)
+        }
+
+    Design: clone failures are non-blocking (return ok=True with clone_error set)
+    so the loop falls back to the existing auto_merge-stage validation. Only
+    actual KB schema validation failures return ok=False.
+    """
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    if not repo_url or not base_branch or not branch:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_skipped_missing_env",
+            "kb_validation": None,
+            "files": [],
+            "workspace": "",
+            "clone_error": None,
+        }
+    workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / f"{run_id}-kb-early"
+    try:
+        files = _changed_files_for_branch(
+            repo_url=repo_url,
+            base_branch=base_branch,
+            branch=branch,
+            workspace=workspace,
+        )
+    except Exception as exc:
+        # Clone/fetch failure is non-blocking: fall back to auto_merge-stage check.
+        logger.warning(
+            "early_kb_validation: clone/fetch failed for branch=%s run_id=%s: %s",
+            branch,
+            run_id,
+            exc,
+        )
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_clone_failed",
+            "kb_validation": None,
+            "files": [],
+            "workspace": str(workspace),
+            "clone_error": str(exc)[:500],
+        }
+    if not files:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_no_changed_files",
+            "kb_validation": None,
+            "files": [],
+            "workspace": str(workspace),
+            "clone_error": None,
+        }
+    # Short-circuit: if no KB JSON files in the diff, skip validation entirely.
+    kb_files = [f for f in files if _kb_json_kind_for_repo_path(f)]
+    if not kb_files:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_no_kb_json_changes",
+            "kb_validation": None,
+            "files": files,
+            "workspace": str(workspace),
+            "clone_error": None,
+        }
+    kb_validation = _validate_kb_json_changes_for_auto_merge(
+        branch=branch,
+        files=files,
+        workspace=workspace,
+    )
+    return {
+        "ok": bool(kb_validation.get("ok")),
+        "reason": str(kb_validation.get("reason") or ""),
+        "kb_validation": kb_validation,
+        "files": files,
+        "workspace": str(workspace),
+        "clone_error": None,
+    }
+
+
+def _find_pr_number_for_branch(branch: str) -> Optional[int]:
+    """Find the open PR number for a branch via `gh pr list --head`.
+
+    Returns None if gh is unavailable, not authenticated, or no open PR exists.
+    Never raises — PR commenting/labeling is best-effort.
+    """
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "open",
+        "--json",
+        "number",
+        "--jq",
+        ".[0].number",
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except Exception as exc:
+        logger.warning("kb_schema_retry: gh pr list failed for branch=%s: %s", branch, exc)
+        return None
+    if proc.returncode != 0:
+        logger.warning(
+            "kb_schema_retry: gh pr list rc=%s for branch=%s stderr=%s",
+            proc.returncode,
+            branch,
+            (proc.stderr or "")[:200],
+        )
+        return None
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _gh_pr_comment(pr_number: int, body: str) -> bool:
+    """Best-effort PR comment via `gh pr comment`. Returns True on success."""
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "comment",
+        str(pr_number),
+        "--body",
+        body,
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+    except Exception as exc:
+        logger.warning("kb_schema_retry: gh pr comment failed pr=%s: %s", pr_number, exc)
+        return False
+    if proc.returncode != 0:
+        logger.warning(
+            "kb_schema_retry: gh pr comment rc=%s pr=%s stderr=%s",
+            proc.returncode,
+            pr_number,
+            (proc.stderr or "")[:200],
+        )
+        return False
+    return True
+
+
+def _gh_pr_add_label(pr_number: int, label: str) -> bool:
+    """Best-effort PR label add via `gh pr edit --add-label`. Returns True on success."""
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "edit",
+        str(pr_number),
+        "--add-label",
+        label,
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+    except Exception as exc:
+        logger.warning(
+            "kb_schema_retry: gh pr edit --add-label %s failed pr=%s: %s",
+            label,
+            pr_number,
+            exc,
+        )
+        return False
+    if proc.returncode != 0:
+        # Most common failure: label doesn't exist in repo yet. Log but don't block.
+        logger.warning(
+            "kb_schema_retry: gh pr edit --add-label %s rc=%s pr=%s stderr=%s",
+            label,
+            proc.returncode,
+            pr_number,
+            (proc.stderr or "")[:200],
+        )
+        return False
+    return True
+
+
+def _existing_kb_schema_retry_item(
+    open_items: List[Dict[str, Any]],
+    *,
+    branch: str,
+    para_task_id: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Find the most recent non-escalated kb_schema_retry open_item.
+
+    Matching priority (first match wins, scanning most-recent first):
+      1. Exact branch match
+      2. Exact para_task_id match
+      3. Any non-escalated kb_schema_retry item within the last 24h
+         (so retry_count escalates even if the employee pushes a new branch
+         on each retry — common when the LLM doesn't reuse branches)
+    """
+    now = _utc_now()
+    fallback_within_24h: Optional[Dict[str, Any]] = None
+    for item in reversed(open_items):
+        if not isinstance(item, dict):
+            continue
+        if item.get("kind") != "kb_schema_retry":
+            continue
+        if item.get("escalated"):
+            continue
+        item_branch = str(item.get("branch") or "").strip()
+        item_task_id = str(item.get("para_task_id") or "").strip()
+        if branch and item_branch == branch:
+            return item
+        if para_task_id and item_task_id == para_task_id:
+            return item
+        # Fallback: track recent retries across different branches so the
+        # employee cannot reset retry_count by creating a new branch each time.
+        created_dt = _parse_iso(item.get("created_at") or item.get("last_attempted_at"))
+        if created_dt and (now - created_dt).total_seconds() <= 24 * 3600:
+            if fallback_within_24h is None:
+                fallback_within_24h = item
+    return fallback_within_24h
+
+
+def _reject_and_retry_kb_schema_failure(
+    *,
+    run_id: str,
+    branch: str,
+    para_task_id: Optional[str],
+    kb_validation: Dict[str, Any],
+    steps: List[Dict[str, Any]],
+    gate: Dict[str, Any],
+    triggered_by: str = "scheduled_self_maintenance",
+    started_at: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Reject KB-schema-invalid branch and retry code step (or escalate to human).
+
+    Called immediately after code step completes when KB JSON schema validation fails.
+    Actions (best-effort, never raises):
+      1. Comment on the PR (find by branch via `gh pr list --head`)
+      2. Add ``kb-schema-failed`` label to the PR
+      3. Write/refresh a ``kb_schema_retry`` open_item in loop memory (retry_count++)
+      4. If retry_count >= KB_SCHEMA_RETRY_MAX: add ``needs-human`` label, mark escalated
+      5. Return a final state dict with policy_decision.action=hold_for_automated_remediation
+
+    Next LOOP iteration sees the ``kb_schema_retry`` open_item and re-runs the code step
+    (see ``_resume_review_qa_candidate``). After KB_SCHEMA_RETRY_MAX retries without
+    resolution, the item is marked escalated so the loop stops retrying and waits for
+    human review.
+    """
+    errors = kb_validation.get("errors") if isinstance(kb_validation, dict) else None
+    if not isinstance(errors, list) or not errors:
+        errors = [{"error": "unknown kb schema validation failure", "file": "", "kind": ""}]
+    error_bullets = "\n".join(
+        f"- file: `{e.get('file') or '?'}` kind: `{e.get('kind') or '?'}` "
+        f"error: {(e.get('error') or '')[:300]}"
+        for e in errors[:8]
+    )
+    checked_files = kb_validation.get("checked") if isinstance(kb_validation, dict) else []
+    checked_str = ", ".join(str(f) for f in checked_files) if checked_files else "(none)"
+
+    # Load loop memory to compute retry_count
+    memory = _load_loop_memory()
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    existing = _existing_kb_schema_retry_item(open_items, branch=branch, para_task_id=para_task_id)
+    if existing is not None:
+        retry_count = int(existing.get("retry_count") or 0) + 1
+    else:
+        retry_count = 1
+    escalated = retry_count >= KB_SCHEMA_RETRY_MAX
+
+    # 1. Find PR by branch
+    pr_number = _find_pr_number_for_branch(branch)
+
+    # 2. Comment on PR with error details
+    comment_body = (
+        f"## KB JSON schema validation failed (attempt {retry_count}/{KB_SCHEMA_RETRY_MAX})\n\n"
+        f"The KB JSON file(s) in this branch failed schema validation. "
+        f"Please fix the schema errors below and re-push.\n\n"
+        f"**Checked files:** {checked_str}\n\n"
+        f"**Errors:**\n{error_bullets}\n\n"
+        f"**Required schema for fix KB** (`FHD/XCAGI/kb/fixes/*.json`):\n"
+        "```json\n"
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "kind": "fix",\n'
+        '  "created_at": "<ISO-8601>",\n'
+        '  "symptom": "<non-empty string>",\n'
+        '  "root_cause": "<non-empty string>",\n'
+        '  "fix_diff": "<non-empty string>",\n'
+        '  "metadata": {},\n'
+        '  "executable_template": {\n'
+        '    "applicability_check": "<non-empty string>",\n'
+        '    "patch_strategy": "<non-empty string>",\n'
+        '    "rollback_plan": "<non-empty string>",\n'
+        '    "required_tests": ["test_a.py"]\n'
+        "  }\n"
+        "}\n"
+        "```\n\n"
+        "Validate before push:\n"
+        "```\n"
+        'python -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
+        "import json; validate_kb_payload('fixes', json.load(open('<file>')))\"\n"
+        "```\n"
+    )
+    if escalated:
+        comment_body += (
+            f"\n\n**Escalated to human review** after {retry_count} retry attempts. "
+            f"Manual fix required. The `needs-human` label has been applied."
+        )
+    if pr_number is not None:
+        _gh_pr_comment(pr_number, comment_body)
+        _gh_pr_add_label(pr_number, KB_SCHEMA_FAILED_LABEL)
+        if escalated:
+            _gh_pr_add_label(pr_number, NEEDS_HUMAN_LABEL)
+    else:
+        logger.warning(
+            "kb_schema_retry: no open PR found for branch=%s; skipping PR comment/label",
+            branch,
+        )
+
+    # 3. Write/refresh kb_schema_retry open_item
+    now = _utc_now()
+    if existing is not None:
+        existing["retry_count"] = retry_count
+        existing["last_attempted_at"] = _iso(now)
+        existing["kb_validation_errors"] = errors[:10]
+        existing["run_id"] = run_id
+        existing["escalated"] = escalated
+        if para_task_id:
+            existing["para_task_id"] = para_task_id
+    else:
+        new_item: Dict[str, Any] = {
+            "branch": branch,
+            "created_at": _iso(now),
+            "escalated": escalated,
+            "kind": "kb_schema_retry",
+            "kb_validation_errors": errors[:10],
+            "last_attempted_at": _iso(now),
+            "para_task_id": para_task_id,
+            "retry_count": retry_count,
+            "run_id": run_id,
+            "steps": ["code"],
+        }
+        open_items.append(new_item)
+    memory["open_items"] = open_items
+    memory["updated_at"] = _iso(now)
+    _write_loop_memory(memory)
+
+    # 4. Governance audit record
+    audit_record = {
+        "action": "kb_schema_retry",
+        "actor": "auto",
+        "branch": branch,
+        "escalated": escalated,
+        "created_at": _iso(now),
+        "kb_validation_errors": errors[:10],
+        "ok": False,
+        "pr_number": pr_number,
+        "reason": "kb_json_schema_validation_failed",
+        "retry_count": retry_count,
+        "run_id": run_id,
+        "source": "self_maintenance_loop_runner",
+        "status": "escalated" if escalated else "retrying",
+    }
+    try:
+        _append_governance_audit(audit_record)
+    except Exception:
+        logger.exception("kb_schema_retry: failed to write governance audit")
+
+    # 5. Build final state
+    final_status = "completed_waiting_human_strategy" if escalated else "failed"
+    policy_decision = {
+        "action": "hold_for_automated_remediation",
+        "active_gates": {
+            "kb_schema_gate": {
+                "ok": False,
+                "blocking": True,
+                "reason": "kb_json_schema_validation_failed",
+                "retry_count": retry_count,
+                "escalated": escalated,
+            }
+        },
+        "governance_gate": audit_record,
+        "kb_validation": kb_validation,
+        "reason": "kb_json_schema_validation_failed",
+        "retry_count": retry_count,
+        "escalated": escalated,
+    }
+    final = {
+        "branch": branch,
+        "completed_at": _iso(now),
+        "failed_step": "code",
+        "kb_schema_retry": True,
+        "para_task_id": para_task_id,
+        "phase": "complete",
+        "policy_decision": policy_decision,
+        "run_id": run_id,
+        "started_at": _iso(started_at) if started_at else _iso(now),
+        "status": final_status,
+        "steps": steps,
+        "triggered_by": triggered_by,
+    }
+    _append_ledger(final)
+    return final
+
+
 def _normalize_repo_path(file_name: str) -> str:
     return (file_name or "").replace("\\", "/").strip().strip('"').strip("'")
 
@@ -1914,7 +2787,10 @@ def _diff_stats_changed_files_consistency(
     diff_stats: Dict[str, Any],
 ) -> Dict[str, Any]:
     if not isinstance(diff_stats, dict) or diff_stats.get("source") != "git_diff_numstat":
-        return {"ok": True, "reason": "diff_stats_consistency_not_enforced_for_legacy_input"}
+        return {
+            "ok": True,
+            "reason": "diff_stats_consistency_not_enforced_for_legacy_input",
+        }
     expected = {_normalize_repo_path(file_name) for file_name in files if file_name}
     stats_changed = diff_stats.get("changed_files")
     if not isinstance(stats_changed, list):
@@ -1964,11 +2840,17 @@ def _auto_merge_max_risk_score() -> int:
 
 def _auto_merge_min_safety_score_v2() -> int:
     return max(
-        0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90), 100)
+        0,
+        min(
+            _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90),
+            100,
+        ),
     )
 
 
-def _historical_auto_merge_success_rate(memory: Optional[Dict[str, Any]]) -> Optional[float]:
+def _historical_auto_merge_success_rate(
+    memory: Optional[Dict[str, Any]],
+) -> Optional[float]:
     if not isinstance(memory, dict):
         return None
     recent_runs = memory.get("recent_runs")
@@ -2005,11 +2887,53 @@ def _historical_rollback_rate(memory: Optional[Dict[str, Any]]) -> Optional[floa
     for run in recent_runs[-50:]:
         if not isinstance(run, dict):
             continue
-        text = json.dumps(run, ensure_ascii=False).lower()
-        if "auto_merged_low_risk" in text or "completed_merged" in text:
-            considered += 1
-            if any(term in text for term in ("rollback", "revert", "regression", "回滚", "退回")):
-                rollbacks += 1
+        decision = run.get("policy_decision")
+        decision = decision if isinstance(decision, dict) else {}
+        if (
+            str(decision.get("action") or "") != "auto_merged_low_risk"
+            and str(run.get("status") or "") != "completed_merged"
+        ):
+            continue
+        considered += 1
+        merge_result = decision.get("merge_result")
+        merge_result = merge_result if isinstance(merge_result, dict) else {}
+        rollback_records = [
+            run.get("rollback"),
+            decision.get("rollback"),
+            merge_result.get("rollback"),
+        ]
+        explicit_statuses = {
+            str(run.get("status") or "").lower(),
+            str(run.get("rollback_status") or "").lower(),
+            str(decision.get("action") or "").lower(),
+            str(decision.get("outcome") or "").lower(),
+            str(merge_result.get("outcome") or "").lower(),
+        }
+        rolled_back = bool(
+            explicit_statuses
+            & {
+                "auto_rollback",
+                "completed_rolled_back",
+                "rollback_completed",
+                "rollback_executed",
+                "rolled_back",
+            }
+        )
+        if not rolled_back:
+            for record in rollback_records:
+                if not isinstance(record, dict):
+                    continue
+                status = str(record.get("status") or record.get("outcome") or "").lower()
+                if record.get("executed") is True or status in {
+                    "completed",
+                    "executed",
+                    "rolled_back",
+                    "success",
+                }:
+                    rolled_back = True
+                    break
+        if rolled_back:
+            rollbacks += 1
     if considered <= 0:
         return None
     return rollbacks / considered
@@ -2029,7 +2953,15 @@ def _file_type_risk(file_name: str) -> int:
         return 32
     if any(
         part in lower
-        for part in ("models.py", "/models/", "migration", "alembic", "payment", "auth", "security")
+        for part in (
+            "models.py",
+            "/models/",
+            "migration",
+            "alembic",
+            "payment",
+            "auth",
+            "security",
+        )
     ):
         return 55
     if lower.endswith((".py", ".ts", ".tsx", ".js", ".jsx")):
@@ -2105,7 +3037,9 @@ def _auto_merge_risk_score_v1(
     }
 
 
-def _semantic_review_qa_analysis(steps: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
+def _semantic_review_qa_analysis(
+    steps: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
     if not isinstance(steps, list):
         return {"available": False, "penalty": 8, "reason": "no_structured_llm_reports"}
     penalty = 0
@@ -2119,9 +3053,13 @@ def _semantic_review_qa_analysis(steps: Optional[List[Dict[str, Any]]]) -> Dict[
         if isinstance(review_json, dict):
             reports["review"] = review_json
             severity = str(review_json.get("max_severity") or "medium").lower()
-            penalty += {"none": 0, "low": 2, "medium": 8, "high": 30, "critical": 50}.get(
-                severity, 15
-            )
+            penalty += {
+                "none": 0,
+                "low": 2,
+                "medium": 8,
+                "high": 30,
+                "critical": 50,
+            }.get(severity, 15)
             if review_json.get("blocking_findings"):
                 penalty += 40
         else:
@@ -2647,17 +3585,20 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 select id, email
                 from users
                 where email = 'guest@devfleet.local'
                    or (email like 'guest_%@devfleet.local')
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
-                """).fetchone()
+                """
+            ).fetchone()
     except Exception:
         logger.warning(
-            "failed to read Para guest user from sqlite for local auth mint", exc_info=True
+            "failed to read Para guest user from sqlite for local auth mint",
+            exc_info=True,
         )
         return None
     if not row:
@@ -2922,7 +3863,10 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                             "stale_clear": stale_clear,
                             "status": target.get("status"),
                         }
-                        return {**last_status, "reason": "online_after_stale_current_task_clear"}
+                        return {
+                            **last_status,
+                            "reason": "online_after_stale_current_task_clear",
+                        }
                 if online and current_task:
                     last_status = {
                         "codex_tool": codex_tool,
@@ -2982,6 +3926,36 @@ def _mark_para_task_merged(*, api_base: str, task_id: str, merge_sha: str) -> Di
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def _request_para_task_merge(*, api_base: str, task_id: str) -> Dict[str, Any]:
+    """Queue the already-pushed Para workspace only after loop gates pass.
+
+    The CVM cannot reach GitHub directly, while the Para worker on the Mac can.
+    Keeping this request here makes review, QA and ``autonomy_guard`` the sole
+    authorization path; the device agent only prepares and pushes the branch.
+    """
+
+    workspace_root = (
+        os.environ.get("MODSTORE_PARA_WORKSPACE_ROOT")
+        or "/Users/a4243342/XCMAX-runtime/para-main-agent/workspace"
+    ).strip()
+    workspace_path = str(Path(workspace_root).expanduser() / task_id)
+    headers = _guest_auth_headers(api_base)
+    with httpx.Client(timeout=30.0, trust_env=False, verify=False) as client:
+        resp = client.post(
+            f"{api_base.rstrip('/')}/api/tasks/{task_id}/request-merge",
+            headers=headers,
+            json={"workspace_path": workspace_path, "auto_merge": True},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    return {
+        "ok": True,
+        "para_response": payload,
+        "reason": "merge_requested_after_loop_risk_gate",
+        "workspace_path": workspace_path,
+    }
 
 
 def _loop_steps_roster_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3097,8 +4071,8 @@ def _auto_merge_low_risk_branch(
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     api_base = os.environ.get("MODSTORE_PARA_API_BASE", "").strip()
     # Security guard: by default only local file:// repos allow auto-merge.
-    # Operators can opt-in to remote https:// repos by setting
-    # MODSTORE_AUTO_MERGE_ALLOW_REMOTE=1 (e.g. for trusted GitHub forks).
+    # Trusted remote repos use the Para worker, but the request is emitted only
+    # after review, QA and the autonomy SSOT have all passed.
     allow_remote = _env_bool("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", False)
     if not repo_url.startswith("file://") and not (
         allow_remote and repo_url.startswith(("http://", "https://"))
@@ -3108,6 +4082,46 @@ def _auto_merge_low_risk_branch(
         return {"ok": False, "reason": "missing_base_branch"}
     if not api_base:
         return {"ok": False, "reason": "missing_api_base"}
+
+    if repo_url.startswith(("http://", "https://")):
+        report_gate = _structured_report_gate(steps or [])
+        if not report_gate.get("ok"):
+            return {
+                "ok": False,
+                "reason": report_gate.get("reason") or "structured_reports_not_passed",
+                "structured_report_gate": report_gate,
+            }
+
+        from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+        decision = evaluate_risk(
+            "self_maintenance_l1_merge",
+            action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+            source="self_maintenance_loop.remote_merge_request",
+        )
+        if not decision.allowed:
+            return {
+                "ok": False,
+                "reason": "autonomy_guard_blocked",
+                "risk_decision": decision.to_dict(),
+            }
+        try:
+            request_result = _request_para_task_merge(api_base=api_base, task_id=task_id)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc)[:500],
+                "reason": "para_merge_request_failed",
+                "risk_decision": decision.to_dict(),
+            }
+        return {
+            "ok": True,
+            "merge_requested": True,
+            "para_request": request_result,
+            "reason": "merge_requested_after_loop_risk_gate",
+            "risk_decision": decision.to_dict(),
+            "structured_report_gate": report_gate,
+        }
 
     workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / run_id
     files = _changed_files_for_branch(
@@ -3173,11 +4187,7 @@ def _auto_merge_low_risk_branch(
     if not decision.allowed:
         return {
             "ok": False,
-            "reason": (
-                "autonomy_guard_pending_approval"
-                if decision.requires_confirmation
-                else "autonomy_guard_blocked"
-            ),
+            "reason": "autonomy_guard_blocked",
             "risk_decision": decision.to_dict(),
         }
 
@@ -3222,33 +4232,12 @@ def _decide_post_loop_policy(
     status: str,
     steps: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    def _await_human(reason: str, **extra: Any) -> Dict[str, Any]:
-        decision = {
-            "action": "await_human_strategy_approval",
+    def _hold_for_remediation(reason: str, **extra: Any) -> Dict[str, Any]:
+        return {
+            "action": "hold_for_automated_remediation",
             "reason": reason,
             **extra,
         }
-        try:
-            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-
-            decision["uncertainty_queue"] = enqueue_uncertain_item(
-                context={
-                    "branch": branch,
-                    "active_gates": extra.get("active_gates"),
-                    "evolution_gate": extra.get("evolution_gate"),
-                    "gate": gate,
-                    "governance_gate": extra.get("governance_gate"),
-                    "para_task_id": para_task_id,
-                    "roster_gate": extra.get("roster_gate"),
-                    "run_id": run_id,
-                    "status": status,
-                },
-                decision=decision,
-                reason=reason,
-            )
-        except Exception as exc:
-            decision["uncertainty_queue"] = {"queued": False, "error": str(exc)[:300]}
-        return decision
 
     if status != "completed":
         return {"action": "stop", "reason": "loop_not_completed"}
@@ -3277,7 +4266,7 @@ def _decide_post_loop_policy(
         structured_gate=structured_gate,
     )
     if not structured_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             structured_gate.get("reason") or "structured_report_gate_failed",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3286,7 +4275,7 @@ def _decide_post_loop_policy(
             structured_gate=structured_gate,
         )
     if report_only_missing:
-        return _await_human(
+        return _hold_for_remediation(
             "missing_report_only_evidence",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3294,7 +4283,7 @@ def _decide_post_loop_policy(
             roster_gate=roster_gate,
         )
     if not roster_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             roster_gate.get("reason") or "roster_gate_failed",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3302,14 +4291,14 @@ def _decide_post_loop_policy(
             roster_gate=roster_gate,
         )
     if not governance_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             governance_gate.get("reason") or "governance_gate_failed",
             active_gates=active_gates,
             governance_gate=governance_gate,
             roster_gate=roster_gate,
         )
     if bool(evolution_gate.get("pause")):
-        return _await_human(
+        return _hold_for_remediation(
             evolution_gate.get("reason") or "evolution_metrics_pause",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3326,7 +4315,7 @@ def _decide_post_loop_policy(
             "roster_gate": roster_gate,
         }
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", True):
-        return _await_human(
+        return _hold_for_remediation(
             "auto_merge_disabled",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3341,17 +4330,20 @@ def _decide_post_loop_policy(
         steps=steps,
     )
     if merge_result.get("ok"):
+        merge_requested = bool(merge_result.get("merge_requested"))
         return {
-            "action": "auto_merged_low_risk",
+            "action": (
+                "auto_merge_requested_low_risk" if merge_requested else "auto_merged_low_risk"
+            ),
             "active_gates": active_gates,
             "evolution_gate": evolution_gate,
             "gate": gate,
             "governance_gate": governance_gate,
             "merge_result": merge_result,
-            "reason": "low_risk_policy_passed",
+            "reason": ("low_risk_merge_requested" if merge_requested else "low_risk_policy_passed"),
             "roster_gate": roster_gate,
         }
-    return _await_human(
+    return _hold_for_remediation(
         merge_result.get("reason") or "auto_merge_not_allowed",
         gate=gate,
         active_gates=active_gates,
@@ -3360,6 +4352,146 @@ def _decide_post_loop_policy(
         merge_result=merge_result,
         roster_gate=roster_gate,
     )
+
+
+LOOP_EVICT_MAX_ITEMS = 100
+LOOP_EVICT_STUCK_AGE_SECONDS = 24 * 3600
+LOOP_EVICT_STUCK_RETRY_THRESHOLD = 3
+LOOP_EVICT_AGE_OUT_SECONDS = 7 * 24 * 3600
+
+
+def _evict_loop_memory_items(
+    memory: Dict[str, Any],
+    *,
+    actor: str = "auto",
+    note: str = "",
+    admin_user_id: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Evict stale open_items so the loop can resume fresh runs.
+
+    Rules (checked in order, first match wins):
+      - any item with created_at > 7d  → evict (reason=aged_out_7d)
+      - failed_steps item with created_at > 24h AND retry_count >= 3
+        → evict (reason=stuck_24h_retry_3)
+    Evicted items are appended to memory["evicted_items"] (capped at the last
+    LOOP_EVICT_MAX_ITEMS entries) and a ``loop_evicted`` governance audit
+    record is written so the action is visible in the governance UI.
+    Returns a summary dict; never raises.
+    """
+
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    evicted_items = memory.get("evicted_items")
+    if not isinstance(evicted_items, list):
+        evicted_items = []
+
+    now = _utc_now()
+    kept: List[Dict[str, Any]] = []
+    newly_evicted: List[Dict[str, Any]] = []
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        created_dt = _parse_iso(item.get("created_at"))
+        age_seconds = (now - created_dt).total_seconds() if created_dt else 0.0
+        retry_count = int(item.get("retry_count") or 0)
+        kind = str(item.get("kind") or "")
+
+        evict_reason = ""
+        if age_seconds >= LOOP_EVICT_AGE_OUT_SECONDS:
+            evict_reason = "aged_out_7d"
+        elif (
+            kind == "failed_steps"
+            and age_seconds >= LOOP_EVICT_STUCK_AGE_SECONDS
+            and retry_count >= LOOP_EVICT_STUCK_RETRY_THRESHOLD
+        ):
+            evict_reason = "stuck_24h_retry_3"
+
+        if evict_reason:
+            evicted_entry: Dict[str, Any] = {
+                "actor": actor,
+                "evicted_at": _iso(now),
+                "evict_reason": evict_reason,
+                "original_item": item,
+            }
+            if note:
+                evicted_entry["note"] = str(note)[:1000]
+            if admin_user_id is not None:
+                evicted_entry["admin_user_id"] = admin_user_id
+            newly_evicted.append(evicted_entry)
+        else:
+            kept.append(item)
+
+    memory["open_items"] = kept
+    memory["evicted_items"] = (evicted_items + newly_evicted)[-LOOP_EVICT_MAX_ITEMS:]
+
+    if not newly_evicted:
+        return {
+            "evicted_count": 0,
+            "evicted_items": [],
+            "reasons": {
+                "aged_out_7d": 0,
+                "stuck_24h_retry_3": 0,
+            },
+        }
+
+    reasons = {
+        "aged_out_7d": sum(1 for entry in newly_evicted if entry["evict_reason"] == "aged_out_7d"),
+        "stuck_24h_retry_3": sum(
+            1 for entry in newly_evicted if entry["evict_reason"] == "stuck_24h_retry_3"
+        ),
+    }
+    summary_record = {
+        "action": "loop_evicted",
+        "actor": actor,
+        "admin_user_id": admin_user_id,
+        "created_at": _iso(now),
+        "evicted_count": len(newly_evicted),
+        "evicted_items": newly_evicted,
+        "note": str(note or "")[:1000],
+        "ok": True,
+        "reasons": reasons,
+        "source": "self_maintenance_loop_runner",
+        "status": "evicted",
+    }
+    try:
+        _append_governance_audit(summary_record)
+    except Exception:
+        logger.exception("failed to write loop_evicted governance audit")
+
+    return {
+        "evicted_count": len(newly_evicted),
+        "evicted_items": newly_evicted,
+        "reasons": reasons,
+    }
+
+
+def evict_loop_memory_items(
+    *,
+    actor: str = "manual",
+    note: str = "",
+    admin_user_id: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Manually evict stale loop-memory open_items (veto channel).
+
+    Exposed via POST /api/xcmax/admin/loop/memory/evict for human override when
+    the loop is stuck resuming long-failed runs.
+    """
+
+    memory = _load_loop_memory()
+    result = _evict_loop_memory_items(
+        memory,
+        actor=actor,
+        note=note,
+        admin_user_id=admin_user_id,
+    )
+    memory["updated_at"] = _iso(_utc_now())
+    _write_loop_memory(memory)
+    return {
+        **result,
+        "memory_path": str(loop_memory_path()),
+        "open_items_remaining": len(memory.get("open_items") or []),
+    }
 
 
 def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
@@ -3458,14 +4590,14 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             if final.get("para_task_id"):
                 new_item["para_task_id"] = final.get("para_task_id")
             open_items.append(new_item)
-    if decision.get("action") == "await_human_strategy_approval":
+    if decision.get("action") == "hold_for_automated_remediation":
         open_items.append(
             {
                 "branch": final.get("branch"),
                 "active_gates": decision.get("active_gates"),
                 "created_at": _iso(_utc_now()),
                 "evolution_gate": decision.get("evolution_gate"),
-                "kind": "human_strategy_approval",
+                "kind": "automated_remediation",
                 "governance_gate": decision.get("governance_gate"),
                 "reason": decision.get("reason"),
                 "roster_gate": decision.get("roster_gate"),
@@ -3581,8 +4713,18 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         }
     )
 
+    # Auto-evict stale open_items before persistence so long-failed runs do
+    # not get resumed every LOOP iteration (24h + retry_count>=3, or 7d old).
+    try:
+        evict_summary = _evict_loop_memory_items(memory, actor="auto")
+    except Exception:
+        evict_summary = {"evicted_count": 0, "error": "evict_failed"}
+        logger.exception("loop memory auto-evict failed run_id=%s", final.get("run_id"))
+
     memory.update(
         {
+            "evicted_items": memory.get("evicted_items", [])[-LOOP_EVICT_MAX_ITEMS:],
+            "last_evict_summary": evict_summary,
             "last_gate": gate,
             "last_knowledge_record": knowledge_record,
             "last_policy_decision": decision,
@@ -3651,7 +4793,13 @@ def run_self_maintenance_loop(
     code_branch: Optional[str] = str(resume_candidate.get("branch")) if resume_candidate else None
 
     plan = []
-    if not resume_candidate:
+    steps_to_run = _resume_steps(resume_candidate)
+    if "code" in steps_to_run:
+        # A failed code task is terminal in Para. Start a fresh task/branch;
+        # reusing its id would produce an empty resume plan forever.
+        if resume_candidate:
+            para_task_id = None
+            code_branch = None
         plan.append(
             (
                 "vibe-coding-maintainer",
@@ -3666,12 +4814,7 @@ def run_self_maintenance_loop(
                 },
             )
         )
-    resume_failed_steps = (
-        set(resume_candidate.get("failed_steps") or []) if resume_candidate else set()
-    )
-    should_run_review = not resume_candidate or "review" in resume_failed_steps
-    should_run_qa = not resume_candidate or bool({"review", "qa"} & resume_failed_steps)
-    if should_run_review:
+    if "review" in steps_to_run:
         plan.append(
             (
                 "change-request-auditor",
@@ -3687,7 +4830,7 @@ def run_self_maintenance_loop(
                 },
             )
         )
-    if should_run_qa:
+    if "qa" in steps_to_run:
         plan.append(
             (
                 "test-qa-runner",
@@ -3721,28 +4864,27 @@ def run_self_maintenance_loop(
                     "review_target_para_task_id": para_task_id,
                 }
 
-            input_data = _base_para_input(extra)
-            result = _execute_employee_task_with_retries(
-                employee_id,
-                task_text,
-                input_data,
+            (
+                result,
+                ok,
+                failure_reason,
+                para_meta,
+                report_excerpt,
+                code_fix_retry_rounds,
+                marker_retry_rounds,
+            ) = _run_step_with_inner_retries(
+                employee_id=employee_id,
+                step_name=step_name,
+                task_text=task_text,
+                extra=extra,
                 user_id=user_id,
+                run_id=run_id,
             )
-            ok = _employee_result_ok(result)
-            para_meta = _extract_para_meta(result)
-            report_excerpt = _extract_report_excerpt(result)
-            para_report_excerpt = _fetch_para_task_report_excerpt(
-                para_meta.get("task_id"),
-                para_meta.get("subtask_id"),
-            )
-            if para_report_excerpt:
-                report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
             if para_meta.get("task_id") and para_task_id is None:
                 para_task_id = str(para_meta["task_id"])
             if step_name == "code" and para_meta.get("branch"):
                 code_branch = str(para_meta["branch"])
 
-            failure_reason = "" if ok else _extract_failure_reason(result, para_meta)
             step_record = {
                 "employee_id": employee_id,
                 "error": failure_reason,
@@ -3751,6 +4893,8 @@ def run_self_maintenance_loop(
                 "phase": "step",
                 "report_excerpt": report_excerpt,
                 "retry_attempts": result.get("self_maintenance_retry_attempts"),
+                "code_fix_retry_rounds": code_fix_retry_rounds,
+                "marker_retry_rounds": marker_retry_rounds,
                 "run_id": run_id,
                 "status": "success" if ok else "failed",
                 "step": step_name,
@@ -3787,6 +4931,45 @@ def run_self_maintenance_loop(
                 _update_loop_memory(final, gate)
                 return final
 
+            # Early KB JSON schema validation: right after code step succeeds,
+            # before review/qa. If the employee pushed KB JSON files with schema
+            # errors (e.g., missing/wrong executable_template), reject the branch
+            # immediately and retry the code step (or escalate to human after
+            # KB_SCHEMA_RETRY_MAX attempts). This avoids wasting review/qa cycles
+            # on schema-invalid branches and gives the employee fast feedback.
+            if step_name == "code" and ok and code_branch:
+                try:
+                    early_kb = _early_kb_validation_for_branch(run_id=run_id, branch=code_branch)
+                except Exception:
+                    logger.exception(
+                        "early KB validation crashed for branch=%s run_id=%s; skipping",
+                        code_branch,
+                        run_id,
+                    )
+                    early_kb = {"ok": True, "reason": "early_kb_validation_crashed"}
+                if (
+                    isinstance(early_kb, dict)
+                    and not early_kb.get("ok")
+                    and early_kb.get("reason") == "kb_json_schema_validation_failed"
+                    and isinstance(early_kb.get("kb_validation"), dict)
+                ):
+                    logger.warning(
+                        "early KB schema validation failed for branch=%s run_id=%s; "
+                        "rejecting and retrying code step",
+                        code_branch,
+                        run_id,
+                    )
+                    return _reject_and_retry_kb_schema_failure(
+                        run_id=run_id,
+                        branch=code_branch,
+                        para_task_id=para_task_id,
+                        kb_validation=early_kb["kb_validation"],
+                        steps=steps,
+                        gate=gate,
+                        triggered_by=triggered_by,
+                        started_at=started_at,
+                    )
+
         policy_decision = _decide_post_loop_policy(
             branch=code_branch,
             gate=gate,
@@ -3798,8 +4981,10 @@ def run_self_maintenance_loop(
         final_status = "completed"
         if policy_decision.get("action") == "auto_merged_low_risk":
             final_status = "completed_merged"
-        elif policy_decision.get("action") == "await_human_strategy_approval":
-            final_status = "completed_waiting_human_strategy"
+        elif policy_decision.get("action") == "auto_merge_requested_low_risk":
+            final_status = "completed_merge_requested"
+        elif policy_decision.get("action") == "hold_for_automated_remediation":
+            final_status = "completed_held_for_remediation"
 
         final = {
             "branch": code_branch,
@@ -4028,7 +5213,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ):
                 if key in value:
                     _add_participant(str(value.get(key) or ""), value, source)
-            for key in ("steps", "nodes", "result", "employee_results", "reports", "items"):
+            for key in (
+                "steps",
+                "nodes",
+                "result",
+                "employee_results",
+                "reports",
+                "items",
+            ):
                 if key in value:
                     _collect_participants(value.get(key), source)
         elif isinstance(value, list):
@@ -4432,7 +5624,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                         item.get("executable_template", {}).get("required_tests")
                         if isinstance(item.get("executable_template"), dict)
                         and isinstance(
-                            item.get("executable_template", {}).get("required_tests"), list
+                            item.get("executable_template", {}).get("required_tests"),
+                            list,
                         )
                         else []
                     ),
@@ -4600,7 +5793,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "register_duty_employees"
-            next_actions = ["register_duty_employees", "refresh_self_maintenance_status"]
+            next_actions = [
+                "register_duty_employees",
+                "refresh_self_maintenance_status",
+            ]
         elif gate_action == "isolate":
             state = "requires_roster_isolation"
             tone = "bad"
@@ -4627,7 +5823,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             primary_surface = "self_evolution_loop"
             primary_view = "loop"
             primary_action = "inspect_governance_audit"
-            next_actions = ["inspect_governance_audit", "review_failed_governance_actions"]
+            next_actions = [
+                "inspect_governance_audit",
+                "review_failed_governance_actions",
+            ]
         elif not participant_count:
             state = "waiting_for_loop_participants"
             tone = "warn"
@@ -4744,7 +5943,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "governance_health": governance_audit_summary,
             "next_actions": next_actions,
             "handoff_path": [
-                {"surface": "self_evolution_loop", "role": "runtime_overview", "view": "loop"},
+                {
+                    "surface": "self_evolution_loop",
+                    "role": "runtime_overview",
+                    "view": "loop",
+                },
                 {
                     "surface": "duty_roster_graph",
                     "role": "governance_surface",
@@ -4805,7 +6008,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "governance_audit",
             "merge_decision",
         ],
-        "surfaces": ["employee_space", "duty_roster_graph", "self_evolution_loop_runtime"],
+        "surfaces": [
+            "employee_space",
+            "duty_roster_graph",
+            "self_evolution_loop_runtime",
+        ],
         "identity_dependencies": ["participants", "roster_alignment", "ui_bridge"],
         "gate_dependencies": [
             "active_gates",
@@ -4814,7 +6021,12 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "merge_decision",
             "evolution_metrics_summary",
         ],
-        "truth_dependencies": ["source", "evidence", "governance_audit", "run_timelines"],
+        "truth_dependencies": [
+            "source",
+            "evidence",
+            "governance_audit",
+            "run_timelines",
+        ],
         "required_nested": [
             "active_gates.items",
             "governance_audit.summary",
@@ -5236,6 +6448,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ),
             "auto_merge_scope_globs": _auto_merge_scope_globs(),
             "report_timeout_sec": _env_int("MODSTORE_SELF_MAINTENANCE_REPORT_TIMEOUT_SEC", 1800),
+            "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
         },

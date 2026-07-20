@@ -4,6 +4,11 @@
 1. .sh 文件必须有 shebang（#!/bin/bash 或 #!/usr/bin/env bash）—— lib/ 目录除外（库文件被 source）
 2. .sh 文件应有 set -euo pipefail（或至少 set -e）—— lib/ 目录除外
 3. 不应硬编码产品版本号（四段 x.y.z.w 出现在 .sh 中视为可疑）—— 仅警告，不阻断
+
+版本号 vs IP 地址识别：
+- 部署脚本中合法出现 IP（127.0.0.1、119.27.178.147 等），不是版本号
+- 用上下文关键字（HOST/IP/curl/http/@127./DATABASE_URL 等）排除 IP 误报
+- fallback 版本号（如 1.0.0.0）仍会被报告，提醒开发者考虑动态读取
 """
 from __future__ import annotations
 
@@ -19,6 +24,11 @@ from scripts.dev.ssot_plugins.base import ROOT  # noqa: E402
 
 DEPLOY_ROOT = ROOT / "scripts" / "deploy"
 HARDCODED_VERSION_RE = re.compile(r"\b\d+\.\d+\.\d+\.\d+\b")
+# IP 上下文关键字：行中含这些片段时，四段数字视为 IP 而非版本号。
+# 覆盖：HOST 变量、curl http://、@127.（数据库连接串替换）、DATABASE_URL/VECTOR_DB_URL 等。
+_IP_CONTEXT_RE = re.compile(
+    r"(?:HOST|IP|curl|http|@127\.|127\.0\.0\.1|0\.0\.0\.0|DATABASE_URL|VECTOR_DB_URL|host\.docker\.internal)"
+)
 
 
 def _is_lib_file(rel: Path) -> bool:
@@ -58,8 +68,13 @@ def check_drift() -> int:
                 errors.append(f"{rel}: 缺少 'set -e'（建议 set -euo pipefail）")
 
         # 规则 3：硬编码版本号（仅警告）
+        # _IP_CONTEXT_RE 跳过含 IP 上下文关键字的行（127.0.0.1、119.27.178.147 等合法 IP）
         for i, line in enumerate(lines, 1):
-            if HARDCODED_VERSION_RE.search(line) and not line.strip().startswith("#"):
+            if (
+                HARDCODED_VERSION_RE.search(line)
+                and not _IP_CONTEXT_RE.search(line)
+                and not line.strip().startswith("#")
+            ):
                 warnings.append(f"{rel}:L{i}: 硬编码四段产品版本号")
 
     if warnings:

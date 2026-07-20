@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>XCAGI 下载中心 | 成都修茈科技有限公司</title>
+    <meta name="description" content="下载 XCAGI 企业版客户端:Windows / macOS 桌面端与 Android 移动端。本地运行、数据自有,安装后从 XC AGI 市场装入行业 Mod。" />
+    <link rel="stylesheet" href="./styles.css?v=20260610d" />
+    <style>
+      /* ===== XCAGI 下载中心:独立视觉身份(深色产品面,不跟随官网浅色营销面) ===== */
+      .dl-body {
+        background:
+          radial-gradient(circle at 85% -10%, rgba(36, 213, 255, 0.14), transparent 30rem),
+          radial-gradient(circle at 8% 110%, rgba(255, 176, 32, 0.08), transparent 26rem),
+          linear-gradient(180deg, #07111f 0%, #0a1728 100%);
+        color: #f0f4fa;
+        min-height: 100vh;
+      }
+      .dl-header {
+        position: sticky; top: 0; z-index: 80;
+        background: rgba(7, 17, 31, 0.88);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      }
+      .dl-header-inner { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .dl-brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; }
+      .dl-brand img { width: 44px; height: 44px; border-radius: 12px; object-fit: contain; background: #fff; padding: 3px; }
+      .dl-brand strong { font-size: 16px; color: #fff; letter-spacing: 0.01em; }
+      .dl-brand span { display: block; font-size: 11px; color: rgba(255,255,255,0.45); letter-spacing: 0.1em; text-transform: uppercase; }
+      .dl-header-links { display: flex; align-items: center; gap: 10px; }
+      .dl-header-links a {
+        font-size: 14px; color: rgba(255,255,255,0.72); text-decoration: none;
+        padding: 8px 14px; border-radius: var(--radius-pill); transition: color .15s ease, background .15s ease;
+      }
+      .dl-header-links a:hover { color: #fff; background: rgba(255,255,255,0.08); }
+      .dl-header-links a.dl-market-link {
+        color: #07111f; background: linear-gradient(135deg, #24d5ff, #7ef0c9); font-weight: 700;
+      }
+      .dl-header-links a.dl-market-link:hover { background: linear-gradient(135deg, #4bddff, #93f5d5); }
+
+      .dl-main { display: flex; flex-direction: column; align-items: center; text-align: center; padding: clamp(48px, 8vh, 88px) 0 clamp(56px, 8vh, 96px); }
+      .dl-logo { width: 96px; height: 96px; border-radius: 24px; background: #fff; padding: 6px; box-shadow: 0 24px 64px rgba(36, 213, 255, 0.22); }
+      .dl-title { margin: 26px 0 10px; font-size: clamp(30px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; color: #fff; }
+      .dl-sub { margin: 0; max-width: 30rem; font-size: 15px; line-height: 1.7; color: rgba(255,255,255,0.55); }
+      .dl-version { margin-top: 14px; font-size: 13px; color: rgba(255,255,255,0.45); }
+      .dl-version strong { color: #7ef0c9; font-weight: 700; }
+
+      .dl-tabs { display: inline-flex; gap: 6px; margin-top: 30px; padding: 4px; border-radius: var(--radius-pill); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); }
+      .dl-tab {
+        border: 0; background: transparent; color: rgba(255,255,255,0.6);
+        font-size: 14px; font-weight: 600; padding: 8px 22px; border-radius: var(--radius-pill);
+        cursor: pointer; transition: background .15s ease, color .15s ease;
+      }
+      .dl-tab--active { background: rgba(255,255,255,0.14); color: #fff; }
+
+      .dl-cards { width: min(100%, 460px); margin-top: 26px; display: grid; gap: 12px; text-align: left; }
+      .dl-card {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 18px 20px; border-radius: var(--radius-md);
+        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+        cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .15s ease;
+        color: inherit; text-decoration: none;
+      }
+      .dl-card:hover { border-color: rgba(36,213,255,0.5); background: rgba(255,255,255,0.08); transform: translateY(-2px); }
+      .dl-card--primary { border-color: rgba(255,176,32,0.45); background: rgba(255,176,32,0.07); }
+      .dl-card--primary:hover { border-color: rgba(255,176,32,0.8); background: rgba(255,176,32,0.12); }
+      .dl-card[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+      .dl-card__main { display: grid; gap: 3px; min-width: 0; }
+      .dl-card__name { font-size: 16px; font-weight: 700; color: #fff; }
+      .dl-card__meta { font-size: 12px; color: rgba(255,255,255,0.42); }
+      .dl-card__action { flex-shrink: 0; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.6); white-space: nowrap; }
+      .dl-card--primary .dl-card__action { color: var(--amber); }
+
+      .dl-pending { margin-top: 18px; font-size: 13px; color: #f6c76a; }
+      .dl-note { margin: 30px auto 0; max-width: 28rem; font-size: 12.5px; line-height: 1.7; color: rgba(255,255,255,0.38); }
+      .dl-note a { color: rgba(255,255,255,0.6); text-decoration: underline; text-underline-offset: 2px; }
+      .dl-next { margin-top: 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+      .dl-next a {
+        font-size: 14px; font-weight: 600; text-decoration: none; padding: 11px 22px; border-radius: var(--radius-pill);
+        border: 1px solid rgba(255,255,255,0.16); color: rgba(255,255,255,0.8); transition: background .15s ease, color .15s ease;
+      }
+      .dl-next a:hover { background: rgba(255,255,255,0.1); color: #fff; }
+      .dl-next a.dl-next--accent { border: 0; color: #07111f; background: linear-gradient(135deg, #24d5ff, #7ef0c9); }
+    </style>
+  </head>
+  <body class="dl-body">
+    <header class="dl-header">
+      <div class="container dl-header-inner">
+        <a class="dl-brand" href="/corp-butler/brand-xc-logo.jpg" aria-label="XCAGI" onclick="return false" style="cursor:default">
+          <img src="/corp-butler/brand-xc-logo.jpg" alt="XCAGI Logo" />
+          <span><strong>XCAGI 下载中心</strong><span>XCAGI Download</span></span>
+        </a>
+        <nav class="dl-header-links" aria-label="快捷导航">
+          <a href="/index.html">返回官网</a>
+          <a class="dl-market-link" href="/market/">进入 AI 市场</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container dl-main">
+      <img class="dl-logo" src="/corp-butler/brand-xc-logo.jpg" alt="XCAGI" width="96" height="96" />
+      <h1 class="dl-title">下载 XCAGI</h1>
+      <p class="dl-sub" id="dl-sub">企业版客户端:AI 对话、Excel 单据解析与自动化工作流,本地运行、数据自有。</p>
+      <p class="dl-version" id="dl-version">正在获取最新版本…</p>
+
+      <div class="dl-tabs" role="tablist" aria-label="选择平台">
+        <button type="button" role="tab" class="dl-tab dl-tab--active" id="tab-desktop" aria-selected="true">桌面端</button>
+        <button type="button" role="tab" class="dl-tab" id="tab-android" aria-selected="false">Android</button>
+      </div>
+
+      <p class="dl-pending" id="dl-pending" hidden>1.0.0.0 稳定版制品正在签名与验收,完成后开放下载。</p>
+
+      <div class="dl-cards" id="dl-cards" aria-label="可下载版本"></div>
+
+      <p class="dl-note" id="dl-note">
+        支持 Windows 10+(64 位)、macOS 12+。安装后打开,首次向导会引导你装入行业 Mod;
+        也可以先到 <a href="/market/">XC AGI 市场</a> 看看有哪些 AI 员工。
+      </p>
+
+      <div class="dl-next">
+        <a href="/index.html">了解修茈科技</a>
+        <a href="/contact.html">需要定制化服务?</a>
+        <a class="dl-next--accent" href="/market/">进入 XC AGI 市场</a>
+      </div>
+    </main>
+
+    <script>
+    (function () {
+      'use strict';
+
+      var DEFAULT_VERSION = '1.0.0.0';
+      var DEFAULT_ANDROID_VERSION = '1.0.0.0';
+      var DEFAULT_BASE = 'https://xiu-ci.com/xcagi-v' + DEFAULT_VERSION;
+      var state = {
+        version: DEFAULT_VERSION,
+        androidVersion: DEFAULT_ANDROID_VERSION,
+        base: DEFAULT_BASE,
+        winMb: '',
+        releaseReady: true,
+        manifest: null,
+        tab: 'desktop',
+        macArch: 'arm64'
+      };
+
+      // ---------- 平台/架构检测(移植自 market xcagiDownloadLinks) ----------
+      function detectMacArch() {
+        var q = new URLSearchParams(window.location.search).get('macArch');
+        if (q) {
+          q = q.toLowerCase();
+          if (q === 'arm64' || q === 'aarch64') return 'arm64';
+          if (q === 'x64' || q === 'x86_64' || q === 'intel') return 'x64';
+        }
+        var ua = navigator.userAgent || '';
+        if (/\b(aarch64|arm64)\b/i.test(ua)) return 'arm64';
+        try {
+          var canvas = document.createElement('canvas');
+          var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          if (gl && gl.getExtension) {
+            var ext = gl.getExtension('WEBGL_debug_renderer_info');
+            if (ext) {
+              var renderer = String(gl.getParameter(ext.UNMASKED_RENDERER_INFO));
+              if (/Apple M\d|Apple GPU/i.test(renderer)) return 'arm64';
+            }
+          }
+        } catch (e) { /* ignore */ }
+        var nud = navigator.userAgentData;
+        if (nud && nud.architecture === 'x86') return 'x64';
+        return 'arm64';
+      }
+
+      function isMobileOrAndroid() {
+        return window.matchMedia('(max-width: 768px)').matches || /Android/i.test(navigator.userAgent || '');
+      }
+
+      // ---------- URL 生成(与 market 侧文件名契约一致) ----------
+      function fileName(platform) {
+        var label = 'Enterprise';
+        if (platform === 'android') return 'XCAGI-' + label + '-Android-' + state.androidVersion + '.apk';
+        if (platform === 'mac') return 'XCAGI-' + label + '-' + state.version + '-mac-' + state.macArch + '.dmg';
+        return 'XCAGI-' + label + '-Setup-' + state.version + '-x64.exe';
+      }
+
+      function staticUrl(platform) {
+        return state.base + '/enterprise/' + fileName(platform);
+      }
+
+      function manifestEntry(platform) {
+        var m = state.manifest;
+        if (!m || !m.channels || !m.channels.official_download) return null;
+        var sku = m.channels.official_download.enterprise;
+        if (!sku) return null;
+        if (platform === 'win') return sku.win || null;
+        if (platform === 'android') return sku.android || null;
+        if (platform === 'mac') {
+          var macs = sku.mac || [];
+          for (var i = 0; i < macs.length; i++) if (macs[i].arch === state.macArch) return macs[i];
+          return macs[0] || null;
+        }
+        return null;
+      }
+
+      function downloadUrl(platform) {
+        var entry = manifestEntry(platform);
+        return entry && entry.url ? entry.url : staticUrl(platform);
+      }
+
+      function metaText(platform) {
+        var entry = manifestEntry(platform);
+        var bits = [];
+        if (entry && entry.size) bits.push('约 ' + Math.round(entry.size / 1048576) + ' MB');
+        else if (platform === 'win' && state.winMb) bits.push('安装包约 ' + state.winMb + ' MB');
+        if (entry && entry.sha256) bits.push('SHA256 ' + String(entry.sha256).slice(0, 12) + '…');
+        return bits.join(' · ');
+      }
+
+      // ---------- 数据加载 ----------
+      function loadReleaseInfo() {
+        return fetch('/download-release.json', { cache: 'no-store' })
+          .then(function (r) { return r.ok && (r.headers.get('content-type') || '').includes('json') ? r.json() : null; })
+          .then(function (j) {
+            if (!j) return;
+            if (typeof j.download_version === 'string') state.version = j.download_version;
+            if (typeof j.android_version === 'string') state.androidVersion = j.android_version;
+            if (j.win_installer_mb != null) state.winMb = String(j.win_installer_mb);
+            if (typeof j.release_ready === 'boolean') state.releaseReady = j.release_ready;
+            if (typeof j.release_root === 'string') state.base = j.release_root.replace(/\/$/, '');
+            else if (typeof j.cos_base_url === 'string') state.base = j.cos_base_url.replace(/\/$/, '');
+          })
+          .catch(function () { /* 离线回退默认常量 */ });
+      }
+
+      function loadManifest() {
+        var url = state.base + '/manifest.json';
+        return fetch(url, { cache: 'no-cache' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (j) {
+            if (j && j.schema === 'xcagi.download_manifest/v1') state.manifest = j;
+          })
+          .catch(function () { /* 降级静态 URL */ });
+      }
+
+      // ---------- 渲染 ----------
+      var cardsEl = document.getElementById('dl-cards');
+      var versionEl = document.getElementById('dl-version');
+      var pendingEl = document.getElementById('dl-pending');
+      var subEl = document.getElementById('dl-sub');
+      var noteEl = document.getElementById('dl-note');
+      var tabDesktop = document.getElementById('tab-desktop');
+      var tabAndroid = document.getElementById('tab-android');
+
+      function macArchLabel() { return state.macArch === 'arm64' ? 'Apple Silicon' : 'Intel'; }
+
+      function renderVersion() {
+        versionEl.innerHTML = state.tab === 'android'
+          ? '当前版本 <strong>XCAGI ' + state.androidVersion + '</strong> · Android'
+          : '当前版本 <strong>XCAGI ' + state.version + '</strong> · 企业版';
+      }
+
+      function rows() {
+        if (state.tab === 'android') {
+          return [{ platform: 'android', name: 'Android · 企业版', primary: true }];
+        }
+        return [
+          { platform: 'win', name: 'Windows 64 位', primary: true },
+          { platform: 'mac', name: 'macOS(' + macArchLabel() + ')', primary: false }
+        ];
+      }
+
+      function render() {
+        renderVersion();
+        pendingEl.hidden = state.releaseReady;
+        subEl.textContent = state.tab === 'android'
+          ? 'Android 客户端:AI 对话、能力市场与电脑端协同。'
+          : '企业版客户端:AI 对话、Excel 单据解析与自动化工作流,本地运行、数据自有。';
+        noteEl.innerHTML = state.tab === 'android'
+          ? '下载后请在系统设置中允许「安装未知应用」。桌面端请切换到「桌面端」标签。'
+          : '支持 Windows 10+(64 位)、macOS 12+。安装后打开,首次向导会引导你装入行业 Mod;也可以先到 <a href="/market/">XC AGI 市场</a> 看看有哪些 AI 员工。';
+
+        cardsEl.innerHTML = '';
+        rows().forEach(function (row) {
+          var a = document.createElement('a');
+          a.className = 'dl-card' + (row.primary ? ' dl-card--primary' : '');
+          a.href = downloadUrl(row.platform);
+          a.setAttribute('download', fileName(row.platform));
+          a.setAttribute('rel', 'noopener');
+          if (!state.releaseReady) a.setAttribute('aria-disabled', 'true');
+          var meta = metaText(row.platform);
+          a.innerHTML =
+            '<span class="dl-card__main">' +
+              '<span class="dl-card__name">' + row.name + '</span>' +
+              (meta ? '<span class="dl-card__meta">' + meta + '</span>' : '') +
+            '</span>' +
+            '<span class="dl-card__action">' + (state.releaseReady ? (row.primary ? '立即下载' : '下载') : '待开放') + '</span>';
+          if (!state.releaseReady) {
+            a.addEventListener('click', function (e) { e.preventDefault(); });
+          }
+          cardsEl.appendChild(a);
+        });
+      }
+
+      function setTab(tab) {
+        state.tab = tab;
+        tabDesktop.classList.toggle('dl-tab--active', tab === 'desktop');
+        tabAndroid.classList.toggle('dl-tab--active', tab === 'android');
+        tabDesktop.setAttribute('aria-selected', tab === 'desktop' ? 'true' : 'false');
+        tabAndroid.setAttribute('aria-selected', tab === 'android' ? 'true' : 'false');
+        render();
+      }
+
+      tabDesktop.addEventListener('click', function () { setTab('desktop'); });
+      tabAndroid.addEventListener('click', function () { setTab('android'); });
+
+      // ---------- 启动 ----------
+      state.macArch = detectMacArch();
+      if (isMobileOrAndroid()) state.tab = 'android';
+      setTab(state.tab);
+      loadReleaseInfo()
+        .then(loadManifest)
+        .then(render);
+    })();
+    </script>
+  </body>
+</html>

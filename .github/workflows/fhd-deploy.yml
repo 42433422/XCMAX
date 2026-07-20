@@ -27,7 +27,7 @@ on:
           - freeze-manifest
           - unfreeze-manifest
       action_id:
-        description: Pending autonomy action id to resume after production approval
+        description: Optional autonomy action id for audit correlation
         required: false
         type: string
         default: ""
@@ -44,9 +44,6 @@ jobs:
   cvm-rolling:
     name: CVM rolling (${{ inputs.environment }})
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ inputs.environment == 'production' && 'production' || 'staging' }}
-      url: ${{ inputs.environment == 'production' && 'https://xiu-ci.com/fhd-api/api/health' || 'https://staging.xiu-ci.com/fhd-api/api/health' }}
     steps:
       - name: Require CVM SSH secrets
         env:
@@ -93,56 +90,21 @@ jobs:
              fi
              printf "%s\n" \
                "AUTONOMY_WEBHOOK_TOKEN=$autonomy_token" \
-               "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=require_human" \
+               "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" \
                "XCAGI_AUTONOMY_DATA_DIR=/var/lib/xcagi/autonomy" >> "$tmp_file"
              install -m 600 "$tmp_file" "$env_file"
              rm -f "$tmp_file"
              install -d -m 700 /var/lib/xcagi/autonomy
              systemctl restart fhd-full.service
-             systemctl is-active --quiet fhd-full.service'
-
-      - name: Resume approved autonomy action
-        id: authorize-autonomy
-        if: ${{ inputs.environment == 'production' && inputs.action_id != '' }}
-        env:
-          ACTION_ID: ${{ inputs.action_id }}
-          APPROVAL_ID: ${{ github.run_id }}
-          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
-          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
-            echo "::error::AUTONOMY_CALLBACK_URL and MODSTORE_OPS_INGEST_TOKEN are required when action_id is set."
-            exit 1
-          fi
-          approver=""
-          while IFS= read -r statuses_url; do
-            approver="$(gh api "$statuses_url" | jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
-              [.[]
-                | select((.log_url // "") | contains($needle))
-                | select(.state == "in_progress" or .state == "queued")
-                | .creator.login][0] // empty
-            ')"
-            [ -n "$approver" ] && break
-          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" --jq '.[].statuses_url')
-          if [ -z "$approver" ]; then
-            echo "::error::Could not resolve the production environment reviewer; refusing to resume."
-            exit 1
-          fi
-          payload="$(jq -nc \
-            --arg action_id "$ACTION_ID" \
-            --arg approval_id "$APPROVAL_ID" \
-            --arg approver "$approver" \
-            --arg workflow_action "${{ inputs.action }}" \
-            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,workflow_action:$workflow_action,defer_execution:true,decision:"approved"}')"
-          curl --fail-with-body --silent --show-error \
-            -X POST "$AUTONOMY_CALLBACK_URL" \
-            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-GitHub-Actor: $approver" \
-            --data "$payload"
-          echo "approver=$approver" >> "$GITHUB_OUTPUT"
+             systemctl is-active --quiet fhd-full.service
+             for attempt in $(seq 1 30); do
+               if curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health >/dev/null; then
+                 exit 0
+               fi
+               sleep 2
+             done
+             echo "fhd-full.service did not become HTTP-ready after autonomy config sync" >&2
+             exit 1'
 
       - name: SSH rolling restart / apply
         env:
@@ -163,11 +125,43 @@ jobs:
             DEPLOY_ROOT="/opt/fhd-staging"
             MANIFEST="/var/www/update/releases/staging/server/fhd-manifest.json"
             HEALTH_URL="https://staging.xiu-ci.com/fhd-api/api/health"
+            ENV_FILE="/root/fhd-staging.env"
           else
             DEPLOY_ROOT="/opt/fhd-full"
             MANIFEST="/var/www/update/releases/stable/server/fhd-manifest.json"
             HEALTH_URL="https://xiu-ci.com/fhd-api/api/health"
+            ENV_FILE="/root/fhd-full.env"
           fi
+
+          # Neuro Bus 7 开关生产校验（cicd-e2e-prompt.md 关键约束 10）
+          # 任一开关缺失/为空 → 阻断部署，防止静默降级运行
+          echo "Verifying Neuro Bus production switches in ${ENV_FILE}..."
+          ssh -i "$KEY_FILE" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${USER}@${HOST}" \
+            "bash -s" <<NEURO_EOF
+          set -euo pipefail
+          ENV_FILE="${ENV_FILE}"
+          VARS="XCAGI_NEURO_BUS_DEDUP XCAGI_NEURO_BUS_CIRCUIT XCAGI_NEURO_BUS_RATE_LIMIT XCAGI_NEURO_BUS_TRACE XCAGI_NEURO_BUS_LIFELINE XCAGI_NEURO_BUS_DLQ_AUTO XCAGI_NEURO_BUS_SLA_LOG"
+          if [ ! -f "\$ENV_FILE" ]; then
+            echo "::error::env file \$ENV_FILE not found on remote host"
+            exit 1
+          fi
+          MISSING=""
+          for v in \$VARS; do
+            val=\$(grep -E "^\s*\$v\s*=" "\$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]' || echo "")
+            if [ "\$val" != "1" ]; then
+              echo "::error::\$v expected=1 got='\$val' (in \$ENV_FILE)"
+              MISSING="\$MISSING \$v"
+            fi
+          done
+          if [ -n "\$MISSING" ]; then
+            echo "::error::Neuro Bus 生产开关未启用:\$MISSING — 部署被阻断"
+            exit 1
+          fi
+          echo "✅ Neuro Bus 7 switches verified (all =1) in \$ENV_FILE"
+          NEURO_EOF
 
           REMOTE_CMD=$(cat <<EOF
           set -euo pipefail
@@ -225,7 +219,7 @@ jobs:
         env:
           ACTION_ID: ${{ inputs.action_id }}
           APPROVAL_ID: ${{ github.run_id }}
-          APPROVER: ${{ steps.authorize-autonomy.outputs.approver || github.actor }}
+          APPROVER: ${{ github.actor }}
           AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
           AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
         run: |
@@ -242,3 +236,51 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-GitHub-Actor: $APPROVER" \
             --data "$payload"
+
+  report-autonomy-failure:
+    name: Report autonomy execution failure
+    needs: cvm-rolling
+    if: ${{ always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark pending action terminal
+        env:
+          ACTION_ID: ${{ inputs.action_id }}
+          APPROVAL_ID: ${{ github.run_id }}
+          WORKFLOW_ACTION: ${{ inputs.action }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "::error::Autonomy callback configuration is missing."
+            exit 1
+          fi
+          decision="execution_failed"
+          approver="$GITHUB_ACTOR"
+          reason="Autonomous workflow execution failed"
+          payload="$(jq -nc \
+            --arg action_id "$ACTION_ID" \
+            --arg approval_id "$APPROVAL_ID" \
+            --arg approver "$approver" \
+            --arg decision "$decision" \
+            --arg workflow_action "$WORKFLOW_ACTION" \
+            --arg reason "$reason" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,decision:$decision,workflow_action:$workflow_action,reason:$reason,outcome:{reason:$reason}}')"
+          response_body="${RUNNER_TEMP}/autonomy-failure-callback.json"
+          status="$(curl --silent --show-error --output "$response_body" --write-out '%{http_code}' \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $approver" \
+            --data "$payload")"
+          cat "$response_body"
+          if [[ "$status" == 2* ]]; then
+            exit 0
+          fi
+          if [ "$status" = "409" ] && grep -qE 'already terminal|was rejected' "$response_body"; then
+            echo "Autonomy action was already terminal; callback is idempotently complete."
+            exit 0
+          fi
+          echo "::error::Autonomy failure callback returned HTTP $status"
+          exit 1

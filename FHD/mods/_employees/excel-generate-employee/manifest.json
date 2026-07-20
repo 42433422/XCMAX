@@ -107,7 +107,10 @@
   },
   "metadata": {
     "framework_version": "2.0.0",
-    "created_by": "asset_pipeline"
+    "created_by": "asset_pipeline",
+    "legacy_manual_dev": true,
+    "migration_status": "candidate_for_auto_generation",
+    "migration_note": "人工开发的 mod，已纳入进化状态退役计划。新 mod 应通过 generate_mod_from_description.py 自动生成；本 mod 在自动生成器覆盖其 direct_python 能力后将标记 deprecated。"
   },
   "actions": {
     "handlers": [

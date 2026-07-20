@@ -15,6 +15,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -128,12 +129,51 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _is_rebuildable_db_error(exc: sqlite3.DatabaseError) -> bool:
+    message = str(exc).strip().lower()
+    return "file is not a database" in message or "database disk image is malformed" in message
+
+
+def _initialize_database() -> None:
+    try:
+        with _get_conn() as conn:
+            _ensure_schema(conn)
+        return
+    except sqlite3.DatabaseError as exc:
+        path = _resolve_db_path()
+        if not path.is_file() or not _is_rebuildable_db_error(exc):
+            raise
+
+    with _lock:
+        try:
+            with _get_conn() as conn:
+                _ensure_schema(conn)
+            return
+        except sqlite3.DatabaseError as exc:
+            path = _resolve_db_path()
+            if not path.is_file() or not _is_rebuildable_db_error(exc):
+                raise
+
+        backup_path = path.with_name(f"{path.name}.incompatible-{time.time_ns()}.bak")
+        path.replace(backup_path)
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(f"{path}{suffix}")
+            if sidecar.exists():
+                sidecar.replace(Path(f"{backup_path}{suffix}"))
+        logger.warning(
+            "Archived incompatible XCmax sync database %s to %s; starting a fresh sidecar",
+            path,
+            backup_path,
+        )
+        with _get_conn() as conn:
+            _ensure_schema(conn)
+
+
 class SyncDb:
     """XCmax 同步数据库访问对象。每次操作新建连接（SQLite NullPool 风格）。"""
 
     def __init__(self) -> None:
-        with _get_conn() as conn:
-            _ensure_schema(conn)
+        _initialize_database()
 
     # ------------------------------------------------------------------
     # 变更写入

@@ -65,13 +65,22 @@ DEFAULT_PERMISSIONS = [
     {"name": "编辑物料", "code": "material.edit", "module": "material"},
     {"name": "管理用户", "code": "admin.manage_users", "module": "admin"},
     {"name": "系统配置", "code": "admin.system_config", "module": "admin"},
+    {"name": "查看企业知识", "code": "dataset.read", "module": "knowledge"},
+    {"name": "管理企业知识", "code": "dataset.write", "module": "knowledge"},
+    {"name": "跨租户管理知识", "code": "dataset.admin", "module": "knowledge"},
 ]
 
 DEFAULT_ROLES = [
     {
         "name": "viewer",
         "description": "只读用户",
-        "permissions": ["customer.view", "product.view", "shipment.view", "material.view"],
+        "permissions": [
+            "customer.view",
+            "product.view",
+            "shipment.view",
+            "material.view",
+            "dataset.read",
+        ],
     },
     {
         "name": "operator",
@@ -87,6 +96,8 @@ DEFAULT_ROLES = [
             "material.view",
             "material.edit",
             "print.label",
+            "dataset.read",
+            "dataset.write",
         ],
     },
     {
@@ -106,6 +117,9 @@ DEFAULT_ROLES = [
             "print.label",
             "admin.manage_users",
             "admin.system_config",
+            "dataset.read",
+            "dataset.write",
+            "dataset.admin",
         ],
     },
 ]

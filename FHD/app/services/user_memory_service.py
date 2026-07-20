@@ -612,6 +612,23 @@ class UserMemoryService(NeuroEventPublisherMixin):
             records.append(dict(record))
         return records
 
+    def record_memory_recall(self, user_id: str, memory_id: str) -> dict[str, Any]:
+        """Reinforce a confirmed memory after it contributed to retrieval."""
+
+        memory = self._store.get_memory(user_id)
+        if memory is None:
+            return {"success": False, "message": "用户记忆不存在"}
+        idx, record = self._find_memory_v2_record(memory, memory_id)
+        if record is None or record.get("status") != "active":
+            return {"success": False, "message": "可召回记忆不存在"}
+        updated = dict(record)
+        now = datetime.now().isoformat()
+        updated["recall_count"] = int(updated.get("recall_count") or 0) + 1
+        updated["last_recalled_at"] = now
+        memory.memory_v2_records[idx] = updated
+        self._store.save_memory(user_id, memory)
+        return {"success": True, "memory": dict(updated)}
+
     def get_memory_v2_summary(self, user_id: str) -> dict[str, Any]:
         memory = self._store.get_memory(user_id)
         if memory is None:

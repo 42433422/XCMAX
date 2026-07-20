@@ -31,7 +31,7 @@
     {
       "id": "saas-permanent-starter",
       "title": "永久授权 · 1–5 万",
-      "description": "适用于预算 1–5 万的企业，一次购买永久使用。",
+      "description": "适用于预算 1–5 万的企业：1 个行业 Mod 定制 + 四部门 AI 员工配置 + 1-3 天上线交付 + 1 年免费维护，一次购买永久使用。",
       "amount_cents": 4999900,
       "license_type": "permanent",
       "account_tier": "normal",
@@ -40,7 +40,7 @@
     {
       "id": "saas-permanent-growth",
       "title": "永久授权 · 5–10 万",
-      "description": "适用于预算 5–10 万的企业，一次购买永久使用。",
+      "description": "适用于预算 5–10 万的企业：多行业 Mod 组合 + 现有系统对接（金蝶/用友/ERP）+ 专属 AI 员工训练 + 2 年免费维护，一次购买永久使用。",
       "amount_cents": 9999900,
       "license_type": "permanent",
       "account_tier": "pro",
@@ -49,7 +49,7 @@
     {
       "id": "saas-permanent-max",
       "title": "永久授权 · 10–50 万",
-      "description": "适用于预算 10–50 万的企业，一次购买永久使用。",
+      "description": "适用于预算 10–50 万的集团企业：集团多组织架构 + 3 年免费维护，一次购买永久使用。",
       "amount_cents": 49999900,
       "license_type": "permanent",
       "account_tier": "max",
@@ -58,7 +58,7 @@
     {
       "id": "saas-permanent-ultra",
       "title": "永久授权 · 50–100 万",
-      "description": "适用于预算 50–100 万的企业，一次购买永久使用。",
+      "description": "适用于预算 50–100 万的集团企业：源码托管 + 二开授权 + SLA 99.9% 保障，一次购买永久使用。",
       "amount_cents": 99999900,
       "license_type": "permanent",
       "account_tier": "ultra",

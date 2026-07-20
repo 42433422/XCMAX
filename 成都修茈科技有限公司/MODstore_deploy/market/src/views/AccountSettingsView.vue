@@ -331,6 +331,10 @@ watch(
 onMounted(async () => {
   try {
     const me = normalizeMeResponse(await api.me())
+    if (!me) {
+      err.value = '加载失败'
+      return
+    }
     username.value = me.username || ''
     email.value = me.email || ''
     await authStore.refreshSession(true)

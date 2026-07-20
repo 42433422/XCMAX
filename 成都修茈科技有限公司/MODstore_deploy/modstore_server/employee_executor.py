@@ -91,26 +91,34 @@ _ALL_HANDS_ROLE_CONTEXT_MODES = frozenset({"all_hands_meeting", "all_hands_stand
 # 10 项成熟度第 1 项「主动沟通」协议：让 LLM 知道有 requires_human 通道可用，
 # 遇到下面任一情况必须主动向老板提问（输出 requires_human=true + human_question）。
 # 不破坏原 JSON 输出格式，只是把 requires_human / human_question 作为可选字段加入。
+#
+# 触发门收紧（2026-07-20）：仅条件 1-4（真正需要老板业务决策）才走 requires_human。
+# - 条件 5（超职责）→ 交由 handoff_to 协议处理，不问老板
+# - 条件 6（3次失败）→ 输出 exhausted=true + failure_summary，不问老板，由进化扫描接手
+# - 条件 7（泛化不确定）→ 移除，依赖 1-4 的具体场景判断
 _PHASE_D_PROTOCOL_APPEND = """\
 【主动沟通协议 — 强制遵守】
 你是真员工，不是提示词机器人。完成任务时遇到以下任一情况，**必须**在 JSON 输出里追加两个字段：
 - "requires_human": true
 - "human_question": "<你具体想问老板的问题，简短一句中文>"
 
-需要主动提问的情况：
+需要主动提问的情况（仅限需要老板本人业务决策）：
 1. 任务优先级不明确（多个任务冲突，不知道先做哪个）
 2. 缺资源（需要其他员工配合、需要数据、需要权限）
 3. 发现风险（代码改动可能影响线上、安全风险、合规风险）
 4. 需要老板决策（业务方向、产品取舍、用户影响）
-5. 任务超出你的职责范围（应该转交给别的员工）
-6. 失败 3 次仍无法解决（需要换思路或换人）
-7. 你不确定的事（宁可问，不要瞎做）
 
 提问要具体，不要套话。例：
 - ❌ "需要老板确认" — 太空
 - ✅ "本周修复 A 还是 B 优先级更高？目前 A 影响 100 用户/天" — 具体
 
 没有上述情况时，正常输出你的工作 JSON，不需要带 requires_human 字段。
+
+【失败耗尽协议 — 不问老板】
+如果同一任务你已经失败 3 次仍无法解决，**不要**输出 requires_human，改为追加：
+- "exhausted": true
+- "failure_summary": "<三次失败的原因摘要，各一句>"
+失败耗尽时由系统进化扫描接手（改进你的 prompt 或转给更合适的员工），不需要老板介入。
 
 【任务转交协议 — 同事协作】
 如果你判断任务**不属于你的职责范围**（如本员工 manifest 没覆盖的代码路径 / 接口 / 服务），
@@ -1964,6 +1972,29 @@ def _handler_failure_detail(result: Dict[str, Any]) -> str:
     return "one or more handlers returned ok=False"
 
 
+def _evaluate_employee_risk_gate(
+    employee_id: str,
+    manifest: Dict[str, Any],
+    handler_list: List[str],
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    try:
+        from modstore_server.employee_risk_middleware import gate_action_or_block
+
+        return gate_action_or_block(employee_id, manifest, handler_list, payload)
+    except Exception as exc:  # noqa: BLE001 - guard failure must fail closed
+        logger.exception("risk middleware unavailable; blocking employee execution")
+        return {
+            "ok": False,
+            "blocked": True,
+            "pending_approval": False,
+            "risk_level": "blocked",
+            "decision": "blocked",
+            "reason": "risk middleware unavailable; fail-closed",
+            "detail": f"risk middleware error ({type(exc).__name__})",
+        }
+
+
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -2011,15 +2042,7 @@ def execute_employee_task(
                 )
                 handler_list = list((actions_inner or {}).get("handlers") or [])
 
-                try:
-                    from modstore_server.employee_risk_middleware import gate_action_or_block
-
-                    gate = gate_action_or_block(employee_id, manifest, handler_list, payload)
-                except Exception:
-                    logger.exception(
-                        "risk middleware error; default to allow for backwards compatibility"
-                    )
-                    gate = {"ok": True, "risk_level": "unknown", "reason": "middleware error"}
+                gate = _evaluate_employee_risk_gate(employee_id, manifest, handler_list, payload)
 
                 if not gate.get("ok"):
                     duration_ms = round((time.perf_counter() - t0) * 1000, 3)
@@ -2203,7 +2226,51 @@ def execute_employee_task(
                         _human_question_text = str(
                             reasoning.get("human_question") or reasoning.get("question") or ""
                         )
-                    if _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip()):
+                    # 触发门收紧（2026-07-20）：exhausted 或 handoff_to 已设时不走 requires_human
+                    _exhausted_flag = None
+                    _handoff_intended = None
+                    if isinstance(_parsed_llm, dict):
+                        _exhausted_flag = _parsed_llm.get("exhausted")
+                        _handoff_intended = _parsed_llm.get("handoff_to") or _parsed_llm.get(
+                            "delegate_to"
+                        )
+                    if _exhausted_flag is None and isinstance(reasoning, dict):
+                        _exhausted_flag = reasoning.get("exhausted")
+                    if _handoff_intended is None and isinstance(reasoning, dict):
+                        _handoff_intended = reasoning.get("handoff_to") or reasoning.get(
+                            "delegate_to"
+                        )
+                    if _exhausted_flag is True or (
+                        isinstance(_exhausted_flag, str) and _exhausted_flag.strip()
+                    ):
+                        # 失败耗尽：不问老板，标记给进化扫描接手
+                        reasoning["_exhausted"] = {
+                            "failure_summary": str(
+                                (
+                                    _parsed_llm.get("failure_summary")
+                                    if isinstance(_parsed_llm, dict)
+                                    else ""
+                                )
+                                or reasoning.get("failure_summary", "")
+                            )[:500],
+                            "skipped_ask_human": True,
+                        }
+                        logger.info(
+                            "employee_executor exhausted skip ask_human employee_id=%s task=%s",
+                            employee_id,
+                            str(task)[:200],
+                        )
+                    elif _handoff_intended and (
+                        _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip())
+                    ):
+                        # 超职责：handoff_to 通道会处理，不问老板
+                        reasoning["_ask_human_suppressed_by_handoff"] = True
+                        logger.info(
+                            "employee_executor handoff suppresses ask_human employee_id=%s handoff_to=%s",
+                            employee_id,
+                            str(_handoff_intended)[:128],
+                        )
+                    elif _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip()):
                         _question_text = (
                             _ask_human
                             if isinstance(_ask_human, str) and _ask_human.strip()

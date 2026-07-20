@@ -31,14 +31,64 @@ EXIT_DRIFT = 1
 EXIT_CONFIG = 2
 EXIT_EXEC = 3
 
+# derived 路径是相对于仓库根 XCMAX/（不是 FHD/）。ROOT = FHD/，REPO_ROOT = XCMAX/。
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# derived 路径中含这些片段的视为生成产物，存在性校验跳过（避免首次运行即红）。
+# 规则：生成产物可能在 sync 之前不存在，不算漂移。
+_DERIVED_OPTIONAL_MARKERS = (
+    ".generated.",  # *.generated.json / *.generated.ts
+    "coverage-dual-summary",  # coverage 域对外 SSOT 产物
+    "topology.generated",  # 服务拓扑生成产物
+)
+
 
 def _parse_check_cmd(cmd_str: str) -> list[str]:
     """将 check 命令字符串解析为 argv（用 shell 词法）。"""
     return shlex.split(cmd_str)
 
 
+def _check_derived_paths(domain: dict[str, Any]) -> tuple[int, str] | None:
+    """校验 derived 路径存在性（元数据漂移检测）。
+
+    捕获 ssot.yaml 中 derived 字段指向已删除/迁移文件的情况——这是 check 命令
+    自身无法发现的漂移（如 FHD/MODstore/ 整体迁移后 derived 仍指向旧路径）。
+
+    返回 None 表示 OK，返回 (code, msg) 表示漂移。
+    跳过规则：含 # 后缀的只校验 # 前文件；生成产物（.generated./coverage-dual-summary 等）跳过。
+    """
+    derived = domain.get("derived") or []
+    if not derived:
+        return None
+    missing: list[str] = []
+    for d in derived:
+        # 剥离 # 后缀（如 pyproject.toml#[tool.coverage.report]fail_under）
+        path_str = d.split("#", 1)[0]
+        # 生成产物跳过（避免首次运行即红）
+        if any(marker in path_str for marker in _DERIVED_OPTIONAL_MARKERS):
+            continue
+        # derived 路径相对于仓库根 XCMAX/（如 FHD/config/...、成都修茈科技有限公司/...）
+        path = REPO_ROOT / path_str
+        if not path.exists():
+            missing.append(path_str)
+    if missing:
+        return EXIT_DRIFT, f"{domain['name']}: DERIVED PATH MISSING — {', '.join(missing)}"
+    return None
+
+
 def _run_domain_check(domain: dict[str, Any], *, silent: bool = False) -> tuple[int, str]:
-    """跑单个域的 check，返回 (exit_code, message)。silent=True 时吞掉 subprocess 输出。"""
+    """跑单个域的 check，返回 (exit_code, message)。silent=True 时吞掉 subprocess 输出。
+
+    先校验 derived 路径存在性（捕获元数据漂移），再跑域自己的 check 命令。
+    """
+    # Step 1: derived 路径存在性校验（元数据漂移检测）
+    derived_drift = _check_derived_paths(domain)
+    if derived_drift is not None:
+        if not silent:
+            print(derived_drift[1])
+        return derived_drift
+
+    # Step 2: 域自己的 check 命令
     check_cmd = domain.get("check")
     if not check_cmd:
         return EXIT_CONFIG, f"{domain['name']}: 无 check 命令"

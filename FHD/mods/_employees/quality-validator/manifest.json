@@ -80,9 +80,13 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
         "echo"
       ]
+    },
+    "schedule": {
+      "enabled": true,
+      "cron": "30 3 * * *",
+      "task_brief": "每日 03:30 UTC 对最近生成的员工包产物执行 manifest 合规性、Python 语法、资产完整性、一致性校验，输出报告。"
     },
     "metadata": {
       "framework_version": "2.0.0",

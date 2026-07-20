@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Iterable
 
 _PROCESS_RUNTIME_ENV_KEYS = (
+    "MODSTORE_RUN_BACKGROUND_JOBS",
+    "MODSTORE_DAILY_ROLE",
+    "MODSTORE_CONTROL_PORT",
+    "MODSTORE_API_PORT",
     "DATABASE_URL",
     "MODSTORE_DB_PATH",
     "MODSTORE_RUNTIME_STATE_ROOT",

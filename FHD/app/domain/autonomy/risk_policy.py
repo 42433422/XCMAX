@@ -68,7 +68,7 @@ class RiskPolicyCatalog:
             boundaries_path or boundaries_override or _DEFAULT_BOUNDARIES_PATH
         ).expanduser()
         self.registry = self._load_registry()
-        self.boundaries = self._load_boundaries()
+        self.boundaries, self.veto_boundaries = self._load_boundaries()
         self.medium_risk_policy = self._resolve_medium_policy()
 
     def _load_registry(self) -> dict[str, Any]:
@@ -99,25 +99,44 @@ class RiskPolicyCatalog:
                 raise ValueError(f"BLOCKED action {name} must set allow_auto_execute=false")
         return data
 
-    def _load_boundaries(self) -> dict[str, str]:
+    @staticmethod
+    def _parse_boundary_items(
+        raw: dict[str, Any], field: str, *, allow_empty: bool = False
+    ) -> dict[str, str]:
+        items = raw.get(field)
+        if not isinstance(items, list) or (not items and not allow_empty):
+            raise ValueError(f"autonomy boundaries must list {field}")
+        result: dict[str, str] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError(f"{field} entries must be objects")
+            action = str(item.get("action") or "").strip()
+            reason = str(item.get("reason") or "").strip()
+            if not action or not reason:
+                raise ValueError(f"{field} entries require action and reason")
+            if action in result:
+                raise ValueError(f"duplicate {field} action: {action}")
+            result[action] = reason
+        return result
+
+    def _load_boundaries(self) -> tuple[dict[str, str], dict[str, str]]:
         if not self.boundaries_path.is_file():
             raise FileNotFoundError(f"autonomy boundaries not found: {self.boundaries_path}")
         raw = yaml.safe_load(self.boundaries_path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("autonomy boundaries root must be an object")
-        items = raw.get("prohibited_actions")
-        if not isinstance(items, list) or not items:
-            raise ValueError("autonomy boundaries must list prohibited_actions")
-        result: dict[str, str] = {}
-        for item in items:
-            if not isinstance(item, dict):
-                raise ValueError("prohibited action entries must be objects")
-            action = str(item.get("action") or "").strip()
-            reason = str(item.get("reason") or "").strip()
-            if not action or not reason:
-                raise ValueError("prohibited action entries require action and reason")
-            result[action] = reason
-        return result
+        prohibited = self._parse_boundary_items(raw, "prohibited_actions")
+        requires_veto = self._parse_boundary_items(raw, "requires_veto", allow_empty=True)
+        overlap = set(prohibited) & set(requires_veto)
+        if overlap:
+            raise ValueError(
+                f"actions cannot be both prohibited and requires_veto: {sorted(overlap)}"
+            )
+        registered = set(self.registry.get("autonomous_actions") or {})
+        unknown = (set(prohibited) | set(requires_veto)) - registered
+        if unknown:
+            raise ValueError(f"autonomy boundaries contain unregistered actions: {sorted(unknown)}")
+        return prohibited, requires_veto
 
     def _resolve_medium_policy(self) -> MediumRiskPolicy:
         raw = (
@@ -138,6 +157,12 @@ class RiskPolicyCatalog:
 
     def boundaries_snapshot(self) -> dict[str, str]:
         return dict(self.boundaries)
+
+    def veto_boundaries_snapshot(self) -> dict[str, str]:
+        return dict(self.veto_boundaries)
+
+    def veto_reason(self, action: str) -> str | None:
+        return self.veto_boundaries.get(action)
 
     def autonomous_action_names(self) -> frozenset[str]:
         return frozenset((self.registry.get("autonomous_actions") or {}).keys())

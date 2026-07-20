@@ -468,6 +468,22 @@ class TestDeriveEmployeeContacts:
         }
         assert rows["emp-a"]["installed"] is False
 
+    def test_super_rows_empty_or_duplicate_id_skipped(self, monkeypatch):
+        monkeypatch.setattr(
+            esc,
+            "_super_employee_contacts",
+            lambda: [
+                {"employee_id": "  "},
+                {"employee_id": "emp-dup", "department": "super"},
+                {"employee_id": "emp-dup", "department": "super"},
+            ],
+        )
+        monkeypatch.setattr(esc, "load_employee_manifest_meta", lambda: {})
+        _patch_admin_roster(monkeypatch, [], set())
+        _patch_enterprise(monkeypatch, {})
+        rows = esc.derive_employee_contacts()
+        assert [r["employee_id"] for r in rows] == ["emp-dup"]
+
 
 # ── employee_label_maps ──────────────────────────────────────────────────
 

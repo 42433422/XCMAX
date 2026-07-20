@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.xcmax.modstore-scheduler</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__XCMAX_RUN_MODSTORE_SCHEDULER__</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>__XCMAX_LOG_DIR__/modstore-scheduler.launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__XCMAX_LOG_DIR__/modstore-scheduler.launchd.err.log</string>
+  <key>WorkingDirectory</key>
+  <string>__XCMAX_ROOT__</string>
+</dict>
+</plist>

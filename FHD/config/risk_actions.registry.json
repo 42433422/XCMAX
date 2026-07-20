@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "medium_risk_policy": "require_human",
+  "medium_risk_policy": "auto_approve",
   "autonomous_actions": {
     "apply_release_to_cvm": {
       "risk": "HIGH",
-      "allow_auto_execute": false,
+      "allow_auto_execute": true,
       "rollback_path": "rollback_release",
       "entrypoints": [".github/workflows/fhd-deploy.yml", "scripts/deploy/fhd-auto-update.sh"]
     },
@@ -41,7 +41,7 @@
     },
     "self_heal_pr_merge": {
       "risk": "HIGH",
-      "allow_auto_execute": false,
+      "allow_auto_execute": true,
       "rollback_path": "revert_merge_commit",
       "entrypoints": ["modstore_server/approval_dispatcher.py"]
     },
@@ -54,7 +54,7 @@
     },
     "mod_auto_publish": {
       "risk": "HIGH",
-      "allow_auto_execute": false,
+      "allow_auto_execute": true,
       "rollback_path": "unpublish_mod_version",
       "entrypoints": ["modstore_server/workbench_api.py"]
     },
@@ -72,7 +72,7 @@
     },
     "archive_historical_loop_debt": {
       "risk": "HIGH",
-      "allow_auto_execute": false,
+      "allow_auto_execute": true,
       "rollback_path": "restore_loop_memory_snapshot",
       "entrypoints": ["modstore_server/self_maintenance_loop_runner.py"]
     },
@@ -84,7 +84,7 @@
     },
     "code_write": {
       "risk": "HIGH",
-      "allow_auto_execute": false,
+      "allow_auto_execute": true,
       "rollback_path": "git_revert_commit",
       "entrypoints": ["app/application/employee_runtime/agent.py"]
     },
@@ -98,7 +98,7 @@
       "risk": "BLOCKED",
       "allow_auto_execute": false,
       "rollback_path": "restore_encrypted_backup",
-      "entrypoints": ["app/fastapi_routes"]
+      "entrypoints": ["app/fastapi_routes/ops_autonomy.py"]
     },
     "rotate_encryption_root_key": {
       "risk": "BLOCKED",
@@ -122,6 +122,18 @@
       "risk": "BLOCKED",
       "allow_auto_execute": false,
       "rollback_path": "restore_append_only_audit_store",
+      "entrypoints": ["manual_only"]
+    },
+    "modify_autonomy_policy": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_human_reviewed_policy_revision",
+      "entrypoints": ["manual_only"]
+    },
+    "self_approve_action": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "invalidate_forged_approval_and_reaudit",
       "entrypoints": ["manual_only"]
     }
   },

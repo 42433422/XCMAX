@@ -60,6 +60,9 @@ HISTORY = FHD_ROOT / "metrics" / "coverage-history.jsonl"
 DEFAULT_MARGIN = 1.0
 CHECK_JITTER = 0.5
 
+# 峰值硬阻断：低于历史峰值 PEAK_FLOOR_MARGIN% 即阻断（防止覆盖率静默回退）
+PEAK_FLOOR_MARGIN = 0.5
+
 FE_KEYS = ("lines", "branches", "functions", "statements")
 
 # pyproject.toml 中唯一的 fail_under 行（[tool.coverage.report] 下）。
@@ -232,6 +235,40 @@ def _git_short_sha() -> str | None:
         return None
 
 
+def read_history_peaks() -> dict[str, float]:
+    """从 coverage-history.jsonl 读取历史峰值（只看 backend_lines/branches）。
+    
+    返回 {"backend_lines_peak": float, "backend_branches_peak": float}
+    """
+    if not HISTORY.is_file():
+        return {}
+    
+    peaks = {"backend_lines_peak": 0.0, "backend_branches_peak": 0.0}
+    try:
+        lines = HISTORY.read_text(encoding="utf-8").strip().splitlines()
+        for line in lines:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            
+            # 只看 bump 记录（避免 check-fail 的低值污染峰值）
+            if rec.get("note") != "bump":
+                continue
+            
+            be_lines = rec.get("backend_lines")
+            if be_lines is not None and be_lines > peaks["backend_lines_peak"]:
+                peaks["backend_lines_peak"] = be_lines
+            
+            be_branches = rec.get("backend_branches")
+            if be_branches is not None and be_branches > peaks["backend_branches_peak"]:
+                peaks["backend_branches_peak"] = be_branches
+    except OSError:
+        pass
+    
+    return peaks
+
+
 def append_history(be: dict | None, fe: dict | None, note: str = "") -> None:
     rec = {
         "date": date.today().isoformat(),
@@ -264,6 +301,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     if branch_floor is None:
         branch_floor = base.get("backend_branch_floor")
     fe_floors = base.get("frontend_floors", {})
+    
+    # 峰值硬阻断：读取历史峰值
+    peaks = read_history_peaks() if args.peak_floor else {}
+    line_peak = peaks.get("backend_lines_peak", 0.0)
+    branch_peak = peaks.get("backend_branches_peak", 0.0)
 
     failed = False
     eps = 1e-9
@@ -276,13 +318,24 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"[cov-ratchet] 跳过后端（无 {args.coverage_json}）")
     else:
         bp = "n/a" if be["branch_pct"] is None else f"{be['branch_pct']}%"
+        peak_msg = ""
+        if args.peak_floor and line_peak > 0:
+            peak_msg = f" (历史峰值 {line_peak}%)"
         print(
-            f"[cov-ratchet] backend line={be['line_pct']}% (floor {line_floor}%) "
+            f"[cov-ratchet] backend line={be['line_pct']}% (floor {line_floor}%{peak_msg}) "
             f"branch={bp} (floor {branch_floor}) jitter={jitter}%"
         )
+        # floor 检查
         if be["line_pct"] + jitter + eps < line_floor:
             print(
                 f"FAIL: line coverage regression — 后端行覆盖率 {be['line_pct']}% < floor {line_floor}% (−jitter {jitter}%)",
+                file=sys.stderr,
+            )
+            failed = True
+        # 峰值硬阻断检查（比 floor 更严格）
+        if args.peak_floor and line_peak > 0 and be["line_pct"] + eps < line_peak - PEAK_FLOOR_MARGIN:
+            print(
+                f"FAIL: line coverage regression from peak — 后端行覆盖率 {be['line_pct']}% < 历史峰值 {line_peak}% − {PEAK_FLOOR_MARGIN}%（静默回退）",
                 file=sys.stderr,
             )
             failed = True
@@ -293,6 +346,18 @@ def cmd_check(args: argparse.Namespace) -> int:
         ):
             print(
                 f"FAIL: branch coverage regression — 后端分支覆盖率 {be['branch_pct']}% < floor {branch_floor}% (−jitter {jitter}%)",
+                file=sys.stderr,
+            )
+            failed = True
+        # 分支峰值硬阻断
+        if (
+            args.peak_floor
+            and branch_peak > 0
+            and be["branch_pct"] is not None
+            and be["branch_pct"] + eps < branch_peak - PEAK_FLOOR_MARGIN
+        ):
+            print(
+                f"FAIL: branch coverage regression from peak — 后端分支覆盖率 {be['branch_pct']}% < 历史峰值 {branch_peak}% − {PEAK_FLOOR_MARGIN}%（静默回退）",
                 file=sys.stderr,
             )
             failed = True
@@ -318,7 +383,16 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     if failed:
         print("[cov-ratchet] 覆盖率回退被阻断；请补测后再提交。", file=sys.stderr)
+        # 即使回退也记录 history（note=check-fail），让趋势线反映回退事件。
+        if args.record and (be is not None or fe is not None):
+            append_history(be, fe, note="check-fail")
+            print("[cov-ratchet] 已追加快照到 coverage-history.jsonl (note=check-fail)")
         return 1
+    # check 通过时若显式 --record，也写 history（note=check），让趋势线连续。
+    # CI 应传 --record；本地开发者默认不传，避免噪音。
+    if args.record and (be is not None or fe is not None):
+        append_history(be, fe, note="check")
+        print("[cov-ratchet] 已追加快照到 coverage-history.jsonl (note=check)")
     print("[cov-ratchet] OK — 覆盖率未回退")
     return 0
 
@@ -418,6 +492,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-frontend", action="store_true", help="check：缺前端数据即失败")
     parser.add_argument("--record", action="store_true", help="history：先追加当前快照")
     parser.add_argument("--tail", type=int, default=15, help="history：打印最近 N 条")
+    parser.add_argument(
+        "--peak-floor",
+        action="store_true",
+        help="check：启用峰值硬阻断，低于历史峰值 %.1f%% 即失败" % PEAK_FLOOR_MARGIN,
+    )
     args = parser.parse_args(argv)
 
     if args.check:

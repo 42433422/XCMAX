@@ -1,16 +1,35 @@
 import json
 import sqlite3
+from types import SimpleNamespace
 
+from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server.autonomous_risk_gate import (
+    _historical_rollback_rate as _historical_rollback_rate_v3,
+)
 from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
+    KB_SCHEMA_FAILED_LABEL,
+    KB_SCHEMA_RETRY_MAX,
+    NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
+    _code_task_text,
     _employee_result_ok,
+    _existing_kb_schema_retry_item,
+    _extract_failure_reason,
+    _find_delivery_validation,
+    _find_pr_number_for_branch,
+    _focused_test_command,
+    _gh_pr_add_label,
+    _gh_pr_comment,
     _guest_auth_headers,
     _has_high_risk_report,
+    _historical_rollback_rate,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _qa_task_text,
+    _reject_and_retry_kb_schema_failure,
     _resume_review_qa_candidate,
+    _resume_steps,
     _review_task_text,
     _self_maintenance_actor_user_id,
     _structured_report_gate,
@@ -32,6 +51,75 @@ def _stats(line_changes=12, binary_files=None):
     }
 
 
+def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True, "reason": "structured_reports_passed"},
+    )
+    risk_calls = []
+    monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda action, **kwargs: (
+            risk_calls.append((action, kwargs))
+            or SimpleNamespace(allowed=True, to_dict=lambda: {"decision": "allow"})
+        ),
+    )
+    merge_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-risk-gate",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[{"step": "review"}, {"step": "qa"}],
+    )
+
+    assert result["ok"] is True
+    assert result["merge_requested"] is True
+    assert risk_calls[0][0] == "self_maintenance_l1_merge"
+    assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
+    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
+
+
+def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda *args, **kwargs: SimpleNamespace(
+            allowed=False,
+            to_dict=lambda: {"decision": "blocked"},
+        ),
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("merge request bypassed SSOT")),
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-risk-block",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[],
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "autonomy_guard_blocked"
+
+
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
@@ -47,6 +135,33 @@ def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypa
 
     assert result["ok"] is True
     assert result["reason"] == "dynamic_low_risk_policy_passed"
+
+
+def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> None:
+    memory = {
+        "recent_runs": [
+            {
+                "status": "completed_merged",
+                "policy_decision": {
+                    "action": "auto_merged_low_risk",
+                    "merge_result": {
+                        "autonomy_risk_decision": {"rollback_path": "revert_merge_commit"},
+                        "reason": "merged_low_risk_branch",
+                    },
+                },
+            },
+            {
+                "status": "completed_rolled_back",
+                "policy_decision": {
+                    "action": "auto_merged_low_risk",
+                    "merge_result": {"reason": "merged_low_risk_branch"},
+                },
+            },
+        ]
+    }
+
+    assert _historical_rollback_rate(memory) == 0.5
+    assert _historical_rollback_rate_v3(memory) == 0.5
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
@@ -285,6 +400,49 @@ def test_employee_result_rejects_e2e_codex_timeout():
     assert _employee_result_ok(result) is False
 
 
+def test_extract_failure_reason_picks_up_delivery_validation_failure():
+    # delivery_validation 由 Para 远端返回，嵌在 result.result.outputs[].para_result
+    # 等任意层级。模拟真实结构：change_delivery.ok=true（代码已交付）但验证命令失败。
+    result = {
+        "result": {
+            "ok": False,
+            "status": "failed",
+            "outputs": [
+                {
+                    "handler": "para_delegate",
+                    "para_result": {
+                        "delivery_validation": {
+                            "commands": [
+                                {
+                                    "command": "-m pytest tests/test_x.py",
+                                    "exit_code": 1,
+                                    "output_tail": "FAILED tests/test_x.py::test_safe_branch_name",
+                                },
+                                {"command": "-m py_compile main.py", "exit_code": 0},
+                            ],
+                        }
+                    },
+                }
+            ],
+        }
+    }
+
+    reason = _extract_failure_reason(result, {})
+
+    assert "delivery_validation_failed" in reason
+    assert "exit=1" in reason
+    assert "pytest tests/test_x.py" in reason
+
+
+def test_extract_failure_reason_falls_back_when_no_delivery_validation():
+    # 无 delivery_validation 时走原有兜底逻辑，返回非空原因
+    result = {"result": {"ok": False, "status": "completed"}}
+
+    reason = _extract_failure_reason(result, {})
+
+    assert reason and reason != "delivery_validation_failed"
+
+
 def test_resume_review_qa_candidate_uses_failed_review_branch():
     memory = {
         "open_items": [
@@ -311,6 +469,14 @@ def test_resume_review_qa_candidate_uses_failed_review_branch():
     }
 
 
+def test_resume_steps_rerun_failed_step_and_downstream_chain():
+    assert _resume_steps(None) == {"code", "review", "qa"}
+    assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
+    assert _resume_steps({"failed_steps": ["review"]}) == {"review", "qa"}
+    assert _resume_steps({"failed_steps": ["qa"]}) == {"qa"}
+    assert _resume_steps({"failed_steps": []}) == set()
+
+
 def test_resume_review_qa_candidate_uses_human_strategy_branch():
     memory = {
         "open_items": [
@@ -332,7 +498,32 @@ def test_resume_review_qa_candidate_uses_human_strategy_branch():
         "failed_run_id": "r2",
         "failed_steps": ["qa"],
         "para_task_id": "task-2",
-        "reason": "resume_human_strategy_candidate",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_review_qa_candidate_retries_nonportable_focused_command():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/trae/sub-1",
+                "kind": "human_strategy_approval",
+                "reason": "structured_qa_focused_command_not_passed",
+                "run_id": "r-platform",
+                "task_id": "task-platform",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/trae/sub-1",
+        "failed_run_id": "r-platform",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-platform",
+        "reason": "resume_automated_remediation_candidate",
     }
 
 
@@ -360,6 +551,10 @@ def test_resume_review_qa_candidate_stops_when_latest_policy_has_real_risk():
 def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "feat/base")
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "verified-python -m pytest focused.py -q",
+    )
 
     review = _review_task_text("run-1", "devfleet/codex/sub-1", {})
     qa = _qa_task_text("run-1", "devfleet/codex/sub-1", {})
@@ -369,6 +564,24 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Do not inspect your own report-only task branch" in review
     assert "Do not inspect your own report-only task branch" in qa
     assert "file:///tmp/repo.git" in qa
+    assert "`verified-python -m pytest focused.py -q`" in qa
+    assert "platform-equivalent local `python -m pytest` command" in qa
+    assert "same focused test file" in qa
+    assert "Do not fail solely because the scheduler's absolute Python path" in qa
+
+    code = _code_task_text("run-1", {}, {})
+    assert "`verified-python -m pytest focused.py -q`" in code
+    assert "executable_template object" in code
+    assert "validate_kb_payload" in code
+
+
+def test_focused_test_command_prefers_explicit_command(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+
+    assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
 def test_high_risk_report_detects_standalone_qa_fail():
@@ -386,7 +599,9 @@ def test_high_risk_report_detects_standalone_qa_fail():
     assert _has_high_risk_report(steps) is True
 
 
-def test_structured_report_gate_requires_qa_json_pass():
+def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
     steps = [
         {
             "step": "review",
@@ -400,7 +615,7 @@ def test_structured_report_gate_requires_qa_json_pass():
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"pytest focused","exit_code":0,"status":"passed"}],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -411,7 +626,11 @@ def test_structured_report_gate_requires_qa_json_pass():
     assert _structured_report_gate(steps)["ok"] is True
 
 
-def test_structured_report_gate_blocks_missing_or_failed_qa_json():
+def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
     missing = [{"step": "qa", "report_excerpt": "PASS in prose only"}]
     failed = [
         {
@@ -427,6 +646,98 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json():
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":2,"status":"failed"}}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["ok"] is False
+    assert result["reason"] == "structured_qa_focused_command_not_passed"
+    assert result["focused_command"] == focused
+
+
+def test_structured_report_gate_accepts_platform_equivalent_focused_command(
+    monkeypatch,
+):
+    focused = (
+        "'/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.venv/bin/python' "
+        "-m pytest '成都修茈科技有限公司/MODstore_deploy/tests/"
+        "test_self_maintenance_loop_runner_policy.py' -q"
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                '"tested_commands":['
+                f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
+                '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
+                'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
+                '"exit_code":0,"status":"passed (27 tests passed)"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["ok"] is True
+
+
+def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                '"tested_commands":[{"command":"python3 -m pytest tests/test_other.py -q",'
+                '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+
+
+def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                "Prompt says output SELF_MAINTENANCE_QA_JSON: with schema ...\n"
+                "SELF_MAINTENANCE_QA_JSON: "
+                '{"verdict":"PASS","blocking_findings":[],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["ok"] is True
 
 
 def test_ensure_clean_baseline_writes_default_file(monkeypatch, tmp_path):
@@ -518,3 +829,854 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
+# ---------------------------------------------------------------------------
+
+
+class TestFindDeliveryValidation:
+    """验证 `_find_delivery_validation` 在 Para 远端返回结构中递归定位
+    delivery_validation dict 的能力。"""
+
+    def test_find_delivery_validation_single_level_nesting(self):
+        """单层嵌套：result.result.outputs[0].para_result.delivery_validation。"""
+        dv = {"commands": [{"exit_code": 1, "command": "pytest"}]}
+        result = {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "para_delegate",
+                        "para_result": {"delivery_validation": dv},
+                    }
+                ]
+            }
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv
+
+    def test_find_delivery_validation_deep_nesting(self):
+        """depth=4 多层嵌套，模拟 Para 真实结构
+        result.result.outputs[0].response.data.subtask.delivery_validation。"""
+        dv = {"commands": [{"exit_code": 2}]}
+        result = {
+            "result": {
+                "outputs": [
+                    {
+                        "response": {
+                            "data": {
+                                "subtask": {"delivery_validation": dv},
+                            },
+                        },
+                    }
+                ]
+            }
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv
+
+    def test_find_delivery_validation_depth_truncation(self):
+        """depth>6 时返回 None：构造 7 层嵌套，delivery_validation 在第 7 层。"""
+        dv = {"commands": [{"exit_code": 1}]}
+        # 嵌套结构：a -> b -> c -> d -> e -> f -> g -> delivery_validation
+        # 调用 _find_delivery_validation(top) 时 depth=0, 进入 a 后 depth=1,
+        # 进入 b 后 depth=2, ..., 进入 g 后 depth=7 → 立即返回 None
+        nested = {"delivery_validation": dv}
+        for key in ("g", "f", "e", "d", "c", "b", "a"):
+            nested = {key: nested}
+
+        found = _find_delivery_validation(nested)
+
+        assert found is None
+
+    def test_find_delivery_validation_list_truncation(self):
+        """列表超过 12 项时只搜前 12 项：delivery_validation 放在第 13 项应返回 None。"""
+        dv = {"commands": [{"exit_code": 1}]}
+        items = [{"index": i} for i in range(12)] + [{"delivery_validation": dv}]
+        result = {"items": items}
+
+        found = _find_delivery_validation(result)
+
+        assert found is None
+
+    def test_find_delivery_validation_skips_non_dict(self):
+        """delivery_validation 字段值为字符串/list 时返回 None（只识别 dict）。"""
+        result_str = {"delivery_validation": "not a dict"}
+        result_list = {"delivery_validation": ["not", "a", "dict"]}
+
+        assert _find_delivery_validation(result_str) is None
+        assert _find_delivery_validation(result_list) is None
+
+    def test_find_delivery_validation_empty_dict(self):
+        """空 dict 输入返回 None。"""
+        assert _find_delivery_validation({}) is None
+
+    def test_find_delivery_validation_multiple_occurrences(self):
+        """多个 delivery_validation 时返回第一个（DFS 顺序）。"""
+        dv_first = {"commands": [{"exit_code": 1}], "marker": "first"}
+        dv_second = {"commands": [{"exit_code": 2}], "marker": "second"}
+        result = {
+            "result": {
+                "delivery_validation": dv_first,
+                "nested": {"delivery_validation": dv_second},
+            }
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv_first
+
+    def test_find_delivery_validation_in_list_items(self):
+        """列表项中包含 delivery_validation 能被找到。"""
+        dv = {"commands": [{"exit_code": 1}]}
+        result = {"outputs": [{"name": "skip"}, {"delivery_validation": dv}]}
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv
+
+    def test_find_delivery_validation_commands_with_exit_code_none(self):
+        """exit_code=None 的 command 不视为失败：_find_delivery_validation 仍能找到 dv，
+        但 _extract_failure_reason 不会返回 delivery_validation_failed。"""
+        dv = {"commands": [{"exit_code": None, "command": "pytest"}]}
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        # _find_delivery_validation 找到 dict
+        found = _find_delivery_validation(result)
+        assert found is dv
+
+        # _extract_failure_reason 不把 exit_code=None 视为失败，落到 fallback
+        reason = _extract_failure_reason(result, {})
+        assert "delivery_validation_failed" not in reason
+
+    def test_find_delivery_validation_commands_with_exit_code_zero(self):
+        """exit_code=0 的 command 不视为失败。"""
+        dv = {"commands": [{"exit_code": 0, "command": "pytest"}]}
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        found = _find_delivery_validation(result)
+        assert found is dv
+
+        reason = _extract_failure_reason(result, {})
+        assert "delivery_validation_failed" not in reason
+
+    def test_find_delivery_validation_commands_with_non_zero_exit(self):
+        """exit_code≠0 的 command 视为失败：_extract_failure_reason 返回 delivery_validation_failed。"""
+        dv = {
+            "commands": [
+                {"exit_code": 1, "command": "pytest tests/x.py"},
+                {"exit_code": 0, "command": "ruff check"},
+            ]
+        }
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        found = _find_delivery_validation(result)
+        assert found is dv
+
+        reason = _extract_failure_reason(result, {})
+        assert "delivery_validation_failed" in reason
+        assert "exit=1" in reason
+
+    def test_find_delivery_validation_returns_none_for_none_input(self):
+        """None 输入返回 None。"""
+        assert _find_delivery_validation(None) is None
+
+    def test_find_delivery_validation_returns_none_for_string_input(self):
+        """字符串输入返回 None。"""
+        assert _find_delivery_validation("not a dict") is None
+
+
+# ---------------------------------------------------------------------------
+# _extract_failure_reason: 端到端优先级测试
+# ---------------------------------------------------------------------------
+
+
+class TestExtractFailureReasonEndToEnd:
+    """验证 `_extract_failure_reason` 各分支优先级与 fallback 行为。"""
+
+    def test_priority_handler_failed_message(self):
+        """handler_failed + handler_failed_message 优先级最高。"""
+        result = {
+            "handler_failed": True,
+            "handler_failed_message": "codex cli crashed",
+            "result": {"ok": False, "delivery_validation": {"commands": [{"exit_code": 1}]}},
+        }
+
+        reason = _extract_failure_reason(result, {"error": "para error"})
+
+        assert reason.startswith("handler_failed:")
+        assert "codex cli crashed" in reason
+
+    def test_priority_path_guard_violation(self):
+        """path_guard.ok=False 提取 violations（无 handler_failed 时优先）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "path_guard": {
+                    "checked": True,
+                    "ok": False,
+                    "violations": [
+                        {"path": "forbidden/x.py", "reason": "outside_scope"},
+                    ],
+                },
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason.startswith("path_guard_violation:")
+        assert "forbidden/x.py" in reason
+        assert "outside_scope" in reason
+
+    def test_priority_inner_outputs_failure(self):
+        """outputs[].ok=False 提取 handler/error（无 handler_failed/path_guard 时优先）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [
+                    {
+                        "handler": "code_writer",
+                        "ok": False,
+                        "error": "syntax error in generated file",
+                        "detail": "line 42",
+                    }
+                ],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason.startswith("output_failed:")
+        assert "handler=code_writer" in reason
+        assert "syntax error" in reason
+
+    def test_priority_delivery_validation_failed(self):
+        """delivery_validation.commands[].exit_code≠0 提取失败命令（2026-07-20 修复核心）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [
+                    {
+                        "handler": "para_delegate",
+                        "ok": True,
+                        "para_result": {
+                            "delivery_validation": {
+                                "commands": [
+                                    {
+                                        "command": "pytest tests/test_x.py",
+                                        "exit_code": 1,
+                                        "output_tail": "FAILED tests/test_x.py::test_a",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert "delivery_validation_failed" in reason
+        assert "exit=1" in reason
+        assert "pytest tests/test_x.py" in reason
+
+    def test_priority_para_error(self):
+        """para_meta.error 提取（无 handler/path_guard/outputs/dv 时优先）。"""
+        result = {"result": {"ok": False, "status": "completed"}}
+        para_meta = {"error": "Para task timeout 900s"}
+
+        reason = _extract_failure_reason(result, para_meta)
+
+        assert reason.startswith("para_error:")
+        assert "Para task timeout 900s" in reason
+
+    def test_priority_para_status(self):
+        """para_meta.para_status 非 completed/ok/success 提取。"""
+        result = {"result": {"ok": False, "status": "completed"}}
+        para_meta = {"para_status": "failed"}
+
+        reason = _extract_failure_reason(result, para_meta)
+
+        assert reason == "para_status=failed"
+
+    def test_priority_inner_status_failed(self):
+        """inner.status=failed 提取（无 para_meta 时优先）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "status": "failed",
+                "error": "agent gave up after max rounds",
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason.startswith("inner_status=failed:")
+        assert "agent gave up" in reason
+
+    def test_priority_report_marker_blocked_by_risk_middleware(self):
+        """report 含 'blocked by risk middleware' 返回 blocked_by_risk_middleware。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [{"message": "task blocked by risk middleware: forbidden path"}],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason == "blocked_by_risk_middleware"
+
+    def test_priority_report_marker_codex_cli_failed(self):
+        """report 含 '[e2e-agent] codex cli 失败' 返回 codex_cli_failed。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [{"message": "[e2e-agent] codex cli 失败: exit code 1"}],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason == "codex_cli_failed"
+
+    def test_fallback_ok_false_unknown_reason(self):
+        """所有分支都不匹配时返回 'ok_false_unknown_reason'。"""
+        result = {"result": {"ok": False, "status": "completed"}}
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason == "ok_false_unknown_reason"
+
+    def test_delivery_validation_with_multiple_failed_commands(self):
+        """多个失败命令拼接（最多 3 个）。"""
+        dv = {
+            "commands": [
+                {"exit_code": 1, "command": "pytest a"},
+                {"exit_code": 2, "command": "pytest b"},
+                {"exit_code": 3, "command": "pytest c"},
+                {"exit_code": 4, "command": "pytest d"},  # 超过 3 个，应被截断
+            ]
+        }
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        reason = _extract_failure_reason(result, {})
+
+        assert "delivery_validation_failed" in reason
+        assert "exit=1" in reason
+        assert "exit=2" in reason
+        assert "exit=3" in reason
+        # 第 4 个不应出现
+        assert "exit=4" not in reason
+
+    def test_delivery_validation_truncates_long_output(self):
+        """长 output_tail 截断到 120 字符。"""
+        long_tail = "x" * 500
+        dv = {"commands": [{"exit_code": 1, "command": "pytest", "output_tail": long_tail}]}
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        reason = _extract_failure_reason(result, {})
+
+        assert "delivery_validation_failed" in reason
+        # output_tail 被截断到 120 字符
+        assert ("tail=" + "x" * 120) in reason
+        # 不应包含完整的 500 字符
+        assert "x" * 200 not in reason
+
+
+# ---------------------------------------------------------------------------
+# Task 5: KB schema auto-validate + retry on failure
+# 验收：注入 KB schema 错误 → LOOP 自动评论 PR + 写 kb_schema_retry open_item；
+#       retry_count >= 2 后标 needs-human；resume 触发 fresh code step。
+# ---------------------------------------------------------------------------
+
+
+def _kb_validation_failed_payload(file_name="FHD/XCAGI/kb/fixes/test.json"):
+    """模拟 _validate_kb_json_changes_for_auto_merge 失败时的返回。"""
+    return {
+        "checked": [file_name],
+        "errors": [
+            {
+                "error": "fix executable_template must be an object",
+                "file": file_name,
+                "kind": "fixes",
+            }
+        ],
+        "ok": False,
+        "reason": "kb_json_schema_validation_failed",
+    }
+
+
+def _seed_loop_memory_for_kb_retry(tmp_path, open_items):
+    """把 open_items 写到 tmp_path 的 loop memory 文件中，返回 memory_path。"""
+    memory_path = tmp_path / "loop_memory.json"
+    memory_path.write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": open_items,
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return memory_path
+
+
+def test_resume_returns_none_when_kb_schema_retry_open_item_exists(monkeypatch, tmp_path):
+    """非 escalated 的 kb_schema_retry open_item → resume 返 None 触发 fresh code step。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 1,
+                "run_id": "r-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    memory = _load_loop_memory()
+    result = _resume_review_qa_candidate(memory)
+
+    # 应该返回 None，让 loop 跑 fresh code step
+    assert result is None
+
+
+def test_resume_does_not_short_circuit_when_kb_schema_retry_escalated(monkeypatch, tmp_path):
+    """escalated 的 kb_schema_retry open_item → resume 不短路，等人工。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": True,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 2,
+                "run_id": "r-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    memory = _load_loop_memory()
+    result = _resume_review_qa_candidate(memory)
+
+    # escalated 的项不应触发 fresh code step。result 可能是 None（因为没有其他
+    # resume 候选）或其他 resume 候选；这里只验证它不是因为 kb_schema_retry 短路。
+    # 由于没有其他 open_items，应该返回 None，但不是因为 kb_schema_retry。
+    assert result is None
+
+
+def test_existing_kb_schema_retry_item_matches_by_branch():
+    """精确 branch 匹配优先。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-1",
+            "created_at": "2026-07-20T12:00:00+00:00",
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-1",
+            "retry_count": 1,
+        },
+        {
+            "branch": "devfleet/codex/kb-bad-2",
+            "created_at": "2026-07-20T13:00:00+00:00",
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-2",
+            "retry_count": 1,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="devfleet/codex/kb-bad-2", para_task_id=None
+    )
+    assert found is not None
+    assert found["branch"] == "devfleet/codex/kb-bad-2"
+
+
+def test_existing_kb_schema_retry_item_matches_by_para_task_id():
+    """para_task_id 精确匹配。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-1",
+            "created_at": "2026-07-20T12:00:00+00:00",
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-1",
+            "retry_count": 1,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="different-branch", para_task_id="task-kb-1"
+    )
+    assert found is not None
+    assert found["para_task_id"] == "task-kb-1"
+
+
+def test_existing_kb_schema_retry_item_fallback_within_24h():
+    """不同 branch/task 但 24h 内 → 返回最近项（避免 LLM 换 branch 重置 retry_count）。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-old",
+            "created_at": "2026-07-19T10:00:00+00:00",  # >24h ago
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-old",
+            "retry_count": 1,
+        },
+        {
+            "branch": "devfleet/codex/kb-bad-recent",
+            "created_at": "2026-07-20T10:00:00+00:00",  # <24h ago
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-recent",
+            "retry_count": 1,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="devfleet/codex/kb-new-branch", para_task_id="task-new"
+    )
+    assert found is not None
+    assert found["branch"] == "devfleet/codex/kb-bad-recent"
+
+
+def test_existing_kb_schema_retry_item_skips_escalated():
+    """escalated 项被跳过。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-1",
+            "created_at": "2026-07-20T12:00:00+00:00",
+            "escalated": True,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-1",
+            "retry_count": 2,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="devfleet/codex/kb-bad-1", para_task_id="task-kb-1"
+    )
+    assert found is None
+
+
+def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, tmp_path):
+    """第一次 schema 失败 → 写 kb_schema_retry open_item, retry_count=1, 未 escalated。"""
+    memory_path = tmp_path / "loop_memory.json"
+    _seed_loop_memory_for_kb_retry(tmp_path, [])
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+
+    # Mock PR 操作（避免依赖 gh CLI）
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
+    comment_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_comment",
+        lambda pr, body: comment_calls.append((pr, body)) or True,
+    )
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
+    )
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-1",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 验证 final 状态
+    assert final["status"] == "failed"
+    assert final["failed_step"] == "code"
+    assert final["kb_schema_retry"] is True
+    assert final["policy_decision"]["action"] == "hold_for_automated_remediation"
+    assert final["policy_decision"]["reason"] == "kb_json_schema_validation_failed"
+    assert final["policy_decision"]["retry_count"] == 1
+    assert final["policy_decision"]["escalated"] is False
+
+    # 验证 PR 评论 + label
+    assert comment_calls == [(42, comment_calls[0][1])]
+    assert "KB JSON schema validation failed" in comment_calls[0][1]
+    assert "executable_template must be an object" in comment_calls[0][1]
+    assert (42, KB_SCHEMA_FAILED_LABEL) in label_calls
+    # 第一次失败不应该标 needs-human
+    assert (42, NEEDS_HUMAN_LABEL) not in label_calls
+
+    # 验证 open_item 写入 loop memory
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 1
+    assert kb_items[0]["escalated"] is False
+    assert kb_items[0]["branch"] == "devfleet/codex/kb-bad-1"
+    assert kb_items[0]["para_task_id"] == "task-kb-1"
+
+
+def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkeypatch, tmp_path):
+    """第二次 schema 失败（同 branch）→ retry_count=2, escalated=True, 标 needs-human。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 1,
+                "run_id": "run-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
+    )
+    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-2",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 第二次失败 → escalated
+    assert final["policy_decision"]["retry_count"] == 2
+    assert final["policy_decision"]["escalated"] is True
+    assert final["status"] == "completed_waiting_human_strategy"
+    assert (42, KB_SCHEMA_FAILED_LABEL) in label_calls
+    assert (42, NEEDS_HUMAN_LABEL) in label_calls
+
+    # open_item 应被刷新（不是新增）
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 2
+    assert kb_items[0]["escalated"] is True
+
+
+def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp_path):
+    """retry_count >= KB_SCHEMA_RETRY_MAX (2) → 升级为 human review。"""
+    # 验证 KB_SCHEMA_RETRY_MAX 常量是 2
+    assert KB_SCHEMA_RETRY_MAX == 2
+
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 1,  # 已经失败过 1 次
+                "run_id": "run-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 99)
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
+    )
+    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-2",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 第二次失败 → escalated
+    assert final["policy_decision"]["retry_count"] == 2
+    assert final["policy_decision"]["escalated"] is True
+    assert final["status"] == "completed_waiting_human_strategy"
+    # needs-human label 被添加
+    assert (99, NEEDS_HUMAN_LABEL) in label_calls
+
+
+def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(monkeypatch, tmp_path):
+    """LLM 创建新 branch，但 24h 内有旧 kb_schema_retry → 增量 retry_count 而非重置。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-old",  # 旧 branch
+                "created_at": "2026-07-20T10:00:00+00:00",  # 今天早些时候
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-old",
+                "retry_count": 1,
+                "run_id": "run-kb-old",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
+    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(loop_runner, "_gh_pr_add_label", lambda pr, label: True)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    # 新 branch，不同 para_task_id
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-new",
+        branch="devfleet/codex/kb-bad-new-branch",
+        para_task_id="task-kb-new",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 应该匹配到 24h 内的旧 item，retry_count 从 1 → 2，escalated
+    assert final["policy_decision"]["retry_count"] == 2
+    assert final["policy_decision"]["escalated"] is True
+
+
+def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(monkeypatch, tmp_path):
+    """没有 PR（gh 不可用）→ 跳过 PR 操作，仍然写 open_item。"""
+    _seed_loop_memory_for_kb_retry(tmp_path, [])
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    # _find_pr_number_for_branch 返 None
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
+    comment_calls = []
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner, "_gh_pr_comment", lambda pr, body: comment_calls.append((pr, body)) or True
+    )
+    monkeypatch.setattr(
+        loop_runner, "_gh_pr_add_label", lambda pr, label: label_calls.append((pr, label)) or True
+    )
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-no-pr",
+        branch="devfleet/codex/kb-no-pr",
+        para_task_id=None,
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 不应该调用 PR 评论/label
+    assert comment_calls == []
+    assert label_calls == []
+    # open_item 仍然写入
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 1
+
+
+def test_code_task_text_includes_strict_kb_schema_example_and_validate_instruction():
+    """员工 prompt 必须包含：完整 KB JSON schema 示例 + pre-push validate 强制指令 + kb-schema-failed 警告。"""
+    text = _code_task_text(
+        "run-prompt-test",
+        {"gaps": ["test_gap"]},
+        {"open_items": [], "recent_runs": []},
+    )
+
+    # 1. 包含完整 schema 示例（executable_template 嵌套结构）
+    assert '"schema_version": 1' in text
+    assert '"kind": "fix"' in text
+    assert '"executable_template":' in text
+    assert '"applicability_check":' in text
+    assert '"patch_strategy":' in text
+    assert '"rollback_plan":' in text
+    assert '"required_tests":' in text
+
+    # 2. 包含 pre-push validate 强制指令
+    assert "validate_kb_payload" in text
+    assert "MANDATORY PRE-PUSH VALIDATION" in text
+
+    # 3. 警告 kb-schema-failed label 和重试机制
+    assert "kb-schema-failed" in text
+    assert "needs-human" in text or "human review" in text
+
+    # 4. 强调 executable_template 必须是 object（cedde773 的失败原因）
+    assert "executable_template MUST be an object" in text
+
+
+def test_gh_pr_add_label_is_best_effort_and_returns_false_on_failure(monkeypatch):
+    """gh 命令失败时返回 False，不抛异常。"""
+    import subprocess as _sp
+
+    def fake_run(*args, **kwargs):
+        return _sp.CompletedProcess(
+            args=args[0] if args else kwargs.get("args"),
+            returncode=1,
+            stdout="",
+            stderr="label not found",
+        )
+
+    monkeypatch.setattr(_sp, "run", fake_run)
+    monkeypatch.setenv("GITHUB_REPO", "test/repo")
+
+    result = _gh_pr_add_label(42, "nonexistent-label")
+    assert result is False
+
+
+def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
+    """gh CLI 不可用时返 None。"""
+    import subprocess as _sp
+
+    def fake_run(*args, **kwargs):
+        return _sp.CompletedProcess(
+            args=args[0] if args else kwargs.get("args"),
+            returncode=127,
+            stdout="",
+            stderr="gh: command not found",
+        )
+
+    monkeypatch.setattr(_sp, "run", fake_run)
+    monkeypatch.setenv("GITHUB_REPO", "test/repo")
+
+    result = _find_pr_number_for_branch("any-branch")
+    assert result is None

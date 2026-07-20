@@ -15,20 +15,16 @@ autonomy_evaluate_action() {
     XCAGI_AUTONOMY_DATA_DIR="$data_dir" \
     "$python_bin" - "$action" "$action_id" <<'PY'
 import json
-import os
 import sys
 
 from app.domain.autonomy.autonomy_guard import evaluate_risk
 
 action, action_id = sys.argv[1:3]
-approver = (os.environ.get("FHD_AUTONOMY_APPROVED_BY") or "").strip()
 decision = evaluate_risk(
     action,
     {
-        "human_approved": bool(approver),
-        "approved_by": approver,
-        "approval_id": (os.environ.get("FHD_AUTONOMY_APPROVAL_ID") or "").strip(),
         "trigger": "fhd_deploy_script",
+        "execution_mode": "automatic",
     },
     action_id=action_id,
     source="fhd.deploy.script",

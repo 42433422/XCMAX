@@ -12,6 +12,7 @@ import fnmatch
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ def _count_diff_lines(content: str, original: Optional[str] = None) -> int:
     return len((content or "").splitlines())
 
 
-def evaluate_risk(
+def classify_change_risk(
     rel_path: str,
     content: str,
     *,
@@ -239,7 +240,7 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                 sg, fg, ag = [], [], list(dict.fromkeys([*ag_snapshot, *ag_from_row]))
 
             # 重新评估风险（DB 中可能是旧值）
-            risk, reason = evaluate_risk(
+            risk, reason = classify_change_risk(
                 rel_path,
                 content,
                 scope_globs=sg,
@@ -249,22 +250,25 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
             row.risk_level = risk
             session.commit()
 
-        if risk == "high":
-            return {"auto_approved": False, "reason": f"high risk: {reason}"}
+        from modstore_server.autonomy_guard_delegate import evaluate_risk as evaluate_action_risk
 
-        if _require_ci() and risk != "low":
+        risk_decision = evaluate_action_risk(
+            {"action": "code_write", "risk_level": risk},
+            {
+                "change_request_id": int(change_request_id),
+                "path": rel_path,
+            },
+            action_id=f"change-request:{int(change_request_id)}:apply",
+            source="modstore.auto_approve_policy",
+        )
+        if not risk_decision.allowed:
             return {
                 "auto_approved": False,
-                "reason": "waiting for CI (MODSTORE_AUTO_APPROVE_REQUIRE_CI)",
+                "reason": risk_decision.reason,
+                "risk_decision": risk_decision.to_dict(),
             }
 
-        if risk == "medium":
-            return {
-                "auto_approved": False,
-                "reason": f"medium risk requires manual approval: {reason}",
-            }
-
-        # risk == "low" → 窄 CI 验证（可通过 MODSTORE_AUTO_APPROVE_REQUIRE_CI 强制）
+        # 所有风险等级先经 SSOT，再由自动窄 CI 验证；不进入人工审批队列。
         narrow_ci: Dict[str, Any] = {"ok": True, "skipped": True}
         if _require_ci() or os.environ.get(
             "MODSTORE_CR_NARROW_CI_ENABLED", "1"
@@ -293,7 +297,7 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                     "narrow_ci": narrow_ci,
                 }
 
-        # risk == "low" → 自动落盘
+        # SSOT + 窄 CI 通过后自动落盘。
         from modstore_server.employee_change_request_service import apply_employee_change_request
         from modstore_server.models import User
 
@@ -308,12 +312,15 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
             admin_id = int(u.id) if u else 0
 
         result = apply_employee_change_request(change_request_id, admin_id or 0)
-        logger.info("auto_approve: CR %d auto-approved (risk=low): %s", change_request_id, reason)
+        logger.info(
+            "auto_approve: CR %d auto-approved (risk=%s): %s", change_request_id, risk, reason
+        )
         return {
             "auto_approved": True,
             "reason": reason,
             "result": result,
             "narrow_ci": narrow_ci,
+            "risk_decision": risk_decision.to_dict(),
         }
 
     except Exception as exc:
@@ -321,4 +328,46 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
         return {"auto_approved": False, "reason": str(exc)}
 
 
-__all__ = ["evaluate_risk", "maybe_auto_approve"]
+# --------------------------------------------------------------------------- #
+# employee_pack 审核（接通点 #5）
+# --------------------------------------------------------------------------- #
+
+MAX_EMPLOYEE_PACK_FILES = 5
+
+
+def _catalog_files_root():
+    env_val = os.environ.get("MODSTORE_CATALOG_FILES_ROOT", "")
+    if env_val:
+        return Path(env_val)
+    return None
+
+
+def evaluate_employee_pack(pack_id: str) -> Tuple[str, str]:
+    """评估 employee_pack 风险等级。
+
+    复用 HIGH_RISK_PATTERNS 检查所有文件路径 + ≤5 文件限制。
+    返回 (risk_level, reason)。
+    risk_level: "low"（自动通过）/ "high"（强制人工）
+    """
+    files_root = _catalog_files_root()
+    if files_root is None:
+        return "high", "MODSTORE_CATALOG_FILES_ROOT not set"
+    pack_dir = files_root / pack_id
+    if not pack_dir.is_dir():
+        return "high", f"pack dir not found: {pack_dir}"
+
+    files = list(pack_dir.rglob("*"))
+    file_paths = [f for f in files if f.is_file()]
+
+    if len(file_paths) > MAX_EMPLOYEE_PACK_FILES:
+        return "high", f"pack has {len(file_paths)} files > {MAX_EMPLOYEE_PACK_FILES} limit"
+
+    for f in file_paths:
+        rel = str(f.relative_to(pack_dir))
+        if _path_is_high_risk(rel):
+            return "high", f"pack contains high-risk path: {rel}"
+
+    return "low", f"pack approved: {len(file_paths)} files, no high-risk paths"
+
+
+__all__ = ["classify_change_risk", "maybe_auto_approve", "evaluate_employee_pack"]

@@ -79,11 +79,52 @@ def _historical_rollback_rate(memory: Optional[Dict[str, Any]]) -> Optional[floa
     for row in rows[-80:]:
         if not isinstance(row, dict):
             continue
-        text = json.dumps(row, ensure_ascii=False).lower()
-        if "auto_merged" not in text and "completed_merged" not in text:
+        decision = row.get("policy_decision")
+        decision = decision if isinstance(decision, dict) else {}
+        if (
+            str(decision.get("action") or "") != "auto_merged_low_risk"
+            and str(row.get("status") or "") != "completed_merged"
+        ):
             continue
         considered += 1
-        if any(token in text for token in ("rollback", "revert", "regression", "回滚", "退回")):
+        merge_result = decision.get("merge_result")
+        merge_result = merge_result if isinstance(merge_result, dict) else {}
+        rollback_records = [
+            row.get("rollback"),
+            decision.get("rollback"),
+            merge_result.get("rollback"),
+        ]
+        explicit_statuses = {
+            str(row.get("status") or "").lower(),
+            str(row.get("rollback_status") or "").lower(),
+            str(decision.get("action") or "").lower(),
+            str(decision.get("outcome") or "").lower(),
+            str(merge_result.get("outcome") or "").lower(),
+        }
+        is_rollback = bool(
+            explicit_statuses
+            & {
+                "auto_rollback",
+                "completed_rolled_back",
+                "rollback_completed",
+                "rollback_executed",
+                "rolled_back",
+            }
+        )
+        if not is_rollback:
+            for record in rollback_records:
+                if not isinstance(record, dict):
+                    continue
+                status = str(record.get("status") or record.get("outcome") or "").lower()
+                if record.get("executed") is True or status in {
+                    "completed",
+                    "executed",
+                    "rolled_back",
+                    "success",
+                }:
+                    is_rollback = True
+                    break
+        if is_rollback:
             rolled_back += 1
     if considered <= 0:
         return None

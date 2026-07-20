@@ -86,3 +86,44 @@ def test_change_request_reject(admin_client):
         row = s.get(EmployeeChangeRequest, cid)
         assert row is not None
         assert row.status == "rejected"
+
+
+def test_high_risk_change_request_auto_applies_through_autonomy_ssot(
+    admin_client, tmp_path, monkeypatch
+):
+    _client, workspace = admin_client
+    monkeypatch.setenv("MODSTORE_AUTO_APPROVE_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_AUTO_APPROVE_REQUIRE_CI", "0")
+    monkeypatch.setenv("MODSTORE_CR_NARROW_CI_ENABLED", "0")
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "auto_approve")
+    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "autonomy.sqlite3"))
+    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "autonomy.jsonl"))
+
+    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.models import EmployeeChangeRequest, get_session_factory
+
+    target = workspace / ".env.production"
+    cid = defer_write_as_change_request(
+        "autonomy-code-writer",
+        str(workspace),
+        ".env.production",
+        "SAFE_TEST_VALUE=1\n",
+    )
+
+    assert target.read_text(encoding="utf-8") == "SAFE_TEST_VALUE=1\n"
+    with get_session_factory()() as session:
+        row = session.get(EmployeeChangeRequest, cid)
+        assert row is not None
+        assert row.risk_level == "high"
+        assert row.status == "applied"
+
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+    ensure_fhd_on_path()
+    from app.domain.autonomy.audit_log import list_autonomy_audit
+
+    audit_rows = list_autonomy_audit(action_id=f"change-request:{cid}:apply")
+    assert audit_rows and audit_rows[0]["action"] == "code_write"
+    audit = audit_rows[0]
+    assert audit["decision"] == "auto_approve"
+    assert audit["approver"] is None

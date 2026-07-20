@@ -175,6 +175,16 @@ class AIChatApplicationService(
                 self._persist_chat_turn(user_id, message, ctx, resp)
             except RECOVERABLE_ERRORS as persist_err:
                 logger.warning("会话落库失败（已返回对话结果）: %s", persist_err)
+            try:
+                self._persist_recallable_chat_turn(
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=ctx,
+                    response_data=resp,
+                )
+            except RECOVERABLE_ERRORS as memory_err:
+                logger.warning("跨会话记忆写入失败（已返回对话结果）: %s", memory_err)
 
             return resp
 
@@ -339,6 +349,78 @@ class AIChatApplicationService(
         response_data = self._build_response(ai_result, source, message)
 
         return _finalize(response_data)
+
+    @staticmethod
+    def _persist_recallable_chat_turn(
+        *,
+        user_id: str,
+        message: str,
+        source: str | None,
+        context: dict[str, Any],
+        response_data: dict[str, Any],
+    ) -> None:
+        if context.get("memory_capture_enabled") is False or not response_data.get("success"):
+            return
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            return
+        from app.utils.deployment import is_desktop_mode
+
+        trusted_principal = context.get("_dataset_access_context_trusted") is True
+        if not trusted_principal and not is_desktop_mode():
+            return
+        inner = response_data.get("data") if isinstance(response_data.get("data"), dict) else {}
+        action = str(response_data.get("action") or inner.get("action") or "").strip().lower()
+        if action in {
+            "error",
+            "error_fallback",
+            "fallback",
+            "goodbye",
+            "greeting",
+            "help",
+            "requires_token",
+        }:
+            return
+        sensitive = re.compile(
+            r"(?:password|passcode|api[_ -]?key|access[_ -]?token|secret|验证码|密码|密钥)",
+            re.I,
+        )
+        assistant_text = str(response_data.get("response") or "").strip()
+        if not assistant_text:
+            assistant_text = str(inner.get("text") or inner.get("message") or "").strip()
+        if not assistant_text or sensitive.search(f"{message}\n{assistant_text}"):
+            return
+
+        from app.application.user_memory_vector_app_service import (
+            get_user_memory_vector_ingest_app_service,
+        )
+
+        service = get_user_memory_vector_ingest_app_service()
+        chunk = service.build_chat_turn_chunk(
+            user_id=normalized_user_id,
+            user_message=message,
+            assistant_message=assistant_text,
+            session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
+            source=str(source or "chat"),
+        )
+        service.ingest_chunks(normalized_user_id, [chunk])
+
+        access_context = context.get("_dataset_access_context")
+        if trusted_principal and isinstance(access_context, dict):
+            from app.application.persy_memory_app_service import get_persy_memory_app_service
+
+            get_persy_memory_app_service().capture_conversation_turn(
+                access_context=access_context,
+                user_message=message,
+                assistant_message=assistant_text,
+                session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
+                source=str(source or "chat"),
+                scope=(
+                    "tenant"
+                    if str(context.get("persy_memory_scope") or "").strip().lower() == "tenant"
+                    else "user"
+                ),
+            )
 
     def _persist_chat_turn(
         self,
