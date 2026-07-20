@@ -285,8 +285,9 @@ show_contexts = true
 # 关键：mutmut 3.x 把源码复制进 mutants/ 后在那里跑测试，app 代码 `from resources.config...`
 # 依赖顶层 resources/ 包，故 also_copy 必须含 resources 与 tests，否则 baseline ModuleNotFoundError。
 # 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 80
-# CI 门槛（fhd-mutation-smoke.yml L56）已对齐 test-coverage-90-prompt.md 指令 6 的 80% 目标；
-# 当前实测 ~43%，PR 触发条件 paths-filtered（di/contexts/security/middleware），未达标时 CI 失败但不阻断主合并。
+# CI 门槛（mutation-smoke.yml L49）= 80%（test-coverage-90-prompt.md 指令 6 目标）；
+# 实测 ~43%，未达 80% 目标。2026-07-20 调整：mutation-smoke 已从 PR gate 移除（见 workflow 注释），
+# 改为 weekly nightly + manual 监控趋势。待 kill rate ≥ 80% 后再加回 PR gate。
 # 首轮聚焦低依赖包；补测后逐步扩大 source_paths（见 docs/reports/TO_9_PROGRAM.md T6/T9）。
 [tool.mutmut]
 source_paths = ["app/di", "app/contexts", "app/security", "app/middleware"]
