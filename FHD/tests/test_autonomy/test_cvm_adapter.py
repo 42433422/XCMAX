@@ -1,11 +1,14 @@
 """tests/test_autonomy/test_cvm_adapter.py — CvmAutonomyAdapter 单元测试。
 
 覆盖：
-  - 6 个 action 的成功路径（restart_service / rollback_to_last_tarball /
-    freeze_manifest / clear_logs / escalate / noop）
-  - 6 个 action 的失败路径（无 compose.yml / 无 .deploy-last.tarball / 无 manifest /
-    无 logs 目录 / subprocess 超时 / 命令失败）
+  - 8 个 action 的成功路径（restart_service / rollback_to_last_tarball /
+    freeze_manifest / unfreeze_manifest / clear_logs / escalate / noop /
+    open_incident_issue）
+  - 8 个 action 的失败路径（无 compose.yml / 无 .deploy-last.tarball / 无 manifest /
+    无 logs 目录 / subprocess 超时 / 命令失败 / hold_ttl 未过期 / health 失败 /
+    token 缺失 / GitHub API 错误 / 24h 去重命中 / 前置 action 成功跳过）
   - collect_truth 容错（docker 不可用 / df 失败 / manifest 不存在）
+  - check_unfreeze_needed 守护逻辑
   - audit 写入与读取
 """
 
@@ -14,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -57,7 +61,7 @@ def _make_completed(
 
 
 # --------------------------------------------------------------------------- #
-# 6 个 action 成功路径
+# 8 个 action 成功路径
 # --------------------------------------------------------------------------- #
 
 
@@ -138,7 +142,11 @@ class TestFreezeManifestSuccess:
         adapter_for_test: CvmAutonomyAdapter,
         tmp_manifest_path: str,
     ) -> None:
-        """freeze_manifest 成功：manifest 存在 + .hold 不存在 → os.rename 成功。"""
+        """freeze_manifest 成功：manifest 存在 + .frozen 不存在 → touch marker 文件。
+
+        与 fhd-deploy.yml#L171 `touch ${MANIFEST}.frozen` 同源：marker 文件创建后
+        manifest 原地保留（cron 检测 marker 跳过自动更新）。
+        """
         assert os.path.isfile(tmp_manifest_path)
         action = _make_action(ActionType.FREEZE_MANIFEST, risk=RiskLevel.LOW)
 
@@ -146,10 +154,176 @@ class TestFreezeManifestSuccess:
 
         assert result.ok is True
         assert "manifest frozen" in result.detail
-        # 验证 .hold 文件已生成
-        assert os.path.isfile(f"{tmp_manifest_path}.hold")
-        # 原 manifest 已重命名走
-        assert not os.path.isfile(tmp_manifest_path)
+        assert "manifest preserved" in result.detail
+        # 验证 .frozen marker 文件已生成
+        assert os.path.isfile(f"{tmp_manifest_path}.frozen")
+        # manifest 原地保留（touch 语义，不 rename）
+        assert os.path.isfile(tmp_manifest_path)
+
+
+class TestUnfreezeManifestSuccess:
+    """unfreeze_manifest action 成功路径：hold_ttl 过期 + health 通过 → rm .frozen。"""
+
+    def test_unfreeze_manifest_success_when_expired_and_healthy(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """hold_ttl 过期 + health_ok=True → rm .frozen 成功，ok=True。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        Path(frozen_path).write_text("frozen")
+        # 把 mtime 设为 1 小时前（远超默认 hold_ttl 30min）
+        old_ts = time.time() - 3600
+        os.utime(frozen_path, (old_ts, old_ts))
+        adapter_for_test._health_probe = lambda url: True
+        adapter_for_test.hold_ttl = 1800  # 显式 30min
+        action = _make_action(ActionType.UNFREEZE_MANIFEST, risk=RiskLevel.LOW)
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is True
+        assert "manifest unfrozen" in result.detail
+        assert "marker=" in result.detail
+        assert "health=ok" in result.detail
+        # .frozen marker 已被 rm
+        assert not os.path.isfile(frozen_path)
+
+    def test_unfreeze_manifest_no_frozen_marker(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """.frozen 不存在 → ok=False, "no .frozen marker to remove"。"""
+        assert not os.path.isfile(f"{tmp_manifest_path}.frozen")
+        action = _make_action(ActionType.UNFREEZE_MANIFEST, risk=RiskLevel.LOW)
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is False
+        assert "no .frozen marker" in result.detail
+
+    def test_unfreeze_manifest_within_hold_ttl_keeps_frozen(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """mtime age < hold_ttl → ok=False, "still within hold_ttl"。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        # mtime 设为 5 分钟前（默认 hold_ttl 30min，未过期）
+        recent_ts = time.time() - 300
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (recent_ts, recent_ts))
+        adapter_for_test.hold_ttl = 1800
+        action = _make_action(ActionType.UNFREEZE_MANIFEST, risk=RiskLevel.LOW)
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is False
+        assert "keep frozen" in result.detail
+        assert "age 300s" in result.detail
+        assert f"< hold_ttl {adapter_for_test.hold_ttl}s" in result.detail
+        # marker 未删除
+        assert os.path.isfile(frozen_path)
+
+    def test_unfreeze_manifest_health_failed_keeps_frozen(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """hold_ttl 过期 BUT health_ok=False → ok=False, "health failed, keep frozen"。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 3600  # 1 小时前，已过期
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        adapter_for_test._health_probe = lambda url: False
+        adapter_for_test.hold_ttl = 1800
+        action = _make_action(ActionType.UNFREEZE_MANIFEST, risk=RiskLevel.LOW)
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is False
+        assert "health check failed" in result.detail
+        assert "keep frozen" in result.detail
+        # marker 未删除（health 失败保持冻结）
+        assert os.path.isfile(frozen_path)
+
+    def test_unfreeze_manifest_custom_hold_ttl_via_env(
+        self,
+        tmp_deploy_root: Path,
+        tmp_audit_dir: Path,
+        tmp_manifest_path: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """env FHD_MANIFEST_HOLD_TTL_SECONDS=60 → hold_ttl=60s, 5 分钟前 marker 视为过期。"""
+        monkeypatch.setenv("FHD_MANIFEST_HOLD_TTL_SECONDS", "60")
+        adapter = CvmAutonomyAdapter(
+            deploy_root=str(tmp_deploy_root),
+            manifest_path=tmp_manifest_path,
+            audit_dir=str(tmp_audit_dir),
+        )
+        assert adapter.hold_ttl == 60
+
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 300  # 5 分钟前，> 60s ttl
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        adapter._health_probe = lambda url: True
+        action = _make_action(ActionType.UNFREEZE_MANIFEST, risk=RiskLevel.LOW)
+
+        result = adapter.execute_action(action)
+
+        assert result.ok is True
+        assert "ttl=60s" in result.detail
+        assert not os.path.isfile(frozen_path)
+
+
+class TestCheckUnfreezeNeeded:
+    """adapter.check_unfreeze_needed() 守护逻辑测试。"""
+
+    def test_no_frozen_marker_returns_false(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """.frozen 不存在 → (False, 0)。"""
+        needed, age = adapter_for_test.check_unfreeze_needed()
+
+        assert needed is False
+        assert age == 0
+
+    def test_within_hold_ttl_returns_false(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """mtime age < hold_ttl → (False, age)。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        recent_ts = time.time() - 60  # 1 分钟前
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (recent_ts, recent_ts))
+        adapter_for_test.hold_ttl = 1800
+
+        needed, age = adapter_for_test.check_unfreeze_needed()
+
+        assert needed is False
+        assert 50 <= age <= 70  # ~60s ± 容差
+
+    def test_expired_returns_true(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """mtime age >= hold_ttl → (True, age)。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 3600  # 1 小时前
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        adapter_for_test.hold_ttl = 1800
+
+        needed, age = adapter_for_test.check_unfreeze_needed()
+
+        assert needed is True
+        assert 3500 <= age <= 3700
 
 
 class TestClearLogsSuccess:
@@ -196,7 +370,7 @@ class TestEscalateNoopSuccess:
 
 
 # --------------------------------------------------------------------------- #
-# 6 个 action 失败路径
+# 8 个 action 失败路径（含 open_incident_issue 专属失败路径）
 # --------------------------------------------------------------------------- #
 
 
@@ -270,8 +444,8 @@ class TestActionFailures:
         adapter_for_test: CvmAutonomyAdapter,
         tmp_manifest_path: str,
     ) -> None:
-        """freeze_manifest 失败：.hold 已存在。"""
-        Path(f"{tmp_manifest_path}.hold").write_text("frozen")
+        """freeze_manifest 失败：.frozen marker 已存在。"""
+        Path(f"{tmp_manifest_path}.frozen").write_text("frozen")
         action = _make_action(ActionType.FREEZE_MANIFEST, risk=RiskLevel.LOW)
 
         result = adapter_for_test.execute_action(action)
@@ -424,8 +598,8 @@ class TestCollectTruth:
         adapter_for_test: CvmAutonomyAdapter,
         tmp_manifest_path: str,
     ) -> None:
-        """collect_truth: .hold 存在 → manifest_frozen=True。"""
-        Path(f"{tmp_manifest_path}.hold").write_text("frozen")
+        """collect_truth: .frozen marker 存在 → manifest_frozen=True。"""
+        Path(f"{tmp_manifest_path}.frozen").write_text("frozen")
         adapter_for_test._health_probe = lambda url: True
         adapter_for_test._compose_status_probe = lambda root: ("running", True)
 
