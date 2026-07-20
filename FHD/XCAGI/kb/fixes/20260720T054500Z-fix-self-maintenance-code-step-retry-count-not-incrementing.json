@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "symptom": "自维护循环code步骤重复失败，open_items中不断新增failed_steps=code条目，retry_count始终为1，无法达到max_retries阈值升级到人工处理，造成无限循环执行code步骤",
+  "root_cause": "_update_loop_memory中匹配code步骤失败项的逻辑错误要求existing item必须没有para_task_id，但code步骤执行后在返回失败时通常已经创建了para_task_id（但尚未创建branch），导致无法匹配已有失败项，每次都新增条目而不是累加重试次数",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n@@ -3407,15 +3407,12 @@ def _update_loop_memory(memory: Dict[str, Any], final: Dict[str, Any], gate: Dic\n                         existing_idx = idx\n                         break\n         # If still not found and failing at code step (no branch yet), match existing open code failure\n         if existing_idx is None and failed_steps == [\"code\"]:\n             for idx, item in reversed(list(enumerate(open_items))):\n                 if (\n                     isinstance(item, dict)\n                     and item.get(\"kind\") == \"failed_steps\"\n                     and item.get(\"steps\") == [\"code\"]\n                     and not item.get(\"branch\")\n-                    and not item.get(\"task_id\")\n-                    and not item.get(\"para_task_id\")\n                 ):\n-                    existing_idx = idx\n-                    break\n+                    # Early code failures (before branch creation) always match the most recent open code failure,\n+                    # regardless of para_task_id, since no branch exists to resume against\n+                    existing_idx = idx\n+                    break\n",
+  "executable_template": {
+    "applicability_check": "当自维护循环open_items中存在多个kind=failed_steps且steps=[\"code\"]、retry_count=1的条目，且循环持续重复执行code步骤无法推进到review/qa阶段时适用",
+    "patch_strategy": "移除code失败项匹配逻辑中对para_task_id为空的要求，允许匹配到最近的无分支code失败项，从而正确累加重试次数",
+    "rollback_plan": "恢复原匹配条件，重新添加`and not item.get(\"para_task_id\")`判断即可回滚",
+    "required_tests": [
+      "test_self_maintenance_loop_runner_policy.py",
+      "test_self_maintenance_policy.py"
+    ]
+  },
+  "created_at": "2026-07-20T05:45:00Z",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "confidence": 0.95,
+    "files": [
+      "self_maintenance_loop_runner.py"
+    ]
+  }
+}

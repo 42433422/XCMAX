@@ -3404,7 +3404,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                     ):
                         existing_idx = idx
                         break
-        # If still not found and failing at code step (no branch/task yet), match existing open code failure
+        # If still not found and failing at code step (no branch yet), match existing open code failure
         if existing_idx is None and failed_steps == ["code"]:
             for idx, item in reversed(list(enumerate(open_items))):
                 if (
@@ -3413,8 +3413,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                     and item.get("steps") == ["code"]
                     and not item.get("branch")
                     and not item.get("task_id")
-                    and not item.get("para_task_id")
                 ):
+                    # Early code failures (before branch creation) always match the most recent open code failure,
+                    # regardless of para_task_id, since no branch exists to resume against
                     existing_idx = idx
                     break
         # If still not found and failing with same branch/para_task_id, match existing task failure
