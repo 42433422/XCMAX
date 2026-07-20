@@ -213,6 +213,13 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "workflow_definitions",
+        lambda: (
+            __import__("app.fastapi_routes.workflow_definitions", fromlist=["router"]).router
+        ),
+    )
+    _mount(
+        registry,
         "mods",
         lambda: __import__(
             "app.fastapi_routes.mods_routes", fromlist=["get_mods_router"]

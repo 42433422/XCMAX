@@ -112,14 +112,17 @@ class RagService:
 
 def get_default_embedder() -> Callable[[str], list[float]] | None:
     """
-    默认 embedder：尝试用 app.infrastructure.ai 提供的 embedding。
-    返回 None 时调用方需自带 embedder。
+    默认 embedder：优先用真实 ``EmbeddingService``（local/remote）；
+    disabled 或不可用时返回 None，调用方需自带 embedder。
     """
     try:
         from app.infrastructure.llm import get_default_embedding_service
 
         svc = get_default_embedding_service()
-        return lambda text: svc.embed(text)
+        if svc is None:
+            return None
+        # HybridRetriever 期望 Callable[[str], list[float]]，直接复用 embed_one
+        return svc.embed_one
     except RECOVERABLE_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None

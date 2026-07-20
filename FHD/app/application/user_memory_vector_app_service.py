@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from app.application.excel_vector_app_service import HashEmbedder
+from app.application.excel_vector_app_service import _get_default_embedder
+from app.application.ports.embedder import EmbedderPort
 from app.application.ports.vector_store import VectorStorePort
 from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
 
@@ -23,10 +24,10 @@ class UserMemoryVectorIngestApplicationService:
     def __init__(
         self,
         vector_store: VectorStorePort | None = None,
-        embedder: HashEmbedder | None = None,
+        embedder: EmbedderPort | None = None,
     ) -> None:
         self._vector_store = vector_store or get_user_memory_vector_store()
-        self._embedder = embedder or HashEmbedder()
+        self._embedder = embedder or _get_default_embedder()
 
     def _ensure_user_index(self, user_id: str) -> None:
         if hasattr(self._vector_store, "create_or_update_index"):
@@ -154,10 +155,10 @@ class UserMemoryRagApplicationService:
     def __init__(
         self,
         vector_store: VectorStorePort | None = None,
-        embedder: HashEmbedder | None = None,
+        embedder: EmbedderPort | None = None,
     ) -> None:
         self._vector_store = vector_store or get_user_memory_vector_store()
-        self._embedder = embedder or HashEmbedder()
+        self._embedder = embedder or _get_default_embedder()
 
     def query(self, user_id: str, query_text: str, top_k: int = 5) -> dict[str, Any]:
         if not user_id:
