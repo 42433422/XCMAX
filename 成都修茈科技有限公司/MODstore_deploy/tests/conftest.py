@@ -36,6 +36,16 @@ from fastapi.testclient import TestClient
 from modman.repo_config import RepoConfig
 
 
+@pytest.fixture(autouse=True)
+def _isolate_evolution_ledger(tmp_path, monkeypatch):
+    """全局隔离 evolution ledger 路径到 tmp_path，避免测试间通过默认 ledger 路径泄漏状态。
+
+    与 ``MODSTORE_DB_PATH`` 全局隔离同理；显式 setenv 的测试（如 ``tmp_ledger``）会覆盖此值。
+    """
+    ledger_path = tmp_path / "evolution_decisions.jsonl"
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
+
+
 @pytest.fixture
 def isolated_modstore(tmp_path, monkeypatch):
     """
