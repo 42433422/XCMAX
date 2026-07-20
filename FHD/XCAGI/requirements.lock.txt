@@ -368,7 +368,7 @@ tokenizers==0.22.2
     # via
     #   faster-whisper
     #   transformers
-torch==2.12.1
+torch==2.13.0
     # via
     #   -r XCAGI/requirements.txt
     #   accelerate
