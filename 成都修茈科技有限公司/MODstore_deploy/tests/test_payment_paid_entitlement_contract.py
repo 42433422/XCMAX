@@ -31,8 +31,8 @@ from modstore_server.models import (
     Purchase,
     Quota,
     Transaction,
-    UserPlan,
     User,
+    UserPlan,
     Wallet,
     get_session_factory,
 )

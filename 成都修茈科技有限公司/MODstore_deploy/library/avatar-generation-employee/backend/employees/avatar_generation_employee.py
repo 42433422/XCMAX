@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import sys
 
 EMPLOYEE_ID = "avatar-generation-employee"
 EMPLOYEE_LABEL = "头像生成员"
