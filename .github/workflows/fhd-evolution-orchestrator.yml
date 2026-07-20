@@ -1,0 +1,163 @@
+# CI SSOT: generated from FHD/.github/workflows/evolution-orchestrator.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Evolution Orchestrator
+
+# 演化闭环编排：
+#   - schedule: 每周一 04:00 UTC 扫描信号 → LLM 提议 → 开 issue（打 ai-implement 标签）
+#   - workflow_dispatch: 手动触发
+#   - pull_request (closed): PR 合并后构建 employee_pack + 注册 catalog + 审核
+#
+# 与 ai-issue-implement.yml 协作：
+#   - 本 workflow 负责 "信号 → issue" 阶段
+#   - ai-issue-implement.yml 负责 "issue → 实现 → PR" 阶段
+#   - 本 workflow 负责 "PR 合并 → 上架 catalog" 阶段
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'  # 每周一 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run signal scan even if no new signals'
+        required: false
+        default: 'false'
+        type: string
+  pull_request:
+    types: [closed]
+    paths:
+      - '成都修茈科技有限公司/MODstore_deploy/catalog_data/files/**'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  scan-and-propose:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_REPO: ${{ github.repository }}
+      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || true
+          pip install httpx apscheduler 2>/dev/null || true
+
+      - name: Aggregate evolution signals + LLM propose + open issue
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+        run: |
+          python -c "
+          import os, sys, json
+          from modstore_server.evolution_signal_collector import aggregate_signals
+          from modstore_server.employee_autonomy_service import propose_employee_pack
+          from modstore_server.gap_to_issue import open_issue_for_proposal
+          from modstore_server.evolution_ledger import append_event
+
+          signals = aggregate_signals()
+          print(f'Aggregated signals: {signals}')
+          if not signals.get('signals_to_propose'):
+              print('No signals to propose, exiting.')
+              sys.exit(0)
+
+          append_event({'event_type': 'signal_detected', 'signals': signals, 'final_status': 'signal_detected'})
+
+          proposal = propose_employee_pack(signals)
+          if not proposal:
+              print('LLM returned no proposal, exiting.')
+              sys.exit(0)
+
+          print(f'Proposal: {proposal}')
+          try:
+              issue_url = open_issue_for_proposal(proposal)
+              print(f'Opened issue: {issue_url}')
+          except Exception as e:
+              print(f'Failed to open issue: {e}', file=sys.stderr)
+              append_event({'event_type': 'issue_open_failed', 'error': str(e), 'final_status': 'needs_human'})
+              sys.exit(1)
+          "
+
+      - name: Upload ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evolution-ledger-scan
+          path: FHD/evolution_decisions.jsonl
+          if-no-files-found: ignore
+
+  build-on-merge:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
+      MODSTORE_CATALOG_PACKAGES_PATH: 成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/packages.json
+      MODSTORE_CATALOG_FILES_ROOT: 成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || true
+
+      - name: Build employee_pack from merge commit
+        working-directory: .
+        run: |
+          git pull origin main
+          python -c "
+          import sys, json
+          sys.path.insert(0, '成都修茈科技有限公司/MODstore_deploy')
+          from modstore_server.build_employee_pack import build_pack_from_commit
+          from pathlib import Path
+          result = build_pack_from_commit(commit_sha='HEAD', repo_root=Path('.'))
+          print(json.dumps(result, indent=2, default=str))
+          if result.get('approved'):
+              print('::notice::Employee pack listed: ' + result.get('pack_id', ''))
+          elif result.get('skipped'):
+              print('No employee_pack files in this merge, skipping.')
+          else:
+              print(f'::warning::Pack not approved: {result.get(\"reason\")}')
+              sys.exit(1)
+          "
+
+      - name: Append final ledger event
+        if: success()
+        working-directory: .
+        run: |
+          python FHD/scripts/dev/append_evolution_event.py --event pack_listed || true
+
+      - name: Upload ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evolution-ledger-build
+          path: FHD/evolution_decisions.jsonl
+          if-no-files-found: ignore
