@@ -116,26 +116,40 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
 def _run_collector_with_timeout(
     fn: Callable[[], Any], *, label: str, timeout: float = 240.0
 ) -> Any:
-    """运行 sync collector 并施加 wall-clock 超时。
+    """运行 sync collector 并施加 wall-clock 超时（2026-07-20 重写）。
 
-    APScheduler ``BackgroundScheduler`` 在线程池里跑 sync 任务，没有运行中的事件循环；
-    这里在 worker 线程里新建一个临时 loop，用 ``asyncio.wait_for`` + ``run_in_executor``
-    包裹 sync 调用。超时后 ``wait_for`` 抛 ``TimeoutError``，被外层 ``except Exception``
-    捕获并记日志——APScheduler 的 job 实例槽位（``max_instances=1``）随即释放，
-    避免某个 collector 卡死后实例无限堆积。
+    历史问题：旧实现 ``asyncio.run(wait_for(loop.run_in_executor(None, fn), timeout))``
+    在 ``asyncio.run`` 退出时调 ``loop.shutdown_default_executor()`` JOIN 默认
+    ThreadPoolExecutor 的 orphan 线程。当 fn 永久阻塞时，整个函数永不返回 →
+    APScheduler ``max_instances=1`` 槽位被永久占用 → scheduler 看似在跑但所有
+    incident_collect_* 都报 "maximum number of running instances reached"。
 
-    注意：CPython 无法强杀线程，超时后原 collector 仍可能在 executor 线程里跑（orphan），
-    但已不再阻塞调度器。这是 Python 生态下 sync 调用超时的标准妥协。
+    修复：用专用 ``ThreadPoolExecutor(max_workers=1)``，``future.result(timeout=...)``
+    真超时——超时后调用方立即返回 None 释放 APScheduler 槽位，executor 不 shutdown，
+    orphan 线程在 fn 自然结束（或进程退出）时消失。这是 CPython 无法强杀线程下的
+    标准妥协：槽位释放是关键，orphan 线程副作用可接受。
+
+    回归覆盖：``tests/test_run_collector_timeout.py`` 验证 hanging fn 在 timeout+1s
+    内返回 None、且不影响后续调用。
     """
+    import concurrent.futures
 
-    async def _wrapped() -> Any:
-        loop = asyncio.get_running_loop()
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, fn),
-            timeout=timeout,
+    executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix=f"collector-{label}"
+    )
+    future = executor.submit(fn)
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        logger.error(
+            "collector %s exceeded %.0fs timeout; orphan thread left running",
+            label,
+            timeout,
         )
-
-    return asyncio.run(_wrapped())
+        return None
+    except Exception:
+        executor.shutdown(wait=False)
+        raise
 
 
 def start_scheduler() -> None:
@@ -1017,6 +1031,42 @@ def start_scheduler() -> None:
             )
     except Exception:
         logger.exception("register post_deploy_smoke cron failed")
+
+    try:
+        from modstore_server.system_status_daily_report import (
+            system_status_daily_summary_job,
+            system_status_sample_job,
+        )
+
+        # CVM + 本机双端 health 日报：每 30min 探活，每天 23:55 Asia/Shanghai 汇总
+        # 门槛 ≥99% ok / 95-99% warn / <95% critical。样本与日报写到 $MODSTORE_RUNTIME_DIR。
+        sample_minutes = _env_int("MODSTORE_SYSTEM_STATUS_SAMPLE_MINUTES", 30)
+        _scheduler.add_job(
+            system_status_sample_job,
+            IntervalTrigger(minutes=max(5, sample_minutes)),
+            id="system_status_sample",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=300,
+        )
+
+        summary_tz = os.environ.get("MODSTORE_SYSTEM_STATUS_SUMMARY_TZ", "Asia/Shanghai")
+        summary_hour = _env_int("MODSTORE_SYSTEM_STATUS_SUMMARY_HOUR_LOCAL", 23)
+        summary_minute = _env_int("MODSTORE_SYSTEM_STATUS_SUMMARY_MINUTE_LOCAL", 55)
+        _scheduler.add_job(
+            system_status_daily_summary_job,
+            CronTrigger(
+                hour=summary_hour, minute=summary_minute, timezone=summary_tz
+            ),
+            id="system_status_daily_summary",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=_business_misfire_grace_time(),
+        )
+    except Exception:
+        logger.exception("register system_status_daily_report cron failed")
 
     logger.info("workflow scheduler started")
 

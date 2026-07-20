@@ -2618,4 +2618,41 @@ const openApprovalItems = computed(() =>
     grid-template-columns: 1fr;
   }
 }
+
+.selp-burnin { margin-top: 24px; padding: 20px; border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 12px; background: rgba(15, 23, 42, 0.4); }
+.selp-burnin-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.selp-burnin-title { margin: 4px 0 8px 0; font-size: 18px; font-weight: 600; color: #e2e8f0; }
+.selp-burnin-phase { display: flex; gap: 8px; align-items: center; }
+.selp-burnin-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.selp-burnin-chip.is-active { background: rgba(96, 165, 250, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.3); }
+.selp-burnin-chip.is-idle { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+.selp-burnin-chip.subtle { background: rgba(148, 163, 184, 0.08); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.15); padding: 2px 8px; }
+.selp-burnin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.selp-burnin-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(148, 163, 184, 0.25); background: rgba(30, 41, 59, 0.6); color: #e2e8f0; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+.selp-burnin-btn:hover:not(:disabled) { background: rgba(51, 65, 85, 0.8); border-color: rgba(148, 163, 184, 0.4); }
+.selp-burnin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.selp-burnin-btn.primary { background: rgba(96, 165, 250, 0.15); border-color: rgba(96, 165, 250, 0.4); color: #60a5fa; }
+.selp-burnin-btn.primary:hover:not(:disabled) { background: rgba(96, 165, 250, 0.25); }
+.selp-burnin-btn.danger { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); color: #f87171; }
+.selp-burnin-btn.danger:hover:not(:disabled) { background: rgba(248, 113, 113, 0.2); }
+.selp-burnin-error { margin: 12px 0; padding: 8px 12px; border-radius: 6px; background: rgba(248, 113, 113, 0.1); color: #f87171; font-size: 13px; }
+.selp-burnin-result { margin: 12px 0; padding: 8px 12px; border-radius: 6px; background: rgba(134, 239, 172, 0.08); color: #86efac; font-size: 12px; word-break: break-all; }
+.selp-burnin-progress { height: 8px; background: rgba(148, 163, 184, 0.15); border-radius: 4px; overflow: hidden; margin: 16px 0; }
+.selp-burnin-progress-bar { height: 100%; background: linear-gradient(90deg, #60a5fa 0%, #818cf8 100%); transition: width 0.3s; }
+.selp-burnin-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+.selp-burnin-card { padding: 14px; border-radius: 8px; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.15); }
+.selp-burnin-card-label { font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+.selp-burnin-card-value { font-size: 24px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+.selp-burnin-card-threshold { font-size: 11px; color: #64748b; }
+.selp-burnin-breakdown { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.selp-burnin-breaches { margin: 16px 0; padding: 12px; border-radius: 8px; background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.25); }
+.selp-burnin-breaches-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.selp-burnin-kicker.danger { color: #f87171; font-size: 13px; font-weight: 600; }
+.selp-burnin-breaches ul { margin: 0; padding-left: 20px; color: #fca5a5; font-size: 13px; }
+.selp-burnin-breaches li { margin: 4px 0; }
+.selp-burnin-history { margin-top: 16px; }
+.selp-burnin-history summary { cursor: pointer; color: #94a3b8; font-size: 13px; padding: 6px 0; }
+.selp-burnin-history table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; }
+.selp-burnin-history th, .selp-burnin-history td { padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(148, 163, 184, 0.1); color: #cbd5e1; }
+.selp-burnin-history th { color: #94a3b8; font-weight: 500; }
 </style>

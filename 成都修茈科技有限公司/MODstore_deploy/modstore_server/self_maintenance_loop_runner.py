@@ -112,6 +112,25 @@ DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS = [
     "**/pyproject.toml",
     "**/package-lock.json",
 ]
+# Safe-data-only globs: when ALL changed files match these patterns AND the
+# structured review+qa gate passes, the auto-merge policy bypasses the v2/v3
+# scoring gates. These files are pure data/documentation/tests — not source
+# code — so keyword-based scoring penalties (e.g. "token" appearing in a KB
+# fix JSON) should not block the loop from reaching `completed_merged`.
+# Aligns with P1 task: "只改测试/文档/明确 allow → completed_merged".
+DEFAULT_SAFE_DATA_ONLY_GLOBS = [
+    "FHD/XCAGI/kb/fixes/*.json",
+    "FHD/XCAGI/kb/fixes/*.md",
+    "FHD/XCAGI/kb/patterns/*.json",
+    "FHD/XCAGI/kb/patterns/*.md",
+    "FHD/XCAGI/kb/metrics/*.jsonl",
+    "FHD/XCAGI/kb/*.json",
+    "FHD/XCAGI/kb/*.md",
+    "**/*.md",
+    "**/docs/**",
+    "**/tests/**",
+    "成都修茈科技有限公司/MODstore_deploy/tests/**",
+]
 _PARA_GUEST_AUTH_CACHE: Dict[str, tuple] = {}
 _PARA_GUEST_AUTH_TTL_SECONDS = 1800  # 30 分钟
 _PARA_GUEST_AUTH_FILE_SAFETY_SECONDS = 60
@@ -1072,6 +1091,134 @@ def _last_started_at() -> Optional[datetime]:
     return None
 
 
+def _last_terminal_record() -> Optional[Dict[str, Any]]:
+    """返回 ledger 中最近一条 phase=complete/skip 终态记录；无则 None。"""
+    for row in reversed(_read_ledger()):
+        phase = str(row.get("phase") or "")
+        if phase in {"complete", "skip"}:
+            return row
+    return None
+
+
+def _last_in_progress_start() -> Optional[Dict[str, Any]]:
+    """如果存在「有 start 无 complete」的 run，返回该 start 记录。
+
+    用于阻止新 run 启动；与 reconcile_stale_self_maintenance_runs 的兜底不同——
+    这里只看 ledger 上的事实状态，reconcile 负责清理超时未终态的 run。
+    """
+    rows = _read_ledger()
+    started: Dict[str, Dict[str, Any]] = {}
+    terminal_run_ids: set = set()
+    for row in rows:
+        run_id = str(row.get("run_id") or "")
+        if not run_id:
+            continue
+        phase = str(row.get("phase") or "")
+        if phase == "start":
+            started[run_id] = row
+        elif phase in {"complete", "skip"}:
+            terminal_run_ids.add(run_id)
+    in_progress = [
+        rec for run_id, rec in started.items() if run_id not in terminal_run_ids
+    ]
+    if not in_progress:
+        return None
+    in_progress.sort(
+        key=lambda r: _parse_iso(r.get("started_at") or r.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return in_progress[0] if in_progress else None
+
+
+def _consecutive_failures() -> int:
+    """从最近一条终态向前数连续的失败计数。
+
+    成功类状态中断计数；abandoned_stale 视为失败类。
+    """
+    success_statuses = {
+        "completed",
+        "completed_merged",
+        "completed_no_action",
+        "completed_held_for_remediation",
+        "completed_merge_requested",
+    }
+    failure_statuses = {"failed", "abandoned_stale"}
+    count = 0
+    for row in reversed(_read_ledger()):
+        phase = str(row.get("phase") or "")
+        if phase not in {"complete", "skip"}:
+            continue
+        status = str(row.get("status") or "")
+        if status in success_statuses:
+            break
+        if status in failure_statuses:
+            count += 1
+        # 其他状态（completed_waiting_human_strategy 等）不打断也不计入
+    return count
+
+
+def _compute_cooldown_minutes(triggered_by: str) -> int:
+    """rational cooldown：基于上次终态而非 last_started。
+
+    - incident_event: 固定 60min（独立短冷却，让 incident 信号不被 6h 长冷却吞掉）
+    - scheduler + 上次成功: 30min 短冷却，让次日 cron 自然 fire
+    - scheduler + 上次 waiting_human: 60min
+    - scheduler + 上次失败: 指数退避 base + (n-1) * step，cap 上限
+    - scheduler + 无终态记录: 0（首次运行）
+    - manual: 360min 默认（防止人工频繁触发）
+    - legacy mode: 退回旧行为（基于 last_started 的 360min）
+    """
+    mode = os.environ.get("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MODE", "rational")
+    if mode == "legacy":
+        if triggered_by == "incident_event":
+            return _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
+        return _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
+
+    if triggered_by == "incident_event":
+        return _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
+
+    if triggered_by == "scheduler":
+        last_terminal = _last_terminal_record()
+        if last_terminal is None:
+            return 0
+        last_status = str(last_terminal.get("status") or "")
+        success_statuses = {
+            "completed",
+            "completed_merged",
+            "completed_no_action",
+            "completed_held_for_remediation",
+            "completed_merge_requested",
+        }
+        if last_status in success_statuses:
+            return _env_int(
+                "MODSTORE_SELF_MAINTENANCE_SUCCESS_COOLDOWN_MINUTES", 30
+            )
+        if last_status == "completed_waiting_human_strategy":
+            return _env_int(
+                "MODSTORE_SELF_MAINTENANCE_WAITING_COOLDOWN_MINUTES", 60
+            )
+        if last_status in {"failed", "abandoned_stale"}:
+            consecutive = _consecutive_failures()
+            base = _env_int(
+                "MODSTORE_SELF_MAINTENANCE_FAILURE_COOLDOWN_BASE_MINUTES", 60
+            )
+            step = _env_int(
+                "MODSTORE_SELF_MAINTENANCE_FAILURE_COOLDOWN_STEP_MINUTES", 60
+            )
+            cap = _env_int(
+                "MODSTORE_SELF_MAINTENANCE_FAILURE_COOLDOWN_CAP_MINUTES", 360
+            )
+            if consecutive <= 0:
+                return base
+            return min(cap, base + (consecutive - 1) * step)
+        # 其他未知终态：保守 60min
+        return 60
+
+    # manual / 其他
+    return _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
+
+
 def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
     rows = _read_ledger(limit=300)
     started: Dict[str, Dict[str, Any]] = {}
@@ -1156,25 +1303,55 @@ def should_run_self_maintenance_loop(
             "should_run": False,
         }
     threshold = _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1)
-    # incident 触发用独立更短冷却，避免 6 小时冷却导致信号被全部跳过
-    if triggered_by == "incident_event":
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
-    else:
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
-    last_started = _last_started_at()
 
-    if not force and last_started is not None and cooldown_minutes > 0:
-        next_allowed = last_started + timedelta(minutes=cooldown_minutes)
-        if _utc_now() < next_allowed:
+    cooldown_minutes = _compute_cooldown_minutes(triggered_by)
+
+    # 闸 1：in_progress run 阻断新 run（除非 force）
+    # 检查 ledger 中有 start 无 complete 的 run_id。reconcile_stale_self_maintenance_runs
+    # 负责把超时未终态的 run 兜底标记为 abandoned_stale，这里只看事实状态。
+    if not force:
+        in_progress = _last_in_progress_start()
+        if in_progress is not None:
             return {
                 **evaluation,
                 "cooldown_minutes": cooldown_minutes,
-                "next_allowed_at": _iso(next_allowed),
-                "reason": "cooldown",
+                "in_progress_run_id": in_progress.get("run_id"),
+                "reason": "in_progress",
                 "should_run": False,
                 "threshold": threshold,
                 "triggered_by": triggered_by,
             }
+
+    # 闸 2：基于上次终态的 cooldown
+    # rational 模式：cooldown 窗口从 last_terminal.completed_at 起算
+    # legacy 模式：cooldown 窗口从 last_started 起算（旧行为）
+    mode = os.environ.get("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MODE", "rational")
+    if not force and cooldown_minutes > 0:
+        if mode == "legacy":
+            anchor = _last_started_at()
+            last_terminal = None
+        else:
+            last_terminal = _last_terminal_record()
+            anchor = (
+                _parse_iso(last_terminal.get("completed_at") or last_terminal.get("started_at"))
+                if last_terminal
+                else None
+            )
+        if anchor is not None:
+            next_allowed = anchor + timedelta(minutes=cooldown_minutes)
+            if _utc_now() < next_allowed:
+                return {
+                    **evaluation,
+                    "cooldown_minutes": cooldown_minutes,
+                    "last_terminal_status": (
+                        last_terminal.get("status") if last_terminal else None
+                    ),
+                    "next_allowed_at": _iso(next_allowed),
+                    "reason": "cooldown",
+                    "should_run": False,
+                    "threshold": threshold,
+                    "triggered_by": triggered_by,
+                }
 
     if not force and int(evaluation["signal_count"]) < threshold:
         return {
@@ -2117,6 +2294,13 @@ def _auto_merge_forbidden_globs() -> List[str]:
     return _env_list(
         "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS",
         DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS,
+    )
+
+
+def _safe_data_only_globs() -> List[str]:
+    return _env_list(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SAFE_DATA_GLOBS",
+        DEFAULT_SAFE_DATA_ONLY_GLOBS,
     )
 
 

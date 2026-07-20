@@ -1680,3 +1680,165 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
     result = _find_pr_number_for_branch("any-branch")
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Safe-data-only bypass tests (P1: 只改测试/文档/明确 allow → completed_merged)
+# ---------------------------------------------------------------------------
+
+
+def test_safe_data_only_bypass_passes_for_kb_fix_json_with_structured_reports(monkeypatch):
+    """所有变更文件都是 KB fix JSON 且 review+qa gate 通过 → bypass v2/v3 直接 ok=True."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SAFE_DATA_GLOBS", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS", "1")
+    # v2/v3 gate 保持启用（默认），验证 bypass 在 v2/v3 会失败时仍能通过
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True, "reason": "structured_reports_passed"},
+    )
+    # Mock v2/v3 评分返回低分（模拟 "token"/"auth" 关键字扣分场景）
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda *args, **kwargs: {"score": 71, "min_allowed": 90, "ok": False},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kwargs: {"score": 92, "min_allowed": 95, "ok": False},
+    )
+
+    files = [
+        "FHD/XCAGI/kb/fixes/20260618T205404Z-fix-evolution-signal-collector.json",
+        "FHD/XCAGI/kb/fixes/20260618T210503Z-fix-para-api-is-down.json",
+    ]
+    result = _assess_branch_auto_merge_policy(
+        files, _stats(), steps=[{"step": "review"}, {"step": "qa"}]
+    )
+    assert result["ok"] is True
+    assert result["reason"] == "safe_data_only_bypass_passed"
+    assert result["structured_report_gate"]["ok"] is True
+
+
+def test_safe_data_only_bypass_skipped_when_any_file_outside_safe_globs(monkeypatch):
+    """混合变更（KB JSON + 业务代码）不能 bypass，回到 v2/v3 评分路径."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SAFE_DATA_GLOBS", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda *args, **kwargs: {"score": 71, "min_allowed": 90, "ok": False},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kwargs: {"score": 0, "min_allowed": 95, "ok": False},
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
+
+    files = [
+        "FHD/XCAGI/kb/fixes/20260618T205404Z-fix-evolution-signal-collector.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/source_code.py",
+    ]
+    result = _assess_branch_auto_merge_policy(
+        files, _stats(), steps=[{"step": "review"}, {"step": "qa"}]
+    )
+    # 不应 bypass
+    assert result["reason"] != "safe_data_only_bypass_passed"
+    assert result["ok"] is False
+
+
+def test_safe_data_only_bypass_skipped_when_structured_gate_fails(monkeypatch):
+    """所有文件都是 safe-data 但 review/qa gate 失败 → 不能 bypass，回到 v2/v3 路径."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SAFE_DATA_GLOBS", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": False, "reason": "structured_qa_verdict_not_pass"},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda *args, **kwargs: {"score": 71, "min_allowed": 90, "ok": False},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kwargs: {"score": 0, "min_allowed": 95, "ok": False},
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
+
+    files = ["FHD/XCAGI/kb/fixes/20260618T205404Z-fix-example.json"]
+    result = _assess_branch_auto_merge_policy(
+        files, _stats(), steps=[{"step": "review"}, {"step": "qa"}]
+    )
+    assert result["reason"] != "safe_data_only_bypass_passed"
+
+
+def test_safe_data_only_bypass_disabled_via_env(monkeypatch):
+    """MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS=0 → bypass 不生效，走 v2/v3 评分路径."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS", "0")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda *args, **kwargs: {"score": 71, "min_allowed": 90, "ok": False},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kwargs: {"score": 0, "min_allowed": 95, "ok": False},
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
+
+    files = ["FHD/XCAGI/kb/fixes/20260618T205404Z-fix-example.json"]
+    result = _assess_branch_auto_merge_policy(
+        files, _stats(), steps=[{"step": "review"}, {"step": "qa"}]
+    )
+    assert result["reason"] != "safe_data_only_bypass_passed"
+
+
+def test_safe_data_only_bypass_includes_tests_and_docs(monkeypatch):
+    """safe-data globs 覆盖测试和文档文件."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SAFE_DATA_GLOBS", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SAFE_DATA_BYPASS", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps: {"ok": True},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda *args, **kwargs: {"score": 50, "min_allowed": 90, "ok": False},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kwargs: {"score": 0, "min_allowed": 95, "ok": False},
+    )
+
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+        "FHD/XCAGI/kb/patterns/example-pattern.md",
+        "docs/CI_SSOT.md",
+    ]
+    result = _assess_branch_auto_merge_policy(
+        files, _stats(), steps=[{"step": "review"}, {"step": "qa"}]
+    )
+    assert result["ok"] is True
+    assert result["reason"] == "safe_data_only_bypass_passed"
+
