@@ -18,23 +18,16 @@ export type LevelProfileDict = {
   experience: number
   current_level_min_exp: number
   next_level_min_exp: number | null
+  /** 当前等级到下一等级的进度，范围 [0, 1]；已封顶时固定为 1。 */
   progress: number
 }
 
 export function buildLevelProfileDict(experience: number | null | undefined): LevelProfileDict {
   const exp = Math.max(Math.floor(Number(experience) || 0), 0)
-  let current = LEVEL_THRESHOLDS[0]
-  let nextRow: (typeof LEVEL_THRESHOLDS)[number] | null = null
-
-  for (let idx = 0; idx < LEVEL_THRESHOLDS.length; idx++) {
-    const row = LEVEL_THRESHOLDS[idx]
-    if (exp >= row.minExp) {
-      current = row
-      nextRow = idx + 1 < LEVEL_THRESHOLDS.length ? LEVEL_THRESHOLDS[idx + 1]! : null
-    } else {
-      break
-    }
-  }
+  const idx = LEVEL_THRESHOLDS.findLastIndex((row) => exp >= row.minExp)
+  const safeIdx = idx < 0 ? 0 : idx
+  const current = LEVEL_THRESHOLDS[safeIdx]
+  const nextRow = LEVEL_THRESHOLDS[safeIdx + 1] ?? null
 
   const currentMin = current.minExp
   const nextMin = nextRow?.minExp ?? null
@@ -54,32 +47,48 @@ export function buildLevelProfileDict(experience: number | null | undefined): Le
   }
 }
 
+/** 已规范化的 /api/auth/me 响应（扁平结构）。 */
+export type NormalizedMe = {
+  id?: number | string
+  username?: string
+  email?: string
+  phone?: string
+  is_admin: boolean
+  created_at?: string
+  experience: number
+  level_profile?: unknown
+  avatar_url?: string | null
+}
+
 /**
  * FastAPI market `/api/auth/me` 为扁平对象；Java 等可能为 `{ user: { ... } }`。
  * 统一成与 Pinia 一致的扁平结构，并兼容 `admin` / `is_admin`。
+ * 非对象输入（字符串、数字等）一律返回 null，调用方需做 null 检查。
  */
-export function normalizeMeResponse(me: unknown): any {
-  if (!me || typeof me !== 'object') return me
-  const m = me as Record<string, any>
+export function normalizeMeResponse(me: unknown): NormalizedMe | null | undefined {
+  if (me === null) return null
+  if (me === undefined) return undefined
+  if (typeof me !== 'object') return null
+  const m = me as Record<string, unknown>
   const inner = m.user
-  if (inner && typeof inner === 'object' && m.id === undefined && inner.id !== undefined) {
-    const u = inner as Record<string, any>
+  if (inner && typeof inner === 'object' && m.id === undefined && (inner as { id?: unknown }).id !== undefined) {
+    const u = inner as Record<string, unknown>
     return {
-      id: u.id,
-      username: u.username,
-      email: u.email,
-      phone: u.phone,
+      id: u.id as number | string | undefined,
+      username: u.username as string | undefined,
+      email: u.email as string | undefined,
+      phone: u.phone as string | undefined,
       is_admin: Boolean(u.is_admin ?? u.admin),
-      created_at: u.created_at,
+      created_at: u.created_at as string | undefined,
       experience: Number(u.experience ?? m.experience ?? 0) || 0,
       level_profile: u.level_profile ?? m.level_profile,
-      avatar_url: u.avatar_url ?? m.avatar_url ?? null,
+      avatar_url: (u.avatar_url ?? m.avatar_url ?? null) as string | null | undefined,
     }
   }
-  return m
+  return m as NormalizedMe
 }
 
 export function isMeAdminPayload(data: unknown): boolean {
   const flat = normalizeMeResponse(data)
-  return flat?.is_admin === true
+  return !!flat && typeof flat === 'object' && flat.is_admin === true
 }
