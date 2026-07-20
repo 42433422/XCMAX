@@ -6,6 +6,13 @@ name: mutation-smoke
 on:
   schedule:
     - cron: "0 3 * * 1"  # 每周一 03:00 UTC
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'FHD/app/di/**'
+      - 'FHD/app/contexts/**'
+      - 'FHD/app/security/**'
+      - 'FHD/app/middleware/**'
   workflow_dispatch:
 
 permissions:
@@ -46,7 +53,7 @@ jobs:
 
       - name: Generate kill report
         working-directory: FHD
-        run: python scripts/dev/mutation_kill_report.py --threshold 70
+        run: python scripts/dev/mutation_kill_report.py --threshold 80
 
       - name: Upload mutation history
         if: always()
