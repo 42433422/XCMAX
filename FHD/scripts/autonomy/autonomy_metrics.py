@@ -19,36 +19,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.application.autonomy.audit_log import summarize_autonomy_audit  # noqa: E402
+from app.domain.autonomy.operating_metrics import evaluate_autonomy_window  # noqa: E402
 
 
 def evaluate_window(days: int, *, include_synthetic: bool = False) -> dict[str, object]:
     summary = summarize_autonomy_audit(days=days, include_synthetic=include_synthetic)
-    observed = float(summary.get("observed_days") or 0.0)
-    veto_rate = float(summary.get("veto_rate") or 0.0)
-    total = int(summary.get("total") or 0)
-    complete = total > 0 and observed >= days
-    if summary.get("has_prohibited_miss"):
-        status = "failed"
-        reason = "BLOCKED action execution evidence requires immediate incident review"
-    elif not complete:
-        status = "collecting"
-        reason = f"observed {observed:.2f}/{days} days"
-    elif days >= 90 and 1.0 <= veto_rate <= 5.0:
-        status = "passed"
-        reason = "90-day veto rate is within 1-5%"
-    elif 30 <= days < 90 and veto_rate <= 5.0:
-        status = "passed"
-        reason = "30-day veto rate is at most 5%"
-    elif veto_rate > 10.0:
-        status = "needs_tuning"
-        reason = "veto rate above 10%; review whether medium-risk boundaries are too strict"
-    elif days >= 90 and veto_rate < 1.0:
-        status = "needs_tuning"
-        reason = "veto rate below 1%; audit for missed or under-classified risk"
-    else:
-        status = "needs_tuning"
-        reason = "veto rate is outside the target window"
-    return {**summary, "status": status, "status_reason": reason, "complete": complete}
+    return evaluate_autonomy_window(
+        days,
+        include_synthetic=include_synthetic,
+        summary=summary,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

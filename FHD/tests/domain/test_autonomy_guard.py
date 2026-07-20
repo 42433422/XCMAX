@@ -5,6 +5,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +22,7 @@ from app.application.autonomy.approval_resume import (
 )
 from app.application.autonomy.audit_log import (
     append_autonomy_audit,
+    autonomy_daily_digest_html,
     list_autonomy_audit,
     summarize_autonomy_audit,
 )
@@ -31,6 +33,11 @@ from app.domain.autonomy.autonomy_guard import (
     RiskLevel,
     get_autonomy_guard,
     reload_autonomy_guard,
+)
+from app.domain.autonomy.operating_metrics import (
+    autonomy_boundary_review_status,
+    evaluate_autonomy_window,
+    record_autonomy_metrics_snapshots,
 )
 from app.domain.autonomy.risk_policy import RiskPolicyCatalog
 
@@ -72,6 +79,10 @@ REQUIRED_ACTIVATION_EVIDENCE = {
         FHD_ROOT / "app/fastapi_routes/ops_autonomy.py",
         "result = evaluate_risk(",
     ),
+    "autonomy_metrics_snapshot": (
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomy_metrics_job.py",
+        '"autonomy_metrics_snapshot",',
+    ),
 }
 
 
@@ -79,6 +90,7 @@ REQUIRED_ACTIVATION_EVIDENCE = {
 def isolated_autonomy_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "audit.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("XCAGI_AUTONOMY_METRICS_LOG_PATH", str(tmp_path / "metrics.jsonl"))
     monkeypatch.setenv(
         "XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval-ledger.jsonl")
     )
@@ -608,6 +620,106 @@ def test_audit_summary_separates_synthetic_probes_and_counts_human_veto() -> Non
     assert summary["human_approval_count"] == 1
     assert summary["synthetic_probe_count"] == 1
     assert summary["veto_rate"] == 50.0
+
+
+def test_operating_window_requires_quarterly_boundary_review(tmp_path: Path, monkeypatch) -> None:
+    boundaries = tmp_path / "boundaries.yaml"
+    boundary_data = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundary_data.update(
+        {
+            "boundary_revision": 4,
+            "last_reviewed_at": "2026-01-01",
+            "review_cadence_days": 90,
+        }
+    )
+    boundaries.write_text(yaml.safe_dump(boundary_data), encoding="utf-8")
+    monkeypatch.setenv("XCAGI_AUTONOMY_BOUNDARIES_PATH", str(boundaries))
+    summary = {
+        "observed_days": 90.0,
+        "veto_rate": 3.0,
+        "total": 100,
+        "has_prohibited_miss": False,
+    }
+
+    due = evaluate_autonomy_window(
+        90,
+        summary=summary,
+        now=datetime(2026, 7, 20, tzinfo=UTC),
+    )
+    assert due["status"] == "needs_review"
+    assert due["recommendation"] == "review_boundaries"
+
+    high_veto = evaluate_autonomy_window(
+        90,
+        summary={**summary, "veto_rate": 11.0},
+        now=datetime(2026, 7, 20, tzinfo=UTC),
+    )
+    assert high_veto["status"] == "needs_tuning"
+    assert high_veto["recommendation"] == "review_medium_risk_boundaries"
+
+    boundary_data.update(
+        {
+            "boundary_revision": 5,
+            "last_reviewed_at": "2026-07-20",
+        }
+    )
+    boundaries.write_text(yaml.safe_dump(boundary_data), encoding="utf-8")
+    current = evaluate_autonomy_window(
+        90,
+        summary=summary,
+        now=datetime(2026, 7, 20, tzinfo=UTC),
+    )
+    assert current["status"] == "passed"
+    assert current["boundary_review"]["boundary_revision"] == 5
+
+
+def test_daily_metrics_snapshots_are_append_only_and_idempotent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    metrics_path = tmp_path / "metrics.jsonl"
+    monkeypatch.setenv("XCAGI_AUTONOMY_METRICS_LOG_PATH", str(metrics_path))
+    append_autonomy_audit(
+        {
+            "action_id": "daily-operational-action",
+            "action": "restart_service",
+            "risk_level": "LOW",
+            "decision": "allow",
+            "outcome": "allowed",
+            "source": "scheduler",
+        }
+    )
+    now = datetime(2026, 7, 20, 8, 0, tzinfo=UTC)
+
+    first = record_autonomy_metrics_snapshots(now=now)
+    second = record_autonomy_metrics_snapshots(now=now)
+
+    assert [item["window_days"] for item in first] == [30, 90]
+    assert all(item["recorded"] for item in first)
+    assert all(not item["recorded"] for item in second)
+    rows = [json.loads(line) for line in metrics_path.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 2
+    assert {row["status"] for row in rows} == {"collecting"}
+    assert {row["snapshot_date"] for row in rows} == {"2026-07-20"}
+
+
+def test_daily_digest_renders_operating_windows() -> None:
+    append_autonomy_audit(
+        {
+            "action_id": "digest-operational-action",
+            "action": "restart_service",
+            "risk_level": "LOW",
+            "decision": "allow",
+            "outcome": "allowed",
+            "source": "daily_digest",
+        }
+    )
+
+    html = autonomy_daily_digest_html()
+
+    assert "30天 · collecting" in html
+    assert "90天 · collecting" in html
+    boundary = autonomy_boundary_review_status()
+    assert f"revision {boundary['boundary_revision']}" in html
 
 
 def test_pending_approval_resumes_and_rejection_never_retries(monkeypatch) -> None:

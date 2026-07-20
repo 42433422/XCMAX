@@ -81,6 +81,7 @@ async def autonomy_audit_log(
         list_autonomy_audit,
         summarize_autonomy_audit,
     )
+    from app.domain.autonomy.operating_metrics import evaluate_autonomy_window
 
     items = list_autonomy_audit(
         limit=limit,
@@ -89,12 +90,16 @@ async def autonomy_audit_log(
         veto_only=veto_only,
         since=since,
     )
+    summary = summarize_autonomy_audit(days=days)
     return {
         "success": True,
         "append_only": True,
         "items": items,
         "count": len(items),
-        "summary": summarize_autonomy_audit(days=days),
+        "summary": summary,
+        "evaluation": (
+            evaluate_autonomy_window(days, summary=summary) if days in {30, 90} else None
+        ),
     }
 
 

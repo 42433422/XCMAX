@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -315,6 +316,49 @@ def start_scheduler() -> None:
         coalesce=True,
         misfire_grace_time=300,
     )
+
+    def _autonomy_metrics_snapshot() -> None:
+        try:
+            from modstore_server.autonomy_metrics_job import run_autonomy_metrics_snapshot
+
+            result = _run_tracked_scheduler_job(
+                "autonomy_metrics_snapshot",
+                run_autonomy_metrics_snapshot,
+            )
+            message = "autonomy metrics snapshot: date=%s severity=%s windows=%s" % (
+                result.get("snapshot_date"),
+                result.get("severity"),
+                [
+                    {
+                        "days": item.get("window_days"),
+                        "status": item.get("status"),
+                        "veto_rate": item.get("veto_rate"),
+                    }
+                    for item in result.get("snapshots") or []
+                ],
+            )
+            if result.get("severity") == "critical":
+                logger.error(message)
+            elif result.get("alert"):
+                logger.warning(message)
+            else:
+                logger.info(message)
+        except Exception:
+            logger.exception("autonomy metrics snapshot job failed")
+
+    try:
+        _scheduler.add_job(
+            _autonomy_metrics_snapshot,
+            CronTrigger(hour=0, minute=5, timezone="UTC"),
+            id="autonomy_metrics_snapshot",
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=15),  # noqa: UP017
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except Exception:
+        logger.exception("register autonomy metrics snapshot cron failed")
 
     def _daily_digest_email() -> None:
         try:
