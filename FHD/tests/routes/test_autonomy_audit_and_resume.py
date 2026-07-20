@@ -13,6 +13,7 @@ from app.fastapi_routes import ops_autonomy, xcmax_admin
 def _isolate(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "audit.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("XCAGI_AUTONOMY_METRICS_LOG_PATH", str(tmp_path / "metrics.jsonl"))
     monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     reload_autonomy_guard()
@@ -33,6 +34,8 @@ def test_admin_audit_log_endpoint_returns_highlighted_veto(tmp_path, monkeypatch
     assert body["items"]
     assert all(item["highlighted"] for item in body["items"])
     assert body["summary"]["veto_count"] >= 1
+    assert body["evaluation"]["status"] == "collecting"
+    assert body["evaluation"]["window_days"] == 30
 
 
 def test_github_approval_callback_resumes_and_rejects(tmp_path, monkeypatch) -> None:
