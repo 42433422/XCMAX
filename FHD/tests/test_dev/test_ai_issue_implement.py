@@ -3,6 +3,7 @@
 只测不依赖 GitHub API / git / LLM 的纯逻辑：
 - _has_aimplement_label
 - _owner_confirmed（关键词匹配 + author 校验）
+- _allowlist_preauthorized / _is_authorized（方案 B 域预授权）
 - _estimate_files（粗估规则）
 - _apply_files（路径穿越/敏感文件过滤）
 - ImplementResult / _write_report
@@ -123,6 +124,93 @@ class TestOwnerConfirmed:
         ok, msg = _ai_impl._owner_confirmed(issue, [], "owner/repo")
         assert ok is False
         assert "未解析" in msg
+
+
+class TestAllowlistPreauthorized:
+    def test_pattern_hit(self) -> None:
+        issue = {"labels": [{"name": "ai-implement"}, {"name": "bug-mech-timeout"}]}
+        ok, msg = _ai_impl._allowlist_preauthorized(
+            issue, patterns=[r"^bug-mech-.*", r"^refactor-.*"]
+        )
+        assert ok is True
+        assert "bug-mech-timeout" in msg
+
+    def test_pattern_miss_keeps_gate(self) -> None:
+        issue = {"labels": [{"name": "ai-implement"}, {"name": "enhancement"}]}
+        ok, _ = _ai_impl._allowlist_preauthorized(
+            issue, patterns=[r"^bug-mech-.*", r"^refactor-.*"]
+        )
+        assert ok is False
+
+    def test_empty_patterns_not_authorized(self) -> None:
+        issue = {"labels": [{"name": "bug-mech-x"}]}
+        ok, msg = _ai_impl._allowlist_preauthorized(issue, patterns=[])
+        assert ok is False
+        assert "未配置" in msg or "未启用" in msg
+
+    def test_invalid_regex_skipped(self) -> None:
+        issue = {"labels": [{"name": "refactor-foo"}]}
+        ok, _ = _ai_impl._allowlist_preauthorized(
+            issue, patterns=[r"[invalid", r"^refactor-.*"]
+        )
+        assert ok is True
+
+    def test_load_repo_allowlist_file(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "auto-implement-allowlist.yaml"
+        cfg.write_text(
+            "version: 1\nenabled: true\nlabel_patterns:\n  - '^bug-fix$'\n",
+            encoding="utf-8",
+        )
+        pats = _ai_impl._load_allowlist_patterns(cfg)
+        assert pats == ["^bug-fix$"]
+        issue = {"labels": [{"name": "bug-fix"}]}
+        ok, _ = _ai_impl._allowlist_preauthorized(issue, patterns=pats)
+        assert ok is True
+
+    def test_disabled_allowlist(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "auto-implement-allowlist.yaml"
+        cfg.write_text(
+            "enabled: false\nlabel_patterns:\n  - '^bug-fix$'\n",
+            encoding="utf-8",
+        )
+        assert _ai_impl._load_allowlist_patterns(cfg) == []
+
+
+class TestIsAuthorized:
+    def test_allowlist_bypasses_confirm_comment(self) -> None:
+        issue = {
+            "user": {"login": "owner"},
+            "body": "no confirm keyword",
+            "labels": [{"name": "ai-implement"}, {"name": "refactor-cleanup"}],
+        }
+        # monkeypatch patterns via _allowlist_preauthorized patterns arg is internal;
+        # call _is_authorized after temporarily stubbing loader
+        original = _ai_impl._load_allowlist_patterns
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^refactor-.*"]  # type: ignore[assignment]
+        try:
+            ok, msg = _ai_impl._is_authorized(issue, [], "owner/repo")
+            assert ok is True
+            assert "域预授权" in msg
+        finally:
+            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+
+    def test_falls_back_to_owner_confirm(self) -> None:
+        issue = {
+            "user": {"login": "owner"},
+            "body": "plain body",
+            "labels": [{"name": "ai-implement"}],
+        }
+        original = _ai_impl._load_allowlist_patterns
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
+        try:
+            ok, _ = _ai_impl._is_authorized(
+                issue,
+                [{"user": {"login": "owner"}, "body": "确认"}],
+                "owner/repo",
+            )
+            assert ok is True
+        finally:
+            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
 
 
 class TestEstimateFiles:

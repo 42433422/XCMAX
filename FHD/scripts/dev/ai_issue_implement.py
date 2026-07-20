@@ -1,9 +1,13 @@
 """AI Issue Implement — 决策矩阵承诺兑现脚本。
 
 约束（来自 .trae/rules/cicd-e2e-prompt.md）：
-  - owner 评论「确认」才执行
+  - owner 评论「确认」才执行（除非命中域预授权 allowlist）
   - 预估变更 >5 文件拒做
   - 实现后创建 PR 标 `needs-human` 待人工合并
+
+预授权（方案 B）：
+  ``config/auto-implement-allowlist.yaml`` 中的 ``label_patterns``
+  命中 issue 标签时，跳过「确认」评论门禁。
 
 使用方式（本地 dry-run）:
     python scripts/dev/ai_issue_implement.py \\
@@ -46,7 +50,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-REPORT_DIR = Path(__file__).resolve().parents[2] / "test_reports"
+FHD_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = FHD_ROOT.parent
+REPORT_DIR = FHD_ROOT / "test_reports"
+DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
 MAX_CHANGED_FILES = 5  # 决策矩阵硬阈值
 BRANCH_PREFIX = "ai-impl"
 CONFIRM_KEYWORDS = ("确认", "confirm", "approved", "approve", "+1", "OK", "go")
@@ -131,6 +138,92 @@ def _has_aimplement_label(issue: dict[str, Any]) -> bool:
     return any(str(lb.get("name") or "").strip() == "ai-implement" for lb in labels if isinstance(lb, dict))
 
 
+def _issue_label_names(issue: dict[str, Any]) -> list[str]:
+    names: list[str] = []
+    for lb in issue.get("labels") or []:
+        if not isinstance(lb, dict):
+            continue
+        name = str(lb.get("name") or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _allowlist_path() -> Path:
+    override = (os.environ.get("AUTO_IMPLEMENT_ALLOWLIST_PATH") or "").strip()
+    return Path(override) if override else DEFAULT_ALLOWLIST_PATH
+
+
+def _load_allowlist_patterns(path: Path | None = None) -> list[str]:
+    """读取域预授权 label regex 列表；文件缺失/禁用时返回空列表。"""
+    cfg_path = path or _allowlist_path()
+    if not cfg_path.is_file():
+        return []
+    try:
+        text = cfg_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("allowlist read failed: %s", exc)
+        return []
+    try:
+        import yaml  # type: ignore
+
+        data = yaml.safe_load(text) or {}
+    except Exception:  # noqa: BLE001 — 无 PyYAML 时走极简解析
+        data = _parse_allowlist_fallback(text)
+    if not isinstance(data, dict) or not data.get("enabled", True):
+        return []
+    patterns = data.get("label_patterns") or []
+    if not isinstance(patterns, list):
+        return []
+    return [str(p).strip() for p in patterns if str(p).strip()]
+
+
+def _parse_allowlist_fallback(text: str) -> dict[str, Any]:
+    """无 PyYAML 时的极简解析：只认 enabled / label_patterns 列表项。"""
+    enabled = True
+    patterns: list[str] = []
+    in_patterns = False
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        stripped = line.strip()
+        if stripped.startswith("enabled:"):
+            val = stripped.split(":", 1)[1].strip().lower()
+            enabled = val in ("true", "1", "yes")
+            in_patterns = False
+            continue
+        if stripped.startswith("label_patterns:"):
+            in_patterns = True
+            continue
+        if in_patterns and stripped.startswith("- "):
+            item = stripped[2:].strip().strip("\"'")
+            if item:
+                patterns.append(item)
+            continue
+        if not line.startswith((" ", "\t")):
+            in_patterns = False
+    return {"enabled": enabled, "label_patterns": patterns}
+
+
+def _allowlist_preauthorized(
+    issue: dict[str, Any], *, patterns: list[str] | None = None
+) -> tuple[bool, str]:
+    """方案 B：issue 标签命中 allowlist regex 则视为预授权。"""
+    pats = patterns if patterns is not None else _load_allowlist_patterns()
+    if not pats:
+        return False, "allowlist 未配置或未启用"
+    names = _issue_label_names(issue)
+    for name in names:
+        for pat in pats:
+            try:
+                if re.fullmatch(pat, name):
+                    return True, f"域预授权命中 label `{name}` (pattern={pat})"
+            except re.error as exc:
+                logger.warning("invalid allowlist pattern %r: %s", pat, exc)
+    return False, "未命中域预授权 allowlist"
+
+
 def _owner_confirmed(issue: dict[str, Any], comments: list[dict[str, Any]], repo: str) -> tuple[bool, str]:
     """决策矩阵要求：owner 评论「确认」才执行。
 
@@ -154,6 +247,16 @@ def _owner_confirmed(issue: dict[str, Any], comments: list[dict[str, Any]], repo
     if any(kw in body for kw in CONFIRM_KEYWORDS):
         return True, f"owner @{author} 在 issue body 中确认"
     return False, f"owner @{author} 未在评论中确认（关键词：{CONFIRM_KEYWORDS}）"
+
+
+def _is_authorized(
+    issue: dict[str, Any], comments: list[dict[str, Any]], repo: str
+) -> tuple[bool, str]:
+    """授权：域预授权 allowlist 命中，或 owner 评论确认。"""
+    pre_ok, pre_reason = _allowlist_preauthorized(issue)
+    if pre_ok:
+        return True, pre_reason
+    return _owner_confirmed(issue, comments, repo)
 
 
 def _estimate_files(issue_title: str, issue_body: str) -> int:
@@ -369,7 +472,7 @@ def run(args: argparse.Namespace) -> ImplementResult:
         comments = []
         logger.warning("fetch comments failed: %s", exc)
 
-    confirmed, confirm_reason = _owner_confirmed(issue, comments, repo)
+    confirmed, confirm_reason = _is_authorized(issue, comments, repo)
     result.owner_confirmed = confirmed
     if not confirmed:
         result.status = "waiting_confirmation"
@@ -385,6 +488,7 @@ def run(args: argparse.Namespace) -> ImplementResult:
             {
                 "body": (
                     "🤖 `ai-issue-implement` 已收到 `ai-implement` 标签。\n\n"
+                    "未命中域预授权 allowlist（见 `config/auto-implement-allowlist.yaml`）。\n"
                     "等待 owner 在本 issue 评论「确认」/「confirm」/「approved」后开始执行。\n\n"
                     "约束：预估变更 >5 文件时将自动拒做。"
                 )
