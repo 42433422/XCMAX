@@ -122,7 +122,17 @@ else
   if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
     command -v npm >/dev/null 2>&1 || fail "npm is required to build the market"
     log "building market assets inside the release"
-    (cd "$DEPLOY_DIR/market" && npm ci --no-audit --legacy-peer-deps && VITE_PUBLIC_BASE=/market/ npm run build)
+    # The browser bundle uses onnxruntime-web.  @huggingface/transformers also
+    # declares onnxruntime-node, whose install hook downloads a native release
+    # index and fails behind the production network's redirecting proxy.  Keep
+    # the immutable build deterministic by skipping dependency lifecycle hooks,
+    # then install only the native bindings required by Vite/Rollup/esbuild.
+    (
+      cd "$DEPLOY_DIR/market"
+      npm ci --no-audit --legacy-peer-deps --ignore-scripts
+      node scripts/install-native-bindings.mjs
+      VITE_PUBLIC_BASE=/market/ npm run build
+    )
     [[ -f "$DEPLOY_DIR/market/dist/index.html" ]] || fail "market build produced no index.html"
   fi
 
