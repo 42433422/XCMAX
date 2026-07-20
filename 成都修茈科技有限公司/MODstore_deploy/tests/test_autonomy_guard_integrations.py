@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -23,15 +27,97 @@ def isolated_autonomy(tmp_path, monkeypatch):
     reload_autonomy_guard()
 
 
-def test_daily_vibe_cron_enters_pending_before_dispatch() -> None:
+def test_daily_vibe_cron_auto_approves_before_dispatch(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "modstore_server.automation_primary.skip_daily_automation_result",
+        lambda **kwargs: {
+            "ok": True,
+            "skipped": True,
+            "reason": "test-after-auto-gate",
+        },
+    )
     result = run_daily_vibe_line_execute_job(record_id=42)
-    assert result["ok"] is False
-    assert result["reason"] == "autonomy_guard_pending_approval"
-    assert result["pending_approval"]["state"] == "pending_approval"
-    assert result["risk_decision"]["risk_level"] == "medium"
+    assert result["ok"] is True
+    assert result["reason"] == "test-after-auto-gate"
+
+    from app.application.autonomy.audit_log import list_autonomy_audit
+
+    rows = [row for row in list_autonomy_audit(limit=20) if row["action"] == "daily_vibe_dispatch"]
+    assert rows and rows[0]["decision"] == "auto_approve"
 
 
-def test_daily_vibe_rejected_action_is_not_requeued() -> None:
+def test_delegate_accepts_deployed_fhd_runtime_root(tmp_path, monkeypatch) -> None:
+    runtime_fhd = tmp_path / "fhd-runtime"
+    guard_path = runtime_fhd / "app" / "domain" / "autonomy" / "autonomy_guard.py"
+    guard_path.parent.mkdir(parents=True)
+    guard_path.write_text("# runtime guard probe\n", encoding="utf-8")
+    monkeypatch.setenv("XCAGI_FHD_RUNTIME_ROOT", str(runtime_fhd))
+    monkeypatch.delenv("XCMAX_MONOREPO_ROOT", raising=False)
+
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+    ensure_fhd_on_path()
+
+    assert str(runtime_fhd) in sys.path
+    sys.path.remove(str(runtime_fhd))
+
+
+def test_delegate_repairs_an_existing_app_namespace() -> None:
+    modstore_root = Path(__file__).resolve().parents[1]
+    fhd_root = Path(__file__).resolve().parents[3] / "FHD"
+    script = """
+import sys
+import types
+app = types.ModuleType("app")
+app.__path__ = []
+domain = types.ModuleType("app.domain")
+domain.__path__ = []
+sys.modules["app"] = app
+sys.modules["app.domain"] = domain
+from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+ensure_fhd_on_path()
+from app.domain.autonomy.autonomy_guard import AutonomyGuard
+assert AutonomyGuard
+"""
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(modstore_root),
+        "XCAGI_FHD_RUNTIME_ROOT": str(fhd_root),
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_employee_executor_fails_closed_when_risk_middleware_errors(
+    monkeypatch,
+) -> None:
+    from modstore_server import employee_executor, employee_risk_middleware
+
+    def broken_gate(*_args, **_kwargs):
+        raise ModuleNotFoundError("risk SSOT unavailable")
+
+    monkeypatch.setattr(employee_risk_middleware, "gate_action_or_block", broken_gate)
+    decision = employee_executor._evaluate_employee_risk_gate("worker", {}, ["agent"], {})
+
+    assert decision["ok"] is False
+    assert decision["blocked"] is True
+    assert decision["pending_approval"] is False
+    assert decision["risk_level"] == "blocked"
+    assert decision["decision"] == "blocked"
+
+
+def test_legacy_manual_policy_rejected_action_is_not_requeued(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    from app.domain.autonomy.autonomy_guard import reload_autonomy_guard
+
+    reload_autonomy_guard()
     first = run_daily_vibe_line_execute_job(record_id=42)
     from app.application.autonomy.approval_resume import reject_action
 
@@ -94,15 +180,11 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
         branch="autonomy/test",
         steps=[],
     )
-    assert result["reason"] == "autonomy_guard_pending_approval"
+    assert result["reason"] == "autonomy_guard_blocked"
     assert not any(command[:2] == ["git", "merge"] for command in commands)
 
 
-def test_high_risk_pr_merge_requires_and_records_human_approval(monkeypatch, tmp_path) -> None:
-    blocked = approval_dispatcher._maybe_merge_pr("auto/security-fix")
-    assert blocked["ok"] is False
-    assert blocked["risk_decision"]["decision"] == "require_human"
-
+def test_high_risk_pr_merge_auto_approves_and_is_audited(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "modstore_server.integrations.ops_action_handlers.repo_root",
         lambda: tmp_path,
@@ -111,10 +193,7 @@ def test_high_risk_pr_merge_requires_and_records_human_approval(monkeypatch, tmp
         "subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
-    approved = approval_dispatcher._maybe_merge_pr(
-        "auto/security-fix",
-        human_approved_by="ops-approval-token:42",
-    )
+    approved = approval_dispatcher._maybe_merge_pr("auto/security-fix")
     assert approved["ok"] is True
-    assert approved["risk_decision"]["decision"] == "approved"
-    assert approved["risk_decision"]["approver"] == "ops-approval-token:42"
+    assert approved["risk_decision"]["decision"] == "auto_approve"
+    assert approved["risk_decision"]["approver"] is None

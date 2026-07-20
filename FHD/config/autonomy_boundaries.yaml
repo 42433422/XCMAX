@@ -1,4 +1,7 @@
-schema_version: 1
+schema_version: 4
+boundary_revision: 4
+last_reviewed_at: 2026-07-20
+review_cadence_days: 90
 default_unknown_action: blocked
 prohibited_actions:
   - action: db_migration
@@ -13,3 +16,8 @@ prohibited_actions:
     reason: No autonomous path may bypass the risk SSOT.
   - action: rewrite_audit_history
     reason: Autonomy audit history is append-only and immutable.
+  - action: modify_autonomy_policy
+    reason: Autonomy may not alter its own risk registry or hard boundaries without a human-reviewed code change.
+  - action: self_approve_action
+    reason: Autonomy may never create, forge, or impersonate human approval evidence for its own action.
+requires_veto: []

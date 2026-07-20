@@ -156,9 +156,15 @@ def test_workflow_registry_includes_employee_tools(employee_mods_root):
     assert "csv-full-read-employee" in names
 
 
-def test_risk_gate_blocks_high_without_token():
+def test_risk_gate_auto_approves_registered_high_action(monkeypatch):
     from app.application.employee_runtime.risk_gate import gate_action_or_block
+    from app.domain.autonomy.autonomy_guard import reload_autonomy_guard
+
+    monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
+    reload_autonomy_guard()
 
     manifest = {"employee_config_v2": {"risk_level": "high"}}
     gate = gate_action_or_block("test", manifest, ["shell_exec"], {})
-    assert gate.get("ok") is False
+    assert gate.get("ok") is True
+    assert gate.get("risk_level") == "high"
+    assert gate.get("decision") == "auto_approve"

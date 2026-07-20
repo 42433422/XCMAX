@@ -65,6 +65,15 @@ _VETO_DECISIONS = frozenset(
     }
 )
 
+_SYNTHETIC_COHORT_SQL = """
+(
+    action_id LIKE 'e2e-%'
+    OR action_id LIKE 'test-%'
+    OR COALESCE(source, '') IN ('test', 'pytest')
+    OR COALESCE(source, '') LIKE 'test.%'
+)
+"""
+
 
 def _runtime_dir() -> Path:
     explicit = (os.environ.get("XCAGI_AUTONOMY_DATA_DIR") or "").strip()
@@ -224,34 +233,38 @@ def latest_action_event(action: str, *, decisions: set[str] | None = None) -> di
     return item
 
 
-def summarize_autonomy_audit(*, days: int = 1) -> dict[str, Any]:
+def summarize_autonomy_audit(*, days: int = 1, include_synthetic: bool = False) -> dict[str, Any]:
     bounded_days = max(1, min(int(days), 3650))
     since = (datetime.now(UTC) - timedelta(days=bounded_days)).isoformat()
+    cohort_sql = "1 = 1" if include_synthetic else f"NOT {_SYNTHETIC_COHORT_SQL}"
     with _LOCK, _connect() as conn:
         grouped = conn.execute(
-            """
+            f"""
             SELECT decision, COUNT(*) AS n
             FROM autonomy_audit_log
             WHERE timestamp >= ? AND event_type IN ('decision', 'approval')
+              AND {cohort_sql}
             GROUP BY decision
             """,
             (since,),
         ).fetchall()
         risks = conn.execute(
-            """
+            f"""
             SELECT risk_level, COUNT(*) AS n
             FROM autonomy_audit_log
             WHERE timestamp >= ? AND event_type IN ('decision', 'approval')
+              AND {cohort_sql}
             GROUP BY risk_level
             """,
             (since,),
         ).fetchall()
         unique_total = int(
             conn.execute(
-                """
+                f"""
                 SELECT COUNT(DISTINCT action_id)
                 FROM autonomy_audit_log
                 WHERE timestamp >= ? AND event_type = 'decision' AND action != '__configuration__'
+                  AND {cohort_sql}
                 """,
                 (since,),
             ).fetchone()[0]
@@ -262,7 +275,12 @@ def summarize_autonomy_audit(*, days: int = 1) -> dict[str, Any]:
             "SELECT COUNT(DISTINCT action_id) "
             "FROM autonomy_audit_log "
             "WHERE timestamp >= ? AND event_type IN ('decision', 'approval') "
-            "AND decision IN (" + marks + ")"
+            "AND "
+            + cohort_sql
+            + " AND (decision IN ("
+            + marks
+            + ") OR (decision = 'approved' AND risk_level IN ('MEDIUM', 'HIGH', 'BLOCKED') "
+            "AND COALESCE(approver, '') != ''))"
         )
         unique_veto = int(
             conn.execute(
@@ -272,22 +290,77 @@ def summarize_autonomy_audit(*, days: int = 1) -> dict[str, Any]:
             or 0
         )
         bounds = conn.execute(
-            """
+            f"""
             SELECT MIN(timestamp) AS first_ts, MAX(timestamp) AS last_ts
             FROM autonomy_audit_log
             WHERE event_type = 'decision' AND action != '__configuration__'
+              AND {cohort_sql}
             """
         ).fetchone()
         prohibited_miss_count = int(
             conn.execute(
-                """
+                f"""
                 SELECT COUNT(DISTINCT action_id)
                 FROM autonomy_audit_log
                 WHERE timestamp >= ? AND risk_level = 'BLOCKED'
+                  AND {cohort_sql}
                   AND (
                     decision IN ('allow', 'auto_approve', 'approved', 'executed')
                     OR outcome IN ('allowed', 'executed')
                   )
+                """,
+                (since,),
+            ).fetchone()[0]
+            or 0
+        )
+        human_approval_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT action_id)
+                FROM autonomy_audit_log
+                WHERE timestamp >= ? AND event_type IN ('decision', 'approval')
+                  AND {cohort_sql}
+                  AND decision = 'approved'
+                  AND risk_level IN ('MEDIUM', 'HIGH', 'BLOCKED')
+                  AND COALESCE(approver, '') != ''
+                """,
+                (since,),
+            ).fetchone()[0]
+            or 0
+        )
+        prohibited_event_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT action_id)
+                FROM autonomy_audit_log
+                WHERE timestamp >= ? AND {cohort_sql}
+                  AND risk_level = 'BLOCKED'
+                  AND decision IN ('blocked', 'prohibited')
+                """,
+                (since,),
+            ).fetchone()[0]
+            or 0
+        )
+        synthetic_probe_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT action_id)
+                FROM autonomy_audit_log
+                WHERE timestamp >= ? AND {_SYNTHETIC_COHORT_SQL}
+                  AND action != '__configuration__'
+                """,
+                (since,),
+            ).fetchone()[0]
+            or 0
+        )
+        synthetic_prohibited_event_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT action_id)
+                FROM autonomy_audit_log
+                WHERE timestamp >= ? AND {_SYNTHETIC_COHORT_SQL}
+                  AND risk_level = 'BLOCKED'
+                  AND decision IN ('blocked', 'prohibited')
                 """,
                 (since,),
             ).fetchone()[0]
@@ -317,15 +390,24 @@ def summarize_autonomy_audit(*, days: int = 1) -> dict[str, Any]:
         "veto_count": veto_count,
         "veto_rate": round((veto_count / total) * 100, 2) if total else 0.0,
         "auto_pass_rate": round((auto_pass_count / total) * 100, 2) if total else 0.0,
-        "counting_rule": "unique action_id; veto if any decision required human, rejected, blocked, prohibited, or cooldown",
+        "cohort": "all" if include_synthetic else "operational",
+        "counting_rule": (
+            "unique operational action_id; veto if any decision required human, was rejected, "
+            "blocked, prohibited, cooldown, or records a non-LOW human approval; e2e/test probes "
+            "are reported separately"
+        ),
         "first_decision_at": first_ts or None,
         "last_decision_at": last_ts or None,
         "observed_days": observed_days,
         "by_decision": by_decision,
         "by_risk_level": by_risk,
         "target_veto_rate": {"min": 1.0, "max": 5.0},
+        "human_approval_count": human_approval_count,
+        "prohibited_event_count": prohibited_event_count,
         "prohibited_miss_count": prohibited_miss_count,
         "has_prohibited_miss": prohibited_miss_count > 0,
+        "synthetic_probe_count": synthetic_probe_count,
+        "synthetic_prohibited_event_count": synthetic_prohibited_event_count,
     }
 
 
