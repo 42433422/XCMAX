@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "_doc": "ModelRouter 配置：按任务复杂度在小/大 LLM 之间路由。环境变量 FHD_MODEL_SMALL / FHD_MODEL_LARGE / FHD_MODEL_ROUTING_ENABLED 优先级高于本文件。加载方: app.infrastructure.llm.model_router.ModelRouter",
+  "default_tier": "small",
+  "small_model": "deepseek-chat",
+  "large_model": "deepseek-reasoner",
+  "rules": {
+    "large_intent_keywords": [
+      "分析",
+      "规划",
+      "报表",
+      "对比",
+      "总结",
+      "预测",
+      "workflow",
+      "multi_step"
+    ],
+    "large_message_length": 2000,
+    "large_tool_count": 3,
+    "large_history_turns": 10
+  }
+}

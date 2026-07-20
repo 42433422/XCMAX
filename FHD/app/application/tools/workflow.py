@@ -32,7 +32,8 @@ _workflow_tool_registry_cache: list[dict[str, Any]] | None = None
 _workflow_tool_registry_bulk_token_present: bool | None = None
 _workflow_registry_cache_ver: int | None = None
 # 递增以使进程内工具注册表缓存失效（新增工具时 bump）
-_WORKFLOW_REG_VER = 2
+# 2026-07-21: bump 2→3 新增订单/客户/报表/RBAC 工具集
+_WORKFLOW_REG_VER = 3
 
 
 from app.application.tools.workflow_excel_paths import resolve_safe_excel_path
@@ -477,6 +478,392 @@ def _base_registry() -> list[dict[str, Any]]:
                 },
             },
         },
+        # ─── 订单（出货记录）CRUD 工具 ──────────────────────────────────
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_order",
+                "description": (
+                    "删除单条订单（出货记录）。高危操作，必须传 confirm=true 才会真正执行。"
+                    "若未传 confirm，返回预览信息等待用户二次确认。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "order_number": {
+                            "type": "string",
+                            "description": "订单 ID（出货记录主键，与 /api/shipment/orders/{order_number} 同语义）",
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行删除。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["order_number"],
+                },
+            },
+            "risk_level": "high",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_order",
+                "description": (
+                    "更新订单（出货记录）字段，如购买单位、产品名、型号、数量、单价、金额、状态等。"
+                    "写操作，必须传 confirm=true 才会执行。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "order_number": {
+                            "type": "string",
+                            "description": "订单 ID（出货记录主键）",
+                        },
+                        "fields": {
+                            "type": "object",
+                            "description": "待更新字段。支持 unit_name / product_name / model_number / quantity_kg / quantity_tins / tin_spec / unit_price / amount / status / date",
+                            "properties": {
+                                "unit_name": {"type": "string"},
+                                "product_name": {"type": "string"},
+                                "model_number": {"type": "string"},
+                                "quantity_kg": {"type": "number"},
+                                "quantity_tins": {"type": "integer"},
+                                "tin_spec": {"type": "string"},
+                                "unit_price": {"type": "number"},
+                                "amount": {"type": "number"},
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["pending", "printed", "completed", "cancelled"],
+                                },
+                                "date": {"type": "string", "description": "ISO 日期字符串"},
+                            },
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行更新。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["order_number", "fields"],
+                },
+            },
+            "risk_level": "medium",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_orders",
+                "description": (
+                    "查询订单（出货记录）列表。支持按购买单位、关键字过滤，返回最近记录。"
+                    "只读操作。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filters": {
+                            "type": "object",
+                            "description": "过滤条件",
+                            "properties": {
+                                "unit_name": {"type": "string", "description": "购买单位名"},
+                                "keyword": {"type": "string", "description": "搜索关键字"},
+                                "start_date": {"type": "string"},
+                                "end_date": {"type": "string"},
+                            },
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "返回条数上限，默认 20，最大 200",
+                        },
+                    },
+                },
+            },
+            "risk_level": "low",
+        },
+        # ─── 客户（购买单位）CRUD 工具 ─────────────────────────────────
+        {
+            "type": "function",
+            "function": {
+                "name": "update_customer",
+                "description": (
+                    "更新客户（购买单位）信息：客户名称、联系人、电话、地址。"
+                    "写操作，必须传 confirm=true 才会执行。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {"type": "integer", "description": "客户 ID"},
+                        "fields": {
+                            "type": "object",
+                            "description": "待更新字段。支持 customer_name / contact_person / contact_phone / contact_address",
+                            "properties": {
+                                "customer_name": {"type": "string"},
+                                "contact_person": {"type": "string"},
+                                "contact_phone": {"type": "string"},
+                                "contact_address": {"type": "string"},
+                            },
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行更新。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["customer_id", "fields"],
+                },
+            },
+            "risk_level": "medium",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_customer",
+                "description": (
+                    "删除客户（购买单位）。高危操作，必须传 confirm=true 才会执行。"
+                    "若客户关联了出货记录，默认会拒绝；可传 force=true 强制删除。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {"type": "integer", "description": "客户 ID"},
+                        "force": {
+                            "type": "boolean",
+                            "description": "是否强制删除（忽略关联检查）",
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行删除。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["customer_id"],
+                },
+            },
+            "risk_level": "high",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_customers",
+                "description": "查询客户（购买单位）列表，可按关键字搜索。只读操作。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filters": {
+                            "type": "object",
+                            "properties": {
+                                "keyword": {"type": "string"},
+                                "page": {"type": "integer", "description": "页码，默认 1"},
+                                "per_page": {"type": "integer", "description": "每页条数，默认 20"},
+                            },
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "等价于 per_page；若未提供 per_page 则用此值",
+                        },
+                    },
+                },
+            },
+            "risk_level": "low",
+        },
+        # ─── 报表配置工具 ─────────────────────────────────────────────
+        {
+            "type": "function",
+            "function": {
+                "name": "configure_report",
+                "description": (
+                    "新建或更新报表配置（报表类型、日期范围、分组维度、图表类型等）。"
+                    "写操作，必须传 confirm=true 才会执行。"
+                    "现有报表类型：sales / inventory / inventory_transactions / purchase / dashboard。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "report_type": {
+                            "type": "string",
+                            "enum": [
+                                "sales",
+                                "inventory",
+                                "inventory_transactions",
+                                "purchase",
+                                "dashboard",
+                            ],
+                            "description": "报表类型",
+                        },
+                        "config": {
+                            "type": "object",
+                            "description": "配置内容，可包含 name / date_range / group_by / chart_type / filters 等",
+                            "properties": {
+                                "name": {"type": "string", "description": "配置名称"},
+                                "date_range": {
+                                    "type": "object",
+                                    "properties": {
+                                        "start_date": {"type": "string"},
+                                        "end_date": {"type": "string"},
+                                    },
+                                },
+                                "group_by": {
+                                    "type": "string",
+                                    "enum": [
+                                        "product",
+                                        "customer",
+                                        "supplier",
+                                        "category",
+                                        "warehouse",
+                                        "month",
+                                        "week",
+                                        "day",
+                                    ],
+                                },
+                                "chart_type": {
+                                    "type": "string",
+                                    "enum": ["bar", "line", "pie", "table", "scatter"],
+                                },
+                                "filters": {"type": "object"},
+                            },
+                        },
+                        "config_id": {
+                            "type": "string",
+                            "description": "可选：若提供则更新现有配置，否则新建",
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行写入。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["report_type", "config"],
+                },
+            },
+            "risk_level": "medium",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_report_configs",
+                "description": "列出所有报表配置，可按 report_type 过滤。只读操作。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "report_type": {
+                            "type": "string",
+                            "description": "可选：按报表类型过滤",
+                        },
+                    },
+                },
+            },
+            "risk_level": "low",
+        },
+        # ─── RBAC（角色/权限）工具 ────────────────────────────────────
+        {
+            "type": "function",
+            "function": {
+                "name": "create_role",
+                "description": (
+                    "创建自定义角色并指定权限列表。写操作，必须传 confirm=true 才会执行。"
+                    "权限 code 须先通过 list_permissions 查询获得。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "角色名称"},
+                        "permissions": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "权限 code 列表",
+                        },
+                        "description": {"type": "string", "description": "角色描述"},
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行创建。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["name", "permissions"],
+                },
+            },
+            "risk_level": "high",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_role",
+                "description": "更新角色描述和权限列表。系统角色只允许修改描述。写操作，必须传 confirm=true。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "role_id": {"type": "integer", "description": "角色 ID"},
+                        "description": {"type": "string", "description": "新描述"},
+                        "permissions": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "新权限 code 列表",
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行更新。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["role_id"],
+                },
+            },
+            "risk_level": "medium",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_role",
+                "description": (
+                    "删除自定义角色（系统角色不可删除）。高危操作，必须传 confirm=true 才会执行。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "role_id": {"type": "integer", "description": "角色 ID"},
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行删除。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["role_id"],
+                },
+            },
+            "risk_level": "high",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "assign_role",
+                "description": (
+                    "将用户分配到指定角色（按角色名称修改 User.role 字段）。"
+                    "写操作，必须传 confirm=true 才会执行。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {"type": "integer", "description": "用户 ID"},
+                        "role": {"type": "string", "description": "角色名称"},
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "是否确认执行分配。必须显式传 true 才会执行",
+                        },
+                    },
+                    "required": ["user_id", "role"],
+                },
+            },
+            "risk_level": "high",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_roles",
+                "description": "列出所有角色及其权限列表。只读操作。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tenant_id": {
+                            "type": "string",
+                            "description": "可选：租户 ID",
+                        },
+                    },
+                },
+            },
+            "risk_level": "low",
+        },
     ]
 
 
@@ -867,7 +1254,72 @@ def execute_workflow_tool(
             )
         except RECOVERABLE_ERRORS as e:
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+    # ─── 新增工具集分发：订单/客户/报表/RBAC ───────────────────────────
+    # 直接调 service 层，不经过 HTTP。高危操作由各执行器内部 confirm 参数守护。
+    new_tool_dispatch = _resolve_new_tool_dispatch(name)
+    if new_tool_dispatch is not None:
+        try:
+            result = new_tool_dispatch(args)
+            return json.dumps(result, ensure_ascii=False)
+        except RECOVERABLE_ERRORS as e:
+            return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
     return json.dumps({"success": False, "error": "unknown_tool", "tool": name}, ensure_ascii=False)
+
+
+# 新增工具名 → 执行器函数 懒映射。缓存以避免每次 dispatch 都重新 import。
+_NEW_TOOL_DISPATCH_CACHE: dict[str, Any] | None = None
+
+
+def _resolve_new_tool_dispatch(name: str) -> Any:
+    """惰性解析新工具执行器；首次调用时统一 import 全部新工具模块并缓存映射。"""
+    global _NEW_TOOL_DISPATCH_CACHE
+    if _NEW_TOOL_DISPATCH_CACHE is None:
+        try:
+            from app.application.tools.customer_crud_tools import (
+                delete_customer,
+                list_customers,
+                update_customer,
+            )
+            from app.application.tools.rbac_tools import (
+                assign_role,
+                create_role,
+                delete_role,
+                list_roles,
+                update_role,
+            )
+            from app.application.tools.report_config_tools import (
+                configure_report,
+                list_report_configs,
+            )
+            from app.application.tools.shipment_crud_tools import (
+                delete_order,
+                list_orders,
+                update_order,
+            )
+
+            _NEW_TOOL_DISPATCH_CACHE = {
+                # 订单（出货记录）
+                "delete_order": delete_order,
+                "update_order": update_order,
+                "list_orders": list_orders,
+                # 客户（购买单位）
+                "update_customer": update_customer,
+                "delete_customer": delete_customer,
+                "list_customers": list_customers,
+                # 报表配置
+                "configure_report": configure_report,
+                "list_report_configs": list_report_configs,
+                # RBAC
+                "create_role": create_role,
+                "update_role": update_role,
+                "delete_role": delete_role,
+                "assign_role": assign_role,
+                "list_roles": list_roles,
+            }
+        except RECOVERABLE_ERRORS:
+            logger.debug("new tool dispatch init failed", exc_info=True)
+            _NEW_TOOL_DISPATCH_CACHE = {}
+    return _NEW_TOOL_DISPATCH_CACHE.get(name) if _NEW_TOOL_DISPATCH_CACHE else None
 
 
 def _handle_import_excel_to_database(

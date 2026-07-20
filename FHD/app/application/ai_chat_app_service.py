@@ -146,6 +146,9 @@ class AIChatApplicationService(
         # chat_run / chat_run_context 由下方主链路赋值；workflow 捷径路径保持 None（已自带 run）。
         chat_run = None
         chat_run_context: dict[str, Any] = {}
+        # ModelRouter 路由决策：仅在主链路 LLM 调用前赋值，早期捷径路径保持 None。
+        # 在 _finalize 之前初始化，便于 _finalize 闭包安全引用（早期 return 路径不挂载）。
+        routing_decision: Any = None
 
         def _finalize(resp: dict[str, Any]) -> dict[str, Any]:
             if chat_run is not None:
@@ -303,6 +306,14 @@ class AIChatApplicationService(
         # 向量已在 ctx 上注入；enriched_context 由 ctx 浅拷贝而来，无需再次检索。
         prepared_context = enriched_context
 
+        # ModelRouter 路由决策：在调用 LLM 前根据 message + intent + 上下文决定 small/large 模型。
+        # 决策结果挂在 prepared_context 上供下游 chat_completion(model=...) 覆盖；
+        # 同时写入 metadata 用于审计。FHD_MODEL_ROUTING_ENABLED 未开启时 decision 为 None，
+        # 行为与改造前完全一致。
+        routing_decision = self._compute_model_routing_decision(message, prepared_context)
+        if routing_decision is not None:
+            prepared_context["_model_routing_decision"] = routing_decision.to_dict()
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -348,7 +359,96 @@ class AIChatApplicationService(
 
         response_data = self._build_response(ai_result, source, message)
 
+        # 审计：把路由决策写入 response metadata（仅主链路 LLM 调用路径，
+        # 早期 deterministic / business / workflow 捷径不挂载）。
+        if routing_decision is not None:
+            self._attach_routing_metadata(response_data, routing_decision)
+
         return _finalize(response_data)
+
+    @staticmethod
+    def _attach_routing_metadata(response_data: dict[str, Any], decision: Any) -> None:
+        """把 ModelRouter 路由决策写入响应 metadata，便于审计与回放。
+
+        写入位置：``response_data["data"]["data"]["_routing"]``（与现有
+        ``intent`` / ``thinking_steps`` 同层）；若 ``data.data`` 不存在则跳过。
+        """
+        if not isinstance(response_data, dict) or decision is None:
+            return
+        try:
+            inner = response_data.get("data")
+            if not isinstance(inner, dict):
+                return
+            inner_payload = inner.get("data")
+            if not isinstance(inner_payload, dict):
+                inner_payload = {}
+                inner["data"] = inner_payload
+            decision_dict = decision.to_dict() if hasattr(decision, "to_dict") else dict(decision)
+            inner_payload["_routing"] = decision_dict
+        except RECOVERABLE_ERRORS:
+            logger.debug("attach routing metadata failed", exc_info=True)
+
+    @staticmethod
+    def _compute_model_routing_decision(message: str, context: dict[str, Any]) -> Any:
+        """构造 RoutingRequest 调用 ModelRouter，返回 RoutingDecision 或 None。
+
+        返回 ``None`` 的情形：
+        - ``FHD_MODEL_ROUTING_ENABLED`` 未开启（``ModelRouter.enabled=False``）
+        - 加载 ModelRouter 或路由判定抛出可恢复异常
+
+        Args:
+            message: 用户消息文本。
+            context: 当前请求上下文（用于读取 intent / tool_count / history_len / profile）。
+
+        Returns:
+            :class:`app.infrastructure.llm.model_router.RoutingDecision` 或 ``None``。
+        """
+        try:
+            from app.infrastructure.llm.model_router import (
+                RoutingRequest,
+                get_model_router,
+            )
+        except RECOVERABLE_ERRORS:
+            return None
+
+        try:
+            router = get_model_router()
+        except RECOVERABLE_ERRORS:
+            return None
+        if not router.enabled:
+            return None
+
+        ctx = context if isinstance(context, dict) else {}
+        intent = str(ctx.get("intent") or ctx.get("primary_intent") or "").strip() or None
+        try:
+            tool_count = int(ctx.get("tool_count") or 0)
+        except (TypeError, ValueError):
+            tool_count = 0
+        history_obj = ctx.get("conversation_history") or ctx.get("history")
+        if isinstance(history_obj, list):
+            history_len = len(history_obj)
+        else:
+            try:
+                history_len = int(ctx.get("conversation_history_len") or 0)
+            except (TypeError, ValueError):
+                history_len = 0
+        profile = (
+            str(ctx.get("model_profile") or ctx.get("llm_profile") or "").strip().lower() or None
+        )
+
+        try:
+            return router.route(
+                RoutingRequest(
+                    message=str(message or ""),
+                    intent=intent,
+                    tool_count=tool_count,
+                    conversation_history_len=history_len,
+                    profile=profile,
+                )
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("ModelRouter.route failed", exc_info=True)
+            return None
 
     @staticmethod
     def _persist_recallable_chat_turn(

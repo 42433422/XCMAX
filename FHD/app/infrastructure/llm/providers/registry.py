@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -11,6 +12,8 @@ from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
 from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")
 _PROVIDER_ID_ALIASES = {
@@ -115,14 +118,72 @@ def get_active_provider(
     conversation_service: Any | None = None,
     profile: str | None = None,
 ) -> LLMProvider | None:
-    """profile 保留供未来按场景路由；当前与默认顺序一致。"""
-    _ = profile
+    """根据 profile 选择 LLM provider。
+
+    向后兼容策略：
+
+    - ``profile=None``：走原逻辑（header override → routing order fallback），
+      行为与未引入 ModelRouter 前完全一致。
+    - ``profile="small"`` / ``"large"`` / ``"reasoning"`` / ``"fast"``：调用
+      :class:`app.infrastructure.llm.model_router.ModelRouter` 决策模型 tier，
+      并把 :class:`RoutingDecision` 挂载到返回的 provider 上
+      （属性名 ``_routing_decision``），调用方可读取该属性覆盖实际请求体中的
+      ``model`` 字段。``ModelRouter.enabled=False`` 时退化为 ``profile=None``
+      行为（不挂载 decision）。
+
+    Note:
+        本函数不替换 provider 实例——所有内置 provider 共享同一 ``base_url``，
+        仅 ``model`` 字段不同；调用方（如 ``OpenAICompatibleProvider.chat_completion``）
+        应读取 ``_routing_decision.model_name`` 覆盖请求体。
+    """
     header_provider = None
     if request is not None:
         headers = getattr(request, "headers", None)
         if headers is not None:
             header_provider = headers.get("X-LLM-Provider") or headers.get("x-llm-provider")
-    return get_llm_registry().resolve(
+    provider = get_llm_registry().resolve(
         header_provider=header_provider,
         conversation_service=conversation_service,
     )
+    if provider is None:
+        return None
+
+    # profile=None 保持原行为
+    if profile is None:
+        return provider
+
+    # 落地 profile：交给 ModelRouter 决策，并把 decision 挂载到 provider 上
+    try:
+        from app.infrastructure.llm.model_router import (
+            RoutingRequest,
+            get_model_router,
+        )
+
+        router = get_model_router()
+        if not router.enabled:
+            # 路由未启用 → 不挂 decision，调用方走 provider 默认 model
+            return provider
+
+        # 从 request 对象 best-effort 抽取 message（不强制要求结构）
+        message = ""
+        if request is not None:
+            for attr in ("message", "body", "query", "text"):
+                try:
+                    val = getattr(request, attr, None)
+                except RECOVERABLE_ERRORS:
+                    val = None
+                if isinstance(val, str) and val:
+                    message = val
+                    break
+
+        decision = router.route(
+            RoutingRequest(message=message, profile=str(profile).strip().lower() or None)
+        )
+        try:
+            provider._routing_decision = decision  # type: ignore[attr-defined]
+        except RECOVERABLE_ERRORS:
+            # 装饰层 / 不可变对象等场景下挂载失败不阻断返回 provider
+            logger.debug("attach _routing_decision to provider failed", exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.debug("ModelRouter 落地 profile 失败，回退默认 provider", exc_info=True)
+    return provider

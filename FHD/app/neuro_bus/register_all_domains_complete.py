@@ -1,7 +1,7 @@
 """
 注册所有 Neuro 领域事件处理器（完整版）
 
-一次性注册以下 10 个领域的 handler 模块 + 核心 app service 消费者：
+一次性注册以下 12 个领域的 handler 模块 + 核心 app service 消费者：
 1. product - 产品领域
 2. shipment - 发货单领域
 3. order - 订单领域
@@ -12,6 +12,8 @@
 8. wechat - 微信领域
 9. print - 打印领域
 10. ai - AI领域
+11. finance - 财务领域（approval_requested/approval_completed 编排链路）
+12. report - 报表领域（monthly_summary 请求/生成）
 + application_consumers - 核心 app service 真实落地消费者
 
 注：auth / material / conversation 仅有事件定义（``app.neuro_bus.events.*``），
@@ -112,6 +114,32 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
         logger.info("[NeuroDomainRegistration] AI 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] AI 领域注册失败: %s", e)
+
+    # 11.5 Finance 领域（端到端编排链路第 3 段：approval_requested/approval_completed）
+    try:
+        from app.neuro_bus.domains.finance_domain_handlers import (
+            register_finance_domain_handlers,
+        )
+
+        register_finance_domain_handlers(bus)
+        logger.info("[NeuroDomainRegistration] Finance 领域处理器注册完成")
+    except ImportError:
+        logger.info("[NeuroDomainRegistration] Finance 领域处理器不存在，跳过")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("[NeuroDomainRegistration] Finance 领域注册失败: %s", e)
+
+    # 11.6 Report 领域（端到端编排链路第 4 段：monthly_summary_requested/generated）
+    try:
+        from app.neuro_bus.domains.report_domain_handlers import (
+            register_report_domain_handlers,
+        )
+
+        register_report_domain_handlers(bus)
+        logger.info("[NeuroDomainRegistration] Report 领域处理器注册完成")
+    except ImportError:
+        logger.info("[NeuroDomainRegistration] Report 领域处理器不存在，跳过")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("[NeuroDomainRegistration] Report 领域注册失败: %s", e)
 
     # 11. 核心 app service 真实落地消费者（products.imported / conversation.message_saved /
     #     customer.changed）—— 为「只发布、无消费」的服务补齐持久副作用消费者。

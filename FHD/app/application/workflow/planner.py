@@ -1260,7 +1260,16 @@ class LLMWorkflowPlanner:
         message: str,
         tool_registry: dict[str, Any],
         context: dict[str, Any] | None = None,
+        *,
+        persist: bool = False,
+        definition_name: str | None = None,
     ) -> PlanGraph:
+        """生成 ``PlanGraph``。
+
+        新增 ``persist`` 选项：为 ``True`` 时将生成的 ``PlanGraph`` 持久化为
+        ``WorkflowDefinition``（``trigger_type=one_time``）。持久化失败不阻断主流程，
+        只记录 warning。默认 ``False`` 保持向后兼容。
+        """
         context = dict(context or {})
         plan_id = uuid.uuid4().hex
 
@@ -1310,10 +1319,53 @@ class LLMWorkflowPlanner:
         if planned is not None:
             err = validate_plan_graph(planned)
             if err is None:
+                self._maybe_persist_plan(planned, context, persist, definition_name)
                 return planned
             logger.warning("ReAct/CoT 计划校验失败，回退规则规划: %s", err)
 
-        return self._fallback_plan(plan_id, message, registry_for_plan)
+        final_plan = self._fallback_plan(plan_id, message, registry_for_plan)
+        self._maybe_persist_plan(final_plan, context, persist, definition_name)
+        return final_plan
+
+    @staticmethod
+    def _maybe_persist_plan(
+        plan: PlanGraph,
+        context: dict[str, Any],
+        persist: bool,
+        definition_name: str | None,
+    ) -> None:
+        """可选：将 PlanGraph 持久化为 WorkflowDefinition。失败仅记日志。"""
+        if not persist:
+            return
+        try:
+            from app.application.workflow_definition_app_service import (
+                get_workflow_definition_app_service,
+            )
+            from app.db.models.workflow import WorkflowTriggerType
+
+            tenant_id_raw = (context or {}).get("tenant_id")
+            try:
+                tenant_id = int(tenant_id_raw) if tenant_id_raw is not None else None
+            except (TypeError, ValueError):
+                tenant_id = None
+            created_by_raw = (context or {}).get("user_id") or (context or {}).get("created_by")
+            try:
+                created_by = int(created_by_raw) if created_by_raw is not None else None
+            except (TypeError, ValueError):
+                created_by = None
+
+            name = (definition_name or plan.intent or "auto_plan").strip() or "auto_plan"
+            get_workflow_definition_app_service().create_definition_from_plan_graph(
+                plan,
+                tenant_id=tenant_id,
+                name=name,
+                description=plan.intent,
+                trigger_type=WorkflowTriggerType.ONE_TIME.value,
+                trigger_config={"plan_id": plan.plan_id, "message": (context or {}).get("message", "")},
+                created_by=created_by,
+            )
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("PlanGraph 持久化失败（不阻断主流程）: %s", e)
 
     def _plan_with_react_multiagent(
         self,

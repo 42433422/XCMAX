@@ -120,12 +120,12 @@
           :disabled="voiceButtonDisabled"
           :title="voiceButtonTitle"
           data-tutorial-id="chat-voice-push-to-talk"
-          @mousedown.prevent="startVoiceRecording"
-          @mouseup.prevent="stopVoiceRecording(false)"
-          @mouseleave="stopVoiceRecording(true)"
-          @touchstart.prevent="startVoiceRecording"
-          @touchend.prevent="stopVoiceRecording(false)"
-          @touchcancel.prevent="stopVoiceRecording(true)"
+          @mousedown.prevent="onVoiceMouseDown"
+          @mouseup.prevent="onVoiceMouseUp"
+          @mouseleave="onVoiceMouseLeave"
+          @touchstart.prevent="onVoiceTouchStart"
+          @touchend.prevent="onVoiceTouchEnd"
+          @touchcancel.prevent="onVoiceTouchCancel"
         >
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
@@ -183,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
@@ -206,6 +206,7 @@ import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
+import type { VoiceCommandData } from '@/api/voice'
 
 const router = useRouter()
 const modsStore = useModsStore()
@@ -298,6 +299,43 @@ const {
 
 const messageInput = ref('')
 
+/**
+ * 语音指令执行结果回调：把用户原话作为 user 消息、工具执行结果作为 ai 消息注入对话区。
+ * 仅在 /api/voice/command executed=true 时触发（auto_execute=true + 低风险 + 高置信度）。
+ */
+const handleVoiceCommandExecuted = async (data: VoiceCommandData) => {
+  try {
+    if (data.text) {
+      await addAndSaveMessage(data.text, 'user')
+    }
+    const responseText =
+      (data.result?.response && String(data.result.response).trim()) ||
+      `（已执行语音指令：${data.intent || '工具'}）`
+    await addAndSaveMessage(responseText, 'ai')
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[ChatView] handleVoiceCommandExecuted failed:', err)
+  }
+}
+
+/**
+ * 语音指令"识别到意图但未执行"回调：在 composerStatusText 显示 5 秒提示，
+ * 引导用户手动点发送执行（高风险/低置信度/否定式/auto_execute=false 场景）。
+ */
+const voiceIntentHintText = ref('')
+let voiceIntentHintTimer: number | null = null
+const handleVoiceIntentRecognized = (data: VoiceCommandData) => {
+  const intent = data.intent || ''
+  const riskSuffix = data.is_high_risk ? '（高风险，需二次确认）' : ''
+  const confidencePct = Math.round((data.confidence || 0) * 100)
+  voiceIntentHintText.value = `已识别意图：${intent}${riskSuffix}（置信度 ${confidencePct}%），可点击发送执行`
+  if (voiceIntentHintTimer) window.clearTimeout(voiceIntentHintTimer)
+  voiceIntentHintTimer = window.setTimeout(() => {
+    voiceIntentHintText.value = ''
+    voiceIntentHintTimer = null
+  }, 5_000)
+}
+
 const {
   voiceButtonDisabled,
   voiceButtonClass,
@@ -307,8 +345,83 @@ const {
   voiceFeedbackText,
   startVoiceRecording,
   stopVoiceRecording,
+  setVoiceCommandMode,
   cleanupVoiceInput,
-} = useChatVoiceInput({ messageInput, isLoading })
+} = useChatVoiceInput({
+  messageInput,
+  isLoading,
+  sessionId: currentSessionId,
+  onVoiceCommandExecuted: handleVoiceCommandExecuted,
+  onVoiceIntentRecognized: handleVoiceIntentRecognized,
+})
+
+// ---------------------------------------------------------------------------
+// 语音按钮长按 1.5s 切换"语音指令模式"（auto_execute=true）
+// - 短按：松开后走 /api/voice/command autoExecute=false（仅填入输入框）
+// - 长按 ≥1.5s：松开后走 /api/voice/command autoExecute=true（直接执行低风险工具）
+// ---------------------------------------------------------------------------
+const VOICE_LONG_PRESS_MS = 1500
+let voiceLongPressTimer: number | null = null
+
+const clearVoiceLongPressTimer = () => {
+  if (voiceLongPressTimer !== null) {
+    window.clearTimeout(voiceLongPressTimer)
+    voiceLongPressTimer = null
+  }
+}
+
+const startVoiceLongPressTimer = () => {
+  clearVoiceLongPressTimer()
+  voiceLongPressTimer = window.setTimeout(() => {
+    voiceLongPressTimer = null
+    setVoiceCommandMode(true)
+  }, VOICE_LONG_PRESS_MS)
+}
+
+const onVoiceMouseDown = (e: MouseEvent) => {
+  e.preventDefault()
+  void startVoiceRecording()
+  startVoiceLongPressTimer()
+}
+
+const onVoiceMouseUp = (e: MouseEvent) => {
+  e.preventDefault()
+  clearVoiceLongPressTimer()
+  // 短按松开：保持 setVoiceCommandMode 当前值（false）；长按已触发则保持 true
+  stopVoiceRecording(false)
+}
+
+const onVoiceMouseLeave = () => {
+  clearVoiceLongPressTimer()
+  setVoiceCommandMode(false)
+  stopVoiceRecording(true)
+}
+
+const onVoiceTouchStart = (e: TouchEvent) => {
+  e.preventDefault()
+  void startVoiceRecording()
+  startVoiceLongPressTimer()
+}
+
+const onVoiceTouchEnd = (e: TouchEvent) => {
+  e.preventDefault()
+  clearVoiceLongPressTimer()
+  stopVoiceRecording(false)
+}
+
+const onVoiceTouchCancel = () => {
+  clearVoiceLongPressTimer()
+  setVoiceCommandMode(false)
+  stopVoiceRecording(true)
+}
+
+onBeforeUnmount(() => {
+  clearVoiceLongPressTimer()
+  if (voiceIntentHintTimer !== null) {
+    window.clearTimeout(voiceIntentHintTimer)
+    voiceIntentHintTimer = null
+  }
+})
 
 const {
   messageHeights,
@@ -366,6 +479,7 @@ const sendButtonTitle = computed(() => {
 })
 const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
+  if (voiceIntentHintText.value) return voiceIntentHintText.value
   if (isLoading.value) return '正在发送，请稍候'
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
@@ -454,5 +568,12 @@ function emitSwitchView(view: string) {
 
 .chat-composer-status--error {
   color: #b42318;
+}
+
+/* 语音指令模式（长按 1.5s 触发）：高亮按钮边框，提示用户松开将自动执行 */
+.voice-input-btn.voice-input-btn-command {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+  background-color: rgba(245, 158, 11, 0.08);
 }
 </style>
