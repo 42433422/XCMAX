@@ -135,6 +135,16 @@ def test_autonomy_deploy_reports_terminal_failure_in_same_workflow() -> None:
     assert "github_cli_retry gh workflow run fhd-deploy.yml" in dispatcher
     assert "github_cli_retry gh run list" in dispatcher
     assert "Could not resolve the production environment reviewer; refusing to resume." in deploy
+    assert "actions/runs/${GITHUB_RUN_ID}/approvals" in deploy
+    assert 'select(.state == "approved")' in deploy
+    assert 'select(.state == "rejected")' in deploy
+    assert 'select(.user.type != "Bot")' in deploy
+    assert ".user.login" in deploy
+    assert "actions/runs/${RUN_ID}/approvals" in fallback
+    assert 'select(.state == "approved")' in fallback
+    assert 'select(.state == "rejected")' in fallback
+    assert 'select(.user.type != "Bot")' in fallback
+    assert ".user.login" in fallback
     assert "|| printf '{\"jobs\":[]}'" in deploy
     assert "|| printf '{\"jobs\":[]}'" in fallback
     assert "|| printf '[]'" in deploy
