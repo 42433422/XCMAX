@@ -126,10 +126,84 @@ class GitHubClient:
                         additions=pr_data.get("additions", 0),
                         deletions=pr_data.get("deletions", 0),
                         kind=kind,
+                        author=_extract_login(pr_data.get("user")),
+                        head_sha=pr_data.get("head", {}).get("sha", "") or "",
                     )
                 )
                 seen.add(pr_number)
         return prs
+
+    def list_regular_prs(self) -> list[PRInfo]:
+        """列出所有 open PR，排除带 ai-self-heal / ai-generated label 的 PR。
+
+        普通 PR 由本函数专门处理，不走 risk 分级；走三重门禁。
+        """
+        url = f"{GITHUB_API}/repos/{self.repo}/pulls"
+        prs: list[PRInfo] = []
+        page = 1
+        while True:
+            resp = self.client.get(
+                url,
+                params={"state": "open", "per_page": 100, "page": page, "sort": "created", "direction": "desc"},
+            )
+            resp.raise_for_status()
+            items = resp.json()
+            if not items:
+                break
+            for pr_data in items:
+                labels = [lab["name"] for lab in pr_data.get("labels", [])]
+                # 排除 ai-self-heal / ai-generated PR（由 list_self_heal_prs 处理）
+                if any(lab in AI_PR_LABELS for lab in labels):
+                    continue
+                prs.append(
+                    PRInfo(
+                        number=pr_data["number"],
+                        title=pr_data["title"],
+                        url=pr_data["html_url"],
+                        head_branch=pr_data["head"]["ref"],
+                        created_at=_parse_iso(pr_data["created_at"]),
+                        labels=labels,
+                        changed_files=pr_data.get("changed_files", 0),
+                        additions=pr_data.get("additions", 0),
+                        deletions=pr_data.get("deletions", 0),
+                        kind="regular",
+                        author=_extract_login(pr_data.get("user")),
+                        head_sha=pr_data.get("head", {}).get("sha", "") or "",
+                    )
+                )
+            if len(items) < 100:
+                break
+            page += 1
+            # 安全上限：避免极端情况下无限翻页
+            if page > 10:
+                break
+        return prs
+
+    def get_workflow_run_conclusion(self, head_sha: str, workflow_name: str) -> tuple[bool, str]:
+        """检查指定 head SHA 上某 workflow 的最近一次 run 是否 conclusion=success。
+
+        GitHub Actions API：list workflow runs by head_sha 过滤 name 字段。
+        返回 (passed, reason)。
+        """
+        if not head_sha:
+            return False, "no_head_sha"
+        url = f"{GITHUB_API}/repos/{self.repo}/actions/runs"
+        resp = self.client.get(url, params={"head_sha": head_sha, "per_page": 100})
+        if resp.status_code != 200:
+            return False, f"workflow_runs_api_error_{resp.status_code}"
+        runs = resp.json().get("workflow_runs", []) or []
+        matched = [r for r in runs if r.get("name") == workflow_name]
+        if not matched:
+            return False, f"no_workflow_run:{workflow_name}"
+        # 取最新一条（GitHub 默认按 created_at desc 返回，但显式排序更稳）
+        latest = max(matched, key=lambda r: r.get("created_at", ""))
+        status = latest.get("status", "")
+        conclusion = latest.get("conclusion")
+        if status != "completed":
+            return False, f"workflow_not_completed:{workflow_name}:{status}"
+        if conclusion != "success":
+            return False, f"workflow_failed:{workflow_name}:{conclusion}"
+        return True, "ok"
 
     def get_pr_files(self, pr_number: int) -> list[str]:
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/files"
@@ -187,6 +261,80 @@ def _parse_iso(s: str) -> float:
     return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
 
 
+def _extract_login(user: Any) -> str:
+    """从 GitHub API user 字段提取 login（兼容 None / 缺字段）。"""
+    if not isinstance(user, dict):
+        return ""
+    return str(user.get("login") or "")
+
+
+# =====================================================================
+# allowlist 加载
+# =====================================================================
+
+
+def _allowlist_path() -> Path:
+    override = (os.environ.get("AUTO_IMPLEMENT_ALLOWLIST_PATH") or "").strip()
+    return Path(override) if override else DEFAULT_ALLOWLIST_PATH
+
+
+def _parse_allowlist_fallback(text: str) -> dict[str, Any]:
+    """无 PyYAML 时的极简解析：只认 enabled / trusted_authors 列表项。"""
+    enabled = True
+    authors: list[str] = []
+    in_authors = False
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        stripped = line.strip()
+        if stripped.startswith("enabled:"):
+            val = stripped.split(":", 1)[1].strip().lower()
+            enabled = val in ("true", "1", "yes")
+            in_authors = False
+            continue
+        if stripped.startswith("trusted_authors:"):
+            in_authors = True
+            continue
+        if in_authors and stripped.startswith("- "):
+            item = stripped[2:].strip().strip("\"'")
+            if item:
+                authors.append(item)
+            continue
+        if not line.startswith((" ", "\t")):
+            in_authors = False
+    return {"enabled": enabled, "trusted_authors": authors}
+
+
+def load_trusted_authors(path: Path | None = None) -> list[str]:
+    """读取 config/auto-implement-allowlist.yaml 的 trusted_authors 列表。
+
+    文件缺失 / enabled=false / 字段缺失 → 返回空列表（禁用普通 PR auto-merge）。
+    """
+    cfg_path = path or _allowlist_path()
+    if not cfg_path.is_file():
+        return []
+    try:
+        text = cfg_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    try:
+        try:
+            import yaml  # type: ignore
+        except ImportError:
+            data = _parse_allowlist_fallback(text)
+        else:
+            data = yaml.safe_load(text) or {}
+        if not isinstance(data, dict) or not data.get("enabled", True):
+            return []
+        authors = data.get("trusted_authors") or []
+        if not isinstance(authors, list):
+            return []
+        return [str(a).strip() for a in authors if str(a).strip()]
+    except Exception:  # noqa: BLE001 — 配置解析失败 fail-safe 禁用
+        return []
+
+
 # =====================================================================
 # 二次守卫
 # =====================================================================
@@ -219,8 +367,8 @@ def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
     """二次守卫：返回 (passed, reason)。任一不通过即拦截 auto-merge。"""
     config = GUARD_CONFIG.get(pr.kind, GUARD_CONFIG["self_heal"])
 
-    # 1. CI 全绿
-    head_sha = client.get_pr_head_sha(pr.number)
+    # 1. CI 全绿（优先用 PRInfo.head_sha，避免再发请求）
+    head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
     ci_ok, ci_reason = client.get_pr_check_runs(pr.number, head_sha)
     if not ci_ok:
         return False, f"ci:{ci_reason}"
@@ -251,6 +399,110 @@ def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
         return False, f"autonomy_branch:{pr.head_branch}"
 
     return True, "ok"
+
+
+# =====================================================================
+# 普通 PR 三重门禁（--scan-regular-prs）
+# =====================================================================
+
+
+def check_regular_pr_gates(
+    client: GitHubClient,
+    pr: PRInfo,
+    trusted_authors: list[str],
+) -> tuple[bool, str]:
+    """普通 PR auto-merge 三重门禁 + hold-merge veto。
+
+    顺序：hold-merge veto → ai-review → ci → author
+    任一不通过即拦截。返回 (passed, reason)。
+    """
+    # 0. hold-merge veto（最高优先级，强制人工 hold）
+    if HOLD_MERGE_LABEL in pr.labels:
+        return False, f"veto:{HOLD_MERGE_LABEL}"
+
+    # 1. ai-review: passed
+    #    优先认 label（人工或自动化打的），其次查 workflow run conclusion
+    if AI_REVIEW_PASSED_LABEL in pr.labels:
+        ai_review_ok = True
+        ai_review_reason = "label:ai-review:passed"
+    else:
+        head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+        ai_review_ok, ai_review_reason = client.get_workflow_run_conclusion(
+            head_sha, AI_REVIEW_WORKFLOW_NAME
+        )
+    if not ai_review_ok:
+        return False, f"ai_review:{ai_review_reason}"
+
+    # 2. ci: passed
+    head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+    ci_ok, ci_reason = client.get_pr_check_runs(pr.number, head_sha)
+    if not ci_ok:
+        return False, f"ci:{ci_reason}"
+
+    # 3. author: trusted-author-allowlist
+    if not trusted_authors:
+        return False, "trusted_authors:empty_allowlist"
+    if pr.author not in trusted_authors:
+        return False, f"author:not_trusted:{pr.author or 'unknown'}"
+
+    return True, "ok"
+
+
+def process_regular_pr(
+    client: GitHubClient,
+    pr: PRInfo,
+    trusted_authors: list[str],
+    *,
+    dry_run: bool = False,
+) -> str:
+    """处理单个普通 PR：通过三重门禁 → squash merge；否则 skip。
+
+    返回动作：auto_merged / auto_merged_dry / skipped / merge_failed。
+    不做 stale/close（普通 PR 由人工 review 兜底）。
+    """
+    print(
+        f"[PR #{pr.number}] kind=regular author={pr.author or 'unknown'} "
+        f"files={pr.changed_files} labels={pr.labels}"
+    )
+
+    passed, reason = check_regular_pr_gates(client, pr, trusted_authors)
+    if not passed:
+        print(f"  skip: 三重门禁未通过 ({reason})")
+        _append_stale({
+            "pr": pr.number,
+            "kind": "regular",
+            "author": pr.author,
+            "action": "regular_skipped",
+            "reason": reason,
+        })
+        return "skipped"
+
+    print(f"  三重门禁通过 ({reason})，auto-merge (squash)")
+    if not dry_run:
+        ok = client.merge_pr(pr.number, method="squash")
+        if ok:
+            client.comment(
+                pr.number,
+                f"✅ 三重门禁通过（ai-review:passed + ci:passed + author:trusted），"
+                f"自动 squash merge。",
+            )
+            _append_stale({
+                "pr": pr.number,
+                "kind": "regular",
+                "author": pr.author,
+                "action": "regular_auto_merged",
+            })
+            return "auto_merged"
+        else:
+            client.comment(pr.number, "❌ 自动合并失败（可能冲突或权限不足），请人工处理。")
+            _append_stale({
+                "pr": pr.number,
+                "kind": "regular",
+                "author": pr.author,
+                "action": "regular_auto_merge_failed",
+            })
+            return "merge_failed"
+    return "auto_merged_dry"
 
 
 # =====================================================================
@@ -293,6 +545,17 @@ def process_pr(
         risk = "r0" if pr.kind == "ai_generated" else "r3"
 
     print(f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}")
+
+    # ===== hold-merge veto（人工强制 hold，普适）=====
+    if HOLD_MERGE_LABEL in pr.labels:
+        print(f"  skip: 标 {HOLD_MERGE_LABEL} label，不自动合并/关闭")
+        _append_stale({
+            "pr": pr.number,
+            "kind": pr.kind,
+            "risk": risk,
+            "action": "hold_merge_vetoed",
+        })
+        return "skipped"
 
     # ===== R0 / R1: auto-merge 候选 =====
     if risk in {"r0", "r1"}:
@@ -374,6 +637,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stale-r3-days", type=int, default=7)
     parser.add_argument("--close-r3-days", type=int, default=30)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--scan-regular-prs",
+        action="store_true",
+        help="同时扫描普通 PR（无 ai-self-heal / ai-generated label），"
+        "走三重门禁（ai-review + ci + trusted-author）+ hold-merge veto",
+    )
+    parser.add_argument(
+        "--allowlist-path",
+        default="",
+        help="覆盖 config/auto-implement-allowlist.yaml 路径（默认 <repo_root>/config/...）",
+    )
     args = parser.parse_args(argv)
 
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -386,11 +660,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     client = GitHubClient(args.repo, token)
+
+    # ===== ai-self-heal / ai-generated PR: risk 分级 SLA =====
     prs = client.list_self_heal_prs()
     by_kind = {"self_heal": 0, "ai_generated": 0}
     for pr in prs:
         by_kind[pr.kind] = by_kind.get(pr.kind, 0) + 1
-    print(f"[sla] 发现 {len(prs)} 个 open PR (ai-self-heal={by_kind['self_heal']} ai-generated={by_kind['ai_generated']})")
+    print(
+        f"[sla] 发现 {len(prs)} 个 open AI PR "
+        f"(ai-self-heal={by_kind['self_heal']} ai-generated={by_kind['ai_generated']})"
+    )
 
     stats = {"auto_merged": 0, "upgraded": 0, "stale_warned": 0, "closed": 0, "skipped": 0}
     for pr in prs:
@@ -410,7 +689,38 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
             print(f"[error] PR #{pr.number} 处理失败: {e}", file=sys.stderr)
 
-    print(f"[sla] 处理完成: {stats}")
+    print(f"[sla] AI PR 处理完成: {stats}")
+
+    # ===== 普通 PR: 三重门禁 auto-merge（opt-in）=====
+    if args.scan_regular_prs:
+        allowlist_path = Path(args.allowlist_path) if args.allowlist_path else None
+        trusted_authors = load_trusted_authors(allowlist_path)
+        if not trusted_authors:
+            print(
+                "[sla] --scan-regular-prs 启用但 trusted_authors 为空 "
+                "(config/auto-implement-allowlist.yaml:trusted_authors 未配置)，"
+                "跳过普通 PR 扫描（安全无副作用）"
+            )
+        else:
+            regular_prs = client.list_regular_prs()
+            print(
+                f"[sla] 发现 {len(regular_prs)} 个 open 普通 PR "
+                f"(trusted_authors={len(trusted_authors)})"
+            )
+            regular_stats = {"auto_merged": 0, "skipped": 0, "merge_failed": 0}
+            for pr in regular_prs:
+                try:
+                    action = process_regular_pr(
+                        client,
+                        pr,
+                        trusted_authors,
+                        dry_run=args.dry_run,
+                    )
+                    regular_stats[action] = regular_stats.get(action, 0) + 1
+                except Exception as e:  # noqa: BLE001 - 远端 PR 处理需要兜底
+                    print(f"[error] 普通 PR #{pr.number} 处理失败: {e}", file=sys.stderr)
+            print(f"[sla] 普通 PR 处理完成: {regular_stats}")
+
     return 0
 
 

@@ -19,10 +19,10 @@ from typing import Any, Literal, Protocol, TypedDict
 
 
 class ActionType(str, Enum):
-    """动作类型枚举（三端共用；服务器端 6 个 + 桌面端 4 个）。
+    """动作类型枚举（三端共用；服务器端 7 个 + 桌面端 4 个）。
 
     服务器端实际使用：restart_service / rollback_to_last_tarball / freeze_manifest
-    / clear_logs / escalate / noop
+    / unfreeze_manifest / clear_logs / escalate / noop
     """
 
     RESTART_BACKEND = "restart_backend"
@@ -32,6 +32,7 @@ class ActionType(str, Enum):
     RESTART_SERVICE = "restart_service"
     ROLLBACK_TO_LAST_TARBALL = "rollback_to_last_tarball"
     FREEZE_MANIFEST = "freeze_manifest"
+    UNFREEZE_MANIFEST = "unfreeze_manifest"
     CLEAR_LOGS = "clear_logs"
     ESCALATE = "escalate"
     NOOP = "noop"
@@ -169,7 +170,7 @@ class RuntimeTruthSnapshot:
     restart_count: int = 0  # 服务器端常为 0（不跟踪重启计数）
     # manifest 状态
     manifest_exists: bool = True
-    manifest_frozen: bool = False  # .hold 文件是否存在
+    manifest_frozen: bool = False  # .frozen marker 文件是否存在
     # 自定义扩展字段
     extra: dict[str, Any] | None = None
 
