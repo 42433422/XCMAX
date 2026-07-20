@@ -123,6 +123,18 @@
       "allow_auto_execute": false,
       "rollback_path": "restore_append_only_audit_store",
       "entrypoints": ["manual_only"]
+    },
+    "modify_autonomy_policy": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_human_reviewed_policy_revision",
+      "entrypoints": ["manual_only"]
+    },
+    "self_approve_action": {
+      "risk": "BLOCKED",
+      "allow_auto_execute": false,
+      "rollback_path": "invalidate_forged_approval_and_reaudit",
+      "entrypoints": ["manual_only"]
     }
   },
   "action_classes": {

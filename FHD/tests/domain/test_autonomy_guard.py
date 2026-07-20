@@ -319,6 +319,49 @@ def test_audit_summary_detects_any_blocked_action_execution_evidence() -> None:
     assert leaked["has_prohibited_miss"] is True
 
 
+def test_audit_summary_separates_synthetic_probes_and_counts_human_veto() -> None:
+    append_autonomy_audit(
+        {
+            "action_id": "e2e-medium-probe",
+            "action": "freeze_manifest",
+            "risk_level": "MEDIUM",
+            "decision": "require_human",
+            "outcome": "not_executed",
+            "source": "ops_autonomy.request",
+        }
+    )
+    append_autonomy_audit(
+        {
+            "action_id": "operational-low",
+            "action": "restart_service",
+            "risk_level": "LOW",
+            "decision": "allow",
+            "outcome": "allowed",
+            "source": "self_heal",
+        }
+    )
+    append_autonomy_audit(
+        {
+            "action_id": "operational-high",
+            "action": "apply_release_to_cvm",
+            "risk_level": "HIGH",
+            "decision": "approved",
+            "approver": "operator",
+            "outcome": "allowed",
+            "source": "release",
+        }
+    )
+
+    summary = summarize_autonomy_audit(days=1)
+
+    assert summary["cohort"] == "operational"
+    assert summary["total"] == 2
+    assert summary["veto_count"] == 1
+    assert summary["human_approval_count"] == 1
+    assert summary["synthetic_probe_count"] == 1
+    assert summary["veto_rate"] == 50.0
+
+
 def test_pending_approval_resumes_and_rejection_never_retries() -> None:
     executed: list[dict] = []
     decision, pending = request_action(
@@ -355,7 +398,7 @@ def test_pending_approval_resumes_and_rejection_never_retries() -> None:
     with pytest.raises(ApprovalStateError, match="rejected"):
         resume_action("reject-me", approver="octocat")
 
-    summary = summarize_autonomy_audit(days=1)
+    summary = summarize_autonomy_audit(days=1, include_synthetic=True)
     assert summary["total"] > 0
     assert summary["veto_count"] > 0
 

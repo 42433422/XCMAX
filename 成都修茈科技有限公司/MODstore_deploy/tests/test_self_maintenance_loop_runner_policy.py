@@ -1,12 +1,18 @@
 import json
 import sqlite3
 
+from modstore_server.autonomous_risk_gate import (
+    _historical_rollback_rate as _historical_rollback_rate_v3,
+)
 from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     _assess_branch_auto_merge_policy,
+    _code_task_text,
     _employee_result_ok,
+    _focused_test_command,
     _guest_auth_headers,
     _has_high_risk_report,
+    _historical_rollback_rate,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _qa_task_text,
@@ -47,6 +53,33 @@ def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypa
 
     assert result["ok"] is True
     assert result["reason"] == "dynamic_low_risk_policy_passed"
+
+
+def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> None:
+    memory = {
+        "recent_runs": [
+            {
+                "status": "completed_merged",
+                "policy_decision": {
+                    "action": "auto_merged_low_risk",
+                    "merge_result": {
+                        "autonomy_risk_decision": {"rollback_path": "revert_merge_commit"},
+                        "reason": "merged_low_risk_branch",
+                    },
+                },
+            },
+            {
+                "status": "completed_rolled_back",
+                "policy_decision": {
+                    "action": "auto_merged_low_risk",
+                    "merge_result": {"reason": "merged_low_risk_branch"},
+                },
+            },
+        ]
+    }
+
+    assert _historical_rollback_rate(memory) == 0.5
+    assert _historical_rollback_rate_v3(memory) == 0.5
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
@@ -360,6 +393,9 @@ def test_resume_review_qa_candidate_stops_when_latest_policy_has_real_risk():
 def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "feat/base")
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "verified-python -m pytest focused.py -q"
+    )
 
     review = _review_task_text("run-1", "devfleet/codex/sub-1", {})
     qa = _qa_task_text("run-1", "devfleet/codex/sub-1", {})
@@ -369,6 +405,20 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Do not inspect your own report-only task branch" in review
     assert "Do not inspect your own report-only task branch" in qa
     assert "file:///tmp/repo.git" in qa
+    assert "`verified-python -m pytest focused.py -q`" in qa
+
+    code = _code_task_text("run-1", {}, {})
+    assert "`verified-python -m pytest focused.py -q`" in code
+    assert "executable_template object" in code
+    assert "validate_kb_payload" in code
+
+
+def test_focused_test_command_prefers_explicit_command(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "runtime-python -m pytest focused.py -q"
+    )
+
+    assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
 def test_high_risk_report_detects_standalone_qa_fail():
@@ -386,7 +436,9 @@ def test_high_risk_report_detects_standalone_qa_fail():
     assert _has_high_risk_report(steps) is True
 
 
-def test_structured_report_gate_requires_qa_json_pass():
+def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
     steps = [
         {
             "step": "review",
@@ -400,7 +452,7 @@ def test_structured_report_gate_requires_qa_json_pass():
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"pytest focused","exit_code":0,"status":"passed"}],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -411,7 +463,10 @@ def test_structured_report_gate_requires_qa_json_pass():
     assert _structured_report_gate(steps)["ok"] is True
 
 
-def test_structured_report_gate_blocks_missing_or_failed_qa_json():
+def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "runtime-python -m pytest focused.py -q"
+    )
     missing = [{"step": "qa", "report_excerpt": "PASS in prose only"}]
     failed = [
         {
@@ -427,6 +482,50 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json():
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":2,"status":"failed"}}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["ok"] is False
+    assert result["reason"] == "structured_qa_focused_command_not_passed"
+    assert result["focused_command"] == focused
+
+
+def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                "Prompt says output SELF_MAINTENANCE_QA_JSON: with schema ...\n"
+                "SELF_MAINTENANCE_QA_JSON: "
+                '{"verdict":"PASS","blocking_findings":[],'
+                f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["ok"] is True
 
 
 def test_ensure_clean_baseline_writes_default_file(monkeypatch, tmp_path):

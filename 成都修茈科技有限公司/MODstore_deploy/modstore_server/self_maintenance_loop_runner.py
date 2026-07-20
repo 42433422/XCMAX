@@ -15,8 +15,10 @@ import json
 import logging
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -1477,8 +1479,68 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return data
 
 
+def _python_supports_focused_tests(candidate: Path) -> bool:
+    """Return whether a Python executable has the loop's test dependencies."""
+
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        return False
+    try:
+        probe = subprocess.run(
+            [str(candidate), "-c", "import apscheduler, pytest"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+def _focused_test_command() -> str:
+    """Resolve one executable QA command from the running MODstore environment.
+
+    The scheduler may itself run from the lighter FHD venv, which intentionally
+    does not install pytest.  Prefer the MODstore venv used for repository tests
+    and expose explicit overrides for production or isolated runners.
+    """
+
+    command_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
+    if command_override:
+        return command_override
+
+    test_python_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
+    deploy_root = Path(
+        os.environ.get("MODSTORE_DEPLOY_ROOT") or Path(__file__).resolve().parent.parent
+    )
+    runtime_root = os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
+    candidates = [
+        Path(test_python_override).expanduser() if test_python_override else None,
+        deploy_root / ".venv" / "bin" / "python",
+        (
+            Path(runtime_root).expanduser() / "MODstore_deploy" / ".venv" / "bin" / "python"
+            if runtime_root
+            else None
+        ),
+        Path(sys.executable),
+    ]
+    test_python = next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate and _python_supports_focused_tests(candidate)
+        ),
+        Path(sys.executable),
+    )
+    test_path = (
+        "成都修茈科技有限公司/MODstore_deploy/tests/" "test_self_maintenance_loop_runner_policy.py"
+    )
+    return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
+
+
 def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
+    focused_test_command = _focused_test_command()
     evolution_context_dict = build_self_evolution_context(
         run_id=run_id, evaluation=evaluation, memory=memory
     )
@@ -1512,10 +1574,16 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "Only when no historical fix applies may you reason from scratch. "
         "If there is no bug gap, choose one proactive task from performance, coverage, or tech_debt signals. "
         "When you fix a bug, write the symptom/root_cause/fix_diff triad under FHD/XCAGI/kb/fixes; "
+        "every changed fix JSON MUST also contain schema_version=1, kind=fix, and an "
+        "executable_template object with non-empty applicability_check, patch_strategy, "
+        "rollback_plan, and a string-list required_tests. Validate each changed KB JSON with "
+        "self_evolution_knowledge.validate_kb_payload before reporting completion. "
         "when review/QA approves a reusable change, write the pattern under FHD/XCAGI/kb/patterns. "
         "Do not create marker-only/status-only changes as proof of completion. "
         "Prefer changes that make scheduler gating, loop memory, report-only review/QA, "
         "or policy decisions more directly executable. "
+        f"Before reporting completion, execute `{focused_test_command}` in the target branch "
+        "and require exit code 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
@@ -1554,6 +1622,7 @@ def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]
 def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    focused_test_command = _focused_test_command()
     return (
         "MODSTORE_REPORT_ONLY=1. Report-only QA task. "
         "Do not change files, do not commit, and do not push. "
@@ -1565,6 +1634,9 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "and compare `origin/<base>...origin/<target>` or the local equivalent. "
         "If fetch/branch resolution fails, report that exact failure as target_branch_unavailable. "
         "Evaluate the target branch, tests, changed files, and previous loop memory as merge-readiness evidence. "
+        f"You MUST execute the focused verification command `{focused_test_command}` and include its "
+        "exact command, real exit code, and status in tested_commands. A syntax-only check or a "
+        "different Python environment is not a substitute. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
         "FAIL only for new failures, missing target branch, blocking findings, or unsafe evidence. "
         "Do not fail only because the final terminal ledger record for this in-flight run does not exist yet; "
@@ -1585,18 +1657,27 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
 
 
 def _json_after_marker(text: str, marker: str) -> Optional[Dict[str, Any]]:
-    idx = (text or "").find(marker)
-    if idx < 0:
-        return None
-    tail = text[idx + len(marker) :]
-    tail = tail.lstrip(" \t\r\n:=`")
-    if tail.startswith("json"):
-        tail = tail[4:].lstrip(" \t\r\n")
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(tail)
-        return obj if isinstance(obj, dict) else None
-    except Exception:
-        return None
+    report = text or ""
+    positions: List[int] = []
+    start = 0
+    while True:
+        idx = report.find(marker, start)
+        if idx < 0:
+            break
+        positions.append(idx)
+        start = idx + len(marker)
+    for idx in reversed(positions):
+        tail = report[idx + len(marker) :]
+        tail = tail.lstrip(" \t\r\n:=`")
+        if tail.startswith("json"):
+            tail = tail[4:].lstrip(" \t\r\n")
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(tail)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
 
 
 def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
@@ -1656,6 +1737,21 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
         blocking = qa_json.get("blocking_findings")
         if isinstance(blocking, list) and blocking:
             return {"ok": False, "reason": "structured_qa_blocking_findings", "qa": qa_json}
+        tested_commands = qa_json.get("tested_commands")
+        focused_command = _focused_test_command()
+        if not isinstance(tested_commands, list) or not any(
+            isinstance(item, dict)
+            and str(item.get("command") or "").strip() == focused_command
+            and int(item.get("exit_code") if item.get("exit_code") is not None else -1) == 0
+            and str(item.get("status") or "").lower() == "passed"
+            for item in tested_commands
+        ):
+            return {
+                "ok": False,
+                "reason": "structured_qa_focused_command_not_passed",
+                "focused_command": focused_command,
+                "qa": qa_json,
+            }
         test_delta = (
             qa_json.get("test_delta") if isinstance(qa_json.get("test_delta"), dict) else {}
         )
@@ -2005,11 +2101,53 @@ def _historical_rollback_rate(memory: Optional[Dict[str, Any]]) -> Optional[floa
     for run in recent_runs[-50:]:
         if not isinstance(run, dict):
             continue
-        text = json.dumps(run, ensure_ascii=False).lower()
-        if "auto_merged_low_risk" in text or "completed_merged" in text:
-            considered += 1
-            if any(term in text for term in ("rollback", "revert", "regression", "回滚", "退回")):
-                rollbacks += 1
+        decision = run.get("policy_decision")
+        decision = decision if isinstance(decision, dict) else {}
+        if (
+            str(decision.get("action") or "") != "auto_merged_low_risk"
+            and str(run.get("status") or "") != "completed_merged"
+        ):
+            continue
+        considered += 1
+        merge_result = decision.get("merge_result")
+        merge_result = merge_result if isinstance(merge_result, dict) else {}
+        rollback_records = [
+            run.get("rollback"),
+            decision.get("rollback"),
+            merge_result.get("rollback"),
+        ]
+        explicit_statuses = {
+            str(run.get("status") or "").lower(),
+            str(run.get("rollback_status") or "").lower(),
+            str(decision.get("action") or "").lower(),
+            str(decision.get("outcome") or "").lower(),
+            str(merge_result.get("outcome") or "").lower(),
+        }
+        rolled_back = bool(
+            explicit_statuses
+            & {
+                "auto_rollback",
+                "completed_rolled_back",
+                "rollback_completed",
+                "rollback_executed",
+                "rolled_back",
+            }
+        )
+        if not rolled_back:
+            for record in rollback_records:
+                if not isinstance(record, dict):
+                    continue
+                status = str(record.get("status") or record.get("outcome") or "").lower()
+                if record.get("executed") is True or status in {
+                    "completed",
+                    "executed",
+                    "rolled_back",
+                    "success",
+                }:
+                    rolled_back = True
+                    break
+        if rolled_back:
+            rollbacks += 1
     if considered <= 0:
         return None
     return rollbacks / considered
@@ -5236,6 +5374,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ),
             "auto_merge_scope_globs": _auto_merge_scope_globs(),
             "report_timeout_sec": _env_int("MODSTORE_SELF_MAINTENANCE_REPORT_TIMEOUT_SEC", 1800),
+            "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
         },
