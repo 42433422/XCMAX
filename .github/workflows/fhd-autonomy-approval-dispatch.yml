@@ -47,6 +47,18 @@ jobs:
             echo "::error::AUTONOMY_CALLBACK_URL and MODSTORE_OPS_INGEST_TOKEN are required."
             exit 1
           fi
+          github_cli_retry() {
+            local attempt output
+            for attempt in $(seq 1 12); do
+              if output="$("$@" 2>&1)"; then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            return 1
+          }
           autonomy_api_base="${AUTONOMY_CALLBACK_URL%/github-approval}"
           seed_action="${SEED_ACTION:-none}"
           seed_action_id="${SEED_ACTION_ID:-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
@@ -91,7 +103,7 @@ jobs:
               apply-latest|restart-only|freeze-manifest|unfreeze-manifest) ;;
               *) echo "::warning::Unsupported workflow action for $action_id"; continue ;;
             esac
-            active_run="$(gh run list \
+            active_run="$(github_cli_retry gh run list \
               --repo "$GITHUB_REPOSITORY" \
               --workflow fhd-deploy.yml \
               --limit 100 \
@@ -102,7 +114,7 @@ jobs:
               echo "Approval workflow already active for $action_id (run=$active_run)."
               continue
             fi
-            gh workflow run fhd-deploy.yml \
+            github_cli_retry gh workflow run fhd-deploy.yml \
               --repo "$GITHUB_REPOSITORY" \
               --ref main \
               -f environment=production \

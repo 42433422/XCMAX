@@ -37,19 +37,32 @@ jobs:
             echo "::error::Autonomy callback configuration is missing."
             exit 1
           fi
+          github_cli_retry() {
+            local attempt output
+            for attempt in $(seq 1 12); do
+              if output="$("$@" 2>&1)"; then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            return 1
+          }
           approver=""
-          jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?filter=latest")"
+          jobs="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?filter=latest" || printf '{"jobs":[]}')"
           resume_succeeded="$(jq -r '
             any(.jobs[]?.steps[]?;
               .name == "Resume approved autonomy action" and .conclusion == "success")
           ' <<< "$jobs")"
+          deployments="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&per_page=100" || printf '[]')"
           while IFS= read -r statuses_url; do
-            statuses="$(gh api "$statuses_url")"
+            statuses="$(github_cli_retry gh api "$statuses_url" || printf '[]')"
             approver="$(jq -r --arg needle "/actions/runs/${RUN_ID}/" '
               [.[] | select((.log_url // "") | contains($needle)) | select(.state == "failure") | .creator.login][0] // empty
             ' <<< "$statuses")"
             [ -n "$approver" ] && break
-          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&per_page=100" --jq '.[].statuses_url')
+          done < <(jq -r '.[].statuses_url' <<< "$deployments")
           approver="${approver:-$APPROVER_FALLBACK}"
           decision="rejected"
           reason="GitHub environment review rejected: $CONCLUSION"
