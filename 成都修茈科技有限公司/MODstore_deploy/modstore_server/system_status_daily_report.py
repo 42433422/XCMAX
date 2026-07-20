@@ -67,7 +67,7 @@ def probe_endpoint(name: str, url: str, *, timeout: float = 5.0) -> Dict[str, An
     started = time.monotonic()
     probed_at = datetime.now(timezone.utc).isoformat()
     try:
-        with httpx.Client(timeout=timeout) as client:
+        with httpx.Client(timeout=timeout, trust_env=False) as client:
             resp = client.get(url)
         latency_ms = int((time.monotonic() - started) * 1000)
         body: Optional[Any] = None

@@ -808,6 +808,79 @@ const openApprovalItems = computed(() =>
     .slice(-5)
     .reverse(),
 )
+
+// ---- Burn-in ----
+const burnin = computed<AnyRecord>(() => asRecord(raw.value?.burnin))
+const burninActive = computed(() => burnin.value.active === true)
+const burninDay = computed(() => asNumber(burnin.value.burnin_day, 0))
+const burninPhase = computed(() => firstText(burnin.value.phase, '未启动'))
+const burninMetrics = computed<AnyRecord>(() => asRecord(burnin.value.metrics))
+const burninBreaches = computed(() =>
+  asArray(burnin.value.breaches).map((item) => asRecord(item))
+    .filter((item) => firstText(item.metric)),
+)
+const burninNotifySms = computed(() => burnin.value.notify_sms === true)
+const burninHistory = computed(() =>
+  asArray(burnin.value.history).map((item) => asRecord(item))
+    .filter((item) => firstText(item.timestamp)),
+)
+const burninMetricCards = computed(() => {
+  const m = burninMetrics.value
+  return [
+    { key: 'completed_merged_rate', label: 'completed_merged 率', value: asNumber(m.completed_merged_rate, 0), format: 'percent', threshold: '≥ 30% / 50% / 90%' },
+    { key: 'waiting_human_rate', label: 'waiting_human (veto) 率', value: asNumber(m.waiting_human_rate, 0), format: 'percent', threshold: '≤ 70% / 50% / 10%' },
+    { key: 'health', label: 'health', value: asNumber(m.health, 0), format: 'percent', threshold: '≥ 50% / 70% / 95%' },
+    { key: 'manual_intervention_count', label: '人工介入次数', value: asNumber(m.manual_intervention_count, 0), format: 'count', threshold: '≤ 5 / 3 / 1' },
+  ]
+})
+const burninStatusBreakdownCards = computed(() => {
+  const m = burninMetrics.value
+  return [
+    { label: 'total_complete_runs', value: asNumber(m.total_complete_runs, 0) },
+    { label: 'completed_merged', value: asNumber(m.completed_merged, 0) },
+    { label: 'waiting_human', value: asNumber(m.waiting_human, 0) },
+    { label: 'failed', value: asNumber(m.failed, 0) },
+    { label: 'abandoned_stale', value: asNumber(m.abandoned_stale, 0) },
+  ]
+})
+const burninProgressPercent = computed(() => {
+  if (!burninActive.value) return 0
+  return Math.min(100, Math.round((burninDay.value / 7) * 100))
+})
+
+const burninActionBusy = ref(false)
+const burninActionError = ref('')
+const burninActionResult = ref<AnyRecord | null>(null)
+
+async function _runBurninAction(action: 'start' | 'reset' | 'check') {
+  burninActionBusy.value = true
+  burninActionError.value = ''
+  burninActionResult.value = null
+  try {
+    if (action === 'start') burninActionResult.value = await xcmaxMarketProxy.selfMaintenanceBurninStart() as AnyRecord
+    else if (action === 'reset') burninActionResult.value = await xcmaxMarketProxy.selfMaintenanceBurninReset() as AnyRecord
+    else burninActionResult.value = await xcmaxMarketProxy.selfMaintenanceBurninCheck() as AnyRecord
+    await refresh()
+  } catch (err: unknown) {
+    const e = err as { message?: unknown; detail?: unknown }
+    burninActionError.value = String(e?.message || e?.detail || err || 'burnin action failed')
+  } finally {
+    burninActionBusy.value = false
+  }
+}
+function startBurnin() { return _runBurninAction('start') }
+function resetBurnin() { return _runBurninAction('reset') }
+function forceBurninCheck() { return _runBurninAction('check') }
+
+interface BurninMetricCard {
+  format?: string
+  value: number
+}
+
+function formatBurninValue(card: BurninMetricCard): string {
+  if (card.format === 'percent') return `${(card.value * 100).toFixed(1)}%`
+  return String(card.value)
+}
 </script>
 
 <template>
@@ -1278,6 +1351,80 @@ const openApprovalItems = computed(() =>
         <small>{{ actionLabel }}</small>
       </div>
     </div>
+
+    <section class="selp-burnin">
+      <div class="selp-burnin-head">
+        <div>
+          <div class="selp-kicker">P6 · 7 天烧机</div>
+          <h3 class="selp-burnin-title">无人值守烧机看板</h3>
+          <div class="selp-burnin-phase">
+            <span class="selp-burnin-chip" :class="{ 'is-active': burninActive, 'is-idle': !burninActive }">
+              {{ burninActive ? `Day ${burninDay}/7 · ${burninPhase}` : '未启动' }}
+            </span>
+          </div>
+        </div>
+        <div class="selp-burnin-actions">
+          <button type="button" class="selp-burnin-btn primary" :disabled="burninActionBusy || burninActive" @click="startBurnin">启动烧机</button>
+          <button type="button" class="selp-burnin-btn" :disabled="burninActionBusy" @click="forceBurninCheck">立即检查</button>
+          <button type="button" class="selp-burnin-btn danger" :disabled="burninActionBusy" @click="resetBurnin">重置</button>
+        </div>
+      </div>
+
+      <div v-if="burninActionError" class="selp-burnin-error">{{ burninActionError }}</div>
+      <div v-if="burninActionResult" class="selp-burnin-result">操作结果：{{ JSON.stringify(burninActionResult) }}</div>
+
+      <div class="selp-burnin-progress">
+        <div class="selp-burnin-progress-bar" :style="{ width: `${burninProgressPercent}%` }"></div>
+      </div>
+
+      <div class="selp-burnin-cards">
+        <div v-for="card in burninMetricCards" :key="card.key" class="selp-burnin-card">
+          <div class="selp-burnin-card-label">{{ card.label }}</div>
+          <div class="selp-burnin-card-value">{{ formatBurninValue(card) }}</div>
+          <div class="selp-burnin-card-threshold">门槛：{{ card.threshold }}</div>
+        </div>
+      </div>
+
+      <div class="selp-burnin-breakdown">
+        <span v-for="item in burninStatusBreakdownCards" :key="item.label" class="selp-burnin-chip subtle">
+          {{ item.label }}: {{ item.value }}
+        </span>
+      </div>
+
+      <div v-if="burninBreaches.length" class="selp-burnin-breaches">
+        <div class="selp-burnin-breaches-head">
+          <span class="selp-burnin-kicker danger">⚠ 门槛跌破 ({{ burninBreaches.length }})</span>
+          <span v-if="burninNotifySms" class="selp-burnin-kicker danger">连续 2 天 → 已通知短信</span>
+        </div>
+        <ul>
+          <li v-for="b in burninBreaches" :key="b.metric">
+            <strong>{{ b.metric }}</strong> · actual={{ b.actual }} · threshold={{ b.threshold }} · comparison={{ b.comparison }} · {{ b.day_range }}
+          </li>
+        </ul>
+      </div>
+
+      <details v-if="burninHistory.length" class="selp-burnin-history">
+        <summary>历史 ({{ burninHistory.length }})</summary>
+        <table>
+          <thead>
+            <tr><th>时间</th><th>Day</th><th>Phase</th><th>merged%</th><th>veto%</th><th>health%</th><th>介入</th><th>breaches</th><th>sms</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, idx) in burninHistory" :key="idx">
+              <td>{{ row.timestamp }}</td>
+              <td>{{ row.burnin_day }}</td>
+              <td>{{ row.phase }}</td>
+              <td>{{ ((asNumber(asRecord(row.metrics).completed_merged_rate, 0)) * 100).toFixed(1) }}%</td>
+              <td>{{ ((asNumber(asRecord(row.metrics).waiting_human_rate, 0)) * 100).toFixed(1) }}%</td>
+              <td>{{ ((asNumber(asRecord(row.metrics).health, 0)) * 100).toFixed(1) }}%</td>
+              <td>{{ asNumber(asRecord(row.metrics).manual_intervention_count, 0) }}</td>
+              <td>{{ asArray(row.breaches).length }}</td>
+              <td>{{ row.notify_sms ? '是' : '否' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+    </section>
   </section>
 </template>
 

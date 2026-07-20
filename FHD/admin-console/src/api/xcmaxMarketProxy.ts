@@ -194,6 +194,50 @@ const xcmaxMarketProxy = {
       throw e
     }
   },
+  selfMaintenanceBurninStatus: async () => {
+    try {
+      return await api.get(`${LOCAL_PREFIX}/ops/self-maintenance/burnin`)
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq('ops/self-maintenance/burnin')
+      }
+      throw e
+    }
+  },
+  selfMaintenanceBurninStart: async () => {
+    try {
+      return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/burnin/start`, {})
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq('ops/self-maintenance/burnin/start', { method: 'POST', body: {} })
+      }
+      throw e
+    }
+  },
+  selfMaintenanceBurninReset: async () => {
+    try {
+      return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/burnin/reset`, {})
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq('ops/self-maintenance/burnin/reset', { method: 'POST', body: {} })
+      }
+      throw e
+    }
+  },
+  selfMaintenanceBurninCheck: async () => {
+    try {
+      return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/burnin/check`, {})
+    } catch (e: unknown) {
+      const err = e as { status?: number }
+      if (err?.status === 404) {
+        return marketReq('ops/self-maintenance/burnin/check', { method: 'POST', body: {} })
+      }
+      throw e
+    }
+  },
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),
   llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024) =>

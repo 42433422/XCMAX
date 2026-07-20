@@ -1,0 +1,2 @@
+[trigger] preflight: {'ok': True, 'warnings': []}
+[trigger] invoking run_self_maintenance_loop force=True triggered_by=manual_p1_test

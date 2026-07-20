@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 # import time; runtime reads go through ``_runtime_dir()`` so tests can
 # monkeypatch ``MODSTORE_RUNTIME_DIR`` after import.
 DEFAULT_RUNTIME_DIR = Path(
-    os.environ.get("MODSTORE_RUNTIME_DIR", os.path.expanduser("~/.xcmax/modstore-daily"))
+    os.environ.get(
+        "MODSTORE_RUNTIME_DIR", os.path.expanduser("~/.xcmax/modstore-daily")
+    )
 )
 BURNIN_STATE_PATH = DEFAULT_RUNTIME_DIR / "burnin_state.json"
 BURNIN_HISTORY_PATH = DEFAULT_RUNTIME_DIR / "burnin_metrics.jsonl"
@@ -246,7 +248,9 @@ def get_burnin_day_index(now: Optional[datetime] = None) -> int:
     return delta.days + 1
 
 
-def get_current_phase_threshold(now: Optional[datetime] = None) -> Optional[PhaseThreshold]:
+def get_current_phase_threshold(
+    now: Optional[datetime] = None,
+) -> Optional[PhaseThreshold]:
     """Return the current phase threshold, or ``None`` if not started / expired."""
 
     day = get_burnin_day_index(now)
@@ -285,7 +289,9 @@ def compute_burnin_metrics(now: Optional[datetime] = None) -> Dict[str, Any]:
 
     all_rows = _load_jsonl(_loop_ledger_path(), limit=5000)
 
-    complete_rows = [row for row in all_rows if str(row.get("phase") or "") == "complete"]
+    complete_rows = [
+        row for row in all_rows if str(row.get("phase") or "") == "complete"
+    ]
     complete_in_window = _filter_rows_in_window(
         complete_rows,
         field="completed_at",
@@ -295,7 +301,9 @@ def compute_burnin_metrics(now: Optional[datetime] = None) -> Dict[str, Any]:
 
     total_complete_runs = len(complete_in_window)
     completed_merged = sum(
-        1 for row in complete_in_window if str(row.get("status") or "") == "completed_merged"
+        1
+        for row in complete_in_window
+        if str(row.get("status") or "") == "completed_merged"
     )
     waiting_human = sum(
         1
@@ -306,7 +314,9 @@ def compute_burnin_metrics(now: Optional[datetime] = None) -> Dict[str, Any]:
         1 for row in complete_in_window if str(row.get("status") or "") == "failed"
     )
     abandoned_stale = sum(
-        1 for row in complete_in_window if str(row.get("status") or "") == "abandoned_stale"
+        1
+        for row in complete_in_window
+        if str(row.get("status") or "") == "abandoned_stale"
     )
 
     completed_merged_rate = (

@@ -45,7 +45,9 @@ def _business_misfire_grace_time() -> int:
 
 
 def _cleanup_misfire_grace_time() -> int:
-    return max(60, _env_int("MODSTORE_SCHEDULER_CLEANUP_MISFIRE_GRACE_SECONDS", 4 * 3600))
+    return max(
+        60, _env_int("MODSTORE_SCHEDULER_CLEANUP_MISFIRE_GRACE_SECONDS", 4 * 3600)
+    )
 
 
 def _daily_pipeline_lock_wait_seconds(stage: str) -> int:
@@ -93,10 +95,14 @@ def _run_tracked_scheduler_job(job_id: str, fn: Callable[[], Any]) -> Any:
 
 
 def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> None:
-    if not emitted or not _env_bool("MODSTORE_SELF_MAINTENANCE_EVENT_TRIGGER_ENABLED", True):
+    if not emitted or not _env_bool(
+        "MODSTORE_SELF_MAINTENANCE_EVENT_TRIGGER_ENABLED", True
+    ):
         return
     try:
-        from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
+        from modstore_server.self_maintenance_loop_runner import (
+            run_self_maintenance_loop,
+        )
 
         result = run_self_maintenance_loop(
             triggered_by="incident_event",
@@ -159,7 +165,9 @@ def start_scheduler() -> None:
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     try:
-        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
+        from modstore_server.backup_event_subscriber import (
+            register_backup_event_subscribers,
+        )
 
         register_backup_event_subscribers()
     except Exception:
@@ -170,11 +178,15 @@ def start_scheduler() -> None:
         try:
             from modstore_server.daily_pipeline_lock import write_scheduler_heartbeat
 
-            write_scheduler_heartbeat(job_count=len(_scheduler.get_jobs()) if _scheduler else None)
+            write_scheduler_heartbeat(
+                job_count=len(_scheduler.get_jobs()) if _scheduler else None
+            )
             try:
                 from modstore_server.node_coordinator import write_node_heartbeat
 
-                write_node_heartbeat(job_count=len(_scheduler.get_jobs()) if _scheduler else None)
+                write_node_heartbeat(
+                    job_count=len(_scheduler.get_jobs()) if _scheduler else None
+                )
             except Exception:
                 logger.debug("node heartbeat failed", exc_info=True)
         except Exception:
@@ -268,9 +280,13 @@ def start_scheduler() -> None:
             )
 
         try:
-            _run_collector_with_timeout(_body, label="incident_collect_nginx", timeout=240.0)
+            _run_collector_with_timeout(
+                _body, label="incident_collect_nginx", timeout=240.0
+            )
         except (TimeoutError, asyncio.TimeoutError):
-            logger.error("incident_collect_nginx exceeded 240s timeout; orphan thread left running")
+            logger.error(
+                "incident_collect_nginx exceeded 240s timeout; orphan thread left running"
+            )
         except Exception:
             logger.exception("incident_collect_nginx failed")
 
@@ -312,7 +328,9 @@ def start_scheduler() -> None:
             )
 
         try:
-            _run_collector_with_timeout(_body, label="incident_collect_extended", timeout=240.0)
+            _run_collector_with_timeout(
+                _body, label="incident_collect_extended", timeout=240.0
+            )
         except (TimeoutError, asyncio.TimeoutError):
             logger.error(
                 "incident_collect_extended exceeded 240s timeout; orphan thread left running"
@@ -369,18 +387,28 @@ def start_scheduler() -> None:
                     logger.info(
                         "daily chain event: vibe_line record_id=%s ok=%s skipped=%s",
                         record_id,
-                        vibe_result.get("ok") if isinstance(vibe_result, dict) else None,
-                        vibe_result.get("skipped") if isinstance(vibe_result, dict) else None,
+                        vibe_result.get("ok")
+                        if isinstance(vibe_result, dict)
+                        else None,
+                        vibe_result.get("skipped")
+                        if isinstance(vibe_result, dict)
+                        else None,
                     )
                     release_result = _run_daily_pipeline_stage(
                         "release_train_orchestrator",
-                        lambda: run_daily_release_train_orchestrator_job(record_id=record_id),
+                        lambda: run_daily_release_train_orchestrator_job(
+                            record_id=record_id
+                        ),
                     )
                     logger.info(
                         "daily chain event: release_train record_id=%s ok=%s skipped=%s",
                         record_id,
-                        release_result.get("ok") if isinstance(release_result, dict) else None,
-                        release_result.get("skipped") if isinstance(release_result, dict) else None,
+                        release_result.get("ok")
+                        if isinstance(release_result, dict)
+                        else None,
+                        release_result.get("skipped")
+                        if isinstance(release_result, dict)
+                        else None,
                     )
         except Exception:
             logger.exception("daily digest email job failed")
@@ -403,14 +431,20 @@ def start_scheduler() -> None:
 
     def _daily_vibe_line_execute_job() -> None:
         try:
-            from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_execute_job
+            from modstore_server.daily_vibe_line_execute_job import (
+                run_daily_vibe_line_execute_job,
+            )
 
-            _run_daily_pipeline_stage("daily_vibe_line_execute", run_daily_vibe_line_execute_job)
+            _run_daily_pipeline_stage(
+                "daily_vibe_line_execute", run_daily_vibe_line_execute_job
+            )
         except Exception:
             logger.exception("daily vibe line execute job failed")
 
     try:
-        from modstore_server.daily_vibe_line_execute_job import cron_trigger_for_vibe_line_execute
+        from modstore_server.daily_vibe_line_execute_job import (
+            cron_trigger_for_vibe_line_execute,
+        )
 
         if _env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
             _scheduler.add_job(
@@ -423,13 +457,17 @@ def start_scheduler() -> None:
                 max_instances=1,
             )
         else:
-            logger.info("daily vibe line cron disabled; digest completion event is primary")
+            logger.info(
+                "daily vibe line cron disabled; digest completion event is primary"
+            )
     except Exception:
         logger.exception("register daily vibe line execute cron failed")
 
     def _daily_orchestrator_job() -> None:
         try:
-            from modstore_server.daily_orchestrator_job import run_daily_orchestrator_job
+            from modstore_server.daily_orchestrator_job import (
+                run_daily_orchestrator_job,
+            )
 
             run_daily_orchestrator_job()
         except Exception:
@@ -482,6 +520,40 @@ def start_scheduler() -> None:
     except Exception:
         logger.exception("register self-maintenance loop cron failed")
 
+    def _self_maintenance_burnin_job() -> None:
+        try:
+            from modstore_server.self_maintenance_burnin import run_burnin_check
+
+            result = run_burnin_check()
+            logger.info(
+                "self-maintenance burnin check: ok=%s day=%s breaches=%s",
+                result.get("ok"),
+                result.get("burnin_day"),
+                len(result.get("breaches") or []),
+            )
+        except Exception:
+            logger.exception("self-maintenance burnin job failed")
+
+    try:
+        burnin_hour = _env_int("MODSTORE_BURNIN_HOUR", 4)
+        burnin_minute = _env_int("MODSTORE_BURNIN_MINUTE", 0)
+        burnin_tz = os.environ.get("MODSTORE_BURNIN_TZ", "UTC")
+        burnin_trigger = CronTrigger(
+            hour=burnin_hour, minute=burnin_minute, timezone=burnin_tz
+        )
+
+        _scheduler.add_job(
+            _self_maintenance_burnin_job,
+            burnin_trigger,
+            id="self_maintenance_burnin_daily",
+            replace_existing=True,
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except Exception:
+        logger.exception("register self-maintenance burnin cron failed")
+
     def _daily_release_train_orchestrator_job() -> None:
         try:
             from modstore_server.daily_release_train_orchestrator_job import (
@@ -511,7 +583,9 @@ def start_scheduler() -> None:
                 max_instances=1,
             )
         else:
-            logger.info("daily release_train cron disabled; digest completion event is primary")
+            logger.info(
+                "daily release_train cron disabled; digest completion event is primary"
+            )
     except Exception:
         logger.exception("register daily release_train orchestrator cron failed")
 
@@ -520,7 +594,9 @@ def start_scheduler() -> None:
             from modstore_server.daily_backup_job import run_daily_backup_job
 
             r = run_daily_backup_job()
-            logger.info("daily backup job: ok=%s dir=%s", r.get("ok"), r.get("backup_dir"))
+            logger.info(
+                "daily backup job: ok=%s dir=%s", r.get("ok"), r.get("backup_dir")
+            )
         except Exception:
             logger.exception("daily backup job failed")
 
@@ -577,11 +653,19 @@ def start_scheduler() -> None:
                 sync_missing_evidence_backlog,
             )
 
-            threshold = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3"))
-            sync_limit = int(os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32"))
-            min_queue_gap = int(os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1"))
+            threshold = int(
+                os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3")
+            )
+            sync_limit = int(
+                os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32")
+            )
+            min_queue_gap = int(
+                os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1")
+            )
             cooldown_seconds = int(
-                os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60))
+                os.environ.get(
+                    "MODSTORE_TIME_RAIL_MAINTENANCE_COOLDOWN_SECONDS", str(10 * 60)
+                )
             )
             if threshold < 1:
                 threshold = 1
@@ -727,11 +811,15 @@ def start_scheduler() -> None:
                 )
 
                 try:
-                    brief_limit = int(os.environ.get("MODSTORE_BRIEF_DISPATCH_BATCH", "20"))
+                    brief_limit = int(
+                        os.environ.get("MODSTORE_BRIEF_DISPATCH_BATCH", "20")
+                    )
                 except ValueError:
                     brief_limit = 20
                 try:
-                    sug_limit = int(os.environ.get("MODSTORE_SUGGESTION_DISPATCH_BATCH", "20"))
+                    sug_limit = int(
+                        os.environ.get("MODSTORE_SUGGESTION_DISPATCH_BATCH", "20")
+                    )
                 except ValueError:
                     sug_limit = 20
                 b = dispatch_pending_brief_tasks(limit=max(1, min(brief_limit, 100)))
@@ -751,7 +839,9 @@ def start_scheduler() -> None:
             logger.exception("employee autonomy dispatch loop failed")
 
     try:
-        loop_seconds = int(os.environ.get("MODSTORE_EMPLOYEE_AUTONOMY_LOOP_SECONDS", "120"))
+        loop_seconds = int(
+            os.environ.get("MODSTORE_EMPLOYEE_AUTONOMY_LOOP_SECONDS", "120")
+        )
     except ValueError:
         loop_seconds = 120
     _scheduler.add_job(
@@ -765,20 +855,28 @@ def start_scheduler() -> None:
         try:
 
             def _run() -> None:
-                from modstore_server.employee_autonomy_service import run_employee_evolution_scan
+                from modstore_server.employee_autonomy_service import (
+                    run_employee_evolution_scan,
+                )
 
                 try:
                     lookback = int(
-                        os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_LOOKBACK_HOURS", "24")
+                        os.environ.get(
+                            "MODSTORE_EMPLOYEE_EVOLUTION_LOOKBACK_HOURS", "24"
+                        )
                     )
                 except ValueError:
                     lookback = 24
                 try:
-                    min_fail = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_MIN_FAILURES", "3"))
+                    min_fail = int(
+                        os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_MIN_FAILURES", "3")
+                    )
                 except ValueError:
                     min_fail = 3
                 try:
-                    lim = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20"))
+                    lim = int(
+                        os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20")
+                    )
                 except ValueError:
                     lim = 20
                 out = run_employee_evolution_scan(
@@ -847,7 +945,9 @@ def start_scheduler() -> None:
         try:
 
             def _run() -> None:
-                from modstore_server.boss_daily_im_report import send_boss_daily_im_report
+                from modstore_server.boss_daily_im_report import (
+                    send_boss_daily_im_report,
+                )
 
                 out = send_boss_daily_im_report()
                 logger.info(
@@ -946,7 +1046,9 @@ def start_scheduler() -> None:
 
     def _predictive_maintenance_job() -> None:
         try:
-            from modstore_server.predictive_maintenance import run_predictive_maintenance_once
+            from modstore_server.predictive_maintenance import (
+                run_predictive_maintenance_once,
+            )
 
             out = run_predictive_maintenance_once()
             logger.info(
@@ -985,7 +1087,9 @@ def start_scheduler() -> None:
 
     _scheduler.add_job(
         _kb_self_maintenance_job,
-        IntervalTrigger(hours=max(1, _env_int("MODSTORE_KB_SELF_MAINTENANCE_INTERVAL_HOURS", 24))),
+        IntervalTrigger(
+            hours=max(1, _env_int("MODSTORE_KB_SELF_MAINTENANCE_INTERVAL_HOURS", 24))
+        ),
         id="kb_self_maintenance",
         replace_existing=True,
         coalesce=True,
@@ -994,7 +1098,9 @@ def start_scheduler() -> None:
 
     def _auto_merge_audit_sampling_job() -> None:
         try:
-            from modstore_server.auto_merge_audit_sampler import run_auto_merge_audit_sampling_once
+            from modstore_server.auto_merge_audit_sampler import (
+                run_auto_merge_audit_sampling_once,
+            )
 
             out = run_auto_merge_audit_sampling_once()
             logger.info(
@@ -1008,7 +1114,9 @@ def start_scheduler() -> None:
 
     _scheduler.add_job(
         _auto_merge_audit_sampling_job,
-        IntervalTrigger(hours=max(1, _env_int("MODSTORE_AUTO_MERGE_AUDIT_INTERVAL_HOURS", 168))),
+        IntervalTrigger(
+            hours=max(1, _env_int("MODSTORE_AUTO_MERGE_AUDIT_INTERVAL_HOURS", 168))
+        ),
         id="auto_merge_audit_sampling",
         replace_existing=True,
         coalesce=True,
@@ -1051,14 +1159,14 @@ def start_scheduler() -> None:
             misfire_grace_time=300,
         )
 
-        summary_tz = os.environ.get("MODSTORE_SYSTEM_STATUS_SUMMARY_TZ", "Asia/Shanghai")
+        summary_tz = os.environ.get(
+            "MODSTORE_SYSTEM_STATUS_SUMMARY_TZ", "Asia/Shanghai"
+        )
         summary_hour = _env_int("MODSTORE_SYSTEM_STATUS_SUMMARY_HOUR_LOCAL", 23)
         summary_minute = _env_int("MODSTORE_SYSTEM_STATUS_SUMMARY_MINUTE_LOCAL", 55)
         _scheduler.add_job(
             system_status_daily_summary_job,
-            CronTrigger(
-                hour=summary_hour, minute=summary_minute, timezone=summary_tz
-            ),
+            CronTrigger(hour=summary_hour, minute=summary_minute, timezone=summary_tz),
             id="system_status_daily_summary",
             replace_existing=True,
             max_instances=1,
@@ -1075,7 +1183,9 @@ _EMPLOYEE_CRON_JOB_PREFIX = "emp_cron_"
 
 
 def _employee_auto_cron_enabled() -> bool:
-    return os.environ.get("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1").strip().lower() in (
+    return os.environ.get(
+        "MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1"
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -1084,7 +1194,9 @@ def _employee_auto_cron_enabled() -> bool:
 
 
 def _employee_cron_job_id(employee_id: str) -> str:
-    safe = "".join(c for c in (employee_id or "") if c.isalnum() or c in ("-", "_"))[:64]
+    safe = "".join(c for c in (employee_id or "") if c.isalnum() or c in ("-", "_"))[
+        :64
+    ]
     return f"{_EMPLOYEE_CRON_JOB_PREFIX}{safe or 'unknown'}"
 
 
@@ -1114,7 +1226,9 @@ def _register_employee_cron_jobs() -> None:
     if _scheduler is None:
         return
     if not _employee_auto_cron_enabled():
-        logger.info("employee auto cron disabled (MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED=0)")
+        logger.info(
+            "employee auto cron disabled (MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED=0)"
+        )
         return
 
     try:
@@ -1144,7 +1258,9 @@ def _register_employee_cron_jobs() -> None:
         try:
             with sf() as session:
                 pack = load_employee_pack(session, emp_id)
-            manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
+            manifest = (
+                pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
+            )
         except Exception:
             skipped += 1
             continue
@@ -1185,7 +1301,9 @@ def _register_employee_cron_jobs() -> None:
             try:
                 import importlib
 
-                employee_executor = importlib.import_module("modstore_server.employee_executor")
+                employee_executor = importlib.import_module(
+                    "modstore_server.employee_executor"
+                )
                 employee_executor.execute_employee_task(
                     eid, brief, {"trigger": "schedule"}, user_id=0
                 )
@@ -1220,7 +1338,9 @@ def list_employee_cron_jobs() -> list:
             {
                 "job_id": jid,
                 "employee_id": jid[len(_EMPLOYEE_CRON_JOB_PREFIX) :],
-                "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+                "next_run_time": job.next_run_time.isoformat()
+                if job.next_run_time
+                else None,
                 "trigger": str(job.trigger),
             }
         )
@@ -1304,7 +1424,10 @@ def _register_cron_trigger(
             replace_existing=True,
         )
         logger.info(
-            "registered cron trigger id=%s workflow=%s expr=%s", trigger_id, wf_id, cron_expr
+            "registered cron trigger id=%s workflow=%s expr=%s",
+            trigger_id,
+            wf_id,
+            cron_expr,
         )
     except Exception as e:
         logger.warning("invalid cron for trigger id=%s: %s", trigger_id, e)
@@ -1323,7 +1446,11 @@ def unregister_cron_trigger(trigger_id: int) -> None:
 def refresh_cron_trigger(trigger_id: int) -> None:
     sf = get_session_factory()
     with sf() as session:
-        t = session.query(WorkflowTrigger).filter(WorkflowTrigger.id == trigger_id).first()
+        t = (
+            session.query(WorkflowTrigger)
+            .filter(WorkflowTrigger.id == trigger_id)
+            .first()
+        )
     if not t or not t.is_active or (t.trigger_type or "").lower() != "cron":
         unregister_cron_trigger(trigger_id)
         return

@@ -55,11 +55,14 @@ Output JSON ONLY:
   ]
 }}
 
-Constraints:
-- Maximum {MAX_FILES} files
-- Include at minimum: prompt.txt, skills.json, manifest.json
+STRICT CONSTRAINTS (violations cause IMMEDIATE failure with NO retry):
+- HARD LIMIT: At most {MAX_FILES} files. Generating {MAX_FILES + 1}+ files fails the entire operation.
+- Required files (count toward the {MAX_FILES}-file limit): prompt.txt, skills.json, manifest.json
 - manifest.json must contain: name, department, skills, tools
 - Do NOT touch any file outside the employee pack directory
+- If you would exceed {MAX_FILES} files, CONSOLIDATE content into fewer files
+  (e.g., merge supporting docs into prompt.txt, fold small helpers into existing files).
+- Before submitting, count your files; if count > {MAX_FILES}, stop and consolidate.
 """
 
 

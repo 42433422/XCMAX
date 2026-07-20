@@ -1627,12 +1627,44 @@ def api_admin_patch_catalog_item(
     body: CatalogItemAdminPatchDTO,
     user: User = Depends(_require_admin),
 ):
-    """入库默认不公开展示；需要上架时 ``PATCH {"is_public": true}``。"""
+    """入库默认不公开展示；需要上架时 ``PATCH {"is_public": true}``。
+
+    T-C12：切 ``is_public=True`` 前先过 :func:`validate_catalog_publish`；
+    校验失败 → 调 :func:`apply_publish_rollback` 把状态退回安全默认
+    （``is_public=False`` / ``compliance_status='disabled'`` / ``rank_score=0.0``
+    / ``delist_reason``）+ 发 ``log.anomaly`` 告警 + 抛 400。
+    下架（``is_public=False``）不触发回滚，仅切换可见性。
+    """
+    from modstore_server.publish_validation import (
+        apply_publish_rollback,
+        publish_failure_alert,
+        validate_catalog_publish,
+    )
+
     sf = get_session_factory()
     with sf() as session:
         item = session.query(CatalogItem).filter(CatalogItem.id == item_id).first()
         if not item:
             raise HTTPException(404, "商品不存在")
+
+        if body.is_public:
+            reason = validate_catalog_publish(item)
+            if reason:
+                # 上架校验失败 → 自动回滚到安全默认 + 告警 + 阻断本次上架。
+                rollback = apply_publish_rollback(item, reason=reason)
+                session.commit()
+                publish_failure_alert(
+                    item_id=int(item.id),
+                    pkg_id=str(item.pkg_id or ""),
+                    version=str(item.version or ""),
+                    reason=reason,
+                    rollback=rollback,
+                )
+                from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
+
+                _invalidate_market_catalog_caches()
+                raise HTTPException(400, f"上架校验失败已自动回滚：{reason}")
+
         item.is_public = bool(body.is_public)
         session.commit()
     from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
