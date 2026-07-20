@@ -6,7 +6,10 @@ name: AI Self-Heal
 
 on:
   workflow_run:
-    workflows: ["CI/CD Pipeline", "Smoke Tests"]
+    # workflow_run matches the target workflow's `name:`, not its file path.
+    # Keep this inline so the monorepo workflow publisher does not path-prefix
+    # these display names while rewriting path-list entries.
+    workflows: ["CI/CD Pipeline", "Smoke Tests", "cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Release gate CI"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -27,6 +30,7 @@ permissions:
   contents: write
   pull-requests: write
   actions: read
+  issues: write
 
 
 defaults:

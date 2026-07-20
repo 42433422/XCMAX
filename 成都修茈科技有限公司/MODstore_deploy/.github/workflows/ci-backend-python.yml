@@ -4,19 +4,11 @@ on:
   push:
     branches: [main, develop, master]
     paths:
-      - "modman/**"
-      - "modstore_server/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - "alembic/**"
+      - "**"
   pull_request:
     branches: [main, develop, master]
     paths:
-      - "modman/**"
-      - "modstore_server/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - "alembic/**"
+      - "**"
   workflow_dispatch:
 
 env:

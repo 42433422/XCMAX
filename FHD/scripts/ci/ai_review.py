@@ -8,9 +8,9 @@ RuntimeTruthSnapshot(diff) → AuditEntry(comment thread)。
 设计要点：
 - 触发：GitHub Actions pull_request opened/synchronize
 - 高危规则匹配优先（不依赖 LLM）：subprocess shell=True / eval / pickle.loads / 硬编码 secret 等
-- LLM 仅复核 high/medium finding，fail-open
-- 仅 confirmed-high 阻断（exit 1），confirmed-low 仅评论
-- LLM 故障 → fail-open（不阻断）
+- 确定性 high 规则直接阻断；medium 由独立 LLM 复核
+- diff/PR/LLM 证据不可用时 fail-closed（exit 2）
+- 审查结论和行级评论都必须可审计
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ def fetch_pr_diff(
         if resp.status_code != 200:
             return ""
         return resp.text
-    except Exception:  # noqa: BLE001 - fail-open 设计
+    except Exception:  # noqa: BLE001 - caller treats empty evidence as blocking
         return ""
     finally:
         if close_after:
@@ -258,7 +258,7 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
 
 
 # =====================================================================
-# LLM 复核（fail-open）
+# LLM 复核（fail-closed）
 # =====================================================================
 
 
@@ -272,13 +272,15 @@ def call_llm_review(
 ) -> str:
     """LLM 复核单条 finding，返回 'high'/'medium'/'low'/'false-positive'。
 
-    fail-open：任何异常返回 'false-positive'（不阻断）。
+    Any unavailable or malformed response returns ``unavailable`` so the
+    required review check can fail closed.  ``false-positive`` is reserved for
+    an explicit reviewer verdict and is never synthesized from an exception.
     """
     api_key = api_key or os.environ.get("XCAGI_LLM_API_KEY")
     if not api_key:
-        return "false-positive"
+        return "unavailable"
     if httpx is None and client is None:
-        return "false-positive"
+        return "unavailable"
     endpoint = endpoint or os.environ.get("XCAGI_LLM_ENDPOINT", "https://api.example.com/v1/review")
     payload = {
         "rule": finding.rule,
@@ -297,17 +299,17 @@ def call_llm_review(
         try:
             resp = client.post(endpoint, json=payload, headers=headers)
             if resp.status_code != 200:
-                return "false-positive"
+                return "unavailable"
             data = resp.json()
         finally:
             if close_after:
                 client.close()
     except Exception:
-        return "false-positive"
+        return "unavailable"
     verdict = data.get("verdict") if isinstance(data, dict) else None
     if verdict in {"high", "medium", "low", "false-positive"}:
         return verdict
-    return "false-positive"
+    return "unavailable"
 
 
 # =====================================================================
@@ -382,17 +384,20 @@ def main(argv: list[str] | None = None) -> int:
 
     pr_number = args.pr_number or _pr_number_from_env()
     if not pr_number:
-        print("[review] no PR number provided (env PR_NUMBER or --pr-number)")
-        return 0
+        print("::error::[review] no PR number provided (env PR_NUMBER or --pr-number)")
+        return 2
 
     print(f"[review] fetch diff for PR #{pr_number}")
     diff_text = fetch_pr_diff(pr_number)
     if not diff_text:
-        print("[review] empty diff (fail-open)")
-        return 0
+        print("::error::[review] diff evidence unavailable; blocking merge")
+        return 2
 
     hunks = parse_diff(diff_text)
     print(f"[review] parsed {len(hunks)} hunk(s)")
+    if not hunks:
+        print("::error::[review] diff contains no reviewable hunks; blocking merge")
+        return 2
     findings = match_high_risk_rules(hunks)
     print(f"[review] {len(findings)} finding(s) by rules")
 
@@ -400,29 +405,37 @@ def main(argv: list[str] | None = None) -> int:
         print("[review] PASS - no findings")
         return 0
 
-    # LLM 复核：仅对 high/medium finding（low 不阻断也无需复核）
-    confirmed_high: list[Finding] = []
+    # High deterministic security rules are blocking without an LLM override.
+    # Medium findings need an independent verdict; unavailable evidence blocks.
+    blocking_findings: list[Finding] = []
+    unavailable_findings: list[Finding] = []
     low_for_comment: list[Finding] = []
     for f in findings:
-        if f.severity in {"high", "medium"}:
+        if f.severity == "high":
+            blocking_findings.append(f)
+            print(f"[review] {f.rule} @ {f.file_path}:{f.line} deterministic-high=block")
+        elif f.severity == "medium":
             verdict = call_llm_review(f)
             print(f"[review] {f.rule} @ {f.file_path}:{f.line} severity={f.severity} llm={verdict}")
-            if verdict == "high":
-                confirmed_high.append(f)
+            if verdict in {"high", "medium"}:
+                blocking_findings.append(f)
             elif verdict == "low":
                 low_for_comment.append(f)
-            # verdict == 'false-positive' → 不评论不阻断
+            elif verdict == "unavailable":
+                unavailable_findings.append(f)
+            # Explicit false-positive is the only non-commenting pass verdict.
         elif f.severity == "low":
             low_for_comment.append(f)
 
     if args.dry_run:
         print(
-            f"[dry-run] confirmed_high={len(confirmed_high)} low_for_comment={len(low_for_comment)}"
+            f"[dry-run] blocking={len(blocking_findings)} "
+            f"unavailable={len(unavailable_findings)} low_for_comment={len(low_for_comment)}"
         )
         return 0
 
-    # 发布行级评论（low & confirmed_high）
-    for f in low_for_comment + confirmed_high:
+    comment_failures = 0
+    for f in low_for_comment + blocking_findings + unavailable_findings:
         body = f"**[{f.severity.upper()}] {f.rule}**\n\n{f.suggestion}\n\n```\n{f.snippet}\n```"
         ok = post_line_comment(
             pr_number=pr_number,
@@ -432,14 +445,20 @@ def main(argv: list[str] | None = None) -> int:
             commit_id=args.commit_id or None,
         )
         if not ok:
-            print(f"[review] comment failed for {f.file_path}:{f.line} (fail-open)")
+            comment_failures += 1
+            print(f"::error::[review] comment failed for {f.file_path}:{f.line}")
 
-    # 仅 confirmed-high 阻断
-    if confirmed_high:
-        print(f"[review] BLOCK - {len(confirmed_high)} confirmed-high finding(s)")
+    if blocking_findings:
+        print(f"[review] BLOCK - {len(blocking_findings)} blocking finding(s)")
         return 1
+    if unavailable_findings or comment_failures:
+        print(
+            "::error::[review] BLOCK - review evidence incomplete "
+            f"(unavailable={len(unavailable_findings)}, comment_failures={comment_failures})"
+        )
+        return 2
 
-    print("[review] PASS - no confirmed-high findings")
+    print("[review] PASS - no blocking findings")
     return 0
 
 

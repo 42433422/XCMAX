@@ -9,7 +9,7 @@
 - call_llm fail-open（mock httpx 超时返回 None）
 - create_pr mock github API
 - autonomy/ 分支不递归
-- 空日志不崩溃
+- 空日志会创建 remediation incident 并保持失败
 - LLM API key 缺失 fail-open
 """
 
@@ -283,6 +283,34 @@ class TestCreatePr:
         url = heal.create_pr("autonomy/x", "patch")
         assert url == ""
 
+
+class TestCreateRemediationIssue:
+    def test_uses_only_provisioned_incident_labels(self) -> None:
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 201
+        response.json.return_value = {"html_url": "https://github.com/owner/repo/issues/2"}
+        client.post.return_value = response
+
+        url = heal.create_remediation_issue(
+            run_id=42,
+            workflow="CI/CD Pipeline",
+            branch="main",
+            fingerprint="f" * 64,
+            log_excerpt="failed",
+            errors=[],
+            token="tok",
+            repo="owner/repo",
+            client=client,
+        )
+
+        assert url.endswith("/issues/2")
+        assert client.post.call_args.kwargs["json"]["labels"] == [
+            "ai-implement",
+            "incident",
+            "auto-incident",
+        ]
+
     def test_no_repo_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
@@ -377,13 +405,13 @@ class TestAutonomyRecursion:
 
 
 class TestMainFlow:
-    def test_no_run_id_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_run_id_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
         monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
         rc = heal.main(["--branch", "feature/x"])
-        assert rc == 0
+        assert rc == 2
 
-    def test_empty_log_returns_zero(
+    def test_empty_log_routes_incident_and_blocks(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -391,6 +419,11 @@ class TestMainFlow:
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.setenv("GITHUB_REPOSITORY", "a/b")
         monkeypatch.setattr(heal, "fetch_workflow_logs", lambda *a, **k: "")
+        monkeypatch.setattr(
+            heal,
+            "create_remediation_issue",
+            lambda **kwargs: "https://github.com/a/b/issues/1",
+        )
         rc = heal.main(
             [
                 "--run-id",
@@ -403,7 +436,7 @@ class TestMainFlow:
                 str(tmp_path / "fps.jsonl"),
             ]
         )
-        assert rc == 0
+        assert rc == 2
 
     def test_dry_run_does_not_create_pr(
         self,

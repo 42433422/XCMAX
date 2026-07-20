@@ -17,6 +17,8 @@ class HealthResponse(BaseModel):
     ok: bool = True
     deploy_tier: str = "local"
     git_sha: str = ""
+    release_id: str = ""
+    artifact_sha256: str = ""
     hostname: str = ""
     tavily_configured: bool = False
     scheduler_running: Optional[bool] = None

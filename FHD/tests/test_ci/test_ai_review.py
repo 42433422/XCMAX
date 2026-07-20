@@ -261,12 +261,12 @@ class TestMatchRules:
 
 
 # =====================================================================
-# call_llm_review fail-open 测试
+# call_llm_review fail-closed 测试
 # =====================================================================
 
 
 class TestCallLlmReview:
-    def test_no_api_key_returns_false_positive(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_api_key_returns_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_API_KEY", raising=False)
         finding = review.Finding(
             file_path="f",
@@ -276,9 +276,9 @@ class TestCallLlmReview:
             snippet="eval()",
             suggestion="don't",
         )
-        assert review.call_llm_review(finding) == "false-positive"
+        assert review.call_llm_review(finding) == "unavailable"
 
-    def test_timeout_returns_false_positive(self) -> None:
+    def test_timeout_returns_unavailable(self) -> None:
         finding = review.Finding(
             file_path="f",
             line=1,
@@ -290,9 +290,9 @@ class TestCallLlmReview:
         client = MagicMock()
         client.post.side_effect = TimeoutError("timeout")
         result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "false-positive"
+        assert result == "unavailable"
 
-    def test_http_500_returns_false_positive(self) -> None:
+    def test_http_500_returns_unavailable(self) -> None:
         finding = review.Finding(
             file_path="f",
             line=1,
@@ -306,7 +306,7 @@ class TestCallLlmReview:
         resp.status_code = 500
         client.post.return_value = resp
         result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "false-positive"
+        assert result == "unavailable"
 
     def test_valid_response_returns_verdict(self) -> None:
         finding = review.Finding(
@@ -325,7 +325,7 @@ class TestCallLlmReview:
         result = review.call_llm_review(finding, api_key="k", client=client)
         assert result == "high"
 
-    def test_invalid_verdict_returns_false_positive(self) -> None:
+    def test_invalid_verdict_returns_unavailable(self) -> None:
         finding = review.Finding(
             file_path="f",
             line=1,
@@ -340,7 +340,7 @@ class TestCallLlmReview:
         resp.json.return_value = {"verdict": "bogus"}
         client.post.return_value = resp
         result = review.call_llm_review(finding, api_key="k", client=client)
-        assert result == "false-positive"
+        assert result == "unavailable"
 
 
 # =====================================================================
@@ -448,11 +448,15 @@ class TestFetchPrDiff:
 
 
 class TestMain:
-    def test_no_pr_number_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_pr_number_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("PR_NUMBER", raising=False)
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
         rc = review.main([])
-        assert rc == 0
+        assert rc == 2
+
+    def test_empty_diff_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(review, "fetch_pr_diff", lambda *a, **k: "")
+        assert review.main(["--pr-number", "1"]) == 2
 
     def test_no_finding_passes(
         self,
@@ -470,31 +474,29 @@ class TestMain:
     ) -> None:
         diff = "diff --git a/evil.py b/evil.py\n@@ -1,1 +1,1 @@\n+result = eval(user_input)\n"
         monkeypatch.setattr(review, "fetch_pr_diff", lambda *a, **k: diff)
-        monkeypatch.setattr(
-            review,
-            "call_llm_review",
-            lambda *a, **k: "high",
-        )
         # 不实际发评论
         monkeypatch.setattr(review, "post_line_comment", lambda *a, **k: True)
         rc = review.main(["--pr-number", "1"])
         assert rc == 1
 
-    def test_llm_failure_fail_open(
+    def test_medium_llm_failure_fails_closed(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """LLM 返回 false-positive（故障）→ 不阻断。"""
-        diff = "diff --git a/evil.py b/evil.py\n@@ -1,1 +1,1 @@\n+result = eval(user_input)\n"
+        diff = (
+            "diff --git a/client.py b/client.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "+requests.get(url, verify=" + "False)\n"
+        )
         monkeypatch.setattr(review, "fetch_pr_diff", lambda *a, **k: diff)
         monkeypatch.setattr(
             review,
             "call_llm_review",
-            lambda *a, **k: "false-positive",
+            lambda *a, **k: "unavailable",
         )
         monkeypatch.setattr(review, "post_line_comment", lambda *a, **k: True)
         rc = review.main(["--pr-number", "1"])
-        assert rc == 0  # fail-open，不阻断
+        assert rc == 2
 
     def test_pragma_no_cover_does_not_block(
         self,
