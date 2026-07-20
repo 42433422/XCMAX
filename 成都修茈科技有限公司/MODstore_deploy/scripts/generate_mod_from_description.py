@@ -161,11 +161,19 @@ def run(args: argparse.Namespace) -> int:
     errs = _validate_manifest(manifest, args.id, args.name)
     if errs:
         logger.error("manifest 校验失败：%s", errs)
-        print(json.dumps({"ok": False, "errors": errs, "manifest": manifest}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {"ok": False, "errors": errs, "manifest": manifest}, ensure_ascii=False, indent=2
+            )
+        )
         return 2
 
     if args.dry_run:
-        print(json.dumps({"ok": True, "manifest": manifest, "dry_run": True}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {"ok": True, "manifest": manifest, "dry_run": True}, ensure_ascii=False, indent=2
+            )
+        )
         return 0
 
     # 打包为 .xcemp
@@ -229,7 +237,9 @@ def main() -> None:
     parser.add_argument("--version", default="1.0.0")
     parser.add_argument("--llm-api-key", default=os.environ.get("XCAGI_LLM_API_KEY", ""))
     parser.add_argument("--dry-run", action="store_true", help="只输出 manifest，不写盘")
-    parser.add_argument("--apply", action="store_true", help="实际写盘到 modstore library + FHD/mods/")
+    parser.add_argument(
+        "--apply", action="store_true", help="实际写盘到 modstore library + FHD/mods/"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     sys.exit(run(args))

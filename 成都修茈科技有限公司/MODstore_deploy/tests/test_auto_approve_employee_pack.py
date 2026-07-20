@@ -1,5 +1,6 @@
 # 成都修茈科技有限公司/MODstore_deploy/tests/test_auto_approve_employee_pack.py
 """auto_approve_policy.evaluate_employee_pack 单元测试。"""
+
 from __future__ import annotations
 
 import json

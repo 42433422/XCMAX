@@ -9,6 +9,7 @@
 
 测试通过 pytest 全局 ``MODSTORE_DB_PATH`` 临时 SQLite 隔离（见 ``conftest.py``）。
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
