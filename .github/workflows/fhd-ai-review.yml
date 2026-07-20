@@ -1,7 +1,7 @@
 # CI SSOT: generated from FHD/.github/workflows/ai-review.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# CI SSOT: generated from FHD/.github/workflows/ai-review.yml
-# 编辑源：FHD/.github/workflows/ai-review.yml（根仓 .github/workflows/ai-review.yml 为同步副本）
+# CI SSOT: generated from FHD/.github/workflows/fhd-ai-review.yml
+# 编辑源：FHD/.github/workflows/fhd-ai-review.yml（根仓 .github/workflows/fhd-ai-review.yml 为同步副本）
 name: AI Review
 
 on:

@@ -1,0 +1,63 @@
+name: Capability Proposal to Issue
+
+# 进化状态闭环（2026-07-20）：
+#   1. intent_confirmation_service 检测到未命中意图 → 写 capability_proposal.jsonl
+#   2. 本 workflow 每周一 04:00 UTC 读取 pending 提案
+#   3. 创建 GitHub issue 并打 `ai-implement` 标签
+#   4. 触发 ai-issue-implement.yml workflow 自主实现
+#
+# 触发：每周一 04:00 UTC（错开 intent-benchmark.yml 的 03:00）+ 手动
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      max_issues:
+        description: "单次最多创建 issue 数"
+        required: false
+        default: "5"
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: FHD
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt
+
+      - name: Read proposals and create issues
+        working-directory: FHD
+        env:
+          MAX_ISSUES: ${{ github.event.inputs.max_issues || '5' }}
+        run: |
+          python scripts/dev/capability_proposal_to_issue.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GITHUB_TOKEN" \
+            --max-issues "$MAX_ISSUES" \
+            --apply
+
+      - name: Upload proposal log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capability-proposal-log
+          path: FHD/test_reports/capability_proposal.jsonl
+          if-no-files-found: ignore
