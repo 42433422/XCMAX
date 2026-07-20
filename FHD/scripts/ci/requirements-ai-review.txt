@@ -1,0 +1,4 @@
+# CI ai-review 依赖（Python 3.11）
+PyGithub>=1.59
+httpx>=0.24
+pydantic>=2.0
