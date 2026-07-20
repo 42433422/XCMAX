@@ -136,11 +136,7 @@ class TestParseAllowlistFallback:
         assert data["trusted_authors"] == []
 
     def test_comments_stripped(self) -> None:
-        text = (
-            "enabled: true  # 主开关\n"
-            "trusted_authors:\n"
-            "  - octocat  # 主作者\n"
-        )
+        text = "enabled: true  # 主开关\ntrusted_authors:\n  - octocat  # 主作者\n"
         data = sla._parse_allowlist_fallback(text)
         assert data["enabled"] is True
         assert data["trusted_authors"] == ["octocat"]
@@ -217,11 +213,15 @@ class TestCheckRegularPrGates:
         passed, reason = sla.check_regular_pr_gates(client, pr, ["octocat"])
         assert passed is True
         assert reason == "ok"
-        client.get_workflow_run_conclusion.assert_called_once_with("abc123", sla.AI_REVIEW_WORKFLOW_NAME)
+        client.get_workflow_run_conclusion.assert_called_once_with(
+            "abc123", sla.AI_REVIEW_WORKFLOW_NAME
+        )
 
     def test_ai_review_workflow_fails(self) -> None:
         pr = _make_pr(author="octocat")
-        client = _mock_client(ai_review_ok=False, ai_review_reason="workflow_failed:AI Review:failure")
+        client = _mock_client(
+            ai_review_ok=False, ai_review_reason="workflow_failed:AI Review:failure"
+        )
         passed, reason = sla.check_regular_pr_gates(client, pr, ["octocat"])
         assert passed is False
         assert "ai_review:" in reason
@@ -263,7 +263,9 @@ class TestCheckRegularPrGates:
 
 
 class TestProcessRegularPr:
-    def test_gates_pass_triggers_squash_merge(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_gates_pass_triggers_squash_merge(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 把 stale jsonl 重定向到 tmp_path，避免污染真实 metrics
         monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
         monkeypatch.setattr(sla, "STALE_JSONL", tmp_path / "stale.jsonl")
@@ -303,7 +305,9 @@ class TestProcessRegularPr:
         client.merge_pr.assert_not_called()
         client.comment.assert_not_called()
 
-    def test_merge_failure_returns_merge_failed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_merge_failure_returns_merge_failed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
         monkeypatch.setattr(sla, "STALE_JSONL", tmp_path / "stale.jsonl")
 
@@ -318,7 +322,9 @@ class TestProcessRegularPr:
         # 失败也要发评论告知
         client.comment.assert_called()
 
-    def test_stale_log_appended_on_skip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_stale_log_appended_on_skip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
         stale = tmp_path / "stale.jsonl"
         monkeypatch.setattr(sla, "STALE_JSONL", stale)
@@ -330,6 +336,7 @@ class TestProcessRegularPr:
         assert stale.is_file()
         content = stale.read_text(encoding="utf-8").strip()
         import json
+
         rec = json.loads(content)
         assert rec["pr"] == 100
         assert rec["kind"] == "regular"
