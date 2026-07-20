@@ -44,8 +44,7 @@ REQUIRED_ACTIVATION_EVIDENCE = {
         'autonomy_evaluate_action "restart_service"',
     ),
     "self_heal_pr_merge": (
-        REPO_ROOT
-        / "成都修茈科技有限公司/MODstore_deploy/modstore_server/approval_dispatcher.py",
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/approval_dispatcher.py",
         'evaluate_risk(\n        "self_heal_pr_merge"',
     ),
     "mod_auto_publish": (
