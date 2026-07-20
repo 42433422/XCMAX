@@ -30,7 +30,8 @@ def _connect() -> sqlite3.Connection:
 
 def ensure_outbox_schema() -> None:
     with _connect() as conn:
-        conn.executescript("""
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS cs_webhook_outbox (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               target_url TEXT NOT NULL,
@@ -48,7 +49,8 @@ def ensure_outbox_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS ix_cs_webhook_outbox_status
               ON cs_webhook_outbox(status, next_retry_at);
-            """)
+            """
+        )
         conn.commit()
 
 

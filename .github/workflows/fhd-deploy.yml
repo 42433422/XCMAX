@@ -125,11 +125,43 @@ jobs:
             DEPLOY_ROOT="/opt/fhd-staging"
             MANIFEST="/var/www/update/releases/staging/server/fhd-manifest.json"
             HEALTH_URL="https://staging.xiu-ci.com/fhd-api/api/health"
+            ENV_FILE="/root/fhd-staging.env"
           else
             DEPLOY_ROOT="/opt/fhd-full"
             MANIFEST="/var/www/update/releases/stable/server/fhd-manifest.json"
             HEALTH_URL="https://xiu-ci.com/fhd-api/api/health"
+            ENV_FILE="/root/fhd-full.env"
           fi
+
+          # Neuro Bus 7 开关生产校验（cicd-e2e-prompt.md 关键约束 10）
+          # 任一开关缺失/为空 → 阻断部署，防止静默降级运行
+          echo "Verifying Neuro Bus production switches in ${ENV_FILE}..."
+          ssh -i "$KEY_FILE" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${USER}@${HOST}" \
+            "bash -s" <<NEURO_EOF
+          set -euo pipefail
+          ENV_FILE="${ENV_FILE}"
+          VARS="XCAGI_NEURO_BUS_DEDUP XCAGI_NEURO_BUS_CIRCUIT XCAGI_NEURO_BUS_RATE_LIMIT XCAGI_NEURO_BUS_TRACE XCAGI_NEURO_BUS_LIFELINE XCAGI_NEURO_BUS_DLQ_AUTO XCAGI_NEURO_BUS_SLA_LOG"
+          if [ ! -f "\$ENV_FILE" ]; then
+            echo "::error::env file \$ENV_FILE not found on remote host"
+            exit 1
+          fi
+          MISSING=""
+          for v in \$VARS; do
+            val=\$(grep -E "^\s*\$v\s*=" "\$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]' || echo "")
+            if [ "\$val" != "1" ]; then
+              echo "::error::\$v expected=1 got='\$val' (in \$ENV_FILE)"
+              MISSING="\$MISSING \$v"
+            fi
+          done
+          if [ -n "\$MISSING" ]; then
+            echo "::error::Neuro Bus 生产开关未启用:\$MISSING — 部署被阻断"
+            exit 1
+          fi
+          echo "✅ Neuro Bus 7 switches verified (all =1) in \$ENV_FILE"
+          NEURO_EOF
 
           REMOTE_CMD=$(cat <<EOF
           set -euo pipefail

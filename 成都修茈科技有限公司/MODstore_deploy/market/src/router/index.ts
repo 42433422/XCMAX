@@ -64,17 +64,6 @@ const routes: RouteRecordRaw[] = [
       pageDescription: '查看与购买 XC AGI 会员套餐。',
     },
   },
-  {
-    path: '/download',
-    name: 'download',
-    component: () => import('../views/SoftwareDownloadView.vue'),
-    meta: {
-      layout: 'public',
-      pageTitle: '下载 XCAGI 客户端',
-      pageDescription:
-        '下载 XCAGI 企业版客户端：Windows、macOS 与 Android APK（官网分发，应用商店审核中）。',
-    },
-  },
   { path: '/workflow', name: 'workflow', component: () => import('../views/WorkflowView.vue'), meta: { auth: true } },
   {
     path: '/workflow/v2/:id',
@@ -161,11 +150,6 @@ const routes: RouteRecordRaw[] = [
         path: 'materials',
         name: 'workbench-materials',
         component: () => import('../views/MyMaterialsView.vue'),
-      },
-      {
-        path: 'download',
-        name: 'workbench-download',
-        component: () => import('../views/SoftwareDownloadView.vue'),
       },
       {
         path: 'change-requests',

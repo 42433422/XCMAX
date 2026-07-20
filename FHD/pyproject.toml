@@ -157,6 +157,10 @@ ignore = [
 "app/utils/__init__.py" = ["F403", "F405", "F401", "F821"]
 "app/legacy/**" = ["BLE001"]
 "app/traditional_mode_fs.py" = ["BLE001"]
+# CI 自治脚本：网络/IO/LLM 调用全 fail-open（设计约束：不阻断主流程）
+"scripts/ci/ai_self_heal.py" = ["BLE001", "UP015"]
+"scripts/ci/ai_self_heal_sla.py" = ["BLE001", "UP015"]
+"scripts/ci/ai_review.py" = ["BLE001", "UP015"]
 # 顶层兜底 catch-all（已记录日志）：裸 except: 已统一改为 except Exception: 后由 BLE001 接管，
 # 这些 I/O / 文档生成 / 意图识别热路径的 catch-all 属合理设计，显式登记免噪。
 "app/utils/printer_automation.py" = ["BLE001"]
@@ -282,7 +286,10 @@ show_contexts = true
 # 从未真跑出杀死率。下面是 3.x 有效键（已本机验证可跑：app/di 62 变体/25 killed/约43% kill）。
 # 关键：mutmut 3.x 把源码复制进 mutants/ 后在那里跑测试，app 代码 `from resources.config...`
 # 依赖顶层 resources/ 包，故 also_copy 必须含 resources 与 tests，否则 baseline ModuleNotFoundError。
-# 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 40
+# 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 80
+# CI 门槛（mutation-smoke.yml L49）= 80%（test-coverage-90-prompt.md 指令 6 目标）；
+# 实测 ~43%，未达 80% 目标。2026-07-20 调整：mutation-smoke 已从 PR gate 移除（见 workflow 注释），
+# 改为 weekly nightly + manual 监控趋势。待 kill rate ≥ 80% 后再加回 PR gate。
 # 首轮聚焦低依赖包；补测后逐步扩大 source_paths（见 docs/reports/TO_9_PROGRAM.md T6/T9）。
 [tool.mutmut]
 source_paths = ["app/di", "app/contexts", "app/security", "app/middleware"]

@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
-"""Publish FHD / MODstore GitHub Actions to XCMAX root .github/workflows/ (CI SSOT)."""
+"""Publish FHD / MODstore GitHub Actions to XCMAX root .github/workflows/ (CI SSOT).
+
+用法：
+  python scripts/dev/publish_ci_workflows_to_root.py            # 默认 --apply，写入根仓
+  python scripts/dev/publish_ci_workflows_to_root.py --check    # 仅校验，不写入
+  python scripts/dev/publish_ci_workflows_to_root.py --apply    # 显式写入
+
+退出码：--check 模式下，存在漂移或新增返回 1；--apply 模式始终 0。
+"""
 
 from __future__ import annotations
 
+import argparse
+import difflib
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -199,54 +210,134 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
     return content
 
 
-def publish_fhd() -> list[str]:
+def _render_fhd(src: Path) -> tuple[str, str] | None:
+    """渲染 FHD 源文件的根仓副本内容，返回 (out_name, full_content) 或 None（跳过）。"""
+    body = src.read_text(encoding="utf-8").strip()
+    if not body or "jobs:" not in body:
+        return None
+    body = re.sub(
+        r"^# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root\.py\n",
+        "",
+        body,
+    )
+    out_name = WORKFLOW_RENAMES.get(src.name, f"fhd-{src.name}")
+    body = _insert_defaults(body, DEFAULTS_FHD)
+    body = _prefix_fhd_paths(body, out_name)
+    header = (
+        f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — DO NOT edit here.\n"
+        f"# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
+    )
+    return out_name, header + body + "\n"
+
+
+def _render_mod(src: Path) -> tuple[str, str] | None:
+    """渲染 MODstore 源文件的根仓副本内容。"""
+    body = src.read_text(encoding="utf-8").strip()
+    if not body or "jobs:" not in body:
+        return None
+    out_name = MOD_RENAMES.get(src.name, f"modstore-{src.name}")
+    body = _insert_defaults(body, DEFAULTS_MOD)
+    body = _prefix_mod_paths(body, out_name)
+    header = (
+        f"# CI SSOT: generated from MODstore_deploy/.github/workflows/{src.name} "
+        "— DO NOT edit here.\n"
+        "# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
+    )
+    return out_name, header + body + "\n"
+
+
+def _diff_one(out_name: str, expected: str) -> str:
+    """对比根仓现有副本与期望内容，返回 diff 字符串（无差异返回空串）。"""
+    dst = OUT / out_name
+    if not dst.exists():
+        return f"  + {out_name} (NEW)"
+    actual = dst.read_text(encoding="utf-8")
+    if actual == expected:
+        return ""
+    diff = difflib.unified_diff(
+        actual.splitlines(keepends=True),
+        expected.splitlines(keepends=True),
+        fromfile=f"a/.github/workflows/{out_name}",
+        tofile=f"b/.github/workflows/{out_name}",
+        n=1,
+    )
+    return "  ~ " + out_name + "\n" + "".join("    " + line for line in diff)
+
+
+def publish_fhd(apply: bool = True) -> tuple[list[str], list[str]]:
+    """返回 (written, drifts)。apply=True 时写入，否则仅对比。"""
     written: list[str] = []
+    drifts: list[str] = []
     for src in sorted(FHD_WF.glob("*.yml")):
-        body = src.read_text(encoding="utf-8").strip()
-        if not body or "jobs:" not in body:
+        rendered = _render_fhd(src)
+        if rendered is None:
             continue
-        body = re.sub(
-            r"^# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root\.py\n",
-            "",
-            body,
-        )
-        out_name = WORKFLOW_RENAMES.get(src.name, f"fhd-{src.name}")
-        body = _insert_defaults(body, DEFAULTS_FHD)
-        body = _prefix_fhd_paths(body, out_name)
-        header = (
-            f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — DO NOT edit here.\n"
-            f"# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
-        )
-        (OUT / out_name).write_text(header + body + "\n", encoding="utf-8")
-        written.append(out_name)
-    return written
+        out_name, content = rendered
+        diff = _diff_one(out_name, content)
+        if diff:
+            drifts.append(diff)
+            if apply:
+                (OUT / out_name).write_text(content, encoding="utf-8")
+                written.append(out_name)
+        else:
+            written.append(out_name)
+    return written, drifts
 
 
-def publish_mod() -> list[str]:
+def publish_mod(apply: bool = True) -> tuple[list[str], list[str]]:
     written: list[str] = []
+    drifts: list[str] = []
     for src in sorted(MOD_WF.glob("*.yml")):
-        body = src.read_text(encoding="utf-8").strip()
-        if not body or "jobs:" not in body:
+        rendered = _render_mod(src)
+        if rendered is None:
             continue
-        out_name = MOD_RENAMES.get(src.name, f"modstore-{src.name}")
-        body = _insert_defaults(body, DEFAULTS_MOD)
-        body = _prefix_mod_paths(body, out_name)
-        header = (
-            f"# CI SSOT: generated from MODstore_deploy/.github/workflows/{src.name} "
-            "— DO NOT edit here.\n"
-            "# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
-        )
-        (OUT / out_name).write_text(header + body + "\n", encoding="utf-8")
-        written.append(out_name)
-    return written
+        out_name, content = rendered
+        diff = _diff_one(out_name, content)
+        if diff:
+            drifts.append(diff)
+            if apply:
+                (OUT / out_name).write_text(content, encoding="utf-8")
+                written.append(out_name)
+        else:
+            written.append(out_name)
+    return written, drifts
 
 
-def main() -> None:
-    fhd = publish_fhd()
-    mod = publish_mod()
-    print("FHD:", ", ".join(fhd))
-    print("MODstore:", ", ".join(mod))
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="仅校验，不写入（CI 用）")
+    mode.add_argument("--apply", action="store_true", help="写入根仓副本（默认）")
+    args = parser.parse_args()
+
+    apply_mode = not args.check  # 默认 apply
+    print(f"模式: {'--apply (写入)' if apply_mode else '--check (仅校验)'}")
+    print()
+
+    fhd_written, fhd_drifts = publish_fhd(apply=apply_mode)
+    mod_written, mod_drifts = publish_mod(apply=apply_mode)
+
+    print(f"FHD ({len(fhd_written)} 文件):", ", ".join(fhd_written))
+    print(f"MODstore ({len(mod_written)} 文件):", ", ".join(mod_written))
+    print()
+
+    all_drifts = fhd_drifts + mod_drifts
+    if all_drifts:
+        if apply_mode:
+            print(f"已写入 {len(all_drifts)} 个漂移文件。下一步：")
+            print("  git add .github/workflows/")
+            print('  git commit -m "ci: sync workflows from FHD/MODstore sources"')
+        else:
+            print(f"发现 {len(all_drifts)} 处漂移：")
+            for d in all_drifts:
+                print(d)
+            print()
+            print("修复：python scripts/dev/publish_ci_workflows_to_root.py --apply")
+            return 1
+    else:
+        print("无漂移，所有副本与源一致。")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

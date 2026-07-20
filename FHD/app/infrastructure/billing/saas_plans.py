@@ -145,11 +145,18 @@ def permanent_plan_for_budget(budget_range: str | None) -> dict[str, Any] | None
 
 
 def pricing_plans_for_budget(budget_range: str | None = None) -> list[dict[str, Any]]:
-    """定价页展示：30 天试用 + 预算档位对应的永久购买。"""
+    """定价页展示：30 天试用 + 全部永久档位；预算对应档标记 recommended。"""
     all_plans = list_saas_plans()
     trial = [p for p in all_plans if p.get("id") == "saas-trial-30"]
     perm_id = permanent_plan_id_for_budget(budget_range)
-    permanent = [p for p in all_plans if p.get("id") == perm_id]
+    permanent: list[dict[str, Any]] = []
+    for p in all_plans:
+        if not is_permanent_saas_plan_id(str(p.get("id") or "")):
+            continue
+        item = dict(p)
+        if item.get("id") == perm_id:
+            item["recommended"] = True
+        permanent.append(item)
     return trial + permanent
 
 

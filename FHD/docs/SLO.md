@@ -15,6 +15,61 @@
 
 将 `WINDOW` 替换为 `7d`（验收）或 `30d`（合同滚动）。
 
+## 业务 SLO（BIZ 五域）
+
+> **场景**：补齐 SME 业务数据自动化的核心业务可观测性（客户/文档/导出/MOD）。
+> **指标定义**：[`app/utils/metrics.py`](../app/utils/metrics.py) "业务 SLI 指标" 段 + `record_customer_op` / `record_doc_recognition` / `record_export_task` / `record_mod_install` 辅助函数。
+> **采集**：与 M0 五域共用 `collect_slo_metrics.py`，产物同落 `metrics/slo-measured-YYYYMMDD.json`。
+
+| ID | 名称 | 目标 | PromQL（窗口可配 7d/30d） | 埋点位置 |
+|----|------|------|---------------------------|---------|
+| SLO-BIZ-01 | 客户 CRUD P95 | < 800ms | `histogram_quantile(0.95, sum by (le) (rate(customer_op_duration_seconds_bucket[WINDOW]))) * 1000` | 客户路由（create/update/delete/query） |
+| SLO-BIZ-02 | 客户 CRUD 错误率 | < 0.5% | `sum(rate(customer_op_total{status="error"}[WINDOW])) / clamp_min(sum(rate(customer_op_total[WINDOW])),1)` | 同上 |
+| SLO-BIZ-03 | 文档识别 P95 | < 5s | `histogram_quantile(0.95, sum by (le) (rate(doc_recognition_duration_seconds_bucket[WINDOW]))) * 1000` | OCR / Excel / Word 解析路径 |
+| SLO-BIZ-04 | 数据导出 P95 | < 30s | `histogram_quantile(0.95, sum by (le) (rate(export_task_duration_seconds_bucket[WINDOW]))) * 1000` | Excel / CSV / PDF 导出任务 |
+| SLO-BIZ-05 | MOD 安装成功率 | ≥ 99% | `1 - sum(rate(mod_install_total{status="error"}[WINDOW])) / clamp_min(sum(rate(mod_install_total[WINDOW])),1)` | MOD 安装/卸载路径 |
+
+### 标签约束
+
+| 指标 | 标签 | 基数 | 取值 |
+|------|------|------|------|
+| `customer_op_total` | `operation`, `status` | 4 × 2 | `create/update/delete/query` × `success/error` |
+| `customer_op_duration_seconds` | `operation` | 4 | 同上 |
+| `doc_recognition_total` | `doc_type`, `status` | 4 × 2 | `excel/word/ocr/pdf` × `success/error` |
+| `doc_recognition_duration_seconds` | `doc_type` | 4 | 同上 |
+| `export_task_total` | `export_type`, `status` | 3 × 2 | `excel/csv/pdf` × `success/error` |
+| `export_task_duration_seconds` | `export_type` | 3 | 同上 |
+| `mod_install_total` | `operation`, `status` | 4 × 2 | `install/uninstall/activate/deactivate` × `success/error` |
+
+均满足"标签基数 < 20"（铁律 8）；禁止使用 `user_id` / `tenant_id` / `request_id` 等高基数标签。
+
+### 埋点示例
+
+```python
+from app.utils.metrics import record_customer_op, record_doc_recognition
+import time
+
+# 客户 CRUD 路由
+start = time.time()
+try:
+    customer = await customer_app_service.create(...)
+    record_customer_op("create", "success", time.time() - start)
+    return customer
+except Exception:
+    record_customer_op("create", "error", time.time() - start)
+    raise
+
+# 文档识别
+start = time.time()
+try:
+    result = await ocr_service.recognize(file_bytes)
+    record_doc_recognition("excel", "success", time.time() - start)
+    return result
+except Exception:
+    record_doc_recognition("excel", "error", time.time() - start)
+    raise
+```
+
 ## 数据源
 
 | 层 | 路径 |

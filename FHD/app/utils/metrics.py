@@ -125,6 +125,54 @@ mod_sqlite_copy_present = Gauge(
     ["mod_id"],
 )
 
+# --- 业务 SLI 指标（SLO-BIZ-01..05）----------------------------------------------
+# 对应 docs/SLO.md "业务 SLO (BIZ 五域)"；标签基数 < 20（铁律 8）。
+# 设计：与 SLO-API/AI/BUS 技术域并列，补齐客户/文档/导出/MOD 业务可观测性。
+customer_op_total = Counter(
+    "customer_op_total",
+    "Total customer CRUD operations (create/update/delete/query)",
+    ["operation", "status"],
+)
+
+customer_op_duration_seconds = Histogram(
+    "customer_op_duration_seconds",
+    "Customer CRUD operation duration in seconds",
+    ["operation"],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+
+doc_recognition_total = Counter(
+    "doc_recognition_total",
+    "Total document recognition operations (OCR/Excel/Word parsing)",
+    ["doc_type", "status"],
+)
+
+doc_recognition_duration_seconds = Histogram(
+    "doc_recognition_duration_seconds",
+    "Document recognition duration in seconds (parse → structured data)",
+    ["doc_type"],
+    buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0),
+)
+
+export_task_total = Counter(
+    "export_task_total",
+    "Total export tasks (Excel/CSV/PDF generation)",
+    ["export_type", "status"],
+)
+
+export_task_duration_seconds = Histogram(
+    "export_task_duration_seconds",
+    "Export task duration in seconds (queue → file ready)",
+    ["export_type"],
+    buckets=(0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0),
+)
+
+mod_install_total = Counter(
+    "mod_install_total",
+    "Total mod install/uninstall operations",
+    ["operation", "status"],
+)
+
 
 def _normalize_endpoint(path: str) -> str:
     if not path or path == "/":
@@ -182,6 +230,62 @@ def record_neurobus_lost(count: int = 1) -> None:
 def record_neurobus_dead_lettered(count: int = 1) -> None:
     if count > 0:
         neurobus_events_dead_lettered_total.inc(count)
+
+
+# --- 业务 SLI record_* 辅助函数（SLO-BIZ-01..05）-------------------------------
+# 业务路由按需调用；fail-open（RECOVERABLE_ERRORS 不抛错，铁律 9 CI 容错）。
+# status 取值约束：success / error（与 api_requests_total 风格一致）。
+
+
+def record_customer_op(operation: str, status: str, duration_seconds: float) -> None:
+    """客户 CRUD 操作埋点（SLO-BIZ-01/02）。
+
+    operation: create / update / delete / query
+    status: success / error
+    """
+    try:
+        customer_op_total.labels(operation=operation, status=status).inc()
+        customer_op_duration_seconds.labels(operation=operation).observe(duration_seconds)
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def record_doc_recognition(doc_type: str, status: str, duration_seconds: float) -> None:
+    """文档识别埋点（SLO-BIZ-03）。
+
+    doc_type: excel / word / ocr / pdf
+    status: success / error
+    """
+    try:
+        doc_recognition_total.labels(doc_type=doc_type, status=status).inc()
+        doc_recognition_duration_seconds.labels(doc_type=doc_type).observe(duration_seconds)
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def record_export_task(export_type: str, status: str, duration_seconds: float) -> None:
+    """数据导出任务埋点（SLO-BIZ-04）。
+
+    export_type: excel / csv / pdf
+    status: success / error
+    """
+    try:
+        export_task_total.labels(export_type=export_type, status=status).inc()
+        export_task_duration_seconds.labels(export_type=export_type).observe(duration_seconds)
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def record_mod_install(operation: str, status: str) -> None:
+    """MOD 安装/卸载埋点（SLO-BIZ-05）。
+
+    operation: install / uninstall / activate / deactivate
+    status: success / error
+    """
+    try:
+        mod_install_total.labels(operation=operation, status=status).inc()
+    except RECOVERABLE_ERRORS:
+        pass
 
 
 def refresh_mod_sqlite_copy_metrics(mod_ids: list[str]) -> int:

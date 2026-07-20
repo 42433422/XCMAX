@@ -30,6 +30,23 @@
           {{ imConnectionLabel }}
         </div>
 
+        <div v-if="externalChannelEntries.length" class="im-channel-list">
+          <button
+            v-for="entry in externalChannelEntries"
+            :key="entry.id"
+            type="button"
+            :class="['im-channel-entry', { active: activeExternalEntry?.id === entry.id }]"
+            @click="activatePinnedEntry(entry)"
+          >
+            <span class="im-avatar im-avatar--channel" aria-hidden="true">客</span>
+            <span class="im-conv-main">
+              <span class="im-conv-title">{{ entry.display_name }}</span>
+              <span class="im-conv-preview">{{ entry.subtitle }}</span>
+            </span>
+            <i class="fa fa-comments-o" aria-hidden="true"></i>
+          </button>
+        </div>
+
         <ul v-if="sidebarListItems.length" class="im-conv-list">
           <li
             v-for="item in sidebarListItems"
@@ -72,7 +89,10 @@
         </div>
       </aside>
 
-      <main v-if="activeSystemEntry" class="im-chat im-chat--system-employee">
+      <main v-if="activeExternalEntry" class="im-chat im-chat--external-inbox">
+        <KellaiCustomerInbox />
+      </main>
+      <main v-else-if="activeSystemEntry" class="im-chat im-chat--system-employee">
         <header class="im-chat-head">
           <span
             :class="[
@@ -410,6 +430,7 @@ import {
   fetchCursorSuperEmployeeMessages,
   sendCursorSuperEmployeeMessage,
 } from '@/api/cursorSuperEmployee';
+import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -454,8 +475,17 @@ type DutyEmployeeEntry = {
   is_duty_employee_entry: true;
 };
 
+type ExternalAppEntry = {
+  id: 'kellai-customer-im';
+  display_name: '客户消息 · 客来来';
+  username: 'kellai-customer-im';
+  subtitle: '在 XCMAX 内只读查看客户会话';
+  target_url: string;
+  is_external_app_entry: true;
+};
+
 type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
-type PinnedImEntry = ImContact | SystemEmployeeEntry;
+type PinnedImEntry = ImContact | SystemEmployeeEntry | ExternalAppEntry;
 type ImSidebarListItem =
   | { kind: 'pinned'; key: string; entry: PinnedImEntry }
   | { kind: 'conversation'; key: string; conversation: ImConversationSummary };
@@ -534,6 +564,15 @@ const CURSOR_SUPER_EMPLOYEE_ENTRY: CursorSuperEmployeeEntry = {
   is_cursor_super_employee: true,
 };
 
+const KELLAI_CUSTOMER_IM_ENTRY: ExternalAppEntry = {
+  id: 'kellai-customer-im',
+  display_name: '客户消息 · 客来来',
+  username: 'kellai-customer-im',
+  subtitle: '在 XCMAX 内只读查看客户会话',
+  target_url: 'kellai://messages?source=xcmax',
+  is_external_app_entry: true,
+};
+
 const SUPER_CLI_TOOLS: SystemEmployeeEntry[] = [
   CODEX_SUPER_EMPLOYEE_ENTRY,
   CURSOR_SUPER_EMPLOYEE_ENTRY,
@@ -544,6 +583,7 @@ const localUserId = ref<number | null>(null);
 const conversations = ref<ImConversationSummary[]>([]);
 const activeConversationId = ref<number | null>(null);
 const activeSystemEntry = ref<SystemEmployeeEntry | null>(null);
+const activeExternalEntry = ref<ExternalAppEntry | null>(null);
 const codexMessages = ref<CodexSuperEmployeeMessage[]>([]);
 const codexDraft = ref('');
 const codexBusy = ref(false);
@@ -721,10 +761,16 @@ const pinnedContacts = computed<PinnedImEntry[]>(() => {
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
 
+const externalChannelEntries = computed<ExternalAppEntry[]>(() =>
+  isAdminCustomerServiceConsole.value ? [] : [KELLAI_CUSTOMER_IM_ENTRY],
+);
+
 const sidebarListItems = computed<ImSidebarListItem[]>(() => {
   const pinnedConversationIds = new Set<number>();
   for (const entry of pinnedContacts.value) {
-    if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry)) continue;
+    if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry) || isExternalAppEntry(entry)) {
+      continue;
+    }
     const conv = existingDedicatedConversation(entry);
     if (conv) pinnedConversationIds.add(conv.id);
   }
@@ -791,9 +837,14 @@ function isDutyEmployeeEntry(entry: PinnedImEntry | null): entry is DutyEmployee
   return Boolean(entry && 'is_duty_employee_entry' in entry && entry.is_duty_employee_entry);
 }
 
+function isExternalAppEntry(entry: PinnedImEntry | null): entry is ExternalAppEntry {
+  return Boolean(entry && 'is_external_app_entry' in entry && entry.is_external_app_entry);
+}
+
 function pinnedEntryPreview(entry: PinnedImEntry): string {
   if (isSuperEmployeeEntry(entry)) return entry.subtitle;
   if (isDutyEmployeeEntry(entry)) return entry.subtitle;
+  if (isExternalAppEntry(entry)) return entry.subtitle;
   return `@${entry.username}`;
 }
 
@@ -812,6 +863,7 @@ function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
   if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
   if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
+  if (isExternalAppEntry(entry)) return '客';
   if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
   return avatarText(entry.display_name);
 }
@@ -1062,6 +1114,7 @@ function existingDedicatedConversation(contact: ImContact): ImConversationSummar
 }
 
 function isPinnedContactActive(contact: PinnedImEntry): boolean {
+  if (isExternalAppEntry(contact)) return activeExternalEntry.value?.id === contact.id;
   if (isSuperEmployeeEntry(contact)) {
     return activeSystemEntry.value?.id === contact.id;
   }
@@ -1097,6 +1150,7 @@ function sidebarItemAvatarClasses(item: ImSidebarListItem) {
       'im-avatar--super-tool': avatarKey,
       [`im-avatar--${avatarKey}`]: avatarKey,
       'im-avatar--employee': isDutyEmployeeEntry(entry),
+      'im-avatar--external': isExternalAppEntry(entry),
     },
   ];
 }
@@ -1105,14 +1159,21 @@ function sidebarItemPinClasses(item: ImSidebarListItem) {
   if (item.kind !== 'pinned') return [];
   return [
     'fa',
-    isDutyEmployeeEntry(item.entry) ? 'fa-id-badge' : 'fa-thumb-tack',
+    isExternalAppEntry(item.entry)
+      ? 'fa-comments-o'
+      : isDutyEmployeeEntry(item.entry)
+        ? 'fa-id-badge'
+        : 'fa-thumb-tack',
     'im-pin',
-    { 'im-pin--employee': isDutyEmployeeEntry(item.entry) },
+    {
+      'im-pin--employee': isDutyEmployeeEntry(item.entry),
+      'im-pin--external': isExternalAppEntry(item.entry),
+    },
   ];
 }
 
 function sidebarItemShowsPin(item: ImSidebarListItem): boolean {
-  return item.kind === 'pinned' && !isAdminCustomerServiceConsole.value;
+  return item.kind === 'pinned' && (isExternalAppEntry(item.entry) || !isAdminCustomerServiceConsole.value);
 }
 
 function sidebarItemTitle(item: ImSidebarListItem): string {
@@ -1397,10 +1458,23 @@ function startCodexPolling(requestId = ''): void {
 }
 
 async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
+  if (isExternalAppEntry(entry)) {
+    closeOverlappingAssistantFloat();
+    stopCodexPolling();
+    stopCodexTypewriter(true);
+    activeExternalEntry.value = entry;
+    activeSystemEntry.value = null;
+    activeConversationId.value = null;
+    messages.value = [];
+    hasMoreHistory.value = false;
+    closeContactPicker();
+    return;
+  }
   if (isSuperEmployeeEntry(entry)) {
     closeOverlappingAssistantFloat();
     stopCodexPolling();
     stopCodexTypewriter(true);
+    activeExternalEntry.value = null;
     activeSystemEntry.value = entry;
     activeConversationId.value = null;
     messages.value = [];
@@ -1415,6 +1489,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
     closeOverlappingAssistantFloat();
     stopCodexPolling();
     stopCodexTypewriter(true);
+    activeExternalEntry.value = null;
     activeSystemEntry.value = entry;
     activeConversationId.value = null;
     messages.value = [];
@@ -1428,6 +1503,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
   restoreOverlappingAssistantFloat();
   stopCodexPolling();
   stopCodexTypewriter(true);
+  activeExternalEntry.value = null;
   activeSystemEntry.value = null;
   await startChatWith(entry);
 }
@@ -1687,6 +1763,7 @@ async function selectConversation(id: number): Promise<void> {
   stopCodexPolling();
   stopCodexTypewriter(true);
   dutyEmployeeDraft.value = '';
+  activeExternalEntry.value = null;
   activeSystemEntry.value = null;
   activeConversationId.value = id;
   busy.value = true;
@@ -1998,6 +2075,36 @@ onUnmounted(() => {
   background: #f53f3f;
 }
 
+.im-channel-list {
+  padding: 0 8px 6px;
+}
+.im-channel-entry {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.06);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.im-channel-entry:hover,
+.im-channel-entry.active {
+  border-color: rgba(15, 118, 110, 0.34);
+  background: rgba(15, 118, 110, 0.12);
+}
+.im-channel-entry > .fa {
+  color: #0f766e;
+}
+.im-avatar--channel {
+  background: #dff3ee;
+  color: #0f766e;
+}
+
 .im-conv-list {
   list-style: none;
   margin: 0;
@@ -2045,6 +2152,9 @@ onUnmounted(() => {
 }
 .im-pin--employee {
   color: #86909c;
+}
+.im-pin--external {
+  color: #0f766e;
 }
 .im-conv-main {
   min-width: 0;
@@ -2116,6 +2226,11 @@ onUnmounted(() => {
   border-radius: 10px;
   background: #edf4ff;
   color: #1f6feb;
+}
+.im-avatar--external {
+  border-radius: 10px;
+  background: #e6f6f2;
+  color: #0f766e;
 }
 .im-avatar--sm.im-avatar--employee {
   flex-basis: 30px;

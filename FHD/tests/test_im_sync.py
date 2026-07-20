@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -57,6 +59,27 @@ def _reset_sync_path(monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.delenv("DATABASE_PATH", raising=False)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.setattr("app.db.xcmax_sync._db_path", None)
+
+
+def test_sync_db_archives_incompatible_sidecar_and_recreates(tmp_path):
+    db_path = tmp_path / "mod_dbs" / "xcmax_sync.db"
+    db_path.parent.mkdir(parents=True)
+    incompatible_bytes = b"encrypted-or-incompatible-sync-sidecar"
+    db_path.write_bytes(incompatible_bytes)
+
+    from app.db.xcmax_sync import SyncDb
+
+    SyncDb()
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    assert {"sync_changes", "sync_outbox", "sync_inbox", "sync_meta"} <= tables
+    backups = list(db_path.parent.glob("xcmax_sync.db.incompatible-*.bak"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == incompatible_bytes
 
 
 def test_record_change_on_send_message(im_db, monkeypatch: pytest.MonkeyPatch):

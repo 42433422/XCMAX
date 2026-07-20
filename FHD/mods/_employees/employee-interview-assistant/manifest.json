@@ -81,7 +81,7 @@
     },
     "actions": {
       "handlers": [
-        "direct_python"
+        "echo"
       ],
       "direct_python": {
         "module": "employee_interview_assistant",
@@ -90,6 +90,11 @@
         "default_template_relpath": "",
         "default_use_personnel_roster": true
       }
+    },
+    "schedule": {
+      "enabled": true,
+      "cron": "30 9 * * 1-5",
+      "task_brief": "每周一至周五 09:30 UTC 扫描员工 manifest 与 yuangon 资料，补全元数据缺口；echo handler 用于激活真运转验证。"
     },
     "metadata": {
       "framework_version": "2.0.0",

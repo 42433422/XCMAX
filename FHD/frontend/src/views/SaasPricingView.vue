@@ -115,10 +115,16 @@ async function goBack() {
       <p v-if="loading" class="muted">加载中…</p>
 
       <div v-else class="saas-plan-grid">
-        <article v-for="plan in plans" :key="plan.id" class="saas-plan-card">
+        <article
+          v-for="plan in plans"
+          :key="plan.id"
+          class="saas-plan-card"
+          :class="{ 'saas-plan-card--recommended': plan.recommended }"
+        >
           <div class="saas-plan-head">
             <h2>{{ plan.title }}</h2>
-            <span v-if="plan.badge" class="saas-badge">{{ plan.badge }}</span>
+            <span v-if="plan.recommended" class="saas-badge saas-badge--recommended">按预算推荐</span>
+            <span v-else-if="plan.badge" class="saas-badge">{{ plan.badge }}</span>
           </div>
           <p class="saas-price">
             <span class="saas-price-num">¥{{ formatYuan(plan.amount_cents) }}</span>
@@ -168,6 +174,15 @@ async function goBack() {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 20px;
+}
+
+.saas-plan-card--recommended {
+  border-color: #111827;
+  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
+}
+
+.saas-badge--recommended {
+  background: #2563eb;
 }
 
 .saas-plan-head {

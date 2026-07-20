@@ -30,27 +30,45 @@ elif [[ -d "${_WS_MODSTORE}/modstore_server" ]]; then
 else
   MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${_ARCHIVE_MODSTORE}}"
 fi
-MODSTORE_PORT="${MODSTORE_PORT:-8788}"
+MODSTORE_REQUESTED_ROLE="${MODSTORE_DAILY_ROLE:-api}"
+MODSTORE_REQUESTED_CONTROL_PORT="${MODSTORE_CONTROL_PORT:-8788}"
+MODSTORE_DAILY_ROLE="${MODSTORE_REQUESTED_ROLE}"
+MODSTORE_CONTROL_PORT="${MODSTORE_REQUESTED_CONTROL_PORT}"
+MODSTORE_REQUESTED_PORT="${MODSTORE_PORT:-}"
 MARKET_PORT="${MARKET_PORT:-5176}"
 PY="${FHD_ROOT}/.venv/bin/python"
 
 log() { printf '[daily-local] %s\n' "$*"; }
 fail() { log "ERROR: $*"; exit 1; }
 
+install_python_packages() {
+  if "${PY}" -m pip --version >/dev/null 2>&1; then
+    "${PY}" -m pip install -q "$@"
+    return
+  fi
+  if command -v uv >/dev/null 2>&1; then
+    uv pip install --python "${PY}" -q "$@"
+    return
+  fi
+  fail "Python 依赖缺失且 pip/uv 均不可用: $*"
+}
+
 [[ -d "${MODSTORE_DEPLOY_ROOT}/modstore_server" ]] || fail "MODstore_deploy 未找到: ${MODSTORE_DEPLOY_ROOT}"
 [[ -x "${PY}" ]] || fail "FHD venv 未找到: ${PY}"
 
-if ! "${PY}" -c "import apscheduler" 2>/dev/null; then
-  log "安装 apscheduler（日更 cron 依赖）…"
-  "${PY}" -m pip install -q apscheduler
-fi
-if ! "${PY}" -c "import cursor_sdk" 2>/dev/null; then
-  log "安装 cursor-sdk（vibe-coding-maintainer Cursor 委托改码）…"
-  "${PY}" -m pip install -q cursor-sdk
-fi
-if [[ "${MODSTORE_SELF_EVOLUTION_REDISVL_ENABLED:-1}" != "0" ]] && ! "${PY}" -c "import redisvl" 2>/dev/null; then
-  log "安装 redis/redisvl（self-evolution KB 向量索引）…"
-  "${PY}" -m pip install -q "redis>=5.0" "redisvl>=0.3.0"
+if [[ "${MODSTORE_DAILY_ROLE}" == "scheduler" ]]; then
+  if ! "${PY}" -c "import apscheduler" 2>/dev/null; then
+    log "安装 apscheduler（日更 cron 依赖）…"
+    install_python_packages apscheduler
+  fi
+  if ! "${PY}" -c "import cursor_sdk" 2>/dev/null; then
+    log "安装 cursor-sdk（vibe-coding-maintainer Cursor 委托改码）…"
+    install_python_packages 'cursor-sdk>=0.1.0'
+  fi
+  if [[ "${MODSTORE_SELF_EVOLUTION_REDISVL_ENABLED:-1}" != "0" ]] && ! "${PY}" -c "import redisvl" 2>/dev/null; then
+    log "安装 redis/redisvl（self-evolution KB 向量索引）…"
+    install_python_packages "redis>=5.0" "redisvl>=0.3.0"
+  fi
 fi
 
 export XCMAX_MONOREPO_ROOT="${XCMAX_MONOREPO_ROOT:-${XCMAX_ROOT}}"
@@ -66,14 +84,6 @@ export MODSTORE_DAILY_BRANCH="${MODSTORE_DAILY_BRANCH:-auto/daily}"
 export MODSTORE_CR_GIT_AUTO_PR="${MODSTORE_CR_GIT_AUTO_PR:-1}"
 export MODSTORE_CR_BRANCH_PREFIX="${MODSTORE_CR_BRANCH_PREFIX:-cr}"
 export MODSTORE_BRANCH_CLEANUP_KEEP_DAYS="${MODSTORE_BRANCH_CLEANUP_KEEP_DAYS:-7}"
-export MODSTORE_API_PORT="${MODSTORE_PORT}"
-export XCAGI_MARKET_BASE_URL="http://127.0.0.1:${MODSTORE_PORT}"
-export MODSTORE_LOCAL_AUTOMATION=1
-export MODSTORE_LOCAL_BASE_URL="http://127.0.0.1:${MODSTORE_PORT}"
-export MODSTORE_DIGEST_BASE_URL="http://127.0.0.1:${MODSTORE_PORT}"
-export MODSTORE_ALL_HANDS_BASE_URL="http://127.0.0.1:${MODSTORE_PORT}"
-export MODSTORE_RUN_BACKGROUND_JOBS=1
-
 # 发信：优先 .env.production 的 QQ SMTP（用户已配置）；默认真发，不设 DEBUG
 _load_modstore_env_file() {
   local f="$1"
@@ -178,15 +188,38 @@ if [[ -n "${MODSTORE_DB_PATH:-}" ]]; then
 fi
 export MODSTORE_RUNTIME_STATE_ROOT MODSTORE_RUNTIME_DB_PATH MODSTORE_RUNTIME_DIR MODSTORE_EVENT_OUTBOX_PATH MODSTORE_WEBHOOK_EVENTS_DIR
 export MODSTORE_RUNTIME_CONFIG_ROOT
+# 本地运行时采用与生产相同的双进程拓扑：
+# - api       :8788，只承载 HTTP 控制面；
+# - scheduler :8789，只承载 APScheduler/事件 outbox/订阅任务。
+# 两个进程共享数据库和状态目录，但长任务不能再占死 HTTP 控制面。
+MODSTORE_DAILY_ROLE="${MODSTORE_REQUESTED_ROLE}"
+MODSTORE_CONTROL_PORT="${MODSTORE_REQUESTED_CONTROL_PORT}"
+case "${MODSTORE_DAILY_ROLE}" in
+  api)
+    MODSTORE_PORT="${MODSTORE_REQUESTED_PORT:-${MODSTORE_CONTROL_PORT}}"
+    export MODSTORE_RUN_BACKGROUND_JOBS=0
+    ;;
+  scheduler)
+    MODSTORE_PORT="${MODSTORE_REQUESTED_PORT:-${MODSTORE_SCHEDULER_PORT:-8789}}"
+    export MODSTORE_RUN_BACKGROUND_JOBS=1
+    ;;
+  *)
+    fail "未知 MODSTORE_DAILY_ROLE=${MODSTORE_DAILY_ROLE}（仅支持 api/scheduler）"
+    ;;
+esac
+export MODSTORE_DAILY_ROLE MODSTORE_CONTROL_PORT MODSTORE_PORT
+export MODSTORE_API_PORT="${MODSTORE_CONTROL_PORT}"
+export MODSTORE_LOCAL_AUTOMATION=1
+export MODSTORE_INTERNAL_API_BASE="http://127.0.0.1:${MODSTORE_CONTROL_PORT}"
+export XCAGI_MARKET_BASE_URL="http://127.0.0.1:${MODSTORE_CONTROL_PORT}"
+export MODSTORE_LOCAL_BASE_URL="http://127.0.0.1:${MODSTORE_CONTROL_PORT}"
+export MODSTORE_DIGEST_BASE_URL="http://127.0.0.1:${MODSTORE_CONTROL_PORT}"
+export MODSTORE_ALL_HANDS_BASE_URL="http://127.0.0.1:${MODSTORE_CONTROL_PORT}"
 # 本地无 Redis 时关闭 Streams 双写，避免 incident_bus 刷 Connection refused
 export MODSTORE_EVENT_STREAM_ENABLED="${MODSTORE_EVENT_STREAM_ENABLED:-0}"
 if [[ "${MODSTORE_EVENT_STREAM_ENABLED}" == "0" ]]; then
   unset REDIS_URL REDIS_PORT MODSTORE_REDIS_URL MODSTORE_EVENT_STREAM_URL CACHE_REDIS_URL XCAGI_REDIS_URL MODSTORE_VECTOR_REDIS_URL 2>/dev/null || true
 fi
-export MODSTORE_INTERNAL_API_BASE="${MODSTORE_INTERNAL_API_BASE:-http://127.0.0.1:${MODSTORE_PORT}}"
-export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
-export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
-export MODSTORE_DIGEST_BASE_URL="${MODSTORE_DIGEST_BASE_URL:-http://127.0.0.1:${MODSTORE_PORT}}"
 # 真 SMTP / Cursor 授权（覆盖 .env.production 里的 your-* 占位符）；勿提交 git。
 # launchd cleanroom 会优先加载 env snapshot；snapshot 可能在拉取凭证后过期，
 # 所以这些明确的本地 secret 文件始终作为白名单 overlay 重新加载。
@@ -271,7 +304,7 @@ export MODSTORE_INBOX_POLL_ENABLED="${MODSTORE_INBOX_POLL_ENABLED:-1}"
 export MODSTORE_POST_DEPLOY_SMOKE_ENABLED="${MODSTORE_POST_DEPLOY_SMOKE_ENABLED:-1}"
 export MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED="${MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED:-1}"
 export MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE="${MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE:-${MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE_DEFAULT}}"
-export MODSTORE_DEPLOY_HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:${MODSTORE_PORT}/api/health}"
+export MODSTORE_DEPLOY_HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:${MODSTORE_CONTROL_PORT}/api/health}"
 export MODSTORE_POST_DEPLOY_MARKET_URL="${MODSTORE_POST_DEPLOY_MARKET_URL:-https://xiu-ci.com/market/download}"
 export MODSTORE_LINE_PRIMARY_LINES="${MODSTORE_LINE_PRIMARY_LINES:-P-S}"
 export MODSTORE_LINE_SHADOW_LINES="${MODSTORE_LINE_SHADOW_LINES:-P-W,P-App,S-R}"
@@ -320,7 +353,7 @@ for line in out.splitlines():
 sys.exit(1)
 PY
 }
-if [[ "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
+if [[ "${MODSTORE_DAILY_ROLE}" == "scheduler" && "${MODSTORE_SURFACE_AUDIT_ANDROID}" != "0" ]]; then
   if ! _adb_devices_has_online_target "${ADB_BIN}"; then
     if [[ "${XCAGI_AUTO_START_EMULATOR:-1}" == "1" && -x "${ANDROID_SDK_FOR_DAILY}/emulator/emulator" ]]; then
       log "P-App 截图：无在线模拟器，尝试启动 …"
@@ -377,7 +410,7 @@ if [[ -z "${CURSOR_API_KEY:-}" ]]; then
   log "WARN: CURSOR_API_KEY 未设 → P0/Cursor 委托改码将跳过；写入 FHD/XCAGI/.env.cursor.local"
 fi
 
-log "MODstore 全量日更栈 → http://127.0.0.1:${MODSTORE_PORT}"
+log "MODstore ${MODSTORE_DAILY_ROLE} → http://127.0.0.1:${MODSTORE_PORT}（控制面 :${MODSTORE_CONTROL_PORT}）"
 log "部署根 ${MODSTORE_DEPLOY_ROOT}"
 log "运行时根 ${MODSTORE_RUNTIME_ROOT}"
 log "状态根 ${MODSTORE_RUNTIME_STATE_ROOT}"
@@ -431,13 +464,21 @@ except Exception as exc:
 PY
 fi
 
-if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
-  sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
-  if [[ "${MODSTORE_DAILY_FORCE_RESTART:-0}" != "1" && ( "${sched}" == "True" || "${sched}" == "true" ) ]]; then
-    log "MODstore 已在 :${MODSTORE_PORT} 运行且调度器已开 — 跳过重启（foreground=${MODSTORE_DAILY_FOREGROUND:-0}；改配置后设 MODSTORE_DAILY_FORCE_RESTART=1）"
+if curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
+  sched="$(curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
+  expected_sched="false"
+  [[ "${MODSTORE_DAILY_ROLE}" == "scheduler" ]] && expected_sched="true"
+  scheduler_matches_role="false"
+  if [[ "${expected_sched}" == "true" && ( "${sched}" == "True" || "${sched}" == "true" ) ]]; then
+    scheduler_matches_role="true"
+  elif [[ "${expected_sched}" == "false" && ( "${sched}" == "False" || "${sched}" == "false" ) ]]; then
+    scheduler_matches_role="true"
+  fi
+  if [[ "${MODSTORE_DAILY_FORCE_RESTART:-0}" != "1" && "${scheduler_matches_role}" == "true" ]]; then
+    log "MODstore ${MODSTORE_DAILY_ROLE} 已在 :${MODSTORE_PORT} 运行（scheduler=${sched}）— 跳过重启"
     exit 0
   fi
-  log "检测到 :${MODSTORE_PORT} 需重启为全量日更实例（scheduler=${sched} foreground=${MODSTORE_DAILY_FOREGROUND:-0}）"
+  log "检测到 :${MODSTORE_PORT} 角色不匹配，重启为 ${MODSTORE_DAILY_ROLE}（scheduler=${sched}）"
   pid="$(lsof -ti :${MODSTORE_PORT} 2>/dev/null || true)"
   if [[ -n "${pid}" ]]; then
     kill "${pid}" 2>/dev/null || true
@@ -462,8 +503,8 @@ UV_PID=$!
 disown "${UV_PID}" 2>/dev/null || true
 
 for _ in $(seq 1 45); do
-  if curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
-    sched="$(curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '')"
+  if curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; then
+    sched="$(curl --noproxy '*' -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" | "${PY}" -c "import sys,json; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '')"
     log "MODstore 就绪 pid=${UV_PID} scheduler_running=${sched}"
     log "守护日志 ${DAEMON_LOG_PATH}"
     log "手动触发摘要: curl -X POST http://127.0.0.1:5000/api/xcmax/admin/email/digest-now （需 FHD 管理员会话）"

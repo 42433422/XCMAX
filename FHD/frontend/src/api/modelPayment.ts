@@ -15,6 +15,7 @@ export type ModelPaymentPlan = {
   license_type?: 'trial' | 'permanent' | string;
   expires_behavior?: 'freeze' | string;
   account_tier?: 'normal' | 'pro' | 'max' | 'ultra' | string;
+  recommended?: boolean;
 };
 
 export type ModelPaymentIntegration = {

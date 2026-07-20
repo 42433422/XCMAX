@@ -1,0 +1,160 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  PERSY_KNOWLEDGE_DATASET_ID,
+  knowledgeBaseApi,
+  normalizeKnowledgeDatasetId,
+} from './knowledgeBase'
+
+const mocks = vi.hoisted(() => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+  primeCsrfCookie: vi.fn(),
+}))
+
+vi.mock('./core', () => ({
+  api: mocks.api,
+  primeCsrfCookie: mocks.primeCsrfCookie,
+}))
+
+describe('knowledgeBaseApi', () => {
+  beforeEach(() => {
+    mocks.api.get.mockReset().mockResolvedValue({ success: true })
+    mocks.api.post.mockReset().mockResolvedValue({ success: true })
+    mocks.api.patch.mockReset().mockResolvedValue({ success: true })
+    mocks.api.delete.mockReset().mockResolvedValue({ success: true })
+    mocks.primeCsrfCookie.mockReset().mockResolvedValue(undefined)
+  })
+
+  it('normalizes blank dataset id to Persy default', () => {
+    expect(normalizeKnowledgeDatasetId('')).toBe(PERSY_KNOWLEDGE_DATASET_ID)
+    expect(normalizeKnowledgeDatasetId(' team-docs ')).toBe('team-docs')
+  })
+
+  it('loads default Persy dataset status', async () => {
+    await knowledgeBaseApi.status()
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      `/api/knowledge/v1/datasets/${PERSY_KNOWLEDGE_DATASET_ID}/status`,
+    )
+  })
+
+  it('loads the bounded Persy knowledge graph', async () => {
+    await knowledgeBaseApi.graph('team brain', 999)
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/team%20brain/graph?limit=240',
+    )
+  })
+
+  it('ingests text through dataset document route', async () => {
+    await knowledgeBaseApi.ingestDocument({
+      datasetId: 'persy docs',
+      source: 'policy',
+      text: 'Use citations.',
+      metadata: { scope: 'persy' },
+    })
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy%20docs/documents',
+      {
+        source: 'policy',
+        text: 'Use citations.',
+        document_id: '',
+        tenant_id: '',
+        version: '',
+        version_label: '',
+        chunk_strategy: 'semantic',
+        metadata: { scope: 'persy' },
+      },
+    )
+  })
+
+  it('uploads a document through multipart dataset route', async () => {
+    const file = new File(['policy body'], 'policy.txt', { type: 'text/plain' })
+
+    await knowledgeBaseApi.uploadDocument({
+      datasetId: 'persy-knowledge',
+      source: 'Policy',
+      file,
+    })
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.post).toHaveBeenCalledTimes(1)
+    const [path, form] = mocks.api.post.mock.calls[0]
+    expect(path).toBe('/api/knowledge/v1/datasets/persy-knowledge/documents/upload')
+    expect(form).toBeInstanceOf(FormData)
+    expect((form as FormData).get('file')).toBe(file)
+    expect((form as FormData).get('source')).toBe('Policy')
+    expect((form as FormData).get('chunk_strategy')).toBe('semantic')
+  })
+
+  it('queries dataset with answer and rerank options', async () => {
+    await knowledgeBaseApi.query({
+      datasetId: 'persy-knowledge',
+      query: 'How should Persy answer?',
+      topK: 8,
+      rerank: true,
+    })
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/query',
+      {
+        query: 'How should Persy answer?',
+        top_k: 8,
+        include_answer: true,
+        tenant_id: '',
+        version: '',
+        metadata_filter: {},
+        rerank: true,
+      },
+    )
+  })
+
+  it('loads and queries governed Persy memories', async () => {
+    await knowledgeBaseApi.memories('persy-knowledge', { status: 'pending', limit: 5000 })
+    await knowledgeBaseApi.queryMemories({
+      datasetId: 'persy-knowledge',
+      query: '北辰科技负责人',
+      topK: 30,
+    })
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories?status=pending&limit=1000',
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories/query',
+      { query: '北辰科技负责人', top_k: 20, reinforce: true },
+    )
+  })
+
+  it('mutates memories and deletes documents through CSRF-protected routes', async () => {
+    await knowledgeBaseApi.confirmMemory('persy-knowledge', 'mem / 1')
+    await knowledgeBaseApi.updateMemory('persy-knowledge', 'mem / 1', {
+      key: '客户.负责人',
+    })
+    await knowledgeBaseApi.deleteMemory('persy-knowledge', 'mem / 1', 'outdated')
+    await knowledgeBaseApi.deleteDocument('persy-knowledge', 'doc / 1')
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(4)
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories/mem%20%2F%201/confirm',
+      {},
+    )
+    expect(mocks.api.patch).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories/mem%20%2F%201',
+      { key: '客户.负责人' },
+    )
+    expect(mocks.api.delete).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories/mem%20%2F%201?reason=outdated',
+    )
+    expect(mocks.api.delete).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/documents/doc%20%2F%201',
+    )
+  })
+})

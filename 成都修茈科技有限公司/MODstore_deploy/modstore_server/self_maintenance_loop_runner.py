@@ -23,7 +23,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -750,6 +750,26 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
     if escalated_items:
         return None
 
+    # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
+    # return None to trigger a fresh code step. The employee will see the
+    # previous KB schema errors in loop memory (via _memory_context) and
+    # should produce a corrected branch. Escalated items (retry_count >=
+    # KB_SCHEMA_RETRY_MAX) are skipped so the loop waits for human review.
+    if isinstance(open_items_raw, list):
+        for item in reversed(open_items_raw):
+            if not isinstance(item, dict):
+                continue
+            if item.get("kind") != "kb_schema_retry":
+                continue
+            if item.get("escalated"):
+                continue
+            logger.info(
+                "kb_schema_retry: resuming fresh code step for run_id=%s retry_count=%d",
+                item.get("run_id"),
+                int(item.get("retry_count") or 0),
+            )
+            return None
+
     last_decision = memory.get("last_policy_decision")
     last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
     if last_reason == "review_or_qa_reported_risk":
@@ -1056,6 +1076,7 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
     rows = _read_ledger(limit=300)
     started: Dict[str, Dict[str, Any]] = {}
     terminal: Dict[str, Dict[str, Any]] = {}
+    steps_by_run: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
         run_id = str(row.get("run_id") or "")
         if not run_id:
@@ -1065,8 +1086,13 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
             started[run_id] = row
         elif phase in {"complete", "skip"}:
             terminal[run_id] = row
+        elif phase in {"step", "step_retry"}:
+            steps_by_run.setdefault(run_id, []).append(row)
 
-    stale_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_STALE_RUN_MINUTES", 90)
+    # 默认 180 分钟：3 step × 30 分钟 + 内层重试 + dispatch 延迟的余量。
+    # 旧默认 90 分钟刚好卡在 (wait_timeout_sec=1800 × 3) 边界，加任何 dispatch
+    # 延迟就超时 → abandoned_stale。提到 180 给足余量。
+    stale_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_STALE_RUN_MINUTES", 180)
     cutoff = _utc_now() - timedelta(minutes=stale_minutes)
     reconciled: List[str] = []
     for run_id, start in started.items():
@@ -1075,6 +1101,26 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
         started_at = _parse_iso(start.get("started_at") or start.get("created_at"))
         if started_at is None or started_at > cutoff:
             continue
+
+        # 找该 run 最后一个 step 终态；如果只有 step_retry 没有 phase=step，
+        # 说明某个 step 的内层重试还没收敛就超时了——补一条 step 终态记录，
+        # 让下游查询能看到完整 step 链路。
+        run_steps = steps_by_run.get(run_id) or []
+        last_step_phase = str(run_steps[-1].get("phase") or "") if run_steps else ""
+        if last_step_phase == "step_retry":
+            last_step = run_steps[-1]
+            step_terminal = {
+                "employee_id": last_step.get("employee_id"),
+                "error": "step abandoned during inner retry before stale timeout",
+                "ok": False,
+                "phase": "step",
+                "run_id": run_id,
+                "status": "abandoned_stale",
+                "step": last_step.get("step"),
+                "timestamp": _iso(_utc_now()),
+            }
+            _append_ledger(step_terminal)
+
         final = {
             "completed_at": _iso(_utc_now()),
             "error": "run did not write a terminal record before stale timeout",
@@ -1177,6 +1223,31 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
     return True
 
 
+def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, Any]]:
+    """递归查找 result 里的 delivery_validation dict（Para 远端返回）。
+
+    delivery_validation 不在本地代码产出，由 Para 平台返回时嵌在
+    result.result.outputs[].response / para_result 等任意层级，故需递归。
+    限制深度 6 / 列表前 12 项，避免大对象全遍历。
+    """
+    if depth > 6 or not isinstance(obj, (dict, list)):
+        return None
+    if isinstance(obj, dict):
+        dv = obj.get("delivery_validation")
+        if isinstance(dv, dict):
+            return dv
+        for value in obj.values():
+            found = _find_delivery_validation(value, depth + 1)
+            if found is not None:
+                return found
+    else:
+        for item in obj[:12]:
+            found = _find_delivery_validation(item, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
 def _extract_failure_reason(
     result: Dict[str, Any], para_meta: Optional[Dict[str, Any]] = None
 ) -> str:
@@ -1243,6 +1314,31 @@ def _extract_failure_reason(
         return path_guard_failure
     if inner_outputs_failure:
         return inner_outputs_failure
+
+    # delivery_validation 失败：员工交付了代码（change_delivery.ok=true）但验证命令
+    # （测试/lint）失败。这是 code step 最常见的静默失败来源——_employee_result_ok
+    # 判 False 但其他分支都提不到原因。delivery_validation 由 Para 远端返回，嵌在
+    # result 任意层级，用 _find_delivery_validation 递归定位。
+    dv = _find_delivery_validation(result)
+    if isinstance(dv, dict):
+        cmds = dv.get("commands")
+        if isinstance(cmds, list):
+            failed_cmds = [
+                c for c in cmds if isinstance(c, dict) and c.get("exit_code") not in (0, None)
+            ]
+            if failed_cmds:
+                parts: List[str] = []
+                for c in failed_cmds[:3]:
+                    ec = c.get("exit_code")
+                    cmd = str(c.get("command") or "")[:80]
+                    tail = str(c.get("output_tail") or c.get("output") or "")[:120]
+                    seg = f"exit={ec}"
+                    if cmd:
+                        seg += f" cmd={cmd}"
+                    if tail:
+                        seg += f" tail={tail}"
+                    parts.append(seg)
+                return "delivery_validation_failed: " + " | ".join(parts)[:300]
 
     # para 层错误（走 Para bridge 时）
     if isinstance(para_meta, dict):
@@ -1441,6 +1537,138 @@ def _execute_employee_task_with_retries(
     return result
 
 
+def _run_step_with_inner_retries(
+    *,
+    employee_id: str,
+    step_name: str,
+    task_text: str,
+    extra: Dict[str, Any],
+    user_id: int,
+    run_id: str,
+) -> Tuple[Dict[str, Any], bool, str, Dict[str, Any], str, int, int]:
+    """Run a single step with inner fix-retry (code) or marker-retry (review/qa).
+
+    返回 (result, ok, failure_reason, para_meta, report_excerpt,
+           code_fix_retry_rounds, marker_retry_rounds)。
+
+    内层重试边界：
+    - code step: MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES (默认 2) 额外轮数。
+      失败时把 failure_reason 反馈给员工，强制其重新跑测试/lint 直到通过再交付。
+      攻克 30/37 静默失败：员工代码测试不过 → loop 不再立即终止，而是给员工
+      N 次修代码机会，failure_reason 直接拼进 task_text 让 LLM 看到具体错误。
+    - review/qa step: MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES (默认 1) 额外轮数。
+      dispatch 成功但缺 SELF_MAINTENANCE_*_JSON marker 时，提醒员工按格式
+      重新输出，gate 标准不变。攻克 13 条 waiting_human_strategy 中因 marker
+      缺失而误判的部分。
+
+    每次内层尝试写一条 phase=step_retry 的 ledger 记录（最终结论由调用方写
+    phase=step），保证内层痕迹可观测但不污染 steps 列表。
+    """
+    if step_name == "code":
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
+        retry_kind = "code_fix"
+    else:
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 1) + 1)
+        retry_kind = "marker"
+    marker = STRUCTURED_REVIEW_MARKER if step_name == "review" else STRUCTURED_QA_MARKER
+
+    last_task_text = task_text
+    result: Dict[str, Any] = {}
+    ok = False
+    failure_reason = ""
+    para_meta: Dict[str, Any] = {}
+    report_excerpt = ""
+    code_fix_retry_rounds = 0
+    marker_retry_rounds = 0
+
+    for attempt in range(1, inner_max + 1):
+        input_data = _base_para_input(extra)
+        result = _execute_employee_task_with_retries(
+            employee_id,
+            last_task_text,
+            input_data,
+            user_id=user_id,
+        )
+        ok = _employee_result_ok(result)
+        para_meta = _extract_para_meta(result)
+        report_excerpt = _extract_report_excerpt(result)
+        para_report_excerpt = _fetch_para_task_report_excerpt(
+            para_meta.get("task_id"),
+            para_meta.get("subtask_id"),
+        )
+        if para_report_excerpt:
+            report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
+        failure_reason = "" if ok else _extract_failure_reason(result, para_meta)
+
+        is_final = attempt >= inner_max
+
+        # 决定是否需要内层重试
+        should_retry = False
+        if not ok and not is_final:
+            # code step: dispatch/code 失败 → 反馈原因让员工修代码再交付
+            # review/qa step: dispatch 失败不重试内层（_execute_employee_task_with_retries
+            #                 已重试过瞬态失败），让外层走 _decide_post_loop_policy
+            if retry_kind == "code_fix":
+                should_retry = True
+        elif ok and retry_kind == "marker" and not is_final:
+            # dispatch 成功但 marker 缺失 → 提醒员工按格式重新输出
+            marker_obj = _structured_report_from_step({"report_excerpt": report_excerpt}, marker)
+            if marker_obj is None:
+                should_retry = True
+
+        # 写非最终的 step_retry trace（最终 step 由调用方写）
+        # 只在确实要重试时才写 trace，避免 should_retry=False 时误写一条悬空 step_retry
+        if not is_final and should_retry:
+            trace_record = {
+                "employee_id": employee_id,
+                "error": failure_reason,
+                "inner_attempt": attempt,
+                "ok": ok,
+                "para": para_meta,
+                "phase": "step_retry",
+                "report_excerpt": report_excerpt,
+                "retry_attempts": result.get("self_maintenance_retry_attempts"),
+                "run_id": run_id,
+                "status": "success" if ok else "failed",
+                "step": step_name,
+                "timestamp": _iso(_utc_now()),
+            }
+            _append_ledger(trace_record)
+
+        if not should_retry:
+            break
+
+        if retry_kind == "code_fix":
+            last_task_text = (
+                task_text
+                + f"\n\n=== PREVIOUS ATTEMPT FAILED (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"failure_reason: {failure_reason}\n"
+                + "MANDATORY: Address the failure reason above. Re-run the failing "
+                + "command locally, fix until it passes, then deliver again. Do not "
+                + "report completion unless the previously failing command now exits 0."
+            )
+            code_fix_retry_rounds = attempt
+        else:  # marker
+            last_task_text = (
+                task_text
+                + f"\n\n=== PREVIOUS REPORT MISSING REQUIRED MARKER (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"Your previous report did not include the required JSON marker {marker}. "
+                + f"Re-emit your report with exactly one JSON object after the marker {marker}. "
+                + "Schema and other requirements unchanged."
+            )
+            marker_retry_rounds = attempt
+
+    return (
+        result,
+        ok,
+        failure_reason,
+        para_meta,
+        report_excerpt,
+        code_fix_retry_rounds,
+        marker_retry_rounds,
+    )
+
+
 def _fetch_para_task_report_excerpt(
     task_id: Optional[str], subtask_id: Optional[str], limit: int = 8000
 ) -> str:
@@ -1583,9 +1811,36 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "Only when no historical fix applies may you reason from scratch. "
         "If there is no bug gap, choose one proactive task from performance, coverage, or tech_debt signals. "
         "When you fix a bug, write the symptom/root_cause/fix_diff triad under FHD/XCAGI/kb/fixes; "
-        "every changed fix JSON MUST also contain schema_version=1, kind=fix, and an "
-        "executable_template object with non-empty applicability_check, patch_strategy, "
-        "rollback_plan, and a string-list required_tests. Validate each changed KB JSON with "
+        "every changed fix JSON MUST conform to the EXACT schema below (all fields required, no extras that break validation):\n"
+        "```json\n"
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "kind": "fix",\n'
+        '  "created_at": "2026-07-20T12:00:00+00:00",\n'
+        '  "symptom": "<non-empty string: observed symptom>",\n'
+        '  "root_cause": "<non-empty string: root cause>",\n'
+        '  "fix_diff": "<non-empty string: diff or description>",\n'
+        '  "metadata": {"component": "...", "files": ["..."]},\n'
+        '  "executable_template": {\n'
+        '    "applicability_check": "<non-empty string>",\n'
+        '    "patch_strategy": "<non-empty string>",\n'
+        '    "rollback_plan": "<non-empty string>",\n'
+        '    "required_tests": ["test_a.py", "test_b.py"]\n'
+        "  }\n"
+        "}\n"
+        "```\n"
+        "CRITICAL: executable_template MUST be an object (the executable_template object "
+        "must not be a string, null, or omitted) with non-empty string fields "
+        "applicability_check/patch_strategy/rollback_plan AND a "
+        "string-list required_tests. Common failure: writing fix_diff as a description but "
+        "forgetting executable_template, or setting executable_template to a string. "
+        "MANDATORY PRE-PUSH VALIDATION: Before committing/pushing any KB JSON file, you MUST "
+        'run `python -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
+        "import json; validate_kb_payload('fixes', json.load(open('FHD/XCAGI/kb/fixes/<file>.json')))\"` "
+        "(or 'patterns' for pattern files) and require it to return without raising. If validation "
+        "raises ValueError, FIX the JSON before pushing — the loop will reject KB-schema-invalid "
+        "branches with a `kb-schema-failed` PR label and retry up to 2 times before escalating to "
+        "human review. Validate each changed KB JSON with "
         "self_evolution_knowledge.validate_kb_payload before reporting completion. "
         "when review/QA approves a reusable change, write the pattern under FHD/XCAGI/kb/patterns. "
         "Do not create marker-only/status-only changes as proof of completion. "
@@ -1598,6 +1853,13 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
         "NO_ACTION_REASON explaining why no source change was safe. "
         "Do not edit runtime-only, ignored, .devfleet, or .trae files. "
+        "MANDATORY SELF-VERIFICATION: Before reporting completion, you MUST run the "
+        "relevant tests/lint/type-check commands for the files you changed and paste "
+        "the passing output (exit code 0) in your report. If any command fails, fix "
+        "your changes and retry — do NOT report completion with failing tests. The "
+        "loop will reject your delivery if delivery_validation shows exit_code != 0, "
+        "and you will be given the failure_reason to fix; save everyone a round by "
+        "self-verifying first. "
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
@@ -2076,6 +2338,444 @@ def _validate_kb_json_changes_for_auto_merge(
         "ok": True,
         "reason": "kb_json_schema_valid" if checked else "no_kb_json_changes",
     }
+
+
+KB_SCHEMA_RETRY_MAX = 2
+KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
+NEEDS_HUMAN_LABEL = "needs-human"
+
+
+def _early_kb_validation_for_branch(
+    *,
+    run_id: str,
+    branch: str,
+) -> Dict[str, Any]:
+    """Early KB JSON schema validation for a code-step branch.
+
+    Clones the repo (best-effort), fetches the branch, gets the changed-files
+    list, and runs ``_validate_kb_json_changes_for_auto_merge`` against any KB
+    JSON files in the diff. Returns a dict with::
+
+        {
+          "ok": bool,                           # True if validation passed (or no KB files / clone failed)
+          "reason": str,                        # "kb_json_schema_validation_failed" on failure
+          "kb_validation": {...},               # raw _validate_kb_json_changes_for_auto_merge result
+          "files": [...],                       # changed-files list (empty if clone failed)
+          "workspace": str,                     # workspace path used (for cleanup/debug)
+          "clone_error": str | None,            # set if clone/fetch failed (ok=True, non-blocking)
+        }
+
+    Design: clone failures are non-blocking (return ok=True with clone_error set)
+    so the loop falls back to the existing auto_merge-stage validation. Only
+    actual KB schema validation failures return ok=False.
+    """
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    if not repo_url or not base_branch or not branch:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_skipped_missing_env",
+            "kb_validation": None,
+            "files": [],
+            "workspace": "",
+            "clone_error": None,
+        }
+    workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / f"{run_id}-kb-early"
+    try:
+        files = _changed_files_for_branch(
+            repo_url=repo_url,
+            base_branch=base_branch,
+            branch=branch,
+            workspace=workspace,
+        )
+    except Exception as exc:
+        # Clone/fetch failure is non-blocking: fall back to auto_merge-stage check.
+        logger.warning(
+            "early_kb_validation: clone/fetch failed for branch=%s run_id=%s: %s",
+            branch,
+            run_id,
+            exc,
+        )
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_clone_failed",
+            "kb_validation": None,
+            "files": [],
+            "workspace": str(workspace),
+            "clone_error": str(exc)[:500],
+        }
+    if not files:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_no_changed_files",
+            "kb_validation": None,
+            "files": [],
+            "workspace": str(workspace),
+            "clone_error": None,
+        }
+    # Short-circuit: if no KB JSON files in the diff, skip validation entirely.
+    kb_files = [f for f in files if _kb_json_kind_for_repo_path(f)]
+    if not kb_files:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_no_kb_json_changes",
+            "kb_validation": None,
+            "files": files,
+            "workspace": str(workspace),
+            "clone_error": None,
+        }
+    kb_validation = _validate_kb_json_changes_for_auto_merge(
+        branch=branch,
+        files=files,
+        workspace=workspace,
+    )
+    return {
+        "ok": bool(kb_validation.get("ok")),
+        "reason": str(kb_validation.get("reason") or ""),
+        "kb_validation": kb_validation,
+        "files": files,
+        "workspace": str(workspace),
+        "clone_error": None,
+    }
+
+
+def _find_pr_number_for_branch(branch: str) -> Optional[int]:
+    """Find the open PR number for a branch via `gh pr list --head`.
+
+    Returns None if gh is unavailable, not authenticated, or no open PR exists.
+    Never raises — PR commenting/labeling is best-effort.
+    """
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "open",
+        "--json",
+        "number",
+        "--jq",
+        ".[0].number",
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except Exception as exc:
+        logger.warning("kb_schema_retry: gh pr list failed for branch=%s: %s", branch, exc)
+        return None
+    if proc.returncode != 0:
+        logger.warning(
+            "kb_schema_retry: gh pr list rc=%s for branch=%s stderr=%s",
+            proc.returncode,
+            branch,
+            (proc.stderr or "")[:200],
+        )
+        return None
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _gh_pr_comment(pr_number: int, body: str) -> bool:
+    """Best-effort PR comment via `gh pr comment`. Returns True on success."""
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "comment",
+        str(pr_number),
+        "--body",
+        body,
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+    except Exception as exc:
+        logger.warning("kb_schema_retry: gh pr comment failed pr=%s: %s", pr_number, exc)
+        return False
+    if proc.returncode != 0:
+        logger.warning(
+            "kb_schema_retry: gh pr comment rc=%s pr=%s stderr=%s",
+            proc.returncode,
+            pr_number,
+            (proc.stderr or "")[:200],
+        )
+        return False
+    return True
+
+
+def _gh_pr_add_label(pr_number: int, label: str) -> bool:
+    """Best-effort PR label add via `gh pr edit --add-label`. Returns True on success."""
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "edit",
+        str(pr_number),
+        "--add-label",
+        label,
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+    except Exception as exc:
+        logger.warning(
+            "kb_schema_retry: gh pr edit --add-label %s failed pr=%s: %s",
+            label,
+            pr_number,
+            exc,
+        )
+        return False
+    if proc.returncode != 0:
+        # Most common failure: label doesn't exist in repo yet. Log but don't block.
+        logger.warning(
+            "kb_schema_retry: gh pr edit --add-label %s rc=%s pr=%s stderr=%s",
+            label,
+            proc.returncode,
+            pr_number,
+            (proc.stderr or "")[:200],
+        )
+        return False
+    return True
+
+
+def _existing_kb_schema_retry_item(
+    open_items: List[Dict[str, Any]],
+    *,
+    branch: str,
+    para_task_id: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Find the most recent non-escalated kb_schema_retry open_item.
+
+    Matching priority (first match wins, scanning most-recent first):
+      1. Exact branch match
+      2. Exact para_task_id match
+      3. Any non-escalated kb_schema_retry item within the last 24h
+         (so retry_count escalates even if the employee pushes a new branch
+         on each retry — common when the LLM doesn't reuse branches)
+    """
+    now = _utc_now()
+    fallback_within_24h: Optional[Dict[str, Any]] = None
+    for item in reversed(open_items):
+        if not isinstance(item, dict):
+            continue
+        if item.get("kind") != "kb_schema_retry":
+            continue
+        if item.get("escalated"):
+            continue
+        item_branch = str(item.get("branch") or "").strip()
+        item_task_id = str(item.get("para_task_id") or "").strip()
+        if branch and item_branch == branch:
+            return item
+        if para_task_id and item_task_id == para_task_id:
+            return item
+        # Fallback: track recent retries across different branches so the
+        # employee cannot reset retry_count by creating a new branch each time.
+        created_dt = _parse_iso(item.get("created_at") or item.get("last_attempted_at"))
+        if created_dt and (now - created_dt).total_seconds() <= 24 * 3600:
+            if fallback_within_24h is None:
+                fallback_within_24h = item
+    return fallback_within_24h
+
+
+def _reject_and_retry_kb_schema_failure(
+    *,
+    run_id: str,
+    branch: str,
+    para_task_id: Optional[str],
+    kb_validation: Dict[str, Any],
+    steps: List[Dict[str, Any]],
+    gate: Dict[str, Any],
+    triggered_by: str = "scheduled_self_maintenance",
+    started_at: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Reject KB-schema-invalid branch and retry code step (or escalate to human).
+
+    Called immediately after code step completes when KB JSON schema validation fails.
+    Actions (best-effort, never raises):
+      1. Comment on the PR (find by branch via `gh pr list --head`)
+      2. Add ``kb-schema-failed`` label to the PR
+      3. Write/refresh a ``kb_schema_retry`` open_item in loop memory (retry_count++)
+      4. If retry_count >= KB_SCHEMA_RETRY_MAX: add ``needs-human`` label, mark escalated
+      5. Return a final state dict with policy_decision.action=hold_for_automated_remediation
+
+    Next LOOP iteration sees the ``kb_schema_retry`` open_item and re-runs the code step
+    (see ``_resume_review_qa_candidate``). After KB_SCHEMA_RETRY_MAX retries without
+    resolution, the item is marked escalated so the loop stops retrying and waits for
+    human review.
+    """
+    errors = kb_validation.get("errors") if isinstance(kb_validation, dict) else None
+    if not isinstance(errors, list) or not errors:
+        errors = [{"error": "unknown kb schema validation failure", "file": "", "kind": ""}]
+    error_bullets = "\n".join(
+        f"- file: `{e.get('file') or '?'}` kind: `{e.get('kind') or '?'}` "
+        f"error: {(e.get('error') or '')[:300]}"
+        for e in errors[:8]
+    )
+    checked_files = kb_validation.get("checked") if isinstance(kb_validation, dict) else []
+    checked_str = ", ".join(str(f) for f in checked_files) if checked_files else "(none)"
+
+    # Load loop memory to compute retry_count
+    memory = _load_loop_memory()
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    existing = _existing_kb_schema_retry_item(open_items, branch=branch, para_task_id=para_task_id)
+    if existing is not None:
+        retry_count = int(existing.get("retry_count") or 0) + 1
+    else:
+        retry_count = 1
+    escalated = retry_count >= KB_SCHEMA_RETRY_MAX
+
+    # 1. Find PR by branch
+    pr_number = _find_pr_number_for_branch(branch)
+
+    # 2. Comment on PR with error details
+    comment_body = (
+        f"## KB JSON schema validation failed (attempt {retry_count}/{KB_SCHEMA_RETRY_MAX})\n\n"
+        f"The KB JSON file(s) in this branch failed schema validation. "
+        f"Please fix the schema errors below and re-push.\n\n"
+        f"**Checked files:** {checked_str}\n\n"
+        f"**Errors:**\n{error_bullets}\n\n"
+        f"**Required schema for fix KB** (`FHD/XCAGI/kb/fixes/*.json`):\n"
+        "```json\n"
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "kind": "fix",\n'
+        '  "created_at": "<ISO-8601>",\n'
+        '  "symptom": "<non-empty string>",\n'
+        '  "root_cause": "<non-empty string>",\n'
+        '  "fix_diff": "<non-empty string>",\n'
+        '  "metadata": {},\n'
+        '  "executable_template": {\n'
+        '    "applicability_check": "<non-empty string>",\n'
+        '    "patch_strategy": "<non-empty string>",\n'
+        '    "rollback_plan": "<non-empty string>",\n'
+        '    "required_tests": ["test_a.py"]\n'
+        "  }\n"
+        "}\n"
+        "```\n\n"
+        "Validate before push:\n"
+        "```\n"
+        'python -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
+        "import json; validate_kb_payload('fixes', json.load(open('<file>')))\"\n"
+        "```\n"
+    )
+    if escalated:
+        comment_body += (
+            f"\n\n**Escalated to human review** after {retry_count} retry attempts. "
+            f"Manual fix required. The `needs-human` label has been applied."
+        )
+    if pr_number is not None:
+        _gh_pr_comment(pr_number, comment_body)
+        _gh_pr_add_label(pr_number, KB_SCHEMA_FAILED_LABEL)
+        if escalated:
+            _gh_pr_add_label(pr_number, NEEDS_HUMAN_LABEL)
+    else:
+        logger.warning(
+            "kb_schema_retry: no open PR found for branch=%s; skipping PR comment/label",
+            branch,
+        )
+
+    # 3. Write/refresh kb_schema_retry open_item
+    now = _utc_now()
+    if existing is not None:
+        existing["retry_count"] = retry_count
+        existing["last_attempted_at"] = _iso(now)
+        existing["kb_validation_errors"] = errors[:10]
+        existing["run_id"] = run_id
+        existing["escalated"] = escalated
+        if para_task_id:
+            existing["para_task_id"] = para_task_id
+    else:
+        new_item: Dict[str, Any] = {
+            "branch": branch,
+            "created_at": _iso(now),
+            "escalated": escalated,
+            "kind": "kb_schema_retry",
+            "kb_validation_errors": errors[:10],
+            "last_attempted_at": _iso(now),
+            "para_task_id": para_task_id,
+            "retry_count": retry_count,
+            "run_id": run_id,
+            "steps": ["code"],
+        }
+        open_items.append(new_item)
+    memory["open_items"] = open_items
+    memory["updated_at"] = _iso(now)
+    _write_loop_memory(memory)
+
+    # 4. Governance audit record
+    audit_record = {
+        "action": "kb_schema_retry",
+        "actor": "auto",
+        "branch": branch,
+        "escalated": escalated,
+        "created_at": _iso(now),
+        "kb_validation_errors": errors[:10],
+        "ok": False,
+        "pr_number": pr_number,
+        "reason": "kb_json_schema_validation_failed",
+        "retry_count": retry_count,
+        "run_id": run_id,
+        "source": "self_maintenance_loop_runner",
+        "status": "escalated" if escalated else "retrying",
+    }
+    try:
+        _append_governance_audit(audit_record)
+    except Exception:
+        logger.exception("kb_schema_retry: failed to write governance audit")
+
+    # 5. Build final state
+    final_status = "completed_waiting_human_strategy" if escalated else "failed"
+    policy_decision = {
+        "action": "hold_for_automated_remediation",
+        "active_gates": {
+            "kb_schema_gate": {
+                "ok": False,
+                "blocking": True,
+                "reason": "kb_json_schema_validation_failed",
+                "retry_count": retry_count,
+                "escalated": escalated,
+            }
+        },
+        "governance_gate": audit_record,
+        "kb_validation": kb_validation,
+        "reason": "kb_json_schema_validation_failed",
+        "retry_count": retry_count,
+        "escalated": escalated,
+    }
+    final = {
+        "branch": branch,
+        "completed_at": _iso(now),
+        "failed_step": "code",
+        "kb_schema_retry": True,
+        "para_task_id": para_task_id,
+        "phase": "complete",
+        "policy_decision": policy_decision,
+        "run_id": run_id,
+        "started_at": _iso(started_at) if started_at else _iso(now),
+        "status": final_status,
+        "steps": steps,
+        "triggered_by": triggered_by,
+    }
+    _append_ledger(final)
+    return final
 
 
 def _normalize_repo_path(file_name: str) -> str:
@@ -2885,14 +3585,16 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 select id, email
                 from users
                 where email = 'guest@devfleet.local'
                    or (email like 'guest_%@devfleet.local')
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
-                """).fetchone()
+                """
+            ).fetchone()
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint",
@@ -3652,6 +4354,146 @@ def _decide_post_loop_policy(
     )
 
 
+LOOP_EVICT_MAX_ITEMS = 100
+LOOP_EVICT_STUCK_AGE_SECONDS = 24 * 3600
+LOOP_EVICT_STUCK_RETRY_THRESHOLD = 3
+LOOP_EVICT_AGE_OUT_SECONDS = 7 * 24 * 3600
+
+
+def _evict_loop_memory_items(
+    memory: Dict[str, Any],
+    *,
+    actor: str = "auto",
+    note: str = "",
+    admin_user_id: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Evict stale open_items so the loop can resume fresh runs.
+
+    Rules (checked in order, first match wins):
+      - any item with created_at > 7d  → evict (reason=aged_out_7d)
+      - failed_steps item with created_at > 24h AND retry_count >= 3
+        → evict (reason=stuck_24h_retry_3)
+    Evicted items are appended to memory["evicted_items"] (capped at the last
+    LOOP_EVICT_MAX_ITEMS entries) and a ``loop_evicted`` governance audit
+    record is written so the action is visible in the governance UI.
+    Returns a summary dict; never raises.
+    """
+
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    evicted_items = memory.get("evicted_items")
+    if not isinstance(evicted_items, list):
+        evicted_items = []
+
+    now = _utc_now()
+    kept: List[Dict[str, Any]] = []
+    newly_evicted: List[Dict[str, Any]] = []
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        created_dt = _parse_iso(item.get("created_at"))
+        age_seconds = (now - created_dt).total_seconds() if created_dt else 0.0
+        retry_count = int(item.get("retry_count") or 0)
+        kind = str(item.get("kind") or "")
+
+        evict_reason = ""
+        if age_seconds >= LOOP_EVICT_AGE_OUT_SECONDS:
+            evict_reason = "aged_out_7d"
+        elif (
+            kind == "failed_steps"
+            and age_seconds >= LOOP_EVICT_STUCK_AGE_SECONDS
+            and retry_count >= LOOP_EVICT_STUCK_RETRY_THRESHOLD
+        ):
+            evict_reason = "stuck_24h_retry_3"
+
+        if evict_reason:
+            evicted_entry: Dict[str, Any] = {
+                "actor": actor,
+                "evicted_at": _iso(now),
+                "evict_reason": evict_reason,
+                "original_item": item,
+            }
+            if note:
+                evicted_entry["note"] = str(note)[:1000]
+            if admin_user_id is not None:
+                evicted_entry["admin_user_id"] = admin_user_id
+            newly_evicted.append(evicted_entry)
+        else:
+            kept.append(item)
+
+    memory["open_items"] = kept
+    memory["evicted_items"] = (evicted_items + newly_evicted)[-LOOP_EVICT_MAX_ITEMS:]
+
+    if not newly_evicted:
+        return {
+            "evicted_count": 0,
+            "evicted_items": [],
+            "reasons": {
+                "aged_out_7d": 0,
+                "stuck_24h_retry_3": 0,
+            },
+        }
+
+    reasons = {
+        "aged_out_7d": sum(1 for entry in newly_evicted if entry["evict_reason"] == "aged_out_7d"),
+        "stuck_24h_retry_3": sum(
+            1 for entry in newly_evicted if entry["evict_reason"] == "stuck_24h_retry_3"
+        ),
+    }
+    summary_record = {
+        "action": "loop_evicted",
+        "actor": actor,
+        "admin_user_id": admin_user_id,
+        "created_at": _iso(now),
+        "evicted_count": len(newly_evicted),
+        "evicted_items": newly_evicted,
+        "note": str(note or "")[:1000],
+        "ok": True,
+        "reasons": reasons,
+        "source": "self_maintenance_loop_runner",
+        "status": "evicted",
+    }
+    try:
+        _append_governance_audit(summary_record)
+    except Exception:
+        logger.exception("failed to write loop_evicted governance audit")
+
+    return {
+        "evicted_count": len(newly_evicted),
+        "evicted_items": newly_evicted,
+        "reasons": reasons,
+    }
+
+
+def evict_loop_memory_items(
+    *,
+    actor: str = "manual",
+    note: str = "",
+    admin_user_id: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Manually evict stale loop-memory open_items (veto channel).
+
+    Exposed via POST /api/xcmax/admin/loop/memory/evict for human override when
+    the loop is stuck resuming long-failed runs.
+    """
+
+    memory = _load_loop_memory()
+    result = _evict_loop_memory_items(
+        memory,
+        actor=actor,
+        note=note,
+        admin_user_id=admin_user_id,
+    )
+    memory["updated_at"] = _iso(_utc_now())
+    _write_loop_memory(memory)
+    return {
+        **result,
+        "memory_path": str(loop_memory_path()),
+        "open_items_remaining": len(memory.get("open_items") or []),
+    }
+
+
 def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     memory = _load_loop_memory()
     recent_runs = memory.get("recent_runs")
@@ -3871,8 +4713,18 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         }
     )
 
+    # Auto-evict stale open_items before persistence so long-failed runs do
+    # not get resumed every LOOP iteration (24h + retry_count>=3, or 7d old).
+    try:
+        evict_summary = _evict_loop_memory_items(memory, actor="auto")
+    except Exception:
+        evict_summary = {"evicted_count": 0, "error": "evict_failed"}
+        logger.exception("loop memory auto-evict failed run_id=%s", final.get("run_id"))
+
     memory.update(
         {
+            "evicted_items": memory.get("evicted_items", [])[-LOOP_EVICT_MAX_ITEMS:],
+            "last_evict_summary": evict_summary,
             "last_gate": gate,
             "last_knowledge_record": knowledge_record,
             "last_policy_decision": decision,
@@ -4012,28 +4864,27 @@ def run_self_maintenance_loop(
                     "review_target_para_task_id": para_task_id,
                 }
 
-            input_data = _base_para_input(extra)
-            result = _execute_employee_task_with_retries(
-                employee_id,
-                task_text,
-                input_data,
+            (
+                result,
+                ok,
+                failure_reason,
+                para_meta,
+                report_excerpt,
+                code_fix_retry_rounds,
+                marker_retry_rounds,
+            ) = _run_step_with_inner_retries(
+                employee_id=employee_id,
+                step_name=step_name,
+                task_text=task_text,
+                extra=extra,
                 user_id=user_id,
+                run_id=run_id,
             )
-            ok = _employee_result_ok(result)
-            para_meta = _extract_para_meta(result)
-            report_excerpt = _extract_report_excerpt(result)
-            para_report_excerpt = _fetch_para_task_report_excerpt(
-                para_meta.get("task_id"),
-                para_meta.get("subtask_id"),
-            )
-            if para_report_excerpt:
-                report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
             if para_meta.get("task_id") and para_task_id is None:
                 para_task_id = str(para_meta["task_id"])
             if step_name == "code" and para_meta.get("branch"):
                 code_branch = str(para_meta["branch"])
 
-            failure_reason = "" if ok else _extract_failure_reason(result, para_meta)
             step_record = {
                 "employee_id": employee_id,
                 "error": failure_reason,
@@ -4042,6 +4893,8 @@ def run_self_maintenance_loop(
                 "phase": "step",
                 "report_excerpt": report_excerpt,
                 "retry_attempts": result.get("self_maintenance_retry_attempts"),
+                "code_fix_retry_rounds": code_fix_retry_rounds,
+                "marker_retry_rounds": marker_retry_rounds,
                 "run_id": run_id,
                 "status": "success" if ok else "failed",
                 "step": step_name,
@@ -4077,6 +4930,45 @@ def run_self_maintenance_loop(
                 _append_ledger(final)
                 _update_loop_memory(final, gate)
                 return final
+
+            # Early KB JSON schema validation: right after code step succeeds,
+            # before review/qa. If the employee pushed KB JSON files with schema
+            # errors (e.g., missing/wrong executable_template), reject the branch
+            # immediately and retry the code step (or escalate to human after
+            # KB_SCHEMA_RETRY_MAX attempts). This avoids wasting review/qa cycles
+            # on schema-invalid branches and gives the employee fast feedback.
+            if step_name == "code" and ok and code_branch:
+                try:
+                    early_kb = _early_kb_validation_for_branch(run_id=run_id, branch=code_branch)
+                except Exception:
+                    logger.exception(
+                        "early KB validation crashed for branch=%s run_id=%s; skipping",
+                        code_branch,
+                        run_id,
+                    )
+                    early_kb = {"ok": True, "reason": "early_kb_validation_crashed"}
+                if (
+                    isinstance(early_kb, dict)
+                    and not early_kb.get("ok")
+                    and early_kb.get("reason") == "kb_json_schema_validation_failed"
+                    and isinstance(early_kb.get("kb_validation"), dict)
+                ):
+                    logger.warning(
+                        "early KB schema validation failed for branch=%s run_id=%s; "
+                        "rejecting and retrying code step",
+                        code_branch,
+                        run_id,
+                    )
+                    return _reject_and_retry_kb_schema_failure(
+                        run_id=run_id,
+                        branch=code_branch,
+                        para_task_id=para_task_id,
+                        kb_validation=early_kb["kb_validation"],
+                        steps=steps,
+                        gate=gate,
+                        triggered_by=triggered_by,
+                        started_at=started_at,
+                    )
 
         policy_decision = _decide_post_loop_policy(
             branch=code_branch,

@@ -142,6 +142,22 @@ def test_load_modstore_env_reads_synced_then_local(tmp_path, monkeypatch):
     assert os.environ["MODSTORE_DAILY_DIGEST_ENABLED"] == "1"
 
 
+def test_load_modstore_env_preserves_process_role(tmp_path, monkeypatch):
+    from modstore_server.env_loader import load_modstore_env
+
+    (tmp_path / ".env.production.synced").write_text(
+        "MODSTORE_RUN_BACKGROUND_JOBS=1\nMODSTORE_DAILY_ROLE=scheduler\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_RUN_BACKGROUND_JOBS", "0")
+    monkeypatch.setenv("MODSTORE_DAILY_ROLE", "api")
+
+    load_modstore_env(tmp_path, include_synced=True, include_local=False)
+
+    assert os.environ["MODSTORE_RUN_BACKGROUND_JOBS"] == "0"
+    assert os.environ["MODSTORE_DAILY_ROLE"] == "api"
+
+
 def test_assert_email_outbound_configured_passes_in_debug(monkeypatch):
     from modstore_server import email_service as svc
 

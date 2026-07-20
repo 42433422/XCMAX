@@ -11,9 +11,9 @@ import {
 } from './clientWorkshops'
 
 describe('clientWorkshops', () => {
-  it('seeds eight enabled workshops', () => {
-    expect(CLIENT_WORKSHOPS.length).toBe(8)
-    expect(listClientWorkshops().length).toBe(8)
+  it('seeds seven enabled workshops', () => {
+    expect(CLIENT_WORKSHOPS.length).toBe(7)
+    expect(listClientWorkshops().length).toBe(7)
   })
 
   it('gear workshops use wbGear query on workbench-home', () => {

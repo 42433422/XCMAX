@@ -1,0 +1,111 @@
+# CI SSOT: generated from FHD/.github/workflows/evolution-aggregator.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Evolution Aggregator
+
+# 演化闭环 5 连接点统一入口 — 每周一 05:00 UTC 触发（错开 evolution-orchestrator 的 04:00）：
+#   - schedule: 跑完整 dry-run（默认），只写 ledger 不真实触发
+#   - workflow_dispatch: 手动触发，可选 dry-run=false 真实执行
+#
+# 与 evolution-orchestrator.yml 的关系：
+#   - evolution-orchestrator.yml 是 "signal → issue → PR 合并 → 上架" 直通管道
+#   - evolution-aggregator.yml (本 workflow) 是 5 连接点 dry-run + ledger trace 验证入口
+#   - 两者共享 evolution_decisions.jsonl ledger
+#
+# 接通的 5 个连接点：
+#   1. collect-signals    → signal_detected
+#   2. propose-pack       → proposal_generated
+#   3. open-issue         → issue_opened
+#   4. implement-pack     → implement_succeeded / implement_failed
+#   5. publish-pack       → pack_listed
+#
+# CLI: FHD/scripts/autonomy/evolution_decision_ledger.py
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'  # 每周一 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry-run mode (只写 ledger 不真实触发)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_REPO: ${{ github.repository }}
+      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
+      MODSTORE_REPO_ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || true
+          pip install httpx apscheduler 2>/dev/null || true
+
+      - name: Run evolution aggregator (dry-run)
+        if: ${{ inputs.dry-run != false }}
+        run: |
+          python scripts/autonomy/evolution_decision_ledger.py dry-run
+
+      - name: Run evolution aggregator (real)
+        if: ${{ inputs.dry-run == false }}
+        run: |
+          # 5 连接点逐个执行（实模式）
+          python scripts/autonomy/evolution_decision_ledger.py collect-signals --triggered-by weekly-cron
+          # 其余步骤由 evolution-orchestrator.yml 继续（issue 创建 / 实现 / 上架）
+          # 这里只负责信号采集，避免与 evolution-orchestrator 重复执行
+
+      - name: Ledger summary
+        if: always()
+        run: |
+          echo "=== Evolution ledger summary (last 7d) ==="
+          python scripts/autonomy/evolution_decision_ledger.py summary --since-days 7 || true
+
+      - name: Commit ledger updates
+        if: always()
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # CI 中 ledger 写入到 FHD/evolution_decisions.jsonl（MODSTORE_EVOLUTION_LEDGER_PATH）
+          # 拷贝回 MODstore_deploy 仓内权威位置再提交
+          if [ -f FHD/evolution_decisions.jsonl ]; then
+            cp FHD/evolution_decisions.jsonl \
+              "成都修茈科技有限公司/MODstore_deploy/modstore_server/data/evolution_decisions.jsonl"
+          fi
+          git add "成都修茈科技有限公司/MODstore_deploy/modstore_server/data/evolution_decisions.jsonl" || true
+          git diff --staged --quiet && echo "No ledger changes" || \
+            git commit -m "chore(evolution): append ledger events from aggregator"
+          git push || echo "push skipped (no changes or branch protection)"
+
+      - name: Upload ledger artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evolution-ledger-aggregator
+          path: FHD/evolution_decisions.jsonl
+          if-no-files-found: ignore
