@@ -23,8 +23,12 @@ export function parseTraeStream(output) {
     : typeof lastResult.output === 'string'
       ? lastResult.output
       : '';
+  let error = typeof lastResult.error === 'string' ? lastResult.error.trim() : '';
+  if (!error && lastResult.is_error) {
+    error = resultOutput || `Trae stream result is_error subtype=${lastResult.subtype || 'unknown'}`;
+  }
   return {
-    error: typeof lastResult.error === 'string' ? lastResult.error.trim() : '',
+    error,
     output: resultOutput.trim(),
     subtype: String(lastResult.subtype || ''),
   };
@@ -37,11 +41,13 @@ export function describeTraeFailure(error) {
   const exitCode = Number.isInteger(error?.code) ? error.code : null;
   let summary = structured.error;
   if (!summary && stderr) summary = stderr.split(/\r?\n/).slice(-8).join('\n').trim();
+  if (!summary && error?.message) summary = String(error.message).trim();
   if (!summary) summary = `Trae CLI exited${exitCode === null ? '' : ` with code ${exitCode}`}`;
   summary = summary.slice(0, MAX_SUMMARY_CHARS);
+  const message = asText(error?.message).trim();
   return {
     exitCode,
-    raw: `${structured.error}\n${stderr}`.trim().toLowerCase(),
+    raw: `${structured.error}\n${stderr}\n${message}`.trim().toLowerCase(),
     subtype: structured.subtype,
     summary,
   };
