@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -99,7 +100,10 @@ hiddenimports.extend(
         "app.application.attendance_reference_data",
         "app.application.chat_business_safety",
         "app.services.ai_action_audit_service",
+        "app.services.office_plaintext_generate",
+        "app.services.service_contract_fill",
         "app.services.ocr_service",
+        "socksio",
         "app.runtime_integrity",
     ]
 )
@@ -122,10 +126,13 @@ for module in ["ctranslate2", "av"]:
     except Exception:
         pass
 
-# Official PDF employees must remain usable in the commercial desktop package.
+# Official PDF and Word employees must remain usable in the commercial desktop
+# package. python-docx needs its XML templates at runtime; importing the module
+# alone is insufficient and previously produced a signed app that could not
+# open DOCX files.
 # pypdf and ReportLab are permissively licensed; do not replace them with the
 # AGPL PyMuPDF/fitz runtime unless a separate commercial license is recorded.
-for module in ["pypdf", "reportlab"]:
+for module in ["pypdf", "reportlab", "docx"]:
     try:
         hiddenimports.extend(collect_submodules(module))
     except Exception:
@@ -134,6 +141,18 @@ for module in ["pypdf", "reportlab"]:
         datas.extend(collect_data_files(module, include_py_files=False))
     except Exception:
         pass
+# python-docx resolves its default XML templates from ``docx.parts.__file__``.
+# PyInstaller normally keeps those modules only inside PYZ, so the synthetic
+# ``_internal/docx/parts`` directory does not exist even though
+# ``_internal/docx/templates`` does. Preserve the package marker as data so
+# every ``parts/../templates/*.xml`` lookup can traverse a real directory.
+_docx_spec = importlib.util.find_spec("docx")
+if _docx_spec and _docx_spec.submodule_search_locations:
+    _docx_parts_init = (
+        Path(next(iter(_docx_spec.submodule_search_locations))) / "parts" / "__init__.py"
+    )
+    if _docx_parts_init.is_file():
+        datas.append((str(_docx_parts_init), "docx/parts"))
 # de-dupe while preserving order
 _seen = set()
 _deduped = []

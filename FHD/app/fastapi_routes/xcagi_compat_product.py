@@ -346,6 +346,7 @@ def _products_price_list_word_response(
 ) -> Response:
     from app.infrastructure.documents.price_list_export import (
         build_price_list_docx_bytes,
+        ensure_builtin_price_list_template,
         resolve_price_list_docx_template,
     )
     from app.shell.mod_business_scope import business_data_exposed, business_data_hidden_reason
@@ -356,6 +357,9 @@ def _products_price_list_word_response(
             detail=business_data_hidden_reason() or "扩展 Mod 未就绪，无法导出价格表。",
         )
     tpl_path, tpl_rel = resolve_price_list_docx_template(template_slug)
+    if not tpl_path.is_file():
+        tpl_path = ensure_builtin_price_list_template()
+        tpl_rel = "内置默认模板"
     if not tpl_path.is_file():
         raise HTTPException(
             status_code=404,

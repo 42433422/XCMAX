@@ -286,6 +286,11 @@ def get_vector_store() -> VectorStorePort:
     use_sqlite_fallback = (
         os.environ.get("ENABLE_SQLITE_VECTOR_FALLBACK", "0") or "0"
     ).strip() == "1"
+    configured_url = (
+        os.environ.get("VECTOR_DB_URL") or os.environ.get("DATABASE_URL") or ""
+    ).strip()
+    if configured_url.lower().startswith("sqlite"):
+        use_sqlite_fallback = True
     if use_sqlite_fallback:
         _vector_store_instance = get_sqlite_vector_store()
     else:

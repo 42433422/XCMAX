@@ -116,6 +116,31 @@ class SQLAlchemyExtractLogStore(ExtractLogStorePort):
             logger.error("创建提取日志失败：%s", e)
             return {"success": False, "message": f"创建失败：{str(e)}"}
 
+    def update(self, log_id: int, fields: dict[str, Any]) -> dict[str, Any]:
+        allowed = {
+            "status",
+            "valid_rows",
+            "imported_rows",
+            "skipped_rows",
+            "failed_rows",
+            "error_message",
+        }
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if not updates:
+            return {"success": True}
+        try:
+            assignments = ", ".join(f"{key} = :{key}" for key in updates)
+            with get_db() as db:
+                db.execute(
+                    text(f"UPDATE extract_logs SET {assignments} WHERE id = :log_id"),
+                    {"log_id": log_id, **updates},
+                )
+                db.commit()
+            return {"success": True}
+        except RECOVERABLE_ERRORS as e:
+            logger.error("更新提取日志失败：%s", e)
+            return {"success": False, "message": f"更新失败：{str(e)}"}
+
     def delete(self, log_id: int) -> dict[str, Any]:
         try:
             with get_db() as db:

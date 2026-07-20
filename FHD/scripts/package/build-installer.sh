@@ -104,7 +104,13 @@ build_one_sku() {
   export XCAGI_BUILD_SHA="${build_sha}"
   "${PYTHON:-python3}" scripts/package/generate-desktop-resources.py
 
-  (cd desktop && [ -d node_modules ] || npm install)
+  # Release packaging must never inherit an incomplete or cross-worktree node_modules
+  # tree. electron-builder only reports collector problems as warnings and can
+  # otherwise produce a signed app whose updater imports fail before bootstrap.
+  if [ "${SKIP_DESKTOP_INSTALL:-0}" != "1" ]; then
+    (cd desktop && npm ci)
+  fi
+  (cd desktop && npm ls --omit=dev)
   # Finder/provenance xattrs can survive npm's Electron extraction and make
   # codesign reject helper binaries as containing resource-fork detritus.
   if command -v xattr >/dev/null 2>&1; then

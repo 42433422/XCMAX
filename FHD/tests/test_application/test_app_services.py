@@ -187,6 +187,27 @@ class TestExtractLogApplicationService:
         assert result["success"] is True
         assert result["log_id"] == 1
 
+    def test_excel_route_compatibility_methods(self):
+        mock_store = Mock()
+        mock_store.create.return_value = {"success": True, "log_id": 7}
+        mock_store.update.return_value = {"success": True}
+        mock_store.find_by_id.return_value = {"id": 7, "status": "completed"}
+        mock_store.find_all.return_value = {
+            "success": True,
+            "data": [
+                {"id": 7, "data_type": "products", "status": "completed"},
+                {"id": 8, "data_type": "customers", "status": "pending"},
+            ],
+        }
+        service = ExtractLogApplicationService(store=mock_store)
+
+        assert service.create_log("items.xlsx", "products", total_rows=2) == 7
+        assert service.update_log(7, "completed", imported_rows=2) is True
+        assert service.get_log(7) == {"id": 7, "status": "completed"}
+        assert service.get_logs(data_type="products", status="completed") == [
+            {"id": 7, "data_type": "products", "status": "completed"}
+        ]
+
     def test_delete_extract_log(self):
         """测试删除提取日志"""
         mock_store = Mock()

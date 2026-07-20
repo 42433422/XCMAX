@@ -39,6 +39,49 @@ class ExtractLogApplicationService:
     def create_extract_log(self, log_data: dict[str, Any]) -> dict[str, Any]:
         return self._store.create(log_data)
 
+    # Compatibility API used by the Excel import routes.  Keep it here so the
+    # route layer does not depend on the legacy services package.
+    def create_log(
+        self,
+        file_name: str,
+        data_type: str,
+        file_path: str | None = None,
+        total_rows: int = 0,
+        field_mapping: dict | None = None,
+    ) -> int:
+        result = self.create_extract_log(
+            {
+                "file_name": file_name,
+                "file_path": file_path,
+                "data_type": data_type,
+                "total_rows": total_rows,
+                "field_mapping": field_mapping,
+            }
+        )
+        return int(result.get("log_id") or -1)
+
+    def update_log(self, log_id: int, status: str, **fields: Any) -> bool:
+        result = self._store.update(log_id, {"status": status, **fields})
+        return bool(result.get("success"))
+
+    def get_log(self, log_id: int) -> dict[str, Any] | None:
+        return self._store.find_by_id(log_id)
+
+    def get_logs(
+        self,
+        data_type: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        result = self._store.find_all(page=1, per_page=max(offset + limit, 1))
+        rows = list(result.get("data") or [])
+        if data_type:
+            rows = [row for row in rows if row.get("data_type") == data_type]
+        if status:
+            rows = [row for row in rows if row.get("status") == status]
+        return rows[offset : offset + limit]
+
     def delete_extract_log(self, log_id: int) -> dict[str, Any]:
         return self._store.delete(log_id)
 

@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, File, Query, UploadFile
+from fastapi import Body, File, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 
@@ -343,8 +343,8 @@ def get_templates_list():
 
 
 def list_templates_by_type(
-    type: str = Query(default="发货单"),
-    active_only: str = Query(default="true"),
+    type: str = "发货单",
+    active_only: str = "true",
 ):
     try:
         from app.application import get_template_app_service
@@ -360,7 +360,7 @@ def list_templates_by_type(
         return JSONResponse({"success": False, "message": f"获取失败：{str(e)}"}, status_code=500)
 
 
-def get_default_template(type: str = Query(default="发货单")):
+def get_default_template(type: str = "发货单"):
     try:
         from app.application import get_template_app_service
 

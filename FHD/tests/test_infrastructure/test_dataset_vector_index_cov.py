@@ -64,6 +64,12 @@ def sqlite_index(tmp_path):
     return DatasetVectorSQLiteIndex(db_path)
 
 
+def test_sqlite_index_creates_missing_parent_directory(tmp_path):
+    db_path = tmp_path / "nested" / "dataset" / "vectors.db"
+    backend = DatasetVectorSQLiteIndex(db_path)
+    assert Path(backend.db_path).is_file()
+
+
 # ---------------------------------------------------------------------------
 # _load_json_object
 # ---------------------------------------------------------------------------

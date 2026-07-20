@@ -555,6 +555,10 @@ class TestProductsPriceListExport:
                 "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
                 return_value=(Path("/nonexistent/template.docx"), "template.docx"),
             ),
+            patch(
+                "app.infrastructure.documents.price_list_export.ensure_builtin_price_list_template",
+                return_value=Path("/nonexistent/builtin.docx"),
+            ),
         ):
             r = client.get("/products/price-list-export")
             assert r.status_code == 404

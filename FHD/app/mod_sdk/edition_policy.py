@@ -195,7 +195,14 @@ def seed_edition_mods_from_bundle(
     *,
     mods_root: str | Path | None = None,
 ) -> list[dict[str, str]]:
-    """将内置 Mod 目录复制到用户 mods 目录（已存在则跳过）。"""
+    """将发行版内置 Mod 同步到用户 mods 目录。
+
+    Host facade mods are executable application code, so an installed copy
+    must not remain older than the signed bundle after an app upgrade. Overlay
+    those managed mod directories on every desktop start while preserving
+    extra user files. Independently installed employee packs keep their
+    existing seed-only behavior.
+    """
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     bundle = bundled_mods_dir()
@@ -210,9 +217,6 @@ def seed_edition_mods_from_bundle(
 
     for mod_id in edition_mod_ids(edition):
         dst = root / mod_id
-        if dst.is_dir():
-            results.append({"mod_id": mod_id, "status": "skipped", "message": "already present"})
-            continue
         src = _resolve_mod_seed_source(mod_id, bundle)
         if src is None:
             results.append(
@@ -224,8 +228,13 @@ def seed_edition_mods_from_bundle(
             )
             continue
         try:
-            shutil.copytree(src, dst)
-            results.append({"mod_id": mod_id, "status": "seeded", "message": str(dst)})
+            if dst.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+                status = "updated"
+            else:
+                shutil.copytree(src, dst)
+                status = "seeded"
+            results.append({"mod_id": mod_id, "status": status, "message": str(dst)})
         except OSError as exc:
             results.append({"mod_id": mod_id, "status": "error", "message": str(exc)})
 

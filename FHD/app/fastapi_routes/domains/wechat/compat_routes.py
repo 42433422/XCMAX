@@ -374,8 +374,8 @@ def wechat_contacts_decrypt_status_compat() -> dict:
 
 @router.get("/wechat_contacts/search")
 def wechat_contacts_search_compat(
-    q: str = Query("", description="搜索关键字"),
-    keyword: str = Query("", description="与 q 等价"),
+    q: str = "",
+    keyword: str = "",
 ) -> dict:
     term = (q or keyword or "").strip().lower()
     if not term:

@@ -623,6 +623,10 @@ class TestProductsPriceListExport:
                 "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
                 return_value=(MagicMock(is_file=lambda: False), "missing.docx"),
             ),
+            patch(
+                "app.infrastructure.documents.price_list_export.ensure_builtin_price_list_template",
+                return_value=MagicMock(is_file=lambda: False),
+            ),
         ):
             r = client_compat.get("/products/price-list-export")
             assert r.status_code == 404

@@ -173,11 +173,12 @@ class TestInitWechatTasksTable:
         import sqlite3
 
         conn = sqlite3.connect(db_path)
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='wechat_tasks'"
-        ).fetchall()
+        tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
         conn.close()
-        assert len(tables) == 1
+        assert {"wechat_contacts", "wechat_contact_context", "wechat_tasks"} <= tables
 
 
 # ---------------------------------------------------------------------------

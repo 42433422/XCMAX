@@ -146,17 +146,45 @@ def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False)) or hasattr(sys, "_MEIPASS")
 
 
+def _install_office_employee_runtime_compat() -> None:
+    """Keep released Office employee packs usable without the MODstore server."""
+
+    if not _is_frozen():
+        return
+    _ensure_sys_path()
+    from app.services.office_plaintext_generate import install_modstore_office_compat_alias
+
+    install_modstore_office_compat_alias()
+
+
 def _verify_frozen_critical_runtime() -> None:
     """Exercise critical office and voice dependencies in the frozen executable."""
     import tempfile
 
     import av
     import faster_whisper
+    from docx import Document
+    from docx.parts.comments import CommentsPart
+    from docx.parts.hdrftr import FooterPart, HeaderPart
+    from docx.parts.settings import SettingsPart
+    from docx.parts.styles import StylesPart
     from pypdf import PdfReader
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
     from reportlab.pdfgen import canvas
+
+    if _is_frozen():
+        _install_office_employee_runtime_compat()
+        from modstore_server.office_plaintext_generate import build_word_spec_from_text
+    else:
+        from app.services.office_plaintext_generate import build_word_spec_from_text
+
+    office_spec = build_word_spec_from_text("XCAGI Office employee runtime probe")
+    if office_spec.get("paragraphs", [{}])[0].get("text") != (
+        "XCAGI Office employee runtime probe"
+    ):
+        raise RuntimeError("frozen Office employee compatibility probe returned invalid data")
 
     with tempfile.TemporaryDirectory(prefix="xcagi-office-probe-") as tmp:
         output = Path(tmp) / "probe.pdf"
@@ -172,6 +200,26 @@ def _verify_frozen_critical_runtime() -> None:
         reader = PdfReader(str(output))
         if len(reader.pages) != 1 or output.stat().st_size < 512:
             raise RuntimeError("frozen PDF runtime probe produced an invalid document")
+
+        docx_output = Path(tmp) / "probe.docx"
+        document = Document()
+        document.add_paragraph("XCAGI Word runtime probe")
+        document.save(docx_output)
+        reopened = Document(docx_output)
+        if not reopened.paragraphs or reopened.paragraphs[0].text != "XCAGI Word runtime probe":
+            raise RuntimeError("frozen Word runtime probe produced an invalid document")
+        # Exercise the templates resolved relative to ``docx.parts.__file__``.
+        # This catches the frozen-only case where the XML files are bundled but
+        # the intermediate physical ``docx/parts`` directory is absent.
+        docx_default_templates = (
+            StylesPart._default_styles_xml(),
+            SettingsPart._default_settings_xml(),
+            CommentsPart._default_comments_xml(),
+            HeaderPart._default_header_xml(),
+            FooterPart._default_footer_xml(),
+        )
+        if not all(blob.strip().startswith(b"<?xml") for blob in docx_default_templates):
+            raise RuntimeError("frozen python-docx default template probe returned invalid XML")
 
         if _is_frozen():
             from app.desktop_runtime.paths import configure_desktop_environment
@@ -198,7 +246,8 @@ def _verify_frozen_critical_runtime() -> None:
                 )
     print(
         "[run_fastapi] frozen critical runtime probe OK: "
-        f"pypdf + reportlab + PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
+        "Office employee compat + python-docx + pypdf + reportlab + "
+        f"PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
     )
 
 
@@ -251,6 +300,8 @@ def _resolve_reload(desktop: bool) -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+
+    _install_office_employee_runtime_compat()
 
     if args.verify_frozen_critical_runtime:
         _verify_frozen_critical_runtime()

@@ -19,6 +19,7 @@ from app.infrastructure.documents.sales_contract_excel import (
 from app.infrastructure.documents.template_registry import (
     resolve_template_path_with_meta,
 )
+from app.utils.path_utils import get_app_data_dir
 
 
 def build_sales_contract_template_preview_json(slug: str | None = None) -> dict:
@@ -31,6 +32,29 @@ def build_sales_contract_template_preview_json(slug: str | None = None) -> dict:
 def resolve_price_list_docx_template(slug: str | None = None):
     path, rel = resolve_template_path_with_meta(role="price_list_docx", slug=slug)
     return path, rel
+
+
+def ensure_builtin_price_list_template() -> Path:
+    """Create a usable default price-list template in writable app data."""
+    target = Path(get_app_data_dir()) / "document_templates" / "price_list_default.docx"
+    if target.is_file():
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = Document()
+    title = doc.add_heading("产品价格表", level=1)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph("客户：{{客户}}")
+    doc.add_paragraph("报价日期：{{报价日期}}")
+    table = doc.add_table(rows=2, cols=4)
+    table.style = "Table Grid"
+    for cell, text in zip(table.rows[0].cells, ("型号", "名称", "规格", "单价")):
+        cell.text = text
+    doc.save(str(target))
+    return target
 
 
 def build_price_list_template_preview_json(slug: str | None = None) -> dict:
@@ -586,6 +610,7 @@ def build_price_list_docx_bytes(
 __all__ = [
     "build_sales_contract_template_preview_json",
     "resolve_price_list_docx_template",
+    "ensure_builtin_price_list_template",
     "build_price_list_template_preview_json",
     "build_price_list_docx_bytes",
 ]

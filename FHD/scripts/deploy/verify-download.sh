@@ -37,6 +37,7 @@ CURL_RETRY_ARGS=(
   --retry-delay 2
   --connect-timeout 15
 )
+CURL_PROXY_BYPASS_ARGS=(--noproxy "localhost,127.0.0.1,::1")
 
 if [ ! -f "$MANIFEST" ]; then
   echo "::error::manifest not found: $MANIFEST" >&2
@@ -156,7 +157,7 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
 
   # 1. HTTP HEAD check
   if ! http_code=$(curl -sSIL -o /dev/null -w '%{http_code}' \
-    "${CURL_RETRY_ARGS[@]}" --max-time 30 "$url"); then
+    "${CURL_RETRY_ARGS[@]}" "${CURL_PROXY_BYPASS_ARGS[@]}" --max-time 30 "$url"); then
     http_code="000"
   fi
   if [ "$http_code" != "200" ]; then
@@ -167,7 +168,7 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
   echo "  OK HTTP 200"
 
   # 2. Content-Length check (HEAD may not always return it, so tolerate absence)
-  headers=$(curl -sSIL "${CURL_RETRY_ARGS[@]}" --max-time 30 "$url" || true)
+  headers=$(curl -sSIL "${CURL_RETRY_ARGS[@]}" "${CURL_PROXY_BYPASS_ARGS[@]}" --max-time 30 "$url" || true)
   content_length=$(printf '%s\n' "$headers" | grep -i '^content-length:' | tail -1 | tr -d '\r' | awk '{print $2}')
   if [ -n "$content_length" ] && [ "$content_length" != "$size" ]; then
     echo "  ::error::Content-Length mismatch: got $content_length, expected $size"
@@ -202,7 +203,7 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
 
   tmp_file=$(mktemp)
   trap 'rm -f "$tmp_file"' EXIT
-  if ! curl -fsSL "${CURL_RETRY_ARGS[@]}" --max-time 600 -o "$tmp_file" "$url"; then
+  if ! curl -fsSL "${CURL_RETRY_ARGS[@]}" "${CURL_PROXY_BYPASS_ARGS[@]}" --max-time 600 -o "$tmp_file" "$url"; then
     echo "  ::error::Download failed"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     rm -f "$tmp_file"

@@ -645,6 +645,7 @@ class TestVectorStoreFactoryBranches:
 
     def test_get_vector_store_sqlite_fallback_disabled(self, monkeypatch):
         monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "0")
+        monkeypatch.setenv("VECTOR_DB_URL", "postgresql://localhost/db")
         mock_pg = MagicMock()
         with (
             patch.object(evas_mod, "_vector_store_instance", None),
@@ -653,9 +654,21 @@ class TestVectorStoreFactoryBranches:
             result = get_vector_store()
         assert result is mock_pg
 
+    def test_get_vector_store_uses_sqlite_for_desktop_database_url(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "0")
+        monkeypatch.setenv("VECTOR_DB_URL", "sqlite:////tmp/xcagi.db")
+        mock_sqlite = MagicMock()
+        with (
+            patch.object(evas_mod, "_vector_store_instance", None),
+            patch.object(evas_mod, "get_sqlite_vector_store", return_value=mock_sqlite),
+        ):
+            result = get_vector_store()
+        assert result is mock_sqlite
+
     def test_get_vector_store_sqlite_fallback_empty_string(self, monkeypatch):
         # Empty string -> treated as "0" -> pg path
         monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "")
+        monkeypatch.setenv("VECTOR_DB_URL", "postgresql://localhost/db")
         mock_pg = MagicMock()
         with (
             patch.object(evas_mod, "_vector_store_instance", None),

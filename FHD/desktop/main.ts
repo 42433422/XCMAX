@@ -40,6 +40,7 @@ import { clampWindowBounds, readWindowState, writeWindowState } from './window-s
 
 const APP_NAME = 'XCAGI'
 const POST_UPDATE_STABILITY_MS = 5_000
+const OTA_PROXY_APPLY_TIMEOUT_MS = 2_500
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
 export const OTA_PROXY_BYPASS_RULES =
@@ -92,6 +93,13 @@ function FindProxyForURL(url, host) {
   return 'PROXY ${proxy}; DIRECT';
 }
 `.trim()
+}
+
+export function buildOtaPacScriptUrl(proxyServer: string): string {
+  return `data:application/x-ns-proxy-autoconfig;base64,${Buffer.from(
+    buildOtaPacScript(proxyServer),
+    'utf8',
+  ).toString('base64')}`
 }
 
 export function parseProxyEndpoint(proxyServer: string): { host: string; port: number } | null {
@@ -156,7 +164,36 @@ export function resolveSystemProxyBypassMode(): 'direct' | 'pac' | 'system' {
   return systemProxyBypassMode
 }
 
-export async function applyOtaProxyBypass(): Promise<void> {
+export async function applySessionProxyWithTimeout(
+  config: Parameters<typeof session.defaultSession.setProxy>[0],
+  timeoutMs = OTA_PROXY_APPLY_TIMEOUT_MS,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    await Promise.race([
+      session.defaultSession.setProxy(config),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Electron setProxy timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        )
+      }),
+    ])
+    return true
+  } catch (error) {
+    // 代理配置绝不能阻塞桌面主窗口和本地后端启动；命令行绕过规则仍会保护本地地址。
+    console.warn('[xcagi-desktop] applying OTA proxy bypass failed; continuing startup', error)
+    return false
+  } finally {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+}
+
+export async function applyOtaProxyBypass(
+  timeoutMs = OTA_PROXY_APPLY_TIMEOUT_MS,
+): Promise<void> {
   const proxyServer =
     readWindowsInternetProxy() ||
     String(process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim() ||
@@ -165,20 +202,27 @@ export async function applyOtaProxyBypass(): Promise<void> {
     const reachable = await isProxyEndpointReachable(proxyServer)
     if (!reachable) {
       systemProxyBypassMode = 'direct'
-      await session.defaultSession.setProxy({ mode: 'direct' })
+      await applySessionProxyWithTimeout({ mode: 'direct' }, timeoutMs)
       return
     }
     systemProxyBypassMode = 'pac'
-    await session.defaultSession.setProxy({
-      pacScript: buildOtaPacScript(proxyServer),
-    })
+    await applySessionProxyWithTimeout(
+      {
+        mode: 'pac_script',
+        pacScript: buildOtaPacScriptUrl(proxyServer),
+      },
+      timeoutMs,
+    )
     return
   }
   systemProxyBypassMode = 'system'
-  await session.defaultSession.setProxy({
-    mode: 'system',
-    proxyBypassRules: OTA_PROXY_BYPASS_RULES,
-  })
+  await applySessionProxyWithTimeout(
+    {
+      mode: 'system',
+      proxyBypassRules: OTA_PROXY_BYPASS_RULES,
+    },
+    timeoutMs,
+  )
 }
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
@@ -346,6 +390,25 @@ export function backendEditionEnv(): Record<string, string> {
     env.XCAGI_GENERIC_EDITION = '1'
   }
   return env
+}
+
+const DESKTOP_LOOPBACK_PROXY_BYPASS = ['localhost', '127.0.0.1', '::1']
+
+export function desktopNoProxyEnv(
+  env: NodeJS.ProcessEnv = process.env
+): Record<'NO_PROXY' | 'no_proxy', string> {
+  const existing = String(env.NO_PROXY || env.no_proxy || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+  const normalized = new Set(existing.map(value => value.toLowerCase()))
+  for (const host of DESKTOP_LOOPBACK_PROXY_BYPASS) {
+    if (!normalized.has(host.toLowerCase())) {
+      existing.push(host)
+    }
+  }
+  const value = existing.join(',')
+  return { NO_PROXY: value, no_proxy: value }
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -788,6 +851,7 @@ async function startBackend(): Promise<void> {
     cwd: executable.cwd,
     env: {
       ...process.env,
+      ...desktopNoProxyEnv(),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
@@ -865,6 +929,7 @@ function runBackendMigration(): Promise<string> {
       cwd: executable.cwd,
       env: {
         ...process.env,
+        ...desktopNoProxyEnv(),
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
         XCAGI_UVICORN_RELOAD: '0',

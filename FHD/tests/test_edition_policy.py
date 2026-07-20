@@ -73,7 +73,7 @@ def test_configure_edition_defaults_desktop(monkeypatch):
     assert resolve_edition() == "generic"
 
 
-def test_seed_skips_existing(tmp_path, monkeypatch):
+def test_seed_updates_existing_managed_mod(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle"
     mods = bundle / "xcagi-planner-bridge"
     mods.mkdir(parents=True)
@@ -82,7 +82,9 @@ def test_seed_skips_existing(tmp_path, monkeypatch):
     )
     target = tmp_path / "user-mods"
     target.mkdir()
-    (target / "xcagi-planner-bridge").mkdir()
+    installed = target / "xcagi-planner-bridge"
+    installed.mkdir()
+    (installed / "manifest.json").write_text('{"stale":true}', encoding="utf-8")
     monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(bundle))
     from app.infrastructure.mods.mod_manager import ModManager
 
@@ -93,7 +95,10 @@ def test_seed_skips_existing(tmp_path, monkeypatch):
     )
     out = seed_edition_mods_from_bundle("minimal")
     row = next(r for r in out if r["mod_id"] == "xcagi-planner-bridge")
-    assert row["status"] == "skipped"
+    assert row["status"] == "updated"
+    assert (installed / "manifest.json").read_text(encoding="utf-8") == (
+        '{"id":"xcagi-planner-bridge","name":"p"}'
+    )
 
 
 def test_seed_copies_bundled_employee_packs_without_overwriting_existing(tmp_path, monkeypatch):

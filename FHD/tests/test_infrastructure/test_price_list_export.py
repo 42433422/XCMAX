@@ -26,6 +26,7 @@ from app.infrastructure.documents.price_list_export import (
     build_price_list_docx_bytes,
     build_price_list_template_preview_json,
     build_sales_contract_template_preview_json,
+    ensure_builtin_price_list_template,
     resolve_price_list_docx_template,
 )
 
@@ -233,6 +234,17 @@ class TestResolvePriceListDocxTemplate:
             path, rel = resolve_price_list_docx_template()
         assert str(path) == "/tmp/t.docx"
         assert rel == "t.docx"
+
+
+def test_ensure_builtin_price_list_template(tmp_path):
+    with patch(
+        "app.infrastructure.documents.price_list_export.get_app_data_dir",
+        return_value=str(tmp_path),
+    ):
+        path = ensure_builtin_price_list_template()
+        assert path.is_file()
+        assert path.read_bytes().startswith(b"PK")
+        assert ensure_builtin_price_list_template() == path
 
 
 # ---------------------------------------------------------------------------

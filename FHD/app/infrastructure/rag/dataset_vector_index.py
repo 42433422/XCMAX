@@ -51,6 +51,7 @@ class DatasetVectorSQLiteIndex:
 
     def __init__(self, db_path: str | Path) -> None:
         self._db_path = str(Path(db_path).expanduser().resolve())
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self._ensure_tables()
 
     @property

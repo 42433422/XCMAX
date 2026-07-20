@@ -259,12 +259,20 @@ def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec
-    assert 'for module in ["pypdf", "reportlab"]' in spec
+    assert 'for module in ["pypdf", "reportlab", "docx"]' in spec
+    assert 'datas.append((str(_docx_parts_init), "docx/parts"))' in spec
     assert "import fitz" not in employee_runtime
     assert "from pypdf import PdfReader" in employee_runtime
     assert "from reportlab.pdfgen import canvas" in employee_runtime
     assert "--verify-frozen-critical-runtime" in entrypoint
     assert "import faster_whisper" in entrypoint
+    assert "from docx import Document" in entrypoint
+    assert "document = Document()" in entrypoint
+    assert "StylesPart._default_styles_xml()" in entrypoint
+    assert "SettingsPart._default_settings_xml()" in entrypoint
+    assert "CommentsPart._default_comments_xml()" in entrypoint
+    assert "HeaderPart._default_header_xml()" in entrypoint
+    assert "FooterPart._default_footer_xml()" in entrypoint
     assert 'bundled_root = Path(sys._MEIPASS) / "mods" / "_employees"' in entrypoint
     assert "installed != bundled" in entrypoint
     assert workflow.count("--verify-frozen-critical-runtime") == 2

@@ -128,7 +128,11 @@ def _wait_for_market(base_url: str, proc: subprocess.Popen[str]) -> None:
             output = proc.stdout.read() if proc.stdout else ""
             raise RuntimeError(f"market server exited early code={proc.returncode}\n{output}")
         try:
-            response = httpx.get(f"{base_url}/openapi.json", timeout=1.0)
+            response = httpx.get(
+                f"{base_url}/openapi.json",
+                timeout=1.0,
+                trust_env=False,
+            )
             if response.status_code == 200:
                 return
             last_error = f"HTTP {response.status_code}"
@@ -201,7 +205,9 @@ def run_cross_process_eval() -> dict[str, Any]:
                         return_value={"success": False, "message": "temporary database error"},
                     )
                 )
-                run = AgentOrchestrator(repository=InMemoryAgentRunRepository()).start_run_from_plan(
+                run = AgentOrchestrator(
+                    repository=InMemoryAgentRunRepository()
+                ).start_run_from_plan(
                     user_id=str(user["user_id"]),
                     message="cross process market wallet refund",
                     plan=plan,
@@ -213,11 +219,13 @@ def run_cross_process_eval() -> dict[str, Any]:
                 f"{base_url}/api/wallet/transactions",
                 headers=headers,
                 timeout=5.0,
+                trust_env=False,
             )
             overview_response = httpx.get(
                 f"{base_url}/api/wallet/overview",
                 headers=headers,
                 timeout=5.0,
+                trust_env=False,
             )
             transactions_response.raise_for_status()
             overview_response.raise_for_status()
@@ -234,8 +242,7 @@ def run_cross_process_eval() -> dict[str, Any]:
                 "market_refund_amount": wallet_refund.get("amount_yuan") == "0.02",
                 "market_balance_restored": run.metadata.get("model_wallet_balance_yuan") == "10.00",
                 "market_transactions": all(
-                    txn_type in txn_types
-                    for txn_type in ("ai_preauth", "ai_settle", "ai_refund")
+                    txn_type in txn_types for txn_type in ("ai_preauth", "ai_settle", "ai_refund")
                 ),
                 "wallet_overview_balance": str(
                     (overview.get("wallet") or {}).get("balance") or overview.get("balance") or ""

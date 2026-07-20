@@ -49,6 +49,20 @@ class TestGetTemplates:
         out = svc.get_templates()
         assert out["templates"] == []
 
+    def test_list_by_type_delegates_active_filter(self) -> None:
+        ts = MagicMock()
+        ts.list_by_type.return_value = [{"id": 3}]
+        svc = _svc(ts)
+        assert svc.list_by_type("发货单", active_only=False) == [{"id": 3}]
+        ts.list_by_type.assert_called_once_with("发货单", active_only=False)
+
+    def test_get_default_for_type_delegates(self) -> None:
+        ts = MagicMock()
+        ts.get_default_for_type.return_value = {"id": 4}
+        svc = _svc(ts)
+        assert svc.get_default_for_type("发货单") == {"id": 4}
+        ts.get_default_for_type.assert_called_once_with("发货单")
+
 
 class TestCrudDelegation:
     def test_get(self) -> None:

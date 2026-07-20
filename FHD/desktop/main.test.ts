@@ -281,6 +281,39 @@ describe('main — OTA proxy PAC', () => {
     expect(parseProxyEndpoint('127.0.0.1:7890')).toEqual({ host: '127.0.0.1', port: 7890 })
     expect(parseProxyEndpoint('bad')).toBeNull()
   })
+
+  it('wraps PAC source in a data URL accepted by Electron', async () => {
+    const { buildOtaPacScriptUrl } = await import('./main.js')
+    const url = buildOtaPacScriptUrl('127.0.0.1:7890')
+    expect(url).toMatch(/^data:application\/x-ns-proxy-autoconfig;base64,/)
+    const source = Buffer.from(url.split(',')[1], 'base64').toString('utf8')
+    expect(source).toContain("return 'PROXY 127.0.0.1:7890; DIRECT'")
+  })
+
+  it('continues startup when Electron setProxy never settles', async () => {
+    const savedHttpProxy = process.env.HTTP_PROXY
+    const savedHttpsProxy = process.env.HTTPS_PROXY
+    delete process.env.HTTP_PROXY
+    delete process.env.HTTPS_PROXY
+    electronMocks.session.defaultSession.setProxy.mockImplementationOnce(
+      () => new Promise<void>(() => undefined),
+    )
+    try {
+      const { applyOtaProxyBypass } = await import('./main.js')
+      const startedAt = Date.now()
+      await applyOtaProxyBypass(20)
+      expect(Date.now() - startedAt).toBeLessThan(500)
+      expect(electronMocks.session.defaultSession.setProxy).toHaveBeenLastCalledWith({
+        mode: 'system',
+        proxyBypassRules: expect.stringContaining('localhost'),
+      })
+    } finally {
+      if (savedHttpProxy === undefined) delete process.env.HTTP_PROXY
+      else process.env.HTTP_PROXY = savedHttpProxy
+      if (savedHttpsProxy === undefined) delete process.env.HTTPS_PROXY
+      else process.env.HTTPS_PROXY = savedHttpsProxy
+    }
+  })
 })
 
 describe('main — ED25519_PUBLIC_KEY_PEM', () => {
@@ -421,6 +454,21 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_DEFAULT_EDITION).toBe('minimal')
     expect(env.XCAGI_EDITION).toBe('minimal')
     expect(env.XCAGI_MINIMAL_EDITION).toBe('1')
+  })
+})
+
+describe('main — desktopNoProxyEnv', () => {
+  it('adds loopback hosts while preserving existing exclusions', async () => {
+    const { desktopNoProxyEnv } = await import('./main.js')
+    const env = desktopNoProxyEnv({ NO_PROXY: 'example.com,localhost' })
+    expect(env.NO_PROXY).toBe('example.com,localhost,127.0.0.1,::1')
+    expect(env.no_proxy).toBe(env.NO_PROXY)
+  })
+
+  it('uses lowercase no_proxy and does not duplicate loopback hosts', async () => {
+    const { desktopNoProxyEnv } = await import('./main.js')
+    const env = desktopNoProxyEnv({ no_proxy: '127.0.0.1,::1' })
+    expect(env.NO_PROXY).toBe('127.0.0.1,::1,localhost')
   })
 })
 

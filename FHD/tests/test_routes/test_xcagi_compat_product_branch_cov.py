@@ -981,17 +981,30 @@ class TestProductsPriceListWordResponse:
             assert exc_info.value.status_code == 503
             assert "扩展 Mod" in exc_info.value.detail
 
-    def test_template_not_found(self):
+    def test_missing_registered_template_uses_builtin_fallback(self, tmp_path):
+        fallback = tmp_path / "builtin.docx"
+        fallback.write_bytes(b"builtin-template")
         with (
             patch("app.shell.mod_business_scope.business_data_exposed", return_value=True),
             patch(
                 "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
                 return_value=(Path("/nonexistent/tpl.docx"), "tpl.docx"),
             ),
+            patch(
+                "app.infrastructure.documents.price_list_export.ensure_builtin_price_list_template",
+                return_value=fallback,
+            ),
+            patch(
+                "app.fastapi_routes.xcagi_compat_product._load_products_all_for_export",
+                return_value=[],
+            ),
+            patch(
+                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
+                return_value=b"docx-bytes",
+            ),
         ):
-            with pytest.raises(HTTPException) as exc_info:
-                xp._products_price_list_word_response("unit", None, None)
-            assert exc_info.value.status_code == 404
+            response = xp._products_price_list_word_response("unit", None, None)
+            assert response.body == b"docx-bytes"
 
     def test_build_docx_recoverable_error(self, tmp_path):
         tpl = tmp_path / "tpl.docx"

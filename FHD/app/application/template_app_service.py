@@ -44,6 +44,20 @@ class TemplateApplicationService:
         """
         return cast("dict[str, Any]", self._template_service.get_template(template_id))
 
+    def list_by_type(self, template_type: str, active_only: bool = True) -> list[dict[str, Any]]:
+        """Return templates for the Excel template HTTP API."""
+        return cast(
+            "list[dict[str, Any]]",
+            self._template_service.list_by_type(template_type, active_only=active_only) or [],
+        )
+
+    def get_default_for_type(self, template_type: str) -> dict[str, Any] | None:
+        """Return the default active template for a document type."""
+        return cast(
+            "dict[str, Any] | None",
+            self._template_service.get_default_for_type(template_type),
+        )
+
     def save_template(self, template_data: dict[str, Any]) -> dict[str, Any]:
         """
         保存模板用例

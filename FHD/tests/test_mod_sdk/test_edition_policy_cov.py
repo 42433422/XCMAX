@@ -311,14 +311,19 @@ class TestSeedEditionModsFromBundle:
             result = seed_edition_mods_from_bundle()
         assert result == []
 
-    def test_mod_already_present(self, tmp_path):
+    def test_existing_bundled_mod_is_updated(self, tmp_path):
         bundle = tmp_path / "bundle"
         bundle.mkdir()
         mods_root = tmp_path / "mods_root"
         mods_root.mkdir()
 
         mod_id = "xcagi-planner-bridge"
-        (mods_root / mod_id).mkdir()  # already present
+        source = bundle / mod_id
+        source.mkdir()
+        (source / "backend.py").write_text("new bundled code", encoding="utf-8")
+        destination = mods_root / mod_id
+        destination.mkdir()
+        (destination / "backend.py").write_text("stale installed code", encoding="utf-8")
 
         mm = MagicMock()
         mm.mods_root = str(mods_root)
@@ -327,10 +332,12 @@ class TestSeedEditionModsFromBundle:
             patch("app.mod_sdk.edition_policy.bundled_mods_dir", return_value=bundle),
             patch(_ED_MOD_MANAGER_PATH, return_value=mm),
             patch("app.mod_sdk.edition_policy.edition_mod_ids", return_value=(mod_id,)),
+            patch("app.mod_sdk.edition_policy._resolve_mod_seed_source", return_value=source),
         ):
             result = seed_edition_mods_from_bundle(mods_root=mods_root)
 
-        assert any(r["status"] == "skipped" for r in result)
+        assert any(r["status"] == "updated" for r in result)
+        assert (destination / "backend.py").read_text(encoding="utf-8") == "new bundled code"
 
     def test_mod_missing_from_bundle(self, tmp_path):
         bundle = tmp_path / "bundle"

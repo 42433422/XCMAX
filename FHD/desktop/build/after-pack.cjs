@@ -3,8 +3,21 @@
  * backend carries full Hardened Runtime entitlements before final signing.
  */
 const { execFileSync, spawnSync } = require('node:child_process')
+const asar = require('@electron/asar')
 const fs = require('node:fs')
 const path = require('node:path')
+
+const REQUIRED_RUNTIME_PACKAGES = [
+  'electron-updater',
+  'builder-util-runtime',
+  'fs-extra',
+  'js-yaml',
+  'lazy-val',
+  'lodash.escaperegexp',
+  'lodash.isequal',
+  'semver',
+  'tiny-typed-emitter',
+]
 
 function log(msg) {
   console.log(`[after-pack] ${msg}`)
@@ -63,6 +76,26 @@ function codesign(target, identity, entitlements) {
   }
 }
 
+function verifyPackagedRuntimeDependencies(asarPath) {
+  const missing = []
+  for (const packageName of REQUIRED_RUNTIME_PACKAGES) {
+    const packageJson = `node_modules/${packageName}/package.json`
+    try {
+      asar.extractFile(asarPath, packageJson)
+    } catch {
+      missing.push(packageName)
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `packaged runtime dependencies missing from app.asar: ${missing.join(', ')}`,
+    )
+  }
+}
+
+exports.REQUIRED_RUNTIME_PACKAGES = REQUIRED_RUNTIME_PACKAGES
+exports.verifyPackagedRuntimeDependencies = verifyPackagedRuntimeDependencies
+
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') return
 
@@ -72,6 +105,9 @@ exports.default = async function afterPack(context) {
   // None of these attributes belongs in a distributable app bundle, and codesign
   // rejects inherited Finder/resource metadata before the final seal is written.
   spawnSync('/usr/bin/xattr', ['-cr', appPath], { stdio: 'ignore' })
+  const asarPath = path.join(appPath, 'Contents/Resources/app.asar')
+  verifyPackagedRuntimeDependencies(asarPath)
+  log(`app.asar runtime dependency gate passed (${REQUIRED_RUNTIME_PACKAGES.length} packages)`)
   const backend = path.join(appPath, 'Contents/Resources/backend/xcagi-backend')
   if (!fs.existsSync(backend)) {
     log(`backend missing, skip: ${backend}`)
