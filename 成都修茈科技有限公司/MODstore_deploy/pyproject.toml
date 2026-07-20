@@ -61,7 +61,7 @@ dev = [
   "pytest-asyncio>=0.23",
   "PyYAML>=6.0",
   "black==25.11.0",
-  "isort>=5.13",
+  "isort==6.1.0",
   "jsonschema>=4.21",
   "mypy>=1.8",
   "openpyxl>=3.1",
