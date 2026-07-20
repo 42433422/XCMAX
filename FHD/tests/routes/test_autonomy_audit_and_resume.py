@@ -20,6 +20,8 @@ def _isolate(tmp_path: Path, monkeypatch) -> None:
 
 def test_admin_audit_log_endpoint_returns_highlighted_veto(tmp_path, monkeypatch) -> None:
     _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     request_action("rollback_release", action_id="audit-route", source="route-test")
     monkeypatch.setattr(xcmax_admin, "_require_market_admin_session", lambda request: None)
     app = FastAPI()
@@ -35,6 +37,8 @@ def test_admin_audit_log_endpoint_returns_highlighted_veto(tmp_path, monkeypatch
 
 def test_github_approval_callback_resumes_and_rejects(tmp_path, monkeypatch) -> None:
     _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     outcomes: list[str] = []
     request_action(
         "rollback_release",
@@ -84,6 +88,8 @@ def test_github_approval_callback_resumes_and_rejects(tmp_path, monkeypatch) -> 
 
 def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypatch) -> None:
     _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     monkeypatch.setattr(ops_autonomy, "_auth", lambda *args, **kwargs: None)
     app = FastAPI()
     app.include_router(ops_autonomy.router)

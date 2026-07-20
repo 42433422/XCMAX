@@ -15,8 +15,10 @@ import json
 import logging
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -282,7 +284,8 @@ def ensure_clean_baseline() -> Dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(baseline, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(baseline, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     tmp.replace(path)
     return baseline
@@ -409,7 +412,9 @@ def record_governance_audit_review(
     }
 
 
-def _governance_audit_summary(rows: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _governance_audit_summary(
+    rows: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     items = rows if isinstance(rows, list) else _read_governance_audit(10)
     success_count = sum(
         1 for item in items if isinstance(item, dict) and item.get("ok") is not False
@@ -665,7 +670,11 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if action not in {"auto_merged_low_risk", "auto_continue"} and status != "completed_merged":
+    if action not in {
+        "auto_merged_low_risk",
+        "auto_merge_requested_low_risk",
+        "auto_continue",
+    } and status not in {"completed_merged", "completed_merge_requested"}:
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
@@ -721,7 +730,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 item["escalated"] = True
                 escalated_items.append(item)
                 logger.warning(
-                    "open_item run_id=%s exceeded max_retries=%d, escalating to human review",
+                    "open_item run_id=%s exceeded max_retries=%d, pausing automated retries",
                     item.get("run_id"),
                     max_retries,
                 )
@@ -737,35 +746,14 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 and "code" not in (item.get("steps") or [])
             )
         ]
-    # If there are escalated items, do not resume - return None so loop stops for human intervention
+    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
     if escalated_items:
-        # Enqueue all escalated items to human uncertainty queue
-        try:
-            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-
-            for item in escalated_items:
-                enqueue_uncertain_item(
-                    context={
-                        "failed_run_id": item.get("run_id"),
-                        "failed_steps": item.get("steps", []),
-                        "retry_count": item.get("retry_count"),
-                        "branch": item.get("branch"),
-                        "para_task_id": item.get("para_task_id"),
-                    },
-                    decision={
-                        "action": "await_human_strategy_approval",
-                        "reason": "max_retries_exceeded",
-                    },
-                    reason=f"self-maintenance step {item.get('steps')} failed {item.get('retry_count')} times, exceeded max retries",
-                )
-        except Exception as exc:
-            logger.warning("failed to enqueue escalated item to human queue: %s", exc)
         return None
 
     last_decision = memory.get("last_policy_decision")
     last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
     if last_reason == "review_or_qa_reported_risk":
-        # 真实风险必须由人工介入，禁止自动重试
+        # Real risk remains blocked; removing approval must never turn it into a bypass.
         return None
     if last_reason in {"employee_step_failed", "loop_not_completed"}:
         # Allow resumption for incomplete loops or step failures (e.g., code step can retry)
@@ -837,7 +825,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             }
 
     for item in reversed(open_items):
-        if not isinstance(item, dict) or item.get("kind") != "human_strategy_approval":
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
             continue
         reason = str(item.get("reason") or "")
         if reason not in {
@@ -846,6 +837,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "changed_files_outside_low_risk_globs",
             "missing_report_only_evidence",
             "max_retries_exceeded",
+            "structured_qa_focused_command_not_passed",
         }:
             continue
         branch = str(item.get("branch") or "").strip()
@@ -857,7 +849,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "failed_run_id": run_id,
                 "failed_steps": ["qa"],
                 "para_task_id": para_task_id,
-                "reason": "resume_human_strategy_candidate",
+                "reason": "resume_automated_remediation_candidate",
             }
     return None
 
@@ -972,7 +964,11 @@ def _recent_incident_signals(lookback_hours: int, *, limit: int = 8) -> Dict[str
                     "summary": str(payload.get("summary") or "")[:500],
                 }
             )
-        return {"count": int(count), "events": incidents, "lookback_hours": lookback_hours}
+        return {
+            "count": int(count),
+            "events": incidents,
+            "lookback_hours": lookback_hours,
+        }
     except Exception:
         logger.exception("failed to read recent incident signals")
         return {"count": 1, "events": [], "error": "incident_signal_query_failed"}
@@ -1208,7 +1204,7 @@ def _extract_failure_reason(
         if isinstance(pg, dict) and pg.get("checked") and not pg.get("ok"):
             violations = pg.get("violations") or []
             vstr = "; ".join(
-                f"{v.get('path','')}({v.get('reason','')})"
+                f"{v.get('path', '')}({v.get('reason', '')})"
                 for v in violations[:5]
                 if isinstance(v, dict)
             )
@@ -1477,8 +1473,68 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return data
 
 
+def _python_supports_focused_tests(candidate: Path) -> bool:
+    """Return whether a Python executable has the loop's test dependencies."""
+
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        return False
+    try:
+        probe = subprocess.run(
+            [str(candidate), "-c", "import apscheduler, pytest"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+def _focused_test_command() -> str:
+    """Resolve one executable QA command from the running MODstore environment.
+
+    The scheduler may itself run from the lighter FHD venv, which intentionally
+    does not install pytest.  Prefer the MODstore venv used for repository tests
+    and expose explicit overrides for production or isolated runners.
+    """
+
+    command_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
+    if command_override:
+        return command_override
+
+    test_python_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
+    deploy_root = Path(
+        os.environ.get("MODSTORE_DEPLOY_ROOT") or Path(__file__).resolve().parent.parent
+    )
+    runtime_root = os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
+    candidates = [
+        Path(test_python_override).expanduser() if test_python_override else None,
+        deploy_root / ".venv" / "bin" / "python",
+        (
+            Path(runtime_root).expanduser() / "MODstore_deploy" / ".venv" / "bin" / "python"
+            if runtime_root
+            else None
+        ),
+        Path(sys.executable),
+    ]
+    test_python = next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate and _python_supports_focused_tests(candidate)
+        ),
+        Path(sys.executable),
+    )
+    test_path = (
+        "成都修茈科技有限公司/MODstore_deploy/tests/" "test_self_maintenance_loop_runner_policy.py"
+    )
+    return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
+
+
 def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
+    focused_test_command = _focused_test_command()
     evolution_context_dict = build_self_evolution_context(
         run_id=run_id, evaluation=evaluation, memory=memory
     )
@@ -1512,10 +1568,16 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "Only when no historical fix applies may you reason from scratch. "
         "If there is no bug gap, choose one proactive task from performance, coverage, or tech_debt signals. "
         "When you fix a bug, write the symptom/root_cause/fix_diff triad under FHD/XCAGI/kb/fixes; "
+        "every changed fix JSON MUST also contain schema_version=1, kind=fix, and an "
+        "executable_template object with non-empty applicability_check, patch_strategy, "
+        "rollback_plan, and a string-list required_tests. Validate each changed KB JSON with "
+        "self_evolution_knowledge.validate_kb_payload before reporting completion. "
         "when review/QA approves a reusable change, write the pattern under FHD/XCAGI/kb/patterns. "
         "Do not create marker-only/status-only changes as proof of completion. "
         "Prefer changes that make scheduler gating, loop memory, report-only review/QA, "
         "or policy decisions more directly executable. "
+        f"Before reporting completion, execute `{focused_test_command}` in the target branch "
+        "and require exit code 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
@@ -1554,6 +1616,7 @@ def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]
 def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    focused_test_command = _focused_test_command()
     return (
         "MODSTORE_REPORT_ONLY=1. Report-only QA task. "
         "Do not change files, do not commit, and do not push. "
@@ -1565,6 +1628,9 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "and compare `origin/<base>...origin/<target>` or the local equivalent. "
         "If fetch/branch resolution fails, report that exact failure as target_branch_unavailable. "
         "Evaluate the target branch, tests, changed files, and previous loop memory as merge-readiness evidence. "
+        f"You MUST execute the focused verification command `{focused_test_command}` and include its "
+        "exact command, real exit code, and status in tested_commands. A syntax-only check or a "
+        "different Python environment is not a substitute. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
         "FAIL only for new failures, missing target branch, blocking findings, or unsafe evidence. "
         "Do not fail only because the final terminal ledger record for this in-flight run does not exist yet; "
@@ -1585,18 +1651,27 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
 
 
 def _json_after_marker(text: str, marker: str) -> Optional[Dict[str, Any]]:
-    idx = (text or "").find(marker)
-    if idx < 0:
-        return None
-    tail = text[idx + len(marker) :]
-    tail = tail.lstrip(" \t\r\n:=`")
-    if tail.startswith("json"):
-        tail = tail[4:].lstrip(" \t\r\n")
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(tail)
-        return obj if isinstance(obj, dict) else None
-    except Exception:
-        return None
+    report = text or ""
+    positions: List[int] = []
+    start = 0
+    while True:
+        idx = report.find(marker, start)
+        if idx < 0:
+            break
+        positions.append(idx)
+        start = idx + len(marker)
+    for idx in reversed(positions):
+        tail = report[idx + len(marker) :]
+        tail = tail.lstrip(" \t\r\n:=`")
+        if tail.startswith("json"):
+            tail = tail[4:].lstrip(" \t\r\n")
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(tail)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
 
 
 def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
@@ -1618,6 +1693,43 @@ def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[
             if marker == STRUCTURED_REVIEW_MARKER and "max_severity" in obj:
                 return obj
     return None
+
+
+def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
+    """Accept the focused pytest target across different worker runtimes.
+
+    Para workers may run on a different operating system from the scheduler, so
+    the scheduler's absolute Python path is not portable.  Keep exact matching
+    as the fast path, then accept only a real ``python -m pytest`` invocation
+    of the same focused test file.
+    """
+
+    raw = str(command or "").strip()
+    if not raw:
+        return False
+    if raw == focused_command:
+        return True
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        return False
+    target_name = "test_self_maintenance_loop_runner_policy.py"
+    if not any(Path(token).name == target_name for token in tokens):
+        return False
+    shell_operators = {"&&", "||", ";"}
+    for index in range(1, len(tokens) - 1):
+        if tokens[index : index + 2] != ["-m", "pytest"]:
+            continue
+        python_index = index - 1
+        if not Path(tokens[python_index]).name.lower().startswith("python"):
+            continue
+        segment_start = 0
+        for operator_index, token in enumerate(tokens[:python_index]):
+            if token in shell_operators:
+                segment_start = operator_index + 1
+        if python_index == segment_start:
+            return True
+    return False
 
 
 def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1647,15 +1759,46 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     if qa_steps:
         qa_json = _structured_report_from_step(qa_steps[-1], STRUCTURED_QA_MARKER)
         if not qa_json:
-            return {"ok": False, "reason": "missing_structured_qa_result", "review": review_json}
+            return {
+                "ok": False,
+                "reason": "missing_structured_qa_result",
+                "review": review_json,
+            }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
-            return {"ok": False, "reason": "structured_qa_verdict_not_pass", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_verdict_not_pass",
+                "qa": qa_json,
+            }
         if qa_json.get("target_branch_available") is not True:
-            return {"ok": False, "reason": "structured_qa_target_branch_unavailable", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_target_branch_unavailable",
+                "qa": qa_json,
+            }
         blocking = qa_json.get("blocking_findings")
         if isinstance(blocking, list) and blocking:
-            return {"ok": False, "reason": "structured_qa_blocking_findings", "qa": qa_json}
+            return {
+                "ok": False,
+                "reason": "structured_qa_blocking_findings",
+                "qa": qa_json,
+            }
+        tested_commands = qa_json.get("tested_commands")
+        focused_command = _focused_test_command()
+        if not isinstance(tested_commands, list) or not any(
+            isinstance(item, dict)
+            and _matches_focused_test_command(item.get("command"), focused_command)
+            and int(item.get("exit_code") if item.get("exit_code") is not None else -1) == 0
+            and str(item.get("status") or "").lower().startswith("passed")
+            for item in tested_commands
+        ):
+            return {
+                "ok": False,
+                "reason": "structured_qa_focused_command_not_passed",
+                "focused_command": focused_command,
+                "qa": qa_json,
+            }
         test_delta = (
             qa_json.get("test_delta") if isinstance(qa_json.get("test_delta"), dict) else {}
         )
@@ -1783,7 +1926,12 @@ def _changed_files_for_branch(
             if _sp_run.returncode == 0:
                 # 把 FETCH_HEAD 创建为 origin/{branch} 引用，让后续 diff/numstat 统一用 origin/{branch}。
                 _run_cmd(
-                    ["git", "update-ref", f"refs/remotes/origin/{branch}", "FETCH_HEAD"],
+                    [
+                        "git",
+                        "update-ref",
+                        f"refs/remotes/origin/{branch}",
+                        "FETCH_HEAD",
+                    ],
                     cwd=workspace,
                 )
                 branch_ref = f"origin/{branch}"
@@ -1883,7 +2031,13 @@ def _validate_kb_json_changes_for_auto_merge(
         checked.append(normalized)
         try:
             raw = _run_cmd(
-                ["git", "-c", "core.quotePath=false", "show", f"origin/{branch}:{normalized}"],
+                [
+                    "git",
+                    "-c",
+                    "core.quotePath=false",
+                    "show",
+                    f"origin/{branch}:{normalized}",
+                ],
                 cwd=workspace,
                 timeout=60,
             )
@@ -1914,7 +2068,10 @@ def _diff_stats_changed_files_consistency(
     diff_stats: Dict[str, Any],
 ) -> Dict[str, Any]:
     if not isinstance(diff_stats, dict) or diff_stats.get("source") != "git_diff_numstat":
-        return {"ok": True, "reason": "diff_stats_consistency_not_enforced_for_legacy_input"}
+        return {
+            "ok": True,
+            "reason": "diff_stats_consistency_not_enforced_for_legacy_input",
+        }
     expected = {_normalize_repo_path(file_name) for file_name in files if file_name}
     stats_changed = diff_stats.get("changed_files")
     if not isinstance(stats_changed, list):
@@ -1964,11 +2121,17 @@ def _auto_merge_max_risk_score() -> int:
 
 def _auto_merge_min_safety_score_v2() -> int:
     return max(
-        0, min(_env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90), 100)
+        0,
+        min(
+            _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90),
+            100,
+        ),
     )
 
 
-def _historical_auto_merge_success_rate(memory: Optional[Dict[str, Any]]) -> Optional[float]:
+def _historical_auto_merge_success_rate(
+    memory: Optional[Dict[str, Any]],
+) -> Optional[float]:
     if not isinstance(memory, dict):
         return None
     recent_runs = memory.get("recent_runs")
@@ -2005,11 +2168,53 @@ def _historical_rollback_rate(memory: Optional[Dict[str, Any]]) -> Optional[floa
     for run in recent_runs[-50:]:
         if not isinstance(run, dict):
             continue
-        text = json.dumps(run, ensure_ascii=False).lower()
-        if "auto_merged_low_risk" in text or "completed_merged" in text:
-            considered += 1
-            if any(term in text for term in ("rollback", "revert", "regression", "回滚", "退回")):
-                rollbacks += 1
+        decision = run.get("policy_decision")
+        decision = decision if isinstance(decision, dict) else {}
+        if (
+            str(decision.get("action") or "") != "auto_merged_low_risk"
+            and str(run.get("status") or "") != "completed_merged"
+        ):
+            continue
+        considered += 1
+        merge_result = decision.get("merge_result")
+        merge_result = merge_result if isinstance(merge_result, dict) else {}
+        rollback_records = [
+            run.get("rollback"),
+            decision.get("rollback"),
+            merge_result.get("rollback"),
+        ]
+        explicit_statuses = {
+            str(run.get("status") or "").lower(),
+            str(run.get("rollback_status") or "").lower(),
+            str(decision.get("action") or "").lower(),
+            str(decision.get("outcome") or "").lower(),
+            str(merge_result.get("outcome") or "").lower(),
+        }
+        rolled_back = bool(
+            explicit_statuses
+            & {
+                "auto_rollback",
+                "completed_rolled_back",
+                "rollback_completed",
+                "rollback_executed",
+                "rolled_back",
+            }
+        )
+        if not rolled_back:
+            for record in rollback_records:
+                if not isinstance(record, dict):
+                    continue
+                status = str(record.get("status") or record.get("outcome") or "").lower()
+                if record.get("executed") is True or status in {
+                    "completed",
+                    "executed",
+                    "rolled_back",
+                    "success",
+                }:
+                    rolled_back = True
+                    break
+        if rolled_back:
+            rollbacks += 1
     if considered <= 0:
         return None
     return rollbacks / considered
@@ -2029,7 +2234,15 @@ def _file_type_risk(file_name: str) -> int:
         return 32
     if any(
         part in lower
-        for part in ("models.py", "/models/", "migration", "alembic", "payment", "auth", "security")
+        for part in (
+            "models.py",
+            "/models/",
+            "migration",
+            "alembic",
+            "payment",
+            "auth",
+            "security",
+        )
     ):
         return 55
     if lower.endswith((".py", ".ts", ".tsx", ".js", ".jsx")):
@@ -2105,7 +2318,9 @@ def _auto_merge_risk_score_v1(
     }
 
 
-def _semantic_review_qa_analysis(steps: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
+def _semantic_review_qa_analysis(
+    steps: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
     if not isinstance(steps, list):
         return {"available": False, "penalty": 8, "reason": "no_structured_llm_reports"}
     penalty = 0
@@ -2119,9 +2334,13 @@ def _semantic_review_qa_analysis(steps: Optional[List[Dict[str, Any]]]) -> Dict[
         if isinstance(review_json, dict):
             reports["review"] = review_json
             severity = str(review_json.get("max_severity") or "medium").lower()
-            penalty += {"none": 0, "low": 2, "medium": 8, "high": 30, "critical": 50}.get(
-                severity, 15
-            )
+            penalty += {
+                "none": 0,
+                "low": 2,
+                "medium": 8,
+                "high": 30,
+                "critical": 50,
+            }.get(severity, 15)
             if review_json.get("blocking_findings"):
                 penalty += 40
         else:
@@ -2657,7 +2876,8 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
                 """).fetchone()
     except Exception:
         logger.warning(
-            "failed to read Para guest user from sqlite for local auth mint", exc_info=True
+            "failed to read Para guest user from sqlite for local auth mint",
+            exc_info=True,
         )
         return None
     if not row:
@@ -2922,7 +3142,10 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                             "stale_clear": stale_clear,
                             "status": target.get("status"),
                         }
-                        return {**last_status, "reason": "online_after_stale_current_task_clear"}
+                        return {
+                            **last_status,
+                            "reason": "online_after_stale_current_task_clear",
+                        }
                 if online and current_task:
                     last_status = {
                         "codex_tool": codex_tool,
@@ -2982,6 +3205,36 @@ def _mark_para_task_merged(*, api_base: str, task_id: str, merge_sha: str) -> Di
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def _request_para_task_merge(*, api_base: str, task_id: str) -> Dict[str, Any]:
+    """Queue the already-pushed Para workspace only after loop gates pass.
+
+    The CVM cannot reach GitHub directly, while the Para worker on the Mac can.
+    Keeping this request here makes review, QA and ``autonomy_guard`` the sole
+    authorization path; the device agent only prepares and pushes the branch.
+    """
+
+    workspace_root = (
+        os.environ.get("MODSTORE_PARA_WORKSPACE_ROOT")
+        or "/Users/a4243342/XCMAX-runtime/para-main-agent/workspace"
+    ).strip()
+    workspace_path = str(Path(workspace_root).expanduser() / task_id)
+    headers = _guest_auth_headers(api_base)
+    with httpx.Client(timeout=30.0, trust_env=False, verify=False) as client:
+        resp = client.post(
+            f"{api_base.rstrip('/')}/api/tasks/{task_id}/request-merge",
+            headers=headers,
+            json={"workspace_path": workspace_path, "auto_merge": True},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    return {
+        "ok": True,
+        "para_response": payload,
+        "reason": "merge_requested_after_loop_risk_gate",
+        "workspace_path": workspace_path,
+    }
 
 
 def _loop_steps_roster_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3097,8 +3350,8 @@ def _auto_merge_low_risk_branch(
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     api_base = os.environ.get("MODSTORE_PARA_API_BASE", "").strip()
     # Security guard: by default only local file:// repos allow auto-merge.
-    # Operators can opt-in to remote https:// repos by setting
-    # MODSTORE_AUTO_MERGE_ALLOW_REMOTE=1 (e.g. for trusted GitHub forks).
+    # Trusted remote repos use the Para worker, but the request is emitted only
+    # after review, QA and the autonomy SSOT have all passed.
     allow_remote = _env_bool("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", False)
     if not repo_url.startswith("file://") and not (
         allow_remote and repo_url.startswith(("http://", "https://"))
@@ -3108,6 +3361,46 @@ def _auto_merge_low_risk_branch(
         return {"ok": False, "reason": "missing_base_branch"}
     if not api_base:
         return {"ok": False, "reason": "missing_api_base"}
+
+    if repo_url.startswith(("http://", "https://")):
+        report_gate = _structured_report_gate(steps or [])
+        if not report_gate.get("ok"):
+            return {
+                "ok": False,
+                "reason": report_gate.get("reason") or "structured_reports_not_passed",
+                "structured_report_gate": report_gate,
+            }
+
+        from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+        decision = evaluate_risk(
+            "self_maintenance_l1_merge",
+            action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+            source="self_maintenance_loop.remote_merge_request",
+        )
+        if not decision.allowed:
+            return {
+                "ok": False,
+                "reason": "autonomy_guard_blocked",
+                "risk_decision": decision.to_dict(),
+            }
+        try:
+            request_result = _request_para_task_merge(api_base=api_base, task_id=task_id)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc)[:500],
+                "reason": "para_merge_request_failed",
+                "risk_decision": decision.to_dict(),
+            }
+        return {
+            "ok": True,
+            "merge_requested": True,
+            "para_request": request_result,
+            "reason": "merge_requested_after_loop_risk_gate",
+            "risk_decision": decision.to_dict(),
+            "structured_report_gate": report_gate,
+        }
 
     workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / run_id
     files = _changed_files_for_branch(
@@ -3173,11 +3466,7 @@ def _auto_merge_low_risk_branch(
     if not decision.allowed:
         return {
             "ok": False,
-            "reason": (
-                "autonomy_guard_pending_approval"
-                if decision.requires_confirmation
-                else "autonomy_guard_blocked"
-            ),
+            "reason": "autonomy_guard_blocked",
             "risk_decision": decision.to_dict(),
         }
 
@@ -3222,33 +3511,12 @@ def _decide_post_loop_policy(
     status: str,
     steps: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    def _await_human(reason: str, **extra: Any) -> Dict[str, Any]:
-        decision = {
-            "action": "await_human_strategy_approval",
+    def _hold_for_remediation(reason: str, **extra: Any) -> Dict[str, Any]:
+        return {
+            "action": "hold_for_automated_remediation",
             "reason": reason,
             **extra,
         }
-        try:
-            from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-
-            decision["uncertainty_queue"] = enqueue_uncertain_item(
-                context={
-                    "branch": branch,
-                    "active_gates": extra.get("active_gates"),
-                    "evolution_gate": extra.get("evolution_gate"),
-                    "gate": gate,
-                    "governance_gate": extra.get("governance_gate"),
-                    "para_task_id": para_task_id,
-                    "roster_gate": extra.get("roster_gate"),
-                    "run_id": run_id,
-                    "status": status,
-                },
-                decision=decision,
-                reason=reason,
-            )
-        except Exception as exc:
-            decision["uncertainty_queue"] = {"queued": False, "error": str(exc)[:300]}
-        return decision
 
     if status != "completed":
         return {"action": "stop", "reason": "loop_not_completed"}
@@ -3277,7 +3545,7 @@ def _decide_post_loop_policy(
         structured_gate=structured_gate,
     )
     if not structured_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             structured_gate.get("reason") or "structured_report_gate_failed",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3286,7 +3554,7 @@ def _decide_post_loop_policy(
             structured_gate=structured_gate,
         )
     if report_only_missing:
-        return _await_human(
+        return _hold_for_remediation(
             "missing_report_only_evidence",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3294,7 +3562,7 @@ def _decide_post_loop_policy(
             roster_gate=roster_gate,
         )
     if not roster_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             roster_gate.get("reason") or "roster_gate_failed",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3302,14 +3570,14 @@ def _decide_post_loop_policy(
             roster_gate=roster_gate,
         )
     if not governance_gate.get("ok"):
-        return _await_human(
+        return _hold_for_remediation(
             governance_gate.get("reason") or "governance_gate_failed",
             active_gates=active_gates,
             governance_gate=governance_gate,
             roster_gate=roster_gate,
         )
     if bool(evolution_gate.get("pause")):
-        return _await_human(
+        return _hold_for_remediation(
             evolution_gate.get("reason") or "evolution_metrics_pause",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3326,7 +3594,7 @@ def _decide_post_loop_policy(
             "roster_gate": roster_gate,
         }
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_LOW_RISK", True):
-        return _await_human(
+        return _hold_for_remediation(
             "auto_merge_disabled",
             active_gates=active_gates,
             evolution_gate=evolution_gate,
@@ -3341,17 +3609,20 @@ def _decide_post_loop_policy(
         steps=steps,
     )
     if merge_result.get("ok"):
+        merge_requested = bool(merge_result.get("merge_requested"))
         return {
-            "action": "auto_merged_low_risk",
+            "action": (
+                "auto_merge_requested_low_risk" if merge_requested else "auto_merged_low_risk"
+            ),
             "active_gates": active_gates,
             "evolution_gate": evolution_gate,
             "gate": gate,
             "governance_gate": governance_gate,
             "merge_result": merge_result,
-            "reason": "low_risk_policy_passed",
+            "reason": ("low_risk_merge_requested" if merge_requested else "low_risk_policy_passed"),
             "roster_gate": roster_gate,
         }
-    return _await_human(
+    return _hold_for_remediation(
         merge_result.get("reason") or "auto_merge_not_allowed",
         gate=gate,
         active_gates=active_gates,
@@ -3458,14 +3729,14 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             if final.get("para_task_id"):
                 new_item["para_task_id"] = final.get("para_task_id")
             open_items.append(new_item)
-    if decision.get("action") == "await_human_strategy_approval":
+    if decision.get("action") == "hold_for_automated_remediation":
         open_items.append(
             {
                 "branch": final.get("branch"),
                 "active_gates": decision.get("active_gates"),
                 "created_at": _iso(_utc_now()),
                 "evolution_gate": decision.get("evolution_gate"),
-                "kind": "human_strategy_approval",
+                "kind": "automated_remediation",
                 "governance_gate": decision.get("governance_gate"),
                 "reason": decision.get("reason"),
                 "roster_gate": decision.get("roster_gate"),
@@ -3798,8 +4069,10 @@ def run_self_maintenance_loop(
         final_status = "completed"
         if policy_decision.get("action") == "auto_merged_low_risk":
             final_status = "completed_merged"
-        elif policy_decision.get("action") == "await_human_strategy_approval":
-            final_status = "completed_waiting_human_strategy"
+        elif policy_decision.get("action") == "auto_merge_requested_low_risk":
+            final_status = "completed_merge_requested"
+        elif policy_decision.get("action") == "hold_for_automated_remediation":
+            final_status = "completed_held_for_remediation"
 
         final = {
             "branch": code_branch,
@@ -4028,7 +4301,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ):
                 if key in value:
                     _add_participant(str(value.get(key) or ""), value, source)
-            for key in ("steps", "nodes", "result", "employee_results", "reports", "items"):
+            for key in (
+                "steps",
+                "nodes",
+                "result",
+                "employee_results",
+                "reports",
+                "items",
+            ):
                 if key in value:
                     _collect_participants(value.get(key), source)
         elif isinstance(value, list):
@@ -4432,7 +4712,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                         item.get("executable_template", {}).get("required_tests")
                         if isinstance(item.get("executable_template"), dict)
                         and isinstance(
-                            item.get("executable_template", {}).get("required_tests"), list
+                            item.get("executable_template", {}).get("required_tests"),
+                            list,
                         )
                         else []
                     ),
@@ -4600,7 +4881,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "register_duty_employees"
-            next_actions = ["register_duty_employees", "refresh_self_maintenance_status"]
+            next_actions = [
+                "register_duty_employees",
+                "refresh_self_maintenance_status",
+            ]
         elif gate_action == "isolate":
             state = "requires_roster_isolation"
             tone = "bad"
@@ -4627,7 +4911,10 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             primary_surface = "self_evolution_loop"
             primary_view = "loop"
             primary_action = "inspect_governance_audit"
-            next_actions = ["inspect_governance_audit", "review_failed_governance_actions"]
+            next_actions = [
+                "inspect_governance_audit",
+                "review_failed_governance_actions",
+            ]
         elif not participant_count:
             state = "waiting_for_loop_participants"
             tone = "warn"
@@ -4744,7 +5031,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "governance_health": governance_audit_summary,
             "next_actions": next_actions,
             "handoff_path": [
-                {"surface": "self_evolution_loop", "role": "runtime_overview", "view": "loop"},
+                {
+                    "surface": "self_evolution_loop",
+                    "role": "runtime_overview",
+                    "view": "loop",
+                },
                 {
                     "surface": "duty_roster_graph",
                     "role": "governance_surface",
@@ -4805,7 +5096,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "governance_audit",
             "merge_decision",
         ],
-        "surfaces": ["employee_space", "duty_roster_graph", "self_evolution_loop_runtime"],
+        "surfaces": [
+            "employee_space",
+            "duty_roster_graph",
+            "self_evolution_loop_runtime",
+        ],
         "identity_dependencies": ["participants", "roster_alignment", "ui_bridge"],
         "gate_dependencies": [
             "active_gates",
@@ -4814,7 +5109,12 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "merge_decision",
             "evolution_metrics_summary",
         ],
-        "truth_dependencies": ["source", "evidence", "governance_audit", "run_timelines"],
+        "truth_dependencies": [
+            "source",
+            "evidence",
+            "governance_audit",
+            "run_timelines",
+        ],
         "required_nested": [
             "active_gates.items",
             "governance_audit.summary",
@@ -5236,6 +5536,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ),
             "auto_merge_scope_globs": _auto_merge_scope_globs(),
             "report_timeout_sec": _env_int("MODSTORE_SELF_MAINTENANCE_REPORT_TIMEOUT_SEC", 1800),
+            "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
         },

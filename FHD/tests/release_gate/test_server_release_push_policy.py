@@ -100,7 +100,7 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
     workflow = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
 
     sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[1].split(
-        "- name: Resume approved autonomy action", 1
+        "- name: SSH rolling restart / apply", 1
     )[0]
     assert "systemctl restart fhd-full.service" in sync_step
     assert "for attempt in $(seq 1 30)" in sync_step
@@ -108,44 +108,14 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
     assert "did not become HTTP-ready after autonomy config sync" in sync_step
 
 
-def test_autonomy_deploy_reports_terminal_failure_in_same_workflow() -> None:
+def test_autonomy_deploy_has_no_human_environment_approval() -> None:
     deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
-    dispatcher = (REPO_ROOT / ".github/workflows/fhd-autonomy-approval-dispatch.yml").read_text(
-        encoding="utf-8"
-    )
-    fallback = (REPO_ROOT / ".github/workflows/fhd-autonomy-approval-result.yml").read_text(
-        encoding="utf-8"
-    )
-
     assert "report-autonomy-failure:" in deploy
     assert "needs: cvm-rolling" in deploy
     assert "needs['cvm-rolling'].result != 'success'" in deploy
     assert 'decision="execution_failed"' in deploy
-    assert 'decision="rejected"' in deploy
-    assert 'resume_succeeded="$(jq -r' in deploy
     assert "Autonomy action was already terminal" in deploy
-    assert 'resume_succeeded="$(jq -r' in fallback
-    assert "fallback callback is complete" in fallback
-
-    for workflow in (dispatcher, deploy, fallback):
-        assert "github_cli_retry()" in workflow
-        assert "for attempt in $(seq 1 12)" in workflow
-        assert "GitHub API attempt ${attempt}/12 failed" in workflow
-
-    assert "github_cli_retry gh workflow run fhd-deploy.yml" in dispatcher
-    assert "github_cli_retry gh run list" in dispatcher
-    assert "Could not resolve the production environment reviewer; refusing to resume." in deploy
-    assert "actions/runs/${GITHUB_RUN_ID}/approvals" in deploy
-    assert 'select(.state == "approved")' in deploy
-    assert 'select(.state == "rejected")' in deploy
-    assert 'select(.user.type != "Bot")' in deploy
-    assert ".user.login" in deploy
-    assert "actions/runs/${RUN_ID}/approvals" in fallback
-    assert 'select(.state == "approved")' in fallback
-    assert 'select(.state == "rejected")' in fallback
-    assert 'select(.user.type != "Bot")' in fallback
-    assert ".user.login" in fallback
-    assert "|| printf '{\"jobs\":[]}'" in deploy
-    assert "|| printf '{\"jobs\":[]}'" in fallback
-    assert "|| printf '[]'" in deploy
-    assert "|| printf '[]'" in fallback
+    assert "\n    environment:\n" not in deploy
+    assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
+    assert "Resume approved autonomy action" not in deploy
+    assert "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" in deploy

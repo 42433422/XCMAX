@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 import json
 import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -27,13 +29,50 @@ from app.domain.autonomy.autonomy_guard import (
     MediumRiskPolicy,
     ProhibitedActionError,
     RiskLevel,
+    get_autonomy_guard,
     reload_autonomy_guard,
 )
 from app.domain.autonomy.risk_policy import RiskPolicyCatalog
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = FHD_ROOT.parent
 REGISTRY = FHD_ROOT / "config" / "risk_actions.registry.json"
 BOUNDARIES = FHD_ROOT / "config" / "autonomy_boundaries.yaml"
+
+REQUIRED_ACTIVATION_EVIDENCE = {
+    "apply_release_to_cvm": (
+        FHD_ROOT / "scripts/deploy/fhd-auto-update.sh",
+        'evaluate_risk(\n    "apply_release_to_cvm"',
+    ),
+    "rollback_release": (
+        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        'autonomy_evaluate_action "rollback_release"',
+    ),
+    "freeze_manifest": (
+        FHD_ROOT / "app/fastapi_routes/ops_autonomy.py",
+        '"freeze_manifest": "freeze-manifest"',
+    ),
+    "restart_service": (
+        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        'autonomy_evaluate_action "restart_service"',
+    ),
+    "self_heal_pr_merge": (
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/approval_dispatcher.py",
+        'evaluate_risk(\n        "self_heal_pr_merge"',
+    ),
+    "mod_auto_publish": (
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api.py",
+        'evaluate_risk(\n        "mod_auto_publish"',
+    ),
+    "db_migration": (
+        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        'autonomy_evaluate_action "db_migration"',
+    ),
+    "delete_user_data": (
+        FHD_ROOT / "app/fastapi_routes/ops_autonomy.py",
+        "result = evaluate_risk(",
+    ),
+}
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +96,7 @@ def _registry_with_policy(tmp_path: Path, policy: str) -> Path:
     return path
 
 
-def test_four_risk_levels_have_allow_approval_and_hard_block_branches() -> None:
+def test_four_risk_levels_have_automatic_allow_and_hard_block_branches() -> None:
     audit: list[dict] = []
     guard = AutonomyGuard(audit_sink=audit.append)
 
@@ -66,8 +105,10 @@ def test_four_risk_levels_have_allow_approval_and_hard_block_branches() -> None:
     high = guard.evaluate("apply_release_to_cvm", action_id="high")
 
     assert low.risk_level is RiskLevel.LOW and low.allowed
-    assert medium.risk_level is RiskLevel.MEDIUM and medium.requires_confirmation
-    assert high.risk_level is RiskLevel.HIGH and high.requires_confirmation
+    assert medium.risk_level is RiskLevel.MEDIUM and medium.allowed
+    assert medium.requires_confirmation is False
+    assert high.risk_level is RiskLevel.HIGH and high.allowed
+    assert high.requires_confirmation is False
     with pytest.raises(ProhibitedActionError):
         guard.evaluate("db_migration", action_id="blocked")
     assert {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.BLOCKED} == set(RiskLevel)
@@ -127,6 +168,106 @@ def test_every_boundary_item_raises_prohibited_action() -> None:
             )
 
 
+def test_default_boundaries_have_no_human_veto_items() -> None:
+    items = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))["requires_veto"]
+    guard = AutonomyGuard(audit_sink=lambda row: row)
+    assert items == []
+    assert guard.veto_boundaries_snapshot() == {}
+
+
+def test_requires_veto_overrides_medium_auto_approve(tmp_path: Path) -> None:
+    registry = _registry_with_policy(tmp_path, "auto_approve")
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundaries["requires_veto"].append(
+        {"action": "freeze_manifest", "reason": "test medium veto floor"}
+    )
+    boundaries_path = tmp_path / "boundaries-with-medium-veto.yaml"
+    boundaries_path.write_text(yaml.safe_dump(boundaries), encoding="utf-8")
+
+    decision = AutonomyGuard(
+        registry_path=registry,
+        boundaries_path=boundaries_path,
+        audit_sink=lambda row: row,
+    ).evaluate("freeze_manifest", action_id="veto:medium")
+
+    assert decision.allowed is False
+    assert decision.requires_confirmation is True
+    assert decision.decision == "require_human"
+    assert "requires_veto boundary" in decision.reason
+
+
+def test_requires_veto_accepts_attributed_human_evidence(tmp_path: Path) -> None:
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundaries["requires_veto"].append(
+        {"action": "freeze_manifest", "reason": "coverage veto boundary"}
+    )
+    boundaries_path = tmp_path / "boundaries-with-approved-veto.yaml"
+    boundaries_path.write_text(yaml.safe_dump(boundaries), encoding="utf-8")
+
+    decision = AutonomyGuard(
+        boundaries_path=boundaries_path,
+        audit_sink=lambda row: row,
+    ).evaluate(
+        "freeze_manifest",
+        {"human_approved": True, "approved_by": "operator"},
+        action_id="veto:approved",
+    )
+
+    assert decision.allowed is True
+    assert decision.decision == "approved"
+    assert decision.approver == "operator"
+
+
+def test_unregistered_action_fails_closed_without_explicit_risk() -> None:
+    decision = AutonomyGuard(audit_sink=lambda row: row).evaluate(
+        "not_registered",
+        action_id="unregistered:blocked",
+    )
+
+    assert decision.allowed is False
+    assert decision.decision == "blocked"
+    assert decision.requires_confirmation is False
+
+
+def test_registered_blocked_action_stays_blocked_without_boundary_alias(tmp_path: Path) -> None:
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundaries["prohibited_actions"] = [
+        item for item in boundaries["prohibited_actions"] if item["action"] != "db_migration"
+    ]
+    boundaries_path = tmp_path / "boundaries-without-db-alias.yaml"
+    boundaries_path.write_text(yaml.safe_dump(boundaries), encoding="utf-8")
+
+    decision = AutonomyGuard(
+        boundaries_path=boundaries_path,
+        audit_sink=lambda row: row,
+    ).evaluate("db_migration", action_id="blocked:registry")
+
+    assert decision.risk_level is RiskLevel.BLOCKED
+    assert decision.allowed is False
+    assert decision.decision == "blocked"
+
+
+def test_action_normalization_covers_tool_and_object_inputs() -> None:
+    guard = AutonomyGuard(audit_sink=lambda row: row)
+    tool_decision = guard.evaluate(
+        {"tool_id": "customers", "operation": "query"},
+        action_id="tool:customers.query",
+    )
+    object_decision = guard.evaluate(
+        SimpleNamespace(
+            type="restart_service",
+            risk="LOW",
+            idempotency_key="object:restart",
+            params={"probe": True},
+        )
+    )
+
+    assert tool_decision.allowed is True
+    assert tool_decision.risk_level is RiskLevel.LOW
+    assert object_decision.allowed is True
+    assert object_decision.action_id == "object:restart"
+
+
 def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
     raw_text = REGISTRY.read_text(encoding="utf-8")
     duplicate_keys: list[str] = []
@@ -158,6 +299,96 @@ def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
         assert spec["risk"] in {"LOW", "MEDIUM", "HIGH", "BLOCKED"}
         if spec["risk"] == "BLOCKED":
             assert spec["allow_auto_execute"] is False
+
+
+@pytest.mark.parametrize(
+    ("action", "expected_risk", "expected_decision"),
+    [
+        ("apply_release_to_cvm", RiskLevel.HIGH, "auto_approve"),
+        ("rollback_release", RiskLevel.MEDIUM, "auto_approve"),
+        ("freeze_manifest", RiskLevel.MEDIUM, "auto_approve"),
+        ("restart_service", RiskLevel.LOW, "allow"),
+        ("self_heal_pr_merge", RiskLevel.HIGH, "auto_approve"),
+        ("mod_auto_publish", RiskLevel.HIGH, "auto_approve"),
+        ("code_write", RiskLevel.HIGH, "auto_approve"),
+    ],
+)
+def test_required_automatic_actions_are_evaluated_by_ssot(
+    action: str,
+    expected_risk: RiskLevel,
+    expected_decision: str,
+) -> None:
+    decision = AutonomyGuard().evaluate(action, action_id=f"activation:{action}")
+
+    assert decision.risk_level is expected_risk
+    assert decision.decision == expected_decision
+
+
+def test_registered_auto_action_does_not_forge_human_approval() -> None:
+    decision = AutonomyGuard().evaluate(
+        "employee_execute",
+        {"allow_medium_risk": True},
+        action_id="activation:employee_execute:legacy-context",
+    )
+
+    assert decision.allowed is True
+    assert decision.decision == "auto_approve"
+    assert decision.approver == ""
+    assert decision.requires_confirmation is False
+
+
+def test_registered_action_risk_can_only_escalate() -> None:
+    decision = AutonomyGuard().evaluate(
+        {"action": "employee_execute", "risk_level": "HIGH"},
+        action_id="activation:employee_execute:high",
+    )
+
+    assert decision.risk_level is RiskLevel.HIGH
+    assert decision.allowed is True
+    assert decision.decision == "auto_approve"
+
+
+def test_global_guard_refreshes_when_env_policy_changes(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
+    pending = get_autonomy_guard().evaluate("rollback_release", action_id="env-refresh:pending")
+    assert pending.requires_confirmation is True
+
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "auto_approve")
+    automatic = get_autonomy_guard().evaluate("rollback_release", action_id="env-refresh:auto")
+    assert automatic.allowed is True
+    assert automatic.decision == "auto_approve"
+    assert automatic.requires_confirmation is False
+
+
+@pytest.mark.parametrize("action", ["db_migration", "delete_user_data"])
+def test_required_blocked_actions_reach_ssot_and_can_never_execute(action: str) -> None:
+    with pytest.raises(ProhibitedActionError, match=action):
+        AutonomyGuard().evaluate(
+            action,
+            {"human_approved": True, "approved_by": "activation-contract"},
+            action_id=f"activation:{action}",
+        )
+
+
+def test_required_autonomous_actions_have_executable_activation_evidence() -> None:
+    """Prevent a registry-only action from masquerading as an active risk gate."""
+    actions = json.loads(REGISTRY.read_text(encoding="utf-8"))["autonomous_actions"]
+    assert set(REQUIRED_ACTIVATION_EVIDENCE) <= set(actions)
+
+    for action, (path, marker) in REQUIRED_ACTIVATION_EVIDENCE.items():
+        assert path.is_file(), f"{action}: missing activation entrypoint {path}"
+        assert marker in path.read_text(encoding="utf-8"), (
+            f"{action}: registry entry exists but no SSOT activation marker in {path}"
+        )
+
+    bridge = (FHD_ROOT / "scripts/deploy/lib/autonomy_gate.sh").read_text(encoding="utf-8")
+    assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in bridge
+    delegate = (
+        REPO_ROOT
+        / "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomy_guard_delegate.py"
+    ).read_text(encoding="utf-8")
+    assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in delegate
 
 
 def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) -> None:
@@ -214,6 +445,17 @@ def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) 
         {"prohibited_actions": ["db_migration"]},
         {"prohibited_actions": [{"action": "db_migration"}]},
     ]
+    malformed_veto = copy.deepcopy(boundaries)
+    malformed_veto["requires_veto"] = ["apply_release_to_cvm"]
+    invalid_boundaries.append(malformed_veto)
+    overlapping = copy.deepcopy(boundaries)
+    overlapping["requires_veto"].append({"action": "db_migration", "reason": "invalid overlap"})
+    invalid_boundaries.append(overlapping)
+    unregistered = copy.deepcopy(boundaries)
+    unregistered["requires_veto"].append(
+        {"action": "not_registered", "reason": "invalid unknown action"}
+    )
+    invalid_boundaries.append(unregistered)
     for index, invalid in enumerate(invalid_boundaries):
         boundaries_path = tmp_path / f"invalid-boundaries-{index}.yaml"
         boundaries_path.write_text(yaml.safe_dump(invalid), encoding="utf-8")
@@ -224,6 +466,7 @@ def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) 
             )
 
     assert boundaries["prohibited_actions"]
+    assert boundaries["requires_veto"] == []
 
 
 def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
@@ -237,10 +480,15 @@ def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
 
     registry_snapshot = catalog.registry_snapshot()
     registry_snapshot["medium_risk_policy"] = "mutated"
-    assert catalog.registry["medium_risk_policy"] == "require_human"
+    assert catalog.registry["medium_risk_policy"] == "auto_approve"
     boundaries_snapshot = catalog.boundaries_snapshot()
     boundaries_snapshot.clear()
     assert catalog.boundaries
+    veto_snapshot = catalog.veto_boundaries_snapshot()
+    veto_snapshot.clear()
+    assert catalog.veto_boundaries == {}
+    assert catalog.veto_reason("apply_release_to_cvm") is None
+    assert catalog.veto_reason("restart_service") is None
     assert "restart_service" in catalog.autonomous_action_names()
     assert catalog.autonomous_action_spec("missing") is None
     assert catalog.list_code_write_tools() == frozenset({"patch_file", "write_file"})
@@ -319,7 +567,52 @@ def test_audit_summary_detects_any_blocked_action_execution_evidence() -> None:
     assert leaked["has_prohibited_miss"] is True
 
 
-def test_pending_approval_resumes_and_rejection_never_retries() -> None:
+def test_audit_summary_separates_synthetic_probes_and_counts_human_veto() -> None:
+    append_autonomy_audit(
+        {
+            "action_id": "e2e-medium-probe",
+            "action": "freeze_manifest",
+            "risk_level": "MEDIUM",
+            "decision": "require_human",
+            "outcome": "not_executed",
+            "source": "ops_autonomy.request",
+        }
+    )
+    append_autonomy_audit(
+        {
+            "action_id": "operational-low",
+            "action": "restart_service",
+            "risk_level": "LOW",
+            "decision": "allow",
+            "outcome": "allowed",
+            "source": "self_heal",
+        }
+    )
+    append_autonomy_audit(
+        {
+            "action_id": "operational-high",
+            "action": "apply_release_to_cvm",
+            "risk_level": "HIGH",
+            "decision": "approved",
+            "approver": "operator",
+            "outcome": "allowed",
+            "source": "release",
+        }
+    )
+
+    summary = summarize_autonomy_audit(days=1)
+
+    assert summary["cohort"] == "operational"
+    assert summary["total"] == 2
+    assert summary["veto_count"] == 1
+    assert summary["human_approval_count"] == 1
+    assert summary["synthetic_probe_count"] == 1
+    assert summary["veto_rate"] == 50.0
+
+
+def test_pending_approval_resumes_and_rejection_never_retries(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     executed: list[dict] = []
     decision, pending = request_action(
         "rollback_release",
@@ -355,12 +648,14 @@ def test_pending_approval_resumes_and_rejection_never_retries() -> None:
     with pytest.raises(ApprovalStateError, match="rejected"):
         resume_action("reject-me", approver="octocat")
 
-    summary = summarize_autonomy_audit(days=1)
+    summary = summarize_autonomy_audit(days=1, include_synthetic=True)
     assert summary["total"] > 0
     assert summary["veto_count"] > 0
 
 
-def test_deferred_workflow_only_marks_executed_after_real_outcome() -> None:
+def test_deferred_workflow_only_marks_executed_after_real_outcome(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
     decision, pending = request_action(
         "freeze_manifest",
         action_id="deferred-freeze",
