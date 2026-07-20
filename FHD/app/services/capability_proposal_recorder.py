@@ -19,7 +19,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +34,7 @@ _file_lock = threading.Lock()
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _normalize(text: Any) -> str:
@@ -48,7 +48,7 @@ def _dedup_key(raw_input: Any, reason: str) -> str:
     norm = _normalize(raw_input).lower()
     if len(norm) > 200:
         norm = norm[:200]
-    return hashlib.sha1(f"{reason}|{norm}".encode("utf-8")).hexdigest()
+    return hashlib.sha1(f"{reason}|{norm}".encode()).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
