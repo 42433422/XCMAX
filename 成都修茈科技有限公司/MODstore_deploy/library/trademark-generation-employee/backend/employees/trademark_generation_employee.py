@@ -97,7 +97,9 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
 async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     ctx = dict(ctx or {})
-    action = str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
+    action = (
+        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
+    )
     if action in ("help", "说明", "status"):
         return _ok(
             {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
@@ -127,11 +129,19 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         return _ok(
             result,
             warnings=list(result.get("warnings") or []) if isinstance(result, dict) else [],
-            meta={"handler": "direct_python", "action": "generate", "runtime": "trademark_generation"},
+            meta={
+                "handler": "direct_python",
+                "action": "generate",
+                "runtime": "trademark_generation",
+            },
         )
     except Exception as exc:  # noqa: BLE001
         return _err(
             str(exc),
             warnings=["请检查品牌名、行业、商标类型、风格描述和生图密钥配置。"],
-            meta={"handler": "direct_python", "action": "generate", "runtime": "trademark_generation"},
+            meta={
+                "handler": "direct_python",
+                "action": "generate",
+                "runtime": "trademark_generation",
+            },
         )

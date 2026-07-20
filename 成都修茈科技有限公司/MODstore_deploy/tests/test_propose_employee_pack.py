@@ -1,5 +1,6 @@
 # 成都修茈科技有限公司/MODstore_deploy/tests/test_propose_employee_pack.py
 """LLM 提议器单元测试。"""
+
 from __future__ import annotations
 
 import json

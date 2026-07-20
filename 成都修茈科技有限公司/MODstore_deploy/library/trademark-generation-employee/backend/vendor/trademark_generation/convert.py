@@ -9,7 +9,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-
 TRADEMARK_TYPES: Dict[str, Dict[str, Any]] = {
     "wordmark": {
         "label": "文字商标",
@@ -145,7 +144,11 @@ PROMPT_PRESETS: Dict[str, Dict[str, Any]] = {
             "为「{brand_name}」生成原创 App 图标商标。行业：{industry}；核心符号：{symbol}；风格：{style}；配色：{palette}。"
             "圆角方形安全构图，中心图形强，几何简洁，高对比，24px/48px 仍清晰。除非明确要求缩写，否则不要放字母；不要近似现有 App 图标。"
         ),
-        "postprocess": ["导出 1024/512/256/128/64/32/16px", "检查圆角安全边距", "做 favicon 简化版"],
+        "postprocess": [
+            "导出 1024/512/256/128/64/32/16px",
+            "检查圆角安全边距",
+            "做 favicon 简化版",
+        ],
     },
     "package_label_mark": {
         "label": "包装标签商标",
@@ -210,7 +213,11 @@ def _first(payload: Dict[str, Any], *keys: str, default: str = "") -> str:
 
 
 def normalize_trademark_type(payload: Dict[str, Any]) -> str:
-    raw = str(payload.get("trademark_type") or payload.get("logo_type") or payload.get("type") or "").strip().lower()
+    raw = (
+        str(payload.get("trademark_type") or payload.get("logo_type") or payload.get("type") or "")
+        .strip()
+        .lower()
+    )
     text = (raw + "\n" + _text_blob(payload)).lower()
     if raw in TRADEMARK_TYPES:
         return raw
@@ -270,12 +277,11 @@ def _format_preset_text(template: str, values: Dict[str, str]) -> str:
 
 
 def _select_prompt_preset(payload: Dict[str, Any], brand_name: str, mark_type: str) -> str:
-    raw = str(
-        payload.get("prompt_preset")
-        or payload.get("preset")
-        or payload.get("template")
-        or ""
-    ).strip().lower()
+    raw = (
+        str(payload.get("prompt_preset") or payload.get("preset") or payload.get("template") or "")
+        .strip()
+        .lower()
+    )
     text = "\n".join([raw, brand_name, _text_blob(payload)]).lower()
     for preset_id, spec in PROMPT_PRESETS.items():
         if raw == preset_id or raw.replace("-", "_") == preset_id:
@@ -361,12 +367,30 @@ def build_trademark_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
     spec = TRADEMARK_TYPES[mark_type]
     brand_name = _first(payload, "brand_name", "name", "company", "product_name", default="新品牌")
     industry = _first(payload, "industry", "category", "business", default="AI 软件 / 企业服务")
-    audience = _first(payload, "audience", "target_user", "target_audience", default="企业客户和专业用户")
-    brand_values = _first(payload, "brand_values", "values", "personality", default="可靠、聪明、高效、有温度")
-    palette = _first(payload, "color_palette", "palette", "colors", default="deep blue, clean white, fresh green accent")
-    usage = _first(payload, "usage", "target_platform", "platform", default="官网、App 图标、名片、包装、市场页")
+    audience = _first(
+        payload, "audience", "target_user", "target_audience", default="企业客户和专业用户"
+    )
+    brand_values = _first(
+        payload, "brand_values", "values", "personality", default="可靠、聪明、高效、有温度"
+    )
+    palette = _first(
+        payload,
+        "color_palette",
+        "palette",
+        "colors",
+        default="deep blue, clean white, fresh green accent",
+    )
+    usage = _first(
+        payload,
+        "usage",
+        "target_platform",
+        "platform",
+        default="官网、App 图标、名片、包装、市场页",
+    )
     style = _style_modifier(mark_type, _first(payload, "style", "art_style", default=""))
-    symbol = _first(payload, "symbol", "icon", default=_industry_symbol(f"{industry} {_text_blob(payload)}"))
+    symbol = _first(
+        payload, "symbol", "icon", default=_industry_symbol(f"{industry} {_text_blob(payload)}")
+    )
     selected_preset = _select_prompt_preset(payload, brand_name, mark_type)
     preset = _build_prompt_preset(
         selected_preset,
@@ -420,9 +444,25 @@ def build_trademark_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
         "clearance_checklist": _clearance_checklist(brand_name, industry, mark_type),
         "delivery_spec": {
             "source": ["SVG", "AI or PDF vector", "editable monochrome version"],
-            "raster": ["PNG 1024/512/256/128/64/32/16", "transparent background", "white and dark background previews"],
-            "variants": ["horizontal lockup", "stacked lockup", "symbol-only", "black", "white", "single-color"],
-            "quality_gates": ["24px readability", "black-white contrast", "no tiny strokes", "safe margins for app icon and favicon"],
+            "raster": [
+                "PNG 1024/512/256/128/64/32/16",
+                "transparent background",
+                "white and dark background previews",
+            ],
+            "variants": [
+                "horizontal lockup",
+                "stacked lockup",
+                "symbol-only",
+                "black",
+                "white",
+                "single-color",
+            ],
+            "quality_gates": [
+                "24px readability",
+                "black-white contrast",
+                "no tiny strokes",
+                "safe margins for app icon and favicon",
+            ],
         },
         "legal_note": "本结果是创意与初步自检，不构成法律意见，也不保证商标可注册；正式上线/申请前必须做商标检索和法务复核。",
         "taxonomy": [
@@ -437,7 +477,9 @@ def _image_credentials(provider: str) -> Tuple[str, str, str]:
     if provider == "doubao":
         return (
             os.environ.get("DOUBAO_API_KEY") or os.environ.get("ARK_API_KEY") or "",
-            (os.environ.get("DOUBAO_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3").rstrip("/"),
+            (
+                os.environ.get("DOUBAO_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3"
+            ).rstrip("/"),
             "doubao-seedream-5-0-260128",
         )
     if provider == "openai":
@@ -459,7 +501,9 @@ def _write_data_url(data_url: str, output_path: Path, index: int) -> str:
     return str(img_path)
 
 
-async def _generate_images(profile: Dict[str, Any], payload: Dict[str, Any], output_path: Path) -> Dict[str, Any]:
+async def _generate_images(
+    profile: Dict[str, Any], payload: Dict[str, Any], output_path: Path
+) -> Dict[str, Any]:
     provider = _first(payload, "provider", "image_provider", default="doubao").lower()
     key, base_url, default_model = _image_credentials(provider)
     model = _first(payload, "model", "image_model", default=default_model)
@@ -510,7 +554,9 @@ async def _generate_images(profile: Dict[str, Any], payload: Dict[str, Any], out
             images.append({"url": url, "local_path": ""})
         elif b64:
             data_url = f"data:image/png;base64,{b64}"
-            images.append({"url": data_url, "local_path": _write_data_url(data_url, output_path, idx)})
+            images.append(
+                {"url": data_url, "local_path": _write_data_url(data_url, output_path, idx)}
+            )
     return {"ok": bool(images), "images": images, "provider": provider, "model": model, "raw": data}
 
 
@@ -546,8 +592,12 @@ async def convert_trademark_profile(
         },
         "warnings": warnings,
     }
-    if _as_bool(payload.get("require_image"), default=False) and not (image_result.get("images") or []):
+    if _as_bool(payload.get("require_image"), default=False) and not (
+        image_result.get("images") or []
+    ):
         result["ok"] = False
         result["summary"] = "已生成商标方案和提示词，但未生成图片。"
-    output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return result

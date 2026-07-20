@@ -10,6 +10,7 @@
 - gap_to_issue.subprocess.run（gh CLI）
 - build_employee_pack._get_commit_diff_files / _read_pack_file / evaluate_employee_pack
 """
+
 from __future__ import annotations
 
 import json
