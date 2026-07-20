@@ -5,6 +5,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     _assess_branch_auto_merge_policy,
     _employee_result_ok,
+    _extract_failure_reason,
     _guest_auth_headers,
     _has_high_risk_report,
     _is_transient_employee_dispatch_failure,
@@ -283,6 +284,49 @@ def test_employee_result_rejects_e2e_codex_timeout():
     }
 
     assert _employee_result_ok(result) is False
+
+
+def test_extract_failure_reason_picks_up_delivery_validation_failure():
+    # delivery_validation 由 Para 远端返回，嵌在 result.result.outputs[].para_result
+    # 等任意层级。模拟真实结构：change_delivery.ok=true（代码已交付）但验证命令失败。
+    result = {
+        "result": {
+            "ok": False,
+            "status": "failed",
+            "outputs": [
+                {
+                    "handler": "para_delegate",
+                    "para_result": {
+                        "delivery_validation": {
+                            "commands": [
+                                {
+                                    "command": "-m pytest tests/test_x.py",
+                                    "exit_code": 1,
+                                    "output_tail": "FAILED tests/test_x.py::test_safe_branch_name",
+                                },
+                                {"command": "-m py_compile main.py", "exit_code": 0},
+                            ],
+                        }
+                    },
+                }
+            ],
+        }
+    }
+
+    reason = _extract_failure_reason(result, {})
+
+    assert "delivery_validation_failed" in reason
+    assert "exit=1" in reason
+    assert "pytest tests/test_x.py" in reason
+
+
+def test_extract_failure_reason_falls_back_when_no_delivery_validation():
+    # 无 delivery_validation 时走原有兜底逻辑，返回非空原因
+    result = {"result": {"ok": False, "status": "completed"}}
+
+    reason = _extract_failure_reason(result, {})
+
+    assert reason and reason != "delivery_validation_failed"
 
 
 def test_resume_review_qa_candidate_uses_failed_review_branch():

@@ -45,6 +45,19 @@ def ensure_fhd_on_path() -> None:
                 ]
                 employee_runtime.__package__ = "app.application.employee_runtime"
                 sys.modules["app.application.employee_runtime"] = employee_runtime
+            # risk_gate.py imports app.domain.autonomy.autonomy_guard.
+            # app and app.domain must be exposed as namespace packages too,
+            # otherwise ModuleNotFoundError: No module named 'app.domain.autonomy'.
+            if "app" not in sys.modules:
+                app_pkg = types.ModuleType("app")
+                app_pkg.__path__ = [str(candidate / "app")]
+                app_pkg.__package__ = "app"
+                sys.modules["app"] = app_pkg
+            if "app.domain" not in sys.modules:
+                domain_pkg = types.ModuleType("app.domain")
+                domain_pkg.__path__ = [str(candidate / "app" / "domain")]
+                domain_pkg.__package__ = "app.domain"
+                sys.modules["app.domain"] = domain_pkg
             return
     raise RuntimeError("FHD autonomy_guard SSOT is unavailable")
 
