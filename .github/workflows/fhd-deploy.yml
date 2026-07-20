@@ -136,18 +136,8 @@ jobs:
             done
             return 1
           }
-          approver=""
-          deployments="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100")"
-          while IFS= read -r statuses_url; do
-            statuses="$(github_cli_retry gh api "$statuses_url")"
-            approver="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
-              [.[]
-                | select((.log_url // "") | contains($needle))
-                | select(.state == "in_progress" or .state == "queued")
-                | .creator.login][0] // empty
-            ' <<< "$statuses")"
-            [ -n "$approver" ] && break
-          done < <(jq -r '.[].statuses_url' <<< "$deployments")
+          reviews="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          approver="$(jq -r '[.[] | select(.state == "approved") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
           if [ -z "$approver" ]; then
             echo "::error::Could not resolve the production environment reviewer; refusing to resume."
             exit 1
@@ -304,19 +294,9 @@ jobs:
           ' <<< "$jobs")"
           approved_by=""
           rejected_by=""
-          deployments="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" || printf '[]')"
-          while IFS= read -r statuses_url; do
-            statuses="$(github_cli_retry gh api "$statuses_url" || printf '[]')"
-            approved_by="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
-              [.[] | select((.log_url // "") | contains($needle)) | select(.state == "in_progress") | .creator.login][0] // empty
-            ' <<< "$statuses")"
-            rejected_by="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
-              [.[] | select((.log_url // "") | contains($needle)) | select(.state == "failure") | .creator.login][0] // empty
-            ' <<< "$statuses")"
-            if [ -n "$approved_by" ] || [ -n "$rejected_by" ]; then
-              break
-            fi
-          done < <(jq -r '.[].statuses_url' <<< "$deployments")
+          reviews="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals" || printf '[]')"
+          approved_by="$(jq -r '[.[] | select(.state == "approved") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
+          rejected_by="$(jq -r '[.[] | select(.state == "rejected") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
           if [ "$resume_succeeded" = "true" ]; then
             decision="execution_failed"
             approver="${approved_by:-${rejected_by:-$GITHUB_ACTOR}}"
