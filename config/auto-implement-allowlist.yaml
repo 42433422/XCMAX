@@ -1,0 +1,17 @@
+# ai-issue-implement 域预授权（方案 B）
+#
+# 规则：
+#   1. issue 仍须带 `ai-implement` 标签才会触发 workflow
+#   2. 若 issue 另有 label 全量匹配下列任一 regex，则跳过 owner「确认」评论门禁
+#   3. 未命中 allowlist 时，维持现状（须 owner 评论确认）
+#
+# 风险：仅白名单域自动执行；改此文件即改预授权面，PR 需人工审。
+
+version: 1
+enabled: true
+
+label_patterns:
+  - "^bug-mech-.*"
+  - "^bug-fix$"
+  - "^refactor-.*"
+  - "^tech-debt-.*"
