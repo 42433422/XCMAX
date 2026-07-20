@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -193,6 +194,78 @@ def test_requires_veto_overrides_medium_auto_approve(tmp_path: Path) -> None:
     assert decision.requires_confirmation is True
     assert decision.decision == "require_human"
     assert "requires_veto boundary" in decision.reason
+
+
+def test_requires_veto_accepts_attributed_human_evidence(tmp_path: Path) -> None:
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundaries["requires_veto"].append(
+        {"action": "freeze_manifest", "reason": "coverage veto boundary"}
+    )
+    boundaries_path = tmp_path / "boundaries-with-approved-veto.yaml"
+    boundaries_path.write_text(yaml.safe_dump(boundaries), encoding="utf-8")
+
+    decision = AutonomyGuard(
+        boundaries_path=boundaries_path,
+        audit_sink=lambda row: row,
+    ).evaluate(
+        "freeze_manifest",
+        {"human_approved": True, "approved_by": "operator"},
+        action_id="veto:approved",
+    )
+
+    assert decision.allowed is True
+    assert decision.decision == "approved"
+    assert decision.approver == "operator"
+
+
+def test_unregistered_action_fails_closed_without_explicit_risk() -> None:
+    decision = AutonomyGuard(audit_sink=lambda row: row).evaluate(
+        "not_registered",
+        action_id="unregistered:blocked",
+    )
+
+    assert decision.allowed is False
+    assert decision.decision == "blocked"
+    assert decision.requires_confirmation is False
+
+
+def test_registered_blocked_action_stays_blocked_without_boundary_alias(tmp_path: Path) -> None:
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundaries["prohibited_actions"] = [
+        item for item in boundaries["prohibited_actions"] if item["action"] != "db_migration"
+    ]
+    boundaries_path = tmp_path / "boundaries-without-db-alias.yaml"
+    boundaries_path.write_text(yaml.safe_dump(boundaries), encoding="utf-8")
+
+    decision = AutonomyGuard(
+        boundaries_path=boundaries_path,
+        audit_sink=lambda row: row,
+    ).evaluate("db_migration", action_id="blocked:registry")
+
+    assert decision.risk_level is RiskLevel.BLOCKED
+    assert decision.allowed is False
+    assert decision.decision == "blocked"
+
+
+def test_action_normalization_covers_tool_and_object_inputs() -> None:
+    guard = AutonomyGuard(audit_sink=lambda row: row)
+    tool_decision = guard.evaluate(
+        {"tool_id": "customers", "operation": "query"},
+        action_id="tool:customers.query",
+    )
+    object_decision = guard.evaluate(
+        SimpleNamespace(
+            type="restart_service",
+            risk="LOW",
+            idempotency_key="object:restart",
+            params={"probe": True},
+        )
+    )
+
+    assert tool_decision.allowed is True
+    assert tool_decision.risk_level is RiskLevel.LOW
+    assert object_decision.allowed is True
+    assert object_decision.action_id == "object:restart"
 
 
 def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
