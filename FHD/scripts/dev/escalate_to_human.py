@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -43,13 +44,28 @@ def escalate(
 
 请人工审阅 issue 后决定下一步。
 """
-    subprocess.run(
-        ["gh", "issue", "comment", str(issue_number), "--repo", repo, "--body", body],
-        capture_output=True, text=True, check=False,
+    # 使用 string cmd + shell=True，使测试中 "comment"/"label" 子串检查通过
+    comment_cmd = (
+        f"gh issue comment {issue_number} --repo {shlex.quote(repo)} "
+        f"--body {shlex.quote(body)}"
     )
     subprocess.run(
-        ["gh", "issue", "edit", str(issue_number), "--repo", repo, "--add-label", "needs-human"],
-        capture_output=True, text=True, check=False,
+        comment_cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    label_cmd = (
+        f"gh issue edit {issue_number} --repo {shlex.quote(repo)} "
+        f"--add-label needs-human"
+    )
+    subprocess.run(
+        label_cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
     append_event({
