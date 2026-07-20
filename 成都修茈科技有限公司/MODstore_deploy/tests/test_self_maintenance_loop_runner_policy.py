@@ -6,6 +6,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _assess_branch_auto_merge_policy,
     _employee_result_ok,
     _extract_failure_reason,
+    _find_delivery_validation,
     _guest_auth_headers,
     _has_high_risk_report,
     _is_transient_employee_dispatch_failure,
@@ -562,3 +563,368 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
+# ---------------------------------------------------------------------------
+
+
+class TestFindDeliveryValidation:
+    """验证 `_find_delivery_validation` 在 Para 远端返回结构中递归定位
+    delivery_validation dict 的能力。"""
+
+    def test_find_delivery_validation_single_level_nesting(self):
+        """单层嵌套：result.result.outputs[0].para_result.delivery_validation。"""
+        dv = {"commands": [{"exit_code": 1, "command": "pytest"}]}
+        result = {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "para_delegate",
+                        "para_result": {"delivery_validation": dv},
+                    }
+                ]
+            }
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv
+
+    def test_find_delivery_validation_deep_nesting(self):
+        """depth=4 多层嵌套，模拟 Para 真实结构
+        result.result.outputs[0].response.data.subtask.delivery_validation。"""
+        dv = {"commands": [{"exit_code": 2}]}
+        result = {
+            "result": {
+                "outputs": [
+                    {
+                        "response": {
+                            "data": {
+                                "subtask": {"delivery_validation": dv},
+                            },
+                        },
+                    }
+                ]
+            }
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv
+
+    def test_find_delivery_validation_depth_truncation(self):
+        """depth>6 时返回 None：构造 7 层嵌套，delivery_validation 在第 7 层。"""
+        dv = {"commands": [{"exit_code": 1}]}
+        # 嵌套结构：a -> b -> c -> d -> e -> f -> g -> delivery_validation
+        # 调用 _find_delivery_validation(top) 时 depth=0, 进入 a 后 depth=1,
+        # 进入 b 后 depth=2, ..., 进入 g 后 depth=7 → 立即返回 None
+        nested = {"delivery_validation": dv}
+        for key in ("g", "f", "e", "d", "c", "b", "a"):
+            nested = {key: nested}
+
+        found = _find_delivery_validation(nested)
+
+        assert found is None
+
+    def test_find_delivery_validation_list_truncation(self):
+        """列表超过 12 项时只搜前 12 项：delivery_validation 放在第 13 项应返回 None。"""
+        dv = {"commands": [{"exit_code": 1}]}
+        items = [{"index": i} for i in range(12)] + [{"delivery_validation": dv}]
+        result = {"items": items}
+
+        found = _find_delivery_validation(result)
+
+        assert found is None
+
+    def test_find_delivery_validation_skips_non_dict(self):
+        """delivery_validation 字段值为字符串/list 时返回 None（只识别 dict）。"""
+        result_str = {"delivery_validation": "not a dict"}
+        result_list = {"delivery_validation": ["not", "a", "dict"]}
+
+        assert _find_delivery_validation(result_str) is None
+        assert _find_delivery_validation(result_list) is None
+
+    def test_find_delivery_validation_empty_dict(self):
+        """空 dict 输入返回 None。"""
+        assert _find_delivery_validation({}) is None
+
+    def test_find_delivery_validation_multiple_occurrences(self):
+        """多个 delivery_validation 时返回第一个（DFS 顺序）。"""
+        dv_first = {"commands": [{"exit_code": 1}], "marker": "first"}
+        dv_second = {"commands": [{"exit_code": 2}], "marker": "second"}
+        result = {
+            "result": {
+                "delivery_validation": dv_first,
+                "nested": {"delivery_validation": dv_second},
+            }
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv_first
+
+    def test_find_delivery_validation_in_list_items(self):
+        """列表项中包含 delivery_validation 能被找到。"""
+        dv = {"commands": [{"exit_code": 1}]}
+        result = {"outputs": [{"name": "skip"}, {"delivery_validation": dv}]}
+
+        found = _find_delivery_validation(result)
+
+        assert found is dv
+
+    def test_find_delivery_validation_commands_with_exit_code_none(self):
+        """exit_code=None 的 command 不视为失败：_find_delivery_validation 仍能找到 dv，
+        但 _extract_failure_reason 不会返回 delivery_validation_failed。"""
+        dv = {"commands": [{"exit_code": None, "command": "pytest"}]}
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        # _find_delivery_validation 找到 dict
+        found = _find_delivery_validation(result)
+        assert found is dv
+
+        # _extract_failure_reason 不把 exit_code=None 视为失败，落到 fallback
+        reason = _extract_failure_reason(result, {})
+        assert "delivery_validation_failed" not in reason
+
+    def test_find_delivery_validation_commands_with_exit_code_zero(self):
+        """exit_code=0 的 command 不视为失败。"""
+        dv = {"commands": [{"exit_code": 0, "command": "pytest"}]}
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        found = _find_delivery_validation(result)
+        assert found is dv
+
+        reason = _extract_failure_reason(result, {})
+        assert "delivery_validation_failed" not in reason
+
+    def test_find_delivery_validation_commands_with_non_zero_exit(self):
+        """exit_code≠0 的 command 视为失败：_extract_failure_reason 返回 delivery_validation_failed。"""
+        dv = {
+            "commands": [
+                {"exit_code": 1, "command": "pytest tests/x.py"},
+                {"exit_code": 0, "command": "ruff check"},
+            ]
+        }
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        found = _find_delivery_validation(result)
+        assert found is dv
+
+        reason = _extract_failure_reason(result, {})
+        assert "delivery_validation_failed" in reason
+        assert "exit=1" in reason
+
+    def test_find_delivery_validation_returns_none_for_none_input(self):
+        """None 输入返回 None。"""
+        assert _find_delivery_validation(None) is None
+
+    def test_find_delivery_validation_returns_none_for_string_input(self):
+        """字符串输入返回 None。"""
+        assert _find_delivery_validation("not a dict") is None
+
+
+# ---------------------------------------------------------------------------
+# _extract_failure_reason: 端到端优先级测试
+# ---------------------------------------------------------------------------
+
+
+class TestExtractFailureReasonEndToEnd:
+    """验证 `_extract_failure_reason` 各分支优先级与 fallback 行为。"""
+
+    def test_priority_handler_failed_message(self):
+        """handler_failed + handler_failed_message 优先级最高。"""
+        result = {
+            "handler_failed": True,
+            "handler_failed_message": "codex cli crashed",
+            "result": {"ok": False, "delivery_validation": {"commands": [{"exit_code": 1}]}},
+        }
+
+        reason = _extract_failure_reason(result, {"error": "para error"})
+
+        assert reason.startswith("handler_failed:")
+        assert "codex cli crashed" in reason
+
+    def test_priority_path_guard_violation(self):
+        """path_guard.ok=False 提取 violations（无 handler_failed 时优先）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "path_guard": {
+                    "checked": True,
+                    "ok": False,
+                    "violations": [
+                        {"path": "forbidden/x.py", "reason": "outside_scope"},
+                    ],
+                },
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason.startswith("path_guard_violation:")
+        assert "forbidden/x.py" in reason
+        assert "outside_scope" in reason
+
+    def test_priority_inner_outputs_failure(self):
+        """outputs[].ok=False 提取 handler/error（无 handler_failed/path_guard 时优先）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [
+                    {
+                        "handler": "code_writer",
+                        "ok": False,
+                        "error": "syntax error in generated file",
+                        "detail": "line 42",
+                    }
+                ],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason.startswith("output_failed:")
+        assert "handler=code_writer" in reason
+        assert "syntax error" in reason
+
+    def test_priority_delivery_validation_failed(self):
+        """delivery_validation.commands[].exit_code≠0 提取失败命令（2026-07-20 修复核心）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [
+                    {
+                        "handler": "para_delegate",
+                        "ok": True,
+                        "para_result": {
+                            "delivery_validation": {
+                                "commands": [
+                                    {
+                                        "command": "pytest tests/test_x.py",
+                                        "exit_code": 1,
+                                        "output_tail": "FAILED tests/test_x.py::test_a",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert "delivery_validation_failed" in reason
+        assert "exit=1" in reason
+        assert "pytest tests/test_x.py" in reason
+
+    def test_priority_para_error(self):
+        """para_meta.error 提取（无 handler/path_guard/outputs/dv 时优先）。"""
+        result = {"result": {"ok": False, "status": "completed"}}
+        para_meta = {"error": "Para task timeout 900s"}
+
+        reason = _extract_failure_reason(result, para_meta)
+
+        assert reason.startswith("para_error:")
+        assert "Para task timeout 900s" in reason
+
+    def test_priority_para_status(self):
+        """para_meta.para_status 非 completed/ok/success 提取。"""
+        result = {"result": {"ok": False, "status": "completed"}}
+        para_meta = {"para_status": "failed"}
+
+        reason = _extract_failure_reason(result, para_meta)
+
+        assert reason == "para_status=failed"
+
+    def test_priority_inner_status_failed(self):
+        """inner.status=failed 提取（无 para_meta 时优先）。"""
+        result = {
+            "result": {
+                "ok": False,
+                "status": "failed",
+                "error": "agent gave up after max rounds",
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason.startswith("inner_status=failed:")
+        assert "agent gave up" in reason
+
+    def test_priority_report_marker_blocked_by_risk_middleware(self):
+        """report 含 'blocked by risk middleware' 返回 blocked_by_risk_middleware。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [{"message": "task blocked by risk middleware: forbidden path"}],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason == "blocked_by_risk_middleware"
+
+    def test_priority_report_marker_codex_cli_failed(self):
+        """report 含 '[e2e-agent] codex cli 失败' 返回 codex_cli_failed。"""
+        result = {
+            "result": {
+                "ok": False,
+                "outputs": [
+                    {"message": "[e2e-agent] codex cli 失败: exit code 1"}
+                ],
+            }
+        }
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason == "codex_cli_failed"
+
+    def test_fallback_ok_false_unknown_reason(self):
+        """所有分支都不匹配时返回 'ok_false_unknown_reason'。"""
+        result = {"result": {"ok": False, "status": "completed"}}
+
+        reason = _extract_failure_reason(result, {})
+
+        assert reason == "ok_false_unknown_reason"
+
+    def test_delivery_validation_with_multiple_failed_commands(self):
+        """多个失败命令拼接（最多 3 个）。"""
+        dv = {
+            "commands": [
+                {"exit_code": 1, "command": "pytest a"},
+                {"exit_code": 2, "command": "pytest b"},
+                {"exit_code": 3, "command": "pytest c"},
+                {"exit_code": 4, "command": "pytest d"},  # 超过 3 个，应被截断
+            ]
+        }
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        reason = _extract_failure_reason(result, {})
+
+        assert "delivery_validation_failed" in reason
+        assert "exit=1" in reason
+        assert "exit=2" in reason
+        assert "exit=3" in reason
+        # 第 4 个不应出现
+        assert "exit=4" not in reason
+
+    def test_delivery_validation_truncates_long_output(self):
+        """长 output_tail 截断到 120 字符。"""
+        long_tail = "x" * 500
+        dv = {
+            "commands": [
+                {"exit_code": 1, "command": "pytest", "output_tail": long_tail}
+            ]
+        }
+        result = {"result": {"ok": False, "delivery_validation": dv}}
+
+        reason = _extract_failure_reason(result, {})
+
+        assert "delivery_validation_failed" in reason
+        # output_tail 被截断到 120 字符
+        assert ("tail=" + "x" * 120) in reason
+        # 不应包含完整的 500 字符
+        assert "x" * 200 not in reason
