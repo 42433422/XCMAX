@@ -677,9 +677,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(details.exists()).toBe(true)
     details.element.setAttribute('open', '')
     await flushPromises()
-    // 页面内有多个 .lead.muted（L116 的硬编码文案 + L167 的 baselinePlan.summary），
-    // 用 .host-pack-details 作用域精准定位 baselinePlan.summary 渲染节点。
-    expect(wrapper.find('.host-pack-details .lead.muted').text()).toContain('这是摘要')
+    // baselinePlan.summary 渲染在 .host-pack-details 内的 .lead.muted,
+    // 不能用 find('.lead.muted') 因为页面其他步骤也可能有该 class。
+    expect(details.find('.lead.muted').text()).toContain('这是摘要')
   })
 
   it('host-pack 步骤：明细折叠默认隐藏清单与 mod_id', async () => {
