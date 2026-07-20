@@ -965,6 +965,27 @@ def _resume_steps(resume_candidate: Optional[Dict[str, Any]]) -> set[str]:
     return set()
 
 
+def _resume_dispatch_context(
+    resume_candidate: Optional[Dict[str, Any]], steps_to_run: set[str]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Choose the Para task id and base branch for a resumed loop.
+
+    Code retries must use a fresh Para task. A score remediation still keeps
+    the prior candidate branch as its base so the production fix survives.
+    Review/QA-only retries keep the original task and branch for evidence.
+    """
+
+    if not resume_candidate:
+        return None, None
+    para_task_id = str(resume_candidate.get("para_task_id") or "").strip() or None
+    code_branch = str(resume_candidate.get("branch") or "").strip() or None
+    if "code" not in steps_to_run:
+        return para_task_id, code_branch
+    if resume_candidate.get("continue_existing_code_task"):
+        return None, code_branch
+    return None, None
+
+
 def _parse_iso(value: Any) -> Optional[datetime]:
     if not value:
         return None
@@ -1871,7 +1892,12 @@ def _focused_test_command() -> str:
     return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
 
 
-def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
+def _code_task_text(
+    run_id: str,
+    evaluation: Dict[str, Any],
+    memory: Dict[str, Any],
+    resume_candidate: Optional[Dict[str, Any]] = None,
+) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
     focused_test_command = _focused_test_command()
     evolution_context_dict = build_self_evolution_context(
@@ -1898,15 +1924,39 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
     )
     last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
-    score_remediation = ""
-    if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
+    selected_remediation: Optional[Dict[str, Any]] = None
+    if (
+        isinstance(resume_candidate, dict)
+        and resume_candidate.get("reason") == "resume_safety_score_remediation"
+    ):
+        selected_remediation = resume_candidate
+        open_items = memory.get("open_items") if isinstance(memory, dict) else None
+        if isinstance(open_items, list):
+            selected_branch = str(resume_candidate.get("branch") or "")
+            selected_run_id = str(resume_candidate.get("failed_run_id") or "")
+            selected_task_id = str(resume_candidate.get("para_task_id") or "")
+            for item in reversed(open_items):
+                if not isinstance(item, dict):
+                    continue
+                item_task_id = str(item.get("task_id") or item.get("para_task_id") or "")
+                if (
+                    (selected_branch and str(item.get("branch") or "") == selected_branch)
+                    or (selected_run_id and str(item.get("run_id") or "") == selected_run_id)
+                    or (selected_task_id and item_task_id == selected_task_id)
+                ):
+                    selected_remediation = {**item, **resume_candidate}
+                    break
+    elif isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
         "auto_merge_safety_score_v2_too_low",
         "auto_merge_safety_score_v3_too_low",
         "risk_score_v3_below_threshold_or_blocked",
     }:
+        selected_remediation = last_decision
+    score_remediation = ""
+    if isinstance(selected_remediation, dict):
         merge_result = (
-            last_decision.get("merge_result")
-            if isinstance(last_decision.get("merge_result"), dict)
+            selected_remediation.get("merge_result")
+            if isinstance(selected_remediation.get("merge_result"), dict)
             else {}
         )
         v2 = (
@@ -1925,7 +1975,10 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
             else {}
         )
         remediation_evidence = {
-            "reason": last_decision.get("reason"),
+            "branch": selected_remediation.get("branch"),
+            "failed_run_id": selected_remediation.get("failed_run_id")
+            or selected_remediation.get("run_id"),
+            "reason": selected_remediation.get("reason"),
             "review_max_severity": review.get("max_severity"),
             "review_tested_commands": review.get("tested_commands"),
             "safety_score_v2": v2.get("score"),
@@ -1935,7 +1988,8 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         }
         score_remediation = (
             "\n\n=== EXISTING BRANCH SCORE REMEDIATION ===\n"
-            "Continue the existing candidate; do not replace its production fix with an "
+            f"Continue from the existing candidate base branch "
+            f"`{str(selected_remediation.get('branch') or '').strip()}`; do not replace its production fix with an "
             "unrelated change. The previous independent review/score did not authorize merge. "
             "Address its missing evidence on this candidate, especially any promised focused "
             "regression test that is absent. A test-only follow-up commit is valid here because "
@@ -5027,21 +5081,15 @@ def _run_self_maintenance_loop_unlocked(
     _append_ledger(start_record)
 
     steps: List[Dict[str, Any]] = []
-    para_task_id: Optional[str] = (
-        str(resume_candidate.get("para_task_id")) if resume_candidate else None
-    )
-    code_branch: Optional[str] = str(resume_candidate.get("branch")) if resume_candidate else None
-
     plan = []
     steps_to_run = _resume_steps(resume_candidate)
+    para_task_id, code_branch = _resume_dispatch_context(resume_candidate, steps_to_run)
     if "code" in steps_to_run:
-        # A failed code task is terminal in Para. Start a fresh task/branch;
-        # reusing its id would produce an empty resume plan forever. A completed
-        # candidate held by the safety score is different: Para can append a
-        # remediation subtask to that task and base it on the existing branch.
-        if resume_candidate and not resume_candidate.get("continue_existing_code_task"):
-            para_task_id = None
-            code_branch = None
+        # Code remediation always starts a fresh Para task. Appending to a
+        # completed task leaves its old base branch/completed_at in force, so a
+        # new subtask can both lose the candidate diff and fail to report final
+        # completion. Safety-score remediation keeps the candidate as the new
+        # task's base branch; ordinary failed code starts from the configured base.
         code_extra: Dict[str, Any] = {
             "allow_medium_risk": True,
             # self-maintenance loop 干活范围是整个 XCMAX 仓库（FHD/XCAGI/kb/fixes、
@@ -5055,7 +5103,7 @@ def _run_self_maintenance_loop_unlocked(
             (
                 "vibe-coding-maintainer",
                 "code",
-                _code_task_text(run_id, gate, loop_memory),
+                _code_task_text(run_id, gate, loop_memory, resume_candidate),
                 code_extra,
             )
         )
