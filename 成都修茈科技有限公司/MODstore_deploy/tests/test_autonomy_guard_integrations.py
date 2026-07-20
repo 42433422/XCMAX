@@ -17,9 +17,7 @@ from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_exec
 def isolated_autonomy(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "audit.sqlite3"))
     monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
-    monkeypatch.setenv(
-        "XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl")
-    )
+    monkeypatch.setenv("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH", str(tmp_path / "approval.jsonl"))
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
     from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
 
@@ -44,11 +42,7 @@ def test_daily_vibe_cron_auto_approves_before_dispatch(monkeypatch) -> None:
 
     from app.application.autonomy.audit_log import list_autonomy_audit
 
-    rows = [
-        row
-        for row in list_autonomy_audit(limit=20)
-        if row["action"] == "daily_vibe_dispatch"
-    ]
+    rows = [row for row in list_autonomy_audit(limit=20) if row["action"] == "daily_vibe_dispatch"]
     assert rows and rows[0]["decision"] == "auto_approve"
 
 
@@ -110,9 +104,7 @@ def test_employee_executor_fails_closed_when_risk_middleware_errors(
         raise ModuleNotFoundError("risk SSOT unavailable")
 
     monkeypatch.setattr(employee_risk_middleware, "gate_action_or_block", broken_gate)
-    decision = employee_executor._evaluate_employee_risk_gate(
-        "worker", {}, ["agent"], {}
-    )
+    decision = employee_executor._evaluate_employee_risk_gate("worker", {}, ["agent"], {})
 
     assert decision["ok"] is False
     assert decision["blocked"] is True
@@ -149,9 +141,7 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/autonomy-test.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:9")
-    monkeypatch.setattr(
-        loop_runner, "_changed_files_for_branch", lambda **kwargs: ["safe.py"]
-    )
+    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", lambda **kwargs: ["safe.py"])
     monkeypatch.setattr(
         loop_runner,
         "_diff_numstat_for_branch",
