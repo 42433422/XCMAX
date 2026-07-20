@@ -122,16 +122,14 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     ssh.write_text(
         "#!/usr/bin/env bash\n"
         "cmd=${!#}\n"
-        "case \"$cmd\" in\n"
+        'case "$cmd" in\n'
         "  *curl*) printf '%s\\n' \"$HEALTH_PAYLOAD\" ;;\n"
         "  *REMOTE_SZ*) printf 'OK_MOVED\\n' ;;\n"
         "esac\n",
         encoding="utf-8",
     )
     ssh.chmod(0o755)
-    health_payload = json.dumps(
-        {"build": {"git_sha": "b" * 40, "artifact_sha256": artifact_sha}}
-    )
+    health_payload = json.dumps({"build": {"git_sha": "b" * 40, "artifact_sha256": artifact_sha}})
 
     result = subprocess.run(
         ["bash", str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh")],
