@@ -235,14 +235,15 @@ class TestRiskGateCodeWrite:
         )
         assert result["risk_level"] == "high"
 
-    def test_high_risk_blocked_without_flag(self, monkeypatch):
+    def test_registered_high_risk_auto_approves_without_flag(self, monkeypatch):
         monkeypatch.delenv("FHD_RISK_HIGH_GATE_TOKEN", raising=False)
         manifest = {"employee_config_v2": {}}
         result = gate_action_or_block(
             "fhd-core-maintainer", manifest, ["agent"], {"tool": "patch_file"}
         )
-        assert not result["ok"]
-        assert result.get("blocked") is True
+        assert result["ok"]
+        assert result["decision"] == "auto_approve"
+        assert result.get("pending_approval", False) is False
 
     def test_high_risk_allowed_with_allow_flag(self, monkeypatch):
         monkeypatch.delenv("FHD_RISK_HIGH_GATE_TOKEN", raising=False)
@@ -255,7 +256,7 @@ class TestRiskGateCodeWrite:
         )
         assert result["ok"]
 
-    def test_high_risk_blocked_with_wrong_token(self, monkeypatch):
+    def test_registered_high_risk_ignores_wrong_legacy_token(self, monkeypatch):
         monkeypatch.setenv("FHD_RISK_HIGH_GATE_TOKEN", "secret123")
         manifest = {"employee_config_v2": {}}
         result = gate_action_or_block(
@@ -268,7 +269,8 @@ class TestRiskGateCodeWrite:
                 "high_risk_gate_token": "wrong",
             },
         )
-        assert not result["ok"]
+        assert result["ok"]
+        assert result["decision"] == "auto_approve"
 
     def test_high_risk_allowed_with_correct_token(self, monkeypatch):
         monkeypatch.setenv("FHD_RISK_HIGH_GATE_TOKEN", "secret123")
@@ -284,6 +286,7 @@ class TestRiskGateCodeWrite:
             },
         )
         assert result["ok"]
+        assert result["decision"] == "auto_approve"
 
 
 class TestWorkspaceGuardCodeWrite:
