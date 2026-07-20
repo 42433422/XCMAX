@@ -786,6 +786,7 @@ def test_ai_compat_health_root_and_api(ai_client: TestClient) -> None:
         body = ai_client.get(path).json()
         assert body["success"] is True
         assert body["data"]["status"] == "ok"
+        assert body["build"] == body["data"]["build"]
 
 
 def test_ai_generate_with_template_name(
