@@ -205,6 +205,42 @@ def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90(
     assert result["components"]["rollback_penalty"] == 2
 
 
+def test_diff_semantic_scan_ignores_context_and_kb_explanation():
+    diff = """diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/cr_narrow_ci.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/cr_narrow_ci.py
+--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/cr_narrow_ci.py
++++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/cr_narrow_ci.py
+@@ -188,3 +188,3 @@
+     proc = subprocess.run(
+-        [\"python3\", \"-m\", \"py_compile\", tmp_path],
++        [sys.executable, \"-m\", \"py_compile\", tmp_path],
+diff --git a/FHD/XCAGI/kb/fixes/fix.json b/FHD/XCAGI/kb/fixes/fix.json
+--- /dev/null
++++ b/FHD/XCAGI/kb/fixes/fix.json
+@@ -0,0 +1 @@
++{\"root_cause\": \"subprocess used the wrong Python interpreter\"}
+"""
+
+    result = loop_runner._diff_semantic_penalty(diff)
+
+    assert result["high_hits"] == []
+    assert result["penalty"] == 0
+    assert result["source"] == "diff_added_source_keyword_scan"
+
+
+def test_diff_semantic_scan_still_flags_added_subprocess_call():
+    diff = """diff --git a/worker.py b/worker.py
+--- a/worker.py
++++ b/worker.py
+@@ -1,0 +1 @@
++subprocess.run(command)
+"""
+
+    result = loop_runner._diff_semantic_penalty(diff)
+
+    assert result["high_hits"] == ["subprocess"]
+    assert result["penalty"] == 16
+
+
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
     files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
@@ -568,6 +604,33 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
     }
 
 
+def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-score",
+                "kind": "automated_remediation",
+                "reason": "auto_merge_safety_score_v2_too_low",
+                "run_id": "r-score",
+                "task_id": "task-score",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/codex/sub-1-score",
+        "continue_existing_code_task": True,
+        "failed_run_id": "r-score",
+        "failed_steps": ["code"],
+        "para_task_id": "task-score",
+        "reason": "resume_safety_score_remediation",
+    }
+    assert _resume_steps(result) == {"code", "review", "qa"}
+
+
 def test_resume_review_qa_candidate_stops_when_latest_policy_has_real_risk():
     memory = {
         "last_policy_decision": {
@@ -630,9 +693,7 @@ def test_high_risk_report_detects_standalone_qa_fail():
         {
             "step": "qa",
             "report_excerpt": (
-                "FAIL\n\n"
-                "Blocking QA findings:\n"
-                "Recommendation: do not merge this target as-is."
+                "FAIL\n\nBlocking QA findings:\nRecommendation: do not merge this target as-is."
             ),
         }
     ]
@@ -1085,7 +1146,10 @@ class TestExtractFailureReasonEndToEnd:
         result = {
             "handler_failed": True,
             "handler_failed_message": "codex cli crashed",
-            "result": {"ok": False, "delivery_validation": {"commands": [{"exit_code": 1}]}},
+            "result": {
+                "ok": False,
+                "delivery_validation": {"commands": [{"exit_code": 1}]},
+            },
         }
 
         reason = _extract_failure_reason(result, {"error": "para error"})
@@ -1669,10 +1733,14 @@ def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(monkeypatch, t
     comment_calls = []
     label_calls = []
     monkeypatch.setattr(
-        loop_runner, "_gh_pr_comment", lambda pr, body: comment_calls.append((pr, body)) or True
+        loop_runner,
+        "_gh_pr_comment",
+        lambda pr, body: comment_calls.append((pr, body)) or True,
     )
     monkeypatch.setattr(
-        loop_runner, "_gh_pr_add_label", lambda pr, label: label_calls.append((pr, label)) or True
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
     )
     monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
     monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)

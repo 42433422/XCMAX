@@ -59,7 +59,7 @@ DEFAULT_PARA_AUTH_CACHE_NAME = "para_guest_auth_cache.json"
 DEFAULT_MERGE_WORKSPACE_ROOT = "self_maintenance_merge_workspaces"
 DEFAULT_LOOP_LEASE_NAME = "self_maintenance_loop.lock"
 DEFAULT_STATUS_FILE = (
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/" "self_maintenance_loop_status.py"
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
 )
 DEFAULT_AUTO_MERGE_GLOBS = [DEFAULT_STATUS_FILE]
 DEFAULT_AUTO_MERGE_SCOPE_GLOBS = [
@@ -909,6 +909,24 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         }:
             continue
         reason = str(item.get("reason") or "")
+        if reason in {
+            "auto_merge_safety_score_v2_too_low",
+            "auto_merge_safety_score_v3_too_low",
+            "risk_score_v3_below_threshold_or_blocked",
+        }:
+            branch = str(item.get("branch") or "").strip()
+            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+            run_id = str(item.get("run_id") or "").strip()
+            if branch and para_task_id:
+                return {
+                    "branch": branch,
+                    "continue_existing_code_task": True,
+                    "failed_run_id": run_id,
+                    "failed_steps": ["code"],
+                    "para_task_id": para_task_id,
+                    "reason": "resume_safety_score_remediation",
+                }
+            continue
         if reason not in {
             "changed_files_match_forbidden_globs",
             "changed_files_outside_dynamic_low_risk_scope",
@@ -1848,7 +1866,7 @@ def _focused_test_command() -> str:
         Path(sys.executable),
     )
     test_path = (
-        "成都修茈科技有限公司/MODstore_deploy/tests/" "test_self_maintenance_loop_runner_policy.py"
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     )
     return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
 
@@ -1879,6 +1897,53 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
     fix_digest = (
         "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
     )
+    last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    score_remediation = ""
+    if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
+        "auto_merge_safety_score_v2_too_low",
+        "auto_merge_safety_score_v3_too_low",
+        "risk_score_v3_below_threshold_or_blocked",
+    }:
+        merge_result = (
+            last_decision.get("merge_result")
+            if isinstance(last_decision.get("merge_result"), dict)
+            else {}
+        )
+        v2 = (
+            merge_result.get("safety_score_v2")
+            if isinstance(merge_result.get("safety_score_v2"), dict)
+            else {}
+        )
+        v3 = (
+            merge_result.get("safety_score_v3")
+            if isinstance(merge_result.get("safety_score_v3"), dict)
+            else {}
+        )
+        review = (
+            (v2.get("semantic_llm_analysis") or {}).get("reports", {}).get("review", {})
+            if isinstance(v2.get("semantic_llm_analysis"), dict)
+            else {}
+        )
+        remediation_evidence = {
+            "reason": last_decision.get("reason"),
+            "review_max_severity": review.get("max_severity"),
+            "review_tested_commands": review.get("tested_commands"),
+            "safety_score_v2": v2.get("score"),
+            "safety_score_v2_min": v2.get("min_allowed"),
+            "safety_score_v3": v3.get("score"),
+            "safety_score_v3_min": v3.get("min_allowed"),
+        }
+        score_remediation = (
+            "\n\n=== EXISTING BRANCH SCORE REMEDIATION ===\n"
+            "Continue the existing candidate; do not replace its production fix with an "
+            "unrelated change. The previous independent review/score did not authorize merge. "
+            "Address its missing evidence on this candidate, especially any promised focused "
+            "regression test that is absent. A test-only follow-up commit is valid here because "
+            "the existing candidate already contains the production fix. Run that focused test "
+            "and the mandatory loop policy suite, then commit and push the amended candidate. "
+            "Do not lower, bypass, or game either safety threshold. Evidence: "
+            f"{json.dumps(remediation_evidence, ensure_ascii=False, sort_keys=True)}"
+        )
     return (
         "Run a real MODstore self-maintenance improvement task. "
         "Use the previous loop memory and current evidence gaps to fix the highest-value "
@@ -1948,6 +2013,7 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "self-verifying first. "
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
+        f"{score_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
@@ -2764,8 +2830,7 @@ def _reject_and_retry_kb_schema_failure(
     if not isinstance(errors, list) or not errors:
         errors = [{"error": "unknown kb schema validation failure", "file": "", "kind": ""}]
     error_bullets = "\n".join(
-        f"- file: `{e.get('file') or '?'}` kind: `{e.get('kind') or '?'}` "
-        f"error: {(e.get('error') or '')[:300]}"
+        f"- file: `{e.get('file') or '?'}` kind: `{e.get('kind') or '?'}` error: {(e.get('error') or '')[:300]}"
         for e in errors[:8]
     )
     checked_files = kb_validation.get("checked") if isinstance(kb_validation, dict) else []
@@ -3230,7 +3295,37 @@ def _semantic_review_qa_analysis(
 
 
 def _diff_semantic_penalty(diff_excerpt: str) -> Dict[str, Any]:
-    text = (diff_excerpt or "").lower()
+    raw_diff = diff_excerpt or ""
+    # A unified diff contains unchanged context and often a generated KB record.
+    # Scanning both made a safe replacement such as ``python3`` -> ``sys.executable``
+    # look dangerous merely because an unchanged context line called
+    # ``subprocess.run`` and the KB explained that call. Score only added source
+    # lines. Keep the old plain-text behavior for callers that provide a summary
+    # rather than a unified diff.
+    saw_unified_diff = False
+    current_path = ""
+    added_source_lines: List[str] = []
+    excluded_added_line_prefixes = (
+        "fhd/xcagi/kb/",
+        "docs/",
+    )
+    for line in raw_diff.splitlines():
+        if line.startswith("diff --git "):
+            saw_unified_diff = True
+            continue
+        if line.startswith("+++ "):
+            path = line[4:].strip().strip('"')
+            current_path = path[2:] if path.startswith("b/") else path
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        normalized_path = current_path.lower()
+        if any(normalized_path.startswith(prefix) for prefix in excluded_added_line_prefixes):
+            continue
+        added_source_lines.append(line[1:])
+
+    scanned_text = "\n".join(added_source_lines) if saw_unified_diff else raw_diff
+    text = scanned_text.lower()
     high_terms = [
         "drop table",
         "delete from",
@@ -3249,7 +3344,9 @@ def _diff_semantic_penalty(diff_excerpt: str) -> Dict[str, Any]:
         "high_hits": high_hits,
         "medium_hits": medium_hits,
         "penalty": min(50, len(high_hits) * 16 + len(medium_hits) * 5),
-        "source": "diff_semantic_keyword_scan",
+        "source": (
+            "diff_added_source_keyword_scan" if saw_unified_diff else "diff_semantic_keyword_scan"
+        ),
     }
 
 
@@ -4939,22 +5036,27 @@ def _run_self_maintenance_loop_unlocked(
     steps_to_run = _resume_steps(resume_candidate)
     if "code" in steps_to_run:
         # A failed code task is terminal in Para. Start a fresh task/branch;
-        # reusing its id would produce an empty resume plan forever.
-        if resume_candidate:
+        # reusing its id would produce an empty resume plan forever. A completed
+        # candidate held by the safety score is different: Para can append a
+        # remediation subtask to that task and base it on the existing branch.
+        if resume_candidate and not resume_candidate.get("continue_existing_code_task"):
             para_task_id = None
             code_branch = None
+        code_extra: Dict[str, Any] = {
+            "allow_medium_risk": True,
+            # self-maintenance loop 干活范围是整个 XCMAX 仓库（FHD/XCAGI/kb/fixes、
+            # 成都修茈科技有限公司/MODstore_deploy/modstore_server 等），与 vibe-coding-maintainer
+            # 默认 scope_globs（限定 vibe-coding/）冲突；loop 是受信任系统调度，显式跳过 path_guard。
+            "skip_path_guard": True,
+        }
+        if resume_candidate and resume_candidate.get("continue_existing_code_task"):
+            code_extra["branch"] = code_branch
         plan.append(
             (
                 "vibe-coding-maintainer",
                 "code",
                 _code_task_text(run_id, gate, loop_memory),
-                {
-                    "allow_medium_risk": True,
-                    # self-maintenance loop 干活范围是整个 XCMAX 仓库（FHD/XCAGI/kb/fixes、
-                    # 成都修茈科技有限公司/MODstore_deploy/modstore_server 等），与 vibe-coding-maintainer
-                    # 默认 scope_globs（限定 vibe-coding/）冲突；loop 是受信任系统调度，显式跳过 path_guard。
-                    "skip_path_guard": True,
-                },
+                code_extra,
             )
         )
     if "review" in steps_to_run:
@@ -5097,8 +5199,7 @@ def _run_self_maintenance_loop_unlocked(
                     and isinstance(early_kb.get("kb_validation"), dict)
                 ):
                     logger.warning(
-                        "early KB schema validation failed for branch=%s run_id=%s; "
-                        "rejecting and retrying code step",
+                        "early KB schema validation failed for branch=%s run_id=%s; rejecting and retrying code step",
                         code_branch,
                         run_id,
                     )
