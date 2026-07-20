@@ -55,6 +55,7 @@ class GatedPlanDecision:
                 "requires_confirmation": self.risk_decision.requires_confirmation,
                 "reason": self.risk_decision.reason,
                 "blocking_nodes": list(self.risk_decision.blocking_nodes or []),
+                "denied_nodes": list(self.risk_decision.denied_nodes or []),
             },
             "node_decisions": [
                 {
@@ -122,7 +123,10 @@ class ApprovalGatedEngine:
                 requires_approval=node.node_id in (risk_decision.blocking_nodes or []),
             )
 
-            if nd.requires_approval:
+            if node.node_id in (risk_decision.denied_nodes or []):
+                nd.rejected = True
+                nd.reason = "denied by autonomy_guard"
+            elif nd.requires_approval:
                 req = self._approval_service.create_approval_request(
                     plan_id=plan.plan_id,
                     node=node,

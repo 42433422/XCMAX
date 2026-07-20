@@ -41,6 +41,12 @@ def test_im_rest_paths_are_fixed_lan_bypass() -> None:
     assert lan_guard_path_is_bypassed("/api/im/conversations/1/messages?limit=50", cfg)
 
 
+def test_token_authenticated_autonomy_callback_is_fixed_lan_bypass() -> None:
+    cfg = _cfg()
+    assert lan_guard_path_is_bypassed("/api/ops/autonomy/github-approval", cfg)
+    assert lan_guard_path_is_bypassed("/fhd-api/api/ops/autonomy/actions/pending", cfg)
+
+
 @pytest.mark.asyncio
 async def test_cidr_guard_allows_im_websocket_handshake_path() -> None:
     app = AsyncMock()
