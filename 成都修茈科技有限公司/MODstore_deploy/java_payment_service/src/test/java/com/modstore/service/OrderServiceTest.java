@@ -376,7 +376,8 @@ class OrderServiceTest {
             Order paid = buildPaidOrder("OT-E4", "item", new BigDecimal("40.00"));
             paid.setCreatedAt(LocalDateTime.now().minusHours(5));
 
-            when(orderRepository.findAll()).thenReturn(List.of(old1, old2, recent, paid));
+            when(orderRepository.findByStatusAndCreatedAtBefore(eq("pending"), any(LocalDateTime.class)))
+                    .thenReturn(List.of(old1, old2));
             when(orderRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
             int closed = orderService.closeExpiredPendingOrders(Duration.ofHours(1));
@@ -391,6 +392,7 @@ class OrderServiceTest {
         void reconcilesWechatWhenQueryReturnsSuccess() {
             Order order = buildPendingOrder("OT-R1", "item", new BigDecimal("10.00"));
             order.setPayType("wechat_native");
+            when(orderRepository.findByOutTradeNo("OT-R1")).thenReturn(Optional.of(order));
             when(orderRepository.findByOutTradeNoForUpdate("OT-R1")).thenReturn(Optional.of(order));
             when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -411,7 +413,7 @@ class OrderServiceTest {
         void skipsWechatWhenQueryNotSuccessful() {
             Order order = buildPendingOrder("OT-R1b", "item", new BigDecimal("10.00"));
             order.setPayType("wechat_native");
-            when(orderRepository.findByOutTradeNoForUpdate("OT-R1b")).thenReturn(Optional.of(order));
+            when(orderRepository.findByOutTradeNo("OT-R1b")).thenReturn(Optional.of(order));
             when(wechatPayService.queryTransactionByOutTradeNo("OT-R1b")).thenReturn(Map.of("ok", false, "message", "NOTPAY"));
 
             orderService.reconcileWithAlipayIfUnfulfilled("OT-R1b");
@@ -424,7 +426,7 @@ class OrderServiceTest {
         void skipsAlreadyFulfilledPaidOrder() {
             Order order = buildPaidOrder("OT-R2", "item", new BigDecimal("10.00"));
             order.setFulfilled(true);
-            when(orderRepository.findByOutTradeNoForUpdate("OT-R2")).thenReturn(Optional.of(order));
+            when(orderRepository.findByOutTradeNo("OT-R2")).thenReturn(Optional.of(order));
 
             orderService.reconcileWithAlipayIfUnfulfilled("OT-R2");
 
@@ -435,6 +437,7 @@ class OrderServiceTest {
         @Test
         void reconcilesWhenAlipayReturnsTradeSuccess() {
             Order order = buildPendingOrder("OT-R3", "item", new BigDecimal("10.00"));
+            when(orderRepository.findByOutTradeNo("OT-R3")).thenReturn(Optional.of(order));
             when(orderRepository.findByOutTradeNoForUpdate("OT-R3")).thenReturn(Optional.of(order));
             when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -455,7 +458,7 @@ class OrderServiceTest {
         @Test
         void noopsWhenAlipayQueryFails() {
             Order order = buildPendingOrder("OT-R4", "item", new BigDecimal("10.00"));
-            when(orderRepository.findByOutTradeNoForUpdate("OT-R4")).thenReturn(Optional.of(order));
+            when(orderRepository.findByOutTradeNo("OT-R4")).thenReturn(Optional.of(order));
 
             Map<String, Object> queryResult = Map.of("ok", false, "message", "not found");
             when(alipayService.queryOrder("OT-R4")).thenReturn(queryResult);
