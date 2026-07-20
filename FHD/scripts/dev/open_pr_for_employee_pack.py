@@ -41,7 +41,6 @@ def create_branch_commit_pr(
     _run(["git", "add", str(target_dir)])
     _run(["git", "commit", "-m", f"feat(employee_pack): add {pack_name}\n\nProposal-ID: {proposal.get('proposal_id')}"])
     _run(["git", "push", "origin", branch_name])
-    _run(["git", "checkout", "-"])  # 回到原分支
 
     # 开 PR
     pr_url = _run([
