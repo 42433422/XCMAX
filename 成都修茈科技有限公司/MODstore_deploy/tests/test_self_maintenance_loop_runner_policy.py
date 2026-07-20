@@ -12,7 +12,11 @@ from modstore_server.self_maintenance_loop_runner import (
     KB_SCHEMA_RETRY_MAX,
     NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
+    _auto_dispatch_deploy_envs,
+    _build_synthetic_review_qa_steps,
     _code_task_text,
+    _dispatch_deploy_for_merge,
+    _dispatch_fhd_deploy_action,
     _employee_result_ok,
     _existing_kb_schema_retry_item,
     _extract_failure_reason,
@@ -26,6 +30,8 @@ from modstore_server.self_maintenance_loop_runner import (
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _matches_focused_test_command,
+    _merge_review_qa_into_code,
+    _merged_marker_prompt_suffix,
     _qa_task_text,
     _reject_and_retry_kb_schema_failure,
     _resume_review_qa_candidate,
@@ -328,6 +334,90 @@ def test_dynamic_low_risk_policy_blocks_large_changes(monkeypatch):
 
     assert result["ok"] is False
     assert result["reason"] == "too_many_changed_lines_for_dynamic_auto_merge"
+
+
+def _force_safety_score_v2_too_low(monkeypatch, score: int = 70, min_allowed: int = 90):
+    """让 v2 评分不达标、v3 不通过、其余 gate 走默认配置。"""
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda files, diff_stats, **kw: {"score": score, "min_allowed": min_allowed, "ok": False},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kw: {"ok": False, "score": score, "reason": "v3_disabled_for_test"},
+    )
+
+
+def test_safety_score_v2_too_low_blocks_by_default(monkeypatch):
+    """默认（env 未开）safety_score_v2 < min_allowed → ok=False，走人工战略。"""
+    _force_safety_score_v2_too_low(monkeypatch)
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats())
+
+    assert result["ok"] is False
+    assert result["reason"] == "auto_merge_safety_score_v2_too_low"
+    assert "safety_score_v2_override" not in result
+
+
+def test_safety_score_v2_override_env_forces_merge(monkeypatch):
+    """env=1 时即使 v2 安全分不达标也放行，仅覆盖 auto_merge_safety_score_v2_too_low。"""
+    _force_safety_score_v2_too_low(monkeypatch, score=72, min_allowed=90)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_OVERRIDE_SAFETY_SCORE_V2", "1")
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats())
+
+    assert result["ok"] is True
+    assert result["reason"] == "safety_score_v2_override_passed"
+    override = result["safety_score_v2_override"]
+    assert override["actual_score"] == 72
+    assert override["min_allowed"] == 90
+    assert override["deficit"] == 18
+
+
+def test_safety_score_v2_override_does_not_affect_high_score(monkeypatch):
+    """v2 已达标（score>=min）时仍走 risk_score_v2_policy_passed，override env 无副作用。"""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_OVERRIDE_SAFETY_SCORE_V2", "1")
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v2",
+        lambda files, diff_stats, **kw: {"score": 95, "min_allowed": 90, "ok": True},
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_auto_merge_safety_score_v3",
+        lambda *args, **kw: {"ok": False, "reason": "v3_disabled_for_test"},
+    )
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats())
+
+    assert result["ok"] is True
+    assert result["reason"] == "risk_score_v2_policy_passed"
+    assert "safety_score_v2_override" not in result
+
+
+def test_safety_score_v2_override_does_not_affect_absolute_forbidden(monkeypatch):
+    """override env 不绕过 absolute_forbidden_globs（改 secrets/.env 等仍阻断）。"""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_OVERRIDE_SAFETY_SCORE_V2", "1")
+    _force_safety_score_v2_too_low(monkeypatch)
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/deploy/secrets.env",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats())
+
+    assert result["ok"] is False
+    assert result["reason"] == "changed_files_match_absolute_forbidden_globs"
 
 
 def test_transient_para_api_outbox_failure_is_retryable():
@@ -1767,3 +1857,217 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
     result = _find_pr_number_for_branch("any-branch")
     assert result is None
+
+
+# ============================================================
+# Dispatch deploy tests (卡点 3: 部署链路串通)
+# ============================================================
+
+
+def test_auto_dispatch_deploy_envs_disabled_by_default(monkeypatch):
+    """Default: MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY not set → empty list."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", raising=False)
+
+    assert _auto_dispatch_deploy_envs() == []
+
+
+def test_auto_dispatch_deploy_envs_master_switch_off(monkeypatch):
+    """Master switch off → empty list even if envs configured."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "0")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging,production")
+
+    assert _auto_dispatch_deploy_envs() == []
+
+
+def test_auto_dispatch_deploy_envs_staging_first(monkeypatch):
+    """Staging must always come before production regardless of input order."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "production,staging")
+
+    envs = _auto_dispatch_deploy_envs()
+    assert envs == ["staging", "production"]
+
+
+def test_auto_dispatch_deploy_envs_staging_only(monkeypatch):
+    """Only staging configured → only staging returned."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging")
+
+    assert _auto_dispatch_deploy_envs() == ["staging"]
+
+
+def test_dispatch_fhd_deploy_action_dry_run(monkeypatch):
+    """Dry-run mode: no gh command actually executed."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN", "1")
+    monkeypatch.setenv("GITHUB_REPO", "test/repo")
+
+    import subprocess
+
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(args[0] if args else kwargs.get("args"))
+        raise FileNotFoundError("gh not installed")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = _dispatch_fhd_deploy_action(
+        environment="staging",
+        action="apply-latest",
+        action_id="loop:test-run:deploy:staging",
+    )
+
+    # dry_run mode returns ok=True with reason=dry_run_skipped (no real dispatch)
+    assert result["ok"] is True
+    assert result["reason"] == "dry_run_skipped"
+    assert result["environment"] == "staging"
+    assert "gh workflow run fhd-deploy.yml" in result["gh_command"]
+
+
+def test_dispatch_deploy_for_merge_staging_only_success(monkeypatch):
+    """Staging-only deploy: success path returns single ok result."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN", "0")
+
+    def fake_dispatch(*, environment, action, action_id):
+        return {"ok": True, "environment": environment, "action": action}
+
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._dispatch_fhd_deploy_action",
+        fake_dispatch,
+    )
+
+    results = _dispatch_deploy_for_merge(
+        run_id="test-run",
+        branch="test-branch",
+        environments=["staging"],
+    )
+
+    assert len(results) == 1
+    assert results[0]["ok"] is True
+    assert results[0]["environment"] == "staging"
+
+
+def test_dispatch_deploy_for_merge_staging_failure_freezes_and_stops(monkeypatch):
+    """Staging failure freezes manifest and does not proceed to production."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging,production")
+
+    dispatch_calls = []
+
+    def fake_dispatch(*, environment, action, action_id):
+        dispatch_calls.append({"environment": environment, "action": action})
+        if environment == "staging" and action == "apply-latest":
+            return {"ok": False, "error": "staging health check failed"}
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._dispatch_fhd_deploy_action",
+        fake_dispatch,
+    )
+
+    results = _dispatch_deploy_for_merge(
+        run_id="test-run",
+        branch="test-branch",
+        environments=["staging", "production"],
+    )
+
+    # staging apply-latest failed → freeze-manifest called → production not attempted
+    actions = [c["action"] for c in dispatch_calls]
+    assert "freeze-manifest" in actions
+    assert "apply-latest" in actions
+    # production apply-latest should NOT be called
+    production_apply = [
+        c
+        for c in dispatch_calls
+        if c["environment"] == "production" and c["action"] == "apply-latest"
+    ]
+    assert production_apply == []
+
+
+# ============================================================
+# Merge mode tests (P0: 合并 code+review+qa 一步)
+# ============================================================
+
+
+def test_merge_review_qa_into_code_disabled_by_default(monkeypatch):
+    """Default: MODSTORE_SELF_MAINTENANCE_MERGE_REVIEW_QA_INTO_CODE not set → False."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_MERGE_REVIEW_QA_INTO_CODE", raising=False)
+
+    assert _merge_review_qa_into_code() is False
+
+
+def test_merge_review_qa_into_code_enabled(monkeypatch):
+    """Env set to 1 → True."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MERGE_REVIEW_QA_INTO_CODE", "1")
+
+    assert _merge_review_qa_into_code() is True
+
+
+def test_merged_marker_prompt_suffix_contains_both_markers():
+    """Suffix must require both SELF_MAINTENANCE_REVIEW_JSON and SELF_MAINTENANCE_QA_JSON markers."""
+    suffix = _merged_marker_prompt_suffix("test-run", "test-branch")
+
+    assert "SELF_MAINTENANCE_REVIEW_JSON" in suffix
+    assert "SELF_MAINTENANCE_QA_JSON" in suffix
+    assert "max_severity" in suffix
+    assert "verdict" in suffix
+    assert "tested_commands" in suffix
+    assert "MERGED REVIEW + QA REQUIREMENTS" in suffix
+
+
+def test_build_synthetic_review_qa_steps_creates_two_steps():
+    """Synthetic steps must include both review and qa with shared report_excerpt."""
+    code_step = {
+        "employee_id": "vibe-coding-maintainer",
+        "ok": True,
+        "report_excerpt": "code delivered\nSELF_MAINTENANCE_REVIEW_JSON: {...}",
+        "para": {"task_id": "T1"},
+        "retry_attempts": 1,
+        "code_fix_retry_rounds": 0,
+        "marker_retry_rounds": 0,
+    }
+
+    steps = _build_synthetic_review_qa_steps(code_step, "test-run")
+
+    assert len(steps) == 2
+    assert steps[0]["step"] == "review"
+    assert steps[1]["step"] == "qa"
+    assert steps[0]["report_excerpt"] == code_step["report_excerpt"]
+    assert steps[1]["report_excerpt"] == code_step["report_excerpt"]
+    assert steps[0]["ok"] is True
+    assert steps[1]["ok"] is True
+    assert steps[0]["synthetic_from_code_step"] is True
+    assert steps[1]["synthetic_from_code_step"] is True
+    assert steps[0]["run_id"] == "test-run"
+    assert steps[1]["run_id"] == "test-run"
+
+
+def test_resume_steps_in_merge_mode_reruns_code_for_review_failure(monkeypatch):
+    """In merge mode, review failure must rerun code (because code produces markers)."""
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MERGE_REVIEW_QA_INTO_CODE", "1")
+
+    from modstore_server.self_maintenance_loop_runner import _resume_steps
+
+    # review failed → must rerun code + review + qa
+    assert _resume_steps({"failed_steps": ["review"]}) == {"code", "review", "qa"}
+    # qa failed → must rerun code + review + qa
+    assert _resume_steps({"failed_steps": ["qa"]}) == {"code", "review", "qa"}
+    # code failed → must rerun all
+    assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
+    # no failures → empty set
+    assert _resume_steps({"failed_steps": []}) == set()
+
+
+def test_resume_steps_in_non_merge_mode_preserves_legacy_behavior(monkeypatch):
+    """Without merge mode, resume logic is unchanged (review failure → review+qa only)."""
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_MERGE_REVIEW_QA_INTO_CODE", raising=False)
+
+    from modstore_server.self_maintenance_loop_runner import _resume_steps
+
+    assert _resume_steps({"failed_steps": ["review"]}) == {"review", "qa"}
+    assert _resume_steps({"failed_steps": ["qa"]}) == {"qa"}
+    assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}

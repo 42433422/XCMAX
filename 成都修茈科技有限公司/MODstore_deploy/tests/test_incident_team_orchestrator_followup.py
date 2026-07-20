@@ -291,16 +291,12 @@ def test_multiple_handler_failures_each_get_followup(monkeypatch):
     )
     assert len(follow_ups) == 3
     # 各自按 failure_kind 分流
-    assert (
-        follow_ups[0]["failure_kind"] == "prompt"
-    )  # 500 internal error 不匹配 quota/transient
+    assert follow_ups[0]["failure_kind"] == "prompt"  # 500 internal error 不匹配 quota/transient
     assert follow_ups[1]["failure_kind"] == "transient"
     assert follow_ups[2]["failure_kind"] == "quota"
 
 
-def test_dispatch_incident_team_writes_followups_to_payload(
-    fresh_db, admin_user, monkeypatch
-):
+def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user, monkeypatch):
     """集成测试：dispatch_incident_team 把 follow_ups 写到 _team_claim.follow_ups。"""
     # 准备一个 incident event
     sf = models.get_session_factory()
