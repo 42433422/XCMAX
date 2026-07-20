@@ -234,8 +234,6 @@ class AutonomyGuard:
                 source=source,
                 context=ctx,
             )
-        approved, approver = approval_evidence(ctx, risk)
-
         if risk == RiskLevel.BLOCKED:
             return self._decision(
                 action=action_name,
@@ -248,21 +246,6 @@ class AutonomyGuard:
                 rollback_path=rollback_path,
                 source=source,
                 context=ctx,
-            )
-
-        if approved:
-            return self._decision(
-                action=action_name,
-                action_id=resolved_action_id,
-                risk=risk,
-                decision="approved",
-                allowed=True,
-                requires_confirmation=False,
-                reason=f"risk accepted by human approval ({approver})",
-                rollback_path=rollback_path,
-                source=source,
-                context=ctx,
-                approver=approver,
             )
 
         automatic_reason = ""
@@ -302,6 +285,26 @@ class AutonomyGuard:
                 rollback_path=rollback_path,
                 source=source,
                 context=ctx,
+            )
+
+        # Compatibility approval evidence only applies when the registry/policy
+        # did not already authorize automatic execution. Registered automatic
+        # actions must remain observable as auto decisions, never as a forged
+        # or synthetic human approval.
+        approved, approver = approval_evidence(ctx, risk)
+        if approved:
+            return self._decision(
+                action=action_name,
+                action_id=resolved_action_id,
+                risk=risk,
+                decision="approved",
+                allowed=True,
+                requires_confirmation=False,
+                reason=f"risk accepted by human approval ({approver})",
+                rollback_path=rollback_path,
+                source=source,
+                context=ctx,
+                approver=approver,
             )
 
         return self._decision(

@@ -249,6 +249,19 @@ def test_required_automatic_actions_are_evaluated_by_ssot(
     assert decision.decision == expected_decision
 
 
+def test_registered_auto_action_does_not_forge_human_approval() -> None:
+    decision = AutonomyGuard().evaluate(
+        "employee_execute",
+        {"allow_medium_risk": True},
+        action_id="activation:employee_execute:legacy-context",
+    )
+
+    assert decision.allowed is True
+    assert decision.decision == "auto_approve"
+    assert decision.approver == ""
+    assert decision.requires_confirmation is False
+
+
 @pytest.mark.parametrize("action", ["db_migration", "delete_user_data"])
 def test_required_blocked_actions_reach_ssot_and_can_never_execute(action: str) -> None:
     with pytest.raises(ProhibitedActionError, match=action):

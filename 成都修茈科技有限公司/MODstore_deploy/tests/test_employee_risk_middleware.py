@@ -58,3 +58,4 @@ def test_env_policy_auto_approves_medium(monkeypatch) -> None:
 def test_gate_allows_medium_with_allow_medium_risk_payload() -> None:
     gate = gate_action_or_block("x", {}, ["agent"], {"allow_medium_risk": True})
     assert gate.get("ok") is True
+    assert gate.get("decision") == "auto_approve"
