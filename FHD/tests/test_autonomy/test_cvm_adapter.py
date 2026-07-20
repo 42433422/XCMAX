@@ -31,7 +31,14 @@ from scripts.autonomy.cvm_adapter import (
     CvmAutonomyAdapter,
     list_audit_entries,
 )
-from scripts.autonomy.types import Action, ActionType, AuditEntry, Diagnosis, RiskLevel
+from scripts.autonomy.types import (
+    Action,
+    ActionResult,
+    ActionType,
+    AuditEntry,
+    Diagnosis,
+    RiskLevel,
+)
 
 # --------------------------------------------------------------------------- #
 # 工具函数
@@ -367,6 +374,392 @@ class TestEscalateNoopSuccess:
 
         assert result.ok is True
         assert "noop acknowledged" in result.detail
+
+
+# --------------------------------------------------------------------------- #
+# open_incident_issue 成功路径（GitHub REST API 创建 incident issue）
+# --------------------------------------------------------------------------- #
+
+
+def _make_incident_action(
+    *,
+    incident_type: str = "health_down",
+    previous_action_key: str = "restart_service:health_down",
+    source_kind: str = "health_down",
+    reason: str = "health check failed after restart",
+    diagnosis_root_cause: str = "service_unhealthy",
+) -> Action:
+    """构造测试用 open_incident_issue action。"""
+    return Action(
+        type=ActionType.OPEN_INCIDENT_ISSUE,
+        params={
+            "incident_type": incident_type,
+            "previous_action_key": previous_action_key,
+            "source_kind": source_kind,
+            "reason": reason,
+            "diagnosis_root_cause": diagnosis_root_cause,
+            "evidence": {"compose_status": "exited"},
+            "truth_snapshot": {"health_ok": False},
+        },
+        idempotency_key=f"open_incident_issue:{incident_type}",
+        max_attempts=1,
+        risk=RiskLevel.LOW,
+    )
+
+
+class TestOpenIncidentIssue:
+    """open_incident_issue action：GitHub REST API 创建 incident issue。"""
+
+    def test_token_missing_returns_failure(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+    ) -> None:
+        """github_token 或 github_repo 未配置 → ok=False, 不阻断 watcher。"""
+        # adapter_for_test 默认 github_token / github_repo 都是 None
+        assert adapter_for_test.github_token is None
+        assert adapter_for_test.github_repo is None
+        action = _make_incident_action()
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is False
+        assert "github_token/github_repo not configured" in result.detail
+
+    def test_previous_action_succeeded_skips_issue_creation(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """前置 remediation action 在 audit 中成功 → ok=True, idempotent skip。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        # 写入一条 audit：restart_service:health_down 成功
+        from scripts.autonomy.types import AuditEntry, Diagnosis
+
+        prev_action = Action(
+            type=ActionType.RESTART_SERVICE,
+            params={"reason": "test"},
+            idempotency_key="restart_service:health_down",
+            max_attempts=1,
+            risk=RiskLevel.MEDIUM,
+        )
+        prev_result = ActionResult(
+            action=prev_action,
+            ok=True,
+            detail="docker compose restart ok",
+            ts=1000,
+        )
+        entry = AuditEntry(
+            ts="2026-07-18T00:00:00Z",
+            source_signal=None,
+            diagnosis=Diagnosis(
+                root_cause="service_unhealthy",
+                confidence=0.8,
+                detail="test",
+                evidence=[],
+            ),
+            action=prev_action,
+            result=prev_result,
+            truth_snapshot=None,
+        )
+        adapter_for_test.audit(entry)
+        # 不应被调用的 GitHub API mock
+        adapter_for_test._github_api_get = lambda url, token: (_ for _ in ()).throw(
+            AssertionError("search should not be called when prev succeeded")
+        )
+        adapter_for_test._github_api_post = lambda url, token, body: (_ for _ in ()).throw(
+            AssertionError("create should not be called when prev succeeded")
+        )
+        action = _make_incident_action()
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is True
+        assert "previous action restart_service:health_down succeeded" in result.detail
+        assert "skip incident issue" in result.detail
+
+    def test_previous_action_failed_creates_issue(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """前置 action 失败 → 创建 issue（_github_api_post mock 返回 issue URL）。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        # 写入一条失败 audit
+        from scripts.autonomy.types import AuditEntry, Diagnosis
+
+        prev_action = Action(
+            type=ActionType.RESTART_SERVICE,
+            params={"reason": "test"},
+            idempotency_key="restart_service:health_down",
+            max_attempts=1,
+            risk=RiskLevel.MEDIUM,
+        )
+        prev_result = ActionResult(
+            action=prev_action,
+            ok=False,
+            detail="docker compose restart failed",
+            ts=1000,
+        )
+        entry = AuditEntry(
+            ts="2026-07-18T00:00:00Z",
+            source_signal=None,
+            diagnosis=Diagnosis(
+                root_cause="service_unhealthy",
+                confidence=0.8,
+                detail="test",
+                evidence=[],
+            ),
+            action=prev_action,
+            result=prev_result,
+            truth_snapshot=None,
+        )
+        adapter_for_test.audit(entry)
+        # search 无命中
+        adapter_for_test._github_api_get = lambda url, token: {"items": []}
+        created = {
+            "number": 42,
+            "html_url": "https://github.com/owner/repo/issues/42",
+        }
+        post_calls: list[tuple[str, str, dict[str, Any]]] = []
+        adapter_for_test._github_api_post = lambda url, token, body: (
+            post_calls.append((url, token, body)) or created
+        )
+        action = _make_incident_action()
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is True
+        assert "incident issue #42 created" in result.detail
+        assert "https://github.com/owner/repo/issues/42" in result.detail
+        # 验证 POST 调用
+        assert len(post_calls) == 1
+        url, token, body = post_calls[0]
+        assert url == "https://api.github.com/repos/owner/repo/issues"
+        assert token == "fake-token"
+        assert body["title"].startswith("[incident:health_down]")
+        assert "ai-implement" in body["labels"]
+        assert "incident" in body["labels"]
+        assert "auto-incident" in body["labels"]
+
+    def test_24h_dedup_skips_when_existing_issue_found(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """GitHub Search 命中已有 open issue → ok=True, 24h dedup skip。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        # 写入失败 audit（前置 action 失败）
+        from scripts.autonomy.types import AuditEntry, Diagnosis
+
+        prev_action = Action(
+            type=ActionType.RESTART_SERVICE,
+            params={"reason": "test"},
+            idempotency_key="restart_service:health_down",
+            max_attempts=1,
+            risk=RiskLevel.MEDIUM,
+        )
+        adapter_for_test.audit(
+            AuditEntry(
+                ts="2026-07-18T00:00:00Z",
+                source_signal=None,
+                diagnosis=Diagnosis(
+                    root_cause="service_unhealthy",
+                    confidence=0.8,
+                    detail="test",
+                    evidence=[],
+                ),
+                action=prev_action,
+                result=ActionResult(action=prev_action, ok=False, detail="failed", ts=1000),
+                truth_snapshot=None,
+            )
+        )
+        # search 命中
+        existing = {
+            "number": 7,
+            "html_url": "https://github.com/owner/repo/issues/7",
+        }
+        adapter_for_test._github_api_get = lambda url, token: {"items": [existing]}
+        adapter_for_test._github_api_post = lambda url, token, body: (_ for _ in ()).throw(
+            AssertionError("create should not be called when dedup hit")
+        )
+        action = _make_incident_action()
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is True
+        assert "incident issue #7 already exists (24h dedup)" in result.detail
+        assert "https://github.com/owner/repo/issues/7" in result.detail
+
+    def test_github_api_error_returns_failure(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """_github_post 返回 _error → ok=False, detail 含错误码。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        # 前置失败 audit
+        from scripts.autonomy.types import AuditEntry, Diagnosis
+
+        prev_action = Action(
+            type=ActionType.RESTART_SERVICE,
+            params={"reason": "test"},
+            idempotency_key="restart_service:health_down",
+            max_attempts=1,
+            risk=RiskLevel.MEDIUM,
+        )
+        adapter_for_test.audit(
+            AuditEntry(
+                ts="2026-07-18T00:00:00Z",
+                source_signal=None,
+                diagnosis=Diagnosis(
+                    root_cause="service_unhealthy",
+                    confidence=0.8,
+                    detail="test",
+                    evidence=[],
+                ),
+                action=prev_action,
+                result=ActionResult(action=prev_action, ok=False, detail="failed", ts=1000),
+                truth_snapshot=None,
+            )
+        )
+        adapter_for_test._github_api_get = lambda url, token: {"items": []}
+        adapter_for_test._github_api_post = lambda url, token, body: {
+            "_error": 422,
+            "_body": "validation failed",
+        }
+        action = _make_incident_action()
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is False
+        assert "github create issue failed 422" in result.detail
+        assert "validation failed" in result.detail
+
+    def test_no_previous_action_key_still_creates_issue(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+    ) -> None:
+        """previous_action_key 为空 → 不查 audit，直接走 search + create。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        adapter_for_test._github_api_get = lambda url, token: {"items": []}
+        created = {"number": 99, "html_url": "https://github.com/owner/repo/issues/99"}
+        adapter_for_test._github_api_post = lambda url, token, body: created
+        action = _make_incident_action(previous_action_key="")
+
+        result = adapter_for_test.execute_action(action)
+
+        assert result.ok is True
+        assert "incident issue #99 created" in result.detail
+
+    def test_skips_escalate_and_incident_audit_entries_when_checking_previous(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """_check_previous_action_result 跳过 escalate / open_incident_issue 同 key 条目。
+
+        构造 audit 中：
+          - 一条 escalate（idempotency_key=同 key，但 type=escalate）→ 应跳过
+          - 一条真实的 restart_service 失败 → 应被取到
+        """
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        from scripts.autonomy.types import AuditEntry, Diagnosis
+
+        # 一条 restart_service 失败 audit
+        restart_action = Action(
+            type=ActionType.RESTART_SERVICE,
+            params={"reason": "test"},
+            idempotency_key="restart_service:health_down",
+            max_attempts=1,
+            risk=RiskLevel.MEDIUM,
+        )
+        # 一条 escalate audit（同 idempotency_key，但 type=escalate）→ 应被跳过
+        escalate_action = Action(
+            type=ActionType.ESCALATE,
+            params={"reason": "test", "original_action": "restart_service"},
+            idempotency_key="restart_service:health_down",
+            max_attempts=1,
+            risk=RiskLevel.HIGH,
+        )
+        for act, ok in [
+            (restart_action, False),  # restart 失败
+            (escalate_action, True),  # escalate 成功（但应被跳过）
+        ]:
+            adapter_for_test.audit(
+                AuditEntry(
+                    ts="2026-07-18T00:00:00Z",
+                    source_signal=None,
+                    diagnosis=Diagnosis(
+                        root_cause="service_unhealthy",
+                        confidence=0.8,
+                        detail="test",
+                        evidence=[],
+                    ),
+                    action=act,
+                    result=ActionResult(action=act, ok=ok, detail="detail", ts=1000),
+                    truth_snapshot=None,
+                )
+            )
+        # search 无命中 → 走 create
+        adapter_for_test._github_api_get = lambda url, token: {"items": []}
+        adapter_for_test._github_api_post = lambda url, token, body: {
+            "number": 1,
+            "html_url": "https://github.com/owner/repo/issues/1",
+        }
+        action = _make_incident_action()
+
+        result = adapter_for_test.execute_action(action)
+
+        # 因 restart_service 失败 → 应创建 issue（escalate 同 key 被跳过）
+        assert result.ok is True
+        assert "incident issue #1 created" in result.detail
+
+    def test_build_incident_title_truncates_long_reason(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+    ) -> None:
+        """_build_incident_title：reason > 60 字符 → 截断 + '...'。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        long_reason = "x" * 100  # 100 字符
+        title = adapter_for_test._build_incident_title("disk_full", {"reason": long_reason})
+        assert title.startswith("[incident:disk_full] ")
+        # 60 字符 + "..."
+        assert title.endswith("...")
+        assert len(title) < len(long_reason) + len("[incident:disk_full] ")
+
+    def test_build_incident_body_contains_required_sections(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+    ) -> None:
+        """_build_incident_body：含来源、根因、证据、truth 摘要、闭环说明各 section。"""
+        adapter_for_test.github_token = "fake-token"
+        adapter_for_test.github_repo = "owner/repo"
+        action = _make_incident_action()
+        body = adapter_for_test._build_incident_body(action, action.params)
+
+        # 来源 / 类型 / 根因 section
+        assert "## 来源：CVM 自治 watcher incident" in body
+        assert "`health_down`" in body
+        assert "`service_unhealthy`" in body
+        # 证据 / truth 摘要 section
+        assert "## 证据快照" in body
+        assert "## RuntimeTruthSnapshot 摘要" in body
+        assert '"compose_status": "exited"' in body
+        assert '"health_ok": false' in body
+        # 闭环说明
+        assert "`cvm-autonomy-watcher.yml` workflow" in body
+        assert "`ai-issue-implement.yml` workflow" in body
+        assert "ai-implement" in body
+        assert "incident" in body
+        # 修复建议
+        assert "## 修复建议" in body
 
 
 # --------------------------------------------------------------------------- #

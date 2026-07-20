@@ -166,9 +166,7 @@ class TestPredictRollback:
     ) -> None:
         """rollback: pending_rollback_marker=True → deny（嵌套回滚）。"""
         (tmp_deploy_root / ".deploy-last.tar.gz").write_bytes(b"fake")
-        truth = _make_truth(
-            tmp_deploy_root, tmp_manifest_path, pending_rollback_marker=True
-        )
+        truth = _make_truth(tmp_deploy_root, tmp_manifest_path, pending_rollback_marker=True)
         action = _make_action(ActionType.ROLLBACK_TO_LAST_TARBALL)
 
         prediction = predict(action, truth)
@@ -406,9 +404,7 @@ class TestHelpers:
         tmp_manifest_path: str,
     ) -> None:
         """should_skip: 返回 (skip, reasons) 元组。"""
-        truth = _make_truth(
-            tmp_deploy_root, tmp_manifest_path, disk_usage_percent=50.0
-        )
+        truth = _make_truth(tmp_deploy_root, tmp_manifest_path, disk_usage_percent=50.0)
         action = _make_action(ActionType.CLEAR_LOGS)
 
         skip, reasons = should_skip(action, truth)
