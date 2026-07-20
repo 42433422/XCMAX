@@ -31,12 +31,12 @@ from modstore_server.strategic_layer.council_meeting import (
     MeetingType,
 )
 from modstore_server.strategic_layer.decision_ledger import (
+    DecidedBy,
     DecisionAlreadyDecidedError,
     DecisionLifecycleError,
     DecisionProposer,
     DecisionStatus,
     DecisionType,
-    DecidedBy,
     StrategicDecisionLedger,
     StrategicDecisionRecord,
 )

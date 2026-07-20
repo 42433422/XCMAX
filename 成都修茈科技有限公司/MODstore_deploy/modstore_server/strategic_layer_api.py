@@ -26,12 +26,12 @@ from modstore_server.models import User
 from modstore_server.strategic_layer import (
     AutonomyAction,
     CouncilMeetingService,
+    DecidedBy,
     DecisionAlreadyDecidedError,
     DecisionLifecycleError,
     DecisionProposer,
     DecisionStatus,
     DecisionType,
-    DecidedBy,
     MeetingDecisionRef,
     MeetingParticipants,
     MeetingStatus,

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from modstore_server.employee_autonomy_service import (
+    ProposalValidationError,
     propose_employee_pack,
     validate_proposal,
-    ProposalValidationError,
 )
 
 

@@ -23,12 +23,13 @@ _FHD_SCRIPTS_DEV = _REPO_ROOT / "FHD" / "scripts" / "dev"
 if str(_FHD_SCRIPTS_DEV) not in sys.path:
     sys.path.insert(0, str(_FHD_SCRIPTS_DEV))
 
+from retry_with_adjusted_prompt import run_with_retries  # noqa: E402
+
 from modstore_server.build_employee_pack import build_pack_from_commit  # noqa: E402
 from modstore_server.employee_autonomy_service import propose_employee_pack  # noqa: E402
 from modstore_server.evolution_ledger import list_events  # noqa: E402
 from modstore_server.evolution_signal_collector import aggregate_signals  # noqa: E402
 from modstore_server.gap_to_issue import open_issue_for_proposal  # noqa: E402
-from retry_with_adjusted_prompt import run_with_retries  # noqa: E402
 
 
 def _write_scan_reports(reports_dir: Path) -> None:

@@ -8,6 +8,9 @@ from modstore_server.autonomous_risk_gate import (
 )
 from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
+    KB_SCHEMA_FAILED_LABEL,
+    KB_SCHEMA_RETRY_MAX,
+    NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
     _code_task_text,
     _employee_result_ok,
@@ -31,9 +34,6 @@ from modstore_server.self_maintenance_loop_runner import (
     _self_maintenance_actor_user_id,
     _structured_report_gate,
     _update_loop_memory,
-    KB_SCHEMA_FAILED_LABEL,
-    KB_SCHEMA_RETRY_MAX,
-    NEEDS_HUMAN_LABEL,
     clean_baseline_path,
     close_loop_memory_items,
     ensure_clean_baseline,

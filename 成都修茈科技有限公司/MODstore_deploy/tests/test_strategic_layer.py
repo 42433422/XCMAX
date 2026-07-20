@@ -20,12 +20,12 @@ from modstore_server.strategic_layer import (
     AutonomyAction,
     AutonomyEvaluator,
     CouncilMeetingService,
+    DecidedBy,
     DecisionAlreadyDecidedError,
     DecisionLifecycleError,
     DecisionProposer,
     DecisionStatus,
     DecisionType,
-    DecidedBy,
     MeetingDecisionRef,
     MeetingParticipants,
     MeetingStatus,
@@ -35,7 +35,6 @@ from modstore_server.strategic_layer import (
     StrategicReportService,
     seed_default_boundaries,
 )
-
 
 # ─── fixtures ─────────────────────────────────────────────────────────────
 
