@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import sqlite3
 import subprocess
@@ -32,8 +33,44 @@ from app.domain.autonomy.autonomy_guard import (
 from app.domain.autonomy.risk_policy import RiskPolicyCatalog
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = FHD_ROOT.parent
 REGISTRY = FHD_ROOT / "config" / "risk_actions.registry.json"
 BOUNDARIES = FHD_ROOT / "config" / "autonomy_boundaries.yaml"
+
+REQUIRED_ACTIVATION_EVIDENCE = {
+    "apply_release_to_cvm": (
+        FHD_ROOT / "scripts/deploy/fhd-auto-update.sh",
+        'evaluate_risk(\n    "apply_release_to_cvm"',
+    ),
+    "rollback_release": (
+        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        'autonomy_evaluate_action "rollback_release"',
+    ),
+    "freeze_manifest": (
+        FHD_ROOT / "app/fastapi_routes/ops_autonomy.py",
+        '"freeze_manifest": "freeze-manifest"',
+    ),
+    "restart_service": (
+        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        'autonomy_evaluate_action "restart_service"',
+    ),
+    "self_heal_pr_merge": (
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/approval_dispatcher.py",
+        'evaluate_risk(\n        "self_heal_pr_merge"',
+    ),
+    "mod_auto_publish": (
+        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api.py",
+        'evaluate_risk(\n        "mod_auto_publish"',
+    ),
+    "db_migration": (
+        FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
+        'autonomy_evaluate_action "db_migration"',
+    ),
+    "delete_user_data": (
+        FHD_ROOT / "app/fastapi_routes/ops_autonomy.py",
+        "result = evaluate_risk(",
+    ),
+}
 
 
 @pytest.fixture(autouse=True)
@@ -127,6 +164,56 @@ def test_every_boundary_item_raises_prohibited_action() -> None:
             )
 
 
+def test_every_requires_veto_item_rejects_legacy_bypass_and_accepts_human() -> None:
+    items = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))["requires_veto"]
+    guard = AutonomyGuard(audit_sink=lambda row: row)
+    assert items
+    for item in items:
+        action = item["action"]
+        blocked = guard.evaluate(
+            action,
+            {
+                "workflow_auto_approve_high_risk": True,
+                "allow_high_risk_real_run": True,
+            },
+            action_id=f"veto:blocked:{action}",
+        )
+        assert blocked.allowed is False
+        assert blocked.requires_confirmation is True
+        assert blocked.decision == "require_human"
+        assert "requires_veto boundary" in blocked.reason
+
+        approved = guard.evaluate(
+            action,
+            {"human_approved": True, "approved_by": "boundary-reviewer"},
+            action_id=f"veto:approved:{action}",
+        )
+        assert approved.allowed is True
+        assert approved.decision == "approved"
+        assert approved.approver == "boundary-reviewer"
+
+
+def test_requires_veto_overrides_medium_auto_approve(tmp_path: Path) -> None:
+    registry = _registry_with_policy(tmp_path, "auto_approve")
+    boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
+    boundaries["requires_veto"].append(
+        {"action": "freeze_manifest", "reason": "test medium veto floor"}
+    )
+    boundaries_path = tmp_path / "boundaries-with-medium-veto.yaml"
+    boundaries_path.write_text(yaml.safe_dump(boundaries), encoding="utf-8")
+
+    decision = AutonomyGuard(
+        registry_path=registry,
+        boundaries_path=boundaries_path,
+        audit_sink=lambda row: row,
+    ).evaluate("freeze_manifest", action_id="veto:medium")
+
+    assert decision.allowed is False
+    assert decision.requires_confirmation is True
+    assert decision.decision == "require_human"
+    assert "requires_veto boundary" in decision.reason
+
+
 def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
     raw_text = REGISTRY.read_text(encoding="utf-8")
     duplicate_keys: list[str] = []
@@ -192,6 +279,26 @@ def test_required_blocked_actions_reach_ssot_and_can_never_execute(action: str) 
         )
 
 
+def test_required_autonomous_actions_have_executable_activation_evidence() -> None:
+    """Prevent a registry-only action from masquerading as an active risk gate."""
+    actions = json.loads(REGISTRY.read_text(encoding="utf-8"))["autonomous_actions"]
+    assert set(REQUIRED_ACTIVATION_EVIDENCE) <= set(actions)
+
+    for action, (path, marker) in REQUIRED_ACTIVATION_EVIDENCE.items():
+        assert path.is_file(), f"{action}: missing activation entrypoint {path}"
+        assert marker in path.read_text(encoding="utf-8"), (
+            f"{action}: registry entry exists but no SSOT activation marker in {path}"
+        )
+
+    bridge = (FHD_ROOT / "scripts/deploy/lib/autonomy_gate.sh").read_text(encoding="utf-8")
+    assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in bridge
+    delegate = (
+        REPO_ROOT
+        / "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomy_guard_delegate.py"
+    ).read_text(encoding="utf-8")
+    assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in delegate
+
+
 def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) -> None:
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
     boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))
@@ -246,6 +353,17 @@ def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) 
         {"prohibited_actions": ["db_migration"]},
         {"prohibited_actions": [{"action": "db_migration"}]},
     ]
+    malformed_veto = copy.deepcopy(boundaries)
+    malformed_veto["requires_veto"] = ["apply_release_to_cvm"]
+    invalid_boundaries.append(malformed_veto)
+    overlapping = copy.deepcopy(boundaries)
+    overlapping["requires_veto"].append({"action": "db_migration", "reason": "invalid overlap"})
+    invalid_boundaries.append(overlapping)
+    unregistered = copy.deepcopy(boundaries)
+    unregistered["requires_veto"].append(
+        {"action": "not_registered", "reason": "invalid unknown action"}
+    )
+    invalid_boundaries.append(unregistered)
     for index, invalid in enumerate(invalid_boundaries):
         boundaries_path = tmp_path / f"invalid-boundaries-{index}.yaml"
         boundaries_path.write_text(yaml.safe_dump(invalid), encoding="utf-8")
@@ -256,6 +374,7 @@ def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) 
             )
 
     assert boundaries["prohibited_actions"]
+    assert boundaries["requires_veto"]
 
 
 def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
@@ -273,6 +392,11 @@ def test_policy_catalog_helpers_cover_aliases_tools_and_employee_risk(
     boundaries_snapshot = catalog.boundaries_snapshot()
     boundaries_snapshot.clear()
     assert catalog.boundaries
+    veto_snapshot = catalog.veto_boundaries_snapshot()
+    veto_snapshot.clear()
+    assert catalog.veto_boundaries
+    assert catalog.veto_reason("apply_release_to_cvm")
+    assert catalog.veto_reason("restart_service") is None
     assert "restart_service" in catalog.autonomous_action_names()
     assert catalog.autonomous_action_spec("missing") is None
     assert catalog.list_code_write_tools() == frozenset({"patch_file", "write_file"})

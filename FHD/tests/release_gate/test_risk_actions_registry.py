@@ -16,7 +16,6 @@ from resources.config.risk_actions_loader import load_risk_registry
 pytestmark = pytest.mark.release_gate
 
 ROOT = Path(__file__).resolve().parents[2]
-REPO_ROOT = ROOT.parent
 REQUIRED_CLASSES = {
     "business_db.write",
     "im.send",
@@ -24,41 +23,6 @@ REQUIRED_CLASSES = {
     "payment.charge",
     "bulk_import",
     "delete.batch",
-}
-
-REQUIRED_ACTIVATION_EVIDENCE = {
-    "apply_release_to_cvm": (
-        ROOT / "scripts/deploy/fhd-auto-update.sh",
-        'evaluate_risk(\n    "apply_release_to_cvm"',
-    ),
-    "rollback_release": (
-        ROOT / "scripts/deploy/fhd-apply-release.sh",
-        'autonomy_evaluate_action "rollback_release"',
-    ),
-    "freeze_manifest": (
-        ROOT / "app/fastapi_routes/ops_autonomy.py",
-        '"freeze_manifest": "freeze-manifest"',
-    ),
-    "restart_service": (
-        ROOT / "scripts/deploy/fhd-apply-release.sh",
-        'autonomy_evaluate_action "restart_service"',
-    ),
-    "self_heal_pr_merge": (
-        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/approval_dispatcher.py",
-        'evaluate_risk(\n        "self_heal_pr_merge"',
-    ),
-    "mod_auto_publish": (
-        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api.py",
-        'evaluate_risk(\n        "mod_auto_publish"',
-    ),
-    "db_migration": (
-        ROOT / "scripts/deploy/fhd-apply-release.sh",
-        'autonomy_evaluate_action "db_migration"',
-    ),
-    "delete_user_data": (
-        REPO_ROOT / ".github/workflows/fhd-autonomy-approval-dispatch.yml",
-        "probe_delete_user_data",
-    ),
 }
 
 
@@ -111,24 +75,3 @@ def test_export_script_bindings_present():
     raw = json.loads((ROOT / "config" / "risk_actions.registry.json").read_text(encoding="utf-8"))
     products = (raw.get("tools") or {}).get("products", {}).get("actions", {})
     assert products.get("create", {}).get("action_class") == "business_db.write"
-
-
-def test_required_autonomous_actions_have_executable_activation_evidence():
-    """Prevent a registry-only action from masquerading as an active risk gate."""
-    registry = load_risk_registry()
-    actions = registry.get("autonomous_actions") or {}
-    assert set(REQUIRED_ACTIVATION_EVIDENCE) <= set(actions)
-
-    for action, (path, marker) in REQUIRED_ACTIVATION_EVIDENCE.items():
-        assert path.is_file(), f"{action}: missing activation entrypoint {path}"
-        assert marker in path.read_text(encoding="utf-8"), (
-            f"{action}: registry entry exists but no SSOT activation marker in {path}"
-        )
-
-    bridge = (ROOT / "scripts/deploy/lib/autonomy_gate.sh").read_text(encoding="utf-8")
-    assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in bridge
-    delegate = (
-        REPO_ROOT
-        / "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomy_guard_delegate.py"
-    ).read_text(encoding="utf-8")
-    assert "from app.domain.autonomy.autonomy_guard import evaluate_risk" in delegate

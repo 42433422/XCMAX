@@ -45,6 +45,7 @@ class AutonomyGuard:
         # Retain private aliases for compatibility with diagnostic callers.
         self._registry = self._policy.registry
         self._boundaries = self._policy.boundaries
+        self._veto_boundaries = self._policy.veto_boundaries
         self.medium_risk_policy = self._policy.medium_risk_policy
         self._audit_sink = audit_sink
         self._record_config_state()
@@ -90,6 +91,9 @@ class AutonomyGuard:
 
     def boundaries_snapshot(self) -> dict[str, str]:
         return self._policy.boundaries_snapshot()
+
+    def veto_boundaries_snapshot(self) -> dict[str, str]:
+        return self._policy.veto_boundaries_snapshot()
 
     def autonomous_action_names(self) -> frozenset[str]:
         return self._policy.autonomous_action_names()
@@ -199,6 +203,35 @@ class AutonomyGuard:
         allow_auto = bool(
             (spec or {}).get("allow_auto_execute", risk in {RiskLevel.LOW, RiskLevel.MEDIUM})
         )
+        veto_reason = self._veto_boundaries.get(action_name)
+        if veto_reason:
+            approved, approver = self._human_approval_evidence(ctx)
+            if approved:
+                return self._decision(
+                    action=action_name,
+                    action_id=resolved_action_id,
+                    risk=risk,
+                    decision="approved",
+                    allowed=True,
+                    requires_confirmation=False,
+                    reason=f"requires_veto accepted by human ({approver}): {veto_reason}",
+                    rollback_path=rollback_path,
+                    source=source,
+                    context=ctx,
+                    approver=approver,
+                )
+            return self._decision(
+                action=action_name,
+                action_id=resolved_action_id,
+                risk=risk,
+                decision="require_human",
+                allowed=False,
+                requires_confirmation=True,
+                reason=f"requires_veto boundary: {veto_reason}",
+                rollback_path=rollback_path,
+                source=source,
+                context=ctx,
+            )
         approved, approver = self._approval_evidence(ctx, risk)
 
         if risk == RiskLevel.BLOCKED:
@@ -335,9 +368,10 @@ class AutonomyGuard:
         return self._policy.rollback_path(action)
 
     def _approval_evidence(self, context: dict[str, Any], risk: RiskLevel) -> tuple[bool, str]:
+        approved, approver = self._human_approval_evidence(context)
+        if approved:
+            return approved, approver
         approver = str(context.get("approved_by") or context.get("approver") or "").strip()
-        if truthy(context.get("human_approved")) and approver:
-            return True, approver
         if risk == RiskLevel.MEDIUM and truthy(context.get("allow_medium_risk")):
             return True, approver or "legacy_explicit_runtime_approval"
         if risk == RiskLevel.HIGH and truthy(context.get("workflow_auto_approve_high_risk")):
@@ -351,6 +385,13 @@ class AutonomyGuard:
             supplied = str(context.get("high_risk_gate_token") or "").strip()
             if not configured or (supplied and supplied == configured):
                 return True, approver or "legacy_high_risk_gate"
+        return False, ""
+
+    @staticmethod
+    def _human_approval_evidence(context: dict[str, Any]) -> tuple[bool, str]:
+        approver = str(context.get("approved_by") or context.get("approver") or "").strip()
+        if truthy(context.get("human_approved")) and approver:
+            return True, approver
         return False, ""
 
     def _cooldown_active(self, action: str) -> bool:
