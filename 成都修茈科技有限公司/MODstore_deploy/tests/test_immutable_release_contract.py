@@ -36,6 +36,13 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
     assert "node scripts/install-native-bindings.mjs" in script
     assert script.index("--ignore-scripts") < script.index("npm run build")
+    assert "resolve_java_home" in script
+    assert "/usr/lib/jvm/java-17-*" in script
+    assert 'PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"' in script
+    assert "ExecStart=${PAYMENT_JAVA_BIN} -jar" in script
+    assert script.index(
+        "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
+    ) < script.index("mvn -B -q test package")
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
