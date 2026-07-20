@@ -14,11 +14,11 @@ from modstore_server.self_maintenance_loop_runner import (
     LOOP_EVICT_AGE_OUT_SECONDS,
     LOOP_EVICT_STUCK_AGE_SECONDS,
     LOOP_EVICT_STUCK_RETRY_THRESHOLD,
+    _iso,
     _load_loop_memory,
     _read_governance_audit,
     _update_loop_memory,
     _utc_now,
-    _iso,
     evict_loop_memory_items,
 )
 

@@ -29,8 +29,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import desc, select
 
 from modstore_server.db.base import get_session_factory
+from modstore_server.db.strategic import CouncilMeeting as CouncilMeetingModel
 from modstore_server.db.strategic import (
-    CouncilMeeting as CouncilMeetingModel,
     StrategicActionItem,
 )
 from modstore_server.strategic_layer.decision_ledger import (

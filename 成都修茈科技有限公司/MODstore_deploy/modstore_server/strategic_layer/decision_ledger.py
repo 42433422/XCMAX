@@ -33,8 +33,8 @@ from sqlalchemy import desc, select
 from modstore_server.db.base import get_session_factory
 from modstore_server.db.strategic import (
     StrategicActionItem,
-    StrategicDecision as StrategicDecisionModel,
 )
+from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
 from modstore_server.strategic_layer.autonomy_boundary import (
     AutonomyAction,
     AutonomyEvaluator,

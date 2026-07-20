@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from modstore_server.gap_to_issue import (
-    open_issue_for_proposal,
+    DuplicateProposalError,
     build_issue_body,
     dedupe_signal,
-    DuplicateProposalError,
+    open_issue_for_proposal,
 )
 
 

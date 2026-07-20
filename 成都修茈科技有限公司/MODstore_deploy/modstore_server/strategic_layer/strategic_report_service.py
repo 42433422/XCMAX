@@ -29,9 +29,9 @@ from sqlalchemy import desc, func, select
 from modstore_server.db.base import get_session_factory
 from modstore_server.db.strategic import (
     StrategicActionItem,
-    StrategicDecision as StrategicDecisionModel,
-    StrategicReport as StrategicReportModel,
 )
+from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
+from modstore_server.db.strategic import StrategicReport as StrategicReportModel
 
 logger = logging.getLogger(__name__)
 

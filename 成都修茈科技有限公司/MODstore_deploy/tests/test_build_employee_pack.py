@@ -9,10 +9,10 @@ from unittest.mock import patch
 import pytest
 
 from modstore_server.build_employee_pack import (
-    build_pack_from_commit,
-    validate_pack_schema,
-    register_in_packages_json,
     PackSchemaError,
+    build_pack_from_commit,
+    register_in_packages_json,
+    validate_pack_schema,
 )
 
 
