@@ -110,6 +110,9 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
 
 def test_autonomy_deploy_reports_terminal_failure_in_same_workflow() -> None:
     deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
+    dispatcher = (REPO_ROOT / ".github/workflows/fhd-autonomy-approval-dispatch.yml").read_text(
+        encoding="utf-8"
+    )
     fallback = (REPO_ROOT / ".github/workflows/fhd-autonomy-approval-result.yml").read_text(
         encoding="utf-8"
     )
@@ -123,3 +126,16 @@ def test_autonomy_deploy_reports_terminal_failure_in_same_workflow() -> None:
     assert "Autonomy action was already terminal" in deploy
     assert 'resume_succeeded="$(jq -r' in fallback
     assert "fallback callback is complete" in fallback
+
+    for workflow in (dispatcher, deploy, fallback):
+        assert "github_cli_retry()" in workflow
+        assert "for attempt in $(seq 1 12)" in workflow
+        assert "GitHub API attempt ${attempt}/12 failed" in workflow
+
+    assert "github_cli_retry gh workflow run fhd-deploy.yml" in dispatcher
+    assert "github_cli_retry gh run list" in dispatcher
+    assert "Could not resolve the production environment reviewer; refusing to resume." in deploy
+    assert "|| printf '{\"jobs\":[]}'" in deploy
+    assert "|| printf '{\"jobs\":[]}'" in fallback
+    assert "|| printf '[]'" in deploy
+    assert "|| printf '[]'" in fallback
