@@ -28,6 +28,7 @@ from app.domain.autonomy.autonomy_guard import (
     MediumRiskPolicy,
     ProhibitedActionError,
     RiskLevel,
+    get_autonomy_guard,
     reload_autonomy_guard,
 )
 from app.domain.autonomy.risk_policy import RiskPolicyCatalog
@@ -260,6 +261,30 @@ def test_registered_auto_action_does_not_forge_human_approval() -> None:
     assert decision.decision == "auto_approve"
     assert decision.approver == ""
     assert decision.requires_confirmation is False
+
+
+def test_registered_action_risk_can_only_escalate() -> None:
+    decision = AutonomyGuard().evaluate(
+        {"action": "employee_execute", "risk_level": "HIGH"},
+        action_id="activation:employee_execute:high",
+    )
+
+    assert decision.risk_level is RiskLevel.HIGH
+    assert decision.allowed is True
+    assert decision.decision == "auto_approve"
+
+
+def test_global_guard_refreshes_when_env_policy_changes(monkeypatch) -> None:
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
+    pending = get_autonomy_guard().evaluate("rollback_release", action_id="env-refresh:pending")
+    assert pending.requires_confirmation is True
+
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "auto_approve")
+    automatic = get_autonomy_guard().evaluate("rollback_release", action_id="env-refresh:auto")
+    assert automatic.allowed is True
+    assert automatic.decision == "auto_approve"
+    assert automatic.requires_confirmation is False
 
 
 @pytest.mark.parametrize("action", ["db_migration", "delete_user_data"])

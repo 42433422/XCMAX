@@ -7,6 +7,7 @@ handling, approval validation, hard boundaries and audit writes live here.
 from __future__ import annotations
 
 import copy
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -187,7 +188,7 @@ class AutonomyGuard:
         risk = parse_risk_level(
             (spec or {}).get("risk"), default=explicit_level or RiskLevel.BLOCKED
         )
-        if explicit_level is not None and not isinstance(autonomous_spec, dict):
+        if explicit_level is not None:
             rank = {
                 RiskLevel.LOW: 0,
                 RiskLevel.MEDIUM: 1,
@@ -452,18 +453,26 @@ class AutonomyGuard:
 
 
 _GUARD: AutonomyGuard | None = None
+_GUARD_POLICY_ENV = ""
+
+
+def _medium_policy_env_marker() -> str:
+    return str(os.environ.get("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY") or "").strip().lower()
 
 
 def get_autonomy_guard() -> AutonomyGuard:
-    global _GUARD
-    if _GUARD is None:
+    global _GUARD, _GUARD_POLICY_ENV
+    marker = _medium_policy_env_marker()
+    if _GUARD is None or marker != _GUARD_POLICY_ENV:
         _GUARD = AutonomyGuard()
+        _GUARD_POLICY_ENV = marker
     return _GUARD
 
 
 def reload_autonomy_guard() -> AutonomyGuard:
-    global _GUARD
+    global _GUARD, _GUARD_POLICY_ENV
     _GUARD = AutonomyGuard()
+    _GUARD_POLICY_ENV = _medium_policy_env_marker()
     return _GUARD
 
 
