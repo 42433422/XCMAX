@@ -25,7 +25,7 @@ def gate_action_or_block(
     action_name = (
         "code_write"
         if payload.get("tool") in {"patch_file", "write_file"}
-        else f"employee_runtime:{employee_id}"
+        else "employee_execute"
     )
     decision = evaluate_risk(
         {

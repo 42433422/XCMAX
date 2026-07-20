@@ -16,14 +16,17 @@ def test_assess_risk_agent_handler_is_medium() -> None:
     assert level == "medium"
 
 
-def test_gate_blocks_medium_without_autonomy() -> None:
+def test_gate_auto_approves_registered_medium_action_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
+    _reload_guard()
     manifest = {"employee_config_v2": {}}
     gate = gate_action_or_block("some-employee", manifest, ["agent"], {})
-    assert gate.get("ok") is False
+    assert gate.get("ok") is True
     assert gate.get("risk_level") == "medium"
+    assert gate.get("decision") == "auto_approve"
 
 
-def test_legacy_manifest_self_approve_does_not_override_conservative_default(
+def test_legacy_manifest_self_approve_does_not_override_registry_default(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", raising=False)
@@ -39,8 +42,9 @@ def test_legacy_manifest_self_approve_does_not_override_conservative_default(
         ["llm_md", "echo", "agent"],
         {},
     )
-    assert gate.get("ok") is False
+    assert gate.get("ok") is True
     assert gate.get("risk_level") == "medium"
+    assert gate.get("decision") == "auto_approve"
 
 
 def test_env_policy_auto_approves_medium(monkeypatch) -> None:
