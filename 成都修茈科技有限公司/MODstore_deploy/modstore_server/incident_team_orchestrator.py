@@ -49,10 +49,7 @@ def _payload(row: IncidentEvent) -> Dict[str, Any]:
 
 def _admin_user_id(session) -> int:
     row = (
-        session.query(User)
-        .filter(User.is_admin == True)
-        .order_by(User.id.asc())
-        .first()
+        session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
     )  # noqa: E712
     if row:
         return int(row.id)
@@ -78,11 +75,7 @@ def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
         from modstore_server.employee_task_market import rank_market_candidates
 
         ranked = rank_market_candidates(event_id)
-        rows = (
-            ranked.get("candidates")
-            if isinstance(ranked.get("candidates"), list)
-            else []
-        )
+        rows = ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
         return [row for row in rows if isinstance(row, dict)]
     except Exception:
         return []
@@ -155,11 +148,7 @@ def build_incident_team(event_id: int) -> Dict[str, Any]:
     code_owner = ""
     code_owner_match: Dict[str, Any] = {}
     for row in candidate_rows:
-        ownership = (
-            row.get("code_ownership")
-            if isinstance(row.get("code_ownership"), dict)
-            else {}
-        )
+        ownership = row.get("code_ownership") if isinstance(row.get("code_ownership"), dict) else {}
         if ownership.get("match_count"):
             code_owner = str(row.get("employee_id") or "").strip()
             code_owner_match = ownership
@@ -266,9 +255,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     try:
         from modstore_server.release_recovery_orchestrator import maybe_execute_recovery
 
-        recovery = maybe_execute_recovery(
-            event_id=event_id, event_type=event_type, payload=payload
-        )
+        recovery = maybe_execute_recovery(event_id=event_id, event_type=event_type, payload=payload)
     except Exception as exc:
         recovery = {"ok": False, "error": str(exc)[:500]}
 
@@ -288,9 +275,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 route_for_incident,
             )
 
-            route = route_for_incident(
-                event_type=event_type, payload=payload, role=role
-            )
+            route = route_for_incident(event_type=event_type, payload=payload, role=role)
             bench_override = bench_override_for_route(route)
         except Exception:
             route = {"provider": "auto", "model": "auto", "reason": "router_error"}
@@ -324,11 +309,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             user_id=uid,
             bench_llm_override=bench_override,
         )
-        status = (
-            str(result.get("status") or result.get("execution_status") or "")
-            .strip()
-            .lower()
-        )
+        status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
         risk_blocked = (
             status == "blocked_by_risk_gate"
             or bool(result.get("blocked_by_risk_gate"))
@@ -353,9 +334,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         elif role == "fix":
             fix_result = row
 
-    ok = bool(results) and all(
-        bool(row.get("ok")) for row in results if row.get("role") != "fix"
-    )
+    ok = bool(results) and all(bool(row.get("ok")) for row in results if row.get("role") != "fix")
 
     # ---- 闭环：handler_failed → 按 failure_kind 自动 follow-up ----
     # 旧版：handler_failed 仅写 _team_claim 后 return，184 个 handler_failed 全靠人工接手。
@@ -381,9 +360,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 "claimed_at": datetime.now(timezone.utc).isoformat(),
                 "ok": ok,
                 "recovery": recovery,
-                "team": [
-                    {k: v for k, v in row.items() if k != "result"} for row in results
-                ],
+                "team": [{k: v for k, v in row.items() if k != "result"} for row in results],
                 "follow_ups": follow_ups,
             }
             ev2.payload_json = json.dumps(updated, ensure_ascii=False)[:8000]
@@ -425,9 +402,7 @@ def _follow_up_handler_failures(
 
     # transient 重试上限（env 可调，默认 1，避免无限重试占满调度）
     try:
-        transient_retry_limit = max(
-            0, int(os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV) or "1")
-        )
+        transient_retry_limit = max(0, int(os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV) or "1"))
     except ValueError:
         transient_retry_limit = 1
 
@@ -470,17 +445,13 @@ def _follow_up_handler_failures(
             try:
                 retry_result = _retry_member(
                     event_id=event_id,
-                    member=member_by_role.get(
-                        role, {"employee_id": employee_id, "role": role}
-                    ),
+                    member=member_by_role.get(role, {"employee_id": employee_id, "role": role}),
                     team_plan=team_plan,
                     payload=payload,
                     event_type=event_type,
                     source=source,
                     uid=uid,
-                    prev_results={
-                        r.get("role"): r for r in results if isinstance(r, dict)
-                    },
+                    prev_results={r.get("role"): r for r in results if isinstance(r, dict)},
                 )
                 follow_up["retry_result"] = {
                     k: v
@@ -515,9 +486,7 @@ def _follow_up_handler_failures(
                     for k, v in market_result.items()
                     if k in {"ok", "claimed", "employee_id", "reason"}
                 }
-                follow_up["ok"] = bool(
-                    market_result.get("ok") and market_result.get("claimed")
-                )
+                follow_up["ok"] = bool(market_result.get("ok") and market_result.get("claimed"))
             except Exception as exc:
                 follow_up["retry_result"] = {"error": str(exc)[:500]}
                 follow_up["ok"] = False

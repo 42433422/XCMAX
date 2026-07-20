@@ -28,9 +28,7 @@ _DEFAULT_REPORTER_DISPLAY_NAME = "数字管家"
 
 
 def report_enabled() -> bool:
-    return (
-        os.environ.get("MODSTORE_BOSS_IM_REPORT_ENABLED") or "1"
-    ).strip().lower() not in (
+    return (os.environ.get("MODSTORE_BOSS_IM_REPORT_ENABLED") or "1").strip().lower() not in (
         "0",
         "false",
         "no",
@@ -47,8 +45,7 @@ def report_hour_utc() -> int:
 
 def _reporter_identity() -> Tuple[str, str]:
     eid = (
-        os.environ.get("MODSTORE_BOSS_IM_REPORT_EMPLOYEE_ID")
-        or _DEFAULT_REPORTER_EMPLOYEE_ID
+        os.environ.get("MODSTORE_BOSS_IM_REPORT_EMPLOYEE_ID") or _DEFAULT_REPORTER_EMPLOYEE_ID
     ).strip()
     return eid or _DEFAULT_REPORTER_EMPLOYEE_ID, _DEFAULT_REPORTER_DISPLAY_NAME
 
@@ -97,9 +94,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                     func.count(EmployeeExecutionMetric.id),
                 )
                 .filter(EmployeeExecutionMetric.created_at >= since)
-                .group_by(
-                    EmployeeExecutionMetric.employee_id, EmployeeExecutionMetric.status
-                )
+                .group_by(EmployeeExecutionMetric.employee_id, EmployeeExecutionMetric.status)
                 .all()
             )
             per_emp: Dict[str, int] = {}
@@ -110,9 +105,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                 per_emp[str(emp)] = per_emp.get(str(emp), 0) + int(cnt)
             stats["top_employees"] = sorted(per_emp.items(), key=lambda kv: -kv[1])[:3]
         except Exception:
-            logger.debug(
-                "boss daily report: execution metrics query failed", exc_info=True
-            )
+            logger.debug("boss daily report: execution metrics query failed", exc_info=True)
 
         try:
             trows = (
@@ -159,20 +152,14 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                 or 0
             )
         except Exception:
-            logger.debug(
-                "boss daily report: pending question query failed", exc_info=True
-            )
+            logger.debug("boss daily report: pending question query failed", exc_info=True)
 
         # ---- 感知→修复→验证 漏斗 ----
         # 感知：过去 N 小时 incident_events 总数（含已 dispatch 与未 dispatch）
         # 修复：dispatched_count>0 的数；handler_failed=_team_claim.follow_ups 非空
         # 验证：_team_claim.ok=true 的数；follow_ups 按 failure_kind 分流
         try:
-            incidents = (
-                session.query(IncidentEvent)
-                .filter(IncidentEvent.created_at >= since)
-                .all()
-            )
+            incidents = session.query(IncidentEvent).filter(IncidentEvent.created_at >= since).all()
             stats["funnel_incidents_perceived"] = len(incidents)
             for ev in incidents:
                 if int(ev.dispatched_count or 0) > 0:
@@ -181,9 +168,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                     payload = json.loads(ev.payload_json or "{}")
                 except Exception:
                     continue
-                claim = (
-                    payload.get("_team_claim") if isinstance(payload, dict) else None
-                )
+                claim = payload.get("_team_claim") if isinstance(payload, dict) else None
                 if not isinstance(claim, dict):
                     continue
                 if claim.get("ok") is True:
@@ -202,9 +187,7 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                         elif action == "fallback_task_market":
                             stats["funnel_followups_prompt_market"] += 1
         except Exception:
-            logger.debug(
-                "boss daily report: incident funnel query failed", exc_info=True
-            )
+            logger.debug("boss daily report: incident funnel query failed", exc_info=True)
     return stats
 
 
@@ -237,9 +220,7 @@ def build_boss_daily_im_report(*, hours: int = 24) -> str:
         lines.append(f"· 员工建议已自动执行 {s['suggestions_dispatched']} 条")
 
     if s["questions_pending"]:
-        lines.append(
-            f"⚠️ 有 {s['questions_pending']} 个问题在等你回复（直接回对应员工的聊天即可）"
-        )
+        lines.append(f"⚠️ 有 {s['questions_pending']} 个问题在等你回复（直接回对应员工的聊天即可）")
     else:
         lines.append("· 没有等你拍板的问题")
 
