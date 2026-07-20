@@ -74,7 +74,9 @@ def test_force_bypasses_all_cooldowns(isolated_ledger):
 
 def test_in_progress_run_blocks_new_run(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="completed", completed_at=now - timedelta(minutes=30), run_id="r0")
+    _write_terminal(
+        isolated_ledger, status="completed", completed_at=now - timedelta(minutes=30), run_id="r0"
+    )
     _write_start(isolated_ledger, run_id="in-progress-1", started_at=now - timedelta(minutes=10))
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["should_run"] is False
@@ -94,7 +96,9 @@ def test_scheduler_after_success_uses_short_cooldown(isolated_ledger):
 
 def test_scheduler_after_success_30min_plus_runs(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="completed_merged", completed_at=now - timedelta(minutes=31))
+    _write_terminal(
+        isolated_ledger, status="completed_merged", completed_at=now - timedelta(minutes=31)
+    )
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["should_run"] is True
     assert result["reason"] == "threshold_met"
@@ -102,7 +106,11 @@ def test_scheduler_after_success_30min_plus_runs(isolated_ledger):
 
 def test_scheduler_after_waiting_human_uses_60min(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="completed_waiting_human_strategy", completed_at=now - timedelta(minutes=40))
+    _write_terminal(
+        isolated_ledger,
+        status="completed_waiting_human_strategy",
+        completed_at=now - timedelta(minutes=40),
+    )
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["should_run"] is False
     assert result["reason"] == "cooldown"
@@ -111,7 +119,9 @@ def test_scheduler_after_waiting_human_uses_60min(isolated_ledger):
 
 def test_scheduler_after_1_failure_uses_60min(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="failed", completed_at=now - timedelta(minutes=30), run_id="r1")
+    _write_terminal(
+        isolated_ledger, status="failed", completed_at=now - timedelta(minutes=30), run_id="r1"
+    )
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["cooldown_minutes"] == 60
     assert result["reason"] == "cooldown"
@@ -119,8 +129,15 @@ def test_scheduler_after_1_failure_uses_60min(isolated_ledger):
 
 def test_scheduler_after_2_failures_uses_120min(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="failed", completed_at=now - timedelta(minutes=200), run_id="r1")
-    _write_terminal(isolated_ledger, status="abandoned_stale", completed_at=now - timedelta(minutes=30), run_id="r2")
+    _write_terminal(
+        isolated_ledger, status="failed", completed_at=now - timedelta(minutes=200), run_id="r1"
+    )
+    _write_terminal(
+        isolated_ledger,
+        status="abandoned_stale",
+        completed_at=now - timedelta(minutes=30),
+        run_id="r2",
+    )
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["cooldown_minutes"] == 120
 
@@ -128,7 +145,12 @@ def test_scheduler_after_2_failures_uses_120min(isolated_ledger):
 def test_scheduler_after_5_failures_capped_at_360min(isolated_ledger):
     now = datetime.now(timezone.utc)
     for i in range(10):
-        _write_terminal(isolated_ledger, status="failed", completed_at=now - timedelta(minutes=(10 - i) * 60), run_id=f"r{i}")
+        _write_terminal(
+            isolated_ledger,
+            status="failed",
+            completed_at=now - timedelta(minutes=(10 - i) * 60),
+            run_id=f"r{i}",
+        )
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["cooldown_minutes"] == 360
 
@@ -142,7 +164,9 @@ def test_scheduler_no_terminal_record_runs_immediately(isolated_ledger):
 def test_incident_event_uses_60min_regardless_of_outcome(isolated_ledger):
     now = datetime.now(timezone.utc)
     _write_terminal(isolated_ledger, status="completed", completed_at=now - timedelta(minutes=10))
-    result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="incident_event")
+    result = loop_runner.should_run_self_maintenance_loop(
+        force=False, triggered_by="incident_event"
+    )
     assert result["cooldown_minutes"] == 60
     assert result["reason"] == "cooldown"
 
@@ -158,7 +182,9 @@ def test_legacy_mode_uses_last_started_360min(isolated_ledger, monkeypatch):
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MODE", "legacy")
     now = datetime.now(timezone.utc)
     _write_start(isolated_ledger, run_id="r1", started_at=now - timedelta(minutes=30))
-    _write_terminal(isolated_ledger, status="completed", completed_at=now - timedelta(minutes=20), run_id="r1")
+    _write_terminal(
+        isolated_ledger, status="completed", completed_at=now - timedelta(minutes=20), run_id="r1"
+    )
     result = loop_runner.should_run_self_maintenance_loop(force=False, triggered_by="scheduler")
     assert result["cooldown_minutes"] == 360
     assert result["reason"] == "cooldown"
@@ -166,17 +192,32 @@ def test_legacy_mode_uses_last_started_360min(isolated_ledger, monkeypatch):
 
 def test_consecutive_failures_counts_only_contiguous(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="completed", completed_at=now - timedelta(minutes=240), run_id="r0")
-    _write_terminal(isolated_ledger, status="failed", completed_at=now - timedelta(minutes=180), run_id="r1")
-    _write_terminal(isolated_ledger, status="failed", completed_at=now - timedelta(minutes=120), run_id="r2")
-    _write_terminal(isolated_ledger, status="abandoned_stale", completed_at=now - timedelta(minutes=60), run_id="r3")
+    _write_terminal(
+        isolated_ledger, status="completed", completed_at=now - timedelta(minutes=240), run_id="r0"
+    )
+    _write_terminal(
+        isolated_ledger, status="failed", completed_at=now - timedelta(minutes=180), run_id="r1"
+    )
+    _write_terminal(
+        isolated_ledger, status="failed", completed_at=now - timedelta(minutes=120), run_id="r2"
+    )
+    _write_terminal(
+        isolated_ledger,
+        status="abandoned_stale",
+        completed_at=now - timedelta(minutes=60),
+        run_id="r3",
+    )
     assert loop_runner._consecutive_failures() == 3
 
 
 def test_last_terminal_record_returns_most_recent_complete(isolated_ledger):
     now = datetime.now(timezone.utc)
-    _write_terminal(isolated_ledger, status="failed", completed_at=now - timedelta(minutes=120), run_id="r0")
-    _write_terminal(isolated_ledger, status="completed", completed_at=now - timedelta(minutes=30), run_id="r1")
+    _write_terminal(
+        isolated_ledger, status="failed", completed_at=now - timedelta(minutes=120), run_id="r0"
+    )
+    _write_terminal(
+        isolated_ledger, status="completed", completed_at=now - timedelta(minutes=30), run_id="r1"
+    )
     record = loop_runner._last_terminal_record()
     assert record is not None
     assert record["status"] == "completed"

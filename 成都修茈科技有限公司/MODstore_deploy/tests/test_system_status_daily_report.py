@@ -139,9 +139,7 @@ def test_append_sample_writes_jsonl(isolated_runtime: Path):
 
 
 def test_sample_once_success(isolated_runtime: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv(
-        "MODSTORE_SYSTEM_STATUS_ENDPOINTS", "cvm|https://example.com/health"
-    )
+    monkeypatch.setenv("MODSTORE_SYSTEM_STATUS_ENDPOINTS", "cvm|https://example.com/health")
 
     def fake_get(self, url):
         req = httpx.Request("GET", url)
@@ -156,9 +154,7 @@ def test_sample_once_success(isolated_runtime: Path, monkeypatch: pytest.MonkeyP
     assert len(lines) == 1
 
 
-def test_sample_once_partial_failure(
-    isolated_runtime: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_sample_once_partial_failure(isolated_runtime: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(
         "MODSTORE_SYSTEM_STATUS_ENDPOINTS",
         "good|https://good.example/health,bad|https://bad.example/health",
@@ -315,9 +311,7 @@ def test_cleanup_old_samples_no_file_returns_zero(isolated_runtime: Path):
 def test_system_status_sample_job_writes_sample(
     isolated_runtime: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    monkeypatch.setenv(
-        "MODSTORE_SYSTEM_STATUS_ENDPOINTS", "cvm|https://example.com/health"
-    )
+    monkeypatch.setenv("MODSTORE_SYSTEM_STATUS_ENDPOINTS", "cvm|https://example.com/health")
 
     def fake_get(self, url):
         req = httpx.Request("GET", url)
@@ -331,9 +325,7 @@ def test_system_status_sample_job_writes_sample(
 def test_system_status_daily_summary_job_writes_report(
     isolated_runtime: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    monkeypatch.setenv(
-        "MODSTORE_SYSTEM_STATUS_ENDPOINTS", "cvm|https://example.com/health"
-    )
+    monkeypatch.setenv("MODSTORE_SYSTEM_STATUS_ENDPOINTS", "cvm|https://example.com/health")
     now = datetime.now(timezone.utc)
     ssr.append_sample(
         {

@@ -1882,4 +1882,3 @@ def test_safe_data_only_bypass_includes_tests_and_docs(monkeypatch):
     )
     assert result["ok"] is True
     assert result["reason"] == "safe_data_only_bypass_passed"
-

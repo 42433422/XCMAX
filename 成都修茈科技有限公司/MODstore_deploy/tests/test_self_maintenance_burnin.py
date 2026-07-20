@@ -94,9 +94,7 @@ def _make_complete_row(
     }
 
 
-def _make_start_row(
-    *, triggered_by: str, created_at: datetime, run_id: str
-) -> Dict[str, Any]:
+def _make_start_row(*, triggered_by: str, created_at: datetime, run_id: str) -> Dict[str, Any]:
     return {
         "phase": "start",
         "triggered_by": triggered_by,
@@ -161,9 +159,7 @@ def test_compute_burnin_metrics_mixed_statuses(isolated_runtime):
             completed_at=now - timedelta(hours=2),
             run_id="r2",
         ),
-        _make_complete_row(
-            status="failed", completed_at=now - timedelta(hours=3), run_id="r3"
-        ),
+        _make_complete_row(status="failed", completed_at=now - timedelta(hours=3), run_id="r3"),
         _make_complete_row(
             status="abandoned_stale", completed_at=now - timedelta(hours=4), run_id="r4"
         ),
@@ -216,21 +212,15 @@ def test_compute_burnin_metrics_manual_intervention_count(isolated_runtime):
     # 2 manual starts + 1 scheduled start
     _append_ledger_row(
         isolated_runtime,
-        _make_start_row(
-            triggered_by="manual", created_at=now - timedelta(hours=1), run_id="m1"
-        ),
+        _make_start_row(triggered_by="manual", created_at=now - timedelta(hours=1), run_id="m1"),
     )
     _append_ledger_row(
         isolated_runtime,
-        _make_start_row(
-            triggered_by="manual", created_at=now - timedelta(hours=2), run_id="m2"
-        ),
+        _make_start_row(triggered_by="manual", created_at=now - timedelta(hours=2), run_id="m2"),
     )
     _append_ledger_row(
         isolated_runtime,
-        _make_start_row(
-            triggered_by="scheduler", created_at=now - timedelta(hours=3), run_id="s1"
-        ),
+        _make_start_row(triggered_by="scheduler", created_at=now - timedelta(hours=3), run_id="s1"),
     )
     # 3 governance_audit reviews (only "review_governance_audit" action counts)
     for idx in range(3):
@@ -298,9 +288,7 @@ def test_check_burnin_thresholds_completed_merged_breach(isolated_runtime):
         )
     _append_ledger_row(
         isolated_runtime,
-        _make_complete_row(
-            status="completed_merged", completed_at=now, run_id="merged-1"
-        ),
+        _make_complete_row(status="completed_merged", completed_at=now, run_id="merged-1"),
     )
 
     breaches, _ = check_burnin_thresholds(now=now)
@@ -325,9 +313,7 @@ def test_check_burnin_thresholds_waiting_human_breach(isolated_runtime):
         )
     _append_ledger_row(
         isolated_runtime,
-        _make_complete_row(
-            status="completed_merged", completed_at=now, run_id="merged-1"
-        ),
+        _make_complete_row(status="completed_merged", completed_at=now, run_id="merged-1"),
     )
 
     breaches, _ = check_burnin_thresholds(now=now)
@@ -351,9 +337,7 @@ def test_check_burnin_thresholds_health_breach(isolated_runtime):
         )
     _append_ledger_row(
         isolated_runtime,
-        _make_complete_row(
-            status="completed_merged", completed_at=now, run_id="merged-1"
-        ),
+        _make_complete_row(status="completed_merged", completed_at=now, run_id="merged-1"),
     )
 
     breaches, _ = check_burnin_thresholds(now=now)
@@ -560,9 +544,7 @@ def test_incident_fingerprint_ignores_actual(isolated_runtime):
         day_range="Day 1-2",
     )
 
-    assert _incident_fingerprint(breach_a, "Day 1-2") == _incident_fingerprint(
-        breach_b, "Day 1-2"
-    )
+    assert _incident_fingerprint(breach_a, "Day 1-2") == _incident_fingerprint(breach_b, "Day 1-2")
 
 
 # --------------------------------------------------------------------------- #
@@ -826,9 +808,7 @@ def test_run_burnin_check_breach_opens_incident(isolated_runtime, monkeypatch):
     assert len(result["breaches"]) >= 1
     assert result["incidents_opened"] == len(result["breaches"])
     assert len(publish_calls) == len(result["breaches"])
-    assert all(
-        c["event_type"] == "ops.burnin.threshold_breached" for c in publish_calls
-    )
+    assert all(c["event_type"] == "ops.burnin.threshold_breached" for c in publish_calls)
     assert all(c["source"] == "self_maintenance_burnin" for c in publish_calls)
     assert all(c["fingerprint"] for c in publish_calls)
 
@@ -849,9 +829,7 @@ def test_run_burnin_check_expired_returns_expired(isolated_runtime):
 # --------------------------------------------------------------------------- #
 
 
-def test_open_burnin_incident_fail_open_when_bus_unavailable(
-    isolated_runtime, monkeypatch
-):
+def test_open_burnin_incident_fail_open_when_bus_unavailable(isolated_runtime, monkeypatch):
     _seed_burnin_started(days_ago=0)
 
     breach = ThresholdBreach(

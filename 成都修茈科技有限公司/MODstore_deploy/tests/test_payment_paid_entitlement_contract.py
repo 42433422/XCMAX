@@ -37,7 +37,6 @@ from modstore_server.models import (
     get_session_factory,
 )
 
-
 # --------------------------------------------------------------------- fixtures
 
 
@@ -584,8 +583,6 @@ def test_payment_paid_strategy_dispatch_item_vs_plan_vs_wallet(
             .first()
         )
         assert wallet_ent is None
-        wallet_row = (
-            session.query(Wallet).filter(Wallet.user_id == wallet_uid).first()
-        )
+        wallet_row = session.query(Wallet).filter(Wallet.user_id == wallet_uid).first()
         assert wallet_row is not None
         assert float(wallet_row.balance) == pytest.approx(50.00)

@@ -9,6 +9,7 @@
 每个分类覆盖所有进入该分类的分支条件，确保风险评级无歧义。
 同时覆盖 env-var 解析、路径匹配、行数统计等辅助函数。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -24,7 +25,6 @@ from modstore_server.auto_approve_policy import (
     _require_ci,
     classify_change_risk,
 )
-
 
 # --------------------------------------------------------------------------- #
 # 辅助函数
@@ -153,10 +153,13 @@ class TestPathIsHighRisk:
 
     def test_forbidden_globs_force_high_risk(self):
         """forbidden_globs 命中 → 高风险（即便内置规则不命中）。"""
-        assert _path_is_high_risk(
-            "modstore_server/services/llm.py",
-            forbidden_globs=["modstore_server/services/*"],
-        ) is True
+        assert (
+            _path_is_high_risk(
+                "modstore_server/services/llm.py",
+                forbidden_globs=["modstore_server/services/*"],
+            )
+            is True
+        )
 
     def test_safe_path_returns_false(self):
         assert _path_is_high_risk("modstore_server/services/foo.py") is False
@@ -170,21 +173,25 @@ class TestPathRequiresManualApproval:
     """_path_requires_manual_approval approval_required_globs 判定。"""
 
     def test_match_returns_true(self):
-        assert _path_requires_manual_approval(
-            "modstore_server/services/llm.py",
-            approval_required_globs=["modstore_server/services/llm*"],
-        ) is True
+        assert (
+            _path_requires_manual_approval(
+                "modstore_server/services/llm.py",
+                approval_required_globs=["modstore_server/services/llm*"],
+            )
+            is True
+        )
 
     def test_no_match_returns_false(self):
-        assert _path_requires_manual_approval(
-            "modstore_server/services/foo.py",
-            approval_required_globs=["modstore_server/services/llm*"],
-        ) is False
+        assert (
+            _path_requires_manual_approval(
+                "modstore_server/services/foo.py",
+                approval_required_globs=["modstore_server/services/llm*"],
+            )
+            is False
+        )
 
     def test_empty_globs_returns_false(self):
-        assert _path_requires_manual_approval(
-            "any/path.py", approval_required_globs=[]
-        ) is False
+        assert _path_requires_manual_approval("any/path.py", approval_required_globs=[]) is False
 
 
 class TestCountDiffLines:
@@ -373,18 +380,14 @@ class TestRequireHumanMediumRiskCategory:
         )
         assert risk == "medium"
 
-    def test_marker_status_path_with_executable_requirement(
-        self, monkeypatch, tmp_path
-    ):
+    def test_marker_status_path_with_executable_requirement(self, monkeypatch, tmp_path):
         """self_maintenance marker 路径 + loop_memory 要求 executable change → medium。"""
         marker_path = "self_maintenance_loop_status.py"
 
         # Force the policy check to return required=True
         import modstore_server.self_maintenance_policy as smp
 
-        monkeypatch.setattr(
-            smp, "is_marker_status_path", lambda p: p == marker_path
-        )
+        monkeypatch.setattr(smp, "is_marker_status_path", lambda p: p == marker_path)
         monkeypatch.setattr(
             smp,
             "loop_memory_requires_executable_change",

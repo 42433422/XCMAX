@@ -157,9 +157,7 @@ def _read_samples(limit: int = 0) -> List[Dict[str, Any]]:
     return out
 
 
-def compute_availability(
-    samples: List[Dict[str, Any]], period_hours: int = 24
-) -> Dict[str, Any]:
+def compute_availability(samples: List[Dict[str, Any]], period_hours: int = 24) -> Dict[str, Any]:
     """计算每个 endpoint 在过去 ``period_hours`` 内的可用率。"""
     cutoff = datetime.now(timezone.utc).timestamp() - period_hours * 3600
     per_endpoint: Dict[str, Dict[str, Any]] = {}

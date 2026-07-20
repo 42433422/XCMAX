@@ -31,9 +31,7 @@ async def get_self_maintenance_status(
     return get_self_maintenance_runtime_status(limit=limit)
 
 
-@router.post(
-    "/governance-review", summary="Acknowledge self-maintenance governance audit"
-)
+@router.post("/governance-review", summary="Acknowledge self-maintenance governance audit")
 async def review_self_maintenance_governance(
     body: Dict[str, Any] = Body(default_factory=dict),
     admin_user: User = Depends(require_admin),

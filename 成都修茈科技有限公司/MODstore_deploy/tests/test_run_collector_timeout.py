@@ -11,9 +11,7 @@ from modstore_server.workflow_scheduler import _run_collector_with_timeout
 
 
 def test_fast_returning_fn_returns_result():
-    result = _run_collector_with_timeout(
-        lambda: "ok", label="test-fast", timeout=5.0
-    )
+    result = _run_collector_with_timeout(lambda: "ok", label="test-fast", timeout=5.0)
     assert result == "ok"
 
 
@@ -53,9 +51,7 @@ def test_hanging_fn_does_not_block_subsequent_call():
     assert e1 < 1.5
 
     started = time.monotonic()
-    r2 = _run_collector_with_timeout(
-        lambda: "second-ok", label="test-seq-2", timeout=2.0
-    )
+    r2 = _run_collector_with_timeout(lambda: "second-ok", label="test-seq-2", timeout=2.0)
     e2 = time.monotonic() - started
     assert r2 == "second-ok"
     assert e2 < 1.0
