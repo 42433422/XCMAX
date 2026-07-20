@@ -97,7 +97,9 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
 async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     ctx = dict(ctx or {})
-    action = str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
+    action = (
+        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
+    )
     if action in ("help", "说明", "status"):
         return _ok(
             {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},

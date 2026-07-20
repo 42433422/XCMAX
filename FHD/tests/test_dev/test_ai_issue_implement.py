@@ -181,9 +181,10 @@ class TestIsAuthorized:
         original = _ai_impl._load_allowlist_patterns
         _ai_impl._load_allowlist_patterns = lambda path=None: [r"^refactor-.*"]  # type: ignore[assignment]
         try:
-            ok, msg = _ai_impl._is_authorized(issue, [], "owner/repo")
+            ok, msg, source = _ai_impl._is_authorized(issue, [], "owner/repo")
             assert ok is True
             assert "域预授权" in msg
+            assert source == "allowlist"
         finally:
             _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
 
@@ -196,14 +197,165 @@ class TestIsAuthorized:
         original = _ai_impl._load_allowlist_patterns
         _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
         try:
-            ok, _ = _ai_impl._is_authorized(
+            ok, _, source = _ai_impl._is_authorized(
                 issue,
                 [{"user": {"login": "owner"}, "body": "确认"}],
                 "owner/repo",
             )
             assert ok is True
+            assert source == "owner"
         finally:
             _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+
+    def test_not_authorized_returns_empty_source(self) -> None:
+        issue = {
+            "user": {"login": "owner"},
+            "body": "just a plain description",
+            "labels": [{"name": "ai-implement"}],
+        }
+        original = _ai_impl._load_allowlist_patterns
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
+        try:
+            ok, _, source = _ai_impl._is_authorized(issue, [], "owner/repo")
+            assert ok is False
+            assert source == ""
+        finally:
+            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+
+    def test_allowlist_takes_priority_over_owner(self) -> None:
+        # 同时命中 allowlist 且 owner 确认 → source 必须是 allowlist（更优先）
+        issue = {
+            "user": {"login": "owner"},
+            "body": "已确认",
+            "labels": [{"name": "ai-implement"}, {"name": "bug-mech-typo"}],
+        }
+        original = _ai_impl._load_allowlist_patterns
+        _ai_impl._load_allowlist_patterns = lambda path=None: [r"^bug-mech-.*"]  # type: ignore[assignment]
+        try:
+            ok, _, source = _ai_impl._is_authorized(
+                issue,
+                [{"user": {"login": "owner"}, "body": "确认"}],
+                "owner/repo",
+            )
+            assert ok is True
+            assert source == "allowlist"
+        finally:
+            _ai_impl._load_allowlist_patterns = original  # type: ignore[assignment]
+
+
+class TestCommitAndPrLabelRouting:
+    """_commit_and_pr 按授权来源分流标签（Gap-1 核心保证）。"""
+
+    def test_allowlist_source_labels_r0(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        def fake_git(*args: str, cwd: str | None = None) -> str:
+            return ""
+
+        def fake_gh_post(url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+            if url.endswith("/pulls"):
+                captured["pr_payload"] = payload
+                return {"html_url": "https://github.com/o/r/pull/1", "number": 1}
+            if "/issues/1/labels" in url:
+                captured["labels_payload"] = payload
+                return {}
+            return {}
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+        monkeypatch.setattr(_ai_impl, "_gh_post", fake_gh_post)
+
+        pr_url, pr_num = _ai_impl._commit_and_pr(
+            tmp_path,
+            "fix-branch",
+            1,
+            "title",
+            ["a.py"],
+            "o/r",
+            "tok",
+            auth_source="allowlist",
+        )
+        assert pr_num == 1
+        assert "ai-generated" in captured["labels_payload"]["labels"]
+        assert "risk:r0" in captured["labels_payload"]["labels"]
+        assert "needs-human" not in captured["labels_payload"]["labels"]
+        assert "risk:r2" not in captured["labels_payload"]["labels"]
+        # PR body 必须含 allowlist 来源说明
+        assert "allowlist" in captured["pr_payload"]["body"]
+
+    def test_owner_source_labels_r2_needs_human(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        def fake_git(*args: str, cwd: str | None = None) -> str:
+            return ""
+
+        def fake_gh_post(url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+            if url.endswith("/pulls"):
+                captured["pr_payload"] = payload
+                return {"html_url": "https://github.com/o/r/pull/2", "number": 2}
+            if "/issues/2/labels" in url:
+                captured["labels_payload"] = payload
+                return {}
+            return {}
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+        monkeypatch.setattr(_ai_impl, "_gh_post", fake_gh_post)
+
+        pr_url, pr_num = _ai_impl._commit_and_pr(
+            tmp_path,
+            "fix-branch",
+            2,
+            "title",
+            ["a.py"],
+            "o/r",
+            "tok",
+            auth_source="owner",
+        )
+        assert pr_num == 2
+        labels = captured["labels_payload"]["labels"]
+        assert "needs-human" in labels
+        assert "ai-generated" in labels
+        assert "risk:r2" in labels
+        assert "risk:r0" not in labels
+        # PR body 必须含 owner 来源说明
+        assert "owner" in captured["pr_payload"]["body"]
+
+    def test_default_source_treats_as_owner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # auth_source 缺省（空字符串）→ 按保守策略走 owner 路径
+        captured: dict[str, Any] = {}
+
+        def fake_git(*args: str, cwd: str | None = None) -> str:
+            return ""
+
+        def fake_gh_post(url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+            if url.endswith("/pulls"):
+                return {"html_url": "https://github.com/o/r/pull/3", "number": 3}
+            if "/issues/3/labels" in url:
+                captured["labels_payload"] = payload
+                return {}
+            return {}
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+        monkeypatch.setattr(_ai_impl, "_gh_post", fake_gh_post)
+
+        _ai_impl._commit_and_pr(
+            tmp_path,
+            "fix-branch",
+            3,
+            "title",
+            ["a.py"],
+            "o/r",
+            "tok",
+        )
+        labels = captured["labels_payload"]["labels"]
+        assert "needs-human" in labels
+        assert "risk:r2" in labels
+        assert "risk:r0" not in labels
 
 
 class TestEstimateFiles:
