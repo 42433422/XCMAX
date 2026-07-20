@@ -106,3 +106,20 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
     assert "for attempt in $(seq 1 30)" in sync_step
     assert ('curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health') in sync_step
     assert "did not become HTTP-ready after autonomy config sync" in sync_step
+
+
+def test_autonomy_deploy_reports_terminal_failure_in_same_workflow() -> None:
+    deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
+    fallback = (REPO_ROOT / ".github/workflows/fhd-autonomy-approval-result.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "report-autonomy-failure:" in deploy
+    assert "needs: cvm-rolling" in deploy
+    assert "needs['cvm-rolling'].result != 'success'" in deploy
+    assert 'decision="execution_failed"' in deploy
+    assert 'decision="rejected"' in deploy
+    assert 'resume_succeeded="$(jq -r' in deploy
+    assert "Autonomy action was already terminal" in deploy
+    assert 'resume_succeeded="$(jq -r' in fallback
+    assert "fallback callback is complete" in fallback

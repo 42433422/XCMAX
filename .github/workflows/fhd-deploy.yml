@@ -250,3 +250,77 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-GitHub-Actor: $APPROVER" \
             --data "$payload"
+
+  report-autonomy-failure:
+    name: Report autonomy rejection / failure
+    needs: cvm-rolling
+    if: ${{ always() && inputs.environment == 'production' && inputs.action_id != '' && needs['cvm-rolling'].result != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark pending action terminal
+        env:
+          ACTION_ID: ${{ inputs.action_id }}
+          APPROVAL_ID: ${{ github.run_id }}
+          WORKFLOW_ACTION: ${{ inputs.action }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "::error::Autonomy callback configuration is missing."
+            exit 1
+          fi
+          jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest")"
+          resume_succeeded="$(jq -r '
+            any(.jobs[]?.steps[]?;
+              .name == "Resume approved autonomy action" and .conclusion == "success")
+          ' <<< "$jobs")"
+          approved_by=""
+          rejected_by=""
+          while IFS= read -r statuses_url; do
+            statuses="$(gh api "$statuses_url")"
+            approved_by="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
+              [.[] | select((.log_url // "") | contains($needle)) | select(.state == "in_progress") | .creator.login][0] // empty
+            ' <<< "$statuses")"
+            rejected_by="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
+              [.[] | select((.log_url // "") | contains($needle)) | select(.state == "failure") | .creator.login][0] // empty
+            ' <<< "$statuses")"
+            if [ -n "$approved_by" ] || [ -n "$rejected_by" ]; then
+              break
+            fi
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" --jq '.[].statuses_url')
+          if [ "$resume_succeeded" = "true" ]; then
+            decision="execution_failed"
+            approver="${approved_by:-${rejected_by:-$GITHUB_ACTOR}}"
+            reason="Approved workflow execution failed after autonomy resume"
+          else
+            decision="rejected"
+            approver="${rejected_by:-${approved_by:-$GITHUB_ACTOR}}"
+            reason="GitHub environment review or approval resume failed"
+          fi
+          payload="$(jq -nc \
+            --arg action_id "$ACTION_ID" \
+            --arg approval_id "$APPROVAL_ID" \
+            --arg approver "$approver" \
+            --arg decision "$decision" \
+            --arg workflow_action "$WORKFLOW_ACTION" \
+            --arg reason "$reason" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,decision:$decision,workflow_action:$workflow_action,reason:$reason,outcome:{reason:$reason}}')"
+          response_body="${RUNNER_TEMP}/autonomy-failure-callback.json"
+          status="$(curl --silent --show-error --output "$response_body" --write-out '%{http_code}' \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $approver" \
+            --data "$payload")"
+          cat "$response_body"
+          if [[ "$status" == 2* ]]; then
+            exit 0
+          fi
+          if [ "$status" = "409" ] && grep -qE 'already terminal|was rejected' "$response_body"; then
+            echo "Autonomy action was already terminal; callback is idempotently complete."
+            exit 0
+          fi
+          echo "::error::Autonomy failure callback returned HTTP $status"
+          exit 1
