@@ -275,6 +275,19 @@ class TestSQLiteIndex:
         assert "dataset_vector_indexes" in tables
         assert "dataset_vector_chunks" in tables
 
+    def test_init_archives_incompatible_index_and_recreates(self, tmp_path):
+        db_path = tmp_path / "test_vectors.sqlite"
+        incompatible_bytes = b"encrypted-or-incompatible-vector-index"
+        db_path.write_bytes(incompatible_bytes)
+
+        sqlite_index = DatasetVectorSQLiteIndex(db_path)
+
+        with sqlite3.connect(sqlite_index.db_path) as conn:
+            assert conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        backups = list(tmp_path.glob("test_vectors.sqlite.incompatible-*.bak"))
+        assert len(backups) == 1
+        assert backups[0].read_bytes() == incompatible_bytes
+
     def test_replace_and_delete(self, sqlite_index):
         chunk = _make_chunk(
             metadata={

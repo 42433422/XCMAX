@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import sqlite3
@@ -16,6 +17,8 @@ from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 from app.utils.external_sqlite import connect_sqlite
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -50,8 +53,24 @@ class DatasetVectorSQLiteIndex:
     backend_name = "sqlite_vector"
 
     def __init__(self, db_path: str | Path) -> None:
-        self._db_path = str(Path(db_path).expanduser().resolve())
-        self._ensure_tables()
+        path = Path(db_path).expanduser().resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._db_path = str(path)
+        try:
+            self._ensure_tables()
+        except sqlite3.DatabaseError as exc:
+            if not path.is_file() or not _is_rebuildable_index_error(exc):
+                raise
+            backup_path = path.with_name(
+                f"{path.name}.incompatible-{time.time_ns()}.bak"
+            )
+            path.replace(backup_path)
+            logger.warning(
+                "Archived incompatible dataset vector index %s to %s; rebuilding from source data",
+                path,
+                backup_path,
+            )
+            self._ensure_tables()
 
     @property
     def db_path(self) -> str:
@@ -648,6 +667,11 @@ def default_dataset_vector_index_path(storage_path: str | Path | None = None) ->
 
 def _index_id(dataset_id: str) -> str:
     return f"dataset:{dataset_id}"
+
+
+def _is_rebuildable_index_error(exc: sqlite3.DatabaseError) -> bool:
+    message = str(exc).strip().lower()
+    return "file is not a database" in message or "database disk image is malformed" in message
 
 
 def _chunk_row_id(dataset_id: str, chunk: RetrievedChunk) -> str:
