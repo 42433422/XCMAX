@@ -22,12 +22,11 @@ from scripts.autonomy.policies import (
     health_down_policy,
     manifest_drift_policy,
 )
+from scripts.autonomy.policies.compose_unhealthy_policy import ComposeUnhealthyPolicy
 from scripts.autonomy.policies.disk_full_policy import DiskFullPolicy
 from scripts.autonomy.policies.health_down_policy import HealthDownPolicy
 from scripts.autonomy.policies.manifest_drift_policy import ManifestDriftPolicy
-from scripts.autonomy.policies.compose_unhealthy_policy import ComposeUnhealthyPolicy
 from scripts.autonomy.types import ActionType, Plan, RiskLevel, Signal
-
 
 # --------------------------------------------------------------------------- #
 # 工具函数

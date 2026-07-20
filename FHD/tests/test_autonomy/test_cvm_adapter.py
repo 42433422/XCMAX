@@ -21,14 +21,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from scripts.autonomy.cvm_adapter import (
-    CvmAutonomyAdapter,
     DEFAULT_DEPLOY_ROOT,
     DEFAULT_HEALTH_URL,
     DEFAULT_MANIFEST_PATH,
+    CvmAutonomyAdapter,
     list_audit_entries,
 )
 from scripts.autonomy.types import Action, ActionType, AuditEntry, Diagnosis, RiskLevel
-
 
 # --------------------------------------------------------------------------- #
 # 工具函数

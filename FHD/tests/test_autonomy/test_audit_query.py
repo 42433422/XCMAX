@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -169,7 +169,7 @@ class TestQuery:
 
     def test_since_filter(self, tmp_path):
         path = tmp_path / "audit.jsonl"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         old_ts = (now - timedelta(days=2)).isoformat()
         new_ts = now.isoformat()
         write_jsonl(path, [make_entry(ts=old_ts), make_entry(ts=new_ts)])
