@@ -3,7 +3,9 @@
 约束（来自 .trae/rules/cicd-e2e-prompt.md）：
   - owner 评论「确认」才执行（除非命中域预授权 allowlist）
   - 预估变更 >5 文件拒做
-  - 实现后创建 PR 标 `needs-human` 待人工合并
+  - 实现后创建 PR，按授权来源分流标签：
+    * allowlist 命中 → ai-generated + risk:r0（SLA 二次守卫后 auto-merge）
+    * owner 确认    → needs-human + ai-generated + risk:r2（人工 review）
 
 预授权（方案 B）：
   ``config/auto-implement-allowlist.yaml`` 中的 ``label_patterns``
@@ -44,7 +46,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -83,7 +85,7 @@ class ImplementResult:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _write_report(result: ImplementResult) -> Path:
@@ -251,12 +253,20 @@ def _owner_confirmed(issue: dict[str, Any], comments: list[dict[str, Any]], repo
 
 def _is_authorized(
     issue: dict[str, Any], comments: list[dict[str, Any]], repo: str
-) -> tuple[bool, str]:
-    """授权：域预授权 allowlist 命中，或 owner 评论确认。"""
+) -> tuple[bool, str, str]:
+    """授权：域预授权 allowlist 命中，或 owner 评论确认。
+
+    返回 (authorized, reason, source)，source ∈ {"allowlist", "owner", ""}：
+      - allowlist: 命中 config/auto-implement-allowlist.yaml:label_patterns → 低风险，PR 标 ai-generated + risk:r0
+      - owner:     owner 评论「确认」 → 仍需人工 review，PR 标 needs-human + ai-generated + risk:r2
+    """
     pre_ok, pre_reason = _allowlist_preauthorized(issue)
     if pre_ok:
-        return True, pre_reason
-    return _owner_confirmed(issue, comments, repo)
+        return True, pre_reason, "allowlist"
+    owner_ok, owner_reason = _owner_confirmed(issue, comments, repo)
+    if owner_ok:
+        return True, owner_reason, "owner"
+    return False, owner_reason, ""
 
 
 def _estimate_files(issue_title: str, issue_body: str) -> int:
@@ -389,6 +399,7 @@ def _commit_and_pr(
     files: list[str],
     repo: str,
     token: str,
+    auth_source: str = "",
 ) -> tuple[str, int]:
     _git("add", *files, cwd=str(base))
     _git(
@@ -401,6 +412,23 @@ def _commit_and_pr(
         cwd=str(base),
     )
     _git("push", "origin", branch, cwd=str(base))
+    # 授权来源 → PR 标签分流：
+    #   allowlist: 命中预授权域 → 低风险，PR 标 ai-generated + risk:r0
+    #              → ai-self-heal-auto-merge SLA 12h 二次守卫通过后 auto-merge
+    #   owner:     owner 评论「确认」 → 仍需人工 review，PR 标 needs-human + ai-generated + risk:r2
+    #              → SLA 7d stale 提醒 / 14d 自动关闭
+    if auth_source == "allowlist":
+        pr_labels = ["ai-generated", "risk:r0"]
+        pr_footer = (
+            "_本 PR 由 ai-issue-implement workflow 生成（命中域预授权 allowlist），"
+            "标 `ai-generated` + `risk:r0`，由 ai-self-heal-auto-merge SLA 二次守卫后 auto-merge。_"
+        )
+    else:
+        pr_labels = ["needs-human", "ai-generated", "risk:r2"]
+        pr_footer = (
+            "_本 PR 由 ai-issue-implement workflow 生成（owner 评论确认），"
+            "标 `needs-human` + `risk:r2` 待人工合并，7d stale / 14d 自动关闭。_"
+        )
     pr_body = (
         f"## 关联 issue\n\nCloses #{issue_number}\n\n"
         f"## 变更文件 ({len(files)})\n\n" + "\n".join(f"- `{f}`" for f in files) + "\n\n"
@@ -408,7 +436,7 @@ def _commit_and_pr(
         f"- [ ] 业务语义正确\n"
         f"- [ ] 测试已补\n"
         f"- [ ] 安全/敏感信息无泄漏\n\n"
-        f"_本 PR 由 ai-issue-implement workflow 生成，标 `needs-human` 待人工合并。_"
+        f"{pr_footer}"
     )
     pr = _gh_post(
         f"https://api.github.com/repos/{repo}/pulls",
@@ -422,12 +450,12 @@ def _commit_and_pr(
     )
     pr_url = pr.get("html_url") or ""
     pr_number = int(pr.get("number") or 0)
-    # 打 needs-human 标签
+    # 打风险分流标签
     if pr_number:
         _gh_post(
             f"https://api.github.com/repos/{repo}/issues/{pr_number}/labels",
             token,
-            {"labels": ["needs-human", "ai-generated"]},
+            {"labels": pr_labels},
         )
     return pr_url, pr_number
 
@@ -472,7 +500,7 @@ def run(args: argparse.Namespace) -> ImplementResult:
         comments = []
         logger.warning("fetch comments failed: %s", exc)
 
-    confirmed, confirm_reason = _is_authorized(issue, comments, repo)
+    confirmed, confirm_reason, auth_source = _is_authorized(issue, comments, repo)
     result.owner_confirmed = confirmed
     if not confirmed:
         result.status = "waiting_confirmation"
@@ -562,17 +590,37 @@ def run(args: argparse.Namespace) -> ImplementResult:
             _write_report(result)
             sys.exit(6)
         pr_url, pr_num = _commit_and_pr(
-            base_dir, branch, issue_number, result.issue_title, written, repo, args.token
+            base_dir, branch, issue_number, result.issue_title, written, repo, args.token,
+            auth_source=auth_source,
         )
         result.pr_url = pr_url
         result.pr_number = pr_num
         result.status = "pr_created"
         result.ok = True
-        result.reason = f"PR #{pr_num} 已创建，标 needs-human 待人工合并"
+        if auth_source == "allowlist":
+            result.reason = (
+                f"PR #{pr_num} 已创建（命中 allowlist → ai-generated + risk:r0），"
+                f"待 SLA 二次守卫通过后 auto-merge"
+            )
+            pr_comment = (
+                f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n"
+                f"授权来源：**域预授权 allowlist**（低风险）。\n"
+                f"PR 已标 `ai-generated` + `risk:r0`，"
+                f"将由 `ai-self-heal-auto-merge` SLA 12h 二次守卫通过后自动合并。"
+            )
+        else:
+            result.reason = (
+                f"PR #{pr_num} 已创建（owner 确认 → needs-human + risk:r2），待人工合并"
+            )
+            pr_comment = (
+                f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n"
+                f"授权来源：**owner 评论确认**。\n"
+                f"PR 已标 `needs-human` + `ai-generated` + `risk:r2`，待人工 review 合并。"
+            )
         _gh_post(
             f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments",
             args.token,
-            {"body": f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n待人工 review 后合并。"},
+            {"body": pr_comment},
         )
     except subprocess.CalledProcessError as exc:
         result.status = "failed"
