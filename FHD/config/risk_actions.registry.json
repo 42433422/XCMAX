@@ -84,7 +84,7 @@
     },
     "code_write": {
       "risk": "HIGH",
-      "allow_auto_execute": false,
+      "allow_auto_execute": true,
       "rollback_path": "git_revert_commit",
       "entrypoints": ["app/application/employee_runtime/agent.py"]
     },

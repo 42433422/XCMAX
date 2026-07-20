@@ -237,6 +237,7 @@ def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
         ("restart_service", RiskLevel.LOW, "allow"),
         ("self_heal_pr_merge", RiskLevel.HIGH, "auto_approve"),
         ("mod_auto_publish", RiskLevel.HIGH, "auto_approve"),
+        ("code_write", RiskLevel.HIGH, "auto_approve"),
     ],
 )
 def test_required_automatic_actions_are_evaluated_by_ssot(

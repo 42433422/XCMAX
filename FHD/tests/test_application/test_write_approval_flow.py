@@ -335,12 +335,13 @@ class TestWorkspaceGuardCodeWrite:
 
 
 class TestWriteApprovalGateCodeWrite:
-    """write_approval gate 对代码修改工具强制审批。"""
+    """代码修改工具由 autonomy_guard 自动决策。"""
 
-    def test_write_file_requires_approval(self):
+    def test_write_file_uses_autonomy_ssot(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {})
         result = gate("write_file", {"path": "x.py"})
-        assert not result["ok"]
+        assert result["ok"]
+        assert result["risk_decision"]["decision"] == "auto_approve"
 
     def test_write_file_approved_write_passes(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {"approved_write": True})
@@ -352,10 +353,11 @@ class TestWriteApprovalGateCodeWrite:
         result = gate("write_file", {"path": "x.py"})
         assert result["ok"]
 
-    def test_patch_file_requires_approval(self):
+    def test_patch_file_uses_autonomy_ssot(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {})
         result = gate("patch_file", {"path": "x.py"})
-        assert not result["ok"]
+        assert result["ok"]
+        assert result["risk_decision"]["decision"] == "auto_approve"
 
     def test_non_write_tool_passes(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {})
