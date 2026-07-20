@@ -32,11 +32,10 @@ from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter  # noqa: E402
 from scripts.autonomy.types import (  # noqa: E402
     Action,
     ActionType,
+    RiskLevel,
     RuntimeTruthSnapshot,
     Signal,
-    RiskLevel,
 )
-
 
 # --------------------------------------------------------------------------- #
 # 临时目录 fixtures

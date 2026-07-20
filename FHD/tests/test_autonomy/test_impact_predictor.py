@@ -24,7 +24,6 @@ from scripts.autonomy.impact_predictor import (
 )
 from scripts.autonomy.types import Action, ActionType, Prediction, RiskLevel, RuntimeTruthSnapshot
 
-
 # --------------------------------------------------------------------------- #
 # 工具函数
 # --------------------------------------------------------------------------- #

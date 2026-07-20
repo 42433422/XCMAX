@@ -198,3 +198,6 @@
 [giant-file] app/application/group_chat/dispatch_router.py
 [giant-file] app/application/ai_chat/excel_import_pipeline.py
 [giant-file] app/fastapi_routes/mobile_extensions/routes_ai_groups.py
+# 2026-07-20 新增：kellai customer copilot 与 persy memory app service 暂未拆分
+[giant-file] app/services/kellai_customer_copilot.py
+[giant-file] app/application/persy_memory_app_service.py
