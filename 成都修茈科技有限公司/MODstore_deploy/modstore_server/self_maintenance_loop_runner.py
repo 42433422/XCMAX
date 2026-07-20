@@ -1701,6 +1701,43 @@ def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[
     return None
 
 
+def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
+    """Accept the focused pytest target across different worker runtimes.
+
+    Para workers may run on a different operating system from the scheduler, so
+    the scheduler's absolute Python path is not portable.  Keep exact matching
+    as the fast path, then accept only a real ``python -m pytest`` invocation
+    of the same focused test file.
+    """
+
+    raw = str(command or "").strip()
+    if not raw:
+        return False
+    if raw == focused_command:
+        return True
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        return False
+    target_name = "test_self_maintenance_loop_runner_policy.py"
+    if not any(Path(token).name == target_name for token in tokens):
+        return False
+    shell_operators = {"&&", "||", ";"}
+    for index in range(1, len(tokens) - 1):
+        if tokens[index : index + 2] != ["-m", "pytest"]:
+            continue
+        python_index = index - 1
+        if not Path(tokens[python_index]).name.lower().startswith("python"):
+            continue
+        segment_start = 0
+        for operator_index, token in enumerate(tokens[:python_index]):
+            if token in shell_operators:
+                segment_start = operator_index + 1
+        if python_index == segment_start:
+            return True
+    return False
+
+
 def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
@@ -1741,9 +1778,9 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
         focused_command = _focused_test_command()
         if not isinstance(tested_commands, list) or not any(
             isinstance(item, dict)
-            and str(item.get("command") or "").strip() == focused_command
+            and _matches_focused_test_command(item.get("command"), focused_command)
             and int(item.get("exit_code") if item.get("exit_code") is not None else -1) == 0
-            and str(item.get("status") or "").lower() == "passed"
+            and str(item.get("status") or "").lower().startswith("passed")
             for item in tested_commands
         ):
             return {

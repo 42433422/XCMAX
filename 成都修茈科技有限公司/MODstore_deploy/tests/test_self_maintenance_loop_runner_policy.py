@@ -507,6 +507,52 @@ def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
     assert result["focused_command"] == focused
 
 
+def test_structured_report_gate_accepts_platform_equivalent_focused_command(monkeypatch):
+    focused = (
+        "'/root/XCMAX/成都修茈科技有限公司/MODstore_deploy/.venv/bin/python' "
+        "-m pytest '成都修茈科技有限公司/MODstore_deploy/tests/"
+        "test_self_maintenance_loop_runner_policy.py' -q"
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                '"tested_commands":['
+                f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
+                '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
+                'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
+                '"exit_code":0,"status":"passed (27 tests passed)"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["ok"] is True
+
+
+def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                '"tested_commands":[{"command":"python3 -m pytest tests/test_other.py -q",'
+                '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
+                '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"low","risk_class":"low"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+
+
 def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypatch):
     focused = "runtime-python -m pytest focused.py -q"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
