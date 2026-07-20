@@ -1,4 +1,11 @@
 # CI SSOT: generated from FHD/.github/workflows/mutation-smoke.yml
+# 变异测试 smoke — 非 PR 阻断（实测 kill rate ~43%，目标 80%，见 pyproject.toml [tool.mutmut] 注释）
+# 2026-07-20 调整：从 PR gate 移除。原因：
+#   1. 实测 43% < 阈值 80% → PR 永远红，开发者形成"忽略 mutation 红灯"噪音习惯；
+#   2. mutation-smoke 不在 branch protection required checks（见 cicd-e2e-prompt.md 指令 10），失败不阻断合并；
+#   3. 真正解决需要补测试让 kill rate ≥ 80%，工作量大，单人项目优先级 P3。
+# 当前策略：nightly + manual 持续监控 kill rate 趋势，待达到 80% 后再考虑加回 PR gate。
+# 工作量评估见 docs/reports/TO_9_PROGRAM.md T6/T9。
 name: mutation-smoke
 
 on:
@@ -39,7 +46,7 @@ jobs:
 
       - name: Generate kill report
         working-directory: FHD
-        run: python scripts/dev/mutation_kill_report.py --threshold 70
+        run: python scripts/dev/mutation_kill_report.py --threshold 80
 
       - name: Upload mutation history
         if: always()

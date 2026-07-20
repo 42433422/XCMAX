@@ -2,12 +2,18 @@
 意图反向询问服务
 
 当识别到意图但缺失必要槽位时，自动追问用户补充
+
+进化状态闭环（2026-07-20）：
+  - intent == "unk"（未命中）时，记录为「能力提案」capability_proposal.jsonl
+  - 每周由 capability-proposal-to-issue.yml workflow 读取，创建 GitHub issue 并打
+    `ai-implement` 标签 → 触发 ai-issue-implement workflow 实现自主进化
 """
 
 import logging
 from typing import Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
+from app.services.capability_proposal_recorder import record_capability_proposal
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +216,21 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
         slots = intent_result.get("slots", {})
 
         if not intent or intent == "unk":
+            # 进化状态闭环：未命中意图 → 能力提案 → GitHub issue → ai-implement
+            try:
+                record_capability_proposal(
+                    raw_input=intent_result.get("raw_input") or intent_result.get("text"),
+                    reason="intent_unknown",
+                    context={
+                        "intent_result": {
+                            k: v
+                            for k, v in intent_result.items()
+                            if k in ("primary_intent", "tool_key", "deepseek_intent", "slots")
+                        }
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug("capability_proposal record failed", exc_info=True)
             return {
                 "status": "unclear",
                 "intent": None,

@@ -3,17 +3,25 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
+from app.desktop_runtime.paths import get_desktop_data_dir, is_desktop_mode
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = __import__("logging").getLogger(__name__)
 
 
+def _default_save_dir() -> str:
+    if is_desktop_mode():
+        return str(get_desktop_data_dir() / "saved_analyses")
+    return str(Path.cwd() / "saved_analyses")
+
+
 class AnalysisSaveService(NeuroEventPublisherMixin):
     def __init__(self, save_dir: str | None = None):
-        self.save_dir = save_dir or os.path.join(os.getcwd(), "saved_analyses")
+        self.save_dir = save_dir or _default_save_dir()
         os.makedirs(self.save_dir, exist_ok=True)
 
     def save_analysis(

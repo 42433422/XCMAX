@@ -23,6 +23,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   installUpdate,
+  readLocalBuildSha,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import {
@@ -37,8 +38,14 @@ import {
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { AutonomyController } from './autonomy/controller'
+import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
+import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
+import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
+import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
 
 const APP_NAME = 'XCAGI'
+const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
 const POST_UPDATE_STABILITY_MS = 5_000
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
@@ -357,6 +364,9 @@ let tray: Tray | null = null
 let restartCount = 0
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
+
+// 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
+let autonomyController: AutonomyController | null = null
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -819,6 +829,15 @@ async function startBackend(): Promise<void> {
     if (app.isQuitting) {
       return
     }
+    // 通知自治控制器 backend 退出（控制器据此追踪崩溃频率，5min ≥3 次则自动回滚）
+    autonomyController?.ingest({
+      source: 'backend_exit',
+      kind: 'backend_exit',
+      severity: 'crit',
+      detail: `backend exited code=${code} uptime=${uptimeMs}ms`,
+      ts: Date.now(),
+      payload: { code, uptimeMs, restartCount },
+    })
     // 快速退出（< 5 秒）：通常是端口占用或配置错误，不自动重启以免浪费用户时间
     if (uptimeMs < 5000) {
       void dialog.showErrorBox(
@@ -1054,6 +1073,25 @@ function configureDesktopMediaPermissions(): void {
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const origin = requestingOrigin || webContents?.getURL() || ''
     return wantsAudio && isTrustedDesktopOrigin(origin)
+  })
+}
+
+function openKellaiDesktop(): Promise<{ ok: boolean; reason?: string }> {
+  if (process.platform !== 'darwin') {
+    return shell
+      .openExternal('kellai://messages?source=xcmax')
+      .then(() => ({ ok: true }))
+      .catch(error => ({ ok: false, reason: error instanceof Error ? error.message : String(error) }))
+  }
+
+  return new Promise(resolve => {
+    execFile('open', ['-b', KELLAI_BUNDLE_ID], error => {
+      if (!error) {
+        resolve({ ok: true })
+        return
+      }
+      resolve({ ok: false, reason: '未检测到客来来桌面端，请先安装并打开一次客来来。' })
+    })
   })
 }
 
@@ -1472,6 +1510,7 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
@@ -1549,6 +1588,42 @@ function bootstrap(): void {
           await waitForPostUpdateStartupStability()
           commitRollback()
           writeBackendLog(`[rollback] 后端、业务路由、主界面与观察期就绪，已提交（marker 删除）\n`)
+        }
+        // 启动自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归）
+        // 控制器提供新增能力：5min 内 backend 崩溃 ≥3 次自动回滚、磁盘满自动清日志、配置漂移自动纠正
+        try {
+          const adapter = new DesktopAutonomyAdapter({
+            backendProcessRef: () => {
+              if (!backendProcess) return null
+              const pid = backendProcess.pid ?? null
+              const startedAt = startupMarks.backendSpawnMs ?? null
+              return { pid, running: true, startedAt }
+            },
+            restartCountRef: () => restartCount,
+            port: DEFAULT_PORT,
+            appVersion: app.getVersion(),
+            buildSha: readLocalBuildSha(),
+            configPath: null,
+            // Phase 1：注入 backend 重启 / 版本回滚闭包（与 main.ts 现有逻辑共存）
+            // restartBackend 调用 startBackend()；backend exit 时 backendProcess 已被清空，可直接 spawn
+            restartBackend: async () => { await startBackend() },
+            // triggerRollback 复用现有 triggerRollbackSafe 吞错语义
+            triggerRollback: async () => { await triggerRollbackSafe('autonomy_controller_triggered') },
+            // knownGoodConfigContent 当前为 null（main.ts 暂无配置文件概念，repair_config 自动拒绝）
+            knownGoodConfigContent: null,
+          })
+          autonomyController = new AutonomyController(
+            adapter,
+            [backendCrashPolicy, degradedRemediationPolicy, updateRollbackPolicy],
+            {
+              enabled: !process.env.XCAGI_DESKTOP_TEST,
+              pollIntervalMs: 5_000,
+            },
+          )
+          autonomyController.start()
+          writeBackendLog(`[autonomy] controller started\n`)
+        } catch (e) {
+          writeBackendLog(`[autonomy] controller start failed: ${e instanceof Error ? e.message : e}\n`)
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)

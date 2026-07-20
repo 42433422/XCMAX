@@ -3,6 +3,10 @@ import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import ImMessengerView from './ImMessengerView.vue'
 
+vi.mock('@/components/im/KellaiCustomerInbox.vue', () => ({
+  default: { template: '<section class="kellai-inbox-stub">客来来客户会话（只读）</section>' },
+}))
+
 const enterpriseCsContact = vi.hoisted(() => ({
   id: 99,
   display_name: '企业专属客服',
@@ -134,6 +138,21 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).not.toContain('还没有会话')
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
+    expect(wrapper.find('.im-channel-entry').exists()).toBe(true)
+    expect(wrapper.text()).toContain('客户消息 · 客来来')
+  })
+
+  it('opens Kellai customer conversations inside the client IM', async () => {
+    const wrapper = mount(ImMessengerView, {
+      global: { stubs: { RouterLink: true } },
+    })
+    await flushPromises()
+
+    await wrapper.find('.im-channel-entry').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.kellai-inbox-stub').exists()).toBe(true)
+    expect(wrapper.text()).toContain('客来来客户会话（只读）')
   })
 
   it('shows pinned contact when conversations list is empty', async () => {
@@ -169,6 +188,8 @@ describe('ImMessengerView.vue', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('企业专属客服')
+    expect(wrapper.text()).not.toContain('客户消息 · 客来来')
+    expect(wrapper.find('.im-channel-entry').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('小C助理')
     expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')

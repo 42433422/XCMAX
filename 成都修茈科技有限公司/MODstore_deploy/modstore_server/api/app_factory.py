@@ -392,6 +392,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.telemetry_internal_api",
     "modstore_server.subscription_renewer",
     "modstore_server.xcmax_admin_api",
+    "modstore_server.strategic_layer_api",
     "modstore_server.api.host_config_routes",
 )
 

@@ -9,13 +9,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 XCMAX_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
 LABEL="com.xcmax.modstore-daily"
+SCHEDULER_LABEL="com.xcmax.modstore-scheduler"
 LOGIN_ITEM_NAME="XCMAX MODstore Daily"
 PLIST_SRC="${SCRIPT_DIR}/com.xcmax.modstore-daily.plist"
+SCHEDULER_PLIST_SRC="${SCRIPT_DIR}/com.xcmax.modstore-scheduler.plist"
 PLIST_DST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+SCHEDULER_PLIST_DST="${HOME}/Library/LaunchAgents/${SCHEDULER_LABEL}.plist"
 LOG_DIR="${HOME}/Library/Logs/XCMAX"
 RUN_SCRIPT="${SCRIPT_DIR}/run_modstore_daily_local.sh"
 SUPPORT_DIR="${HOME}/Library/Application Support/XCMAX"
 WRAPPER="${SUPPORT_DIR}/run-modstore-daily.sh"
+SCHEDULER_WRAPPER="${SUPPORT_DIR}/run-modstore-scheduler.sh"
 RUNNER_COPY="${SUPPORT_DIR}/run_modstore_daily_local.sh"
 ANDROID_START_COPY="${SUPPORT_DIR}/start_android_emulator.sh"
 COMMAND_FILE="${SUPPORT_DIR}/run-modstore-daily.command"
@@ -76,6 +80,7 @@ _env_snapshot_append_file() {
 }
 
 [[ -f "${PLIST_SRC}" ]] || { log "缺少 ${PLIST_SRC}"; exit 1; }
+[[ -f "${SCHEDULER_PLIST_SRC}" ]] || { log "缺少 ${SCHEDULER_PLIST_SRC}"; exit 1; }
 [[ -x "${FHD_ROOT}/.venv/bin/python" ]] || { log "缺少 FHD venv"; exit 1; }
 
 mkdir -p "${LOG_DIR}" "${SUPPORT_DIR}" "${HOME}/Library/LaunchAgents" "${STATE_ROOT}" "${RUNTIME_VAR_ROOT}" "${RUNTIME_WEBHOOK_EVENTS_DIR}" "${SURFACE_AUDIT_STATE_ROOT}"
@@ -88,40 +93,41 @@ if [[ ! -d "${MODSTORE_DEPLOY_ROOT}/modstore_server" ]]; then
   MODSTORE_DEPLOY_ROOT="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
 fi
 mkdir -p "${RUNTIME_ROOT}"
-log "同步运行时镜像 → ${RUNTIME_DEPLOY_ROOT}"
-rsync -a --delete \
+if [[ "${MODSTORE_DAILY_SKIP_RUNTIME_SYNC:-0}" != "1" ]]; then
+  log "同步运行时镜像 → ${RUNTIME_DEPLOY_ROOT}"
+  rsync -a --delete \
   --exclude "market/coverage-current/" \
   --exclude "market/coverage-current/.tmp/" \
   --exclude ".venv/" \
   --exclude "node_modules/" \
   --exclude ".pytest_cache/" \
   --exclude "__pycache__/" \
-  "${MODSTORE_DEPLOY_ROOT}/" "${RUNTIME_DEPLOY_ROOT}/"
-log "同步共享 packages → ${RUNTIME_PACKAGES_ROOT}"
-mkdir -p "${RUNTIME_PACKAGES_ROOT}"
-rsync -a --delete "${XCMAX_ROOT}/packages/" "${RUNTIME_PACKAGES_ROOT}/"
-log "同步元工定义 → ${RUNTIME_YUANGON_ROOT}"
-mkdir -p "${RUNTIME_YUANGON_ROOT}"
-rsync -a --delete "${XCMAX_ROOT}/成都修茈科技有限公司/yuangon/" "${RUNTIME_YUANGON_ROOT}/"
-if command -v git >/dev/null 2>&1; then
-  if [[ -d "${RUNTIME_GIT_MIRROR}/objects" ]]; then
-    log "同步 git mirror → ${RUNTIME_GIT_MIRROR}"
-    git --git-dir="${RUNTIME_GIT_MIRROR}" fetch --prune "${XCMAX_ROOT}" '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' >/dev/null 2>&1 || true
-  else
-    log "创建 git mirror → ${RUNTIME_GIT_MIRROR}"
-    rm -rf "${RUNTIME_GIT_MIRROR}"
-    git clone --mirror "${XCMAX_ROOT}" "${RUNTIME_GIT_MIRROR}" >/dev/null 2>&1 || true
+    "${MODSTORE_DEPLOY_ROOT}/" "${RUNTIME_DEPLOY_ROOT}/"
+  log "同步共享 packages → ${RUNTIME_PACKAGES_ROOT}"
+  mkdir -p "${RUNTIME_PACKAGES_ROOT}"
+  rsync -a --delete "${XCMAX_ROOT}/packages/" "${RUNTIME_PACKAGES_ROOT}/"
+  log "同步元工定义 → ${RUNTIME_YUANGON_ROOT}"
+  mkdir -p "${RUNTIME_YUANGON_ROOT}"
+  rsync -a --delete "${XCMAX_ROOT}/成都修茈科技有限公司/yuangon/" "${RUNTIME_YUANGON_ROOT}/"
+  if command -v git >/dev/null 2>&1; then
+    if [[ -d "${RUNTIME_GIT_MIRROR}/objects" ]]; then
+      log "同步 git mirror → ${RUNTIME_GIT_MIRROR}"
+      git --git-dir="${RUNTIME_GIT_MIRROR}" fetch --prune "${XCMAX_ROOT}" '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' >/dev/null 2>&1 || true
+    else
+      log "创建 git mirror → ${RUNTIME_GIT_MIRROR}"
+      rm -rf "${RUNTIME_GIT_MIRROR}"
+      git clone --mirror "${XCMAX_ROOT}" "${RUNTIME_GIT_MIRROR}" >/dev/null 2>&1 || true
+    fi
   fi
-fi
-log "同步 FHD 配置 → ${RUNTIME_FHD_CONFIG_ROOT}"
-mkdir -p "${RUNTIME_FHD_CONFIG_ROOT}"
-rsync -a --delete "${FHD_ROOT}/config/" "${RUNTIME_FHD_CONFIG_ROOT}/"
-log "同步 FHD 巡检运行时 → ${RUNTIME_FHD_ROOT}"
-mkdir -p "${RUNTIME_FHD_ROOT}"
-for d in XCAGI app mods static templates resources scripts frontend; do
-  if [[ -d "${FHD_ROOT}/${d}" ]]; then
-    mkdir -p "${RUNTIME_FHD_ROOT}/${d}"
-    rsync -a --delete \
+  log "同步 FHD 配置 → ${RUNTIME_FHD_CONFIG_ROOT}"
+  mkdir -p "${RUNTIME_FHD_CONFIG_ROOT}"
+  rsync -a --delete "${FHD_ROOT}/config/" "${RUNTIME_FHD_CONFIG_ROOT}/"
+  log "同步 FHD 巡检运行时 → ${RUNTIME_FHD_ROOT}"
+  mkdir -p "${RUNTIME_FHD_ROOT}"
+  for d in XCAGI app mods static templates resources scripts frontend; do
+    if [[ -d "${FHD_ROOT}/${d}" ]]; then
+      mkdir -p "${RUNTIME_FHD_ROOT}/${d}"
+      rsync -a --delete \
       --exclude "node_modules/" \
       --exclude ".pytest_cache/" \
       --exclude "__pycache__/" \
@@ -134,23 +140,26 @@ for d in XCAGI app mods static templates resources scripts frontend; do
       --exclude "coverage-usechatview/" \
       --exclude "test-results/" \
       --exclude "build/" \
-      "${FHD_ROOT}/${d}/" "${RUNTIME_FHD_ROOT}/${d}/"
+        "${FHD_ROOT}/${d}/" "${RUNTIME_FHD_ROOT}/${d}/"
+    fi
+  done
+  find "${FHD_ROOT}" -maxdepth 1 -type f -print0 | xargs -0 -I{} cp "{}" "${RUNTIME_FHD_ROOT}/"
+  ln -sfn "${FHD_ROOT}/.venv" "${RUNTIME_FHD_ROOT}/.venv"
+  if [[ "${MODSTORE_DAILY_FORCE_ANDROID_SDK_SYNC:-0}" == "1" || ! -x "${RUNTIME_ANDROID_SDK_ROOT}/emulator/emulator" ]]; then
+    if [[ -x "${RUNTIME_ANDROID_SDK_ROOT}/platform-tools/adb" ]]; then
+      "${RUNTIME_ANDROID_SDK_ROOT}/platform-tools/adb" emu kill >/dev/null 2>&1 || true
+      "${RUNTIME_ANDROID_SDK_ROOT}/platform-tools/adb" kill-server >/dev/null 2>&1 || true
+      sleep 2
+    fi
+    log "同步 Android SDK → ${RUNTIME_ANDROID_SDK_ROOT}"
+    rm -rf "${RUNTIME_ANDROID_SDK_ROOT}"
+    mkdir -p "$(dirname "${RUNTIME_ANDROID_SDK_ROOT}")"
+    /usr/bin/ditto "${FHD_ROOT}/mobile-android/.toolchain/android-sdk" "${RUNTIME_ANDROID_SDK_ROOT}"
+  else
+    log "Android SDK 已存在 → ${RUNTIME_ANDROID_SDK_ROOT}"
   fi
-done
-find "${FHD_ROOT}" -maxdepth 1 -type f -print0 | xargs -0 -I{} cp "{}" "${RUNTIME_FHD_ROOT}/"
-ln -sfn "${FHD_ROOT}/.venv" "${RUNTIME_FHD_ROOT}/.venv"
-if [[ "${MODSTORE_DAILY_FORCE_ANDROID_SDK_SYNC:-0}" == "1" || ! -x "${RUNTIME_ANDROID_SDK_ROOT}/emulator/emulator" ]]; then
-  if [[ -x "${RUNTIME_ANDROID_SDK_ROOT}/platform-tools/adb" ]]; then
-    "${RUNTIME_ANDROID_SDK_ROOT}/platform-tools/adb" emu kill >/dev/null 2>&1 || true
-    "${RUNTIME_ANDROID_SDK_ROOT}/platform-tools/adb" kill-server >/dev/null 2>&1 || true
-    sleep 2
-  fi
-  log "同步 Android SDK → ${RUNTIME_ANDROID_SDK_ROOT}"
-  rm -rf "${RUNTIME_ANDROID_SDK_ROOT}"
-  mkdir -p "$(dirname "${RUNTIME_ANDROID_SDK_ROOT}")"
-  /usr/bin/ditto "${FHD_ROOT}/mobile-flutter-poc/.toolchain/android-sdk" "${RUNTIME_ANDROID_SDK_ROOT}"
 else
-  log "Android SDK 已存在 → ${RUNTIME_ANDROID_SDK_ROOT}"
+  log "跳过运行时镜像同步；复用现有 ${RUNTIME_ROOT}（只更新启动/隔离配置）"
 fi
 if [[ ! -f "${RUNTIME_DB_PATH}" ]]; then
   if [[ -f "${MODSTORE_DEPLOY_ROOT}/modstore_server/modstore.db" ]]; then
@@ -242,7 +251,7 @@ else
   PARA_DB_FILE="${PARA_DESKTOP_DB_FILE}"
 fi
 if [[ -z "${PARA_API_BASE}" ]]; then
-  if /usr/bin/curl -fsS --max-time 2 "http://127.0.0.1:3001/api/health" >/dev/null 2>&1; then
+  if /usr/bin/curl --noproxy '*' -fsS --max-time 2 "http://127.0.0.1:3001/api/health" >/dev/null 2>&1; then
     PARA_API_BASE="http://127.0.0.1:3001"
   fi
 fi
@@ -291,6 +300,9 @@ if [[ "\${MODSTORE_DAILY_ENV_CLEANROOM:-0}" != "1" ]]; then
     /bin/bash "\$0"
 fi
 export MODSTORE_DAILY_FOREGROUND=1
+export MODSTORE_DAILY_ROLE="\${MODSTORE_DAILY_ROLE:-api}"
+export MODSTORE_CONTROL_PORT="\${MODSTORE_CONTROL_PORT:-8788}"
+export MODSTORE_PORT="\${MODSTORE_PORT:-8788}"
 export MODSTORE_DAILY_FHD_ROOT="${RUNTIME_FHD_ROOT}"
 export MODSTORE_DAILY_XCMAX_ROOT="${RUNTIME_ROOT}"
 export MODSTORE_DAILY_SCRIPT_DIR_OVERRIDE="${SCRIPT_DIR}"
@@ -340,6 +352,19 @@ export MODSTORE_DAILY_DAEMON_LOG_DIR="${LOG_DIR}"
 exec /bin/bash "${RUNNER_COPY}"
 EOF
 chmod +x "${WRAPPER}"
+cat > "${SCHEDULER_WRAPPER}" <<EOF
+#!/usr/bin/env bash
+# 由 install_modstore_daily_launchd.sh 生成 — 勿手改
+exec /usr/bin/env -i \
+  HOME="${HOME}" \
+  PATH="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+  MODSTORE_DAILY_ENV_CLEANROOM=1 \
+  MODSTORE_DAILY_ROLE=scheduler \
+  MODSTORE_CONTROL_PORT=8788 \
+  MODSTORE_PORT=8789 \
+  /bin/bash "${WRAPPER}"
+EOF
+chmod +x "${SCHEDULER_WRAPPER}"
 cat > "${COMMAND_FILE}" <<EOF
 #!/bin/bash
 exec /bin/bash "${WRAPPER}"
@@ -411,12 +436,29 @@ _install_launchd() {
   fi
   launchctl enable "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
   log "已注册 launchd ${PLIST_DST}"
+
+  sed \
+    -e "s|__XCMAX_RUN_MODSTORE_SCHEDULER__|${SCHEDULER_WRAPPER}|g" \
+    -e "s|__XCMAX_LOG_DIR__|${LOG_DIR}|g" \
+    -e "s|__XCMAX_ROOT__|${HOME}|g" \
+    "${SCHEDULER_PLIST_SRC}" > "${SCHEDULER_PLIST_DST}"
+  launchctl bootout "gui/${UID_NUM}/${SCHEDULER_LABEL}" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    if ! launchctl print "gui/${UID_NUM}/${SCHEDULER_LABEL}" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+  done
+  launchctl bootstrap "gui/${UID_NUM}" "${SCHEDULER_PLIST_DST}"
+  launchctl enable "gui/${UID_NUM}/${SCHEDULER_LABEL}" 2>/dev/null || true
+  log "已注册 launchd ${SCHEDULER_PLIST_DST}"
 }
 
 _remove_launchd() {
   UID_NUM="$(id -u)"
   launchctl bootout "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
-  rm -f "${PLIST_DST}"
+  launchctl bootout "gui/${UID_NUM}/${SCHEDULER_LABEL}" 2>/dev/null || true
+  rm -f "${PLIST_DST}" "${SCHEDULER_PLIST_DST}"
 }
 
 if _on_desktop_or_documents; then
@@ -426,11 +468,26 @@ else
 fi
 _install_launchd
 
-# 若当前无调度器实例，立即拉起
+# 分别验证 HTTP 控制面与调度执行面。
+api_sched="?"
+for _ in $(seq 1 75); do
+  if curl --noproxy '*' -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
+    api_sched="$(curl --noproxy '*' -sf "http://127.0.0.1:8788/api/health" | "${FHD_ROOT}/.venv/bin/python" -c "import json,sys; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
+    if [[ "${api_sched}" == "False" || "${api_sched}" == "false" ]]; then
+      break
+    fi
+  fi
+  sleep 1
+done
+if [[ "${api_sched}" != "False" && "${api_sched}" != "false" ]]; then
+  log "HTTP 控制面未就绪 — 重启 ${LABEL}…"
+  UID_NUM="$(id -u)"
+  launchctl kickstart -k "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
+fi
 sched="false"
 for _ in $(seq 1 75); do
-  if curl -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
-    sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo 'false')"
+  if curl --noproxy '*' -sf "http://127.0.0.1:8789/api/health" >/dev/null 2>&1; then
+    sched="$(curl --noproxy '*' -sf "http://127.0.0.1:8789/api/health" | "${FHD_ROOT}/.venv/bin/python" -c "import json,sys; print(json.load(sys.stdin).get('scheduler_running'))" 2>/dev/null || echo '?')"
     if [[ "${sched}" == "True" || "${sched}" == "true" ]]; then
       break
     fi
@@ -438,23 +495,15 @@ for _ in $(seq 1 75); do
   sleep 1
 done
 if [[ "${sched}" != "True" && "${sched}" != "true" ]]; then
-  log "当前无日更调度器 — 重启 launchd job…"
+  log "调度执行面未就绪 — 重启 ${SCHEDULER_LABEL}…"
   UID_NUM="$(id -u)"
-  launchctl kickstart -k "gui/${UID_NUM}/${LABEL}" 2>/dev/null || true
-  for _ in $(seq 1 75); do
-    if curl -sf "http://127.0.0.1:8788/api/health" >/dev/null 2>&1; then
-      sched="$("${FHD_ROOT}/.venv/bin/python" -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8788/api/health')).get('scheduler_running'))" 2>/dev/null || echo '?')"
-      if [[ "${sched}" == "True" || "${sched}" == "true" ]]; then
-        break
-      fi
-    fi
-    sleep 1
-  done
+  launchctl kickstart -k "gui/${UID_NUM}/${SCHEDULER_LABEL}" 2>/dev/null || true
 fi
 
-log "MODstore :8788 scheduler_running=${sched}"
+log "MODstore API :8788 scheduler_running=${api_sched}"
+log "MODstore scheduler :8789 scheduler_running=${sched}"
 log "状态目录: ${STATE_ROOT}"
 log "08:00 自动 digest：全开 FHD/Vite/模拟器 → 跑完自动关（MODSTORE_SURFACE_AUDIT_STOP_AFTER=1）"
-log "日志: ${LOG_DIR}/modstore-daily.launchd.{log,err.log}"
+log "日志: ${LOG_DIR}/modstore-{daily,scheduler}.launchd.{log,err.log}"
 log "手动触发: bash FHD/scripts/dev/trigger_digest_now_local.sh"
 log "一键验证: bash FHD/scripts/dev/run_digest_full_stack.sh"

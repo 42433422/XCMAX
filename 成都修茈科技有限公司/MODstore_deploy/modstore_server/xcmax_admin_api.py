@@ -8,6 +8,7 @@
   GET  /api/xcmax/admin/daily-digests   — 每日摘要存档列表
   GET  /api/xcmax/admin/daily-digests/{id} — 单条摘要正文
   GET  /api/xcmax/admin/digest-identity — 与修茈市场管理端解锁同源的身份校验码摘要
+  POST /api/xcmax/admin/loop/memory/evict — 手动驱逐 self-maintenance loop 中过期的 open_items（veto 通道）
   GET  /api/xcmax/sync/status          — 同步指针 / outbox / inbox 概览
   GET  /api/xcmax/sync/changes         — 服务器变更日志（供本地节点拉取）
   POST /api/xcmax/sync/receive         — 接收来自本地节点的变更（写入 inbox）
@@ -32,14 +33,29 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
+
+
+def _resolve_admin_user(authorization: Optional[str] = Header(None)):
+    """Admin auth dependency for the loop-memory evict veto endpoint.
+
+    Lazily imports ``modstore_server.api.deps`` so the router module stays
+    cheap to load and does not pull SQLAlchemy ORM mappings during router
+    discovery. Mirrors the ``require_admin`` pattern used by
+    ``/api/ops/self-maintenance/governance-review``.
+    """
+
+    from modstore_server.api.deps import get_current_user, require_admin
+
+    user = get_current_user(authorization=authorization)
+    return require_admin(user=user)
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +90,8 @@ def _init_schema_once() -> None:
     """幂等建表 + WAL；多 worker 安全。"""
     with _db_lock:
         with _connect() as conn:
-            conn.executescript("""
+            conn.executescript(
+                """
                 PRAGMA journal_mode=WAL;
                 PRAGMA synchronous=NORMAL;
                 CREATE TABLE IF NOT EXISTS xcmax_changes (
@@ -107,7 +124,8 @@ def _init_schema_once() -> None:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
                 );
-                """)
+                """
+            )
             conn.commit()
 
 
@@ -250,6 +268,77 @@ async def remote_status() -> dict[str, Any]:
             "deploy_tier": str(ctx.get("deploy_tier") or "local"),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# 调度器健康：watchdog（scheduler-watchdog.yml）每 10 分钟探一次。
+# 关键判定：``scheduler.running == True`` 且 ``pending_job_count > 0``（即未停摆且仍有排期）。
+# 任一不满足 → watchdog SSH 进 CVM 重启 modstore-scheduler.service。
+# ---------------------------------------------------------------------------
+
+
+@router.get("/scheduler/health", response_model=None)
+async def scheduler_health() -> dict[str, Any]:
+    """报告 APScheduler 运行状态 + 待执行 job 数。
+
+    响应 watchdog 探测；当调度器卡死（实例占满 / 线程池耗尽）时，
+    ``scheduler.running`` 仍可能为 True 但 ``next_run_time`` 全面停滞，
+    因此同时输出每 job 的 ``next_run_time``，watchdog 可基于此判定是否停摆。
+    """
+    try:
+        from modstore_server.workflow_scheduler import _scheduler
+
+        if _scheduler is None:
+            return {
+                "success": False,
+                "ok": False,
+                "data": {
+                    "scheduler_started": False,
+                    "scheduler_running": False,
+                    "job_count": 0,
+                    "pending_job_count": 0,
+                    "jobs": [],
+                    "reason": "scheduler not initialized (process not running background jobs?)",
+                },
+            }
+
+        jobs_payload: list[dict[str, Any]] = []
+        pending = 0
+        try:
+            for j in _scheduler.get_jobs():
+                nrt = j.next_run_time
+                if nrt is not None:
+                    pending += 1
+                jobs_payload.append(
+                    {
+                        "id": j.id,
+                        "next_run_time": nrt.isoformat() if nrt else None,
+                        "trigger": str(j.trigger),
+                    }
+                )
+        except Exception:
+            logger.exception("scheduler_health: get_jobs failed")
+
+        running = bool(getattr(_scheduler, "running", False))
+        return {
+            "success": True,
+            "ok": running,
+            "data": {
+                "scheduler_started": True,
+                "scheduler_running": running,
+                "job_count": len(jobs_payload),
+                "pending_job_count": pending,
+                "jobs": jobs_payload,
+                "reported_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+    except Exception as exc:
+        logger.exception("scheduler_health endpoint failed")
+        return {
+            "success": False,
+            "ok": False,
+            "data": {"reason": str(exc)},
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -799,6 +888,40 @@ async def xcmax_surface_audit_lane(
         )
     report_stub = {"ok": bool(pages), "results": pages, "lane_analysis": {}}
     return {"success": True, "data": await _lane_payload(report_stub, cached=True)}
+
+
+@router.post("/admin/loop/memory/evict", response_model=None)
+async def xcmax_admin_loop_memory_evict(
+    body: dict[str, Any] = Body(default_factory=dict),
+    admin_user: Any = Depends(_resolve_admin_user),
+):
+    """Manually evict stale self-maintenance loop open_items (veto channel).
+
+    Body (all optional):
+      - ``note``: free-form reason captured in the governance audit record
+
+    Triggers the same eviction rules as the automatic path:
+      - failed_steps item with created_at > 24h AND retry_count >= 3
+      - any item with created_at > 7d
+    Evicted items are moved to ``evicted_items`` (max 100) and a
+    ``loop_evicted`` governance audit record is appended.
+    """
+
+    try:
+        from modstore_server.self_maintenance_loop_runner import evict_loop_memory_items
+
+        result = evict_loop_memory_items(
+            actor="manual",
+            note=str(body.get("note") or ""),
+            admin_user_id=getattr(admin_user, "id", None),
+        )
+        return {"success": True, "data": result}
+    except Exception as exc:
+        logger.warning("xcmax loop memory evict failed: %s", exc)
+        return JSONResponse(
+            {"success": False, "message": str(exc)},
+            status_code=500,
+        )
 
 
 __all__ = ["router"]

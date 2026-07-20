@@ -1,0 +1,90 @@
+name: AI Issue Implement
+
+# 决策矩阵承诺兑现：
+#   - issue 打 `ai-implement` 标签时触发
+#   - 授权：命中 config/auto-implement-allowlist.yaml 域标签，或 owner 评论「确认」
+#   - 预估变更 >5 文件时拒做
+#   - 实现后创建 PR 标 `needs-human` 待人工合并
+#
+# 触发条件：
+#   1. issues 事件（labeled: ai-implement）
+#   2. issue_comment 事件（owner 评论「确认」）
+#   3. workflow_dispatch（手动）
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue 编号（手动触发用）"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  implement:
+    # 仅当 issue 带 ai-implement 标签时触发
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.label.name == 'ai-implement') ||
+      (github.event_name == 'issue_comment' && contains(github.event.issue.labels.*.name, 'ai-implement'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: FHD
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt
+          pip install PyGithub
+
+      - name: Resolve issue number
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "issue_number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate & implement issue
+        working-directory: FHD
+        env:
+          ISSUE_NUMBER: ${{ steps.resolve.outputs.issue_number }}
+        run: |
+          python scripts/dev/ai_issue_implement.py \
+            --issue-number "$ISSUE_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GITHUB_TOKEN" \
+            --llm-api-key "${XCAGI_LLM_API_KEY:-}" \
+            --apply
+
+      - name: Upload implementation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-issue-implement-log-${{ steps.resolve.outputs.issue_number }}
+          path: FHD/test_reports/ai_issue_implement_${{ steps.resolve.outputs.issue_number }}.json
+          if-no-files-found: ignore

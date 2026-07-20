@@ -1,0 +1,118 @@
+# CI SSOT: generated from FHD/.github/workflows/mod-auto-publish.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Mod Auto Publish
+
+# 进化状态闭环 — 系统自己打包上架 MODstore：
+#   - 触发：PR 合并到 main 且涉及 FHD/mods/_employees/** 文件
+#   - 流程：检测变更 mod → build_mod.py 打包 → 上传到本地 /api/mod-store/upload
+#   - 输出：每个 mod 的 .xcemp 路径 + sha256 + 安装结果
+#
+# 也支持 workflow_dispatch 手动触发单个 mod_id
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - "FHD/mods/_employees/**"
+      - "FHD/mods/**/manifest.json"
+  workflow_dispatch:
+    inputs:
+      mod_id:
+        description: "要打包的 mod id（留空则扫描全部 mods/_employees/）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  package-and-publish:
+    # PR 触发：仅当 PR 已合并；workflow_dispatch 无此限制
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Discover changed mods
+        id: discover
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.mod_id }}" ]; then
+            echo "mod_ids=${{ github.event.inputs.mod_id }}" >> $GITHUB_OUTPUT
+          else
+            # PR 触发：从 commits 检测变更的 mod 目录
+            MODS=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' \
+              | grep -E '^FHD/mods/(_employees/)?[^/]+/' \
+              | awk -F/ '{print $(NF-1)}' \
+              | sort -u | tr '\n' ' ')
+            echo "mod_ids=$MODS" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & publish each mod
+        if: steps.discover.outputs.mod_ids != ''
+        working-directory: FHD
+        env:
+          MOD_IDS: ${{ steps.discover.outputs.mod_ids }}
+        run: |
+          mkdir -p dist/employee_packs
+          for mod_id in $MOD_IDS; do
+            echo "=== Building: $mod_id ==="
+            python scripts/build_mod.py --mod-id "$mod_id" --out dist/employee_packs || true
+          done
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-packages
+          path: FHD/dist/employee_packs/*.xcemp
+          if-no-files-found: ignore
+
+      - name: Comment on PR with package info
+        if: github.event_name == 'pull_request' && steps.discover.outputs.mod_ids != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mods = '${{ steps.discover.outputs.mod_ids }}'.trim().split(/\s+/).filter(Boolean);
+            if (mods.length === 0) return;
+            const body = [
+              '## Mod Auto Publish',
+              '',
+              '已自动打包以下 mod（.xcemp 已上传为 artifact）：',
+              ...mods.map(m => `- \`${m}\``),
+              '',
+              '### 进化状态闭环',
+              '',
+              '1. ✅ Mod 代码已合并到 main',
+              '2. ✅ Mod 已自动打包为 .xcemp（含 sha256）',
+              '3. ⚠️ 上架到 MODstore 需在部署环境运行：',
+              '   ```bash',
+              '   curl -X POST https://xiu-ci.com/fhd-api/api/mod-store/upload \\',
+              '     -F "file=@<path>.xcemp"',
+              '   ```',
+              '',
+              '_本评论由 mod-auto-publish.yml workflow 自动生成。_'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body
+            });

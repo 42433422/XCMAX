@@ -1,23 +1,25 @@
-"""知识库 API（V1 简化版）。
+"""Persy knowledge API.
 
-Phase 3.3 交付：
-  - POST /api/knowledge/v1/ingest   — 文本入库（语义分块 + 内存索引）
-  - POST /api/knowledge/v1/query    — 检索（混合 + 引用）
-  - GET  /api/knowledge/v1/status   — 健康检查
-  - GET  /api/knowledge/v1/health   — 详细状态
-
-生产应代理到 MODstore `/api/knowledge/v2/*`；本地开发可用此简化版。
+This boundary owns governed document ingestion, hybrid retrieval, knowledge
+graphs, and user/tenant memory review. Dataset actions continue through the
+unified Agent runtime so permissions, audit records, and run telemetry remain
+consistent with the rest of XCAGI.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import threading
+import uuid
+from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import Query as FastAPIQuery
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.infrastructure.rag import (
     HybridRetriever,
@@ -32,17 +34,76 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge/v1", tags=["knowledge-v1"])
 
+_DATASET_UPLOAD_EXTENSIONS = frozenset({".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".log"})
+_DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
+_DATASET_INLINE_MAX_CHARS = 5_000_000
+_DATASET_METADATA_MAX_BYTES = 64 * 1024
+_PERSY_DATASET_ID = "persy-knowledge"
+
+
+def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
+    def walk(item: Any, depth: int = 0) -> None:
+        if depth > 8:
+            raise ValueError("metadata nesting exceeds 8 levels")
+        if isinstance(item, dict):
+            if len(item) > 200:
+                raise ValueError("metadata has too many fields")
+            for key, child in item.items():
+                if len(str(key)) > 200:
+                    raise ValueError("metadata key is too long")
+                walk(child, depth + 1)
+        elif isinstance(item, (list, tuple)):
+            if len(item) > 1000:
+                raise ValueError("metadata list is too long")
+            for child in item:
+                walk(child, depth + 1)
+
+    walk(value)
+    try:
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str).encode(
+            "utf-8"
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("metadata must be JSON serializable") from exc
+    if len(encoded) > max_bytes:
+        raise ValueError(f"metadata cannot exceed {max_bytes} bytes")
+
+
+def _public_dataset_payload(value: Any) -> Any:
+    """Remove local storage details from HTTP responses without changing service internals."""
+
+    if isinstance(value, dict):
+        return {
+            str(key): _public_dataset_payload(item)
+            for key, item in value.items()
+            if not str(key).startswith("_")
+            and str(key) not in {"storage_path", "file_path", "vector_index_path"}
+        }
+    if isinstance(value, list):
+        return [_public_dataset_payload(item) for item in value]
+    return value
+
 
 class IngestRequest(BaseModel):
-    text: str = Field(..., description="待入库文本")
-    source: str = Field("default", description="来源标识")
-    chunk_strategy: str = Field("semantic", description="semantic | fixed")
+    text: str = Field(
+        ..., min_length=1, max_length=_DATASET_INLINE_MAX_CHARS, description="待入库文本"
+    )
+    source: str = Field("default", max_length=300, description="来源标识")
+    chunk_strategy: str = Field(
+        "semantic", pattern="^(semantic|fixed)$", description="semantic | fixed"
+    )
     chunk_size: int = Field(500, ge=50, le=5000)
     chunk_overlap: int = Field(50, ge=0, le=500)
 
+    @model_validator(mode="after")
+    def validate_chunk_window(self):
+        if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        return self
+
 
 class QueryRequest(BaseModel):
-    query: str = Field(..., description="查询文本")
+    query: str = Field(..., min_length=1, max_length=2000, description="查询文本")
     top_k: int = Field(5, ge=1, le=50)
     include_citations: bool = Field(True, description="是否返回 [1][2] 引用")
 
@@ -71,48 +132,118 @@ class StatusResponse(BaseModel):
 
 
 class DatasetDocumentIngestRequest(BaseModel):
-    text: str = Field("", description="inline document text")
-    file_path: str = Field("", description="allowed local file path")
-    source: str = Field("", description="source label")
-    document_id: str = Field("", description="optional stable document id")
-    tenant_id: str = Field("", description="tenant/user isolation key")
-    version: str = Field("", description="document version number, vN, or empty for auto increment")
-    version_label: str = Field("", description="optional display version label")
-    chunk_strategy: str = Field("semantic", description="semantic | fixed")
+    text: str = Field("", max_length=_DATASET_INLINE_MAX_CHARS, description="inline document text")
+    file_path: str = Field("", max_length=4096, description="allowed local file path")
+    source: str = Field("", max_length=300, description="source label")
+    document_id: str = Field("", max_length=200, description="optional stable document id")
+    tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
+    version: str = Field(
+        "", max_length=80, description="document version number, vN, or empty for auto increment"
+    )
+    version_label: str = Field("", max_length=120, description="optional display version label")
+    chunk_strategy: str = Field(
+        "semantic", pattern="^(semantic|fixed)$", description="semantic | fixed"
+    )
     chunk_size: int = Field(500, ge=50, le=5000)
     chunk_overlap: int = Field(50, ge=0, le=500)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _ensure_bounded_metadata(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_document_input(self):
+        if not self.text.strip() and not self.file_path.strip():
+            raise ValueError("text or file_path is required")
+        if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        return self
+
 
 class DatasetQueryRequest(BaseModel):
-    query: str = Field(..., description="question or retrieval query")
+    query: str = Field(
+        ..., min_length=1, max_length=2000, description="question or retrieval query"
+    )
     top_k: int = Field(5, ge=1, le=50)
     include_answer: bool = Field(True, description="return deterministic answer with citations")
-    tenant_id: str = Field("", description="tenant/user isolation key")
-    version: str = Field("", description="document version number, vN, latest, or empty")
+    tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
+    version: str = Field(
+        "", max_length=80, description="document version number, vN, latest, or empty"
+    )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
-    rerank: bool = Field(False, description="apply lexical reranker after hybrid retrieval")
+    rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+
+    @field_validator("metadata_filter")
+    @classmethod
+    def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _ensure_bounded_metadata(value)
+        return value
 
 
 class DatasetVersionDiffRequest(BaseModel):
-    source: str = Field(..., description="document source label")
-    tenant_id: str = Field("", description="tenant/user isolation key")
-    from_version: str = Field(..., description="source version number, vN, or label")
-    to_version: str = Field("latest", description="target version number, vN, label, or latest")
+    source: str = Field(..., min_length=1, max_length=300, description="document source label")
+    tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
+    from_version: str = Field(
+        ..., min_length=1, max_length=120, description="source version number, vN, or label"
+    )
+    to_version: str = Field(
+        "latest", max_length=120, description="target version number, vN, label, or latest"
+    )
 
 
 class DatasetRollbackRequest(BaseModel):
-    source: str = Field(..., description="document source label")
-    tenant_id: str = Field("", description="tenant/user isolation key")
-    target_version: str = Field(..., description="version to restore into a new latest version")
+    source: str = Field(..., min_length=1, max_length=300, description="document source label")
+    tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
+    target_version: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        description="version to restore into a new latest version",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _ensure_bounded_metadata(value)
+        return value
 
 
 class DatasetRebuildRequest(BaseModel):
-    tenant_id: str = Field("", description="tenant/user isolation key")
+    tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
     background: bool = Field(True, description="run index rebuild in a background thread")
     max_attempts: int = Field(1, ge=1, le=5)
+
+    @field_validator("metadata_filter")
+    @classmethod
+    def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _ensure_bounded_metadata(value)
+        return value
+
+
+class PersyMemoryQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    top_k: int = Field(5, ge=1, le=20)
+    reinforce: bool = Field(True)
+
+
+class PersyMemoryMutationRequest(BaseModel):
+    key: str | None = Field(None, max_length=160)
+    value: Any = None
+    memory_type: str | None = Field(None, max_length=32)
+    confidence: float | None = Field(None, ge=0, le=1)
+    reason: str = Field("", max_length=500)
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, value: Any) -> Any:
+        if value is not None:
+            _ensure_bounded_metadata(value, max_bytes=16 * 1024)
+        return value
 
 
 class _KnowledgeIndex:
@@ -172,39 +303,151 @@ _index = _KnowledgeIndex()
 
 
 def _dataset_access_context_from_request(request: Request) -> Any | None:
-    from app.application.dataset_rag_app_service import DatasetAccessContext
-    from app.infrastructure.auth.tenant_context import resolve_tenant_id
+    from app.fastapi_routes.dataset_access import dataset_access_context_from_request
 
-    headers = request.headers
-    tenant = (headers.get("X-Dataset-Tenant-ID") or headers.get("X-Tenant-ID") or "").strip()
-    if not tenant:
-        resolved_tenant = resolve_tenant_id(request)
-        tenant = str(resolved_tenant) if resolved_tenant is not None else ""
-    actor_id = (headers.get("X-Dataset-Actor-ID") or headers.get("X-User-ID") or "").strip()
-    permissions_raw = headers.get("X-Dataset-Permissions") or headers.get("X-Permissions") or ""
-    permissions = frozenset(
-        part.strip() for part in permissions_raw.replace(";", ",").split(",") if part.strip()
-    )
-    is_admin = headers.get("X-Dataset-Admin", "").strip().lower() in {"1", "true", "yes", "on"}
-    if not tenant and not actor_id and not permissions and not is_admin:
-        return None
-    return DatasetAccessContext(
-        actor_id=actor_id,
-        tenant_id=tenant,
-        permissions=permissions,
-        is_admin=is_admin,
-    )
+    return dataset_access_context_from_request(request)
 
 
 def _dataset_access_payload_from_request(request: Request) -> dict[str, Any]:
-    context = _dataset_access_context_from_request(request)
-    if context is None:
-        return {}
-    payload = dict(context.to_dict())
-    permissions = payload.get("permissions") if isinstance(payload.get("permissions"), list) else []
-    if not payload.get("tenant_id") and not permissions and not payload.get("is_admin"):
-        return {}
-    return payload
+    from app.fastapi_routes.dataset_access import dataset_access_payload_from_request
+
+    return dataset_access_payload_from_request(request)
+
+
+def _persy_memory_service():
+    from app.application.persy_memory_app_service import get_persy_memory_app_service
+
+    return get_persy_memory_app_service()
+
+
+def _persy_dataset_error(dataset_id: str) -> JSONResponse | None:
+    if str(dataset_id or "").strip() == _PERSY_DATASET_ID:
+        return None
+    return JSONResponse(
+        {
+            "success": False,
+            "message": "Persy memory is only available for the Persy knowledge dataset",
+            "error_code": "persy_dataset_required",
+        },
+        status_code=404,
+    )
+
+
+def _persy_memory_response(
+    payload: dict[str, Any],
+    *,
+    request: Request,
+    action: str,
+) -> JSONResponse:
+    success = bool(payload.get("success"))
+    code = str(payload.get("error_code") or "")
+    status_code = 200 if success else 400
+    if code in {"dataset_permission_denied", "persy_memory_scope_missing"}:
+        status_code = 403
+    elif code == "persy_memory_not_found":
+        status_code = 404
+    try:
+        from app.utils import audit_logger
+
+        access = _dataset_access_context_from_request(request)
+        audit_logger.audit_log(
+            f"persy_memory_{action}",
+            getattr(access, "actor_id", "") if access is not None else "",
+            str(getattr(getattr(request, "client", None), "host", "") or ""),
+            {
+                "success": success,
+                "memory_id": str(
+                    (payload.get("memory") or {}).get("memory_id")
+                    if isinstance(payload.get("memory"), dict)
+                    else ""
+                ),
+                "error_code": code,
+            },
+            success=success,
+        )
+    except Exception:  # noqa: BLE001 - audit must never break a user mutation
+        logger.debug("Persy memory audit unavailable", exc_info=True)
+    return JSONResponse(payload, status_code=status_code)
+
+
+def _merge_persy_recall(
+    payload: dict[str, Any],
+    *,
+    request: Request,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    if str(params.get("dataset_id") or "") != _PERSY_DATASET_ID or not payload.get("success"):
+        return payload
+    query_text = str(params.get("query") or "").strip()
+    if not query_text:
+        return payload
+    memory_result = _persy_memory_service().query(
+        access_context=_dataset_access_context_from_request(request),
+        query=query_text,
+        top_k=max(1, min(int(params.get("top_k") or 5), 20)),
+        reinforce=True,
+    )
+    result = dict(payload)
+    result["persy_memory"] = {
+        "available": bool(memory_result.get("success")),
+        "count": len(memory_result.get("chunks") or []),
+        "retriever": str(memory_result.get("retriever") or ""),
+    }
+    if not memory_result.get("success"):
+        result["persy_memory"]["error_code"] = str(memory_result.get("error_code") or "")
+        return result
+
+    knowledge_chunks = [
+        dict(chunk) for chunk in payload.get("chunks", []) if isinstance(chunk, dict)
+    ]
+    memory_chunks = [
+        dict(chunk) for chunk in memory_result.get("chunks", []) if isinstance(chunk, dict)
+    ]
+    seen: set[str] = set()
+    merged_chunks: list[dict[str, Any]] = []
+    for chunk in sorted(
+        [*memory_chunks, *knowledge_chunks],
+        key=lambda item: float(item.get("score") or 0.0),
+        reverse=True,
+    ):
+        metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        fingerprint = str(
+            metadata.get("memory_id")
+            or metadata.get("document_id")
+            or f"{chunk.get('source')}:{chunk.get('chunk_index')}:{chunk.get('text')}"
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        merged_chunks.append(chunk)
+    result["chunks"] = merged_chunks[: max(2, min(int(params.get("top_k") or 5) * 2, 40))]
+
+    citations = [
+        dict(citation) for citation in payload.get("citations", []) if isinstance(citation, dict)
+    ]
+    for chunk in memory_chunks:
+        memory_metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        citations.append(
+            {
+                "index": len(citations) + 1,
+                "source": "对话记忆",
+                "text": str(chunk.get("text") or ""),
+                "score": chunk.get("score"),
+                "memory_id": memory_metadata.get("memory_id"),
+            }
+        )
+    result["citations"] = citations
+
+    if memory_chunks and params.get("include_answer", True):
+        memory_summary = "；".join(
+            str(chunk.get("text") or "").strip()[:180]
+            for chunk in memory_chunks[:3]
+            if str(chunk.get("text") or "").strip()
+        )
+        knowledge_answer = str(payload.get("answer") or "").strip()
+        memory_answer = f"已确认的长期记忆：{memory_summary}。" if memory_summary else ""
+        result["answer"] = "\n\n".join(part for part in (memory_answer, knowledge_answer) if part)
+    return result
 
 
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
@@ -225,7 +468,7 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
         output["run_id"] = run_id
         output["agent_run_id"] = run_id
     output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
+    return cast("dict[str, Any]", _public_dataset_payload(output))
 
 
 def _dataset_agent_user_id(request: Request, params: dict[str, Any]) -> str:
@@ -259,7 +502,8 @@ def _run_dataset_rag_agent(
     if access_payload:
         data["access_context"] = access_payload
         if access_payload.get("tenant_id"):
-            data.setdefault("tenant_id", access_payload["tenant_id"])
+            if not str(data.get("tenant_id") or "").strip():
+                data["tenant_id"] = access_payload["tenant_id"]
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("dataset_rag") or {}).get("actions") or {}).get(action)
     if not isinstance(action_meta, dict):
@@ -320,11 +564,17 @@ def _run_dataset_rag_agent(
             run = continued
 
     payload = _agent_node_output(run, node_id)
-    status_code = 200
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
+    if action == "query":
+        payload = _merge_persy_recall(payload, request=request, params=data)
     if run.status in {"waiting_user", "blocked"}:
         status_code = 202
+    elif payload.get("error_code") == "tool_exception":
+        status_code = 500
+    else:
+        # Keep the established Dataset/RAG route contract: domain-level
+        # failures are returned as a 200 payload with success=false.  Several
+        # desktop clients already branch on error_code instead of HTTP status.
+        status_code = 200
     return JSONResponse(payload, status_code=status_code)
 
 
@@ -393,6 +643,98 @@ def ingest_dataset_document(
     )
 
 
+@router.post("/datasets/{dataset_id}/documents/upload")
+async def upload_dataset_document(
+    dataset_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    source: str = Form(""),
+    tenant_id: str = Form(""),
+    version: str = Form(""),
+    version_label: str = Form(""),
+    chunk_strategy: str = Form("semantic"),
+) -> JSONResponse:
+    raw_name = Path(str(file.filename or "document")).name
+    suffix = Path(raw_name).suffix.lower()
+    stem_limit = max(1, 240 - len(suffix))
+    original_name = f"{Path(raw_name).stem[:stem_limit]}{suffix}"
+    if suffix not in _DATASET_UPLOAD_EXTENSIONS:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": f"不支持的资料类型: {suffix or '无扩展名'}",
+                "allowed_extensions": sorted(_DATASET_UPLOAD_EXTENSIONS),
+            },
+            status_code=400,
+        )
+    source_label = str(source or original_name).strip() or original_name
+    if len(source_label) > 300:
+        return JSONResponse(
+            {"success": False, "message": "资料名称不能超过 300 个字符"},
+            status_code=400,
+        )
+    if any(
+        len(str(value or "")) > limit
+        for value, limit in ((tenant_id, 160), (version, 80), (version_label, 120))
+    ):
+        return JSONResponse(
+            {"success": False, "message": "上传参数过长"},
+            status_code=400,
+        )
+
+    from app.utils.path_utils import get_upload_dir
+
+    safe_dataset = re.sub(r"[^A-Za-z0-9._-]+", "_", str(dataset_id or "default"))[:100]
+    upload_dir = Path(get_upload_dir()).resolve() / "knowledge" / (safe_dataset or "default")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
+    size = 0
+    try:
+        with saved_path.open("wb") as target:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > _DATASET_UPLOAD_MAX_BYTES:
+                    raise ValueError("资料文件不能超过 25 MB")
+                target.write(chunk)
+    except (OSError, ValueError) as exc:
+        saved_path.unlink(missing_ok=True)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    finally:
+        await file.close()
+
+    response = _run_dataset_rag_agent(
+        request=request,
+        action="ingest_document",
+        route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/upload",
+        params={
+            "dataset_id": dataset_id,
+            "source": source_label,
+            "file_path": str(saved_path),
+            "text": "",
+            "document_id": "",
+            "chunk_strategy": chunk_strategy
+            if chunk_strategy in {"semantic", "fixed"}
+            else "semantic",
+            "chunk_size": 500,
+            "chunk_overlap": 50,
+            "metadata": {
+                "original_file_name": original_name,
+                "upload_size_bytes": size,
+                "entrypoint": "persy_knowledge_upload",
+            },
+            "tenant_id": tenant_id,
+            "version": version,
+            "version_label": version_label,
+        },
+    )
+    if response.status_code >= 400:
+        try:
+            saved_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Failed to clean rejected Persy upload: %s", saved_path)
+    return response
+
+
 @router.post("/datasets/{dataset_id}/query")
 def query_dataset(
     dataset_id: str,
@@ -420,8 +762,13 @@ def query_dataset(
 def dataset_status_all(request: Request) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
-    return get_dataset_rag_app_service().status(
-        access_context=_dataset_access_context_from_request(request),
+    return cast(
+        "dict[str, Any]",
+        _public_dataset_payload(
+            get_dataset_rag_app_service().status(
+                access_context=_dataset_access_context_from_request(request),
+            )
+        ),
     )
 
 
@@ -429,10 +776,181 @@ def dataset_status_all(request: Request) -> dict[str, Any]:
 def dataset_status(dataset_id: str, request: Request) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
-    return get_dataset_rag_app_service().status(
-        dataset_id,
-        access_context=_dataset_access_context_from_request(request),
+    access = _dataset_access_context_from_request(request)
+    return cast(
+        "dict[str, Any]",
+        _public_dataset_payload(
+            get_dataset_rag_app_service().status(
+                dataset_id,
+                tenant_id=str(getattr(access, "tenant_id", "") or ""),
+                access_context=access,
+            )
+        ),
     )
+
+
+@router.get("/datasets/{dataset_id}/graph")
+def dataset_graph(
+    dataset_id: str,
+    request: Request,
+    limit: int = FastAPIQuery(120, ge=20, le=240),
+) -> dict[str, Any]:
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+    from app.application.persy_memory_app_service import merge_memory_graph
+
+    access = _dataset_access_context_from_request(request)
+    tenant_id = str(getattr(access, "tenant_id", "") or "")
+    memory_graph: dict[str, Any] = {"success": True, "nodes": [], "edges": [], "stats": {}}
+    graph_limit = limit
+    if dataset_id == _PERSY_DATASET_ID:
+        memory_graph = _persy_memory_service().graph(
+            access_context=access,
+            limit=max(8, min(40, int(limit * 0.28))),
+        )
+        if memory_graph.get("nodes"):
+            graph_limit = max(20, int(limit * 0.62))
+    base_graph = get_dataset_rag_app_service().knowledge_graph(
+        dataset_id,
+        tenant_id=tenant_id,
+        limit=graph_limit,
+        access_context=access,
+    )
+    if not base_graph.get("success") or not memory_graph.get("success"):
+        return cast("dict[str, Any]", _public_dataset_payload(base_graph))
+    return cast(
+        "dict[str, Any]",
+        _public_dataset_payload(merge_memory_graph(base_graph, memory_graph, limit=limit)),
+    )
+
+
+@router.get("/datasets/{dataset_id}/memories")
+def list_persy_memories(
+    dataset_id: str,
+    request: Request,
+    status: str = FastAPIQuery(""),
+    memory_type: str = FastAPIQuery(""),
+    limit: int = FastAPIQuery(200, ge=1, le=1000),
+) -> JSONResponse:
+    unsupported = _persy_dataset_error(dataset_id)
+    if unsupported is not None:
+        return unsupported
+    payload = _persy_memory_service().list_memories(
+        access_context=_dataset_access_context_from_request(request),
+        status=status,
+        memory_type=memory_type,
+        limit=limit,
+    )
+    code = str(payload.get("error_code") or "")
+    status_code = 200 if payload.get("success") else 400
+    if code in {"dataset_permission_denied", "persy_memory_scope_missing"}:
+        status_code = 403
+    return JSONResponse(payload, status_code=status_code)
+
+
+@router.post("/datasets/{dataset_id}/memories/query")
+def query_persy_memories(
+    dataset_id: str,
+    req: PersyMemoryQueryRequest,
+    request: Request,
+) -> JSONResponse:
+    unsupported = _persy_dataset_error(dataset_id)
+    if unsupported is not None:
+        return unsupported
+    payload = _persy_memory_service().query(
+        access_context=_dataset_access_context_from_request(request),
+        query=req.query,
+        top_k=req.top_k,
+        reinforce=req.reinforce,
+    )
+    code = str(payload.get("error_code") or "")
+    status_code = 200 if payload.get("success") else 400
+    if code in {"dataset_permission_denied", "persy_memory_scope_missing"}:
+        status_code = 403
+    return JSONResponse(payload, status_code=status_code)
+
+
+@router.post("/datasets/{dataset_id}/memories/{memory_id}/confirm")
+def confirm_persy_memory(
+    dataset_id: str,
+    memory_id: str,
+    req: PersyMemoryMutationRequest,
+    request: Request,
+) -> JSONResponse:
+    unsupported = _persy_dataset_error(dataset_id)
+    if unsupported is not None:
+        return unsupported
+    correction = {
+        key: getattr(req, key)
+        for key in ("key", "value", "memory_type", "confidence")
+        if key in req.model_fields_set
+    }
+    payload = _persy_memory_service().mutate(
+        access_context=_dataset_access_context_from_request(request),
+        memory_id=memory_id,
+        action="confirm",
+        patch=correction,
+        reason=req.reason,
+    )
+    return _persy_memory_response(payload, request=request, action="confirm")
+
+
+@router.post("/datasets/{dataset_id}/memories/{memory_id}/reject")
+def reject_persy_memory(
+    dataset_id: str,
+    memory_id: str,
+    req: PersyMemoryMutationRequest,
+    request: Request,
+) -> JSONResponse:
+    unsupported = _persy_dataset_error(dataset_id)
+    if unsupported is not None:
+        return unsupported
+    payload = _persy_memory_service().mutate(
+        access_context=_dataset_access_context_from_request(request),
+        memory_id=memory_id,
+        action="reject",
+        reason=req.reason,
+    )
+    return _persy_memory_response(payload, request=request, action="reject")
+
+
+@router.patch("/datasets/{dataset_id}/memories/{memory_id}")
+def correct_persy_memory(
+    dataset_id: str,
+    memory_id: str,
+    req: PersyMemoryMutationRequest,
+    request: Request,
+) -> JSONResponse:
+    unsupported = _persy_dataset_error(dataset_id)
+    if unsupported is not None:
+        return unsupported
+    patch = {key: getattr(req, key) for key in ("key", "value") if key in req.model_fields_set}
+    payload = _persy_memory_service().mutate(
+        access_context=_dataset_access_context_from_request(request),
+        memory_id=memory_id,
+        action="correct",
+        patch=patch,
+        reason=req.reason,
+    )
+    return _persy_memory_response(payload, request=request, action="correct")
+
+
+@router.delete("/datasets/{dataset_id}/memories/{memory_id}")
+def delete_persy_memory(
+    dataset_id: str,
+    memory_id: str,
+    request: Request,
+    reason: str = FastAPIQuery("", max_length=500),
+) -> JSONResponse:
+    unsupported = _persy_dataset_error(dataset_id)
+    if unsupported is not None:
+        return unsupported
+    payload = _persy_memory_service().mutate(
+        access_context=_dataset_access_context_from_request(request),
+        memory_id=memory_id,
+        action="delete",
+        reason=reason,
+    )
+    return _persy_memory_response(payload, request=request, action="delete")
 
 
 @router.post("/datasets/{dataset_id}/versions/diff")
@@ -516,10 +1034,15 @@ def cancel_dataset_rebuild_job(
 def dataset_rebuild_job(dataset_id: str, job_id: str, request: Request) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
-    return get_dataset_rag_app_service().get_rebuild_job(
-        dataset_id,
-        job_id,
-        access_context=_dataset_access_context_from_request(request),
+    return cast(
+        "dict[str, Any]",
+        _public_dataset_payload(
+            get_dataset_rag_app_service().get_rebuild_job(
+                dataset_id,
+                job_id,
+                access_context=_dataset_access_context_from_request(request),
+            )
+        ),
     )
 
 

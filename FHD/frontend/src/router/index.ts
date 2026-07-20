@@ -106,6 +106,12 @@ const allRoutes: RouteRecordRaw[] = [
     meta: { title: '智能对话' }
   },
   {
+    path: '/persy/knowledge',
+    name: 'persy-knowledge',
+    component: () => import('../views/PersyKnowledgeView.vue'),
+    meta: { title: 'Persy 知识库' },
+  },
+  {
     path: '/lan-gate',
     name: 'lan-gate',
     component: () => import('../views/LanGateView.vue'),

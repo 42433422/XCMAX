@@ -124,6 +124,115 @@ def _merge_phase_block(
     return out
 
 
+def trigger_strategic_layer_dispatch(
+    record_id: int,
+    *,
+    release_kind: str,
+    release_train: str,
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """daily-digest 完成后触发战略层集成（可关闭，默认开启）。
+
+    触发条件（任一）：
+    - 任一 phase 失败 → propose "review_digest_failure" 决策（require_human 边界）
+    - installer/major 日 → propose "review_release_train" 决策（require_council 边界）
+    - daily 成功 → 仅 report_only，不提案决策
+
+    shadow 模式跳过（避免影子测试污染决策账本）。
+
+    Returns:
+        ``{"ok": True/False, "skipped": True/False, "reason": str, "decision_id": str, ...}``
+    """
+    if not _env_bool("MODSTORE_STRATEGIC_LAYER_INTEGRATION_ENABLED", "1"):
+        return {"ok": True, "skipped": True, "reason": "strategic_layer integration disabled"}
+
+    if result.get("shadow"):
+        return {"ok": True, "skipped": True, "reason": "shadow mode"}
+
+    try:
+        from modstore_server.strategic_layer import (
+            DecisionProposer,
+            DecisionType,
+            StrategicDecisionLedger,
+        )
+    except ImportError as exc:
+        logger.warning("strategic_layer import failed: %s", exc)
+        return {"ok": False, "error": f"import failed: {exc}"}
+
+    overall_ok = bool(result.get("ok"))
+    failed_phases = [
+        name
+        for name in ("phase_b", "phase_c_pipeline", "phase_c")
+        if not (result.get(name) or {}).get("ok", True)
+    ]
+
+    if not overall_ok:
+        action = "review_digest_failure"
+        title = (
+            f"daily-digest#{record_id} 失败 review "
+            f"(phases: {','.join(failed_phases) or 'unknown'})"
+        )
+        decision_type = DecisionType.OPERATIONAL
+        rationale = (
+            f"auto-proposed by digest_daily_line_chain record_id={record_id} "
+            f"release_kind={release_kind}; failed_phases={failed_phases}"
+        )
+    elif release_kind in ("installer", "major"):
+        action = "review_release_train"
+        title = f"{release_kind} release {release_train} 战略层复盘"
+        decision_type = DecisionType.STRATEGIC
+        rationale = (
+            f"auto-proposed by digest_daily_line_chain record_id={record_id} "
+            f"release_kind={release_kind} release_train={release_train}"
+        )
+    else:
+        return {"ok": True, "skipped": True, "reason": "daily ok, no strategic action"}
+
+    try:
+        ledger = StrategicDecisionLedger()
+        record = ledger.propose(
+            title=title,
+            action=action,
+            proposer=DecisionProposer(
+                actor="digest-daily-line-chain",
+                rationale=rationale,
+                payload={
+                    "record_id": int(record_id),
+                    "release_kind": release_kind,
+                    "release_train": release_train,
+                    "failed_phases": failed_phases,
+                },
+            ),
+            decision_type=decision_type,
+            scope="release_train",
+            scope_ref=str(release_train or ""),
+            execution_plan={
+                "record_id": int(record_id),
+                "release_kind": release_kind,
+                "failed_phases": failed_phases,
+            },
+        )
+        logger.info(
+            "strategic_layer dispatch record_id=%s decision_id=%s status=%s autonomy=%s",
+            record_id,
+            record.decision_id,
+            record.status.value,
+            record.autonomy_action,
+        )
+        return {
+            "ok": True,
+            "skipped": False,
+            "decision_id": record.decision_id,
+            "status": record.status.value,
+            "autonomy_action": record.autonomy_action,
+            "action": action,
+            "title": title,
+        }
+    except Exception as exc:
+        logger.exception("strategic_layer dispatch failed record_id=%s", record_id)
+        return {"ok": False, "error": str(exc)}
+
+
 def wait_for_phase_a(record_id: int, *, required: bool = True) -> Dict[str, Any]:
     """08:25 前确认 08:15 Phase A（P-S + P-App 补丁）已完成或跳过。"""
     if not _env_bool("MODSTORE_RELEASE_TRAIN_WAIT_PHASE_A", "1"):

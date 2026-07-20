@@ -133,6 +133,9 @@ jobs:
           python scripts/dev/count_type_debt.py --max-type-ignore 69 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
+      - name: Big files ratchet (巨文件只减不增)
+        run: python scripts/dev/count_big_files.py
+
       - name: Route integrity tests
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
@@ -156,7 +159,7 @@ jobs:
       - name: Coverage ratchet check (行/分支只升不降)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: python scripts/dev/coverage_ratchet.py --check --require-backend
+        run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is
@@ -744,3 +747,13 @@ jobs:
       - name: SSOT drift gate
         working-directory: FHD
         run: python scripts/dev/ssot_cli.py gate
+
+      - name: Workflow sync drift gate
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          # 校验根仓 .github/workflows/ 与 FHD/MODstore 源一致
+          # 编辑源必须改 FHD/.github/workflows/ 或 MODstore_deploy/.github/workflows/，
+          # 然后跑 python scripts/dev/publish_ci_workflows_to_root.py 同步
+          python scripts/dev/publish_ci_workflows_to_root.py --check

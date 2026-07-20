@@ -290,3 +290,75 @@ gh workflow run fhd-deploy.yml -f environment=production -f action=restart-only
 ```bash
 curl -sf https://xiu-ci.com/fhd-api/api/health
 ```
+
+## 自治闭环（Autonomy）
+
+> **详细手册**：[autonomy.md](./autonomy.md)
+> **范围**：桌面 / 服务器 / CI 三端一体化自治系统，覆盖用户三大痛点 — 触发闭环 / 非代码故障 / 副作用预测。
+
+### 三端自治链路
+
+| 端 | 实现 | 触发方式 | 主要职责 |
+|---|---|---|---|
+| 桌面 | `FHD/desktop/autonomy/controller.ts` | main.ts start() + backend exit ingest | backend 崩溃回滚 / 降级状态修复 / OTA 失败回滚 |
+| 服务器 | `FHD/scripts/autonomy/cvm_autonomy_watcher.py` | GitHub Actions cron `*/10 * * * *` SSH 触发 | health_down / manifest_drift / disk_full / compose_unhealthy |
+| CI | `FHD/scripts/ci/ai_self_heal.py` + `ai_review.py` | `workflow_run(failure)` + `pull_request(opened/synchronize)` | CI 失败自愈 + PR 自动 review |
+
+### CI Workflows
+
+| Workflow | 触发 | 文件 |
+|---|---|---|
+| `fhd-ai-self-heal.yml` | `workflow_run` completed(failure) | `.github/workflows/fhd-ai-self-heal.yml` |
+| `fhd-ai-review.yml` | `pull_request` opened/synchronize | `.github/workflows/fhd-ai-review.yml` |
+| `fhd-cvm-autonomy-watcher.yml` | `schedule(*/10 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
+
+### 关键约束
+
+| 约束 | 说明 |
+|---|---|
+| 同指纹 24h 去重 | `ai-self-heal` 对相同错误指纹 24h 内不重复创建 PR（budget 限制） |
+| `autonomy/` 分支不递归 | ai-self-heal 不处理 `autonomy/*` 分支失败，避免自愈自愈递归 |
+| LLM fail-open | LLM 调用 30s 超时不阻断主流程，降级到纯规则匹配 |
+| `confirmed-high` 才阻断 | ai-review 仅 LLM 高置信度（confirmed-high）高危问题才阻断合并 |
+| 跨端门禁默认禁用 | env `XCAGI_CROSS_TIER_GATE=1` 启用，fail-open（查询失败不阻断） |
+| ImpactPredictor 拦截不阻断 | 误判仅写 audit，不抛错；deny 时不执行但记录原因 |
+| Policy 纯函数 | 禁止 `Date.now()`，时间窗口用 signals 自身 `ts`（取最新信号 ts 作为"现在"） |
+| 所有动作必审计 | AuditEntry 是唯一事后真相，三端共用语义；通过 `audit_query.py` CLI 查询 |
+
+### 触发条件矩阵
+
+| 信号源 | 触发动作 | 自动/人工 |
+|---|---|---|
+| 桌面 backend 5min 内 ≥3 次 exit | `rollback_version`（high） | 自动决策 + CrossTierGate 预检 + 人工 escalate 兜底 |
+| 桌面 disk_full | `clear_cache`（low） | 自动执行 |
+| 桌面 disk_low / db_corrupt / network_down | `escalate`（high） | 直接人工 |
+| 桌面 ota_install_failed | `rollback_version`（high） | 自动决策 + 预检 |
+| 服务器 /api/health 持续 503 | `restart_service`（max_attempts=2） | 自动 + 失败 escalate |
+| 服务器 manifest_drift | `freeze_manifest` | 自动（防 cron 反复重试） |
+| 服务器 disk_full | `clear_logs` | 自动 |
+| 服务器 compose_unhealthy | `restart_service` | 自动 |
+| CI fhd-ci-cd 失败 | 创建修复 PR + 标 `needs-human` | 自动诊断 + 人工合并 |
+| PR opened/synchronize | ai-review 行级评论 | 自动（confirmed-high 才阻断） |
+
+### 跨端门禁场景
+
+| 场景 | 检查项 | 防止问题 |
+|---|---|---|
+| 桌面 `rollback_version` | `server_manifest_frozen` | 桌面回滚到服务器已冻结的版本 |
+| 服务器 `rollback_to_last_tarball` | `desktop_pending_rollback_marker` | 嵌套回滚导致数据丢失 |
+| CI `cvm-push-release` | `server_manifest_frozen` | CI 推送覆盖运维手动冻结的 manifest |
+
+### Audit 查询
+
+```bash
+# 查桌面端最近 24h 的所有 rollback 动作
+python scripts/autonomy/audit_query.py --source desktop --since 24h \
+  --filter 'action.type=rollback_version'
+
+# 查服务器端最近 1h 失败的动作
+python scripts/autonomy/audit_query.py --source server --since 1h \
+  --filter 'result.ok=false'
+```
+
+完整用法与运维剧本见 [autonomy.md](./autonomy.md)。
+

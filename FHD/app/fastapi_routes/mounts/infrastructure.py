@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 def register_infrastructure_routes(app: FastAPI) -> None:
     """Register desktop runtime and GDPR routes."""
     try:
+        from app.fastapi_routes.kellai_binding import router as kellai_binding_router
+
+        app.include_router(kellai_binding_router)
+        logger.info("Registered kellai_binding_router (/api/kellai/binding/*)")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("客来来绑定路由 skipped: %s", e)
+    try:
         from app.fastapi_routes.desktop_runtime import router as desktop_runtime_router
 
         app.include_router(desktop_runtime_router)

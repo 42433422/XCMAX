@@ -1,5 +1,13 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
+/** 响应式断点阈值；与 CSS 媒体查询共用，避免前后端断点漂移。 */
+export const BREAKPOINTS = {
+  /** 移动端最大宽度（含） */
+  mobileMax: 768,
+  /** 平板最大宽度（含） */
+  tabletMax: 1024,
+} as const
+
 const isMobile = ref(false)
 const isTablet = ref(false)
 const isDesktop = ref(true)
@@ -11,8 +19,10 @@ let refCount = 0
 function initListeners() {
   if (typeof window === 'undefined') return
 
-  const mobileQuery = window.matchMedia('(max-width: 768px)')
-  const tabletQuery = window.matchMedia('(min-width: 769px) and (max-width: 1024px)')
+  const mobileQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.mobileMax}px)`)
+  const tabletQuery = window.matchMedia(
+    `(min-width: ${BREAKPOINTS.mobileMax + 1}px) and (max-width: ${BREAKPOINTS.tabletMax}px)`,
+  )
 
   function forceAndroidClient(): boolean {
     if (typeof window === 'undefined') return false

@@ -481,11 +481,16 @@ class TestModStoreDetails:
 
 
 class TestModStoreUpload:
-    def test_not_implemented(self, client: TestClient) -> None:
+    def test_missing_file_returns_422(self, client: TestClient) -> None:
+        """POST /upload 无 file 字段 → 422（FastAPI 校验：file 是必填）。"""
         resp = client.post("/upload")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is False
+        assert resp.status_code == 422
+
+    def test_invalid_extension_returns_400(self, client: TestClient) -> None:
+        """POST /upload 上传非 .xcemp/.zip 文件 → 400。"""
+        files = {"file": ("bad.txt", b"not a mod", "text/plain")}
+        resp = client.post("/upload", files=files)
+        assert resp.status_code == 400
 
 
 class TestModStoreInstall:

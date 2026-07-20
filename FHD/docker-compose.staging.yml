@@ -1,0 +1,155 @@
+# Local Mac Staging — 模拟生产 staging 通道(5101)
+#
+# 用途:
+#   1. 验证 Neuro Bus 7 开关全开行为(等于生产推荐配置)
+#   2. 跑全栈 E2E(E2E_FULL_STACK=1 BASE_URL=http://localhost:5101)
+#   3. 测试 fhd-apply-release-compose.sh 流程(不污染生产 CVM)
+#   4. 验证覆盖率峰值硬阻断在真实 stack 下的行为
+#
+# 与生产 docker-compose.yml 的差异:
+#   - 端口 5101(与生产 staging channel 一致)
+#   - SQLite 替代 PG(mac 本地轻量,符合 desktop runtime 一致性)
+#   - 弱密码(staging 不需要生产强度)
+#   - 挂载本地代码方便热重载
+#   - Neuro Bus 7 开关显式启用(作为 staging 验证基准)
+#
+# 启动: docker compose -f docker-compose.staging.yml up -d
+# 停止: docker compose -f docker-compose.staging.yml down
+# 日志: docker compose -f docker-compose.staging.yml logs -f backend
+# 健康: curl http://localhost:5101/health
+
+services:
+  backend:
+    build:
+      # ⚠️ 已统一主入口至 XCAGI/,构建上下文指向 XCAGI/
+      context: ./XCAGI
+      dockerfile: Dockerfile
+      target: development
+    container_name: xcagi-backend-staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5101:5000"
+    environment:
+      - XCAGI_ENV=staging
+      - XCAGI_DEBUG=1
+      - SECRET_KEY=staging-secret-key-not-for-prod
+      # SQLite WAL(与 desktop runtime 一致,mac 本地轻量)
+      - DATABASE_URL=sqlite:////app/data/xcagi_staging.db
+      - VECTOR_DB_URL=sqlite:////app/data/xcagi_staging.db
+      - DATABASE_PATH=/app/data
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/3
+      - CELERY_RESULT_BACKEND=redis://redis:6379/4
+      - LOG_LEVEL=DEBUG
+      # Neuro Bus 7 开关全开(生产推荐配置,staging 验证基准)
+      - XCAGI_NEURO_BUS_DEDUP=1
+      - XCAGI_NEURO_BUS_CIRCUIT=1
+      - XCAGI_NEURO_BUS_RATE_LIMIT=1
+      - XCAGI_NEURO_BUS_TRACE=1
+      - XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE=0.5
+      - XCAGI_NEURO_BUS_LIFELINE=1
+      - XCAGI_NEURO_BUS_DLQ_AUTO=1
+      - XCAGI_NEURO_BUS_SLA_LOG=1
+    volumes:
+      - .:/app
+      - xcagi-staging-data:/app/data
+      - xcagi-staging-uploads:/app/uploads
+      - xcagi-staging-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - xcagi-staging-network
+    command: >
+      gunicorn --config gunicorn_config.py run:app --reload
+
+  celery-worker:
+    build:
+      context: ./XCAGI
+      dockerfile: Dockerfile
+      target: development
+    container_name: xcagi-celery-worker-staging
+    restart: unless-stopped
+    command: >
+      celery -A celery_app worker --loglevel=debug --concurrency=1
+    environment:
+      - XCAGI_ENV=staging
+      - SECRET_KEY=staging-secret-key-not-for-prod
+      - DATABASE_URL=sqlite:////app/data/xcagi_staging.db
+      - VECTOR_DB_URL=sqlite:////app/data/xcagi_staging.db
+      - DATABASE_PATH=/app/data
+      - UPLOAD_FOLDER=/app/uploads
+      - CACHE_REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/3
+      - CELERY_RESULT_BACKEND=redis://redis:6379/4
+      - LOG_LEVEL=DEBUG
+      # Neuro Bus 7 开关全开(与 backend 一致)
+      - XCAGI_NEURO_BUS_DEDUP=1
+      - XCAGI_NEURO_BUS_CIRCUIT=1
+      - XCAGI_NEURO_BUS_RATE_LIMIT=1
+      - XCAGI_NEURO_BUS_TRACE=1
+      - XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE=0.5
+      - XCAGI_NEURO_BUS_LIFELINE=1
+      - XCAGI_NEURO_BUS_DLQ_AUTO=1
+      - XCAGI_NEURO_BUS_SLA_LOG=1
+    volumes:
+      - .:/app
+      - xcagi-staging-data:/app/data
+      - xcagi-staging-uploads:/app/uploads
+      - xcagi-staging-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - xcagi-staging-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: xcagi-redis-staging
+    restart: unless-stopped
+    command: redis-server
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis-staging-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - xcagi-staging-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: xcagi-frontend-staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8101:80"
+    depends_on:
+      - backend
+    networks:
+      - xcagi-staging-network
+
+volumes:
+  xcagi-staging-data:
+    driver: local
+  xcagi-staging-uploads:
+    driver: local
+  xcagi-staging-logs:
+    driver: local
+  redis-staging-data:
+    driver: local
+
+networks:
+  xcagi-staging-network:
+    driver: bridge
