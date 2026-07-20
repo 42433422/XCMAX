@@ -65,9 +65,9 @@ def defer_write_as_change_request(
 
     # 评估风险等级
     try:
-        from modstore_server.auto_approve_policy import evaluate_risk
+        from modstore_server.auto_approve_policy import classify_change_risk
 
-        risk_level, _reason = evaluate_risk(
+        risk_level, _reason = classify_change_risk(
             path,
             content or "",
             scope_globs=sg,
@@ -161,7 +161,7 @@ def defer_write_as_change_request(
     except Exception:
         logger.exception("publish ops.change_request.submitted failed")
 
-    # 低风险尝试自动审批
+    # 所有可执行风险等级统一经 autonomy_guard + 自动 CI 后尝试落盘。
     try:
         from modstore_server.auto_approve_policy import maybe_auto_approve
 
