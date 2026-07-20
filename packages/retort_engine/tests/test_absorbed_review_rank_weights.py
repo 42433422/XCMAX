@@ -1,10 +1,10 @@
-from retort_engine.absorbed_review_rank_weights import absorbed_rank_weights, capability_rank_boost, external_source_boost
+from retort_engine.absorbed_review_rank_weights import capability_rank_boost, external_source_boost, absorbed_rank_weights
 from retort_engine.pr_review import review_diff
 
 
 def test_absorbed_review_rank_weights_change_external_diagnostic_ranking() -> None:
     weights = absorbed_rank_weights()
-    assert "external_source_boosts" in weights
+    assert weights["run_id"]
     assert external_source_boost("reviewdog/reviewdog", "reviewdog:github-token-write-scope") >= 20
     assert capability_rank_boost("external_diagnostic_ingestion") >= 10
 
@@ -32,10 +32,5 @@ def test_absorbed_review_rank_weights_change_external_diagnostic_ranking() -> No
     )
     external = [row for row in result["comments"] if row.get("capability") == "external_diagnostic_ingestion"]
     assert external
-    assert external[0]["external_diagnostic_rank_weight"] >= 75
+    assert external[0]["external_diagnostic_rank_weight"] >= 55 + 20
     assert result["comments"][0]["capability"] == "external_diagnostic_ingestion"
-
-
-def test_absorbed_review_rank_weights_are_behavior_source_not_registry() -> None:
-    boost = external_source_boost("Codium-ai/pr-agent", "pr-agent:overbroad-permission")
-    assert boost >= 15

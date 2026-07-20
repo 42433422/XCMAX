@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from retort_engine.review_context_bias import context_rank_weights, context_signal_strength, review_context_bias
 
-EXPECTED_ABSORPTION_SOURCE = 'packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot'
+EXPECTED_ABSORPTION_SOURCE = 'https://github.com/alibaba/open-code-review'
 
 
 def test_review_context_bias_exposes_absorbed_file_grouping() -> None:

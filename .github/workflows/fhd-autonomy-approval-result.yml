@@ -1,0 +1,92 @@
+# CI SSOT: root-only workflow — records failed or rejected environment reviews.
+name: FHD autonomy approval result
+
+on:
+  workflow_run:
+    workflows: ["fhd-deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+  deployments: read
+
+jobs:
+  report-rejection:
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark pending action rejected
+        env:
+          RUN_TITLE: ${{ github.event.workflow_run.display_title }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          APPROVAL_ID: ${{ github.event.workflow_run.id }}
+          APPROVER_FALLBACK: ${{ github.event.workflow_run.actor.login }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          AUTONOMY_CALLBACK_URL: ${{ vars.AUTONOMY_CALLBACK_URL }}
+          AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          action_id="$(printf '%s' "$RUN_TITLE" | sed -n 's/.* autonomy:\([^ ]*\).*/\1/p')"
+          workflow_action="$(printf '%s' "$RUN_TITLE" | awk '{print $3}')"
+          if [ -z "$action_id" ] || [ "$action_id" = "none" ]; then
+            echo "No pending autonomy action attached; nothing to reject."
+            exit 0
+          fi
+          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "::error::Autonomy callback configuration is missing."
+            exit 1
+          fi
+          github_cli_retry() {
+            local attempt output
+            for attempt in $(seq 1 12); do
+              if output="$("$@" 2>&1)"; then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            return 1
+          }
+          jobs="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?filter=latest" || printf '{"jobs":[]}')"
+          resume_succeeded="$(jq -r '
+            any(.jobs[]?.steps[]?;
+              .name == "Resume approved autonomy action" and .conclusion == "success")
+          ' <<< "$jobs")"
+          reviews="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/approvals" || printf '[]')"
+          approved_by="$(jq -r '[.[] | select(.state == "approved") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
+          rejected_by="$(jq -r '[.[] | select(.state == "rejected") | select(.user.type != "Bot") | .user.login][0] // empty' <<< "$reviews")"
+          decision="rejected"
+          approver="${rejected_by:-${approved_by:-$APPROVER_FALLBACK}}"
+          reason="GitHub environment review rejected: $CONCLUSION"
+          if [ "$resume_succeeded" = "true" ]; then
+            decision="execution_failed"
+            approver="${approved_by:-${rejected_by:-$APPROVER_FALLBACK}}"
+            reason="Approved workflow execution failed: $CONCLUSION"
+          fi
+          payload="$(jq -nc \
+            --arg action_id "$action_id" \
+            --arg approval_id "$APPROVAL_ID" \
+            --arg approver "$approver" \
+            --arg decision "$decision" \
+            --arg workflow_action "$workflow_action" \
+            --arg reason "$reason" \
+            '{action_id:$action_id,approval_id:$approval_id,approver:$approver,decision:$decision,workflow_action:$workflow_action,reason:$reason,outcome:{reason:$reason}}')"
+          response_body="${RUNNER_TEMP}/autonomy-result-callback.json"
+          status="$(curl --silent --show-error --output "$response_body" --write-out '%{http_code}' \
+            -X POST "$AUTONOMY_CALLBACK_URL" \
+            -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $approver" \
+            --data "$payload")"
+          cat "$response_body"
+          if [[ "$status" == 2* ]]; then
+            exit 0
+          fi
+          if [ "$status" = "409" ] && grep -qE 'already terminal|was rejected' "$response_body"; then
+            echo "Autonomy action was already terminal; fallback callback is complete."
+            exit 0
+          fi
+          echo "::error::Autonomy result callback returned HTTP $status"
+          exit 1

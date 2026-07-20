@@ -1,53 +1,15 @@
-"""员工动作风险中间件（对齐 MODstore employee_risk_middleware）。"""
+"""Employee-runtime compatibility facade for the domain autonomy guard."""
 
 from __future__ import annotations
 
-import logging
-import os
 from typing import Any, Iterable
 
-logger = logging.getLogger(__name__)
-
-_HIGH_RISK_HANDLERS = frozenset({"shell_exec", "ssh_exec", "vibe_edit", "vibe_heal", "vibe_code"})
-_MEDIUM_RISK_HANDLERS = frozenset(
-    {"agent", "doc_sync", "openapi_tool", "fhd_business", "http_request", "webhook"}
-)
-# 代码修改工具名（无论从哪条 handler 路径调用，都判为 high 风险）
-_CODE_WRITE_TOOL_NAMES = frozenset({"patch_file", "write_file"})
-
-
-def _high_risk_gate_token() -> str:
-    return (
-        os.environ.get("FHD_RISK_HIGH_GATE_TOKEN")
-        or os.environ.get("MODSTORE_RISK_HIGH_GATE_TOKEN")
-        or ""
-    ).strip()
-
-
-def _truthy(val: Any) -> bool:
-    if val is True:
-        return True
-    if isinstance(val, str):
-        return val.strip().lower() in ("1", "true", "yes", "on")
-    return False
+from app.domain.autonomy.autonomy_guard import evaluate_risk, get_autonomy_guard
 
 
 def assess_risk(manifest: dict[str, Any], handlers: Iterable[str]) -> tuple[str, str]:
-    declared = ""
-    if isinstance(manifest, dict):
-        ev2 = manifest.get("employee_config_v2")
-        if isinstance(ev2, dict):
-            declared = str(ev2.get("risk_level") or "").strip().lower()
-    handler_list = [str(h or "").strip() for h in (handlers or [])]
-    has_high = any(h in _HIGH_RISK_HANDLERS for h in handler_list)
-    has_medium = any(h in _MEDIUM_RISK_HANDLERS for h in handler_list)
-    inferred = "high" if has_high else ("medium" if has_medium else "low")
-    if declared in ("low", "medium", "high"):
-        order = {"low": 0, "medium": 1, "high": 2}
-        if order[declared] >= order[inferred]:
-            return declared, f"manifest 声明 risk_level={declared}"
-        return inferred, f"handlers 推断 risk_level={inferred}（manifest 声明 {declared}，已升级）"
-    return inferred, f"handlers 推断 risk_level={inferred}"
+    level, reason = get_autonomy_guard().assess_employee_risk(manifest, handlers)
+    return level.value, reason
 
 
 def gate_action_or_block(
@@ -56,54 +18,45 @@ def gate_action_or_block(
     handlers: Iterable[str],
     input_data: dict[str, Any],
 ) -> dict[str, Any]:
-    _ = employee_id
-    level, reason = assess_risk(manifest or {}, handlers)
-    payload = input_data or {}
-    # 代码修改工具强制 high 风险（无论 handler 类型，specialized/agent/direct_python 均覆盖）
-    tool_in_payload = str(payload.get("tool") or "").strip()
-    if tool_in_payload in _CODE_WRITE_TOOL_NAMES:
-        level = "high"
-        reason = f"代码修改工具 {tool_in_payload} 强制 high 风险"
-    if level == "low":
-        return {"ok": True, "risk_level": level, "reason": reason}
-    if level == "medium":
-        if _truthy(payload.get("allow_medium_risk")) or _truthy(
-            payload.get("allow_high_risk_real_run")
-        ):
-            return {"ok": True, "risk_level": level, "reason": reason}
-        ev2 = manifest.get("employee_config_v2") if isinstance(manifest, dict) else {}
-        autonomy = ev2.get("autonomy") if isinstance(ev2, dict) else {}
-        if _truthy((autonomy or {}).get("medium_self_approve")):
-            return {
-                "ok": True,
-                "risk_level": level,
-                "reason": reason + "; medium_self_approve=true",
-            }
-        return _blocked(level, reason, "medium 风险需 allow_medium_risk=True")
-    token_required = _high_risk_gate_token()
-    token_provided = str(payload.get("high_risk_gate_token") or "").strip()
-    if _truthy(payload.get("allow_high_risk_real_run")):
-        if not token_required:
-            return {
-                "ok": True,
-                "risk_level": level,
-                "reason": reason + "; allow_high_risk_real_run=true",
-            }
-        if token_provided and token_provided == token_required:
-            return {"ok": True, "risk_level": level, "reason": reason + "; gate token 校验通过"}
-        return _blocked(level, reason, "high 风险需匹配 high_risk_gate_token")
-    return _blocked(level, reason, "high 风险需 allow_high_risk_real_run=true")
-
-
-def _blocked(level: str, reason: str, detail: str) -> dict[str, Any]:
-    logger.warning("risk middleware blocked: level=%s reason=%s detail=%s", level, reason, detail)
-    return {
-        "ok": False,
-        "blocked": True,
-        "risk_level": level,
-        "reason": reason,
-        "detail": detail,
+    payload = dict(input_data or {})
+    level, inferred_reason = get_autonomy_guard().assess_employee_risk(
+        manifest or {}, handlers, payload
+    )
+    action_name = (
+        "code_write"
+        if payload.get("tool") in {"patch_file", "write_file"}
+        else f"employee_runtime:{employee_id}"
+    )
+    decision = evaluate_risk(
+        {
+            "action": action_name,
+            "risk_level": level.value,
+            "action_id": str(payload.get("action_id") or ""),
+            "rollback_path": "employee_compensating_action",
+        },
+        {
+            **payload,
+            "trigger": "employee_runtime",
+        },
+        action_id=str(payload.get("action_id") or "") or None,
+        source=f"employee_runtime:{employee_id}",
+    )
+    result = {
+        "ok": decision.allowed,
+        "risk_level": decision.risk_level.value,
+        "reason": f"{inferred_reason}; {decision.reason}",
+        "decision": decision.decision,
+        "action_id": decision.action_id,
     }
+    if not decision.allowed:
+        result.update(
+            {
+                "blocked": True,
+                "pending_approval": decision.requires_confirmation,
+                "detail": decision.reason,
+            }
+        )
+    return result
 
 
 __all__ = ["assess_risk", "gate_action_or_block"]

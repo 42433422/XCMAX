@@ -131,6 +131,13 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "ops_autonomy",
+        lambda: __import__("app.fastapi_routes.ops_autonomy", fromlist=["router"]).router,
+        priority=10,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
         "admin_audit",
         lambda: (
             __import__("app.fastapi_routes.domains.admin_audit.routes", fromlist=["router"]).router

@@ -742,6 +742,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         # Enqueue all escalated items to human uncertainty queue
         try:
             from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
+
             for item in escalated_items:
                 enqueue_uncertain_item(
                     context={
@@ -751,22 +752,23 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                         "branch": item.get("branch"),
                         "para_task_id": item.get("para_task_id"),
                     },
-                    decision={"action": "await_human_strategy_approval", "reason": "max_retries_exceeded"},
+                    decision={
+                        "action": "await_human_strategy_approval",
+                        "reason": "max_retries_exceeded",
+                    },
                     reason=f"self-maintenance step {item.get('steps')} failed {item.get('retry_count')} times, exceeded max retries",
                 )
         except Exception as exc:
             logger.warning("failed to enqueue escalated item to human queue: %s", exc)
         return None
-    
+
     last_decision = memory.get("last_policy_decision")
-    if isinstance(last_decision, dict) and str(last_decision.get("reason") or "") in {
-        "review_or_qa_reported_risk",
-        "employee_step_failed",
-    }:
-        # Allow resumption even for employee_step_failed if it was code step failure
-        pass
-    elif isinstance(last_decision, dict) and str(last_decision.get("reason") or "") == "loop_not_completed":
-        # Allow resumption for incomplete loops
+    last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
+    if last_reason == "review_or_qa_reported_risk":
+        # 真实风险必须由人工介入，禁止自动重试
+        return None
+    if last_reason in {"employee_step_failed", "loop_not_completed"}:
+        # Allow resumption for incomplete loops or step failures (e.g., code step can retry)
         pass
     open_items = memory.get("open_items")
     recent_runs = memory.get("recent_runs")
@@ -1099,9 +1101,7 @@ def should_run_self_maintenance_loop(
     threshold = _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1)
     # incident 触发用独立更短冷却，避免 6 小时冷却导致信号被全部跳过
     if triggered_by == "incident_event":
-        cooldown_minutes = _env_int(
-            "MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60
-        )
+        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
     else:
         cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
     last_started = _last_started_at()
@@ -1166,7 +1166,9 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
     return True
 
 
-def _extract_failure_reason(result: Dict[str, Any], para_meta: Optional[Dict[str, Any]] = None) -> str:
+def _extract_failure_reason(
+    result: Dict[str, Any], para_meta: Optional[Dict[str, Any]] = None
+) -> str:
     """Extract a human-readable failure reason from an employee execution result.
 
     Used to enrich ledger records so failures stop being silent (ok=False with
@@ -1192,7 +1194,9 @@ def _extract_failure_reason(result: Dict[str, Any], para_meta: Optional[Dict[str
                         parts.append(f"error={str(err)[:200]}")
                     if detail:
                         parts.append(f"detail={str(detail)[:120]}")
-                    inner_outputs_failure = "output_failed: " + " ".join(parts) if parts else "output ok=False"
+                    inner_outputs_failure = (
+                        "output_failed: " + " ".join(parts) if parts else "output ok=False"
+                    )
                     break
 
     # path_guard 失败：vibe-coding-maintainer 等 scope_globs 限定导致 changed_files 越权。
@@ -1208,7 +1212,9 @@ def _extract_failure_reason(result: Dict[str, Any], para_meta: Optional[Dict[str
                 for v in violations[:5]
                 if isinstance(v, dict)
             )
-            path_guard_failure = f"path_guard_violation: {vstr}"[:300] if vstr else "path_guard_violation"
+            path_guard_failure = (
+                f"path_guard_violation: {vstr}"[:300] if vstr else "path_guard_violation"
+            )
 
     # handler_failed 顶层标记
     if result.get("handler_failed"):
@@ -1464,10 +1470,7 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         # vibe-coding-maintainer 的 agent handler 在 Para 未启用 fallback 时需要
         # project_root 才能分析文件；para_delegate 模式会忽略此字段。
         # 默认指向生产仓库根目录，可用 MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT 覆盖。
-        "project_root": (
-            os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT")
-            or "/root/XCMAX"
-        ),
+        "project_root": (os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"),
     }
     if extra:
         data.update(extra)
@@ -3160,6 +3163,24 @@ def _auto_merge_low_risk_branch(
     if not policy.get("ok"):
         return policy
 
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+    decision = evaluate_risk(
+        "self_maintenance_l1_merge",
+        action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+        source="self_maintenance_loop.auto_merge",
+    )
+    if not decision.allowed:
+        return {
+            "ok": False,
+            "reason": (
+                "autonomy_guard_pending_approval"
+                if decision.requires_confirmation
+                else "autonomy_guard_blocked"
+            ),
+            "risk_decision": decision.to_dict(),
+        }
+
     _run_cmd(["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace)
     merge_sha = _run_cmd(["git", "rev-parse", "HEAD"], cwd=workspace)
     # Push 到 origin 可能因认证/权限失败（如 GitHub https 需 token）。
@@ -3371,7 +3392,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 break
         # If not found, check for resumed run's original failed_run_id
         if existing_idx is None and isinstance(final.get("resume_candidate"), dict):
-            failed_run_id = str(final.get("resume_candidate", {}).get("failed_run_id") or "").strip()
+            failed_run_id = str(
+                final.get("resume_candidate", {}).get("failed_run_id") or ""
+            ).strip()
             if failed_run_id:
                 for idx, item in enumerate(open_items):
                     if (
@@ -3403,8 +3426,12 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                     if not (isinstance(item, dict) and item.get("kind") == "failed_steps"):
                         continue
                     item_branch = str(item.get("branch") or "").strip()
-                    item_task_id = str(item.get("para_task_id") or item.get("task_id") or "").strip()
-                    if (branch and item_branch == branch) or (para_task_id and item_task_id == para_task_id):
+                    item_task_id = str(
+                        item.get("para_task_id") or item.get("task_id") or ""
+                    ).strip()
+                    if (branch and item_branch == branch) or (
+                        para_task_id and item_task_id == para_task_id
+                    ):
                         existing_idx = idx
                         break
         if existing_idx is not None:
