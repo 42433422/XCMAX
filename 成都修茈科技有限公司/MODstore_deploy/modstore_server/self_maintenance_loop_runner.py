@@ -1728,18 +1728,40 @@ def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
         return False
     if raw == focused_command:
         return True
+    
+    # Extract target test filename from the original focused command
     try:
-        tokens = shlex.split(raw)
+        focused_tokens = shlex.split(focused_command)
     except ValueError:
-        return False
-    target_name = "test_self_maintenance_loop_runner_policy.py"
-    if not any(Path(token).name == target_name for token in tokens):
+        focused_tokens = shlex.split(focused_command.replace("'", "").replace('"', ""))
+    target_names = {Path(token).name for token in focused_tokens if token.endswith(".py")}
+    if not target_names:
+        target_names = {"test_self_maintenance_loop_runner_policy.py"}
+    
+    # Strip parenthetical notes that QA often appends (e.g. "(target branch)")
+    cleaned_raw = raw
+    while "(" in cleaned_raw and ")" in cleaned_raw:
+        start = cleaned_raw.find("(")
+        end = cleaned_raw.find(")", start)
+        if end == -1:
+            break
+        cleaned_raw = cleaned_raw[:start] + cleaned_raw[end+1:]
+    cleaned_raw = cleaned_raw.strip()
+    
+    try:
+        tokens = shlex.split(cleaned_raw)
+    except ValueError:
+        # Try without quotes as fallback
+        tokens = shlex.split(cleaned_raw.replace("'", "").replace('"', ""))
+    if not any(Path(token).name in target_names for token in tokens):
         return False
     shell_operators = {"&&", "||", ";"}
     for index in range(1, len(tokens) - 1):
         if tokens[index : index + 2] != ["-m", "pytest"]:
             continue
         python_index = index - 1
+        if python_index < 0:
+            continue
         if not Path(tokens[python_index]).name.lower().startswith("python"):
             continue
         segment_start = 0

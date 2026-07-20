@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "symptom": "自维护循环结构化QA门禁误拒平台等效测试命令，即使QA报告明确标注目标分支pytest通过，仍因命令格式包含括号注释或硬编码测试文件名匹配失败而返回structured_qa_focused_command_not_passed。",
+  "root_cause": "_matches_focused_test_command 函数将目标测试文件名硬编码为test_self_maintenance_loop_runner_policy.py，不支持从动态传入的focused_command提取目标；同时无法解析QA在命令后附加的(parenthetical notes)（如\"(target branch)\"、\"(27 tests passed)\"），导致shlex解析失败或路径匹配失败。",
+  "fix_diff": "1. 从传入的focused_command动态提取所有.py后缀文件的文件名作为匹配目标，移除硬编码测试文件名；2. 增加括号注释剥离逻辑，在解析命令前移除所有(...)格式的备注内容；3. 增加shlex解析失败的fallback逻辑，移除引号后重试解析；4. 增加python_index边界检查防止索引越界。",
+  "executable_template": {
+    "applicability_check": "Apply when structured QA reports include platform-equivalent pytest commands that pass but are rejected, especially when commands contain parenthetical notes or test files other than the hardcoded self-maintenance policy test.",
+    "patch_strategy": "Update _matches_focused_test_command to dynamically extract target test filenames from the focused command, strip parenthetical QA notes before parsing, add quote-fallback parsing, and add index bounds checks.",
+    "required_tests": [
+      "test_self_maintenance_loop_runner_policy.py::test_structured_report_gate_accepts_platform_equivalent_focused_command",
+      "test_self_maintenance_loop_runner_policy.py::test_structured_report_gate_blocks_failed_focused_command",
+      "test_self_maintenance_loop_runner_policy.py::test_structured_report_gate_rejects_unrelated_platform_pytest"
+    ],
+    "rollback_plan": "Revert the _matches_focused_test_command function to its prior hardcoded implementation if this causes valid failed commands to be incorrectly accepted."
+  },
+  "created_at": "2026-07-20T12:27:15+00:00",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "confidence": 0.95,
+    "base_confidence": 1.0
+  }
+}
