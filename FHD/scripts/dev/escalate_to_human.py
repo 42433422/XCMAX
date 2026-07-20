@@ -30,7 +30,7 @@ def escalate(
     if not repo:
         raise RuntimeError("GITHUB_REPO env var not set")
 
-    body = f"""## 自动实现失败：转人工处理
+    body = """## 自动实现失败：转人工处理
 
 3 次重试都失败。
 
