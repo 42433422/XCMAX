@@ -895,6 +895,21 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
     return None
 
 
+def _resume_steps(resume_candidate: Optional[Dict[str, Any]]) -> set[str]:
+    """Return the failed step and every downstream step that must be rerun."""
+
+    if not resume_candidate:
+        return {"code", "review", "qa"}
+    failed = {str(item) for item in (resume_candidate.get("failed_steps") or [])}
+    if "code" in failed:
+        return {"code", "review", "qa"}
+    if "review" in failed:
+        return {"review", "qa"}
+    if "qa" in failed:
+        return {"qa"}
+    return set()
+
+
 def _parse_iso(value: Any) -> Optional[datetime]:
     if not value:
         return None
@@ -4924,7 +4939,13 @@ def run_self_maintenance_loop(
     )
 
     plan = []
-    if not resume_candidate:
+    steps_to_run = _resume_steps(resume_candidate)
+    if "code" in steps_to_run:
+        # A failed code task is terminal in Para. Start a fresh task/branch;
+        # reusing its id would produce an empty resume plan forever.
+        if resume_candidate:
+            para_task_id = None
+            code_branch = None
         plan.append(
             (
                 "vibe-coding-maintainer",
@@ -4939,12 +4960,7 @@ def run_self_maintenance_loop(
                 },
             )
         )
-    resume_failed_steps = (
-        set(resume_candidate.get("failed_steps") or []) if resume_candidate else set()
-    )
-    should_run_review = not resume_candidate or "review" in resume_failed_steps
-    should_run_qa = not resume_candidate or bool({"review", "qa"} & resume_failed_steps)
-    if should_run_review:
+    if "review" in steps_to_run:
         plan.append(
             (
                 "change-request-auditor",
@@ -4960,7 +4976,7 @@ def run_self_maintenance_loop(
                 },
             )
         )
-    if should_run_qa:
+    if "qa" in steps_to_run:
         plan.append(
             (
                 "test-qa-runner",
