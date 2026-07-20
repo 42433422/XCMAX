@@ -64,6 +64,12 @@
       "rollback_path": "supersede_digest_record",
       "entrypoints": ["modstore_server/daily_digest.py"]
     },
+    "autonomy_metrics_snapshot": {
+      "risk": "LOW",
+      "allow_auto_execute": true,
+      "rollback_path": "append_corrective_metrics_snapshot",
+      "entrypoints": ["modstore_server/autonomy_metrics_job.py", "modstore_server/workflow_scheduler.py"]
+    },
     "daily_vibe_dispatch": {
       "risk": "MEDIUM",
       "allow_auto_execute": true,
