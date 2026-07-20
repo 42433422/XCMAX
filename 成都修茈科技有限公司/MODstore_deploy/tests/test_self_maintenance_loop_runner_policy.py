@@ -1135,9 +1135,7 @@ class TestExtractFailureReasonEndToEnd:
         result = {
             "result": {
                 "ok": False,
-                "outputs": [
-                    {"message": "[e2e-agent] codex cli 失败: exit code 1"}
-                ],
+                "outputs": [{"message": "[e2e-agent] codex cli 失败: exit code 1"}],
             }
         }
 
@@ -1177,11 +1175,7 @@ class TestExtractFailureReasonEndToEnd:
     def test_delivery_validation_truncates_long_output(self):
         """长 output_tail 截断到 120 字符。"""
         long_tail = "x" * 500
-        dv = {
-            "commands": [
-                {"exit_code": 1, "command": "pytest", "output_tail": long_tail}
-            ]
-        }
+        dv = {"commands": [{"exit_code": 1, "command": "pytest", "output_tail": long_tail}]}
         result = {"result": {"ok": False, "delivery_validation": dv}}
 
         reason = _extract_failure_reason(result, {})
@@ -1378,9 +1372,7 @@ def test_existing_kb_schema_retry_item_skips_escalated():
     assert found is None
 
 
-def test_reject_and_retry_kb_schema_first_failure_writes_open_item(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, tmp_path):
     """第一次 schema 失败 → 写 kb_schema_retry open_item, retry_count=1, 未 escalated。"""
     memory_path = tmp_path / "loop_memory.json"
     _seed_loop_memory_for_kb_retry(tmp_path, [])
@@ -1439,9 +1431,7 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(
     assert kb_items[0]["para_task_id"] == "task-kb-1"
 
 
-def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkeypatch, tmp_path):
     """第二次 schema 失败（同 branch）→ retry_count=2, escalated=True, 标 needs-human。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -1545,9 +1535,7 @@ def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp
     assert (99, NEEDS_HUMAN_LABEL) in label_calls
 
 
-def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(monkeypatch, tmp_path):
     """LLM 创建新 branch，但 24h 内有旧 kb_schema_retry → 增量 retry_count 而非重置。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -1587,9 +1575,7 @@ def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(
     assert final["policy_decision"]["escalated"] is True
 
 
-def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(monkeypatch, tmp_path):
     """没有 PR（gh 不可用）→ 跳过 PR 操作，仍然写 open_item。"""
     _seed_loop_memory_for_kb_retry(tmp_path, [])
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))

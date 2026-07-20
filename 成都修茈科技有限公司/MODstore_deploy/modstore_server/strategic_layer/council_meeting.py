@@ -170,9 +170,7 @@ class CouncilMeetingService:
             if row is None:
                 raise ValueError(f"meeting not found: {meeting_id}")
             if row.status != MeetingStatus.SCHEDULED.value:
-                raise ValueError(
-                    f"cannot start meeting in status {row.status}; must be scheduled"
-                )
+                raise ValueError(f"cannot start meeting in status {row.status}; must be scheduled")
             row.status = MeetingStatus.IN_PROGRESS.value
             row.started_at = datetime.now(timezone.utc)
             row.updated_at = datetime.now(timezone.utc)
@@ -365,9 +363,11 @@ class CouncilMeetingService:
     ) -> List[Dict[str, Any]]:
         session = self._session_factory()()
         try:
-            stmt = select(CouncilMeetingModel).order_by(
-                desc(CouncilMeetingModel.scheduled_at)
-            ).limit(max(1, min(limit, 200)))
+            stmt = (
+                select(CouncilMeetingModel)
+                .order_by(desc(CouncilMeetingModel.scheduled_at))
+                .limit(max(1, min(limit, 200)))
+            )
             if status is not None:
                 stmt = stmt.where(CouncilMeetingModel.status == status.value)
             if meeting_type is not None:
@@ -388,9 +388,11 @@ class CouncilMeetingService:
         """列出 action items（可按 meeting / 负责人 / 状态过滤）。"""
         session = self._session_factory()()
         try:
-            stmt = select(StrategicActionItem).order_by(
-                desc(StrategicActionItem.created_at)
-            ).limit(max(1, min(limit, 500)))
+            stmt = (
+                select(StrategicActionItem)
+                .order_by(desc(StrategicActionItem.created_at))
+                .limit(max(1, min(limit, 500)))
+            )
             if meeting_id is not None:
                 stmt = stmt.where(StrategicActionItem.meeting_id == meeting_id)
             if assigned_to is not None:
@@ -487,7 +489,9 @@ def _meeting_row_to_dict(row: CouncilMeetingModel) -> Dict[str, Any]:
         "started_at": row.started_at.isoformat() if row.started_at else None,
         "concluded_at": row.concluded_at.isoformat() if row.concluded_at else None,
         "status": row.status,
-        "participants": _loads(row.participants_json, {"required": [], "optional": [], "chair": ""}),
+        "participants": _loads(
+            row.participants_json, {"required": [], "optional": [], "chair": ""}
+        ),
         "minutes_md": row.minutes_md or "",
         "decisions": _loads(row.decisions_json, []),
         "action_items": _loads(row.action_items_json, []),

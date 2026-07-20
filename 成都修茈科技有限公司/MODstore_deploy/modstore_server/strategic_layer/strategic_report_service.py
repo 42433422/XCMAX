@@ -119,7 +119,9 @@ class StrategicReportService:
         period = _week_period(target_date)
         report_key = weekly_report_key(period.year, period.week)
 
-        digest_ids, digest_metrics = self._collect_digest_metrics(period.start_date, period.end_date)
+        digest_ids, digest_metrics = self._collect_digest_metrics(
+            period.start_date, period.end_date
+        )
         decision_metrics = self._collect_decision_metrics(period.start_date, period.end_date)
         action_item_metrics = self._collect_action_item_metrics(period.start_date, period.end_date)
         incident_metrics = self._collect_incident_metrics(period.start_date, period.end_date)
@@ -181,7 +183,12 @@ class StrategicReportService:
         incident_metrics = self._collect_incident_metrics(first_day, last_day)
 
         metrics: Dict[str, Any] = {
-            "period": {"year": year, "month": month, "start_date": first_day.isoformat(), "end_date": last_day.isoformat()},
+            "period": {
+                "year": year,
+                "month": month,
+                "start_date": first_day.isoformat(),
+                "end_date": last_day.isoformat(),
+            },
             "digest_count": len(digest_ids),
             "digest": digest_metrics,
             "decisions": decision_metrics,
@@ -233,9 +240,11 @@ class StrategicReportService:
     ) -> List[Dict[str, Any]]:
         session = self._session_factory()()
         try:
-            stmt = select(StrategicReportModel).order_by(
-                desc(StrategicReportModel.period_start)
-            ).limit(max(1, min(limit, 200)))
+            stmt = (
+                select(StrategicReportModel)
+                .order_by(desc(StrategicReportModel.period_start))
+                .limit(max(1, min(limit, 200)))
+            )
             if report_type is not None:
                 stmt = stmt.where(StrategicReportModel.report_type == report_type)
             rows = session.execute(stmt).scalars().all()
@@ -297,13 +306,19 @@ class StrategicReportService:
         session = self._session_factory()()
         try:
             start_dt = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
-            end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+            end_dt = datetime.combine(
+                end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+            )
 
-            rows = session.execute(
-                select(StrategicDecisionModel)
-                .where(StrategicDecisionModel.proposed_at >= start_dt)
-                .where(StrategicDecisionModel.proposed_at < end_dt)
-            ).scalars().all()
+            rows = (
+                session.execute(
+                    select(StrategicDecisionModel)
+                    .where(StrategicDecisionModel.proposed_at >= start_dt)
+                    .where(StrategicDecisionModel.proposed_at < end_dt)
+                )
+                .scalars()
+                .all()
+            )
 
             total = len(rows)
             by_status: Dict[str, int] = {}
@@ -314,7 +329,9 @@ class StrategicReportService:
                 if r.decided_by:
                     by_decided_by[r.decided_by] = by_decided_by.get(r.decided_by, 0) + 1
                 if r.autonomy_action:
-                    by_autonomy_action[r.autonomy_action] = by_autonomy_action.get(r.autonomy_action, 0) + 1
+                    by_autonomy_action[r.autonomy_action] = (
+                        by_autonomy_action.get(r.autonomy_action, 0) + 1
+                    )
 
             return {
                 "total": total,
@@ -322,8 +339,11 @@ class StrategicReportService:
                 "by_decided_by": by_decided_by,
                 "by_autonomy_action": by_autonomy_action,
                 "auto_approved_rate": (
-                    by_status.get("auto_approved", 0) + by_status.get("completed", 0) + by_status.get("executing", 0)
-                ) / max(total, 1),
+                    by_status.get("auto_approved", 0)
+                    + by_status.get("completed", 0)
+                    + by_status.get("executing", 0)
+                )
+                / max(total, 1),
             }
         except Exception as exc:
             logger.warning("collect_decision_metrics failed: %s", exc)
@@ -336,13 +356,19 @@ class StrategicReportService:
         session = self._session_factory()()
         try:
             start_dt = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
-            end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+            end_dt = datetime.combine(
+                end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+            )
 
-            rows = session.execute(
-                select(StrategicActionItem)
-                .where(StrategicActionItem.created_at >= start_dt)
-                .where(StrategicActionItem.created_at < end_dt)
-            ).scalars().all()
+            rows = (
+                session.execute(
+                    select(StrategicActionItem)
+                    .where(StrategicActionItem.created_at >= start_dt)
+                    .where(StrategicActionItem.created_at < end_dt)
+                )
+                .scalars()
+                .all()
+            )
 
             total = len(rows)
             by_status: Dict[str, int] = {}
@@ -378,10 +404,17 @@ class StrategicReportService:
                 return {"note": "IncidentEvent model unavailable"}
 
             start_dt = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
-            end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
-            count = session.execute(
-                select(func.count(IncidentEvent.id)).where(IncidentEvent.created_at >= start_dt).where(IncidentEvent.created_at < end_dt)
-            ).scalar() or 0
+            end_dt = datetime.combine(
+                end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+            )
+            count = (
+                session.execute(
+                    select(func.count(IncidentEvent.id))
+                    .where(IncidentEvent.created_at >= start_dt)
+                    .where(IncidentEvent.created_at < end_dt)
+                ).scalar()
+                or 0
+            )
 
             return {"total": int(count)}
         except Exception as exc:
@@ -540,9 +573,7 @@ class StrategicReportService:
             lines.append("- 无具体建议，保持当前节奏")
         else:
             for rec in recommendations:
-                lines.append(
-                    f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}"
-                )
+                lines.append(f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}")
         lines.append("")
         return "\n".join(lines)
 
@@ -591,9 +622,7 @@ class StrategicReportService:
             lines.append("- 无具体建议，保持当前节奏")
         else:
             for rec in recommendations:
-                lines.append(
-                    f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}"
-                )
+                lines.append(f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}")
         lines.append("")
         return "\n".join(lines)
 

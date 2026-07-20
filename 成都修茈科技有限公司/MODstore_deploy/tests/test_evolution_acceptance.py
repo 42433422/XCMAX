@@ -166,15 +166,19 @@ def test_acceptance_full_loop_triggers_pack_listed(tmp_path, monkeypatch):
         rel = rel_path.split(f"{pack_id}/", 1)[1]
         return (pack_src_dir / rel).read_text(encoding="utf-8")
 
-    with patch(
-        "modstore_server.build_employee_pack._get_commit_diff_files",
-        return_value=diff_files,
-    ), patch(
-        "modstore_server.build_employee_pack._read_pack_file",
-        side_effect=fake_read_pack_file,
-    ), patch(
-        "modstore_server.build_employee_pack.evaluate_employee_pack",
-        return_value=("low", "auto-approved"),
+    with (
+        patch(
+            "modstore_server.build_employee_pack._get_commit_diff_files",
+            return_value=diff_files,
+        ),
+        patch(
+            "modstore_server.build_employee_pack._read_pack_file",
+            side_effect=fake_read_pack_file,
+        ),
+        patch(
+            "modstore_server.build_employee_pack.evaluate_employee_pack",
+            return_value=("low", "auto-approved"),
+        ),
     ):
         result = build_pack_from_commit(commit_sha="abc123", repo_root=tmp_path)
 
@@ -198,9 +202,7 @@ def test_acceptance_full_loop_triggers_pack_listed(tmp_path, monkeypatch):
 
     # ---- 9. owner 用 audit_evolution.py CLI 查询 pack_listed 事件 ----
     cli_env = os.environ.copy()
-    cli_env["MODSTORE_EVOLUTION_LEDGER_PATH"] = os.environ.get(
-        "MODSTORE_EVOLUTION_LEDGER_PATH", ""
-    )
+    cli_env["MODSTORE_EVOLUTION_LEDGER_PATH"] = os.environ.get("MODSTORE_EVOLUTION_LEDGER_PATH", "")
     cli_result = _run_audit_cli("--event", "pack_built", env=cli_env)
     assert cli_result.returncode == 0
     assert pack_id in cli_result.stdout
@@ -226,14 +228,16 @@ def test_acceptance_needs_human_after_3_retries(tmp_path, monkeypatch):
     # escalate_to_human.py 从 proposal 中读 triggered_by，需补上
     proposal["triggered_by"] = "intent_benchmark"
     for i in range(3):
-        append_event({
-            "event_type": "implement_failed",
-            "triggered_by": "intent_benchmark",
-            "proposal_id": proposal["proposal_id"],
-            "retry_count": i + 1,
-            "failure_reason": f"synthetic failure #{i + 1}",
-            "final_status": "implement_failed",
-        })
+        append_event(
+            {
+                "event_type": "implement_failed",
+                "triggered_by": "intent_benchmark",
+                "proposal_id": proposal["proposal_id"],
+                "retry_count": i + 1,
+                "failure_reason": f"synthetic failure #{i + 1}",
+                "final_status": "implement_failed",
+            }
+        )
 
     # 验证 3 次 implement_failed 已写入
     failed_events = list_events(event_type="implement_failed")
@@ -244,11 +248,13 @@ def test_acceptance_needs_human_after_3_retries(tmp_path, monkeypatch):
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
     proposal_path = tmp_path / "proposal.json"
     proposal_path.write_text(json.dumps(proposal, ensure_ascii=False), encoding="utf-8")
-    failure_reasons = json.dumps([
-        "retry #1 failed: synthetic failure #1",
-        "retry #2 failed: synthetic failure #2",
-        "retry #3 failed: synthetic failure #3",
-    ])
+    failure_reasons = json.dumps(
+        [
+            "retry #1 failed: synthetic failure #1",
+            "retry #2 failed: synthetic failure #2",
+            "retry #3 failed: synthetic failure #3",
+        ]
+    )
 
     # mock escalate_to_human.subprocess.run 避免 gh CLI 真实调用
     # 通过设置环境变量传递 ledger 路径给子进程
@@ -262,17 +268,19 @@ def test_acceptance_needs_human_after_3_retries(tmp_path, monkeypatch):
         [
             sys.executable,
             str(_FHD_SCRIPTS_DEV / "escalate_to_human.py"),
-            "--issue-number", "42",
-            "--proposal", str(proposal_path),
-            "--failure-reasons", failure_reasons,
+            "--issue-number",
+            "42",
+            "--proposal",
+            str(proposal_path),
+            "--failure-reasons",
+            failure_reasons,
         ],
         capture_output=True,
         text=True,
         env=cli_env,
     )
     assert result.returncode == 0, (
-        f"escalate_to_human.py CLI failed: rc={result.returncode}, "
-        f"stderr={result.stderr}"
+        f"escalate_to_human.py CLI failed: rc={result.returncode}, " f"stderr={result.stderr}"
     )
 
     # ---- 4. 验证 ledger 有 escalated_to_human 事件，final_status == needs_human ----
@@ -320,6 +328,6 @@ def test_acceptance_high_risk_file_blocks_listing(tmp_path, monkeypatch):
     # ---- 4. 验证返回 ("high", reason 含 evil.env 或 high-risk) ----
     assert risk_level == "high"
     reason_lower = reason.lower()
-    assert "evil.env" in reason_lower or "high-risk" in reason_lower, (
-        f"reason should mention evil.env or high-risk, got: {reason}"
-    )
+    assert (
+        "evil.env" in reason_lower or "high-risk" in reason_lower
+    ), f"reason should mention evil.env or high-risk, got: {reason}"

@@ -236,7 +236,9 @@ class AutonomyEvaluator:
     """
 
     def __init__(self, rules: Optional[Iterable[AutonomyBoundaryRule]] = None) -> None:
-        self._rules: List[AutonomyBoundaryRule] = list(rules) if rules else list(DEFAULT_AUTONOMY_BOUNDARIES)
+        self._rules: List[AutonomyBoundaryRule] = (
+            list(rules) if rules else list(DEFAULT_AUTONOMY_BOUNDARIES)
+        )
 
     @classmethod
     def from_db(cls, session: Any = None) -> "AutonomyEvaluator":

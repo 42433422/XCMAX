@@ -478,8 +478,18 @@ class TestCouncilMeetingService:
             minutes_md="Two action items for different assignees",
             decisions=[],
             action_items=[
-                {"description": "Task A", "assigned_to": "alice", "decision_id": decision.decision_id, "due_at": None},
-                {"description": "Task B", "assigned_to": "bob", "decision_id": decision.decision_id, "due_at": None},
+                {
+                    "description": "Task A",
+                    "assigned_to": "alice",
+                    "decision_id": decision.decision_id,
+                    "due_at": None,
+                },
+                {
+                    "description": "Task B",
+                    "assigned_to": "bob",
+                    "decision_id": decision.decision_id,
+                    "due_at": None,
+                },
             ],
             actor="founder",
         )
@@ -505,7 +515,12 @@ class TestCouncilMeetingService:
             minutes_md="action item test",
             decisions=[],
             action_items=[
-                {"description": "Do something", "assigned_to": "alice", "decision_id": decision.decision_id, "due_at": None},
+                {
+                    "description": "Do something",
+                    "assigned_to": "alice",
+                    "decision_id": decision.decision_id,
+                    "due_at": None,
+                },
             ],
             actor="founder",
         )
@@ -538,7 +553,12 @@ class TestCouncilMeetingService:
             minutes_md="invalid status test",
             decisions=[],
             action_items=[
-                {"description": "Do something", "assigned_to": "alice", "decision_id": decision.decision_id, "due_at": None},
+                {
+                    "description": "Do something",
+                    "assigned_to": "alice",
+                    "decision_id": decision.decision_id,
+                    "due_at": None,
+                },
             ],
             actor="founder",
         )
@@ -584,6 +604,7 @@ class TestStrategicReportService:
         rs = StrategicReportService()
         # 用同一个 target_date 生成两次
         from datetime import date
+
         target = date(2026, 7, 20)  # 周日
         first = rs.generate_weekly_report(target_date=target, actor="ai-strategist")
         second = rs.generate_weekly_report(target_date=target, actor="ai-strategist")
@@ -696,8 +717,18 @@ class TestStrategicLayerIntegration:
                 ),
             ],
             action_items=[
-                {"description": "Publish release notes", "assigned_to": "release-engineer", "decision_id": decision.decision_id, "due_at": None},
-                {"description": "Monitor production 24h", "assigned_to": "ops-engineer", "decision_id": decision.decision_id, "due_at": None},
+                {
+                    "description": "Publish release notes",
+                    "assigned_to": "release-engineer",
+                    "decision_id": decision.decision_id,
+                    "due_at": None,
+                },
+                {
+                    "description": "Monitor production 24h",
+                    "assigned_to": "ops-engineer",
+                    "decision_id": decision.decision_id,
+                    "due_at": None,
+                },
             ],
             actor="founder",
         )

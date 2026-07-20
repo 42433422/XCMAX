@@ -46,7 +46,9 @@ def test_build_issue_body_contains_proposal_json():
 def test_open_issue_for_proposal_calls_gh(monkeypatch):
     """正常流程：调 gh issue create。"""
     proposal = _make_proposal()
-    mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout="https://github.com/x/y/issues/42\n"))
+    mock_run = MagicMock(
+        return_value=MagicMock(returncode=0, stdout="https://github.com/x/y/issues/42\n")
+    )
     monkeypatch.setattr("modstore_server.gap_to_issue.subprocess.run", mock_run)
     monkeypatch.setenv("GITHUB_REPO", "owner/repo")
 
@@ -83,11 +85,18 @@ def test_dedupe_signal_rejects_recent_duplicate(monkeypatch, tmp_path):
     """5 分钟内同 proposal_id 不重复开 issue。"""
     ledger_path = tmp_path / "evolution_decisions.jsonl"
     from datetime import datetime, timezone
+
     recent = datetime.now(timezone.utc).isoformat()
     ledger_path.write_text(
-        json.dumps({"event_id": "x", "event_type": "issue_opened",
-                    "timestamp": recent,
-                    "llm_proposal": {"proposal_id": "test-uuid-001"}}) + "\n",
+        json.dumps(
+            {
+                "event_id": "x",
+                "event_type": "issue_opened",
+                "timestamp": recent,
+                "llm_proposal": {"proposal_id": "test-uuid-001"},
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
@@ -101,11 +110,18 @@ def test_dedupe_signal_allows_old_proposal(monkeypatch, tmp_path):
     """5 分钟前的同 proposal_id 允许重开。"""
     ledger_path = tmp_path / "evolution_decisions.jsonl"
     from datetime import datetime, timedelta, timezone
+
     old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     ledger_path.write_text(
-        json.dumps({"event_id": "x", "event_type": "issue_opened",
-                    "timestamp": old,
-                    "llm_proposal": {"proposal_id": "test-uuid-001"}}) + "\n",
+        json.dumps(
+            {
+                "event_id": "x",
+                "event_type": "issue_opened",
+                "timestamp": old,
+                "llm_proposal": {"proposal_id": "test-uuid-001"},
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))

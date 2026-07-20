@@ -2,6 +2,7 @@
 
 调用 gh CLI 创建 issue。body 含完整 LLM 提议 JSON。
 """
+
 from __future__ import annotations
 
 import json
@@ -81,24 +82,30 @@ def open_issue_for_proposal(proposal: Dict[str, Any]) -> str:
     title = f"[evolution] {proposal.get('employee_pack', {}).get('name', 'unnamed')} ({proposal.get('department')})"
 
     cmd = [
-        "gh", "issue", "create",
-        "--repo", repo,
-        "--title", title,
-        "--body", body,
-        "--label", AI_IMPLEMENT_LABEL,
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        title,
+        "--body",
+        body,
+        "--label",
+        AI_IMPLEMENT_LABEL,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"gh issue create failed (rc={result.returncode}): {result.stderr}"
-        )
+        raise RuntimeError(f"gh issue create failed (rc={result.returncode}): {result.stderr}")
 
     issue_url = result.stdout.strip()
-    append_event({
-        "event_type": "issue_opened",
-        "triggered_by": proposal.get("triggered_by"),
-        "signal_score": proposal.get("signal_score"),
-        "llm_proposal": proposal,
-        "issue_url": issue_url,
-    })
+    append_event(
+        {
+            "event_type": "issue_opened",
+            "triggered_by": proposal.get("triggered_by"),
+            "signal_score": proposal.get("signal_score"),
+            "llm_proposal": proposal,
+            "issue_url": issue_url,
+        }
+    )
     return issue_url

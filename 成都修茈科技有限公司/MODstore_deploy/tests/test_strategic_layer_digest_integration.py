@@ -3,6 +3,7 @@
 验证 ``trigger_strategic_layer_dispatch`` 在不同 release_kind / result.ok 组合下
 正确提案决策到 ``StrategicDecisionLedger``。
 """
+
 from __future__ import annotations
 
 import pytest

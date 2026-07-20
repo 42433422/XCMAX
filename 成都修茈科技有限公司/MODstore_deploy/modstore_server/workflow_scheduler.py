@@ -113,7 +113,9 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
         logger.exception("incident-driven self-maintenance failed: source=%s", source)
 
 
-def _run_collector_with_timeout(fn: Callable[[], Any], *, label: str, timeout: float = 240.0) -> Any:
+def _run_collector_with_timeout(
+    fn: Callable[[], Any], *, label: str, timeout: float = 240.0
+) -> Any:
     """运行 sync collector 并施加 wall-clock 超时。
 
     APScheduler ``BackgroundScheduler`` 在线程池里跑 sync 任务，没有运行中的事件循环；
@@ -125,6 +127,7 @@ def _run_collector_with_timeout(fn: Callable[[], Any], *, label: str, timeout: f
     注意：CPython 无法强杀线程，超时后原 collector 仍可能在 executor 线程里跑（orphan），
     但已不再阻塞调度器。这是 Python 生态下 sync 调用超时的标准妥协。
     """
+
     async def _wrapped() -> Any:
         loop = asyncio.get_running_loop()
         return await asyncio.wait_for(
@@ -251,13 +254,9 @@ def start_scheduler() -> None:
             )
 
         try:
-            _run_collector_with_timeout(
-                _body, label="incident_collect_nginx", timeout=240.0
-            )
+            _run_collector_with_timeout(_body, label="incident_collect_nginx", timeout=240.0)
         except (TimeoutError, asyncio.TimeoutError):
-            logger.error(
-                "incident_collect_nginx exceeded 240s timeout; orphan thread left running"
-            )
+            logger.error("incident_collect_nginx exceeded 240s timeout; orphan thread left running")
         except Exception:
             logger.exception("incident_collect_nginx failed")
 
@@ -299,9 +298,7 @@ def start_scheduler() -> None:
             )
 
         try:
-            _run_collector_with_timeout(
-                _body, label="incident_collect_extended", timeout=240.0
-            )
+            _run_collector_with_timeout(_body, label="incident_collect_extended", timeout=240.0)
         except (TimeoutError, asyncio.TimeoutError):
             logger.error(
                 "incident_collect_extended exceeded 240s timeout; orphan thread left running"
