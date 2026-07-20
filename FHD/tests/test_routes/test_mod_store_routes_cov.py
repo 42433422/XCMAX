@@ -1042,11 +1042,18 @@ class TestModDetailsRoute:
 
 
 class TestUploadRoute:
-    def test_returns_not_implemented(self):
+    def test_missing_file_returns_422(self):
+        """POST /upload 无 file 字段 → 422（FastAPI 校验：file 必填）。"""
         with _make_client() as client:
             resp = client.post("/upload")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is False
+        assert resp.status_code == 422
+
+    def test_invalid_extension_returns_400(self):
+        """POST /upload 非 .xcemp/.zip 文件 → 400。"""
+        with _make_client() as client:
+            files = {"file": ("bad.txt", b"not a mod", "text/plain")}
+            resp = client.post("/upload", files=files)
+        assert resp.status_code == 400
 
 
 # ===========================================================================
