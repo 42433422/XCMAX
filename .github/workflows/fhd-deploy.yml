@@ -124,16 +124,30 @@ jobs:
             echo "::error::AUTONOMY_CALLBACK_URL and MODSTORE_OPS_INGEST_TOKEN are required when action_id is set."
             exit 1
           fi
+          github_cli_retry() {
+            local attempt output
+            for attempt in $(seq 1 12); do
+              if output="$("$@" 2>&1)"; then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            return 1
+          }
           approver=""
+          deployments="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100")"
           while IFS= read -r statuses_url; do
-            approver="$(gh api "$statuses_url" | jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
+            statuses="$(github_cli_retry gh api "$statuses_url")"
+            approver="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
               [.[]
                 | select((.log_url // "") | contains($needle))
                 | select(.state == "in_progress" or .state == "queued")
                 | .creator.login][0] // empty
-            ')"
+            ' <<< "$statuses")"
             [ -n "$approver" ] && break
-          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" --jq '.[].statuses_url')
+          done < <(jq -r '.[].statuses_url' <<< "$deployments")
           if [ -z "$approver" ]; then
             echo "::error::Could not resolve the production environment reviewer; refusing to resume."
             exit 1
@@ -271,15 +285,28 @@ jobs:
             echo "::error::Autonomy callback configuration is missing."
             exit 1
           fi
-          jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest")"
+          github_cli_retry() {
+            local attempt output
+            for attempt in $(seq 1 12); do
+              if output="$("$@" 2>&1)"; then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              echo "::warning::GitHub API attempt ${attempt}/12 failed: ${output}" >&2
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            return 1
+          }
+          jobs="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest" || printf '{"jobs":[]}')"
           resume_succeeded="$(jq -r '
             any(.jobs[]?.steps[]?;
               .name == "Resume approved autonomy action" and .conclusion == "success")
           ' <<< "$jobs")"
           approved_by=""
           rejected_by=""
+          deployments="$(github_cli_retry gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" || printf '[]')"
           while IFS= read -r statuses_url; do
-            statuses="$(gh api "$statuses_url")"
+            statuses="$(github_cli_retry gh api "$statuses_url" || printf '[]')"
             approved_by="$(jq -r --arg needle "/actions/runs/${GITHUB_RUN_ID}/" '
               [.[] | select((.log_url // "") | contains($needle)) | select(.state == "in_progress") | .creator.login][0] // empty
             ' <<< "$statuses")"
@@ -289,7 +316,7 @@ jobs:
             if [ -n "$approved_by" ] || [ -n "$rejected_by" ]; then
               break
             fi
-          done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&sha=${GITHUB_SHA}&per_page=100" --jq '.[].statuses_url')
+          done < <(jq -r '.[].statuses_url' <<< "$deployments")
           if [ "$resume_succeeded" = "true" ]; then
             decision="execution_failed"
             approver="${approved_by:-${rejected_by:-$GITHUB_ACTOR}}"
