@@ -19,6 +19,9 @@ def ensure_fhd_on_path() -> None:
         ).expanduser()
         os.environ["XCAGI_AUTONOMY_DATA_DIR"] = str(runtime / "autonomy")
     candidates: list[Path] = []
+    runtime_fhd = (os.environ.get("XCAGI_FHD_RUNTIME_ROOT") or "").strip()
+    if runtime_fhd:
+        candidates.append(Path(runtime_fhd).expanduser())
     configured = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if configured:
         candidates.append(Path(configured).expanduser() / "FHD")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +30,22 @@ def test_daily_vibe_cron_enters_pending_before_dispatch() -> None:
     assert result["reason"] == "autonomy_guard_pending_approval"
     assert result["pending_approval"]["state"] == "pending_approval"
     assert result["risk_decision"]["risk_level"] == "medium"
+
+
+def test_delegate_accepts_deployed_fhd_runtime_root(tmp_path, monkeypatch) -> None:
+    runtime_fhd = tmp_path / "fhd-runtime"
+    guard_path = runtime_fhd / "app" / "domain" / "autonomy" / "autonomy_guard.py"
+    guard_path.parent.mkdir(parents=True)
+    guard_path.write_text("# runtime guard probe\n", encoding="utf-8")
+    monkeypatch.setenv("XCAGI_FHD_RUNTIME_ROOT", str(runtime_fhd))
+    monkeypatch.delenv("XCMAX_MONOREPO_ROOT", raising=False)
+
+    from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+
+    ensure_fhd_on_path()
+
+    assert str(runtime_fhd) in sys.path
+    sys.path.remove(str(runtime_fhd))
 
 
 def test_daily_vibe_rejected_action_is_not_requeued() -> None:

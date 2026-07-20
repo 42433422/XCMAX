@@ -98,7 +98,10 @@
       "risk": "BLOCKED",
       "allow_auto_execute": false,
       "rollback_path": "restore_encrypted_backup",
-      "entrypoints": ["app/fastapi_routes"]
+      "entrypoints": [
+        "app/fastapi_routes/ops_autonomy.py",
+        ".github/workflows/fhd-autonomy-approval-dispatch.yml"
+      ]
     },
     "rotate_encryption_root_key": {
       "risk": "BLOCKED",

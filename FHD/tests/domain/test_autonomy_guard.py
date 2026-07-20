@@ -160,6 +160,38 @@ def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
             assert spec["allow_auto_execute"] is False
 
 
+@pytest.mark.parametrize(
+    ("action", "expected_risk", "expected_decision"),
+    [
+        ("apply_release_to_cvm", RiskLevel.HIGH, "require_human"),
+        ("rollback_release", RiskLevel.MEDIUM, "require_human"),
+        ("freeze_manifest", RiskLevel.MEDIUM, "require_human"),
+        ("restart_service", RiskLevel.LOW, "allow"),
+        ("self_heal_pr_merge", RiskLevel.HIGH, "require_human"),
+        ("mod_auto_publish", RiskLevel.HIGH, "require_human"),
+    ],
+)
+def test_required_automatic_actions_are_evaluated_by_ssot(
+    action: str,
+    expected_risk: RiskLevel,
+    expected_decision: str,
+) -> None:
+    decision = AutonomyGuard().evaluate(action, action_id=f"activation:{action}")
+
+    assert decision.risk_level is expected_risk
+    assert decision.decision == expected_decision
+
+
+@pytest.mark.parametrize("action", ["db_migration", "delete_user_data"])
+def test_required_blocked_actions_reach_ssot_and_can_never_execute(action: str) -> None:
+    with pytest.raises(ProhibitedActionError, match=action):
+        AutonomyGuard().evaluate(
+            action,
+            {"human_approved": True, "approved_by": "activation-contract"},
+            action_id=f"activation:{action}",
+        )
+
+
 def test_policy_catalog_rejects_malformed_startup_configuration(tmp_path: Path) -> None:
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
     boundaries = yaml.safe_load(BOUNDARIES.read_text(encoding="utf-8"))

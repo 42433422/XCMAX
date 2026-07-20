@@ -16,6 +16,7 @@ on:
           - freeze_manifest
           - unfreeze_manifest
           - probe_db_migration
+          - probe_delete_user_data
       action_id:
         description: Optional stable id for the seeded action
         required: false
@@ -62,19 +63,20 @@ jobs:
           autonomy_api_base="${AUTONOMY_CALLBACK_URL%/github-approval}"
           seed_action="${SEED_ACTION:-none}"
           seed_action_id="${SEED_ACTION_ID:-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
-          if [ "$seed_action" = "probe_db_migration" ]; then
+          if [ "$seed_action" = "probe_db_migration" ] || [ "$seed_action" = "probe_delete_user_data" ]; then
             probe_body="${RUNNER_TEMP}/prohibited-probe.json"
+            prohibited_action="${seed_action#probe_}"
             status="$(curl --silent --show-error --output "$probe_body" --write-out '%{http_code}' \
               -X POST "$autonomy_api_base/actions/evaluate" \
               -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
               -H "Content-Type: application/json" \
-              --data "$(jq -nc --arg action_id "$seed_action_id" '{action:"db_migration",action_id:$action_id}')")"
+              --data "$(jq -nc --arg action "$prohibited_action" --arg action_id "$seed_action_id" '{action:$action,action_id:$action_id}')")"
             cat "$probe_body"
             if [ "$status" != "403" ]; then
-              echo "::error::Expected prohibited db_migration to return 403, got $status"
+              echo "::error::Expected prohibited $prohibited_action to return 403, got $status"
               exit 1
             fi
-            echo "Prohibited action was blocked and audited (action_id=$seed_action_id)."
+            echo "Prohibited $prohibited_action was blocked and audited (action_id=$seed_action_id)."
           elif [ "$seed_action" != "none" ]; then
             case "$seed_action" in
               freeze_manifest|unfreeze_manifest) ;;
