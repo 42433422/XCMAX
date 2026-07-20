@@ -246,7 +246,9 @@ class TestIsAuthorized:
 class TestCommitAndPrLabelRouting:
     """_commit_and_pr 按授权来源分流标签（Gap-1 核心保证）。"""
 
-    def test_allowlist_source_labels_r0(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_allowlist_source_labels_r0(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, Any] = {}
 
         def fake_git(*args: str, cwd: str | None = None) -> str:
@@ -265,7 +267,13 @@ class TestCommitAndPrLabelRouting:
         monkeypatch.setattr(_ai_impl, "_gh_post", fake_gh_post)
 
         pr_url, pr_num = _ai_impl._commit_and_pr(
-            tmp_path, "fix-branch", 1, "title", ["a.py"], "o/r", "tok",
+            tmp_path,
+            "fix-branch",
+            1,
+            "title",
+            ["a.py"],
+            "o/r",
+            "tok",
             auth_source="allowlist",
         )
         assert pr_num == 1
@@ -276,7 +284,9 @@ class TestCommitAndPrLabelRouting:
         # PR body 必须含 allowlist 来源说明
         assert "allowlist" in captured["pr_payload"]["body"]
 
-    def test_owner_source_labels_r2_needs_human(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_owner_source_labels_r2_needs_human(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, Any] = {}
 
         def fake_git(*args: str, cwd: str | None = None) -> str:
@@ -295,7 +305,13 @@ class TestCommitAndPrLabelRouting:
         monkeypatch.setattr(_ai_impl, "_gh_post", fake_gh_post)
 
         pr_url, pr_num = _ai_impl._commit_and_pr(
-            tmp_path, "fix-branch", 2, "title", ["a.py"], "o/r", "tok",
+            tmp_path,
+            "fix-branch",
+            2,
+            "title",
+            ["a.py"],
+            "o/r",
+            "tok",
             auth_source="owner",
         )
         assert pr_num == 2
@@ -307,7 +323,9 @@ class TestCommitAndPrLabelRouting:
         # PR body 必须含 owner 来源说明
         assert "owner" in captured["pr_payload"]["body"]
 
-    def test_default_source_treats_as_owner(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_source_treats_as_owner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # auth_source 缺省（空字符串）→ 按保守策略走 owner 路径
         captured: dict[str, Any] = {}
 
@@ -326,7 +344,13 @@ class TestCommitAndPrLabelRouting:
         monkeypatch.setattr(_ai_impl, "_gh_post", fake_gh_post)
 
         _ai_impl._commit_and_pr(
-            tmp_path, "fix-branch", 3, "title", ["a.py"], "o/r", "tok",
+            tmp_path,
+            "fix-branch",
+            3,
+            "title",
+            ["a.py"],
+            "o/r",
+            "tok",
         )
         labels = captured["labels_payload"]["labels"]
         assert "needs-human" in labels
