@@ -866,7 +866,6 @@ class DatasetRagApplicationService:
             limit=max(20, min(int(limit), 240)),
         )
 
-
     def answer(
         self,
         *,

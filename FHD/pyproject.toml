@@ -159,6 +159,7 @@ ignore = [
 "app/traditional_mode_fs.py" = ["BLE001"]
 # CI 自治脚本：网络/IO/LLM 调用全 fail-open（设计约束：不阻断主流程）
 "scripts/ci/ai_self_heal.py" = ["BLE001", "UP015"]
+"scripts/ci/ai_self_heal_sla.py" = ["BLE001", "UP015"]
 "scripts/ci/ai_review.py" = ["BLE001", "UP015"]
 # 顶层兜底 catch-all（已记录日志）：裸 except: 已统一改为 except Exception: 后由 BLE001 接管，
 # 这些 I/O / 文档生成 / 意图识别热路径的 catch-all 属合理设计，显式登记免噪。

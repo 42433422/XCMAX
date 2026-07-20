@@ -40,7 +40,9 @@ def local_client(app: FastAPI) -> TestClient:
     return TestClient(app, client=("127.0.0.1", 50000))
 
 
-def test_kellai_loopback_requests_bypass_environment_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kellai_loopback_requests_bypass_environment_proxies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     request = urllib.request.Request("http://127.0.0.1:8793/health")
     sentinel = object()
     calls: list[tuple[urllib.request.Request, float]] = []
@@ -81,10 +83,13 @@ def test_binding_routes_reject_remote_and_unmarked_mutations(app: FastAPI) -> No
     client = local_client(app)
     assert client.post("/api/kellai/binding/start").status_code == 403
     assert client.get("/api/kellai/binding/status").status_code == 403
-    assert client.get(
-        "/api/kellai/binding/status",
-        headers={"X-XCMAX-Client-Shell": "admin"},
-    ).status_code == 403
+    assert (
+        client.get(
+            "/api/kellai/binding/status",
+            headers={"X-XCMAX-Client-Shell": "admin"},
+        ).status_code
+        == 403
+    )
     status = client.get("/api/kellai/binding/status", headers=CLIENT_HEADERS)
     assert status.status_code == 200
     assert status.json()["data"]["state"] == "not_connected"
@@ -97,7 +102,9 @@ def test_admin_account_is_denied_even_if_it_spoofs_the_enterprise_shell(
     from app.application import session_account_meta
     from app.infrastructure.auth import client_shell_session
 
-    monkeypatch.setattr(client_shell_session, "resolve_session_id_from_request", lambda _request: "admin-session")
+    monkeypatch.setattr(
+        client_shell_session, "resolve_session_id_from_request", lambda _request: "admin-session"
+    )
     monkeypatch.setattr(
         session_account_meta,
         "load_session_account_meta",
@@ -147,10 +154,13 @@ def test_pairing_secrets_never_appear_in_public_status(app: FastAPI) -> None:
 
     disconnected = client.post("/api/kellai/binding/disconnect", headers=XCMAX_HEADERS)
     assert disconnected.status_code == 200
-    assert client.get(
-        "/api/kellai/binding/status",
-        headers=CLIENT_HEADERS,
-    ).json()["data"]["state"] == "not_connected"
+    assert (
+        client.get(
+            "/api/kellai/binding/status",
+            headers=CLIENT_HEADERS,
+        ).json()["data"]["state"]
+        == "not_connected"
+    )
 
 
 def test_pairing_requires_all_read_only_scopes(app: FastAPI) -> None:

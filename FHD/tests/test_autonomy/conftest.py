@@ -90,9 +90,7 @@ def mock_subprocess_run(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """
     mock = MagicMock()
     # 默认返回成功（returncode=0, stdout='', stderr=''）
-    default_result = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="", stderr=""
-    )
+    default_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
     mock.return_value = default_result
     # 同时 patch scripts.autonomy.cvm_adapter.subprocess.run
     from scripts.autonomy import cvm_adapter as adapter_mod

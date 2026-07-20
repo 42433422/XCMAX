@@ -102,7 +102,12 @@ def _kellai_get(path: str) -> dict[str, Any]:
     try:
         with _open_kellai_request(request, timeout=3) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ) as exc:
         raise HTTPException(status_code=503, detail=f"无法读取客来来本地数据：{exc}") from exc
     if not isinstance(payload, dict) or not payload.get("success"):
         raise HTTPException(status_code=503, detail="客来来没有返回可用客户数据")
@@ -180,7 +185,9 @@ def get_data_status(request: Request):
 @router.get("/customers")
 def get_customers(request: Request, limit: int = 12):
     _require_xcmax_client(request)
-    payload = _kellai_get(f"/api/kellai/integrations/xcmax/customers?limit={max(1, min(limit, 50))}")
+    payload = _kellai_get(
+        f"/api/kellai/integrations/xcmax/customers?limit={max(1, min(limit, 50))}"
+    )
     return {"success": True, "data": payload.get("data") or {}}
 
 

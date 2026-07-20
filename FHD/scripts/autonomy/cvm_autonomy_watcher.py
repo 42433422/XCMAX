@@ -2,12 +2,14 @@
 
 职责（与桌面端 controller.ts 对称）：
   1. collect_truth(adapter)：调用 adapter.collect_truth()
-  2. derive_signals(truth)：从 truth 派生信号（health_down / disk_full /
+  2. **unfreeze 优先检查**：每次 tick 在执行 plan 前优先检查是否有过期 .frozen
+     需解除（hold_ttl 已过 + health 通过），避免 frozen marker 无限阻塞 cron
+  3. derive_signals(truth)：从 truth 派生信号（health_down / disk_full /
      manifest_drift / compose_unhealthy）
-  3. run_policies(signals, policies)：调用匹配的 policy.plan()
-  4. execute_plan(adapter, plan, truth)：impact_predictor 预检 + adapter.execute_action
+  4. run_policies(signals, policies)：调用匹配的 policy.plan()
+  5. execute_plan(adapter, plan, truth)：impact_predictor 预检 + adapter.execute_action
      + audit
-  5. main()：CLI 入口，支持 --dry-run（只采集+派生+决策，不执行）
+  6. main()：CLI 入口，支持 --dry-run（只采集+派生+决策，不执行）
 
 守护链（与桌面端 controller.ts tryExecute 一致）：
   - max_attempts 守护：耗尽转 escalate
@@ -191,7 +193,9 @@ def execute_plan(
     """
     audits: list[AuditEntry] = []
     for action in plan.actions:
-        entry = _try_execute_single(adapter, action, plan.diagnosis, source_signal, truth, state, dry_run)
+        entry = _try_execute_single(
+            adapter, action, plan.diagnosis, source_signal, truth, state, dry_run
+        )
         audits.append(entry)
     return audits
 
@@ -210,9 +214,7 @@ def _try_execute_single(
 
     # dry_run：只决策不执行，写 audit skipped
     if dry_run:
-        entry = _build_skipped_audit(
-            source_signal, diagnosis, action, truth, ["dry_run mode"]
-        )
+        entry = _build_skipped_audit(source_signal, diagnosis, action, truth, ["dry_run mode"])
         adapter.audit(entry)
         return entry
 
@@ -220,9 +222,15 @@ def _try_execute_single(
     if tracker.attempts >= action.max_attempts:
         if not tracker.escalated:
             tracker.escalated = True
-            return _escalate(adapter, action, diagnosis, source_signal, truth, "max_attempts exhausted")
+            return _escalate(
+                adapter, action, diagnosis, source_signal, truth, "max_attempts exhausted"
+            )
         entry = _build_skipped_audit(
-            source_signal, diagnosis, action, truth, ["max_attempts exhausted and already escalated"]
+            source_signal,
+            diagnosis,
+            action,
+            truth,
+            ["max_attempts exhausted and already escalated"],
         )
         adapter.audit(entry)
         return entry
@@ -240,9 +248,7 @@ def _try_execute_single(
     # ImpactPredictor 预检
     prediction = predict(action, truth)
     if not prediction.allow:
-        entry = _build_skipped_audit(
-            source_signal, diagnosis, action, truth, prediction.reasons
-        )
+        entry = _build_skipped_audit(source_signal, diagnosis, action, truth, prediction.reasons)
         adapter.audit(entry)
         return entry
 
@@ -265,15 +271,9 @@ def _try_execute_single(
     adapter.audit(entry)
 
     # 失败且耗尽 attempts → escalate
-    if (
-        not result.ok
-        and tracker.attempts >= action.max_attempts
-        and not tracker.escalated
-    ):
+    if not result.ok and tracker.attempts >= action.max_attempts and not tracker.escalated:
         tracker.escalated = True
-        escalate_entry = _escalate(
-            adapter, action, diagnosis, source_signal, truth, result.detail
-        )
+        escalate_entry = _escalate(adapter, action, diagnosis, source_signal, truth, result.detail)
         # 同时返回 escalate audit（与桌面端 controller.ts 行为一致：原始 action audit +
         # escalate audit 都写）
         # 注：watcher.execute_plan 返回 list，调用方可看到两条 audit
@@ -368,13 +368,14 @@ def tick(
     state: WatcherState,
     dry_run: bool = False,
 ) -> tuple[RuntimeTruthSnapshot, list[Signal], list[tuple[Policy, Plan]], list[AuditEntry]]:
-    """单次 tick：采集 truth → 派生信号 → 调用 policy → 执行 action。
+    """单次 tick：采集 truth → 优先 unfreeze 检查 → 派生信号 → 调用 policy → 执行 action。
 
     返回 (truth, signals, plans, audits) 供测试断言与 CLI 输出。
 
     与桌面端 controller.ts tick() 对称：
       - truth 采集失败不抛错，写 audit + 返回空
       - 派生信号去重：相同 kind+ts 不重复 ingest（与桌面端 processedSignalKeys 一致）
+      - **每次 tick 优先检查过期 .frozen 需解除**（hold_ttl 过期 + health 通过）
     """
     # 1. 采集 truth（容错）
     try:
@@ -397,7 +398,13 @@ def tick(
         )
         raise
 
-    # 2. 派生信号
+    # 2. 优先检查过期 .frozen 需解除（在 plan 执行前）
+    all_audits: list[AuditEntry] = []
+    unfreeze_entry = _try_unfreeze_expired_manifest(adapter, truth, dry_run)
+    if unfreeze_entry is not None:
+        all_audits.append(unfreeze_entry)
+
+    # 3. 派生信号
     signals = derive_signals(truth)
     # 去重：相同 kind+ts 不重复处理
     new_signals: list[Signal] = []
@@ -408,11 +415,10 @@ def tick(
         state.processed_signal_keys.add(key)
         new_signals.append(sig)
 
-    # 3. 调用 policy
+    # 4. 调用 policy
     plans = run_policies(new_signals, policies)
 
-    # 4. 执行 action
-    all_audits: list[AuditEntry] = []
+    # 5. 执行 action
     for policy, plan in plans:
         # source_signal 取 plan 中最新信号（按 ts 排序）
         matched_signals = [s for s in new_signals if s.kind in policy.matches]
@@ -421,6 +427,95 @@ def tick(
         all_audits.extend(audits)
 
     return truth, new_signals, plans, all_audits
+
+
+def _try_unfreeze_expired_manifest(
+    adapter: AutonomyAdapter,
+    truth: RuntimeTruthSnapshot,
+    dry_run: bool,
+) -> AuditEntry | None:
+    """优先检查并解除过期 .frozen marker（每次 tick 在 plan 执行前调用）。
+
+    触发条件（adapter.check_unfreeze_needed 判定）：
+      - .frozen 文件存在
+      - mtime age >= hold_ttl（默认 30min，env FHD_MANIFEST_HOLD_TTL_SECONDS 可配）
+
+    实际解除（rm .frozen）由 adapter._action_unfreeze_manifest 内部再次校验：
+      - hold_ttl 已过期
+      - health check 通过（health 失败保持冻结）
+
+    非 CvmAutonomyAdapter（如桌面端 adapter）直接跳过（返回 None）。
+
+    Args:
+        adapter: AutonomyAdapter 实例（仅 CvmAutonomyAdapter 支持 unfreeze）
+        truth: 当前 tick 的 truth 快照
+        dry_run: True 时只写 audit skipped，不实际执行
+
+    Returns:
+        AuditEntry if 尝试 unfreeze（成功/失败/dry_run skipped 都返回）；
+        None if 无需 unfreeze（.frozen 不存在 / 未过期 / adapter 不支持）。
+    """
+    # 仅 CvmAutonomyAdapter 暴露 check_unfreeze_needed 接口
+    check_fn = getattr(adapter, "check_unfreeze_needed", None)
+    if check_fn is None:
+        return None
+
+    try:
+        needed, age_seconds = check_fn()
+    except Exception:
+        # 检查失败不影响主流程
+        return None
+
+    if not needed:
+        return None
+
+    # 持有 hold_ttl（用于 audit 上下文，从 adapter 实例属性读取）
+    hold_ttl = getattr(adapter, "hold_ttl", 0)
+
+    action = Action(
+        type=ActionType.UNFREEZE_MANIFEST,
+        params={
+            "age_seconds": age_seconds,
+            "hold_ttl": hold_ttl,
+            "reason": "expired_frozen_marker",
+        },
+        idempotency_key=f"unfreeze_manifest:tick:{truth.ts}",
+        max_attempts=1,
+        risk=RiskLevel.LOW,
+    )
+    diagnosis = Diagnosis(
+        root_cause="expired_frozen_marker",
+        confidence=1.0,
+        detail=(
+            f".frozen age {age_seconds}s >= hold_ttl {hold_ttl}s, "
+            "attempting unfreeze (health check enforced in adapter)"
+        ),
+        evidence=[],
+    )
+
+    if dry_run:
+        entry = _build_skipped_audit(None, diagnosis, action, truth, ["dry_run mode"])
+        adapter.audit(entry)
+        return entry
+
+    # 直接调用 adapter.execute_action（不走 _try_execute_single 守护链）
+    # 理由：unfreeze 是恢复动作，不应被 cooldown / max_attempts 干扰；
+    # adapter._action_unfreeze_manifest 内部已守护 mtime + ttl + health。
+    try:
+        result = adapter.execute_action(action)
+    except Exception as e:
+        result = _make_error_result(action, f"execute_threw: {e}")
+
+    entry = AuditEntry(
+        ts=datetime.now(timezone.utc).isoformat(),
+        source_signal=None,
+        diagnosis=diagnosis,
+        action=action,
+        result=result,
+        truth_snapshot=truth,
+    )
+    adapter.audit(entry)
+    return entry
 
 
 # --------------------------------------------------------------------------- #
@@ -486,8 +581,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # 输出摘要到 stdout（便于 SSH 触发后 GitHub Actions 日志查看）
-    print(f"[cvm-autonomy-watcher] truth: health_ok={truth.health_ok} "
-          f"compose_status={truth.compose_status} disk={truth.disk_usage_percent}%")
+    print(
+        f"[cvm-autonomy-watcher] truth: health_ok={truth.health_ok} "
+        f"compose_status={truth.compose_status} disk={truth.disk_usage_percent}%"
+    )
     print(f"[cvm-autonomy-watcher] signals: {len(signals)} ({[s.kind for s in signals]})")
     print(f"[cvm-autonomy-watcher] plans: {len(plans)}")
     print(f"[cvm-autonomy-watcher] audits: {len(audits)} (dry_run={args.dry_run})")

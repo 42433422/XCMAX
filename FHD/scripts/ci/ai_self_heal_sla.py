@@ -1,8 +1,9 @@
 """AI self-heal PR SLA 处理：auto-merge / stale 提醒 / 关闭。
 
-每 6 小时扫描 open PR，覆盖两类来源：
+扫描 open PR，覆盖三类来源：
 - label:ai-self-heal — ai-self-heal workflow 自动修复 PR
 - label:ai-generated — ai-issue-implement workflow 自动实现 PR
+- 普通 PR（--scan-regular-prs 启用）：无上述 label 的 PR
 
 按 risk:* 标签分流处理：
 - r0：≥ 12h（ai-self-heal）/ ≥ 12h（ai-generated）且二次守卫通过 → auto-merge
@@ -21,11 +22,20 @@
 4. 禁止修改 db/migrations、fastapi_app、deploy 脚本、workflows
 5. 不是 autonomy/ 分支（不递归）
 
+普通 PR 三重门禁（--scan-regular-prs，2026-07-20 新增）：
+1. ai-review: passed — "AI Review" workflow 在 PR head SHA 上 conclusion=success
+   （兼容：若 PR 标 `ai-review: passed` label 则直接视为通过）
+2. ci: passed — PR head SHA 所有 check runs 全绿（success/neutral/skipped）
+3. author: trusted-author-allowlist — PR author ∈ config/auto-implement-allowlist.yaml:trusted_authors
+
+Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
+
 全部动作写 metrics/ai-self-heal-stale.jsonl。
 
 环境变量：
   GITHUB_TOKEN    必填
   GITHUB_REPOSITORY  必填（如 "owner/repo"）
+  AUTO_IMPLEMENT_ALLOWLIST_PATH  可选，覆盖 allowlist 路径（默认 <repo_root>/config/auto-implement-allowlist.yaml）
 """
 
 from __future__ import annotations
@@ -51,6 +61,18 @@ ROOT = Path(__file__).resolve().parents[2]
 METRICS_DIR = ROOT / "metrics"
 STALE_JSONL = METRICS_DIR / "ai-self-heal-stale.jsonl"
 
+# allowlist 文件默认路径：<repo_root>/config/auto-implement-allowlist.yaml
+REPO_ROOT = ROOT.parent
+DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
+
+# ai-review workflow 名称（与 FHD/.github/workflows/ai-review.yml `name:` 字段对齐）
+AI_REVIEW_WORKFLOW_NAME = "AI Review"
+AI_REVIEW_PASSED_LABEL = "ai-review: passed"
+HOLD_MERGE_LABEL = "hold-merge"
+
+# ai-self-heal / ai-generated 标签（用于区分普通 PR）
+AI_PR_LABELS = ("ai-self-heal", "ai-generated")
+
 
 # =====================================================================
 # 数据模型
@@ -70,7 +92,9 @@ class PRInfo:
     changed_files: int = 0
     additions: int = 0
     deletions: int = 0
-    kind: str = "self_heal"  # "self_heal" | "ai_generated"
+    kind: str = "self_heal"  # "self_heal" | "ai_generated" | "regular"
+    author: str = ""
+    head_sha: str = ""
 
 
 # =====================================================================
@@ -483,8 +507,8 @@ def process_regular_pr(
         if ok:
             client.comment(
                 pr.number,
-                f"✅ 三重门禁通过（ai-review:passed + ci:passed + author:trusted），"
-                f"自动 squash merge。",
+                "✅ 三重门禁通过（ai-review:passed + ci:passed + author:trusted），"
+                "自动 squash merge。",
             )
             _append_stale({
                 "pr": pr.number,

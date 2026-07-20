@@ -1,22 +1,26 @@
 # CI SSOT: generated from FHD/.github/workflows/ai-self-heal-auto-merge.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# CI SSOT: generated from FHD/.github/workflows/fhd-ai-self-heal-auto-merge.yml — DO NOT edit here.
-# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 # CI SSOT: generated from FHD/.github/workflows/fhd-ai-self-heal-auto-merge.yml
 # 编辑源：FHD/.github/workflows/fhd-ai-self-heal-auto-merge.yml（根仓 .github/workflows/fhd-ai-self-heal-auto-merge.yml 为同步副本）
 name: AI Self-Heal Auto-Merge SLA
 
 on:
   schedule:
-    # 每 6 小时：00:00 / 06:00 / 12:00 / 18:00 UTC
-    # 加快 ai-generated PR 的 auto-merge 闭环（原每日 01:00 UTC）
-    - cron: "0 */6 * * *"
+    # 每 30 分钟：普通 PR auto-merge 三重门禁闭环 + ai-self-heal/ai-generated SLA
+    # （原 6h 间隔对普通 PR 延迟过大，2026-07-20 收紧到 30min）
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
         description: "仅打印动作不实际合并/关闭"
         required: false
         default: "false"
+        type: choice
+        options: ["true", "false"]
+      scan_regular_prs:
+        description: "扫描普通 PR（无 ai-self-heal / ai-generated label）"
+        required: false
+        default: "true"
         type: choice
         options: ["true", "false"]
 
@@ -47,6 +51,9 @@ jobs:
       - name: Install httpx
         run: pip install httpx
 
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Process ai-self-heal PRs by SLA
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,6 +63,11 @@ jobs:
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             DRY_RUN_FLAG="--dry-run"
           fi
+          # schedule 触发默认启用 scan-regular-prs；workflow_dispatch 可手动关
+          SCAN_REGULAR="--scan-regular-prs"
+          if [[ "${{ github.event.inputs.scan_regular_prs }}" == "false" ]]; then
+            SCAN_REGULAR=""
+          fi
           python scripts/ci/ai_self_heal_sla.py \
             --auto-merge-r0-hours 12 \
             --auto-merge-r1-hours 48 \
@@ -63,6 +75,7 @@ jobs:
             --close-r2-days 14 \
             --stale-r3-days 7 \
             --close-r3-days 30 \
+            $SCAN_REGULAR \
             $DRY_RUN_FLAG
 
       - name: Commit stale log

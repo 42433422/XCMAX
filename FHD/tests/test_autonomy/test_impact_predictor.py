@@ -1,12 +1,13 @@
 """tests/test_autonomy/test_impact_predictor.py — ImpactPredictor 单元测试。
 
-覆盖 6 个 action 的预检边界（allow / deny）：
+覆盖 7 个 action 的预检边界（allow / deny）：
   - restart_service: compose 不存在 / service_running=False → deny
   - rollback_to_last_tarball: 无 tarball / 有 pending marker → deny
   - freeze_manifest: 已 frozen / 不存在 → deny
   - clear_logs: 磁盘不足 / 无 logs 目录 → deny
   - escalate: 始终 allow
   - noop: 始终 allow
+  - open_incident_issue: 始终 allow（token / 去重 / 前置 action 失败判定由 adapter 内守护）
 """
 
 from __future__ import annotations
@@ -298,11 +299,11 @@ class TestPredictClearLogs:
 
 
 # --------------------------------------------------------------------------- #
-# escalate / noop 预检
+# escalate / noop / open_incident_issue 预检
 # --------------------------------------------------------------------------- #
 
 
-class TestPredictEscalateNoop:
+class TestPredictEscalateNoopIncident:
     def test_escalate_always_allow(
         self,
         tmp_deploy_root: Path,
@@ -340,6 +341,34 @@ class TestPredictEscalateNoop:
             service_running=False,
         )
         action = _make_action(ActionType.NOOP)
+
+        prediction = predict(action, truth)
+
+        assert prediction.allow is True
+        assert prediction.reasons == []
+
+    def test_open_incident_issue_always_allow(
+        self,
+        tmp_deploy_root: Path,
+        tmp_manifest_path: str,
+    ) -> None:
+        """open_incident_issue 始终 allow（即使所有 truth 状态都坏）。
+
+        设计：token / 24h 去重 / 前置 action 失败判定由 adapter._action_open_incident_issue
+        内守护，避免 predict 与 action 双重 GitHub API 调用。
+        """
+        truth = _make_truth(
+            tmp_deploy_root,
+            tmp_manifest_path,
+            health_ok=False,
+            service_running=False,
+            compose_status="exited",
+            manifest_exists=False,
+            manifest_frozen=True,
+            pending_rollback_marker=True,
+            disk_usage_percent=99.0,
+        )
+        action = _make_action(ActionType.OPEN_INCIDENT_ISSUE)
 
         prediction = predict(action, truth)
 

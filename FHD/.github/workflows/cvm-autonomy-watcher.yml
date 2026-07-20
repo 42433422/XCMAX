@@ -1,6 +1,7 @@
 # CI SSOT: generated from FHD/.github/workflows/cvm-autonomy-watcher.yml
 # Phase 2：服务器端自治 watcher（cron 每 10 分钟 SSH 触发）
 # 与 fhd-deploy.yml break-glass 模式一致：SSH 到 CVM 执行 watcher，不常驻 systemd
+# open_incident_issue action 通过 CVM_INCIDENT_PAT 在 CVM 上调 GitHub API 创建 issue
 name: cvm-autonomy-watcher
 
 on:
@@ -19,8 +20,11 @@ concurrency:
   group: cvm-autonomy-watcher
   cancel-in-progress: false
 
+# issues: write 仅供 runner-side 调用 GitHub API 时使用（如未来扩展）；
+# 实际 issue 创建在 CVM 上通过 CVM_INCIDENT_PAT 完成（Actions GITHUB_TOKEN 不能跨 runner）
 permissions:
   contents: read
+  issues: write
 
 jobs:
   watcher-tick:
@@ -45,6 +49,10 @@ jobs:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          # CVM_INCIDENT_PAT 是 GitHub PAT（scope: issues:write），用于在 CVM 上创建 incident issue
+          # 未配置时 watcher 自动跳过 open_incident_issue action（adapter 检测 token=None 返回 ok=False）
+          CVM_INCIDENT_PAT: ${{ secrets.CVM_INCIDENT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
@@ -63,9 +71,14 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
 
+          # 通过 SSH env 把 GITHUB_TOKEN (PAT) + GITHUB_REPOSITORY 传到 CVM
+          # 仅当前 shell 中有效，不写入 CVM 持久化文件（最小暴露面）
+          # 注：使用 SendEnv 接收需 sshd 配置 AcceptEnv；这里改用 env 前缀注入更通用
           REMOTE_CMD=$(cat <<EOF
           set -euo pipefail
           cd "${DEPLOY_ROOT}"
+          GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
+          GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
           python3 "${DEPLOY_ROOT}/scripts/autonomy/cvm_autonomy_watcher.py" \
             --deploy-root "${DEPLOY_ROOT}" \
             --manifest-path "${MANIFEST}" \

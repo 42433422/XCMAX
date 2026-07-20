@@ -246,9 +246,7 @@ def test_purge_removes_all_derived_customer_artifacts(
             {
                 "version": 2,
                 "drafts": {"draft-1": {"draft_id": "draft-1", "customer_id": 7}},
-                "follow_up_tasks": {
-                    "task-1": {"task_id": "task-1", "customer_id": 7}
-                },
+                "follow_up_tasks": {"task-1": {"task_id": "task-1", "customer_id": 7}},
             }
         ),
         encoding="utf-8",

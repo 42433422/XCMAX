@@ -216,7 +216,7 @@ def start_scheduler() -> None:
     )
 
     def _incident_collect_pytest_cursor() -> None:
-        try:
+        def _body() -> None:
             from modstore_server.incident_collectors import (
                 collect_cursor_log_spike,
                 collect_pytest_failures,
@@ -228,17 +228,35 @@ def start_scheduler() -> None:
                 emitted=emitted,
                 source="incident_collect_pytest_cursor",
             )
+
+        try:
+            _run_collector_with_timeout(
+                _body, label="incident_collect_pytest_cursor", timeout=240.0
+            )
+        except (TimeoutError, asyncio.TimeoutError):
+            logger.error(
+                "incident_collect_pytest_cursor exceeded 240s timeout; orphan thread left running"
+            )
         except Exception:
             logger.exception("incident_collect_pytest_cursor failed")
 
     def _incident_collect_nginx() -> None:
-        try:
+        def _body() -> None:
             from modstore_server.incident_collectors import collect_nginx_error_tail
 
             emitted = bool(collect_nginx_error_tail())
             _trigger_self_maintenance_from_incident(
                 emitted=emitted,
                 source="incident_collect_nginx",
+            )
+
+        try:
+            _run_collector_with_timeout(
+                _body, label="incident_collect_nginx", timeout=240.0
+            )
+        except (TimeoutError, asyncio.TimeoutError):
+            logger.error(
+                "incident_collect_nginx exceeded 240s timeout; orphan thread left running"
             )
         except Exception:
             logger.exception("incident_collect_nginx failed")
@@ -248,16 +266,24 @@ def start_scheduler() -> None:
         IntervalTrigger(minutes=5),
         id="incident_collect_pytest_cursor",
         replace_existing=True,
+        # 必备三件套：防止 collector 卡死时实例无限堆积导致 scheduler 卡死
+        # (2026-07-20 已发生过 _incident_collect_extended 占满 instances 的事故)
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
     )
     _scheduler.add_job(
         _incident_collect_nginx,
         IntervalTrigger(minutes=10),
         id="incident_collect_nginx",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
     )
 
     def _incident_collect_extended() -> None:
-        try:
+        def _body() -> None:
             from modstore_server.incident_collectors import (
                 collect_ci_failure_log,
                 collect_git_push_event,
@@ -271,6 +297,15 @@ def start_scheduler() -> None:
                 emitted=emitted,
                 source="incident_collect_extended",
             )
+
+        try:
+            _run_collector_with_timeout(
+                _body, label="incident_collect_extended", timeout=240.0
+            )
+        except (TimeoutError, asyncio.TimeoutError):
+            logger.error(
+                "incident_collect_extended exceeded 240s timeout; orphan thread left running"
+            )
         except Exception:
             logger.exception("incident_collect_extended failed")
 
@@ -279,6 +314,9 @@ def start_scheduler() -> None:
         IntervalTrigger(minutes=5),
         id="incident_collect_extended",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
     )
 
     def _daily_digest_email() -> None:

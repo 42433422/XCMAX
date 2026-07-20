@@ -24,12 +24,7 @@ import pytest
 
 # ai_issue_implement 在 scripts/dev/ 下，不是包内模块，需要用 spec 加载
 # 必须先注册到 sys.modules 否则 @dataclass 装饰器在解析 __module__ 时会失败
-_SCRIPT_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "dev"
-    / "ai_issue_implement.py"
-)
+_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ai_issue_implement.py"
 _spec = importlib.util.spec_from_file_location("ai_issue_implement", _SCRIPT_PATH)
 assert _spec is not None and _spec.loader is not None
 _ai_impl = importlib.util.module_from_spec(_spec)
@@ -150,9 +145,7 @@ class TestAllowlistPreauthorized:
 
     def test_invalid_regex_skipped(self) -> None:
         issue = {"labels": [{"name": "refactor-foo"}]}
-        ok, _ = _ai_impl._allowlist_preauthorized(
-            issue, patterns=[r"[invalid", r"^refactor-.*"]
-        )
+        ok, _ = _ai_impl._allowlist_preauthorized(issue, patterns=[r"[invalid", r"^refactor-.*"])
         assert ok is True
 
     def test_load_repo_allowlist_file(self, tmp_path: Path) -> None:
@@ -264,16 +257,12 @@ class TestApplyFiles:
         assert written == []
 
     def test_path_traversal_blocked(self, tmp_path: Path) -> None:
-        files = [
-            {"path": "../escape.py", "action": "create", "content": "x"}
-        ]
+        files = [{"path": "../escape.py", "action": "create", "content": "x"}]
         written = _ai_impl._apply_files(tmp_path, files)
         assert written == []
 
     def test_absolute_path_blocked(self, tmp_path: Path) -> None:
-        files = [
-            {"path": "/etc/passwd", "action": "create", "content": "x"}
-        ]
+        files = [{"path": "/etc/passwd", "action": "create", "content": "x"}]
         written = _ai_impl._apply_files(tmp_path, files)
         assert written == []
 
@@ -289,9 +278,7 @@ class TestApplyFiles:
 
     def test_existing_file_not_overwritten(self, tmp_path: Path) -> None:
         (tmp_path / "exists.py").write_text("ORIGINAL", encoding="utf-8")
-        files = [
-            {"path": "exists.py", "action": "create", "content": "OVERWRITE"}
-        ]
+        files = [{"path": "exists.py", "action": "create", "content": "OVERWRITE"}]
         written = _ai_impl._apply_files(tmp_path, files)
         assert written == []
         assert (tmp_path / "exists.py").read_text(encoding="utf-8") == "ORIGINAL"
@@ -348,9 +335,7 @@ class TestImplementResultDataclass:
         assert r.pr_number == 0
         assert r.llm_used is False
 
-    def test_report_written(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_report_written(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(_ai_impl, "REPORT_DIR", tmp_path)
         r = _ai_impl.ImplementResult(
             issue_number=42,

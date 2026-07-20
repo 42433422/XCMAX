@@ -88,7 +88,9 @@ def _public_connection(connection: Any) -> dict[str, Any] | None:
         "source": "kellai",
         "authorized_scopes": list(connection.get("authorized_scopes") or []),
         "connected_at": str(connection.get("connected_at") or ""),
-        "authorized_by": connection.get("authorized_by") if isinstance(connection.get("authorized_by"), dict) else {},
+        "authorized_by": connection.get("authorized_by")
+        if isinstance(connection.get("authorized_by"), dict)
+        else {},
         "source_name": "客来来客户 IM",
     }
 
@@ -169,7 +171,9 @@ def approve_pairing(
             raise ValueError("绑定请求已过期，请回到 XCMAX 重新发起")
         if not secrets.compare_digest(str(pending.get("request_id") or ""), request_id):
             raise ValueError("绑定请求不匹配")
-        if not secrets.compare_digest(str(pending.get("authorization_secret") or ""), authorization_secret):
+        if not secrets.compare_digest(
+            str(pending.get("authorization_secret") or ""), authorization_secret
+        ):
             raise ValueError("授权校验失败")
         selected = [scope for scope in accepted_scopes if scope in _SCOPE_IDS]
         if set(selected) != set(pending.get("requested_scopes") or []):
@@ -201,7 +205,9 @@ def cancel_pairing(*, request_id: str, authorization_secret: str) -> None:
             return
         if not secrets.compare_digest(str(pending.get("request_id") or ""), request_id):
             raise ValueError("绑定请求不匹配")
-        if not secrets.compare_digest(str(pending.get("authorization_secret") or ""), authorization_secret):
+        if not secrets.compare_digest(
+            str(pending.get("authorization_secret") or ""), authorization_secret
+        ):
             raise ValueError("授权校验失败")
         state["pending"] = None
         _write(state)

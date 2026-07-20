@@ -19,10 +19,10 @@ from typing import Any, Literal, Protocol, TypedDict
 
 
 class ActionType(str, Enum):
-    """动作类型枚举（三端共用；服务器端 7 个 + 桌面端 4 个）。
+    """动作类型枚举（三端共用；服务器端 8 个 + 桌面端 4 个）。
 
     服务器端实际使用：restart_service / rollback_to_last_tarball / freeze_manifest
-    / unfreeze_manifest / clear_logs / escalate / noop
+    / unfreeze_manifest / clear_logs / escalate / noop / open_incident_issue
     """
 
     RESTART_BACKEND = "restart_backend"
@@ -36,6 +36,7 @@ class ActionType(str, Enum):
     CLEAR_LOGS = "clear_logs"
     ESCALATE = "escalate"
     NOOP = "noop"
+    OPEN_INCIDENT_ISSUE = "open_incident_issue"
 
 
 class RiskLevel(str, Enum):

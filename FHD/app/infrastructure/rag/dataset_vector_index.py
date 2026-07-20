@@ -61,9 +61,7 @@ class DatasetVectorSQLiteIndex:
         except sqlite3.DatabaseError as exc:
             if not path.is_file() or not _is_rebuildable_index_error(exc):
                 raise
-            backup_path = path.with_name(
-                f"{path.name}.incompatible-{time.time_ns()}.bak"
-            )
+            backup_path = path.with_name(f"{path.name}.incompatible-{time.time_ns()}.bak")
             path.replace(backup_path)
             logger.warning(
                 "Archived incompatible dataset vector index %s to %s; rebuilding from source data",

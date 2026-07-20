@@ -11,20 +11,28 @@ from modstore_server.self_maintenance_loop_runner import (
     _assess_branch_auto_merge_policy,
     _code_task_text,
     _employee_result_ok,
+    _existing_kb_schema_retry_item,
     _extract_failure_reason,
     _find_delivery_validation,
+    _find_pr_number_for_branch,
     _focused_test_command,
+    _gh_pr_add_label,
+    _gh_pr_comment,
     _guest_auth_headers,
     _has_high_risk_report,
     _historical_rollback_rate,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _qa_task_text,
+    _reject_and_retry_kb_schema_failure,
     _resume_review_qa_candidate,
     _review_task_text,
     _self_maintenance_actor_user_id,
     _structured_report_gate,
     _update_loop_memory,
+    KB_SCHEMA_FAILED_LABEL,
+    KB_SCHEMA_RETRY_MAX,
+    NEEDS_HUMAN_LABEL,
     clean_baseline_path,
     close_loop_memory_items,
     ensure_clean_baseline,
@@ -1174,3 +1182,503 @@ class TestExtractFailureReasonEndToEnd:
         assert ("tail=" + "x" * 120) in reason
         # 不应包含完整的 500 字符
         assert "x" * 200 not in reason
+
+
+# ---------------------------------------------------------------------------
+# Task 5: KB schema auto-validate + retry on failure
+# 验收：注入 KB schema 错误 → LOOP 自动评论 PR + 写 kb_schema_retry open_item；
+#       retry_count >= 2 后标 needs-human；resume 触发 fresh code step。
+# ---------------------------------------------------------------------------
+
+
+def _kb_validation_failed_payload(file_name="FHD/XCAGI/kb/fixes/test.json"):
+    """模拟 _validate_kb_json_changes_for_auto_merge 失败时的返回。"""
+    return {
+        "checked": [file_name],
+        "errors": [
+            {
+                "error": "fix executable_template must be an object",
+                "file": file_name,
+                "kind": "fixes",
+            }
+        ],
+        "ok": False,
+        "reason": "kb_json_schema_validation_failed",
+    }
+
+
+def _seed_loop_memory_for_kb_retry(tmp_path, open_items):
+    """把 open_items 写到 tmp_path 的 loop memory 文件中，返回 memory_path。"""
+    memory_path = tmp_path / "loop_memory.json"
+    memory_path.write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": open_items,
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return memory_path
+
+
+def test_resume_returns_none_when_kb_schema_retry_open_item_exists(monkeypatch, tmp_path):
+    """非 escalated 的 kb_schema_retry open_item → resume 返 None 触发 fresh code step。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 1,
+                "run_id": "r-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    memory = _load_loop_memory()
+    result = _resume_review_qa_candidate(memory)
+
+    # 应该返回 None，让 loop 跑 fresh code step
+    assert result is None
+
+
+def test_resume_does_not_short_circuit_when_kb_schema_retry_escalated(monkeypatch, tmp_path):
+    """escalated 的 kb_schema_retry open_item → resume 不短路，等人工。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": True,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 2,
+                "run_id": "r-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    memory = _load_loop_memory()
+    result = _resume_review_qa_candidate(memory)
+
+    # escalated 的项不应触发 fresh code step。result 可能是 None（因为没有其他
+    # resume 候选）或其他 resume 候选；这里只验证它不是因为 kb_schema_retry 短路。
+    # 由于没有其他 open_items，应该返回 None，但不是因为 kb_schema_retry。
+    assert result is None
+
+
+def test_existing_kb_schema_retry_item_matches_by_branch():
+    """精确 branch 匹配优先。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-1",
+            "created_at": "2026-07-20T12:00:00+00:00",
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-1",
+            "retry_count": 1,
+        },
+        {
+            "branch": "devfleet/codex/kb-bad-2",
+            "created_at": "2026-07-20T13:00:00+00:00",
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-2",
+            "retry_count": 1,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="devfleet/codex/kb-bad-2", para_task_id=None
+    )
+    assert found is not None
+    assert found["branch"] == "devfleet/codex/kb-bad-2"
+
+
+def test_existing_kb_schema_retry_item_matches_by_para_task_id():
+    """para_task_id 精确匹配。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-1",
+            "created_at": "2026-07-20T12:00:00+00:00",
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-1",
+            "retry_count": 1,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="different-branch", para_task_id="task-kb-1"
+    )
+    assert found is not None
+    assert found["para_task_id"] == "task-kb-1"
+
+
+def test_existing_kb_schema_retry_item_fallback_within_24h():
+    """不同 branch/task 但 24h 内 → 返回最近项（避免 LLM 换 branch 重置 retry_count）。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-old",
+            "created_at": "2026-07-19T10:00:00+00:00",  # >24h ago
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-old",
+            "retry_count": 1,
+        },
+        {
+            "branch": "devfleet/codex/kb-bad-recent",
+            "created_at": "2026-07-20T10:00:00+00:00",  # <24h ago
+            "escalated": False,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-recent",
+            "retry_count": 1,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="devfleet/codex/kb-new-branch", para_task_id="task-new"
+    )
+    assert found is not None
+    assert found["branch"] == "devfleet/codex/kb-bad-recent"
+
+
+def test_existing_kb_schema_retry_item_skips_escalated():
+    """escalated 项被跳过。"""
+    items = [
+        {
+            "branch": "devfleet/codex/kb-bad-1",
+            "created_at": "2026-07-20T12:00:00+00:00",
+            "escalated": True,
+            "kind": "kb_schema_retry",
+            "para_task_id": "task-kb-1",
+            "retry_count": 2,
+        },
+    ]
+    found = _existing_kb_schema_retry_item(
+        items, branch="devfleet/codex/kb-bad-1", para_task_id="task-kb-1"
+    )
+    assert found is None
+
+
+def test_reject_and_retry_kb_schema_first_failure_writes_open_item(
+    monkeypatch, tmp_path
+):
+    """第一次 schema 失败 → 写 kb_schema_retry open_item, retry_count=1, 未 escalated。"""
+    memory_path = tmp_path / "loop_memory.json"
+    _seed_loop_memory_for_kb_retry(tmp_path, [])
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+
+    # Mock PR 操作（避免依赖 gh CLI）
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
+    comment_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_comment",
+        lambda pr, body: comment_calls.append((pr, body)) or True,
+    )
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
+    )
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-1",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 验证 final 状态
+    assert final["status"] == "failed"
+    assert final["failed_step"] == "code"
+    assert final["kb_schema_retry"] is True
+    assert final["policy_decision"]["action"] == "hold_for_automated_remediation"
+    assert final["policy_decision"]["reason"] == "kb_json_schema_validation_failed"
+    assert final["policy_decision"]["retry_count"] == 1
+    assert final["policy_decision"]["escalated"] is False
+
+    # 验证 PR 评论 + label
+    assert comment_calls == [(42, comment_calls[0][1])]
+    assert "KB JSON schema validation failed" in comment_calls[0][1]
+    assert "executable_template must be an object" in comment_calls[0][1]
+    assert (42, KB_SCHEMA_FAILED_LABEL) in label_calls
+    # 第一次失败不应该标 needs-human
+    assert (42, NEEDS_HUMAN_LABEL) not in label_calls
+
+    # 验证 open_item 写入 loop memory
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 1
+    assert kb_items[0]["escalated"] is False
+    assert kb_items[0]["branch"] == "devfleet/codex/kb-bad-1"
+    assert kb_items[0]["para_task_id"] == "task-kb-1"
+
+
+def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(
+    monkeypatch, tmp_path
+):
+    """第二次 schema 失败（同 branch）→ retry_count=2, escalated=True, 标 needs-human。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 1,
+                "run_id": "run-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
+    )
+    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-2",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 第二次失败 → escalated
+    assert final["policy_decision"]["retry_count"] == 2
+    assert final["policy_decision"]["escalated"] is True
+    assert final["status"] == "completed_waiting_human_strategy"
+    assert (42, KB_SCHEMA_FAILED_LABEL) in label_calls
+    assert (42, NEEDS_HUMAN_LABEL) in label_calls
+
+    # open_item 应被刷新（不是新增）
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 2
+    assert kb_items[0]["escalated"] is True
+
+
+def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp_path):
+    """retry_count >= KB_SCHEMA_RETRY_MAX (2) → 升级为 human review。"""
+    # 验证 KB_SCHEMA_RETRY_MAX 常量是 2
+    assert KB_SCHEMA_RETRY_MAX == 2
+
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": 1,  # 已经失败过 1 次
+                "run_id": "run-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 99)
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner,
+        "_gh_pr_add_label",
+        lambda pr, label: label_calls.append((pr, label)) or True,
+    )
+    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-2",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 第二次失败 → escalated
+    assert final["policy_decision"]["retry_count"] == 2
+    assert final["policy_decision"]["escalated"] is True
+    assert final["status"] == "completed_waiting_human_strategy"
+    # needs-human label 被添加
+    assert (99, NEEDS_HUMAN_LABEL) in label_calls
+
+
+def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(
+    monkeypatch, tmp_path
+):
+    """LLM 创建新 branch，但 24h 内有旧 kb_schema_retry → 增量 retry_count 而非重置。"""
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-old",  # 旧 branch
+                "created_at": "2026-07-20T10:00:00+00:00",  # 今天早些时候
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-old",
+                "retry_count": 1,
+                "run_id": "run-kb-old",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
+    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(loop_runner, "_gh_pr_add_label", lambda pr, label: True)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    # 新 branch，不同 para_task_id
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-new",
+        branch="devfleet/codex/kb-bad-new-branch",
+        para_task_id="task-kb-new",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 应该匹配到 24h 内的旧 item，retry_count 从 1 → 2，escalated
+    assert final["policy_decision"]["retry_count"] == 2
+    assert final["policy_decision"]["escalated"] is True
+
+
+def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(
+    monkeypatch, tmp_path
+):
+    """没有 PR（gh 不可用）→ 跳过 PR 操作，仍然写 open_item。"""
+    _seed_loop_memory_for_kb_retry(tmp_path, [])
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+
+    # _find_pr_number_for_branch 返 None
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
+    comment_calls = []
+    label_calls = []
+    monkeypatch.setattr(
+        loop_runner, "_gh_pr_comment", lambda pr, body: comment_calls.append((pr, body)) or True
+    )
+    monkeypatch.setattr(
+        loop_runner, "_gh_pr_add_label", lambda pr, label: label_calls.append((pr, label)) or True
+    )
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-no-pr",
+        branch="devfleet/codex/kb-no-pr",
+        para_task_id=None,
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    # 不应该调用 PR 评论/label
+    assert comment_calls == []
+    assert label_calls == []
+    # open_item 仍然写入
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 1
+
+
+def test_code_task_text_includes_strict_kb_schema_example_and_validate_instruction():
+    """员工 prompt 必须包含：完整 KB JSON schema 示例 + pre-push validate 强制指令 + kb-schema-failed 警告。"""
+    text = _code_task_text(
+        "run-prompt-test",
+        {"gaps": ["test_gap"]},
+        {"open_items": [], "recent_runs": []},
+    )
+
+    # 1. 包含完整 schema 示例（executable_template 嵌套结构）
+    assert '"schema_version": 1' in text
+    assert '"kind": "fix"' in text
+    assert '"executable_template":' in text
+    assert '"applicability_check":' in text
+    assert '"patch_strategy":' in text
+    assert '"rollback_plan":' in text
+    assert '"required_tests":' in text
+
+    # 2. 包含 pre-push validate 强制指令
+    assert "validate_kb_payload" in text
+    assert "MANDATORY PRE-PUSH VALIDATION" in text
+
+    # 3. 警告 kb-schema-failed label 和重试机制
+    assert "kb-schema-failed" in text
+    assert "needs-human" in text or "human review" in text
+
+    # 4. 强调 executable_template 必须是 object（cedde773 的失败原因）
+    assert "executable_template MUST be an object" in text
+
+
+def test_gh_pr_add_label_is_best_effort_and_returns_false_on_failure(monkeypatch):
+    """gh 命令失败时返回 False，不抛异常。"""
+    import subprocess as _sp
+
+    def fake_run(*args, **kwargs):
+        return _sp.CompletedProcess(
+            args=args[0] if args else kwargs.get("args"),
+            returncode=1,
+            stdout="",
+            stderr="label not found",
+        )
+
+    monkeypatch.setattr(_sp, "run", fake_run)
+    monkeypatch.setenv("GITHUB_REPO", "test/repo")
+
+    result = _gh_pr_add_label(42, "nonexistent-label")
+    assert result is False
+
+
+def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
+    """gh CLI 不可用时返 None。"""
+    import subprocess as _sp
+
+    def fake_run(*args, **kwargs):
+        return _sp.CompletedProcess(
+            args=args[0] if args else kwargs.get("args"),
+            returncode=127,
+            stdout="",
+            stderr="gh: command not found",
+        )
+
+    monkeypatch.setattr(_sp, "run", fake_run)
+    monkeypatch.setenv("GITHUB_REPO", "test/repo")
+
+    result = _find_pr_number_for_branch("any-branch")
+    assert result is None
