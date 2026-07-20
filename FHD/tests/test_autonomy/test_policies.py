@@ -33,7 +33,9 @@ from scripts.autonomy.types import ActionType, Plan, RiskLevel, Signal
 # --------------------------------------------------------------------------- #
 
 
-def _make_signal(kind: str, ts: int = 1_000_000, detail: str = "test", severity: str = "crit") -> Signal:
+def _make_signal(
+    kind: str, ts: int = 1_000_000, detail: str = "test", severity: str = "crit"
+) -> Signal:
     return Signal(
         source="runtime_truth",
         kind=kind,
@@ -200,6 +202,67 @@ class TestAllPolicies:
 
         assert len(plan.actions) == 1
         assert "new" in plan.actions[0].params["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# Policy 类直接实例化（验证 Protocol duck typing）
+# --------------------------------------------------------------------------- #
+
+
+class TestPolicyClasses:
+    def test_health_down_policy_class_instantiable(self) -> None:
+        """HealthDownPolicy 类可直接实例化。"""
+        p = HealthDownPolicy()
+        assert p.id == "health-down"
+        assert p.gate == "auto"
+
+    def test_disk_full_policy_class_instantiable(self) -> None:
+        p = DiskFullPolicy()
+        assert p.id == "disk-full"
+
+    def test_manifest_drift_policy_class_instantiable(self) -> None:
+        p = ManifestDriftPolicy()
+        assert p.id == "manifest-drift"
+
+    def test_compose_unhealthy_policy_class_instantiable(self) -> None:
+        p = ComposeUnhealthyPolicy()
+        assert p.id == "compose-unhealthy"
+
+
+# --------------------------------------------------------------------------- #
+# diagnosis 生成验证
+# --------------------------------------------------------------------------- #
+
+
+class TestDiagnosis:
+    def test_diagnosis_root_cause_mapped(
+        self,
+        health_down_signal: Signal,
+    ) -> None:
+        """health_down 信号 → root_cause='service_unhealthy'。"""
+        plan = health_down_policy.plan([health_down_signal])
+        assert plan.diagnosis.root_cause == "service_unhealthy"
+        assert plan.diagnosis.confidence == 0.8
+
+    def test_diagnosis_evidence_contains_signal_detail(
+        self,
+        health_down_signal: Signal,
+    ) -> None:
+        """diagnosis.evidence 包含信号 detail。"""
+        plan = health_down_policy.plan([health_down_signal])
+        assert any("health check failed" in e for e in plan.diagnosis.evidence)
+ kind 多条信号 → policy 仍只产出 remediation + 兜底 共 2 个 action（取最新）。"""
+        signals = [
+            _make_signal("health_down", ts=900_000, detail="old"),
+            _make_signal("health_down", ts=950_000, detail="mid"),
+            _make_signal("health_down", ts=1_000_000, detail="new"),
+        ]
+        plan = health_down_policy.plan(signals)
+
+        assert len(plan.actions) == 2
+        remediation, incident = plan.actions
+        assert "new" in remediation.params["reason"]
+        assert "new" in incident.params["reason"]
 
 
 # --------------------------------------------------------------------------- #

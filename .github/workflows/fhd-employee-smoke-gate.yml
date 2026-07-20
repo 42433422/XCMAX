@@ -31,6 +31,7 @@ jobs:
   employee-smoke-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: production
     defaults:
       run:
         working-directory: FHD

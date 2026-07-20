@@ -55,9 +55,7 @@ class TestDedupKey:
 
     def test_whitespace_only_diff_same_key(self) -> None:
         # 归一化后 "hello   world" == "hello world"
-        assert recorder._dedup_key("hello   world", "r") == recorder._dedup_key(
-            "hello world", "r"
-        )
+        assert recorder._dedup_key("hello   world", "r") == recorder._dedup_key("hello world", "r")
 
     def test_case_insensitive(self) -> None:
         assert recorder._dedup_key("Hello", "r") == recorder._dedup_key("HELLO", "r")
@@ -100,9 +98,7 @@ class TestRecordCapabilityProposal:
         assert rec["dedup_key"] == result["dedup_key"]
         assert "ts_unix" in rec
 
-    def test_duplicate_within_window_not_recorded(
-        self, isolated_proposal_file: Path
-    ) -> None:
+    def test_duplicate_within_window_not_recorded(self, isolated_proposal_file: Path) -> None:
         r1 = recorder.record_capability_proposal(raw_input="same input", reason="r")
         r2 = recorder.record_capability_proposal(raw_input="same input", reason="r")
         assert r1["recorded"] is True
@@ -113,9 +109,7 @@ class TestRecordCapabilityProposal:
         lines = isolated_proposal_file.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
 
-    def test_different_reason_records_separately(
-        self, isolated_proposal_file: Path
-    ) -> None:
+    def test_different_reason_records_separately(self, isolated_proposal_file: Path) -> None:
         r1 = recorder.record_capability_proposal(raw_input="x", reason="intent_unknown")
         r2 = recorder.record_capability_proposal(raw_input="x", reason="slot_missing")
         assert r1["recorded"] is True
@@ -160,9 +154,7 @@ class TestListPendingProposals:
     def test_empty_file_returns_empty(self, isolated_proposal_file: Path) -> None:
         assert recorder.list_pending_proposals() == []
 
-    def test_returns_all_when_since_none(
-        self, isolated_proposal_file: Path
-    ) -> None:
+    def test_returns_all_when_since_none(self, isolated_proposal_file: Path) -> None:
         recorder.record_capability_proposal(raw_input="a", reason="r1")
         recorder.record_capability_proposal(raw_input="b", reason="r2")
         pending = recorder.list_pending_proposals()

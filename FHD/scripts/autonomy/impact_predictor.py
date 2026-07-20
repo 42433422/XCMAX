@@ -1,4 +1,4 @@
-"""ImpactPredictor：服务器端 6 action 运行时预检门禁（Phase 2）。
+"""ImpactPredictor：服务器端 8 action 运行时预检门禁（Phase 2）。
 
 用户决策：运行时预检 + Policy 门禁（不做静态依赖图）。
 所有动作执行前必须通过 predict()，allow=False 时 controller 写 audit 不执行。
@@ -8,9 +8,11 @@
 预检规则（与桌面端 impact-predictor.ts 对称，但 action 集合不同）：
   - restart_service：compose.yml 存在 + service_running=True 才允许
   - rollback_to_last_tarball：.deploy-last.tarball 存在 + pending_rollback_marker=False 才允许
-  - freeze_manifest：manifest 存在 + 未已 frozen（.hold 不存在）才允许
+  - freeze_manifest：manifest 存在 + 未已 frozen（.frozen 不存在）才允许
+  - unfreeze_manifest：始终允许（mtime + hold_ttl + health 由 adapter._action_unfreeze_manifest 内守护）
   - clear_logs：logs 目录存在 + disk_usage_percent > 70 才允许
-  - escalate / noop：始终允许
+  - escalate / noop / open_incident_issue：始终允许（无破坏性副作用；open_incident_issue
+    的 token / 去重 / 前置 action 失败判定由 adapter 内守护）
 """
 
 from __future__ import annotations
@@ -40,9 +42,7 @@ def predict(action: Action, truth: RuntimeTruthSnapshot) -> Prediction:
         # 风险：compose 文件不存在则 restart 无意义
         compose_file = _resolve_compose_file(truth.deploy_root)
         if compose_file is None:
-            reasons.append(
-                f"compose.yml 不存在于 {truth.deploy_root}，restart_service 无目标"
-            )
+            reasons.append(f"compose.yml 不存在于 {truth.deploy_root}，restart_service 无目标")
         # 风险：服务未运行则 restart 是空操作（应先 start 而非 restart）
         if not truth.service_running:
             reasons.append("service_running=False，docker compose 无 running 服务，restart 无意义")
@@ -70,9 +70,16 @@ def predict(action: Action, truth: RuntimeTruthSnapshot) -> Prediction:
         # 风险：manifest 不存在则 freeze 无意义
         if not truth.manifest_exists:
             reasons.append(f"manifest 不存在：{truth.manifest_path}")
-        # 风险：已 frozen（.hold 存在）则重复 freeze 无意义
+        # 风险：已 frozen（.frozen 存在）则重复 freeze 无意义
         if truth.manifest_frozen:
-            reasons.append("manifest 已 frozen（.hold 存在），无需重复 freeze")
+            reasons.append("manifest 已 frozen（.frozen 存在），无需重复 freeze")
+
+    elif action.type == ActionType.UNFREEZE_MANIFEST:
+        # 风险：未 frozen 则 unfreeze 无意义
+        if not truth.manifest_frozen:
+            reasons.append("manifest 未 frozen（.frozen 不存在），unfreeze_manifest 无目标")
+        # mtime + hold_ttl + health_ok 由 adapter._action_unfreeze_manifest 内守护，
+        # 不在 predict 阶段重复检查（避免 predict 与 action 双重 health curl）。
 
     elif action.type == ActionType.CLEAR_LOGS:
         # 风险：logs 目录不存在
@@ -86,8 +93,10 @@ def predict(action: Action, truth: RuntimeTruthSnapshot) -> Prediction:
                 f"磁盘占用 {truth.disk_usage_percent}% <= 阈值 {DISK_CLEAN_THRESHOLD}%，无需清理"
             )
 
-    elif action.type in (ActionType.ESCALATE, ActionType.NOOP):
-        # escalate / noop 始终允许（不产生副作用）
+    elif action.type in (ActionType.ESCALATE, ActionType.NOOP, ActionType.OPEN_INCIDENT_ISSUE):
+        # escalate / noop / open_incident_issue 始终允许（不产生破坏性副作用）
+        # open_incident_issue 的 token / 24h 去重 / 前置 action 失败判定
+        # 由 adapter._action_open_incident_issue 内守护（避免 predict 与 action 双重 API 调用）
         pass
 
     return Prediction(

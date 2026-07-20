@@ -175,6 +175,7 @@ class DatasetQueryRequest(BaseModel):
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+
     @field_validator("metadata_filter")
     @classmethod
     def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:

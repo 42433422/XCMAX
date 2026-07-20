@@ -49,11 +49,11 @@ def _make_action(
     )
 
 
-def _make_completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
+def _make_completed(
+    returncode: int = 0, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess:
     """构造 CompletedProcess。"""
-    return subprocess.CompletedProcess(
-        args=[], returncode=returncode, stdout=stdout, stderr=stderr
-    )
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 # --------------------------------------------------------------------------- #
@@ -307,9 +307,7 @@ class TestActionFailures:
         mock_subprocess_run: MagicMock,
     ) -> None:
         """restart_service 失败：docker compose restart 返回非 0。"""
-        mock_subprocess_run.return_value = _make_completed(
-            returncode=1, stderr="docker error"
-        )
+        mock_subprocess_run.return_value = _make_completed(returncode=1, stderr="docker error")
         action = _make_action(ActionType.RESTART_SERVICE, risk=RiskLevel.MEDIUM)
 
         result = adapter_for_test.execute_action(action)
@@ -324,9 +322,7 @@ class TestActionFailures:
         mock_subprocess_run: MagicMock,
     ) -> None:
         """clear_logs 失败：find 返回非 0。"""
-        mock_subprocess_run.return_value = _make_completed(
-            returncode=1, stderr="permission denied"
-        )
+        mock_subprocess_run.return_value = _make_completed(returncode=1, stderr="permission denied")
         action = _make_action(ActionType.CLEAR_LOGS, risk=RiskLevel.LOW)
 
         result = adapter_for_test.execute_action(action)

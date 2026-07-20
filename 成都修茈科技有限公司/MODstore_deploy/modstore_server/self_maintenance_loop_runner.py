@@ -765,6 +765,26 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
     if escalated_items:
         return None
 
+    # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
+    # return None to trigger a fresh code step. The employee will see the
+    # previous KB schema errors in loop memory (via _memory_context) and
+    # should produce a corrected branch. Escalated items (retry_count >=
+    # KB_SCHEMA_RETRY_MAX) are skipped so the loop waits for human review.
+    if isinstance(open_items_raw, list):
+        for item in reversed(open_items_raw):
+            if not isinstance(item, dict):
+                continue
+            if item.get("kind") != "kb_schema_retry":
+                continue
+            if item.get("escalated"):
+                continue
+            logger.info(
+                "kb_schema_retry: resuming fresh code step for run_id=%s retry_count=%d",
+                item.get("run_id"),
+                int(item.get("retry_count") or 0),
+            )
+            return None
+
     last_decision = memory.get("last_policy_decision")
     last_reason = (
         str(last_decision.get("reason") or "")
@@ -1817,9 +1837,36 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "Only when no historical fix applies may you reason from scratch. "
         "If there is no bug gap, choose one proactive task from performance, coverage, or tech_debt signals. "
         "When you fix a bug, write the symptom/root_cause/fix_diff triad under FHD/XCAGI/kb/fixes; "
-        "every changed fix JSON MUST also contain schema_version=1, kind=fix, and an "
-        "executable_template object with non-empty applicability_check, patch_strategy, "
-        "rollback_plan, and a string-list required_tests. Validate each changed KB JSON with "
+        "every changed fix JSON MUST conform to the EXACT schema below (all fields required, no extras that break validation):\n"
+        "```json\n"
+        "{\n"
+        "  \"schema_version\": 1,\n"
+        "  \"kind\": \"fix\",\n"
+        "  \"created_at\": \"2026-07-20T12:00:00+00:00\",\n"
+        "  \"symptom\": \"<non-empty string: observed symptom>\",\n"
+        "  \"root_cause\": \"<non-empty string: root cause>\",\n"
+        "  \"fix_diff\": \"<non-empty string: diff or description>\",\n"
+        "  \"metadata\": {\"component\": \"...\", \"files\": [\"...\"]},\n"
+        "  \"executable_template\": {\n"
+        "    \"applicability_check\": \"<non-empty string>\",\n"
+        "    \"patch_strategy\": \"<non-empty string>\",\n"
+        "    \"rollback_plan\": \"<non-empty string>\",\n"
+        "    \"required_tests\": [\"test_a.py\", \"test_b.py\"]\n"
+        "  }\n"
+        "}\n"
+        "```\n"
+        "CRITICAL: executable_template MUST be an object (the executable_template object "
+        "must not be a string, null, or omitted) with non-empty string fields "
+        "applicability_check/patch_strategy/rollback_plan AND a "
+        "string-list required_tests. Common failure: writing fix_diff as a description but "
+        "forgetting executable_template, or setting executable_template to a string. "
+        "MANDATORY PRE-PUSH VALIDATION: Before committing/pushing any KB JSON file, you MUST "
+        "run `python -c \"from modstore_server.self_evolution_knowledge import validate_kb_payload; "
+        "import json; validate_kb_payload('fixes', json.load(open('FHD/XCAGI/kb/fixes/<file>.json')))\"` "
+        "(or 'patterns' for pattern files) and require it to return without raising. If validation "
+        "raises ValueError, FIX the JSON before pushing — the loop will reject KB-schema-invalid "
+        "branches with a `kb-schema-failed` PR label and retry up to 2 times before escalating to "
+        "human review. Validate each changed KB JSON with "
         "self_evolution_knowledge.validate_kb_payload before reporting completion. "
         "when review/QA approves a reusable change, write the pattern under FHD/XCAGI/kb/patterns. "
         "Do not create marker-only/status-only changes as proof of completion. "
@@ -2329,6 +2376,452 @@ def _validate_kb_json_changes_for_auto_merge(
         "ok": True,
         "reason": "kb_json_schema_valid" if checked else "no_kb_json_changes",
     }
+
+
+KB_SCHEMA_RETRY_MAX = 2
+KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
+NEEDS_HUMAN_LABEL = "needs-human"
+
+
+def _early_kb_validation_for_branch(
+    *,
+    run_id: str,
+    branch: str,
+) -> Dict[str, Any]:
+    """Early KB JSON schema validation for a code-step branch.
+
+    Clones the repo (best-effort), fetches the branch, gets the changed-files
+    list, and runs ``_validate_kb_json_changes_for_auto_merge`` against any KB
+    JSON files in the diff. Returns a dict with::
+
+        {
+          "ok": bool,                           # True if validation passed (or no KB files / clone failed)
+          "reason": str,                        # "kb_json_schema_validation_failed" on failure
+          "kb_validation": {...},               # raw _validate_kb_json_changes_for_auto_merge result
+          "files": [...],                       # changed-files list (empty if clone failed)
+          "workspace": str,                     # workspace path used (for cleanup/debug)
+          "clone_error": str | None,            # set if clone/fetch failed (ok=True, non-blocking)
+        }
+
+    Design: clone failures are non-blocking (return ok=True with clone_error set)
+    so the loop falls back to the existing auto_merge-stage validation. Only
+    actual KB schema validation failures return ok=False.
+    """
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    if not repo_url or not base_branch or not branch:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_skipped_missing_env",
+            "kb_validation": None,
+            "files": [],
+            "workspace": "",
+            "clone_error": None,
+        }
+    workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / f"{run_id}-kb-early"
+    try:
+        files = _changed_files_for_branch(
+            repo_url=repo_url,
+            base_branch=base_branch,
+            branch=branch,
+            workspace=workspace,
+        )
+    except Exception as exc:
+        # Clone/fetch failure is non-blocking: fall back to auto_merge-stage check.
+        logger.warning(
+            "early_kb_validation: clone/fetch failed for branch=%s run_id=%s: %s",
+            branch,
+            run_id,
+            exc,
+        )
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_clone_failed",
+            "kb_validation": None,
+            "files": [],
+            "workspace": str(workspace),
+            "clone_error": str(exc)[:500],
+        }
+    if not files:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_no_changed_files",
+            "kb_validation": None,
+            "files": [],
+            "workspace": str(workspace),
+            "clone_error": None,
+        }
+    # Short-circuit: if no KB JSON files in the diff, skip validation entirely.
+    kb_files = [f for f in files if _kb_json_kind_for_repo_path(f)]
+    if not kb_files:
+        return {
+            "ok": True,
+            "reason": "early_kb_validation_no_kb_json_changes",
+            "kb_validation": None,
+            "files": files,
+            "workspace": str(workspace),
+            "clone_error": None,
+        }
+    kb_validation = _validate_kb_json_changes_for_auto_merge(
+        branch=branch,
+        files=files,
+        workspace=workspace,
+    )
+    return {
+        "ok": bool(kb_validation.get("ok")),
+        "reason": str(kb_validation.get("reason") or ""),
+        "kb_validation": kb_validation,
+        "files": files,
+        "workspace": str(workspace),
+        "clone_error": None,
+    }
+
+
+def _find_pr_number_for_branch(branch: str) -> Optional[int]:
+    """Find the open PR number for a branch via `gh pr list --head`.
+
+    Returns None if gh is unavailable, not authenticated, or no open PR exists.
+    Never raises — PR commenting/labeling is best-effort.
+    """
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "open",
+        "--json",
+        "number",
+        "--jq",
+        ".[0].number",
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except Exception as exc:
+        logger.warning(
+            "kb_schema_retry: gh pr list failed for branch=%s: %s", branch, exc
+        )
+        return None
+    if proc.returncode != 0:
+        logger.warning(
+            "kb_schema_retry: gh pr list rc=%s for branch=%s stderr=%s",
+            proc.returncode,
+            branch,
+            (proc.stderr or "")[:200],
+        )
+        return None
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _gh_pr_comment(pr_number: int, body: str) -> bool:
+    """Best-effort PR comment via `gh pr comment`. Returns True on success."""
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "comment",
+        str(pr_number),
+        "--body",
+        body,
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, check=False
+        )
+    except Exception as exc:
+        logger.warning("kb_schema_retry: gh pr comment failed pr=%s: %s", pr_number, exc)
+        return False
+    if proc.returncode != 0:
+        logger.warning(
+            "kb_schema_retry: gh pr comment rc=%s pr=%s stderr=%s",
+            proc.returncode,
+            pr_number,
+            (proc.stderr or "")[:200],
+        )
+        return False
+    return True
+
+
+def _gh_pr_add_label(pr_number: int, label: str) -> bool:
+    """Best-effort PR label add via `gh pr edit --add-label`. Returns True on success."""
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    cmd: List[str] = [
+        "gh",
+        "pr",
+        "edit",
+        str(pr_number),
+        "--add-label",
+        label,
+    ]
+    if repo:
+        cmd.extend(["--repo", repo])
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, check=False
+        )
+    except Exception as exc:
+        logger.warning(
+            "kb_schema_retry: gh pr edit --add-label %s failed pr=%s: %s",
+            label,
+            pr_number,
+            exc,
+        )
+        return False
+    if proc.returncode != 0:
+        # Most common failure: label doesn't exist in repo yet. Log but don't block.
+        logger.warning(
+            "kb_schema_retry: gh pr edit --add-label %s rc=%s pr=%s stderr=%s",
+            label,
+            proc.returncode,
+            pr_number,
+            (proc.stderr or "")[:200],
+        )
+        return False
+    return True
+
+
+def _existing_kb_schema_retry_item(
+    open_items: List[Dict[str, Any]],
+    *,
+    branch: str,
+    para_task_id: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Find the most recent non-escalated kb_schema_retry open_item.
+
+    Matching priority (first match wins, scanning most-recent first):
+      1. Exact branch match
+      2. Exact para_task_id match
+      3. Any non-escalated kb_schema_retry item within the last 24h
+         (so retry_count escalates even if the employee pushes a new branch
+         on each retry — common when the LLM doesn't reuse branches)
+    """
+    now = _utc_now()
+    fallback_within_24h: Optional[Dict[str, Any]] = None
+    for item in reversed(open_items):
+        if not isinstance(item, dict):
+            continue
+        if item.get("kind") != "kb_schema_retry":
+            continue
+        if item.get("escalated"):
+            continue
+        item_branch = str(item.get("branch") or "").strip()
+        item_task_id = str(item.get("para_task_id") or "").strip()
+        if branch and item_branch == branch:
+            return item
+        if para_task_id and item_task_id == para_task_id:
+            return item
+        # Fallback: track recent retries across different branches so the
+        # employee cannot reset retry_count by creating a new branch each time.
+        created_dt = _parse_iso(item.get("created_at") or item.get("last_attempted_at"))
+        if created_dt and (now - created_dt).total_seconds() <= 24 * 3600:
+            if fallback_within_24h is None:
+                fallback_within_24h = item
+    return fallback_within_24h
+
+
+def _reject_and_retry_kb_schema_failure(
+    *,
+    run_id: str,
+    branch: str,
+    para_task_id: Optional[str],
+    kb_validation: Dict[str, Any],
+    steps: List[Dict[str, Any]],
+    gate: Dict[str, Any],
+    triggered_by: str = "scheduled_self_maintenance",
+    started_at: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Reject KB-schema-invalid branch and retry code step (or escalate to human).
+
+    Called immediately after code step completes when KB JSON schema validation fails.
+    Actions (best-effort, never raises):
+      1. Comment on the PR (find by branch via `gh pr list --head`)
+      2. Add ``kb-schema-failed`` label to the PR
+      3. Write/refresh a ``kb_schema_retry`` open_item in loop memory (retry_count++)
+      4. If retry_count >= KB_SCHEMA_RETRY_MAX: add ``needs-human`` label, mark escalated
+      5. Return a final state dict with policy_decision.action=hold_for_automated_remediation
+
+    Next LOOP iteration sees the ``kb_schema_retry`` open_item and re-runs the code step
+    (see ``_resume_review_qa_candidate``). After KB_SCHEMA_RETRY_MAX retries without
+    resolution, the item is marked escalated so the loop stops retrying and waits for
+    human review.
+    """
+    errors = kb_validation.get("errors") if isinstance(kb_validation, dict) else None
+    if not isinstance(errors, list) or not errors:
+        errors = [{"error": "unknown kb schema validation failure", "file": "", "kind": ""}]
+    error_bullets = "\n".join(
+        f"- file: `{e.get('file') or '?'}` kind: `{e.get('kind') or '?'}` "
+        f"error: {(e.get('error') or '')[:300]}"
+        for e in errors[:8]
+    )
+    checked_files = kb_validation.get("checked") if isinstance(kb_validation, dict) else []
+    checked_str = ", ".join(str(f) for f in checked_files) if checked_files else "(none)"
+
+    # Load loop memory to compute retry_count
+    memory = _load_loop_memory()
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    existing = _existing_kb_schema_retry_item(
+        open_items, branch=branch, para_task_id=para_task_id
+    )
+    if existing is not None:
+        retry_count = int(existing.get("retry_count") or 0) + 1
+    else:
+        retry_count = 1
+    escalated = retry_count >= KB_SCHEMA_RETRY_MAX
+
+    # 1. Find PR by branch
+    pr_number = _find_pr_number_for_branch(branch)
+
+    # 2. Comment on PR with error details
+    comment_body = (
+        f"## KB JSON schema validation failed (attempt {retry_count}/{KB_SCHEMA_RETRY_MAX})\n\n"
+        f"The KB JSON file(s) in this branch failed schema validation. "
+        f"Please fix the schema errors below and re-push.\n\n"
+        f"**Checked files:** {checked_str}\n\n"
+        f"**Errors:**\n{error_bullets}\n\n"
+        f"**Required schema for fix KB** (`FHD/XCAGI/kb/fixes/*.json`):\n"
+        "```json\n"
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "kind": "fix",\n'
+        '  "created_at": "<ISO-8601>",\n'
+        '  "symptom": "<non-empty string>",\n'
+        '  "root_cause": "<non-empty string>",\n'
+        '  "fix_diff": "<non-empty string>",\n'
+        '  "metadata": {},\n'
+        '  "executable_template": {\n'
+        '    "applicability_check": "<non-empty string>",\n'
+        '    "patch_strategy": "<non-empty string>",\n'
+        '    "rollback_plan": "<non-empty string>",\n'
+        '    "required_tests": ["test_a.py"]\n'
+        "  }\n"
+        "}\n"
+        "```\n\n"
+        "Validate before push:\n"
+        "```\n"
+        "python -c \"from modstore_server.self_evolution_knowledge import validate_kb_payload; "
+        "import json; validate_kb_payload('fixes', json.load(open('<file>')))\"\n"
+        "```\n"
+    )
+    if escalated:
+        comment_body += (
+            f"\n\n**Escalated to human review** after {retry_count} retry attempts. "
+            f"Manual fix required. The `needs-human` label has been applied."
+        )
+    if pr_number is not None:
+        _gh_pr_comment(pr_number, comment_body)
+        _gh_pr_add_label(pr_number, KB_SCHEMA_FAILED_LABEL)
+        if escalated:
+            _gh_pr_add_label(pr_number, NEEDS_HUMAN_LABEL)
+    else:
+        logger.warning(
+            "kb_schema_retry: no open PR found for branch=%s; skipping PR comment/label",
+            branch,
+        )
+
+    # 3. Write/refresh kb_schema_retry open_item
+    now = _utc_now()
+    if existing is not None:
+        existing["retry_count"] = retry_count
+        existing["last_attempted_at"] = _iso(now)
+        existing["kb_validation_errors"] = errors[:10]
+        existing["run_id"] = run_id
+        existing["escalated"] = escalated
+        if para_task_id:
+            existing["para_task_id"] = para_task_id
+    else:
+        new_item: Dict[str, Any] = {
+            "branch": branch,
+            "created_at": _iso(now),
+            "escalated": escalated,
+            "kind": "kb_schema_retry",
+            "kb_validation_errors": errors[:10],
+            "last_attempted_at": _iso(now),
+            "para_task_id": para_task_id,
+            "retry_count": retry_count,
+            "run_id": run_id,
+            "steps": ["code"],
+        }
+        open_items.append(new_item)
+    memory["open_items"] = open_items
+    memory["updated_at"] = _iso(now)
+    _write_loop_memory(memory)
+
+    # 4. Governance audit record
+    audit_record = {
+        "action": "kb_schema_retry",
+        "actor": "auto",
+        "branch": branch,
+        "escalated": escalated,
+        "created_at": _iso(now),
+        "kb_validation_errors": errors[:10],
+        "ok": False,
+        "pr_number": pr_number,
+        "reason": "kb_json_schema_validation_failed",
+        "retry_count": retry_count,
+        "run_id": run_id,
+        "source": "self_maintenance_loop_runner",
+        "status": "escalated" if escalated else "retrying",
+    }
+    try:
+        _append_governance_audit(audit_record)
+    except Exception:
+        logger.exception("kb_schema_retry: failed to write governance audit")
+
+    # 5. Build final state
+    final_status = "completed_waiting_human_strategy" if escalated else "failed"
+    policy_decision = {
+        "action": "hold_for_automated_remediation",
+        "active_gates": {
+            "kb_schema_gate": {
+                "ok": False,
+                "blocking": True,
+                "reason": "kb_json_schema_validation_failed",
+                "retry_count": retry_count,
+                "escalated": escalated,
+            }
+        },
+        "governance_gate": audit_record,
+        "kb_validation": kb_validation,
+        "reason": "kb_json_schema_validation_failed",
+        "retry_count": retry_count,
+        "escalated": escalated,
+    }
+    final = {
+        "branch": branch,
+        "completed_at": _iso(now),
+        "failed_step": "code",
+        "kb_schema_retry": True,
+        "para_task_id": para_task_id,
+        "phase": "complete",
+        "policy_decision": policy_decision,
+        "run_id": run_id,
+        "started_at": _iso(started_at) if started_at else _iso(now),
+        "status": final_status,
+        "steps": steps,
+        "triggered_by": triggered_by,
+    }
+    _append_ledger(final)
+    return final
 
 
 def _normalize_repo_path(file_name: str) -> str:
@@ -4567,6 +5060,47 @@ def run_self_maintenance_loop(
                 _append_ledger(final)
                 _update_loop_memory(final, gate)
                 return final
+
+            # Early KB JSON schema validation: right after code step succeeds,
+            # before review/qa. If the employee pushed KB JSON files with schema
+            # errors (e.g., missing/wrong executable_template), reject the branch
+            # immediately and retry the code step (or escalate to human after
+            # KB_SCHEMA_RETRY_MAX attempts). This avoids wasting review/qa cycles
+            # on schema-invalid branches and gives the employee fast feedback.
+            if step_name == "code" and ok and code_branch:
+                try:
+                    early_kb = _early_kb_validation_for_branch(
+                        run_id=run_id, branch=code_branch
+                    )
+                except Exception:
+                    logger.exception(
+                        "early KB validation crashed for branch=%s run_id=%s; skipping",
+                        code_branch,
+                        run_id,
+                    )
+                    early_kb = {"ok": True, "reason": "early_kb_validation_crashed"}
+                if (
+                    isinstance(early_kb, dict)
+                    and not early_kb.get("ok")
+                    and early_kb.get("reason") == "kb_json_schema_validation_failed"
+                    and isinstance(early_kb.get("kb_validation"), dict)
+                ):
+                    logger.warning(
+                        "early KB schema validation failed for branch=%s run_id=%s; "
+                        "rejecting and retrying code step",
+                        code_branch,
+                        run_id,
+                    )
+                    return _reject_and_retry_kb_schema_failure(
+                        run_id=run_id,
+                        branch=code_branch,
+                        para_task_id=para_task_id,
+                        kb_validation=early_kb["kb_validation"],
+                        steps=steps,
+                        gate=gate,
+                        triggered_by=triggered_by,
+                        started_at=started_at,
+                    )
 
         policy_decision = _decide_post_loop_policy(
             branch=code_branch,

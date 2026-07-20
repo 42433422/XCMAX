@@ -8,6 +8,7 @@
   GET  /api/xcmax/admin/daily-digests   — 每日摘要存档列表
   GET  /api/xcmax/admin/daily-digests/{id} — 单条摘要正文
   GET  /api/xcmax/admin/digest-identity — 与修茈市场管理端解锁同源的身份校验码摘要
+  POST /api/xcmax/admin/loop/memory/evict — 手动驱逐 self-maintenance loop 中过期的 open_items（veto 通道）
   GET  /api/xcmax/sync/status          — 同步指针 / outbox / inbox 概览
   GET  /api/xcmax/sync/changes         — 服务器变更日志（供本地节点拉取）
   POST /api/xcmax/sync/receive         — 接收来自本地节点的变更（写入 inbox）
@@ -32,34 +33,29 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-# Lazy imports for the loop-memory evict endpoint. Importing
-# ``require_admin`` and ``User`` at module load time pulls in
-# ``modstore_server.models`` (and thus SQLAlchemy mapping) which can be heavy
-# during router discovery. Resolving them on first call keeps the router
-# cheap to register and avoids any potential import cycle with
-# ``self_maintenance_loop_runner``.
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 
 
-def _require_admin_dep():
-    """Resolve the admin auth dependency lazily (avoids heavy import at module load)."""
-    from modstore_server.api.deps import require_admin
+def _resolve_admin_user(authorization: Optional[str] = Header(None)):
+    """Admin auth dependency for the loop-memory evict veto endpoint.
 
-    return require_admin
+    Lazily imports ``modstore_server.api.deps`` so the router module stays
+    cheap to load and does not pull SQLAlchemy ORM mappings during router
+    discovery. Mirrors the ``require_admin`` pattern used by
+    ``/api/ops/self-maintenance/governance-review``.
+    """
 
+    from modstore_server.api.deps import get_current_user, require_admin
 
-def _user_type():
-    """Resolve the User type lazily for type hints only."""
-    from modstore_server.models import User
-
-    return User
+    user = get_current_user(authorization=authorization)
+    return require_admin(user=user)
 
 
 # ---------------------------------------------------------------------------
@@ -895,7 +891,7 @@ async def xcmax_surface_audit_lane(
 @router.post("/admin/loop/memory/evict", response_model=None)
 async def xcmax_admin_loop_memory_evict(
     body: dict[str, Any] = Body(default_factory=dict),
-    admin_user: "User" = Depends(_require_admin_dep),
+    admin_user: Any = Depends(_resolve_admin_user),
 ):
     """Manually evict stale self-maintenance loop open_items (veto channel).
 

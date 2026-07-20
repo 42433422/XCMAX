@@ -9,6 +9,7 @@
   - escalate 写 audit
   - noop 写 audit
   - CLI 参数解析
+  - tick 优先 unfreeze 过期 .frozen marker
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -59,7 +61,9 @@ def _make_signal(kind: str, ts: int = 1_000_000) -> Signal:
     )
 
 
-def _make_completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
+def _make_completed(
+    returncode: int = 0, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
@@ -141,15 +145,16 @@ class TestRunPolicies:
         assert run_policies([], ALL_POLICIES) == []
 
     def test_matching_signal_produces_plan(self) -> None:
-        """health_down 信号 → 匹配 health_down_policy 产出 plan。"""
+        """health_down 信号 → 匹配 health_down_policy 产出 plan（remediation + 兜底）。"""
         sig = _make_signal("health_down")
         results = run_policies([sig], ALL_POLICIES)
 
         assert len(results) == 1
         policy, plan = results[0]
         assert policy.id == "health-down"
-        assert len(plan.actions) == 1
+        assert len(plan.actions) == 2
         assert plan.actions[0].type == ActionType.RESTART_SERVICE
+        assert plan.actions[1].type == ActionType.OPEN_INCIDENT_ISSUE
 
     def test_unmatched_signal_returns_empty(self) -> None:
         """未匹配的 kind → 不产出 plan。"""
@@ -195,9 +200,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=True
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=True)
 
         assert len(audits) == 1
         # audit 中 action 应为 skipped
@@ -233,9 +236,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         # audit action 应为 skipped（predict deny）
@@ -271,13 +272,12 @@ class TestExecutePlan:
         state = WatcherState()
 
         # 第 1 次执行：失败 + 耗尽 → 立即 escalate
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         # 应有 escalate audit（原始 action audit 已通过 adapter.audit 写入）
         escalate_audits = [
-            a for a in audits
+            a
+            for a in audits
             if a.action is not None
             and not isinstance(a.action, dict)
             and a.action.type == ActionType.ESCALATE
@@ -313,9 +313,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         assert audits[0].result is not None
@@ -345,9 +343,7 @@ class TestExecutePlan:
         )
         state = WatcherState()
 
-        audits = execute_plan(
-            adapter_for_test, plan, sample_truth, None, state, dry_run=False
-        )
+        audits = execute_plan(adapter_for_test, plan, sample_truth, None, state, dry_run=False)
 
         assert len(audits) == 1
         assert audits[0].result is not None
@@ -412,6 +408,7 @@ class TestTick:
         tmp_audit_dir: Path,
     ) -> None:
         """truth 采集失败 → tick 抛错 + 写 audit。"""
+
         def _fail_collect() -> RuntimeTruthSnapshot:
             raise RuntimeError("docker unavailable")
 
@@ -436,9 +433,7 @@ class TestTick:
         adapter_for_test._compose_status_probe = lambda root: ("exited", True)
         state = WatcherState()
 
-        truth, signals, plans, audits = tick(
-            adapter_for_test, ALL_POLICIES, state, dry_run=True
-        )
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state, dry_run=True)
 
         # 派生信号 + 匹配 policy
         assert len(signals) > 0
@@ -456,6 +451,192 @@ class TestTick:
             assert "docker compose restart" not in cmd_str
             assert "fhd-apply-release.sh" not in cmd_str
             assert "-mtime" not in cmd_str
+
+
+# --------------------------------------------------------------------------- #
+# tick 优先 unfreeze 过期 .frozen marker 集成测试
+# --------------------------------------------------------------------------- #
+
+
+class TestTickUnfreezeIntegration:
+    """tick() 在执行 plan 前优先检查并解除过期 .frozen marker。"""
+
+    def test_tick_triggers_unfreeze_when_expired_and_healthy(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """过期 .frozen + health_ok=True → tick 自动 unfreeze，audit 记录 ok=True。"""
+        # 创建 1 小时前的 .frozen marker（已超过默认 hold_ttl 30min）
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 3600
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        # health_ok=True, compose running → 不派生 signal，不触发其他 plan
+        adapter_for_test._health_probe = lambda url: True
+        adapter_for_test._compose_status_probe = lambda root: ("running", True)
+        state = WatcherState()
+
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state)
+
+        # 1 条 unfreeze audit（plan 为空，因 truth 健康）
+        unfreeze_audits = [
+            a
+            for a in audits
+            if a.action is not None
+            and not isinstance(a.action, dict)
+            and a.action.type.value == "unfreeze_manifest"
+        ]
+        assert len(unfreeze_audits) == 1
+        assert unfreeze_audits[0].result is not None
+        assert unfreeze_audits[0].result.ok is True
+        assert "manifest unfrozen" in unfreeze_audits[0].result.detail
+        # .frozen marker 已被 rm
+        assert not os.path.isfile(frozen_path)
+        # signals/plans 为空（health OK 无 signal 派生）
+        assert signals == []
+        assert plans == []
+
+    def test_tick_keeps_frozen_when_health_fails(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+        tmp_audit_dir: Path,
+    ) -> None:
+        """过期 .frozen + health_ok=False → tick 尝试 unfreeze BUT health 失败 → marker 保留。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 3600
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        adapter_for_test._health_probe = lambda url: False  # health 失败
+        # compose running=True 避免 compose_unhealthy signal 干扰断言
+        adapter_for_test._compose_status_probe = lambda root: ("running", True)
+        state = WatcherState()
+
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state)
+
+        # unfreeze audit 应存在但 ok=False（health 失败保持冻结）
+        unfreeze_audits = [
+            a
+            for a in audits
+            if a.action is not None
+            and not isinstance(a.action, dict)
+            and a.action.type.value == "unfreeze_manifest"
+        ]
+        assert len(unfreeze_audits) == 1
+        assert unfreeze_audits[0].result is not None
+        assert unfreeze_audits[0].result.ok is False
+        assert "health check failed" in unfreeze_audits[0].result.detail
+        # marker 保留（health 失败）
+        assert os.path.isfile(frozen_path)
+
+    def test_tick_skips_unfreeze_when_within_hold_ttl(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """未过期 .frozen → check_unfreeze_needed 返回 False → 不创建 unfreeze audit。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        recent_ts = time.time() - 60  # 1 分钟前，未过期
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (recent_ts, recent_ts))
+        adapter_for_test._health_probe = lambda url: True
+        adapter_for_test._compose_status_probe = lambda root: ("running", True)
+        state = WatcherState()
+
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state)
+
+        # 无 unfreeze audit（needed=False，watcher 不 dispatch action）
+        unfreeze_audits = [
+            a
+            for a in audits
+            if a.action is not None
+            and not isinstance(a.action, dict)
+            and a.action.type.value == "unfreeze_manifest"
+        ]
+        assert unfreeze_audits == []
+        # marker 保留
+        assert os.path.isfile(frozen_path)
+
+    def test_tick_dry_run_unfreeze_skipped(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+    ) -> None:
+        """dry_run=True + 过期 .frozen → audit skipped，marker 保留。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 3600
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        adapter_for_test._health_probe = lambda url: True
+        adapter_for_test._compose_status_probe = lambda root: ("running", True)
+        state = WatcherState()
+
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state, dry_run=True)
+
+        # unfreeze audit 应为 skipped（dict 类型，type='skipped'）
+        unfreeze_audits = [
+            a
+            for a in audits
+            if a.action is not None
+            and isinstance(a.action, dict)
+            and a.action.get("type") == "skipped"
+        ]
+        assert len(unfreeze_audits) >= 1
+        assert "dry_run mode" in unfreeze_audits[0].action["reasons"]
+        # marker 保留（dry_run 不实际执行）
+        assert os.path.isfile(frozen_path)
+
+    def test_tick_unfreeze_alongside_other_plans(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_manifest_path: str,
+        mock_subprocess_run: MagicMock,
+    ) -> None:
+        """过期 .frozen + health_ok=True + 同时有 health_down signal → unfreeze + plan 并存。"""
+        frozen_path = f"{tmp_manifest_path}.frozen"
+        old_ts = time.time() - 3600
+        Path(frozen_path).write_text("frozen")
+        os.utime(frozen_path, (old_ts, old_ts))
+        # 注意：这里 health_probe 在 unfreeze 内调用时返回 True（解除 marker），
+        # 但 truth 采集时返回 False → 派生 health_down signal。
+        # 用 side_effect 区分两次调用顺序。
+        health_call_count = {"n": 0}
+
+        def _health_probe(_url: str) -> bool:
+            health_call_count["n"] += 1
+            # 第一次 truth 采集 → False 派生 health_down
+            # 第二次 unfreeze 内部检查 → True 解除 marker
+            return health_call_count["n"] > 1
+
+        adapter_for_test._health_probe = _health_probe
+        adapter_for_test._compose_status_probe = lambda root: ("exited", True)
+        mock_subprocess_run.return_value = _make_completed(returncode=0, stdout="ok")
+        state = WatcherState()
+
+        truth, signals, plans, audits = tick(adapter_for_test, ALL_POLICIES, state)
+
+        # 应有 unfreeze audit (ok=True)
+        unfreeze_audits = [
+            a
+            for a in audits
+            if a.action is not None
+            and not isinstance(a.action, dict)
+            and a.action.type.value == "unfreeze_manifest"
+        ]
+        assert len(unfreeze_audits) == 1
+        assert unfreeze_audits[0].result is not None
+        assert unfreeze_audits[0].result.ok is True
+        # 应同时有其他 plan 的 audit（health_down + compose_unhealthy）
+        action_types = {
+            a.action.type.value
+            for a in audits
+            if a.action is not None and not isinstance(a.action, dict)
+        }
+        assert "restart_service" in action_types
+        # marker 已被 rm
+        assert not os.path.isfile(frozen_path)
 
 
 # --------------------------------------------------------------------------- #
@@ -517,11 +698,16 @@ class TestCli:
 
     def test_parse_args_custom_paths(self) -> None:
         """--deploy-root / --manifest-path / --audit-dir 自定义。"""
-        args = parse_args([
-            "--deploy-root", "/custom/deploy",
-            "--manifest-path", "/custom/manifest.json",
-            "--audit-dir", "/custom/audit",
-        ])
+        args = parse_args(
+            [
+                "--deploy-root",
+                "/custom/deploy",
+                "--manifest-path",
+                "/custom/manifest.json",
+                "--audit-dir",
+                "/custom/audit",
+            ]
+        )
 
         assert args.deploy_root == "/custom/deploy"
         assert args.manifest_path == "/custom/manifest.json"
@@ -555,11 +741,16 @@ class TestCli:
 
         monkeypatch.setattr(watcher_mod.CvmAutonomyAdapter, "__init__", _patched_init)
 
-        exit_code = main([
-            "--deploy-root", str(deploy_root),
-            "--manifest-path", str(manifest_path),
-            "--audit-dir", str(audit_dir),
-        ])
+        exit_code = main(
+            [
+                "--deploy-root",
+                str(deploy_root),
+                "--manifest-path",
+                str(manifest_path),
+                "--audit-dir",
+                str(audit_dir),
+            ]
+        )
 
         assert exit_code == 0
 
@@ -576,10 +767,15 @@ class TestCli:
 
         monkeypatch.setattr(watcher_mod.CvmAutonomyAdapter, "collect_truth", _fail_collect)
 
-        exit_code = main([
-            "--deploy-root", str(tmp_path),
-            "--manifest-path", str(tmp_path / "manifest.json"),
-            "--audit-dir", str(tmp_path / "audit"),
-        ])
+        exit_code = main(
+            [
+                "--deploy-root",
+                str(tmp_path),
+                "--manifest-path",
+                str(tmp_path / "manifest.json"),
+                "--audit-dir",
+                str(tmp_path / "audit"),
+            ]
+        )
 
         assert exit_code == 1

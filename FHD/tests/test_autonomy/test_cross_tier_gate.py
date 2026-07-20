@@ -92,7 +92,9 @@ class TestUnmatchedAction:
     """未匹配的动作默认 allow。"""
 
     def test_unknown_action_type_allow(self):
-        result = check_before_action("desktop", "some_unknown_action", {"server_manifest_frozen": True})
+        result = check_before_action(
+            "desktop", "some_unknown_action", {"server_manifest_frozen": True}
+        )
         assert result.allow is True
 
     def test_unknown_tier_allow(self):

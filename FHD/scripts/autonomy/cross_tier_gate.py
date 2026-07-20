@@ -57,7 +57,7 @@ def check_before_action(
             return GateResult(
                 allow=False,
                 reasons=[
-                    "服务器端 manifest 已冻结（.hold），回滚可能冲突；"
+                    "服务器端 manifest 已冻结（.frozen），回滚可能冲突；"
                     "请联系运维解除冻结或确认回滚目标版本"
                 ],
             )

@@ -163,7 +163,9 @@ def _conversation_input(messages: list[dict[str, Any]]) -> tuple[str, list[str],
         usable.append(
             {
                 "id": str(message.get("id") or ""),
-                "direction": "我方" if str(message.get("direction") or "") == "outbound" else "客户",
+                "direction": "我方"
+                if str(message.get("direction") or "") == "outbound"
+                else "客户",
                 "content": content[:1200],
                 "created_at": str(message.get("created_at") or ""),
             }
@@ -171,7 +173,8 @@ def _conversation_input(messages: list[dict[str, Any]]) -> tuple[str, list[str],
     if not usable:
         raise KellaiCopilotError("该客户还没有可用于分析的真实会话")
     fingerprint_source = "\n".join(
-        f"{item['id']}|{item['direction']}|{item['created_at']}|{item['content']}" for item in usable
+        f"{item['id']}|{item['direction']}|{item['created_at']}|{item['content']}"
+        for item in usable
     )
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
     evidence_ids = [item["id"] for item in usable[-8:] if item["id"]]
@@ -204,7 +207,9 @@ async def generate_draft(
 输出严格 JSON，字段如下：
 {"summary":"不超过120字的事实摘要","intent":"客户当前意图","risk_level":"low|medium|high|critical","next_action":"建议的下一步","reply_draft":"可供人工审核的中文回复草稿"}
 要求：回复草稿不得声称已经执行任何动作；涉及退款、合同、价格、付款、法律、安全或明确承诺时 risk_level 至少为 high。"""
-    system_prompt += "\n若提供 recent_follow_up_outcomes，请参考结果调整建议，避免重复已失败或无效的动作。"
+    system_prompt += (
+        "\n若提供 recent_follow_up_outcomes，请参考结果调整建议，避免重复已失败或无效的动作。"
+    )
     user_prompt = json.dumps(
         {"customer_context": customer_context, "conversation": json.loads(transcript)},
         ensure_ascii=False,
@@ -367,9 +372,7 @@ def create_follow_up_task(
             raise KellaiCopilotError("已拒绝的草稿不能创建跟进任务")
 
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         existing = next(
             (
@@ -436,9 +439,7 @@ def list_follow_up_tasks(customer_id: int) -> list[dict[str, Any]]:
     with _LOCK:
         state = _read()
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         matching = [
             item
@@ -482,7 +483,9 @@ def decide_follow_up_task(
     target_status = (
         "failed"
         if decision == "complete" and outcome_result == "failed"
-        else "completed" if decision == "complete" else "cancelled"
+        else "completed"
+        if decision == "complete"
+        else "cancelled"
     )
     timestamp_field = "completed_at" if decision == "complete" else "cancelled_at"
     actor_field = "completed_by" if decision == "complete" else "cancelled_by"
@@ -490,9 +493,7 @@ def decide_follow_up_task(
     with _LOCK:
         state = _read()
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         record = tasks.get(str(task_id))
         if not isinstance(record, dict):
@@ -540,9 +541,7 @@ def purge_all(*, actor: int | str | None = None) -> dict[str, int]:
         state = _read()
         drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
         tasks = (
-            state.get("follow_up_tasks")
-            if isinstance(state.get("follow_up_tasks"), dict)
-            else {}
+            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
         counts = {"drafts_deleted": len(drafts), "tasks_deleted": len(tasks)}
         path = _store_path()

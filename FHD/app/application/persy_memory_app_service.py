@@ -70,7 +70,9 @@ class PersyMemoryApplicationService:
             return {"success": True, "created_count": 0, "candidates": []}
 
         normalized_scope = "tenant" if str(scope).strip().lower() == "tenant" else "user"
-        owner_id = _tenant_owner_id(access.tenant_id) if normalized_scope == "tenant" else access.actor_id
+        owner_id = (
+            _tenant_owner_id(access.tenant_id) if normalized_scope == "tenant" else access.actor_id
+        )
         captured: list[dict[str, Any]] = []
         created_count = 0
         now = _utc_now_iso()
@@ -121,7 +123,12 @@ class PersyMemoryApplicationService:
         if denied is not None:
             return denied
         requested_status = str(status or "").strip().lower()
-        if requested_status and requested_status not in {"pending", "active", "rejected", "deleted"}:
+        if requested_status and requested_status not in {
+            "pending",
+            "active",
+            "rejected",
+            "deleted",
+        }:
             return {
                 "success": False,
                 "message": f"unsupported memory status: {requested_status}",
@@ -609,7 +616,10 @@ def merge_memory_graph(
     for edge in memory_graph.get("edges", []):
         if not isinstance(edge, dict):
             continue
-        if str(edge.get("source") or "") not in node_ids or str(edge.get("target") or "") not in node_ids:
+        if (
+            str(edge.get("source") or "") not in node_ids
+            or str(edge.get("target") or "") not in node_ids
+        ):
             continue
         edge_id = str(edge.get("id") or "")
         if edge_id and edge_id in edge_ids:
@@ -638,7 +648,11 @@ def _public_memory_record(record: dict[str, Any], scope: str) -> dict[str, Any]:
     statement = str(structured.get("statement") or "").strip()
     if not statement:
         key = str(record.get("key") or "记忆")
-        rendered = json.dumps(value, ensure_ascii=False, default=str) if not isinstance(value, str) else value
+        rendered = (
+            json.dumps(value, ensure_ascii=False, default=str)
+            if not isinstance(value, str)
+            else value
+        )
         statement = f"{key}：{rendered}"
     public = {
         key: record.get(key)
@@ -682,7 +696,10 @@ def _memory_strength(record: dict[str, Any]) -> float:
     recall_count = max(0, int(record.get("recall_count") or 0))
     reinforcement = min(0.22, math.log1p(recall_count) * 0.07)
     status_factor = 1.0 if record.get("status") == PERSY_MEMORY_ACTIVE else 0.68
-    return round(max(0.05, min(1.0, (confidence * 0.72 + retention * 0.28 + reinforcement) * status_factor)), 4)
+    return round(
+        max(0.05, min(1.0, (confidence * 0.72 + retention * 0.28 + reinforcement) * status_factor)),
+        4,
+    )
 
 
 def _coerce_access_context(
@@ -794,7 +811,9 @@ def _lexical_score(query: str, query_tokens: set[str], statement: str) -> float:
     overlap = len(query_tokens & statement_tokens)
     if overlap == 0:
         return 0.0
-    return min(1.0, overlap / max(1, len(query_tokens)) * 0.78 + overlap / len(statement_tokens) * 0.22)
+    return min(
+        1.0, overlap / max(1, len(query_tokens)) * 0.78 + overlap / len(statement_tokens) * 0.22
+    )
 
 
 def _parse_datetime(value: Any) -> datetime:
