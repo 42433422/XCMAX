@@ -3,7 +3,7 @@
 > **用途**：T-E04 交付物。定义 5 条黑盒验收用例，覆盖「客户在 MODstore 平台使用 AI 员工服务时，不感知 AI/人差异」的核心承诺。
 > **设计原则**：每条用例都可被自动化测试引用（fixture 名、断言点、文件锚点齐全）。
 > **生成时间**：2026-07-20
-> **对照 SSOT**：`docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（S3 客户价值付费）
+> **对照路线图**：`docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（S3 客户价值付费）
 
 ## 验收原则
 

@@ -355,8 +355,7 @@ class TestRemediationFailureTriggersEscalate:
         # 至少 1 次 escalate 来自 clear_logs 耗尽
         escalate_calls = adapter.calls_of(ActionType.ESCALATE)
         clear_logs_escalates = [
-            c for c in escalate_calls
-            if c.action.params.get("original_action") == "clear_logs"
+            c for c in escalate_calls if c.action.params.get("original_action") == "clear_logs"
         ]
         assert len(clear_logs_escalates) >= 1
 
@@ -457,7 +456,8 @@ class TestPredictDenyDoesNotSilentlySwallow:
         entries = _read_audit(tmp_audit_dir)
         # 至少有 1 条 skipped audit（clear_logs 被 predict deny）
         skipped_entries = [
-            e for e in entries
+            e
+            for e in entries
             if isinstance(e.get("action"), dict) and e["action"].get("type") == "skipped"
         ]
         assert len(skipped_entries) >= 1

@@ -1,5 +1,3 @@
-# CI SSOT: generated from FHD/.github/workflows/ai-self-heal.yml
-# 编辑源：FHD/.github/workflows/ai-self-heal.yml（根仓 .github/workflows/fhd-ai-self-heal.yml 为同步副本）
 name: AI Self-Heal
 
 on:

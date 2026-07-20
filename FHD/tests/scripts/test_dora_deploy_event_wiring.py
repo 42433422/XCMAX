@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -24,12 +24,12 @@ _SCRIPTS_DIR = _REPO_ROOT / "FHD" / "scripts" / "observability"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-import emit_deploy_event  # noqa: E402
 import collect_dora  # noqa: E402
+import emit_deploy_event  # noqa: E402
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _iso(dt: datetime) -> str:
@@ -103,7 +103,7 @@ class TestComputeDoraCountsRecentEvents:
 
     def test_old_event_outside_window_excluded(self, tmp_path: Path) -> None:
         """窗口外的事件不计入 — 解释为什么 T-E06 之前 7d 恒为 0。"""
-        old_time = datetime.now(timezone.utc) - timedelta(days=30)
+        old_time = datetime.now(UTC) - timedelta(days=30)
         old_event = {
             "deploy_id": "old-seed",
             "deployed_at": _iso(old_time),
@@ -127,7 +127,7 @@ class TestComputeDoraCountsRecentEvents:
         # 写入 5 条 seed（30~60d 前）模拟 T-E06 之前的 jsonl 现状
         seed_lines: list[str] = []
         for i in range(5):
-            old_time = datetime.now(timezone.utc) - timedelta(days=30 + i * 5)
+            old_time = datetime.now(UTC) - timedelta(days=30 + i * 5)
             seed = {
                 "deploy_id": f"seed-{i + 1}",
                 "deployed_at": _iso(old_time),
@@ -157,7 +157,7 @@ class TestComputeDoraStatusClassification:
     """DORA 状态分类计数独立（success/failed/rollback）。"""
 
     def test_status_breakdown_counts_separately(self, tmp_path: Path) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         events_data = [
             {
                 "deploy_id": "s1",
@@ -222,9 +222,7 @@ class TestEndToEndWiringContract:
         assert report["event_count"] >= 1
         assert report["successes"] >= 1
         # Wave-E-delivery 事件在 7d 窗口内
-        wave_e_events = [
-            e for e in events if e.get("source_workflow") == "Wave-E-delivery"
-        ]
+        wave_e_events = [e for e in events if e.get("source_workflow") == "Wave-E-delivery"]
         assert len(wave_e_events) == 1
         assert wave_e_events[0]["status"] == "success"
         assert wave_e_events[0]["git_sha"] == "abc123"
