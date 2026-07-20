@@ -85,7 +85,75 @@ def test_strict_push_applies_and_verifies_exact_sha() -> None:
     assert "FHD_MANIFEST_PATH=%q" in script
     assert "verify_release_identity_payload" in script
     assert '"$SHA256"' in script
+    assert '"${DEPLOY_MODE:-tarball}" == "image"' in script
+    assert '"$EXPECTED_RUNTIME_IMAGE_DIGEST"' in script
     assert "remote_identity_mismatch" in script
+
+
+def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "dist"
+    out_dir.mkdir()
+    artifact = out_dir / "fhd-full-1.0.0.0-test.tar.gz"
+    artifact.write_bytes(b"server-release")
+    artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    (out_dir / "fhd-manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact": artifact.name,
+                "sha256": artifact_sha,
+                "version": "1.0.0.0",
+                "git_sha": "b" * 40,
+                "deploy_mode": "tarball",
+                "image": "ghcr.io/example/fhd-api",
+                "image_digest": "sha256:" + "c" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    scp = mock_bin / "scp"
+    scp.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    scp.chmod(0o755)
+    ssh = mock_bin / "ssh"
+    ssh.write_text(
+        "#!/usr/bin/env bash\n"
+        "cmd=${!#}\n"
+        "case \"$cmd\" in\n"
+        "  *curl*) printf '%s\\n' \"$HEALTH_PAYLOAD\" ;;\n"
+        "  *REMOTE_SZ*) printf 'OK_MOVED\\n' ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    ssh.chmod(0o755)
+    health_payload = json.dumps(
+        {"build": {"git_sha": "b" * 40, "artifact_sha256": artifact_sha}}
+    )
+
+    result = subprocess.run(
+        ["bash", str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh")],
+        cwd=FHD_ROOT,
+        env={
+            **os.environ,
+            "PATH": f"{mock_bin}:{os.environ['PATH']}",
+            "HEALTH_PAYLOAD": health_payload,
+            "FHD_SKIP_PACK": "1",
+            "FHD_RELEASE_OUT_DIR": str(out_dir),
+            "FHD_PUSH_HOST": "example.invalid",
+            "FHD_PUSH_IMAGE_TAR": "0",
+            "FHD_PUSH_APPLY_NOW": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert '"git_sha": "' + "b" * 40 in result.stdout
+    assert "image digest mismatch" not in result.stderr
 
 
 def test_release_identity_verifier_requires_artifact_when_supplied() -> None:
