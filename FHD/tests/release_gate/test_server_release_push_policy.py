@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import yaml
+
 FHD_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = FHD_ROOT.parent
 
@@ -79,6 +81,10 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
     published = (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
 
     for workflow in (source, published):
+        assert "Stamp production environment approval into manifest" not in workflow
+        assert "Could not resolve the production environment reviewer" not in workflow
+        assert "autonomy_approval" not in workflow
+        assert "\n    environment:" not in workflow
         assert "push_image_tar:" in workflow
         assert (
             "group: cvm-push-release-${{ github.event_name == 'workflow_dispatch' "
@@ -94,6 +100,24 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '55m' || '15m' }}"
         ) in workflow
+
+
+def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
+    workflow_paths = [
+        REPO_ROOT / ".github/workflows/fhd-ci-cd.yml",
+        REPO_ROOT / ".github/workflows/fhd-deploy.yml",
+        REPO_ROOT / ".github/workflows/fhd-employee-smoke-gate.yml",
+        REPO_ROOT / ".github/workflows/fhd-release-gate-ci.yml",
+        REPO_ROOT / ".github/workflows/modstore-prod-deploy.yml",
+        FHD_ROOT / ".github/workflows/ci-cd.yml",
+        FHD_ROOT / ".github/workflows/employee-smoke-gate.yml",
+        FHD_ROOT / ".github/workflows/release-gate-ci.yml",
+    ]
+
+    for path in workflow_paths:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            assert "environment" not in job, f"{path}:{job_name} still has an approval gate"
 
 
 def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:

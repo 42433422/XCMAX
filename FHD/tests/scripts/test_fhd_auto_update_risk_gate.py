@@ -89,7 +89,19 @@ def test_stable_auto_update_runs_without_environment_approval(tmp_path: Path) ->
     assert "artifact 不存在" in log
 
 
-def test_stable_auto_update_accepts_real_environment_approval_first(tmp_path: Path) -> None:
+def test_auto_update_and_deploy_bridge_have_no_human_approval_dependency() -> None:
+    auto_update = SCRIPT.read_text(encoding="utf-8")
+    bridge = AUTONOMY_BRIDGE.read_text(encoding="utf-8")
+
+    for source in (auto_update, bridge):
+        assert "FHD_AUTONOMY_APPROVED_BY" not in source
+        assert "FHD_AUTONOMY_APPROVAL_ID" not in source
+        assert '"human_approved"' not in source
+        assert '"approved_by"' not in source
+    assert "autonomy_approval" not in auto_update
+
+
+def test_stable_auto_update_ignores_legacy_environment_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=True)), encoding="utf-8")
     result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True, capture_output=True)
