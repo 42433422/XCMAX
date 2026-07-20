@@ -115,7 +115,6 @@ class WalletServiceTest {
         void debitInsufficientBalanceThrows() {
             wallet.setBalance(new BigDecimal("10.00"));
             stubWalletFindByUserIdForUpdate();
-            stubSaveWallet();
 
             assertThatThrownBy(() -> walletService.debit(user, new BigDecimal("50.00"), "test", "test",
                     null, null, null, null))
@@ -155,7 +154,6 @@ class WalletServiceTest {
             existing.setId(42L);
             existing.setIdempotencyKey("idem-dup");
             when(transactionRepository.findByIdempotencyKey("idem-dup")).thenReturn(Optional.of(existing));
-            stubWalletFindByUserIdForUpdate();
 
             Transaction result = walletService.credit(user, new BigDecimal("10.00"), "test", "test",
                     null, null, null, "idem-dup");
@@ -533,7 +531,6 @@ class WalletServiceTest {
     class MembershipReferenceLine {
         @Test
         void returnsZeroWhenNoData() {
-            stubWalletFindByUser();
             when(transactionRepository.sumMembershipReferenceNet(user)).thenReturn(null);
             when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
                     .thenReturn(Optional.empty());
@@ -545,7 +542,6 @@ class WalletServiceTest {
 
         @Test
         void returnsNetFromTransactions() {
-            stubWalletFindByUser();
             when(transactionRepository.sumMembershipReferenceNet(user)).thenReturn(new BigDecimal("199"));
 
             int line = walletService.getMembershipReferenceLineYuan(user);
@@ -555,7 +551,6 @@ class WalletServiceTest {
 
         @Test
         void fallsBackToPlanPriceWhenNetIsZero() {
-            stubWalletFindByUser();
             when(transactionRepository.sumMembershipReferenceNet(user)).thenReturn(BigDecimal.ZERO);
 
             PlanTemplate plan = new PlanTemplate();

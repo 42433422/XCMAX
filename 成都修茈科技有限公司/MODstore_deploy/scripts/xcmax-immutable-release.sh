@@ -182,8 +182,8 @@ else
 
   if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
     command -v mvn >/dev/null 2>&1 || fail "mvn is required by the active payment service"
-    log "building and testing the Java payment service"
-    (cd "$DEPLOY_DIR/java_payment_service" && mvn -B -q test package)
+    log "packaging the CI-tested Java payment service"
+    (cd "$DEPLOY_DIR/java_payment_service" && mvn -B -q -DskipTests package)
     [[ -f "$DEPLOY_DIR/java_payment_service/target/payment-service-1.0.0.jar" ]] \
       || fail "payment service jar missing after build"
   fi
