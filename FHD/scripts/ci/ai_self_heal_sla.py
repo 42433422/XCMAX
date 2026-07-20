@@ -1,19 +1,25 @@
 """AI self-heal PR SLA 处理：auto-merge / stale 提醒 / 关闭。
 
-每日扫描 label:ai-self-heal 的 open PR，按 risk:* 标签分流处理：
-- r0：≥ 24h 且二次守卫通过 → auto-merge
-- r1：≥ 72h 且二次守卫通过 → auto-merge
+每 6 小时扫描 open PR，覆盖两类来源：
+- label:ai-self-heal — ai-self-heal workflow 自动修复 PR
+- label:ai-generated — ai-issue-implement workflow 自动实现 PR
+
+按 risk:* 标签分流处理：
+- r0：≥ 12h（ai-self-heal）/ ≥ 12h（ai-generated）且二次守卫通过 → auto-merge
+- r1：≥ 48h 且二次守卫通过 → auto-merge
 - r2：≥ 7d stale 评论，≥ 14d 自动关闭
 - r3：≥ 7d stale 评论，≥ 30d 自动关闭（永不 auto-merge）
 
 二次守卫（r0/r1 auto-merge 前置）：
 1. CI 全绿
-2. 覆盖率棘轮不回退
-3. PR 体量 ≤ 3 文件 + ≤ 50 diff 行
-4. 文件类型仅 .py / .md
-5. 禁止修改 db/migrations、fastapi_app、deploy 脚本
-6. 同 fingerprint 24h 内仅 1 PR
-7. 不是 autonomy/ 分支（不递归）
+2. PR 体量
+   - ai-self-heal: ≤ 3 文件 + ≤ 50 diff 行（严格，机械修复）
+   - ai-generated: ≤ 5 文件 + ≤ 100 diff 行（宽松，allowlist 域已预过滤低风险）
+3. 文件类型
+   - ai-self-heal: 仅 .py / .md
+   - ai-generated: .py / .md / .ts / .vue / .js / .json / .yaml / .yml
+4. 禁止修改 db/migrations、fastapi_app、deploy 脚本、workflows
+5. 不是 autonomy/ 分支（不递归）
 
 全部动作写 metrics/ai-self-heal-stale.jsonl。
 
@@ -30,7 +36,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +70,7 @@ class PRInfo:
     changed_files: int = 0
     additions: int = 0
     deletions: int = 0
+    kind: str = "self_heal"  # "self_heal" | "ai_generated"
 
 
 # =====================================================================
@@ -86,31 +93,42 @@ class GitHubClient:
         )
 
     def list_self_heal_prs(self) -> list[PRInfo]:
-        """列出所有 open PR + label:ai-self-heal。"""
-        url = f"{GITHUB_API}/repos/{self.repo}/issues"
-        resp = self.client.get(url, params={"labels": "ai-self-heal", "state": "open", "per_page": 100})
-        resp.raise_for_status()
+        """列出所有 open PR + label:ai-self-heal 或 label:ai-generated。
+
+        GitHub Issues API 的 labels 参数是 AND 关系，因此分两次查询再合并去重。
+        返回的 PRInfo.kind 标记来源（self_heal / ai_generated）。
+        """
+        seen: set[int] = set()
         prs: list[PRInfo] = []
-        for item in resp.json():
-            if "pull_request" not in item:
-                continue
-            pr_url = item["pull_request"]["url"]
-            pr_resp = self.client.get(pr_url)
-            pr_resp.raise_for_status()
-            pr_data = pr_resp.json()
-            prs.append(
-                PRInfo(
-                    number=pr_data["number"],
-                    title=pr_data["title"],
-                    url=pr_data["html_url"],
-                    head_branch=pr_data["head"]["ref"],
-                    created_at=_parse_iso(pr_data["created_at"]),
-                    labels=[lab["name"] for lab in pr_data.get("labels", [])],
-                    changed_files=pr_data.get("changed_files", 0),
-                    additions=pr_data.get("additions", 0),
-                    deletions=pr_data.get("deletions", 0),
+        for label, kind in (("ai-self-heal", "self_heal"), ("ai-generated", "ai_generated")):
+            url = f"{GITHUB_API}/repos/{self.repo}/issues"
+            resp = self.client.get(url, params={"labels": label, "state": "open", "per_page": 100})
+            resp.raise_for_status()
+            for item in resp.json():
+                if "pull_request" not in item:
+                    continue
+                pr_number = item.get("number")
+                if pr_number in seen:
+                    continue
+                pr_url = item["pull_request"]["url"]
+                pr_resp = self.client.get(pr_url)
+                pr_resp.raise_for_status()
+                pr_data = pr_resp.json()
+                prs.append(
+                    PRInfo(
+                        number=pr_data["number"],
+                        title=pr_data["title"],
+                        url=pr_data["html_url"],
+                        head_branch=pr_data["head"]["ref"],
+                        created_at=_parse_iso(pr_data["created_at"]),
+                        labels=[lab["name"] for lab in pr_data.get("labels", [])],
+                        changed_files=pr_data.get("changed_files", 0),
+                        additions=pr_data.get("additions", 0),
+                        deletions=pr_data.get("deletions", 0),
+                        kind=kind,
+                    )
                 )
-            )
+                seen.add(pr_number)
         return prs
 
     def get_pr_files(self, pr_number: int) -> list[str]:
@@ -229,7 +247,7 @@ def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
 def _append_stale(entry: dict[str, Any]) -> None:
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
     entry["ts"] = time.time()
-    entry["ts_iso"] = datetime.now(timezone.utc).isoformat()
+    entry["ts_iso"] = datetime.now(UTC).isoformat()
     with STALE_JSONL.open("a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
@@ -278,14 +296,18 @@ def process_pr(
                     f"⚠️ 二次守卫未通过（`{reason}`），自动升级为 `risk:r2`，"
                     f"转 stale→close 流程（7d 提醒 / 14d 关闭）。",
                 )
-                _append_stale({"pr": pr.number, "risk": risk, "action": "upgraded_to_r2", "reason": reason})
+                _append_stale(
+                    {"pr": pr.number, "risk": risk, "action": "upgraded_to_r2", "reason": reason}
+                )
             return "upgraded"
 
         print(f"  二次守卫通过，auto-merge ({risk} {threshold}h)")
         if not dry_run:
             ok = client.merge_pr(pr.number, method="squash")
             if ok:
-                client.comment(pr.number, f"✅ 二次守卫通过，{risk} 等级 {threshold}h 到期，自动合并。")
+                client.comment(
+                    pr.number, f"✅ 二次守卫通过，{risk} 等级 {threshold}h 到期，自动合并。"
+                )
                 _append_stale({"pr": pr.number, "risk": risk, "action": "auto_merged"})
                 return "auto_merged"
             else:
@@ -318,7 +340,9 @@ def process_pr(
                 f"⏰ 该 PR 已 stale {int(age_days)} 天（risk:{risk}），"
                 f"将于 {close_threshold} 天后自动关闭，请尽快 review。",
             )
-            _append_stale({"pr": pr.number, "risk": risk, "action": f"stale_warned_{stale_threshold}d"})
+            _append_stale(
+                {"pr": pr.number, "risk": risk, "action": f"stale_warned_{stale_threshold}d"}
+            )
         return "stale_warned"
 
     print(f"  skip: 未达 stale 阈值 ({age_days:.1f}d < {stale_threshold}d)")
