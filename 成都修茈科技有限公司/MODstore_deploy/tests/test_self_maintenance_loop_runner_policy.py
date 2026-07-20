@@ -87,9 +87,7 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     assert result["merge_requested"] is True
     assert risk_calls[0][0] == "self_maintenance_l1_merge"
     assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
-    assert merge_calls == [
-        {"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}
-    ]
+    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
 
 
 def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
@@ -97,9 +95,7 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
-    monkeypatch.setattr(
-        loop_runner, "_structured_report_gate", lambda steps: {"ok": True}
-    )
+    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
         lambda *args, **kwargs: SimpleNamespace(
@@ -110,9 +106,7 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     monkeypatch.setattr(
         loop_runner,
         "_request_para_task_merge",
-        lambda **kwargs: (_ for _ in ()).throw(
-            AssertionError("merge request bypassed SSOT")
-        ),
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("merge request bypassed SSOT")),
     )
 
     result = loop_runner._auto_merge_low_risk_branch(
@@ -127,12 +121,8 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
 
 
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False
-    )
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False
-    )
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
     # 关闭 v2/v3 评分门禁，让流程走到 dynamic_low_risk 策略（本测试验证 dynamic_low_risk 逻辑）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
@@ -155,9 +145,7 @@ def test_historical_rollback_rate_ignores_rollback_paths_without_execution() -> 
                 "policy_decision": {
                     "action": "auto_merged_low_risk",
                     "merge_result": {
-                        "autonomy_risk_decision": {
-                            "rollback_path": "revert_merge_commit"
-                        },
+                        "autonomy_risk_decision": {"rollback_path": "revert_merge_commit"},
                         "reason": "merged_low_risk_branch",
                     },
                 },
@@ -254,9 +242,7 @@ def test_diff_semantic_scan_still_flags_added_subprocess_call():
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
-    files = [
-        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
-    ]
+    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
         "open_items": [
             {
@@ -329,12 +315,8 @@ def test_dynamic_low_risk_policy_blocks_name_only_numstat_mismatch():
 
 
 def test_dynamic_low_risk_policy_allows_project_context_followup_files(monkeypatch):
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False
-    )
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False
-    )
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
     # 关闭 v2/v3 评分门禁 + 放宽 risk_score_v1 阈值，让流程走到 dynamic_low_risk 策略
     # （本测试验证 dynamic_low_risk 逻辑，不验证 risk_score 评分）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
@@ -353,12 +335,8 @@ def test_dynamic_low_risk_policy_allows_project_context_followup_files(monkeypat
 
 
 def test_dynamic_low_risk_policy_allows_self_evolution_knowledge_files(monkeypatch):
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False
-    )
-    monkeypatch.delenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False
-    )
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
     # 关闭 v2/v3 评分门禁 + 放宽 risk_score_v1 阈值，让流程走到 dynamic_low_risk 策略
     # （本测试验证 dynamic_low_risk 逻辑，不验证 risk_score 评分）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
@@ -491,9 +469,7 @@ def test_employee_result_rejects_e2e_codex_timeout():
             "ok": True,
             "status": "completed",
             "outputs": [
-                {
-                    "message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"
-                }
+                {"message": "[e2e-agent] Codex CLI 失败: Codex CLI timeout after 600000ms"}
             ],
         }
     }
@@ -842,10 +818,7 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
         }
     ]
 
-    assert (
-        _structured_report_gate(steps)["reason"]
-        == "structured_qa_focused_command_not_passed"
-    )
+    assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
@@ -910,9 +883,7 @@ def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypat
 
 
 def test_ensure_clean_baseline_writes_default_file(monkeypatch, tmp_path):
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_CLEAN_BASELINE", str(tmp_path / "baseline.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_CLEAN_BASELINE", str(tmp_path / "baseline.json"))
 
     baseline = ensure_clean_baseline()
 
@@ -1299,9 +1270,7 @@ class TestExtractFailureReasonEndToEnd:
         result = {
             "result": {
                 "ok": False,
-                "outputs": [
-                    {"message": "task blocked by risk middleware: forbidden path"}
-                ],
+                "outputs": [{"message": "task blocked by risk middleware: forbidden path"}],
             }
         }
 
@@ -1354,11 +1323,7 @@ class TestExtractFailureReasonEndToEnd:
     def test_delivery_validation_truncates_long_output(self):
         """长 output_tail 截断到 120 字符。"""
         long_tail = "x" * 500
-        dv = {
-            "commands": [
-                {"exit_code": 1, "command": "pytest", "output_tail": long_tail}
-            ]
-        }
+        dv = {"commands": [{"exit_code": 1, "command": "pytest", "output_tail": long_tail}]}
         result = {"result": {"ok": False, "delivery_validation": dv}}
 
         reason = _extract_failure_reason(result, {})
@@ -1410,9 +1375,7 @@ def _seed_loop_memory_for_kb_retry(tmp_path, open_items):
     return memory_path
 
 
-def test_resume_returns_none_when_kb_schema_retry_open_item_exists(
-    monkeypatch, tmp_path
-):
+def test_resume_returns_none_when_kb_schema_retry_open_item_exists(monkeypatch, tmp_path):
     """非 escalated 的 kb_schema_retry open_item → resume 返 None 触发 fresh code step。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -1429,9 +1392,7 @@ def test_resume_returns_none_when_kb_schema_retry_open_item_exists(
             }
         ],
     )
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     memory = _load_loop_memory()
     result = _resume_review_qa_candidate(memory)
@@ -1440,9 +1401,7 @@ def test_resume_returns_none_when_kb_schema_retry_open_item_exists(
     assert result is None
 
 
-def test_resume_does_not_short_circuit_when_kb_schema_retry_escalated(
-    monkeypatch, tmp_path
-):
+def test_resume_does_not_short_circuit_when_kb_schema_retry_escalated(monkeypatch, tmp_path):
     """escalated 的 kb_schema_retry open_item → resume 不短路，等人工。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -1459,9 +1418,7 @@ def test_resume_does_not_short_circuit_when_kb_schema_retry_escalated(
             }
         ],
     )
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     memory = _load_loop_memory()
     result = _resume_review_qa_candidate(memory)
@@ -1563,9 +1520,7 @@ def test_existing_kb_schema_retry_item_skips_escalated():
     assert found is None
 
 
-def test_reject_and_retry_kb_schema_first_failure_writes_open_item(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, tmp_path):
     """第一次 schema 失败 → 写 kb_schema_retry open_item, retry_count=1, 未 escalated。"""
     memory_path = tmp_path / "loop_memory.json"
     _seed_loop_memory_for_kb_retry(tmp_path, [])
@@ -1624,9 +1579,7 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(
     assert kb_items[0]["para_task_id"] == "task-kb-1"
 
 
-def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkeypatch, tmp_path):
     """第二次 schema 失败（同 branch）→ retry_count=2, escalated=True, 标 needs-human。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -1643,9 +1596,7 @@ def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(
             }
         ],
     )
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
     label_calls = []
@@ -1702,9 +1653,7 @@ def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp
             }
         ],
     )
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 99)
     label_calls = []
@@ -1734,9 +1683,7 @@ def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp
     assert (99, NEEDS_HUMAN_LABEL) in label_calls
 
 
-def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(monkeypatch, tmp_path):
     """LLM 创建新 branch，但 24h 内有旧 kb_schema_retry → 增量 retry_count 而非重置。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -1753,9 +1700,7 @@ def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(
             }
         ],
     )
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
     monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
@@ -1778,14 +1723,10 @@ def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(
     assert final["policy_decision"]["escalated"] is True
 
 
-def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(
-    monkeypatch, tmp_path
-):
+def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(monkeypatch, tmp_path):
     """没有 PR（gh 不可用）→ 跳过 PR 操作，仍然写 open_item。"""
     _seed_loop_memory_for_kb_retry(tmp_path, [])
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json")
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     # _find_pr_number_for_branch 返 None
     monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
