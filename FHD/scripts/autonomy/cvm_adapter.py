@@ -4,11 +4,12 @@
   - collect_truth()：采集服务器端 truth（curl 健康检查、docker compose ps、df 磁盘、
     manifest 存在性、.deploy-last.tar.gz 存在性）
   - subscribe_signals()：服务器端无主动信号（由 watcher tick 派生）
-  - execute_action()：6 个 action 实现
+  - execute_action()：7 个 action 实现
       * restart_service：cd $DEPLOY_ROOT && docker compose restart（timeout 60s）
       * rollback_to_last_tarball：FHD_RELEASE_TARBALL=... bash fhd-apply-release.sh
         （timeout 300s）
-      * freeze_manifest：mv $MANIFEST $MANIFEST.hold（os.rename）
+      * freeze_manifest：touch $MANIFEST.frozen（创建 marker，manifest 不移动）
+      * unfreeze_manifest：rm $MANIFEST.frozen（仅 hold_ttl 过期 + health 通过才执行）
       * clear_logs：find $DEPLOY_ROOT/logs -mtime +7 -delete（timeout 60s）
       * escalate / noop：返回 ok=True（仅审计）
   - audit()：写 $DEPLOY_ROOT/autonomy/audit.jsonl
@@ -18,6 +19,12 @@
     禁止 shell=True
   - 失败模式：subprocess 抛错 / 返回非 0 → 返回 ActionResult(ok=False, detail=str(e))
   - 测试隔离：for_test 类方法注入 mock，跳过真实 docker/df 调用
+
+frozen marker 与 cron / fhd-deploy.yml 的一致性：
+  - fhd-auto-update.sh#L21: FREEZE_MARKER="${MANIFEST}.frozen"
+  - fhd-deploy.yml#L171: touch "${MANIFEST}.frozen"
+  - fhd-deploy.yml#L173: rm -f "${MANIFEST}.frozen"
+  - cvm_adapter.py: 创建/删除 ${MANIFEST}.frozen（与上同源，统一定义 .frozen 后缀）
 """
 
 from __future__ import annotations
@@ -40,6 +47,13 @@ DEFAULT_DEPLOY_ROOT = "/opt/fhd-full"
 
 # 默认 manifest 路径（与 fhd-deploy.yml production MANIFEST 一致）
 DEFAULT_MANIFEST_PATH = "/var/www/update/releases/stable/server/fhd-manifest.json"
+
+# manifest 冻结 marker 后缀（与 fhd-auto-update.sh / fhd-deploy.yml 一致：.frozen）
+MANIFEST_FROZEN_SUFFIX = ".frozen"
+
+# frozen marker 默认 hold_ttl（秒）：超过后 watcher 自动解除（health 通过时）
+# 可通过 env FHD_MANIFEST_HOLD_TTL_SECONDS 覆盖
+DEFAULT_HOLD_TTL_SECONDS = 30 * 60
 
 # action 命令超时（秒）
 RESTART_SERVICE_TIMEOUT = 60
@@ -64,11 +78,17 @@ class CvmAutonomyAdapter:
         manifest_path: str = DEFAULT_MANIFEST_PATH,
         audit_dir: str | None = None,
         health_url: str = DEFAULT_HEALTH_URL,
+        hold_ttl: int | None = None,
     ) -> None:
         self.deploy_root = deploy_root
         self.manifest_path = manifest_path
         self.audit_dir = audit_dir or os.path.join(deploy_root, "autonomy")
         self.health_url = health_url
+        # frozen marker hold_ttl（秒）：env FHD_MANIFEST_HOLD_TTL_SECONDS 优先
+        if hold_ttl is None:
+            env_ttl = os.environ.get("FHD_MANIFEST_HOLD_TTL_SECONDS")
+            hold_ttl = int(env_ttl) if env_ttl and env_ttl.isdigit() else DEFAULT_HOLD_TTL_SECONDS
+        self.hold_ttl = hold_ttl
         # 创建 audit 目录（不抛错）
         try:
             os.makedirs(self.audit_dir, exist_ok=True)
@@ -91,6 +111,7 @@ class CvmAutonomyAdapter:
         audit_dir: str,
         manifest_path: str | None = None,
         health_url: str = "http://test/health",
+        hold_ttl: int = DEFAULT_HOLD_TTL_SECONDS,
     ) -> "CvmAutonomyAdapter":
         """测试用：创建一个不依赖真实 docker / df / curl 的 adapter 实例。
 
@@ -104,6 +125,7 @@ class CvmAutonomyAdapter:
         )
         inst.audit_dir = audit_dir
         inst.health_url = health_url
+        inst.hold_ttl = hold_ttl
         inst.audit_path = os.path.join(audit_dir, "audit.jsonl")
         try:
             os.makedirs(audit_dir, exist_ok=True)
@@ -129,7 +151,7 @@ class CvmAutonomyAdapter:
         compose_status, service_running = self._probe_compose_status()
         disk_usage_percent = self._probe_disk_usage()
         manifest_exists = os.path.isfile(self.manifest_path)
-        manifest_frozen = os.path.isfile(f"{self.manifest_path}.hold")
+        manifest_frozen = os.path.isfile(f"{self.manifest_path}{MANIFEST_FROZEN_SUFFIX}")
         rollback_tarball = os.path.join(self.deploy_root, ".deploy-last.tar.gz")
         last_backup_ts = self._probe_last_backup_ts(rollback_tarball)
         pending_rollback_marker = os.path.isfile(

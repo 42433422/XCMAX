@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -110,6 +111,28 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
         )
     except Exception:
         logger.exception("incident-driven self-maintenance failed: source=%s", source)
+
+
+def _run_collector_with_timeout(fn: Callable[[], Any], *, label: str, timeout: float = 240.0) -> Any:
+    """运行 sync collector 并施加 wall-clock 超时。
+
+    APScheduler ``BackgroundScheduler`` 在线程池里跑 sync 任务，没有运行中的事件循环；
+    这里在 worker 线程里新建一个临时 loop，用 ``asyncio.wait_for`` + ``run_in_executor``
+    包裹 sync 调用。超时后 ``wait_for`` 抛 ``TimeoutError``，被外层 ``except Exception``
+    捕获并记日志——APScheduler 的 job 实例槽位（``max_instances=1``）随即释放，
+    避免某个 collector 卡死后实例无限堆积。
+
+    注意：CPython 无法强杀线程，超时后原 collector 仍可能在 executor 线程里跑（orphan），
+    但已不再阻塞调度器。这是 Python 生态下 sync 调用超时的标准妥协。
+    """
+    async def _wrapped() -> Any:
+        loop = asyncio.get_running_loop()
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, fn),
+            timeout=timeout,
+        )
+
+    return asyncio.run(_wrapped())
 
 
 def start_scheduler() -> None:

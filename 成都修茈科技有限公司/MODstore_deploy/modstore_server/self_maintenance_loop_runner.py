@@ -3977,6 +3977,148 @@ def _decide_post_loop_policy(
     )
 
 
+LOOP_EVICT_MAX_ITEMS = 100
+LOOP_EVICT_STUCK_AGE_SECONDS = 24 * 3600
+LOOP_EVICT_STUCK_RETRY_THRESHOLD = 3
+LOOP_EVICT_AGE_OUT_SECONDS = 7 * 24 * 3600
+
+
+def _evict_loop_memory_items(
+    memory: Dict[str, Any],
+    *,
+    actor: str = "auto",
+    note: str = "",
+    admin_user_id: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Evict stale open_items so the loop can resume fresh runs.
+
+    Rules (checked in order, first match wins):
+      - any item with created_at > 7d  → evict (reason=aged_out_7d)
+      - failed_steps item with created_at > 24h AND retry_count >= 3
+        → evict (reason=stuck_24h_retry_3)
+    Evicted items are appended to memory["evicted_items"] (capped at the last
+    LOOP_EVICT_MAX_ITEMS entries) and a ``loop_evicted`` governance audit
+    record is written so the action is visible in the governance UI.
+    Returns a summary dict; never raises.
+    """
+
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    evicted_items = memory.get("evicted_items")
+    if not isinstance(evicted_items, list):
+        evicted_items = []
+
+    now = _utc_now()
+    kept: List[Dict[str, Any]] = []
+    newly_evicted: List[Dict[str, Any]] = []
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        created_dt = _parse_iso(item.get("created_at"))
+        age_seconds = (now - created_dt).total_seconds() if created_dt else 0.0
+        retry_count = int(item.get("retry_count") or 0)
+        kind = str(item.get("kind") or "")
+
+        evict_reason = ""
+        if age_seconds >= LOOP_EVICT_AGE_OUT_SECONDS:
+            evict_reason = "aged_out_7d"
+        elif (
+            kind == "failed_steps"
+            and age_seconds >= LOOP_EVICT_STUCK_AGE_SECONDS
+            and retry_count >= LOOP_EVICT_STUCK_RETRY_THRESHOLD
+        ):
+            evict_reason = "stuck_24h_retry_3"
+
+        if evict_reason:
+            evicted_entry: Dict[str, Any] = {
+                "actor": actor,
+                "evicted_at": _iso(now),
+                "evict_reason": evict_reason,
+                "original_item": item,
+            }
+            if note:
+                evicted_entry["note"] = str(note)[:1000]
+            if admin_user_id is not None:
+                evicted_entry["admin_user_id"] = admin_user_id
+            newly_evicted.append(evicted_entry)
+        else:
+            kept.append(item)
+
+    memory["open_items"] = kept
+    memory["evicted_items"] = (evicted_items + newly_evicted)[-LOOP_EVICT_MAX_ITEMS:]
+
+    if not newly_evicted:
+        return {
+            "evicted_count": 0,
+            "evicted_items": [],
+            "reasons": {
+                "aged_out_7d": 0,
+                "stuck_24h_retry_3": 0,
+            },
+        }
+
+    reasons = {
+        "aged_out_7d": sum(
+            1 for entry in newly_evicted if entry["evict_reason"] == "aged_out_7d"
+        ),
+        "stuck_24h_retry_3": sum(
+            1 for entry in newly_evicted if entry["evict_reason"] == "stuck_24h_retry_3"
+        ),
+    }
+    summary_record = {
+        "action": "loop_evicted",
+        "actor": actor,
+        "admin_user_id": admin_user_id,
+        "created_at": _iso(now),
+        "evicted_count": len(newly_evicted),
+        "evicted_items": newly_evicted,
+        "note": str(note or "")[:1000],
+        "ok": True,
+        "reasons": reasons,
+        "source": "self_maintenance_loop_runner",
+        "status": "evicted",
+    }
+    try:
+        _append_governance_audit(summary_record)
+    except Exception:
+        logger.exception("failed to write loop_evicted governance audit")
+
+    return {
+        "evicted_count": len(newly_evicted),
+        "evicted_items": newly_evicted,
+        "reasons": reasons,
+    }
+
+
+def evict_loop_memory_items(
+    *,
+    actor: str = "manual",
+    note: str = "",
+    admin_user_id: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Manually evict stale loop-memory open_items (veto channel).
+
+    Exposed via POST /api/xcmax/admin/loop/memory/evict for human override when
+    the loop is stuck resuming long-failed runs.
+    """
+
+    memory = _load_loop_memory()
+    result = _evict_loop_memory_items(
+        memory,
+        actor=actor,
+        note=note,
+        admin_user_id=admin_user_id,
+    )
+    memory["updated_at"] = _iso(_utc_now())
+    _write_loop_memory(memory)
+    return {
+        **result,
+        "memory_path": str(loop_memory_path()),
+        "open_items_remaining": len(memory.get("open_items") or []),
+    }
+
+
 def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     memory = _load_loop_memory()
     recent_runs = memory.get("recent_runs")
@@ -4207,8 +4349,18 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         }
     )
 
+    # Auto-evict stale open_items before persistence so long-failed runs do
+    # not get resumed every LOOP iteration (24h + retry_count>=3, or 7d old).
+    try:
+        evict_summary = _evict_loop_memory_items(memory, actor="auto")
+    except Exception:
+        evict_summary = {"evicted_count": 0, "error": "evict_failed"}
+        logger.exception("loop memory auto-evict failed run_id=%s", final.get("run_id"))
+
     memory.update(
         {
+            "evicted_items": memory.get("evicted_items", [])[-LOOP_EVICT_MAX_ITEMS:],
+            "last_evict_summary": evict_summary,
             "last_gate": gate,
             "last_knowledge_record": knowledge_record,
             "last_policy_decision": decision,
