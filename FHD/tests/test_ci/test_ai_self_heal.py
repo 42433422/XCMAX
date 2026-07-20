@@ -71,6 +71,42 @@ class TestExtractErrors:
         assert errors[0].tool == "pytest"
         assert errors[0].code == "FAILED"
 
+    def test_ruff_format_would_reformat_parsed(self) -> None:
+        log = (
+            "Would reformat: tests/test_dev/test_ai_issue_implement.py\n"
+            "1 file would be reformatted, 2177 files already formatted\n"
+            "##[error]Process completed with exit code 1.\n"
+        )
+        errors = heal.extract_errors(log)
+        assert len(errors) == 1
+        assert errors[0].tool == "ruff"
+        assert errors[0].code == "FORMAT"
+        assert errors[0].file_path == "tests/test_dev/test_ai_issue_implement.py"
+
+    def test_gha_prefixed_format_line_parsed(self) -> None:
+        log = (
+            "backend-test\tRun Ruff format check\t2026-07-20T13:17:50.3154916Z "
+            "Would reformat: tests/test_dev/test_ai_issue_implement.py\n"
+        )
+        errors = heal.extract_errors(log)
+        assert len(errors) == 1
+        assert errors[0].code == "FORMAT"
+
+    def test_format_rule_is_r0(self) -> None:
+        err = heal.ErrorEntry(
+            tool="ruff",
+            code="FORMAT",
+            message="Would reformat: a.py",
+            file_path="a.py",
+            line=0,
+            raw="Would reformat: a.py",
+        )
+        fixes = heal.match_rules([err])
+        assert len(fixes) == 1
+        assert fixes[0].risk_level == "r0"
+        assert fixes[0].needs_human is False
+        assert fixes[0].patch.startswith("FORMAT:ruff:")
+
     def test_empty_log_returns_empty_list(self) -> None:
         assert heal.extract_errors("") == []
         assert heal.extract_errors(None) == []  # type: ignore[arg-type]

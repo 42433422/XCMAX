@@ -1627,12 +1627,44 @@ def api_admin_patch_catalog_item(
     body: CatalogItemAdminPatchDTO,
     user: User = Depends(_require_admin),
 ):
-    """入库默认不公开展示；需要上架时 ``PATCH {"is_public": true}``。"""
+    """入库默认不公开展示；需要上架时 ``PATCH {"is_public": true}``。
+
+    T-C12：切 ``is_public=True`` 前先过 :func:`validate_catalog_publish`；
+    校验失败 → 调 :func:`apply_publish_rollback` 把状态退回安全默认
+    （``is_public=False`` / ``compliance_status='disabled'`` / ``rank_score=0.0``
+    / ``delist_reason``）+ 发 ``log.anomaly`` 告警 + 抛 400。
+    下架（``is_public=False``）不触发回滚，仅切换可见性。
+    """
+    from modstore_server.publish_validation import (
+        apply_publish_rollback,
+        publish_failure_alert,
+        validate_catalog_publish,
+    )
+
     sf = get_session_factory()
     with sf() as session:
         item = session.query(CatalogItem).filter(CatalogItem.id == item_id).first()
         if not item:
             raise HTTPException(404, "商品不存在")
+
+        if body.is_public:
+            reason = validate_catalog_publish(item)
+            if reason:
+                # 上架校验失败 → 自动回滚到安全默认 + 告警 + 阻断本次上架。
+                rollback = apply_publish_rollback(item, reason=reason)
+                session.commit()
+                publish_failure_alert(
+                    item_id=int(item.id),
+                    pkg_id=str(item.pkg_id or ""),
+                    version=str(item.version or ""),
+                    reason=reason,
+                    rollback=rollback,
+                )
+                from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
+
+                _invalidate_market_catalog_caches()
+                raise HTTPException(400, f"上架校验失败已自动回滚：{reason}")
+
         item.is_public = bool(body.is_public)
         session.commit()
     from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
@@ -2248,6 +2280,34 @@ def api_enterprise_entitled_mod_ids(user: User = Depends(get_current_user)):
     }
 
 
+@router.get("/enterprise/entitlement-check")
+def api_enterprise_entitlement_check(
+    mod_id: str = Query(..., min_length=1),
+    user: User = Depends(get_current_user),
+):
+    """T-E03：租户权益策略探测接口（软租户 = 当前 user_id）。
+
+    返回 ``TenantModAccessPolicy.check(access_mod, mod_id)`` 的可解释决策，
+    供桌面/编排在副作用前做门禁，不替代 ``entitled-mod-ids`` 列表接口。
+    """
+    from modstore_server.tenant_entitlement import TenantModAccessPolicy
+
+    policy = TenantModAccessPolicy(get_session_factory())
+    decision = policy.check(
+        int(user.id),
+        TenantModAccessPolicy.ACTION_ACCESS_MOD,
+        mod_id,
+    )
+    return {
+        "ok": True,
+        "tenant_id": int(user.id),
+        "mod_id": mod_id.strip(),
+        "allow": bool(decision.allow),
+        "reason": decision.reason,
+        "metadata": decision.metadata,
+    }
+
+
 @router.get("/enterprise/customer-delivery-seeds/{pkg_id}/{version}/download")
 def api_enterprise_customer_delivery_seed_download(
     pkg_id: str,
@@ -2259,7 +2319,6 @@ def api_enterprise_customer_delivery_seed_download(
     from fastapi.responses import FileResponse
 
     from modstore_server.catalog_store import files_dir, get_package
-    from modstore_server.models_db import get_user_mod_ids
 
     pkg = get_package(pkg_id, version)
     if not pkg:
@@ -2277,9 +2336,20 @@ def api_enterprise_customer_delivery_seed_download(
     if requested_mod_id != account_mod_id:
         raise HTTPException(403, "交付种子包与请求 Mod 不匹配")
 
-    entitled = set(get_user_mod_ids(int(user.id)))
-    if account_mod_id not in entitled:
-        raise HTTPException(403, "当前账号未授权该客户交付包")
+    # T-E03：运行时走 TenantModAccessPolicy（软租户 = user_id）
+    from modstore_server.tenant_entitlement import TenantModAccessPolicy
+
+    policy = TenantModAccessPolicy(get_session_factory())
+    decision = policy.check(
+        int(user.id),
+        TenantModAccessPolicy.ACTION_ACCESS_MOD,
+        account_mod_id,
+    )
+    if not decision.allow:
+        raise HTTPException(
+            403,
+            f"当前账号未授权该客户交付包（{decision.reason}）",
+        )
 
     name = str(pkg.get("stored_filename") or "").strip()
     if not name:

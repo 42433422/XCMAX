@@ -8,12 +8,19 @@ API 端点：
   GET   /api/invoice/list            — 用户查看自己的发票列表
   GET   /api/admin/invoices          — 管理员查看全部发票申请
   PATCH /api/admin/invoices/{id}     — 管理员审核（issued/rejected）并上传 PDF 链接
+
+T-E07 门控：
+  ``create_invoice_for_order`` 默认 **不** 自动开票。打开需同时满足：
+  1. 环境变量 ``MODSTORE_AUTO_INVOICE_ENABLED=1``（默认 ``0``）
+  2. 管理员在 ``InvoiceAutoInvoiceGate`` 表（或配置项）显式 vet 开启
+  本 MVP 阶段只做第 1 步：env 门控 + 测试防误开。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -31,6 +38,19 @@ router = APIRouter(tags=["invoices"])
 DEFAULT_TAX_RATE: float = 0.06
 
 
+def _auto_invoice_enabled() -> bool:
+    """T-E07 门控：自动开票必须显式开启（默认关闭）。
+
+    打开条件：
+    - 环境变量 ``MODSTORE_AUTO_INVOICE_ENABLED=1``（大小写不敏感）
+    - 任何其他取值（``0``、空、未设）都视为关闭
+
+    后续 S7 阶段需要叠加管理员 veto/审批层，不能仅靠 env 单点开关。
+    """
+    raw = (os.environ.get("MODSTORE_AUTO_INVOICE_ENABLED") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def create_invoice_for_order(
     *,
     out_trade_no: str,
@@ -38,9 +58,61 @@ def create_invoice_for_order(
     amount: float,
     subject: str,
 ) -> None:
-    """NeuroBus ``payment.paid`` 订阅者钩子：按需自动占位发票（当前 MVP 不启用自动申请）。"""
-    _ = (out_trade_no, user_id, amount, subject)
-    # 用户仍通过 POST /api/invoice/apply 主动申请开票；此处保留扩展点。
+    """NeuroBus ``payment.paid`` 订阅者钩子。
+
+    T-E07 门控：MVP 默认 **不** 自动开票。需 ``MODSTORE_AUTO_INVOICE_ENABLED=1``
+    才会真正写 Invoice 行；否则仅记录 debug 日志。
+
+    用户仍可通过 ``POST /api/invoice/apply`` 主动申请开票（不受此门控影响）。
+    """
+    if not _auto_invoice_enabled():
+        logger.debug(
+            "auto_invoice disabled (MODSTORE_AUTO_INVOICE_ENABLED != 1); "
+            "skip auto invoice for order %s user %s",
+            out_trade_no,
+            user_id,
+        )
+        return
+
+    # 门控打开后的真正写入逻辑（与 POST /api/invoice/apply 一致，但无用户输入校验）
+    sf = get_session_factory()
+    try:
+        with sf() as session:
+            # 防重复：同一订单号不重复创建
+            occupied_ids: set[str] = set()
+            for inv in session.query(Invoice).filter(Invoice.status != "rejected").all():
+                try:
+                    ids = json.loads(inv.order_ids_json or "[]")
+                except Exception:
+                    continue
+                occupied_ids.update(str(o) for o in ids)
+            if str(out_trade_no) in occupied_ids:
+                logger.info(
+                    "auto_invoice skipped: order %s already has an Invoice row",
+                    out_trade_no,
+                )
+                return
+
+            inv = Invoice(
+                user_id=user_id,
+                order_ids_json=json.dumps([out_trade_no], ensure_ascii=False),
+                amount=round(float(amount or 0), 2),
+                tax_rate=DEFAULT_TAX_RATE,
+                invoice_type="personal",
+                title=subject or f"订单 {out_trade_no}",
+                status="pending",
+            )
+            session.add(inv)
+            session.commit()
+            logger.info(
+                "auto_invoice created Invoice id=%s for order %s",
+                inv.id,
+                out_trade_no,
+            )
+    except Exception:
+        logger.exception(
+            "auto_invoice failed for order %s user %s", out_trade_no, user_id
+        )
 
 
 # ---------------------------------------------------------------- DTOs
@@ -254,4 +326,4 @@ def _invoice_row(r: Invoice) -> dict:
     }
 
 
-__all__ = ["router"]
+__all__ = ["router", "create_invoice_for_order", "_auto_invoice_enabled"]

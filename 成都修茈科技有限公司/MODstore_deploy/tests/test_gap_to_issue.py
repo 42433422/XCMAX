@@ -82,7 +82,7 @@ def test_open_issue_for_proposal_writes_ledger(monkeypatch, tmp_path):
 
 
 def test_dedupe_signal_rejects_recent_duplicate(monkeypatch, tmp_path):
-    """5 分钟内同 proposal_id 不重复开 issue。"""
+    """5 分钟内同 proposal_id 不重复开 issue（默认 permanent=True 也覆盖此场景）。"""
     ledger_path = tmp_path / "evolution_decisions.jsonl"
     from datetime import datetime, timezone
 
@@ -106,8 +106,8 @@ def test_dedupe_signal_rejects_recent_duplicate(monkeypatch, tmp_path):
         dedupe_signal(proposal)
 
 
-def test_dedupe_signal_allows_old_proposal(monkeypatch, tmp_path):
-    """5 分钟前的同 proposal_id 允许重开。"""
+def test_dedupe_signal_allows_old_proposal_legacy_window(monkeypatch, tmp_path):
+    """legacy 短窗口模式（permanent=False）：5 分钟前的同 proposal_id 允许重开。"""
     ledger_path = tmp_path / "evolution_decisions.jsonl"
     from datetime import datetime, timedelta, timezone
 
@@ -126,7 +126,156 @@ def test_dedupe_signal_allows_old_proposal(monkeypatch, tmp_path):
     )
     monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
     proposal = _make_proposal()
+    # 显式 opt-out 永久去重：仅做 5 分钟窗口检查，1 小时前的记录放行
+    dedupe_signal(proposal, permanent=False)  # 不抛异常即通过
+
+
+# ---------- T-C14：调度幂等 — 相同 gap 永不重复开 issue ----------
+
+
+def test_dedupe_signal_permanent_blocks_old_duplicate(monkeypatch, tmp_path):
+    """T-C14 核心契约：默认 permanent=True，1 小时前的同 proposal_id 也阻断。"""
+    ledger_path = tmp_path / "evolution_decisions.jsonl"
+    from datetime import datetime, timedelta, timezone
+
+    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "event_id": "x",
+                "event_type": "issue_opened",
+                "timestamp": old,
+                "llm_proposal": {"proposal_id": "test-uuid-001"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
+
+    proposal = _make_proposal()
+    with pytest.raises(DuplicateProposalError, match="test-uuid-001"):
+        dedupe_signal(proposal)  # 默认 permanent=True
+
+
+def test_dedupe_signal_permanent_blocks_very_old_duplicate(monkeypatch, tmp_path):
+    """T-C14：跨天历史记录同样阻断（永久幂等，非 24h 窗口）。"""
+    ledger_path = tmp_path / "evolution_decisions.jsonl"
+    from datetime import datetime, timedelta, timezone
+
+    very_old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "event_id": "x",
+                "event_type": "issue_opened",
+                "timestamp": very_old,
+                "llm_proposal": {"proposal_id": "test-uuid-001"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
+
+    proposal = _make_proposal()
+    with pytest.raises(DuplicateProposalError):
+        dedupe_signal(proposal)
+
+
+def test_dedupe_signal_different_proposal_id_allowed(monkeypatch, tmp_path):
+    """不同 proposal_id 不受影响（幂等只对同 gap 生效）。"""
+    ledger_path = tmp_path / "evolution_decisions.jsonl"
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "event_id": "x",
+                "event_type": "issue_opened",
+                "timestamp": now,
+                "llm_proposal": {"proposal_id": "completely-different-id"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
+
+    proposal = _make_proposal()  # proposal_id="test-uuid-001"
     dedupe_signal(proposal)  # 不抛异常即通过
+
+
+def test_dedupe_signal_missing_proposal_id_skipped(monkeypatch, tmp_path):
+    """缺失 proposal_id 时跳过校验（与原行为一致，不阻断）。"""
+    ledger_path = tmp_path / "evolution_decisions.jsonl"
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "event_id": "x",
+                "event_type": "issue_opened",
+                "timestamp": now,
+                "llm_proposal": {"proposal_id": None},  # 历史事件也无 proposal_id
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
+
+    proposal = _make_proposal()
+    proposal.pop("proposal_id", None)  # 当前 proposal 也无 proposal_id
+    dedupe_signal(proposal)  # 不抛异常即通过
+
+
+def test_open_issue_for_proposal_idempotent(monkeypatch, tmp_path):
+    """T-C14 端到端幂等：同 proposal_id 第二次调用必抛 + 不调 gh CLI。"""
+    proposal = _make_proposal()
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(tmp_path / "ledger.jsonl"))
+    monkeypatch.setenv("GITHUB_REPO", "owner/repo")
+
+    call_count = {"n": 0}
+
+    def fake_run(*args, **kwargs):
+        call_count["n"] += 1
+        return MagicMock(returncode=0, stdout="https://github.com/x/y/issues/1\n")
+
+    monkeypatch.setattr("modstore_server.gap_to_issue.subprocess.run", fake_run)
+
+    # 第一次：成功开 issue
+    url1 = open_issue_for_proposal(proposal)
+    assert url1 == "https://github.com/x/y/issues/1"
+    assert call_count["n"] == 1
+
+    # 第二次：同 proposal_id 必须抛 DuplicateProposalError，且不再调 gh
+    with pytest.raises(DuplicateProposalError, match="test-uuid-001"):
+        open_issue_for_proposal(proposal)
+    assert call_count["n"] == 1, "gh CLI 不应在幂等阻断时被再次调用"
+
+
+def test_open_issue_for_proposal_idempotent_after_ledger_reload(monkeypatch, tmp_path):
+    """T-C14：ledger 持久化后重新加载，幂等仍生效（模拟调度器重启）。"""
+    ledger_path = tmp_path / "ledger.jsonl"
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
+    monkeypatch.setenv("GITHUB_REPO", "owner/repo")
+
+    proposal = _make_proposal()
+    monkeypatch.setattr(
+        "modstore_server.gap_to_issue.subprocess.run",
+        lambda *a, **k: MagicMock(returncode=0, stdout="https://github.com/x/y/issues/7\n"),
+    )
+
+    # 第一次调用：开 issue + 写 ledger
+    open_issue_for_proposal(proposal)
+    assert ledger_path.is_file(), "ledger 必须已持久化"
+
+    # 重新读 ledger 模拟进程重启（dedupe_signal 走 list_events 重读文件）
+    with pytest.raises(DuplicateProposalError):
+        open_issue_for_proposal(proposal)
 
 
 def test_open_issue_for_proposal_gh_failure_raises(monkeypatch):

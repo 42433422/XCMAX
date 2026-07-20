@@ -112,6 +112,21 @@ DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS = [
     "**/pyproject.toml",
     "**/package-lock.json",
 ]
+# Safe-data-only bypass globs: 纯 KB/测试/文档变更绕过 v2/v3 关键字扣分（P1 task）。
+# 命中以下 glob 且 structured_report_gate 通过时直接 auto_merge。
+DEFAULT_SAFE_DATA_ONLY_GLOBS = [
+    "FHD/XCAGI/kb/fixes/*.json",
+    "FHD/XCAGI/kb/fixes/*.md",
+    "FHD/XCAGI/kb/patterns/*.json",
+    "FHD/XCAGI/kb/patterns/*.md",
+    "FHD/XCAGI/kb/metrics/*.jsonl",
+    "FHD/XCAGI/kb/*.json",
+    "FHD/XCAGI/kb/*.md",
+    "**/*.md",
+    "**/docs/**",
+    "**/tests/**",
+    "成都修茈科技有限公司/MODstore_deploy/tests/**",
+]
 _PARA_GUEST_AUTH_CACHE: Dict[str, tuple] = {}
 _PARA_GUEST_AUTH_TTL_SECONDS = 1800  # 30 分钟
 _PARA_GUEST_AUTH_FILE_SAFETY_SECONDS = 60
@@ -1072,6 +1087,115 @@ def _last_started_at() -> Optional[datetime]:
     return None
 
 
+# ---- rational cooldown helpers (2026-07-20) --------------------------------
+# 旧 cooldown 只看 last_started_at：失败后 6 小时不让再跑，但成功后也 6 小时
+# 不让跑——日跑 loop 永远凑不齐 "scheduler 每天一次终态" 的验收。
+# 新逻辑基于上次终态：成功 30min / waiting_human 60min / 失败指数退避 60→360。
+
+_SUCCESS_STATUSES = {
+    "completed",
+    "completed_merged",
+    "completed_merge_requested",
+    "completed_held_for_remediation",
+}
+_WAITING_HUMAN_STATUS = "completed_waiting_human_strategy"
+_FAILURE_STATUSES = {"failed", "abandoned_stale"}
+
+
+def _last_terminal_record() -> Optional[Dict[str, Any]]:
+    """返回 ledger 中最近一条 phase=complete/skip 终态记录；无则 None。"""
+    for row in reversed(_read_ledger()):
+        phase = str(row.get("phase") or "")
+        if phase in {"complete", "skip"}:
+            return row
+    return None
+
+
+def _last_in_progress_start() -> Optional[Dict[str, Any]]:
+    """如果存在「有 start 无 complete」的 run，返回该 start 记录。
+
+    scheduler 每 5 min 触发，但一个 loop 可能跑 20+ 分钟；没有这层闸的话
+    会产生多个并发 run 互相踩 ledger。``force=True`` 可绕过。
+    """
+    rows = _read_ledger()
+    started: Dict[str, Dict[str, Any]] = {}
+    terminal_run_ids: set = set()
+    for row in rows:
+        run_id = str(row.get("run_id") or "")
+        if not run_id:
+            continue
+        phase = str(row.get("phase") or "")
+        if phase == "start":
+            started[run_id] = row
+        elif phase in {"complete", "skip"}:
+            terminal_run_ids.add(run_id)
+    in_progress = [
+        rec for run_id, rec in started.items() if run_id not in terminal_run_ids
+    ]
+    if not in_progress:
+        return None
+    in_progress.sort(
+        key=lambda r: _parse_iso(r.get("started_at") or r.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return in_progress[0] if in_progress else None
+
+
+def _consecutive_failures() -> int:
+    """从最近一条终态向前数连续的失败计数（遇到成功/waiting 即停）。"""
+    count = 0
+    for row in reversed(_read_ledger()):
+        phase = str(row.get("phase") or "")
+        if phase not in {"complete", "skip"}:
+            continue
+        status = str(row.get("status") or "")
+        if status in _SUCCESS_STATUSES or status == _WAITING_HUMAN_STATUS:
+            break
+        if status in _FAILURE_STATUSES:
+            count += 1
+    return count
+
+
+def _compute_cooldown_minutes(triggered_by: str) -> int:
+    """rational cooldown：基于上次终态而非 last_started。
+
+    - ``incident_event``：固定 60min（失败风暴时也不让 incident 互相踩）
+    - ``scheduler``：成功 30min / waiting_human 60min / 失败指数退避 60→120→240→360(cap) / 无记录 0
+    - ``manual`` / 其他：固定 360min（防手动瞎触发）
+    - ``MODSTORE_SELF_MAINTENANCE_COOLDOWN_MODE=legacy`` 时回退旧逻辑
+    """
+    mode = os.environ.get("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MODE", "rational")
+    if mode == "legacy":
+        if triggered_by == "incident_event":
+            return _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
+        return _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
+
+    if triggered_by == "incident_event":
+        return _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
+
+    if triggered_by == "scheduler":
+        last_terminal = _last_terminal_record()
+        if last_terminal is None:
+            return 0
+        last_status = str(last_terminal.get("status") or "")
+        if last_status in _SUCCESS_STATUSES:
+            return _env_int("MODSTORE_SELF_MAINTENANCE_SUCCESS_COOLDOWN_MINUTES", 30)
+        if last_status == _WAITING_HUMAN_STATUS:
+            return _env_int("MODSTORE_SELF_MAINTENANCE_WAITING_COOLDOWN_MINUTES", 60)
+        if last_status in _FAILURE_STATUSES:
+            consecutive = _consecutive_failures()
+            base = _env_int("MODSTORE_SELF_MAINTENANCE_FAILURE_COOLDOWN_BASE_MINUTES", 60)
+            step = _env_int("MODSTORE_SELF_MAINTENANCE_FAILURE_COOLDOWN_STEP_MINUTES", 60)
+            cap = _env_int("MODSTORE_SELF_MAINTENANCE_FAILURE_COOLDOWN_CAP_MINUTES", 360)
+            if consecutive <= 0:
+                return base
+            return min(cap, base + (consecutive - 1) * step)
+        return 60
+
+    return _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
+
+
 def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
     rows = _read_ledger(limit=300)
     started: Dict[str, Dict[str, Any]] = {}
@@ -1143,6 +1267,25 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
 def should_run_self_maintenance_loop(
     force: bool = False, triggered_by: str = "manual"
 ) -> Dict[str, Any]:
+    """Gate ``run_self_maintenance_loop`` 的入口决策。
+
+    三道闸：
+    1. **in_progress run**：存在「有 start 无 complete」的 run → 阻断（``force`` 可绕过）
+    2. **cooldown**：基于上次终态的 rational cooldown（``_compute_cooldown_minutes``）
+    3. **below_threshold**：信号数 < threshold → 阻断
+
+    Args:
+        force: True 时跳过闸 1 和闸 2（保留闸 3 仍可选放行，见下）。
+            闸 3 的 below_threshold 也允许 force 绕过，因为 force 通常意味着
+            人为决定要跑，gate 不该卡。
+        triggered_by: ``manual`` / ``scheduler`` / ``incident_event``，
+            影响 cooldown 计算。
+
+    Returns:
+        dict，至少含 ``should_run`` / ``reason`` / ``cooldown_minutes`` /
+        ``triggered_by`` / ``threshold``；阻断时附 ``next_allowed_at`` 或
+        ``in_progress_run_id``。
+    """
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_ENABLED", True):
         return {"should_run": False, "reason": "disabled"}
 
@@ -1156,26 +1299,55 @@ def should_run_self_maintenance_loop(
             "should_run": False,
         }
     threshold = _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1)
-    # incident 触发用独立更短冷却，避免 6 小时冷却导致信号被全部跳过
-    if triggered_by == "incident_event":
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
-    else:
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
-    last_started = _last_started_at()
+    cooldown_minutes = _compute_cooldown_minutes(triggered_by)
 
-    if not force and last_started is not None and cooldown_minutes > 0:
-        next_allowed = last_started + timedelta(minutes=cooldown_minutes)
-        if _utc_now() < next_allowed:
+    # 闸 1：in_progress run 阻断新 run（force 可绕过）
+    if not force:
+        in_progress = _last_in_progress_start()
+        if in_progress is not None:
             return {
                 **evaluation,
                 "cooldown_minutes": cooldown_minutes,
-                "next_allowed_at": _iso(next_allowed),
-                "reason": "cooldown",
+                "in_progress_run_id": in_progress.get("run_id"),
+                "reason": "in_progress",
                 "should_run": False,
                 "threshold": threshold,
                 "triggered_by": triggered_by,
             }
 
+    # 闸 2：基于上次终态的 cooldown
+    mode = os.environ.get("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MODE", "rational")
+    if not force and cooldown_minutes > 0:
+        if mode == "legacy":
+            anchor = _last_started_at()
+            last_terminal = None
+        else:
+            last_terminal = _last_terminal_record()
+            anchor = (
+                _parse_iso(
+                    (last_terminal or {}).get("completed_at")
+                    or (last_terminal or {}).get("started_at")
+                )
+                if last_terminal
+                else None
+            )
+        if anchor is not None:
+            next_allowed = anchor + timedelta(minutes=cooldown_minutes)
+            if _utc_now() < next_allowed:
+                return {
+                    **evaluation,
+                    "cooldown_minutes": cooldown_minutes,
+                    "last_terminal_status": (
+                        last_terminal.get("status") if last_terminal else None
+                    ),
+                    "next_allowed_at": _iso(next_allowed),
+                    "reason": "cooldown",
+                    "should_run": False,
+                    "threshold": threshold,
+                    "triggered_by": triggered_by,
+                }
+
+    # 闸 3：信号数低于阈值（force 绕过）
     if not force and int(evaluation["signal_count"]) < threshold:
         return {
             **evaluation,

@@ -3,3 +3,5 @@
 {"deploy_id":"seed-3","deployed_at":"2026-06-02T09:15:00Z","commit_at":"2026-06-02T07:00:00Z","status":"failed","restored_at":"2026-06-02T16:40:00Z","source_workflow":"CI/CD Pipeline","head_branch":"main"}
 {"deploy_id":"seed-4","deployed_at":"2026-06-02T16:40:00Z","commit_at":"2026-06-02T15:10:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
 {"deploy_id":"seed-5","deployed_at":"2026-06-03T11:00:00Z","commit_at":"2026-06-03T09:45:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
+{"deploy_id": "wave-e-20260720", "deployed_at": "2026-07-20T14:04:56Z", "commit_at": "2026-07-20T14:04:56Z", "status": "success", "restored_at": null, "source_workflow": "Wave-E-delivery", "head_branch": "main", "environment": "staging", "git_sha": ""}
+{"deploy_id": "wave-e-20260720-sha", "deployed_at": "2026-07-20T14:05:06Z", "commit_at": "2026-07-20T13:32:12Z", "status": "success", "restored_at": null, "source_workflow": "Wave-E-delivery", "head_branch": "main", "environment": "staging", "git_sha": "1551168c87c0cc4a5e3641eef0f0bdd067f24d38"}

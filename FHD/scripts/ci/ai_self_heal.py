@@ -133,87 +133,147 @@ def fetch_workflow_logs(
                 pass
 
 
-# 错误提取正则（覆盖 ruff / bandit / mypy / pytest 常见模式）
+# 错误提取正则（覆盖 ruff / bandit / mypy / pytest / format 常见模式）
 _RUFF_RE = re.compile(r"^(?P<file>[^\s:]+):(?P<line>\d+):\d+:\s+(?P<code>[A-Z]\d+)\s+(?P<msg>.*)$")
 _BANDIT_RE = re.compile(r"^\s*Issue:\s*\[(?P<code>B\d+)\]\s*(?P<msg>.*)$")
 _MYPY_RE = re.compile(r"^(?P<file>[^\s:]+):(?P<line>\d+):\s*error:\s*(?P<msg>.*)$")
 _MYPY_CODE_RE = re.compile(r"\[(?P<code>[\w-]+)\]")
 _PYTEST_FAIL_RE = re.compile(r"^(?P<file>[^\s:]+):(?P<line>\d+):\s*(?P<msg>FAILED|ERROR.*)$")
 _PYTEST_FAILED_RE = re.compile(r"^FAILED\s+(?P<msg>.*)$")
+# ruff format --check / black --check（生产失败高频，旧提取器完全漏掉）
+_RUFF_FORMAT_RE = re.compile(r"^Would reformat:\s+(?P<file>\S.+)$")
+_BLACK_FORMAT_RE = re.compile(r"^would reformat\s+(?P<file>\S.+)$", re.IGNORECASE)
+_GHA_ERROR_RE = re.compile(r"^##\[error\](?P<msg>.*)$")
+# GHA downloaded logs: optional "job\tstep\t" + ISO timestamp + "Z "
+_GHA_PREFIX_RE = re.compile(
+    r"^(?:[^\t\n]+\t[^\t\n]+\t)?"  # job\tstep\t (gh run view --log style)
+    r"(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s+)?"  # timestamp
+)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _normalize_log_line(raw_line: str) -> str:
+    """去掉 GHA 前缀 / ANSI，得到可匹配的净文本。"""
+    line = raw_line.rstrip("\r")
+    if line.startswith("\ufeff"):
+        line = line.lstrip("\ufeff")
+    line = _ANSI_RE.sub("", line)
+    line = _GHA_PREFIX_RE.sub("", line)
+    return line.strip()
 
 
 def extract_errors(log_text: str) -> list[ErrorEntry]:
     """从 CI 日志文本中提取错误条目。
 
-    顺序扫描每一行，依次尝试 ruff / bandit / mypy / pytest 模式。
-    返回去重后的列表（同 file+line+code+msg 视为重复）。
+    顺序扫描每一行，依次尝试 ruff format / ruff lint / bandit / mypy / pytest /
+    GHA ##[error] 模式。返回去重后的列表（同 file+line+code+msg 视为重复）。
+
+    2026-07-20：生产审计发现大量 failure 仅输出 ``Would reformat:``，旧正则
+    导致 ``[skip] no extractable errors``。此处补齐 format + 前缀剥离。
     """
     if not log_text:
         return []
     seen: set[tuple[str, str, str, str]] = set()
     out: list[ErrorEntry] = []
     for raw_line in log_text.splitlines():
-        line = raw_line.rstrip("\r")
+        line = _normalize_log_line(raw_line)
         if not line:
             continue
-        m = _RUFF_RE.match(line)
+        entry: ErrorEntry | None = None
+        m = _RUFF_FORMAT_RE.match(line)
         if m:
             entry = ErrorEntry(
                 tool="ruff",
-                code=m.group("code"),
-                message=m.group("msg"),
-                file_path=m.group("file"),
-                line=int(m.group("line")),
+                code="FORMAT",
+                message=f"Would reformat: {m.group('file').strip()}",
+                file_path=m.group("file").strip(),
+                line=0,
                 raw=line,
             )
         else:
-            m = _BANDIT_RE.match(line)
+            m = _BLACK_FORMAT_RE.match(line)
             if m:
                 entry = ErrorEntry(
-                    tool="bandit",
-                    code=m.group("code"),
-                    message=m.group("msg").strip(),
-                    file_path="",
+                    tool="black",
+                    code="FORMAT",
+                    message=f"would reformat {m.group('file').strip()}",
+                    file_path=m.group("file").strip(),
                     line=0,
                     raw=line,
                 )
             else:
-                m = _MYPY_RE.match(line)
+                m = _RUFF_RE.match(line)
                 if m:
-                    code_match = _MYPY_CODE_RE.search(m.group("msg"))
-                    code = code_match.group("code") if code_match else ""
                     entry = ErrorEntry(
-                        tool="mypy",
-                        code=code,
-                        message=m.group("msg").strip(),
+                        tool="ruff",
+                        code=m.group("code"),
+                        message=m.group("msg"),
                         file_path=m.group("file"),
                         line=int(m.group("line")),
                         raw=line,
                     )
                 else:
-                    m = _PYTEST_FAILED_RE.match(line)
+                    m = _BANDIT_RE.match(line)
                     if m:
                         entry = ErrorEntry(
-                            tool="pytest",
-                            code="FAILED",
+                            tool="bandit",
+                            code=m.group("code"),
                             message=m.group("msg").strip(),
                             file_path="",
                             line=0,
                             raw=line,
                         )
                     else:
-                        m = _PYTEST_FAIL_RE.match(line)
+                        m = _MYPY_RE.match(line)
                         if m:
+                            code_match = _MYPY_CODE_RE.search(m.group("msg"))
+                            code = code_match.group("code") if code_match else ""
                             entry = ErrorEntry(
-                                tool="pytest",
-                                code=m.group("msg").split(" ")[0],
-                                message=line,
+                                tool="mypy",
+                                code=code,
+                                message=m.group("msg").strip(),
                                 file_path=m.group("file"),
                                 line=int(m.group("line")),
                                 raw=line,
                             )
                         else:
-                            continue
+                            m = _PYTEST_FAILED_RE.match(line)
+                            if m:
+                                entry = ErrorEntry(
+                                    tool="pytest",
+                                    code="FAILED",
+                                    message=m.group("msg").strip(),
+                                    file_path="",
+                                    line=0,
+                                    raw=line,
+                                )
+                            else:
+                                m = _PYTEST_FAIL_RE.match(line)
+                                if m:
+                                    entry = ErrorEntry(
+                                        tool="pytest",
+                                        code=m.group("msg").split(" ")[0],
+                                        message=line,
+                                        file_path=m.group("file"),
+                                        line=int(m.group("line")),
+                                        raw=line,
+                                    )
+                                else:
+                                    m = _GHA_ERROR_RE.match(line)
+                                    if m:
+                                        msg = m.group("msg").strip()
+                                        # 跳过无诊断价值的壳消息；有 format/lint 时不必重复
+                                        if msg and not msg.startswith("Process completed with exit code"):
+                                            entry = ErrorEntry(
+                                                tool="gha",
+                                                code="ERROR",
+                                                message=msg,
+                                                file_path="",
+                                                line=0,
+                                                raw=line,
+                                            )
+        if entry is None:
+            continue
         key = (entry.tool, entry.code, entry.file_path, entry.message)
         if key in seen:
             continue
@@ -326,13 +386,25 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
     """规则匹配：覆盖 80% 常见失败，返回每个错误对应的修复方案。
 
     风险分级（risk_level）：
-    - r0 极低：机械删除/截断，可 24h 自动合并
+    - r0 极低：机械删除/截断/format，可 24h 自动合并
     - r1 低：可能影响语义但校验可兜底，72h 无 review 自动合并
     - r2 中：需人工 review，7d stale / 14d close
     - r3 高：安全/业务/LLM，永不自动合并，7d stale / 30d close
     """
     fixes: list[Fix] = []
     for err in errors:
+        if err.tool in {"ruff", "black"} and err.code == "FORMAT" and err.file_path:
+            # patch 字段约定：FORMAT:<tool>:<path> —— materialize 时跑 format 命令
+            fixes.append(
+                Fix(
+                    error=err,
+                    patch=f"FORMAT:{err.tool}:{err.file_path}",
+                    needs_human=False,
+                    description=f"自动 format: {err.file_path}",
+                    risk_level="r0",
+                )
+            )
+            continue
         if err.tool == "ruff":
             if err.code in {"F401", "F811"}:  # 未使用 import / 重复定义
                 patch = _make_remove_import_patch(err.file_path, err.line, err.raw)
@@ -510,6 +582,116 @@ def apply_fixes(fixes: list[Fix]) -> str:
     return "\n".join(parts)
 
 
+def _repo_root() -> Path:
+    """优先 GITHUB_WORKSPACE，否则从本文件向上找含 .git 的根。"""
+    env = os.environ.get("GITHUB_WORKSPACE", "").strip()
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return Path.cwd()
+
+
+def _run_git(args: list[str], *, cwd: Path) -> tuple[int, str]:
+    import subprocess
+
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    out = (proc.stdout or "") + (proc.stderr or "")
+    return proc.returncode, out
+
+
+def materialize_branch_with_fixes(
+    branch: str,
+    fixes: list[Fix],
+    *,
+    base: str = "main",
+    repo_root: Path | None = None,
+) -> bool:
+    """在本地 checkout 上应用 r0 机械修复并推送到 ``origin/<branch>``。
+
+    - ``FORMAT:ruff:<path>`` / ``FORMAT:black:<path>`` → 跑对应 format 命令
+    - 其它 unified diff patch → 暂存为说明文件（避免残缺 patch 破坏工作树）；
+      format 是当前生产空跑的主因，优先保证 format 通路可落地。
+
+    成功推送返回 True；无可应用修复 / git 失败返回 False。
+    """
+    import subprocess
+
+    root = repo_root or _repo_root()
+    format_files: list[tuple[str, str]] = []  # (tool, path)
+    for fix in fixes:
+        if fix.needs_human or not fix.patch:
+            continue
+        if fix.patch.startswith("FORMAT:"):
+            parts = fix.patch.split(":", 2)
+            if len(parts) == 3 and parts[2].strip():
+                format_files.append((parts[1], parts[2].strip()))
+
+    if not format_files:
+        print("[heal] no materializable FORMAT fixes; skip branch push")
+        return False
+
+    # 基于当前 HEAD 建分支（workflow 已 checkout 失败源或默认分支）
+    code, out = _run_git(["checkout", "-B", branch], cwd=root)
+    if code != 0:
+        print(f"[heal] git checkout -B failed: {out.strip()}")
+        return False
+
+    changed: list[str] = []
+    for tool, rel in format_files:
+        path = root / rel
+        # CI 常在 FHD/ 工作目录跑；日志路径可能相对 FHD
+        if not path.is_file():
+            alt = root / "FHD" / rel
+            if alt.is_file():
+                path = alt
+                rel = str(Path("FHD") / rel)
+        if not path.is_file():
+            print(f"[heal] format target missing: {rel}")
+            continue
+        cmd = ["ruff", "format", str(path)] if tool == "ruff" else ["black", str(path)]
+        proc = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, check=False)
+        if proc.returncode != 0:
+            print(f"[heal] {tool} format failed for {rel}: {(proc.stderr or proc.stdout or '').strip()}")
+            continue
+        changed.append(rel)
+
+    if not changed:
+        print("[heal] format produced no file changes")
+        return False
+
+    _run_git(["add", "--", *changed], cwd=root)
+    code, out = _run_git(
+        [
+            "commit",
+            "-m",
+            f"ai-self-heal: auto-format {len(changed)} file(s)",
+        ],
+        cwd=root,
+    )
+    if code != 0:
+        print(f"[heal] git commit failed: {out.strip()}")
+        return False
+
+    code, out = _run_git(["push", "-u", "origin", branch, "--force-with-lease"], cwd=root)
+    if code != 0:
+        # 首次推送无 lease 也可
+        code, out = _run_git(["push", "-u", "origin", branch, "--force"], cwd=root)
+    if code != 0:
+        print(f"[heal] git push failed: {out.strip()}")
+        return False
+    print(f"[heal] pushed branch {branch} with {len(changed)} formatted file(s)")
+    return True
+
+
 def create_pr(
     branch: str,
     patch: str,
@@ -522,12 +704,15 @@ def create_pr(
     repo: str | None = None,
     client: Any = None,
 ) -> str:
-    """创建修复 PR，返回 PR URL（失败返回空字符串）。"""
+    """创建修复 PR，返回 PR URL（失败返回空字符串）。
+
+    调用方须先 :func:`materialize_branch_with_fixes` 把 ``branch`` 推到 origin。
+    """
     repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
     token = token or os.environ.get("GITHUB_TOKEN", "")
     if not repo or not token:
         return ""
-    labels = labels or ["needs-human", "ai-self-heal"]
+    labels = labels or ["ai-self-heal"]
     if client is None:
         if httpx is None:
             return ""
@@ -541,11 +726,9 @@ def create_pr(
         "Content-Type": "application/json",
     }
     try:
-        # 1. 创建分支
-        # 简化：直接 POST createRef（实际需要先 GET 默认分支 sha）
         body_payload = {
             "title": title,
-            "body": body or f"ai-self-heal 自动修复 PR\n\n分支: {branch}\n\n需人工审查后合并。",
+            "body": body or f"ai-self-heal 自动修复 PR\n\n分支: {branch}\n",
             "head": branch,
             "base": base,
         }
@@ -555,11 +738,11 @@ def create_pr(
             json=body_payload,
         )
         if resp.status_code not in (200, 201):
+            print(f"[heal] create PR HTTP {resp.status_code}: {resp.text[:300]}")
             return ""
         data = resp.json()
         pr_url = data.get("html_url", "")
         pr_number = data.get("number")
-        # 2. 添加标签
         if pr_number and labels:
             try:
                 client.post(
@@ -570,7 +753,8 @@ def create_pr(
             except Exception:
                 pass
         return pr_url
-    except Exception:
+    except Exception as exc:
+        print(f"[heal] create PR exception: {exc}")
         return ""
     finally:
         if close_after:
@@ -675,6 +859,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         print(f"[dry-run] would create PR with {len(fixes)} fix(es), fingerprint={fingerprint[:8]}")
+        for fx in fixes:
+            print(f"  - [{fx.risk_level}] {fx.description}")
         return 0
 
     patch = apply_fixes(fixes)
@@ -689,6 +875,23 @@ def main(argv: list[str] | None = None) -> int:
     labels = ["ai-self-heal", f"risk:{max_risk}"]
     if max_risk in {"r2", "r3"}:
         labels.append("needs-human")
+
+    # 先落到失败源分支内容，再切 heal 分支并 push（否则 create_pr 无 head）
+    root = _repo_root()
+    source_branch = (args.branch or "").strip()
+    if source_branch and source_branch != branch_name:
+        _run_git(["fetch", "origin", source_branch, "--depth=1"], cwd=root)
+        code, out = _run_git(["checkout", "-B", f"heal-base/{source_branch}", f"origin/{source_branch}"], cwd=root)
+        if code != 0:
+            # 浅克隆可能没有 origin/<branch>；尝试直接 checkout
+            code, out = _run_git(["checkout", source_branch], cwd=root)
+            if code != 0:
+                print(f"[heal] checkout source branch failed ({source_branch}): {out.strip()}")
+
+    pushed = materialize_branch_with_fixes(branch_name, fixes, base=source_branch or "main", repo_root=root)
+    if not pushed:
+        print("[error] materialize/push failed (fail-open, not blocking)")
+        return 0
 
     pr_url = create_pr(
         branch=branch_name,
