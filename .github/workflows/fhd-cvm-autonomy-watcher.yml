@@ -28,11 +28,6 @@ permissions:
   contents: read
   issues: write
 
-
-defaults:
-  run:
-    working-directory: FHD
-
 jobs:
   watcher-tick:
     name: CVM autonomy watcher tick

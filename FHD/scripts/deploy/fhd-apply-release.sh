@@ -25,6 +25,13 @@ else
   echo "[deploy] ERROR: autonomy gate bridge is missing" >&2
   exit 78
 fi
+if [[ -f "$SCRIPT_DIR/lib/verify_release_identity.sh" ]]; then
+  # shellcheck source=lib/verify_release_identity.sh
+  . "$SCRIPT_DIR/lib/verify_release_identity.sh"
+else
+  echo "[deploy] ERROR: release identity verifier is missing" >&2
+  exit 78
+fi
 export DEPLOY_SCRIPT_ID="fhd_apply_release"
 
 DEPLOY_ROOT="${FHD_DEPLOY_ROOT:-/opt/fhd-full}"
@@ -32,10 +39,16 @@ SERVICE="${FHD_SERVICE_NAME:-fhd-full.service}"
 HEALTH_PORT="${FHD_HEALTH_PORT:-5100}"
 VENV="${FHD_VENV:-$DEPLOY_ROOT/.venv}"
 LOG="${FHD_DEPLOY_LOG:-/var/log/fhd-auto-update.log}"
+EXPECTED_GIT_SHA="${FHD_GIT_SHA:-}"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"
 }
+
+if [[ "${FHD_REQUIRE_EXACT_IDENTITY:-1}" == "1" && -z "$EXPECTED_GIT_SHA" ]]; then
+  log "ERROR: FHD_GIT_SHA is required for exact-SHA deployment"
+  exit 78
+fi
 
 TARBALL="${FHD_RELEASE_TARBALL:-}"
 if [[ -z "$TARBALL" || ! -f "$TARBALL" ]]; then
@@ -70,22 +83,29 @@ mkdir -p "$BACKUP_ROOT"
 BACKUP="$BACKUP_ROOT/pre-$TS"
 mkdir -p "$BACKUP"
 
-for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$DEPLOY_ROOT/$item" ]]; then
     rsync -a "$DEPLOY_ROOT/$item" "$BACKUP/"
   fi
 done
-if [[ -f "$DEPLOY_ROOT/.deploy-last.tar.gz" ]]; then
-  cp "$DEPLOY_ROOT/.deploy-last.tar.gz" "$BACKUP/.deploy-last.tar.gz"
-fi
+for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256; do
+  [[ -f "$DEPLOY_ROOT/$stamp" ]] && cp "$DEPLOY_ROOT/$stamp" "$BACKUP/$stamp"
+done
 log "已备份至 $BACKUP"
 
 rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
   log "执行回滚: $BACKUP"
-  for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+  for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
       rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/"
+    fi
+  done
+  for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256; do
+    if [[ -f "$BACKUP/$stamp" ]]; then
+      cp "$BACKUP/$stamp" "$DEPLOY_ROOT/$stamp"
+    else
+      rm -f "$DEPLOY_ROOT/$stamp"
     fi
   done
   autonomy_evaluate_action "restart_service" "restart:rollback:${TARBALL_SHA256:0:16}"
@@ -96,7 +116,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/fhd-apply.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 tar -xzf "$TARBALL" -C "$TMP"
 
-for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
@@ -138,6 +158,8 @@ fi
 
 deploy_emit restart started "service=$SERVICE"
 autonomy_evaluate_action "restart_service" "restart:release:${TARBALL_SHA256:0:16}"
+echo "$TARBALL_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
+echo "$EXPECTED_GIT_SHA" > "$DEPLOY_ROOT/.deploy-git-sha"
 systemctl restart "$SERVICE"
 sleep "${FHD_HEALTH_INITIAL_SLEEP:-15}"
 
@@ -146,9 +168,11 @@ HEALTH_PATH="${FHD_HEALTH_PATH:-/api/health}"
 HEALTH_RETRIES="${FHD_HEALTH_RETRIES:-90}"
 HEALTH_INTERVAL="${FHD_HEALTH_INTERVAL:-3}"
 for _ in $(seq 1 "$HEALTH_RETRIES"); do
-  c="$(curl -sS -o /dev/null -m 5 -w '%{http_code}' "http://127.0.0.1:${HEALTH_PORT}${HEALTH_PATH}" 2>/dev/null || true)"
-  c="${c:-000}"
-  if [[ "$c" == "200" ]]; then
+  if verify_release_health_identity \
+      "http://127.0.0.1:${HEALTH_PORT}${HEALTH_PATH}?lite=true" \
+      "$EXPECTED_GIT_SHA" \
+      "" \
+      "$TARBALL_SHA256"; then
     API_CODE=200
     break
   fi
@@ -162,7 +186,6 @@ if [[ "$API_CODE" != "200" ]]; then
   exit 1
 fi
 
-echo "$TARBALL_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
 cp "$TARBALL" "${DEPLOY_ROOT}/.deploy-last.tar.gz" 2>/dev/null || true
 
 log "发布成功 health=200 sha256=${TARBALL_SHA256:0:16}..."

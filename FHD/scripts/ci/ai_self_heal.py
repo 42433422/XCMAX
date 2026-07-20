@@ -8,9 +8,9 @@ RuntimeTruthSnapshot(logs) → AuditEntry(self-heal-fingerprints.jsonl)。
 - 触发：GitHub Actions workflow_run.completed + conclusion=failure
 - 同指纹 24h 去重：SHA256(repo + workflow + job + error_line_hash)
 - 规则匹配优先：覆盖 ruff/bandit/mypy/pytest 常见错误模式
-- LLM 兜底：fail-open，超时/key 缺失不阻断
+- 无法自动提取或实现时创建预授权 incident，交给 AI Issue Implement
 - autonomy/ 分支不递归：避免自愈自身故障
-- 修复 PR 标 needs-human，不自动合并
+- 原失败在真实修复 PR 合入前保持失败状态，禁止“跳过即成功”
 """
 
 from __future__ import annotations
@@ -580,6 +580,78 @@ def create_pr(
                 pass
 
 
+def create_remediation_issue(
+    *,
+    run_id: int,
+    workflow: str,
+    branch: str,
+    fingerprint: str,
+    log_excerpt: str,
+    errors: list[ErrorEntry],
+    token: str | None = None,
+    repo: str | None = None,
+    client: Any = None,
+) -> str:
+    """Create a deduplicated, pre-authorized incident for the implementation loop."""
+
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    token = token or os.environ.get("GITHUB_TOKEN", "")
+    if not repo or not token:
+        return ""
+    if client is None:
+        if httpx is None:
+            return ""
+        client = httpx.Client(timeout=30.0)
+        close_after = True
+    else:
+        close_after = False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
+    error_lines = "\n".join(f"- `{entry.raw[:500]}`" for entry in errors[:30])
+    if not error_lines:
+        error_lines = "- 日志存在失败结论，但当前解析器未提取到结构化错误。"
+    body = (
+        "## CI 自愈事件\n\n"
+        f"- Workflow: `{workflow or 'unknown'}`\n"
+        f"- Run ID: `{run_id}`\n"
+        f"- Branch: `{branch or 'unknown'}`\n"
+        f"- Correlation/Fingerprint: `{fingerprint}`\n\n"
+        "### 提取结果\n\n"
+        f"{error_lines}\n\n"
+        "### 运行日志摘录\n\n"
+        f"```text\n{log_excerpt[-12000:]}\n```\n\n"
+        "请定位根因、实现最小安全修复、执行相关测试并创建 PR。"
+    )
+    payload = {
+        "title": f"[auto-incident] Repair {workflow or 'failed workflow'} run {run_id}",
+        "body": body,
+        # Keep this list aligned with labels provisioned in the repository;
+        # GitHub rejects issue creation when a requested label is unavailable.
+        "labels": ["ai-implement", "incident", "auto-incident"],
+    }
+    try:
+        response = client.post(
+            f"{GITHUB_API}/repos/{repo}/issues",
+            headers=headers,
+            json=payload,
+        )
+        if response.status_code not in (200, 201):
+            return ""
+        data = response.json()
+        return str(data.get("html_url") or "")
+    except Exception:
+        return ""
+    finally:
+        if close_after:
+            try:
+                client.close()
+            except Exception:  # pragma: no cover
+                pass
+
+
 # =====================================================================
 # 分支递归检查
 # =====================================================================
@@ -620,19 +692,17 @@ def main(argv: list[str] | None = None) -> int:
 
     run_id = args.run_id or _run_id_from_env()
     if not run_id:
-        print("[skip] no run_id provided (env GITHUB_RUN_ID or --run-id)")
-        return 0
+        print("::error::[heal] no failed run_id provided")
+        return 2
 
     print(f"[heal] fetch logs for run_id={run_id} repo={repo}")
     log_text = fetch_workflow_logs(run_id, token=token, repo=repo)
     if not log_text:
-        print("[skip] empty logs (fail-open)")
-        return 0
+        log_text = "workflow log download returned no content"
 
     errors = extract_errors(log_text)
     if not errors:
-        print("[skip] no extractable errors in logs")
-        return 0
+        print("::warning::[heal] no extractable errors; routing raw evidence to incident")
 
     print(f"[heal] extracted {len(errors)} error(s)")
     fixes = match_rules(errors)
@@ -674,60 +744,36 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.dry_run:
-        print(f"[dry-run] would create PR with {len(fixes)} fix(es), fingerprint={fingerprint[:8]}")
+        print(
+            f"[dry-run] would create remediation incident with {len(fixes)} candidate fix(es), "
+            f"fingerprint={fingerprint[:8]}"
+        )
         return 0
 
-    patch = apply_fixes(fixes)
-    branch_name = f"autonomy/self-heal-{fingerprint[:8]}"
-
-    # 计算最高风险等级（r0 < r1 < r2 < r3），决定 PR 标签与 SLA 路径
-    risk_rank = {"r0": 0, "r1": 1, "r2": 2, "r3": 3}
-    max_risk = "r0"
-    for f in fixes:
-        if risk_rank.get(f.risk_level, 3) > risk_rank[max_risk]:
-            max_risk = f.risk_level
-    labels = ["ai-self-heal", f"risk:{max_risk}"]
-    if max_risk in {"r2", "r3"}:
-        labels.append("needs-human")
-
-    pr_url = create_pr(
-        branch=branch_name,
-        patch=patch,
-        title=f"ai-self-heal: auto fix for {args.workflow or 'workflow'}",
-        body=(
-            f"## ai-self-heal 自动修复 PR\n\n"
-            f"- 触发 workflow: `{args.workflow or 'unknown'}`\n"
-            f"- 失败分支: `{args.branch or 'unknown'}`\n"
-            f"- 错误条数: {len(errors)}\n"
-            f"- 自动修复: {len(fixes) - needs_human_count}\n"
-            f"- 需人工: {needs_human_count}\n"
-            f"- 最高风险: **{max_risk}**\n"
-            f"- 指纹: `{fingerprint[:8]}`\n\n"
-            f"### 分级合并 SLA\n"
-            f"| 等级 | 含义 | 处理 |\n"
-            f"|------|------|------|\n"
-            f"| r0 | 机械修复（lint/format） | 24h 二次守卫通过 → auto-merge |\n"
-            f"| r1 | 低风险（未用变量等） | 72h 无 review → auto-merge |\n"
-            f"| r2 | 中风险（其他 lint/mypy） | 7d stale / 14d auto-close |\n"
-            f"| r3 | 高风险（bandit/pytest/LLM） | 永不自动合并，7d stale / 30d close |\n\n"
-            f"**当前 PR 风险等级 = `{max_risk}`，按上表对应路径处理。**\n"
-        ),
-        labels=labels,
+    issue_url = create_remediation_issue(
+        run_id=run_id,
+        workflow=args.workflow,
+        branch=args.branch,
+        fingerprint=fingerprint,
+        log_excerpt=log_text,
+        errors=errors,
+        token=token,
+        repo=repo,
     )
-    if not pr_url:
-        print("[error] PR creation failed (fail-open, not blocking)")
-        return 0
+    if not issue_url:
+        print("::error::[heal] remediation incident creation failed")
+        return 2
 
     record_fingerprint(
         fingerprint=fingerprint,
-        pr_url=pr_url,
+        pr_url=issue_url,
         repo=repo,
         workflow=args.workflow,
         store_path=args.store,
     )
-    print(f"[heal] PR created: {pr_url}")
+    print(f"::error::[heal] original failure is not healed; remediation incident created: {issue_url}")
     print(f"[heal] fingerprint recorded: {fingerprint[:8]}")
-    return 0
+    return 2
 
 
 def _run_id_from_env() -> int | None:

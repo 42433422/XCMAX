@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+# Build and atomically promote one exact XCMAX commit on the production host.
+# The source checkout is only an object mirror; running services use /opt/xcmax/current.
+set -euo pipefail
+
+SOURCE_ROOT="${XCMAX_SOURCE_ROOT:-/root/XCMAX}"
+RELEASE_BASE="${XCMAX_RELEASE_BASE:-/opt/xcmax}"
+CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
+SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
+ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
+ENV_FILE="${MODSTORE_ENV_FILE:-${ENV_DIR}/modstore.env}"
+SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler.env}"
+TARGET_SHA="${XCMAX_TARGET_SHA:-${1:-}}"
+SITE_SUBDIR="成都修茈科技有限公司"
+MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
+LOCK_FILE="${XCMAX_RELEASE_LOCK:-/run/lock/xcmax-immutable-release.lock}"
+HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:9999/api/health}"
+SCHEDULER_HEALTH_URL="${MODSTORE_SCHEDULER_HEALTH_URL:-http://127.0.0.1:9990/api/health}"
+PUBLIC_HEALTH_URL="${MODSTORE_PUBLIC_HEALTH_URL:-https://xiu-ci.com/api/health}"
+
+log() { printf '[xcmax-release] %s\n' "$*"; }
+fail() { log "ERROR: $*" >&2; exit 1; }
+
+[[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
+[[ -d "$SOURCE_ROOT/.git" ]] || fail "source Git mirror not found: $SOURCE_ROOT"
+[[ "$RELEASE_BASE" == /opt/xcmax || "${XCMAX_ALLOW_CUSTOM_RELEASE_BASE:-0}" == 1 ]] \
+  || fail "custom release base requires XCMAX_ALLOW_CUSTOM_RELEASE_BASE=1"
+
+install -d -m 755 "$RELEASE_BASE/releases"
+install -d -m 700 "$ENV_DIR"
+exec 9>"$LOCK_FILE"
+flock -n 9 || fail "another immutable release is active"
+
+git -C "$SOURCE_ROOT" fetch --quiet origin main
+git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}" \
+  || fail "target commit is unavailable after fetch: $TARGET_SHA"
+REMOTE_MAIN_SHA="$(git -C "$SOURCE_ROOT" rev-parse origin/main)"
+if [[ "$TARGET_SHA" != "$REMOTE_MAIN_SHA" && "${XCMAX_ALLOW_NON_HEAD_SHA:-0}" != 1 ]]; then
+  fail "target SHA is not current origin/main (target=$TARGET_SHA origin_main=$REMOTE_MAIN_SHA)"
+fi
+
+FINAL_ROOT="${RELEASE_BASE}/releases/${TARGET_SHA}"
+if [[ -f "$FINAL_ROOT/.xcmax-release.json" ]]; then
+  EXISTING_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$FINAL_ROOT/.xcmax-release.json")"
+  [[ "$EXISTING_SHA" == "$TARGET_SHA" ]] || fail "existing release identity mismatch"
+  log "reusing prepared release $TARGET_SHA"
+else
+  BUILD_ROOT="$(mktemp -d "${RELEASE_BASE}/releases/.${TARGET_SHA}.build.XXXXXX")"
+  SOURCE_ARCHIVE="$(mktemp "${RELEASE_BASE}/releases/.${TARGET_SHA}.source.XXXXXX.tar")"
+  cleanup_build() { rm -rf -- "$BUILD_ROOT"; rm -f -- "$SOURCE_ARCHIVE"; }
+  trap cleanup_build EXIT
+  log "extracting exact Git archive $TARGET_SHA"
+  git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA" > "$SOURCE_ARCHIVE"
+  ARTIFACT_SHA="$(sha256sum "$SOURCE_ARCHIVE" | awk '{print $1}')"
+  tar -xf "$SOURCE_ARCHIVE" -C "$BUILD_ROOT"
+  rm -f -- "$SOURCE_ARCHIVE"
+  DEPLOY_DIR="$BUILD_ROOT/$MODSTORE_SUBDIR"
+  [[ -f "$DEPLOY_DIR/pyproject.toml" ]] || fail "MODstore pyproject missing from release"
+
+  log "creating release-specific Python environment"
+  python3 -m venv "$DEPLOY_DIR/.venv"
+  "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
+  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge]')
+  "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, uvicorn, modstore_server.app'
+
+  if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
+    command -v npm >/dev/null 2>&1 || fail "npm is required to build the market"
+    log "building market assets inside the release"
+    (cd "$DEPLOY_DIR/market" && npm ci --no-audit --legacy-peer-deps && VITE_PUBLIC_BASE=/market/ npm run build)
+    [[ -f "$DEPLOY_DIR/market/dist/index.html" ]] || fail "market build produced no index.html"
+  fi
+
+  if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+    command -v mvn >/dev/null 2>&1 || fail "mvn is required by the active payment service"
+    log "building and testing the Java payment service"
+    (cd "$DEPLOY_DIR/java_payment_service" && mvn -B -q test package)
+    [[ -f "$DEPLOY_DIR/java_payment_service/target/payment-service-1.0.0.jar" ]] \
+      || fail "payment service jar missing after build"
+  fi
+
+  TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
+  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" <<'PY'
+import datetime
+import json
+import sys
+
+path, git_sha, tree_sha, artifact_sha = sys.argv[1:]
+payload = {
+    "artifact_sha256": artifact_sha,
+    "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "git_sha": git_sha,
+    "git_tree": tree_sha,
+    "release_id": git_sha,
+}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+  chmod -R a-w "$BUILD_ROOT"
+  mv "$BUILD_ROOT" "$FINAL_ROOT"
+  trap - EXIT
+fi
+
+DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
+EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
+[[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
+
+migrate_env_file() {
+  local destination="$1"
+  shift
+  [[ -f "$destination" ]] && return 0
+  local candidate
+  for candidate in "$@"; do
+    if [[ -f "$candidate" ]]; then
+      install -m 600 "$candidate" "$destination"
+      log "migrated protected runtime environment to $destination"
+      return 0
+    fi
+  done
+  return 1
+}
+
+migrate_env_file "$ENV_FILE" \
+  "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env" \
+  "$SITE_LINK/MODstore_deploy/.env" \
+  || fail "no production environment file was found"
+migrate_env_file "$SCHEDULER_ENV_FILE" \
+  "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env.scheduler" \
+  "$SITE_LINK/MODstore_deploy/.env.scheduler" \
+  || install -m 600 /dev/null "$SCHEDULER_ENV_FILE"
+
+# Move the legacy inline SECRET_KEY into the protected environment without logging it.
+LEGACY_SECRET_DROPIN="/etc/systemd/system/modstore.service.d/zz-secret-key.conf"
+if [[ -f "$LEGACY_SECRET_DROPIN" ]]; then
+  python3 - "$LEGACY_SECRET_DROPIN" "$ENV_FILE" <<'PY'
+import os
+import shlex
+import sys
+
+source, destination = sys.argv[1:]
+values = {}
+for raw in open(source, encoding="utf-8"):
+    raw = raw.strip()
+    if not raw.startswith("Environment="):
+        continue
+    for token in shlex.split(raw.removeprefix("Environment=")):
+        if "=" in token:
+            key, value = token.split("=", 1)
+            if key == "SECRET_KEY":
+                values[key] = value
+if values:
+    lines = open(destination, encoding="utf-8").read().splitlines()
+    lines = [line for line in lines if not line.startswith("SECRET_KEY=")]
+    lines.append("SECRET_KEY=" + values["SECRET_KEY"])
+    temporary = destination + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, destination)
+PY
+  install -m 600 "$LEGACY_SECRET_DROPIN" "${ENV_DIR}/legacy-zz-secret-key.conf.backup"
+  rm -f -- "$LEGACY_SECRET_DROPIN"
+  log "migrated legacy inline service secret into protected env"
+fi
+
+if [[ ! -L "$CURRENT_LINK" ]]; then
+  [[ ! -e "$CURRENT_LINK" ]] || fail "$CURRENT_LINK exists and is not a symlink"
+  ln -s "$SOURCE_ROOT" "$CURRENT_LINK"
+fi
+PREVIOUS_ROOT="$(readlink -f "$CURRENT_LINK")"
+[[ -d "$PREVIOUS_ROOT" ]] || fail "current release target is invalid: $PREVIOUS_ROOT"
+
+if [[ -e "$SITE_LINK" && ! -L "$SITE_LINK" ]]; then
+  fail "$SITE_LINK must be a symlink for atomic public-site promotion"
+fi
+
+write_service_units() {
+  local release_env="${ENV_DIR}/modstore-release.env"
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\n' \
+    "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" > "${release_env}.tmp"
+  chmod 644 "${release_env}.tmp"
+  mv -f "${release_env}.tmp" "$release_env"
+
+  install -d -m 755 /etc/systemd/system/modstore.service.d /etc/systemd/system/modstore-scheduler.service.d
+  cat > /etc/systemd/system/modstore.service <<EOF
+[Unit]
+Description=MODstore FastAPI immutable release
+After=network.target
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${CURRENT_LINK}/${MODSTORE_SUBDIR}
+EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${release_env}
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=MODSTORE_RUN_BACKGROUND_JOBS=0
+Environment=MODSTORE_BUS=rabbitmq
+ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9999 --workers 4
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+EOF
+  cat > /etc/systemd/system/modstore.service.d/99-modstore-deploy-dir.conf <<EOF
+[Service]
+WorkingDirectory=${CURRENT_LINK}/${MODSTORE_SUBDIR}
+EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${release_env}
+ExecStart=
+ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9999 --workers 4
+EOF
+  cat > /etc/systemd/system/modstore-scheduler.service <<EOF
+[Unit]
+Description=MODstore background jobs immutable release
+After=network.target modstore.service
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${CURRENT_LINK}/${MODSTORE_SUBDIR}
+EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${SCHEDULER_ENV_FILE}
+EnvironmentFile=-${release_env}
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=MODSTORE_RUN_BACKGROUND_JOBS=1
+Environment=MODSTORE_BUS=rabbitmq
+ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990 --workers 1
+Restart=on-failure
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+EOF
+  cat > /etc/systemd/system/modstore-scheduler.service.d/99-modstore-deploy-dir.conf <<EOF
+[Service]
+WorkingDirectory=${CURRENT_LINK}/${MODSTORE_SUBDIR}
+EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${SCHEDULER_ENV_FILE}
+EnvironmentFile=-${release_env}
+ExecStart=
+ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990 --workers 1
+EOF
+
+  if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+    cat > /etc/systemd/system/modstore-payment.service <<EOF
+[Unit]
+Description=MODstore Java Payment immutable release
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+[Service]
+Type=simple
+WorkingDirectory=${CURRENT_LINK}/${MODSTORE_SUBDIR}/java_payment_service
+EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${release_env}
+ExecStart=/usr/bin/java -jar ${CURRENT_LINK}/${MODSTORE_SUBDIR}/java_payment_service/target/payment-service-1.0.0.jar
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+EOF
+    install -d -m 755 /etc/systemd/system/modstore-payment.service.d
+    cat > /etc/systemd/system/modstore-payment.service.d/10-envfile.conf <<EOF
+[Service]
+EnvironmentFile=
+EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${release_env}
+EOF
+  fi
+}
+
+verify_health_identity() {
+  local url="$1"
+  local expected_sha="$2"
+  local expected_artifact="$3"
+  local payload
+  payload="$(curl --noproxy '*' -fsS --max-time 10 "$url")" || return 1
+  HEALTH_PAYLOAD="$payload" EXPECTED_SHA="$expected_sha" EXPECTED_ARTIFACT="$expected_artifact" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["HEALTH_PAYLOAD"])
+expected = os.environ["EXPECTED_SHA"]
+expected_artifact = os.environ["EXPECTED_ARTIFACT"]
+assert payload.get("ok") is True
+assert payload.get("deploy_tier") == "production"
+assert payload.get("git_sha") == expected
+assert payload.get("release_id") == expected
+assert payload.get("artifact_sha256") == expected_artifact
+PY
+}
+
+PREVIOUS_SHA=""
+PREVIOUS_ARTIFACT_SHA=""
+if [[ -f "$PREVIOUS_ROOT/.xcmax-release.json" ]]; then
+  PREVIOUS_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("git_sha", ""))' "$PREVIOUS_ROOT/.xcmax-release.json")"
+  PREVIOUS_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$PREVIOUS_ROOT/.xcmax-release.json")"
+elif [[ -d "$PREVIOUS_ROOT/.git" ]]; then
+  PREVIOUS_SHA="$(git -C "$PREVIOUS_ROOT" rev-parse HEAD 2>/dev/null || true)"
+fi
+[[ -z "$PREVIOUS_SHA" || "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "previous runtime Git SHA is invalid"
+
+rollback() {
+  log "promotion failed; rolling current back to $PREVIOUS_ROOT"
+  ln -s "$PREVIOUS_ROOT" "${CURRENT_LINK}.rollback"
+  mv -Tf "${CURRENT_LINK}.rollback" "$CURRENT_LINK"
+  if [[ -L "$SITE_LINK" ]]; then
+    ln -s "${CURRENT_LINK}/${SITE_SUBDIR}" "${SITE_LINK}.rollback"
+    mv -Tf "${SITE_LINK}.rollback" "$SITE_LINK"
+  fi
+  if [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    TARGET_SHA="$PREVIOUS_SHA" write_service_units
+  fi
+  systemctl daemon-reload
+  systemctl restart modstore.service modstore-scheduler.service || true
+  systemctl restart modstore-payment.service 2>/dev/null || true
+  if [[ "$PREVIOUS_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+    for _ in $(seq 1 30); do
+      verify_health_identity "$HEALTH_URL" "$PREVIOUS_SHA" "$PREVIOUS_ARTIFACT_SHA" && return 0
+      sleep 2
+    done
+    log "ERROR: rollback exact identity verification failed" >&2
+    return 1
+  fi
+  systemctl is-active --quiet modstore.service modstore-scheduler.service
+}
+
+ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
+mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
+ln -s "${CURRENT_LINK}/${SITE_SUBDIR}" "${SITE_LINK}.next"
+mv -Tf "${SITE_LINK}.next" "$SITE_LINK"
+write_service_units
+systemctl daemon-reload
+systemctl enable modstore.service modstore-scheduler.service >/dev/null
+
+if ! systemctl restart modstore.service modstore-scheduler.service; then
+  rollback
+  fail "MODstore services failed to restart"
+fi
+if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+  if ! systemctl restart modstore-payment.service; then
+    rollback
+    fail "payment service failed to restart"
+  fi
+fi
+
+READY=0
+for _ in $(seq 1 60); do
+  if systemctl is-active --quiet modstore.service modstore-scheduler.service \
+      && verify_health_identity "$HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
+      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
+    READY=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$READY" != 1 ]]; then
+  rollback
+  fail "exact-SHA local health verification failed"
+fi
+
+if [[ -n "$PUBLIC_HEALTH_URL" ]] \
+    && ! verify_health_identity "$PUBLIC_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
+  rollback
+  fail "exact-SHA public health verification failed"
+fi
+if systemctl cat modstore-payment.service >/dev/null 2>&1; then
+  for _ in $(seq 1 60); do
+    curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8080/actuator/health >/dev/null && break
+    sleep 2
+  done
+  curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8080/actuator/health >/dev/null \
+    || { rollback; fail "payment health verification failed"; }
+fi
+
+log "release promoted and verified git_sha=$TARGET_SHA root=$FINAL_ROOT"

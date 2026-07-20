@@ -406,6 +406,8 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/FHD/v') }}
           tags: ${{ steps.meta_fhd.outputs.tags }}
           labels: ${{ steps.meta_fhd.outputs.labels }}
+          build-args: |
+            XCAGI_GIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=xcagi-fhd-api
           cache-to: type=gha,mode=max,scope=xcagi-fhd-api
 
@@ -521,7 +523,7 @@ jobs:
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
           FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
-          FHD_CVM_PUSH_STRICT: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+          FHD_CVM_PUSH_STRICT: "true"
           FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' && inputs.push_image_tar && '1' || '0' }}
           FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' && inputs.push_image_tar && '55m' || '15m' }}
         run: |

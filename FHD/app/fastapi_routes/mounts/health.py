@@ -6,6 +6,7 @@ import logging
 
 from fastapi import FastAPI
 
+from app.build_identity import build_identity
 from app.runtime_integrity import neuro_degraded_reasons, runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -24,6 +25,7 @@ def register_health_routes(app: FastAPI) -> None:
             "service": "xcagi-fastapi",
             "runtime": runtime,
             "degradedReasons": list(runtime["degraded_reasons"]),
+            "build": build_identity(),
         }
         if lite:
             return payload

@@ -717,7 +717,7 @@ async def apply_nl_workflow_graph(
         ]
     if preset_nodes:
         lines = "\n".join(
-            f"  {i+1}. skill_id={p['eskill_id']} name={p['name']!r} output_var={p.get('output_var','result')!r}"
+            f"  {i+1}. skill_id={p['eskill_id']} name={p['name']!r} output_var={p.get('output_var', 'result')!r}"
             for i, p in enumerate(preset_nodes)
         )
         preset_requirements = (

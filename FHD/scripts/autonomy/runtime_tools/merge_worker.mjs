@@ -3,20 +3,43 @@
 // 然后把 merge_commit_sha 回传给 Para。解决了「任务 completed 后无 merge 消费者」断点。
 //
 // 触发条件：任务 auto_merge=true 且 workspace_path 非空（由 FHD invoke 在派工时设置）。
-// 安全：默认不 push 到 origin，只本地合并；如需 push 设 MERGE_WORKER_PUSH=1。
-// 冲突：写入 /api/tasks/:id/merge-conflict，任务进 merge_conflict 状态，等待人工处理。
+// 安全：缺 diff、审查异常、结论不明确或高风险路径一律 fail-closed。
+// 冲突：保留 PR + hold-merge veto，并写入 merge-conflict 供后续自治修复。
 
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
 const API_BASE = process.env.PARA_API_BASE || 'http://127.0.0.1:3001';
 const POLL_SEC = Number.parseInt(process.env.MERGE_WORKER_POLL_SEC || '15', 10);
-const PUSH_ORIGIN = process.env.MERGE_WORKER_PUSH === '1';
-const STATE_FILE = process.env.MERGE_WORKER_STATE_FILE || '/tmp/para-merge-worker-state.json';
+const STATE_FILE = process.env.MERGE_WORKER_STATE_FILE
+  || `${process.env.HOME || '/tmp'}/.xcmax/autonomy/para-merge-worker-state.json`;
+const EXPECTED_GITHUB_ACTOR = String(process.env.MERGE_WORKER_EXPECTED_GITHUB_ACTOR || '').trim();
+const REQUIRE_BOT_IDENTITY = process.env.MERGE_WORKER_REQUIRE_BOT_IDENTITY !== '0';
+const BOT_MERGE_WORKFLOW = String(
+  process.env.MERGE_WORKER_BOT_WORKFLOW || 'fhd-ai-self-heal-auto-merge.yml',
+).trim();
+const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
+const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
+const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
 const TOKEN_TTL_MS = 5 * 60 * 1000; // Para guest 限 15min/30 次，复用 5 分钟避免耗尽
+export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
+
+const FORBIDDEN_AUTO_MERGE_PATHS = [
+  /^\.github\/workflows\//,
+  /(^|\/)\.env(?:\.|$)/,
+  /(^|\/)(?:secrets?|credentials?|tokens?)(?:\/|\.|$)/i,
+  /(^|\/)(?:migrations?|alembic)(?:\/|$)/i,
+  /(^|\/)Dockerfile/i,
+  /(^|\/)docker-compose[^/]*\.ya?ml$/i,
+  /(^|\/)package-lock\.json$/,
+  /(^|\/)requirements[^/]*\.txt$/,
+  /(^|\/)pyproject\.toml$/,
+];
 
 let cachedToken = '';
 let cachedTokenAt = 0;
@@ -59,7 +82,10 @@ function readFileSyncSafe(path) {
 }
 
 function saveProcessed(state) {
-  writeFileSync(STATE_FILE, JSON.stringify(state));
+  mkdirSync(dirname(STATE_FILE), { recursive: true, mode: 0o700 });
+  const temporary = `${STATE_FILE}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temporary, STATE_FILE);
 }
 
 async function git(cwd, args) {
@@ -108,11 +134,86 @@ async function reportMerged(token, task, sha) {
 }
 
 // 解析 GitHub repo owner/name，用于 gh --repo 参数
-function parseGithubRepo(repoUrl) {
+export function parseGithubRepo(repoUrl) {
   const url = String(repoUrl || '').trim();
   // git@github.com:owner/name.git 或 https://github.com/owner/name.git
   const m = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/i);
   return m ? `${m[1]}/${m[2]}` : '';
+}
+
+export function forbiddenAutoMergePaths(paths) {
+  return paths.filter((path) => FORBIDDEN_AUTO_MERGE_PATHS.some((pattern) => pattern.test(path)));
+}
+
+export function mergeRetryDelayMs(attempt, baseMs = RETRY_BASE_MS, maxMs = RETRY_MAX_MS) {
+  const normalizedAttempt = Math.max(1, Number.parseInt(String(attempt), 10) || 1);
+  return Math.min(maxMs, baseMs * (2 ** (normalizedAttempt - 1)));
+}
+
+export function isTransientMergeFailure(reason) {
+  const text = String(reason || '').toLowerCase();
+  const terminal = [
+    'actor mismatch',
+    'changed-files-empty',
+    'closed without merge',
+    'diff-too-large',
+    'empty-diff',
+    'forbidden-auto-merge-paths',
+    'indeterminate-review',
+    'is not a bot identity',
+    'no-diff-available',
+    'reject:',
+  ];
+  if (terminal.some((pattern) => text.includes(pattern))) return false;
+  return true;
+}
+
+export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
+  const attempts = Math.max(0, Number(previous?.attempts || 0)) + 1;
+  const delayMs = mergeRetryDelayMs(attempts);
+  return {
+    at: new Date(nowMs).toISOString(),
+    attempts,
+    exhausted: attempts > MAX_RETRY_ATTEMPTS,
+    next_retry_at: new Date(nowMs + delayMs).toISOString(),
+    reason: String(reason || '').slice(0, 2000),
+    status: 'retrying',
+  };
+}
+
+async function verifyAutomationIdentity(workspace, repoFull) {
+  const args = ['api', 'user', '--jq', '.login'];
+  const { stdout } = await execFileAsync('gh', args, {
+    cwd: workspace || process.env.HOME,
+    maxBuffer: 1024 * 1024,
+    timeout: 30_000,
+  });
+  const actor = String(stdout || '').trim();
+  if (!actor) throw new Error('GitHub automation identity is empty');
+  if (EXPECTED_GITHUB_ACTOR && actor !== EXPECTED_GITHUB_ACTOR) {
+    throw new Error(`GitHub actor mismatch: expected=${EXPECTED_GITHUB_ACTOR} actual=${actor}`);
+  }
+  return actor;
+}
+
+async function changedFilesForPR(workspace, branch, baseBranch, prNumber, repoFull) {
+  if (workspace) {
+    const { stdout } = await execFileAsync('git', ['diff', '--name-only', `${baseBranch}...${branch}`], {
+      cwd: workspace,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    return String(stdout || '').split('\n').map((item) => item.trim()).filter(Boolean);
+  }
+  if (!prNumber) throw new Error('cannot resolve changed files without workspace or PR');
+  const args = ['pr', 'diff', prNumber, '--name-only'];
+  if (repoFull) args.push('--repo', repoFull);
+  const { stdout } = await execFileAsync('gh', args, {
+    cwd: process.env.HOME,
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  return String(stdout || '').split('\n').map((item) => item.trim()).filter(Boolean);
 }
 
 async function isGitHubOrigin(workspace, repoUrl) {
@@ -163,9 +264,9 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     ``,
     `本 PR 由 merge-worker 自动创建，源任务由 Trae CLI 执行。`,
     ``,
-    `**风险分级**：标 \`ai-generated\` + \`risk:r0\`（loop 已过 review/QA/autonomy_guard 三层 gate）。`,
-    `AI review APPROVE → 立即 \`gh pr merge --auto\`；AI review REJECT → 打 \`hold-merge\` 强制 veto。`,
-    `兜底：\`ai-self-heal-auto-merge\` SLA 12h 二次守卫通过后 auto-merge。`,
+    `**风险分级**：标 \`risk:r0\`（loop 已过 review/QA/autonomy_guard 三层 gate）。`,
+    `AI review APPROVE → 触发 GitHub Actions bot 三重门禁合并；AI review REJECT → 打 \`hold-merge\` 强制 veto。`,
+    `合并身份固定为 \`github-actions[bot]\`，且仍受 required checks 和 branch protection 约束。`,
   ].join('\n');
   const args = [
     'pr', 'create',
@@ -173,7 +274,10 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     '--base', baseBranch,
     '--title', title,
     '--body', body,
-    '--label', 'ai-generated,risk:r0',
+    // Do not add ai-generated here: that label intentionally enters the
+    // 12-hour SLA lane.  Loop-approved PRs use the immediate regular-PR
+    // three-gate lane and are still merged only by github-actions[bot].
+    '--label', AUTO_PR_LABELS.join(','),
   ];
   if (repoFull) args.push('--repo', repoFull);
   const cwd = workspace || process.env.HOME;
@@ -202,6 +306,45 @@ async function addPrLabels(workspace, prNumber, repoFull, labels) {
   }
 }
 
+async function updatePullRequestBranch(workspace, prNumber, repoFull) {
+  if (!prNumber) throw new Error('cannot update PR branch without PR number');
+  const args = ['pr', 'update-branch', prNumber];
+  if (repoFull) args.push('--repo', repoFull);
+  try {
+    await execFileAsync('gh', args, {
+      cwd: workspace || process.env.HOME,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 90_000,
+    });
+  } catch (err) {
+    const message = String(err?.message || err);
+    if (/already up.to.date|not behind|no update needed/i.test(message)) return;
+    throw new Error(`update-branch failed: ${message.slice(0, 500)}`);
+  }
+}
+
+async function waitForRequiredChecks(workspace, prNumber, repoFull) {
+  if (!prNumber) throw new Error('cannot wait for required checks without PR number');
+  const args = [
+    'pr', 'checks', prNumber,
+    '--required',
+    '--watch',
+    '--fail-fast',
+    '--interval', '10',
+  ];
+  if (repoFull) args.push('--repo', repoFull);
+  try {
+    await execFileAsync('gh', args, {
+      cwd: workspace || process.env.HOME,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30 * 60 * 1000,
+    });
+  } catch (err) {
+    const message = String(err?.message || err);
+    throw new Error(`required checks failed or unavailable: ${message.slice(0, 1000)}`);
+  }
+}
+
 async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
   // merge-worker 自己拿 diff，把 diff 内容直接放进 prompt 让 trae-cli 只读审查。
   // 之前让 trae-cli 在 plan mode 跑 `gh pr diff` 经常被权限拒绝，
@@ -216,8 +359,8 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
       });
       diff = (stdout || '').trim();
     } catch (err) {
-      log(`  获取 diff 失败 (${diffSource}): ${String(err).slice(0, 200)}，fail-open APPROVE`);
-      return { verdict: 'approve', raw: 'diff-fetch-failed' };
+      log(`  获取 diff 失败 (${diffSource}): ${String(err).slice(0, 200)}，fail-closed REJECT`);
+      return { verdict: 'reject', reason: 'diff-fetch-failed', raw: String(err) };
     }
   } else if (prNumber) {
     diffSource = `gh pr diff ${prNumber}${repoFull ? ` --repo ${repoFull}` : ''}`;
@@ -229,21 +372,24 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
       });
       diff = (stdout || '').trim();
     } catch (err) {
-      log(`  获取 diff 失败 (${diffSource}): ${String(err).slice(0, 200)}，fail-open APPROVE`);
-      return { verdict: 'approve', raw: 'diff-fetch-failed' };
+      log(`  获取 diff 失败 (${diffSource}): ${String(err).slice(0, 200)}，fail-closed REJECT`);
+      return { verdict: 'reject', reason: 'diff-fetch-failed', raw: String(err) };
     }
   } else {
-    log(`  AI review 跳过：无 workspace 且无 PR number，直接 APPROVE（交给 CI 门禁）`);
-    return { verdict: 'approve', raw: 'no-diff-available' };
+    log(`  AI review 阻断：无 workspace 且无 PR number`);
+    return { verdict: 'reject', reason: 'no-diff-available', raw: '' };
   }
 
   if (!diff) {
-    log(`  diff 为空，fail-open APPROVE（可能 PR 与 base 一致）`);
-    return { verdict: 'approve', raw: 'empty-diff' };
+    log(`  diff 为空，fail-closed REJECT`);
+    return { verdict: 'reject', reason: 'empty-diff', raw: '' };
   }
 
-  // diff 太大时只取前 30KB（避免 prompt 过长）
-  const diffTruncated = diff.length > 30000 ? `${diff.slice(0, 30000)}\n... (truncated, total ${diff.length} chars)` : diff;
+  if (diff.length > 30000) {
+    log(`  diff=${diff.length} chars 超过完整审查上限，fail-closed REJECT`);
+    return { verdict: 'reject', reason: `diff-too-large:${diff.length}`, raw: '' };
+  }
+  const diffTruncated = diff;
   const prompt = [
     `你是代码审查员。下面是 PR 的 git diff 内容，请直接审查（不要执行任何命令）：`,
     ``,
@@ -276,32 +422,47 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
     if (/^APPROVE$/i.test(line)) return { verdict: 'approve', raw: out };
     if (/^REJECT\s*:/i.test(line)) return { verdict: 'reject', reason: line, raw: out };
   }
-  // 没有明确结论：fail-open APPROVE，让 CI + branch protection 守门。
-  log(`  AI review 未输出明确结论，fail-open APPROVE（交给 CI 守门）`);
-  return { verdict: 'approve', raw: out };
+  log(`  AI review 未输出明确结论，fail-closed REJECT`);
+  return { verdict: 'reject', reason: 'indeterminate-review', raw: out };
 }
 
 async function mergePR(workspace, prNumber, repoFull) {
-  // --auto 让 GitHub 在所有 required status checks pass 后自动 merge。
-  // 避免 branch protection 阻塞 + CI 还在跑时 merge 失败。
-  // gh 命令立即返回（启用 auto-merge），需要轮询 PR 状态等真正 merge。
   const cwd = workspace || process.env.HOME;
-  const mergeArgs = ['pr', 'merge', prNumber, '--merge', '--auto', '--delete-branch'];
-  if (repoFull) mergeArgs.push('--repo', repoFull);
-  try {
-    await execFileAsync('gh', mergeArgs, {
+  if (REQUIRE_BOT_IDENTITY) {
+    if (!BOT_MERGE_WORKFLOW) throw new Error('bot merge workflow is not configured');
+    // Dispatch only after required checks are green.  The bot workflow scans
+    // once per dispatch; dispatching while checks are pending would skip the
+    // PR and leave the worker waiting for a later schedule tick.
+    await waitForRequiredChecks(workspace, prNumber, repoFull);
+    const dispatchArgs = [
+      'workflow', 'run', BOT_MERGE_WORKFLOW,
+      '--ref', 'main',
+      '-f', 'dry_run=false',
+      '-f', 'scan_regular_prs=true',
+    ];
+    if (repoFull) dispatchArgs.push('--repo', repoFull);
+    await execFileAsync('gh', dispatchArgs, {
       cwd,
       maxBuffer: 10 * 1024 * 1024,
       timeout: 60_000,
     });
-  } catch (err) {
-    const msg = String(err?.message || err);
-    // 可接受：PR 已经 merge / 已经 enable auto-merge / 直接可 merge 不需要 --auto
-    // 这些情况下 gh 会以非零退出码结束，但 PR 状态已正确
-    if (!/already merged|already enabled|automerge|auto-merge|mergeable|pull request merge enabled/i.test(msg)) {
-      throw err;
+    log(`  dispatched ${BOT_MERGE_WORKFLOW}; merge will execute as github-actions[bot]`);
+  } else {
+    const mergeArgs = ['pr', 'merge', prNumber, '--merge', '--auto', '--delete-branch'];
+    if (repoFull) mergeArgs.push('--repo', repoFull);
+    try {
+      await execFileAsync('gh', mergeArgs, {
+        cwd,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 60_000,
+      });
+    } catch (err) {
+      const msg = String(err?.message || err);
+      if (!/already merged|already enabled|automerge|auto-merge|mergeable|pull request merge enabled/i.test(msg)) {
+        throw err;
+      }
+      log(`  gh pr merge --auto 提示（可接受）: ${msg.slice(0, 200)}`);
     }
-    log(`  gh pr merge --auto 提示（可接受）: ${msg.slice(0, 200)}`);
   }
   // 轮询等待 PR merged（最多 30 分钟，每 30s 查一次）
   const viewArgs = ['pr', 'view', prNumber, '--json', 'state,mergeCommit'];
@@ -396,6 +557,13 @@ async function processTask(token, task, state) {
   if (state[task.id]?.status === 'merged' || state[task.id]?.status === 'ai_reviewed_merged' || state[task.id]?.status === 'conflict') {
     return;
   }
+  const previousState = state[task.id];
+  if (
+    previousState?.status === 'retrying'
+    && Date.parse(previousState.next_retry_at || '') > Date.now()
+  ) {
+    return;
+  }
   const workspace = String(task.workspace_path || '').trim();
   const workspaceExists = workspace && existsSync(workspace);
   if (workspace && !workspaceExists) {
@@ -426,6 +594,8 @@ async function processTask(token, task, state) {
     // 检查是否已有 merged PR（处理 task 之前已 merge 但 state 未记录的情况，
     // 比如手动 merge 后 task 又被重新放入 merge-queue）
     if (isGithub) {
+      const actor = await verifyAutomationIdentity(workspaceExists ? workspace : '', repoFull);
+      log(`  GitHub automation actor=${actor}`);
       for (const branch of branches) {
         const existingPR = await checkExistingPR(workspaceExists ? workspace : '', branch, baseBranch, repoFull);
         if (existingPR && String(existingPR.state || '').toUpperCase() === 'MERGED') {
@@ -475,6 +645,29 @@ async function processTask(token, task, state) {
             log(`  ✓ ${branch} → PR #${prNumber}: ${prUrl}`);
           }
 
+          // Bring the proposed branch onto the current base before reviewing.
+          // A real conflict fails below and is never silently merged.
+          await updatePullRequestBranch(workspaceExists ? workspace : '', prNumber, repoFull);
+
+          const changedFiles = await changedFilesForPR(
+            workspaceExists ? workspace : '',
+            branch,
+            baseBranch,
+            prNumber,
+            repoFull,
+          );
+          if (changedFiles.length === 0) {
+            throw new Error('changed-files-empty');
+          }
+          const forbidden = forbiddenAutoMergePaths(changedFiles);
+          if (forbidden.length > 0) {
+            const reason = `forbidden-auto-merge-paths: ${forbidden.join(', ')}`;
+            log(`  ✗ ${reason}`);
+            await addPrLabels(workspaceExists ? workspace : '', prNumber, repoFull, ['hold-merge']);
+            results.push({ branch, prUrl, prNumber, merged: false, reason, vetoed: true });
+            continue;
+          }
+
           // AI review
           const review = await aiReviewPR(workspaceExists ? workspace : '', branch, baseBranch, prNumber, repoFull);
           if (review.verdict === 'approve') {
@@ -515,12 +708,30 @@ async function processTask(token, task, state) {
           log(`task ${task.id} merge 回传失败 ${status}: ${JSON.stringify(body).slice(0, 200)}`);
         }
       } else if (failed.length > 0) {
-        // 所有 PR 都被 AI reject 或创建失败
+        // Review/policy vetoes are terminal. Operational failures retry with
+        // bounded exponential backoff before being reported as a conflict.
         const reason = failed.map((r) => `${r.branch}: ${r.reason || r.error}`).join('\n');
+        const retryable = failed.every((result) => !result.vetoed && isTransientMergeFailure(result.reason || result.error));
+        let terminalAttempts = Number(state[task.id]?.attempts || 0);
+        if (retryable) {
+          const retry = nextMergeRetryState(state[task.id], reason);
+          if (!retry.exhausted) {
+            state[task.id] = retry;
+            saveProcessed(state);
+            log(`task ${task.id} → retrying attempt=${retry.attempts} next=${retry.next_retry_at}`);
+            return;
+          }
+          terminalAttempts = retry.attempts;
+        }
         await reportMergeConflict(token, task, reason);
-        state[task.id] = { status: 'ai_rejected', at: new Date().toISOString(), reason };
+        state[task.id] = {
+          status: retryable ? 'conflict' : 'ai_rejected',
+          at: new Date().toISOString(),
+          reason,
+          attempts: terminalAttempts,
+        };
         saveProcessed(state);
-        log(`task ${task.id} → ai_rejected (所有 PR 被 AI review 拒绝)`);
+        log(`task ${task.id} → ${state[task.id].status}`);
       }
     } else {
       // 非 GitHub（file:// 本地测试）：走直接 merge
@@ -540,12 +751,32 @@ async function processTask(token, task, state) {
       }
     }
   } catch (err) {
-    log(`task ${task.id} 异常：${String(err).slice(0, 300)}`);
+    const reason = String(err);
+    log(`task ${task.id} 异常：${reason.slice(0, 300)}`);
+    let terminalAttempts = Number(state[task.id]?.attempts || 0);
+    if (isTransientMergeFailure(reason)) {
+      const retry = nextMergeRetryState(state[task.id], reason);
+      if (!retry.exhausted) {
+        state[task.id] = retry;
+        saveProcessed(state);
+        log(`task ${task.id} → retrying attempt=${retry.attempts} next=${retry.next_retry_at}`);
+        return;
+      }
+      terminalAttempts = retry.attempts;
+    }
+    await reportMergeConflict(token, task, reason);
+    state[task.id] = {
+      status: 'conflict',
+      at: new Date().toISOString(),
+      reason: reason.slice(0, 2000),
+      attempts: terminalAttempts,
+    };
+    saveProcessed(state);
   }
 }
 
 async function main() {
-  log(`启动：API=${API_BASE} poll=${POLL_SEC}s push_origin=${PUSH_ORIGIN}`);
+  log(`启动：API=${API_BASE} poll=${POLL_SEC}s state=${STATE_FILE}`);
   const state = loadProcessed();
   log(`已有 ${Object.keys(state).length} 条历史记录`);
 
@@ -566,7 +797,10 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('[merge-worker] fatal', err);
-  process.exit(1);
-});
+const executedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (executedDirectly) {
+  main().catch((err) => {
+    console.error('[merge-worker] fatal', err);
+    process.exit(1);
+  });
+}

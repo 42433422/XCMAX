@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import socket
@@ -79,6 +80,28 @@ def resolve_hostname() -> str:
         return ""
 
 
+def _release_identity() -> Dict[str, str]:
+    configured = (os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
+    candidates = [Path(configured)] if configured else []
+    candidates.extend(
+        [
+            Path("/opt/xcmax/current/.xcmax-release.json"),
+            _repo_root() / ".xcmax-release.json",
+        ]
+    )
+    for path in candidates:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            return {
+                "artifact_sha256": str(payload.get("artifact_sha256") or ""),
+                "release_id": str(payload.get("release_id") or payload.get("git_sha") or ""),
+            }
+    return {"artifact_sha256": "", "release_id": ""}
+
+
 def health_payload() -> Dict[str, Any]:
     tavily_ok = False
     try:
@@ -87,9 +110,12 @@ def health_payload() -> Dict[str, Any]:
         tavily_ok = bool(tavily_api_key())
     except Exception:
         pass
+    release = _release_identity()
     return {
+        "artifact_sha256": release["artifact_sha256"],
         "deploy_tier": normalized_deploy_tier(),
         "git_sha": resolve_git_sha(),
         "hostname": resolve_hostname(),
+        "release_id": release["release_id"],
         "tavily_configured": tavily_ok,
     }

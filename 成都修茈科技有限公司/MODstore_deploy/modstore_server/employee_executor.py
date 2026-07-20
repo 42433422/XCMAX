@@ -2498,7 +2498,7 @@ def execute_employee_task(
                     exec_status = "blocked_by_path_guard"
                     violations = _pg.get("violations") or []
                     vstr = "; ".join(
-                        f"{v.get('path','')}({v.get('reason','')})"
+                        f"{v.get('path', '')}({v.get('reason', '')})"
                         for v in violations[:5]
                         if isinstance(v, dict)
                     )

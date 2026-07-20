@@ -62,6 +62,7 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
             "FHD_RELEASE_OUT_DIR": str(out_dir),
             "FHD_PUSH_HOST": "example.invalid",
             "FHD_PUSH_IMAGE_TAR": "0",
+            "FHD_PUSH_APPLY_NOW": "0",
         },
         check=False,
         capture_output=True,
@@ -74,6 +75,53 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
     assert "fhd-manifest.json" in call_log
     assert "fhd-api-image.tar.gz" not in call_log
     assert "跳过可选镜像归档" in result.stdout
+
+
+def test_strict_push_applies_and_verifies_exact_sha() -> None:
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+
+    assert "FHD_PUSH_APPLY_NOW:-" in script
+    assert "FHD_CVM_PUSH_STRICT:-false" in script
+    assert "FHD_MANIFEST_PATH=%q" in script
+    assert "verify_release_identity_payload" in script
+    assert '"$SHA256"' in script
+    assert "remote_identity_mismatch" in script
+
+
+def test_release_identity_verifier_requires_artifact_when_supplied() -> None:
+    verifier = FHD_ROOT / "scripts/deploy/lib/verify_release_identity.sh"
+    payload = json.dumps(
+        {
+            "build": {
+                "artifact_sha256": "a" * 64,
+                "git_sha": "b" * 40,
+                "image_digest": "sha256:" + "c" * 64,
+            }
+        }
+    )
+    command = (
+        f"source {verifier!s}; "
+        'verify_release_identity_payload "$PAYLOAD" '
+        f"{'b' * 40} sha256:{'c' * 64} {'a' * 64}"
+    )
+    passed = subprocess.run(
+        ["bash", "-c", command],
+        env={**os.environ, "PAYLOAD": payload},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    failed = subprocess.run(
+        ["bash", "-c", command.replace("a" * 64, "d" * 64)],
+        env={**os.environ, "PAYLOAD": payload},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert passed.returncode == 0, passed.stderr
+    assert failed.returncode != 0
+    assert "artifact SHA256 mismatch" in failed.stderr
 
 
 def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
