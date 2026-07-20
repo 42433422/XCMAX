@@ -317,7 +317,10 @@ class TestHealthDownDetectAct:
         """remediation 失败 + max_attempts 耗尽 → 转 escalate（不静默吞错）。"""
         adapter = mock_adapter_factory(health_ok=False, service_running=True)
         # 让 restart_service 失败
-        adapter.returns_by_type[ActionType.RESTART_SERVICE.value] = (False, "docker compose restart failed")
+        adapter.returns_by_type[ActionType.RESTART_SERVICE.value] = (
+            False,
+            "docker compose restart failed",
+        )
         truth = adapter.collect_truth()
         signals = derive_signals(truth)
         plans = run_policies(signals, ALL_POLICIES)
