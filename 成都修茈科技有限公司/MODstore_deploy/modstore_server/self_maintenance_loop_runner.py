@@ -689,7 +689,12 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         "auto_merged_low_risk",
         "auto_merge_requested_low_risk",
         "auto_continue",
-    } and status not in {"completed_merged", "completed_merge_requested"}:
+        "auto_continue_no_action",
+    } and status not in {
+        "completed_merged",
+        "completed_merge_requested",
+        "completed_no_action",
+    }:
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
