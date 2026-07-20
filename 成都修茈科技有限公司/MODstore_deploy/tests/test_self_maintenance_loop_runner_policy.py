@@ -29,6 +29,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _qa_task_text,
     _reject_and_retry_kb_schema_failure,
     _resume_review_qa_candidate,
+    _resume_dispatch_context,
     _resume_steps,
     _review_task_text,
     _self_maintenance_actor_user_id,
@@ -629,6 +630,57 @@ def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task
         "reason": "resume_safety_score_remediation",
     }
     assert _resume_steps(result) == {"code", "review", "qa"}
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (
+        None,
+        "devfleet/codex/sub-1-score",
+    )
+
+
+def test_resume_dispatch_context_reuses_task_only_for_review_or_qa():
+    candidate = {
+        "branch": "devfleet/codex/sub-1-review",
+        "failed_steps": ["review"],
+        "para_task_id": "task-review",
+    }
+
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        "task-review",
+        "devfleet/codex/sub-1-review",
+    )
+
+
+def test_resume_dispatch_context_starts_failed_code_fresh_from_configured_base():
+    candidate = {
+        "branch": "devfleet/codex/sub-1-failed",
+        "failed_steps": ["code"],
+        "para_task_id": "task-failed",
+    }
+
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
+
+
+def test_code_task_text_pins_selected_score_remediation_when_last_decision_was_overwritten():
+    memory = {
+        "last_policy_decision": {"reason": "low_risk_policy_passed"},
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-score",
+                "kind": "automated_remediation",
+                "reason": "auto_merge_safety_score_v2_too_low",
+                "run_id": "r-score",
+                "task_id": "task-score",
+            }
+        ],
+        "recent_runs": [],
+    }
+    resume_candidate = _resume_review_qa_candidate(memory)
+
+    text = _code_task_text("run-new", {}, memory, resume_candidate)
+
+    assert "EXISTING BRANCH SCORE REMEDIATION" in text
+    assert "`devfleet/codex/sub-1-score`" in text
+    assert '"failed_run_id": "r-score"' in text
+    assert "test-only follow-up commit is valid" in text
 
 
 def test_resume_review_qa_candidate_stops_when_latest_policy_has_real_risk():
