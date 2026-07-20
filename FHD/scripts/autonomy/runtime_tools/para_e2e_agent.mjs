@@ -11,7 +11,10 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import {
+  describeCodexFailure,
   describeTraeFailure,
+  formatCodexNonZeroOutput,
+  isCodexProviderFailoverEligible,
   isTraeProviderFailoverEligible,
   parseTraeStream,
 } from './trae_failover.mjs';
@@ -284,7 +287,7 @@ async function runCodexAgent(taskDir, prompt) {
       // 但文件改动可能已经落盘。我们 resolve 并把退出码包含在输出里，
       // 由调用方在 catch 块检查 git status 决定是否 finalizeTask。
       if (code !== 0) {
-        resolve(`[codex exit=${code}${signal ? ` signal=${signal}` : ''}]\n${output}`);
+        resolve(formatCodexNonZeroOutput({ code, signal, stdout, stderr }));
         return;
       }
       resolve(output);
@@ -1120,9 +1123,8 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runCodexAgent(taskDir, task.description);
-      const codexNonZero = String(output || '').startsWith('[codex exit=');
-      if (output) toolOutput = `${toolOutput}\n${output}`.trim();
+      let output = await runCodexAgent(taskDir, task.description);
+      let codexNonZero = String(output || '').startsWith('[codex exit=');
       if (output) {
         send(ws, {
           type: 'task_log',
@@ -1131,6 +1133,51 @@ async function handleTask(ws, task) {
           content: output.slice(0, 4000),
           level: codexNonZero ? 'warn' : 'info',
         });
+      }
+      if (codexNonZero) {
+        const failure = describeCodexFailure(output);
+        const failoverEnabled = process.env.DEVFLEET_CODEX_TRAE_FAILOVER !== '0';
+        if (
+          failoverEnabled
+          && isCodexProviderFailoverEligible(failure)
+          && traeAgentAvailable()
+        ) {
+          send(ws, {
+            type: 'task_log',
+            task_id: task.task_id,
+            subtask_id: task.subtask_id,
+            content: `[e2e-agent] Codex provider unavailable (${failure.summary}); fail over to Trae CLI`,
+            level: 'warn',
+          });
+          try {
+            output = await runTraeAgent(taskDir, task.description);
+            codexNonZero = false;
+            toolError = '';
+            if (output) {
+              send(ws, {
+                type: 'task_log',
+                task_id: task.task_id,
+                subtask_id: task.subtask_id,
+                content: output.slice(0, 4000),
+                level: 'info',
+              });
+            }
+            if (!reportOnly) await autoFormatPythonFiles(taskDir, ws, task);
+          } catch (traeErr) {
+            const traeFailure = describeTraeFailure(traeErr);
+            toolError = `Codex provider unavailable; Trae failover failed: ${traeFailure.summary}`;
+            send(ws, {
+              type: 'task_log',
+              task_id: task.task_id,
+              subtask_id: task.subtask_id,
+              content: `[e2e-agent] ${toolError}`,
+              level: 'warn',
+            });
+          }
+        }
+      }
+      if (output && !codexNonZero && !toolError) {
+        toolOutput = `${toolOutput}\n${output}`.trim();
       }
       // codex 完成后（无论退出码 0 或非 0）直接进入 finalizeTask（commit + push）。
       // codex 的 --ephemeral sandbox 可能导致 git status 检测不到修改，但文件可能已落盘。
@@ -1149,7 +1196,7 @@ async function handleTask(ws, task) {
         }
         // finalizeTask 返回 false（无改动可提交）。
         if (codexNonZero) {
-          toolError = `Codex CLI 非零退出且无文件改动: ${output.slice(0, 500)}`;
+          toolError = `Codex CLI 非零退出且无文件改动: ${describeCodexFailure(output).summary}`;
           send(ws, {
             type: 'task_log',
             task_id: task.task_id,
@@ -1158,8 +1205,8 @@ async function handleTask(ws, task) {
             level: 'warn',
           });
         }
-      } else if (codexNonZero) {
-        toolError = `Codex CLI 非零退出: ${output.slice(0, 500)}`;
+      } else if (codexNonZero && !toolError) {
+        toolError = `Codex CLI 非零退出: ${describeCodexFailure(output).summary}`;
       }
     } catch (err) {
       toolError = `Codex CLI 失败: ${err instanceof Error ? err.message : String(err)}`;
