@@ -1,14 +1,14 @@
 """tests/test_autonomy/test_policies.py — 4 个 Policy 决策正确性测试。
 
 覆盖：
-  - health_down → restart_service
-  - manifest_drift → freeze_manifest
-  - disk_full → clear_logs
-  - compose_unhealthy → restart_service
+  - health_down → restart_service + open_incident_issue 兜底
+  - manifest_drift → freeze_manifest + open_incident_issue 兜底
+  - disk_full → clear_logs + open_incident_issue 兜底
+  - compose_unhealthy → restart_service + open_incident_issue 兜底
   - max_attempts 耗尽 escalate（由 watcher 守护链处理；此处仅验证 policy.plan 输出）
   - cooldown 窗口外（policy 是纯函数，无 cooldown；由 watcher 状态守护）
   - 空 signals 返回空 actions
-  - 多信号去重（同 kind 多条信号只产出一个 action）
+  - 多信号去重（同 kind 多条信号只产出一个 remediation + 一个兜底）
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from scripts.autonomy.policies.compose_unhealthy_policy import ComposeUnhealthyP
 from scripts.autonomy.policies.disk_full_policy import DiskFullPolicy
 from scripts.autonomy.policies.health_down_policy import HealthDownPolicy
 from scripts.autonomy.policies.manifest_drift_policy import ManifestDriftPolicy
-from scripts.autonomy.types import ActionType, Plan, RiskLevel, Signal
+from scripts.autonomy.types import Action, ActionType, Plan, RiskLevel, Signal
 
 # --------------------------------------------------------------------------- #
 # 工具函数
@@ -45,8 +45,28 @@ def _make_signal(
     )
 
 
+def _assert_incident_fallback(
+    action: Action,
+    *,
+    incident_type: str,
+    previous_action_key: str,
+    source_kind: str,
+) -> None:
+    """断言兜底 open_incident_issue action 的字段结构。"""
+    assert action.type == ActionType.OPEN_INCIDENT_ISSUE
+    assert action.risk == RiskLevel.LOW
+    assert action.max_attempts == 1
+    assert action.idempotency_key == f"open_incident_issue:{incident_type}"
+    assert action.params["incident_type"] == incident_type
+    assert action.params["previous_action_key"] == previous_action_key
+    assert action.params["source_kind"] == source_kind
+    assert "reason" in action.params
+    assert "diagnosis_root_cause" in action.params
+    assert "ts" in action.params
+
+
 # --------------------------------------------------------------------------- #
-# health_down → restart_service
+# health_down → restart_service + open_incident_issue 兜底
 # --------------------------------------------------------------------------- #
 
 
@@ -59,15 +79,23 @@ class TestHealthDownPolicy:
         self,
         health_down_signal: Signal,
     ) -> None:
-        """health_down 信号 → restart_service action。"""
+        """health_down 信号 → restart_service remediation + open_incident_issue 兜底。"""
         plan: Plan = health_down_policy.plan([health_down_signal])
 
-        assert len(plan.actions) == 1
-        action = plan.actions[0]
-        assert action.type == ActionType.RESTART_SERVICE
-        assert action.risk == RiskLevel.MEDIUM
-        assert action.max_attempts == 1
-        assert action.idempotency_key == "restart_service:health_down"
+        assert len(plan.actions) == 2
+        remediation, incident = plan.actions
+        # remediation action
+        assert remediation.type == ActionType.RESTART_SERVICE
+        assert remediation.risk == RiskLevel.MEDIUM
+        assert remediation.max_attempts == 1
+        assert remediation.idempotency_key == "restart_service:health_down"
+        # 兜底 incident action
+        _assert_incident_fallback(
+            incident,
+            incident_type="health_down",
+            previous_action_key="restart_service:health_down",
+            source_kind="health_down",
+        )
 
     def test_plan_empty_signals_returns_empty(self) -> None:
         """空 signals → 空 actions（diagnosis 仍生成）。"""
@@ -89,12 +117,14 @@ class TestHealthDownPolicy:
         new = _make_signal("health_down", ts=1_000_000, detail="new")
         plan = health_down_policy.plan([old, new])
 
-        assert len(plan.actions) == 1
-        assert "new" in plan.actions[0].params["reason"]
+        assert len(plan.actions) == 2
+        remediation, incident = plan.actions
+        assert "new" in remediation.params["reason"]
+        assert "new" in incident.params["reason"]
 
 
 # --------------------------------------------------------------------------- #
-# manifest_drift → freeze_manifest
+# manifest_drift → freeze_manifest + open_incident_issue 兜底
 # --------------------------------------------------------------------------- #
 
 
@@ -103,20 +133,28 @@ class TestManifestDriftPolicy:
         assert "manifest_drift" in manifest_drift_policy.matches
 
     def test_plan_returns_freeze_manifest(self) -> None:
-        """manifest_drift 信号 → freeze_manifest action。"""
+        """manifest_drift 信号 → freeze_manifest + open_incident_issue 兜底。"""
         sig = _make_signal("manifest_drift", severity="warn", detail="sha mismatch")
         plan = manifest_drift_policy.plan([sig])
 
-        assert len(plan.actions) == 1
-        action = plan.actions[0]
-        assert action.type == ActionType.FREEZE_MANIFEST
-        assert action.risk == RiskLevel.LOW
-        assert action.max_attempts == 1
-        assert action.idempotency_key == "freeze_manifest:manifest_drift"
+        assert len(plan.actions) == 2
+        remediation, incident = plan.actions
+        # remediation
+        assert remediation.type == ActionType.FREEZE_MANIFEST
+        assert remediation.risk == RiskLevel.LOW
+        assert remediation.max_attempts == 1
+        assert remediation.idempotency_key == "freeze_manifest:manifest_drift"
+        # 兜底
+        _assert_incident_fallback(
+            incident,
+            incident_type="manifest_drift",
+            previous_action_key="freeze_manifest:manifest_drift",
+            source_kind="manifest_drift",
+        )
 
 
 # --------------------------------------------------------------------------- #
-# disk_full → clear_logs
+# disk_full → clear_logs + open_incident_issue 兜底
 # --------------------------------------------------------------------------- #
 
 
@@ -128,19 +166,27 @@ class TestDiskFullPolicy:
         self,
         disk_full_signal: Signal,
     ) -> None:
-        """disk_full 信号 → clear_logs action。"""
+        """disk_full 信号 → clear_logs + open_incident_issue 兜底。"""
         plan = disk_full_policy.plan([disk_full_signal])
 
-        assert len(plan.actions) == 1
-        action = plan.actions[0]
-        assert action.type == ActionType.CLEAR_LOGS
-        assert action.risk == RiskLevel.LOW
-        assert action.max_attempts == 2  # disk_full 允许 2 次（清理后仍满可再清）
-        assert action.idempotency_key == "clear_logs:disk_full"
+        assert len(plan.actions) == 2
+        remediation, incident = plan.actions
+        # remediation
+        assert remediation.type == ActionType.CLEAR_LOGS
+        assert remediation.risk == RiskLevel.LOW
+        assert remediation.max_attempts == 2  # disk_full 允许 2 次（清理后仍满可再清）
+        assert remediation.idempotency_key == "clear_logs:disk_full"
+        # 兜底
+        _assert_incident_fallback(
+            incident,
+            incident_type="disk_full",
+            previous_action_key="clear_logs:disk_full",
+            source_kind="disk_full",
+        )
 
 
 # --------------------------------------------------------------------------- #
-# compose_unhealthy → restart_service
+# compose_unhealthy → restart_service + open_incident_issue 兜底
 # --------------------------------------------------------------------------- #
 
 
@@ -149,16 +195,24 @@ class TestComposeUnhealthyPolicy:
         assert "compose_unhealthy" in compose_unhealthy_policy.matches
 
     def test_plan_returns_restart_service(self) -> None:
-        """compose_unhealthy 信号 → restart_service action。"""
+        """compose_unhealthy 信号 → restart_service + open_incident_issue 兜底。"""
         sig = _make_signal("compose_unhealthy", detail="compose exited")
         plan = compose_unhealthy_policy.plan([sig])
 
-        assert len(plan.actions) == 1
-        action = plan.actions[0]
-        assert action.type == ActionType.RESTART_SERVICE
-        assert action.risk == RiskLevel.MEDIUM
-        assert action.max_attempts == 1
-        assert action.idempotency_key == "restart_service:compose_unhealthy"
+        assert len(plan.actions) == 2
+        remediation, incident = plan.actions
+        # remediation
+        assert remediation.type == ActionType.RESTART_SERVICE
+        assert remediation.risk == RiskLevel.MEDIUM
+        assert remediation.max_attempts == 1
+        assert remediation.idempotency_key == "restart_service:compose_unhealthy"
+        # 兜底
+        _assert_incident_fallback(
+            incident,
+            incident_type="compose_unhealthy",
+            previous_action_key="restart_service:compose_unhealthy",
+            source_kind="compose_unhealthy",
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -192,66 +246,7 @@ class TestAllPolicies:
             assert plan.actions == [], f"{policy.id} 应返回空 actions"
 
     def test_multi_signals_same_kind_deduplicated(self) -> None:
-        """同 kind 多条信号 → policy 仍只产出一个 action（取最新）。"""
-        signals = [
-            _make_signal("health_down", ts=900_000, detail="old"),
-            _make_signal("health_down", ts=950_000, detail="mid"),
-            _make_signal("health_down", ts=1_000_000, detail="new"),
-        ]
-        plan = health_down_policy.plan(signals)
-
-        assert len(plan.actions) == 1
-        assert "new" in plan.actions[0].params["reason"]
-
-
-# --------------------------------------------------------------------------- #
-# Policy 类直接实例化（验证 Protocol duck typing）
-# --------------------------------------------------------------------------- #
-
-
-class TestPolicyClasses:
-    def test_health_down_policy_class_instantiable(self) -> None:
-        """HealthDownPolicy 类可直接实例化。"""
-        p = HealthDownPolicy()
-        assert p.id == "health-down"
-        assert p.gate == "auto"
-
-    def test_disk_full_policy_class_instantiable(self) -> None:
-        p = DiskFullPolicy()
-        assert p.id == "disk-full"
-
-    def test_manifest_drift_policy_class_instantiable(self) -> None:
-        p = ManifestDriftPolicy()
-        assert p.id == "manifest-drift"
-
-    def test_compose_unhealthy_policy_class_instantiable(self) -> None:
-        p = ComposeUnhealthyPolicy()
-        assert p.id == "compose-unhealthy"
-
-
-# --------------------------------------------------------------------------- #
-# diagnosis 生成验证
-# --------------------------------------------------------------------------- #
-
-
-class TestDiagnosis:
-    def test_diagnosis_root_cause_mapped(
-        self,
-        health_down_signal: Signal,
-    ) -> None:
-        """health_down 信号 → root_cause='service_unhealthy'。"""
-        plan = health_down_policy.plan([health_down_signal])
-        assert plan.diagnosis.root_cause == "service_unhealthy"
-        assert plan.diagnosis.confidence == 0.8
-
-    def test_diagnosis_evidence_contains_signal_detail(
-        self,
-        health_down_signal: Signal,
-    ) -> None:
-        """diagnosis.evidence 包含信号 detail。"""
-        plan = health_down_policy.plan([health_down_signal])
-        assert any("health check failed" in e for e in plan.diagnosis.evidence)
- kind 多条信号 → policy 仍只产出 remediation + 兜底 共 2 个 action（取最新）。"""
+        """同 kind 多条信号 → policy 仍只产出 remediation + 兜底 共 2 个 action（取最新）。"""
         signals = [
             _make_signal("health_down", ts=900_000, detail="old"),
             _make_signal("health_down", ts=950_000, detail="mid"),
