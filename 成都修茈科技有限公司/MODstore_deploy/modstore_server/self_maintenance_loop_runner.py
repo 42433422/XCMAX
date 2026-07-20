@@ -21,7 +21,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -1045,6 +1045,7 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
     rows = _read_ledger(limit=300)
     started: Dict[str, Dict[str, Any]] = {}
     terminal: Dict[str, Dict[str, Any]] = {}
+    steps_by_run: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
         run_id = str(row.get("run_id") or "")
         if not run_id:
@@ -1054,8 +1055,13 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
             started[run_id] = row
         elif phase in {"complete", "skip"}:
             terminal[run_id] = row
+        elif phase in {"step", "step_retry"}:
+            steps_by_run.setdefault(run_id, []).append(row)
 
-    stale_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_STALE_RUN_MINUTES", 90)
+    # 默认 180 分钟：3 step × 30 分钟 + 内层重试 + dispatch 延迟的余量。
+    # 旧默认 90 分钟刚好卡在 (wait_timeout_sec=1800 × 3) 边界，加任何 dispatch
+    # 延迟就超时 → abandoned_stale。提到 180 给足余量。
+    stale_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_STALE_RUN_MINUTES", 180)
     cutoff = _utc_now() - timedelta(minutes=stale_minutes)
     reconciled: List[str] = []
     for run_id, start in started.items():
@@ -1064,6 +1070,26 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
         started_at = _parse_iso(start.get("started_at") or start.get("created_at"))
         if started_at is None or started_at > cutoff:
             continue
+
+        # 找该 run 最后一个 step 终态；如果只有 step_retry 没有 phase=step，
+        # 说明某个 step 的内层重试还没收敛就超时了——补一条 step 终态记录，
+        # 让下游查询能看到完整 step 链路。
+        run_steps = steps_by_run.get(run_id) or []
+        last_step_phase = str(run_steps[-1].get("phase") or "") if run_steps else ""
+        if last_step_phase == "step_retry":
+            last_step = run_steps[-1]
+            step_terminal = {
+                "employee_id": last_step.get("employee_id"),
+                "error": "step abandoned during inner retry before stale timeout",
+                "ok": False,
+                "phase": "step",
+                "run_id": run_id,
+                "status": "abandoned_stale",
+                "step": last_step.get("step"),
+                "timestamp": _iso(_utc_now()),
+            }
+            _append_ledger(step_terminal)
+
         final = {
             "completed_at": _iso(_utc_now()),
             "error": "run did not write a terminal record before stale timeout",
@@ -1166,6 +1192,31 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
     return True
 
 
+def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, Any]]:
+    """递归查找 result 里的 delivery_validation dict（Para 远端返回）。
+
+    delivery_validation 不在本地代码产出，由 Para 平台返回时嵌在
+    result.result.outputs[].response / para_result 等任意层级，故需递归。
+    限制深度 6 / 列表前 12 项，避免大对象全遍历。
+    """
+    if depth > 6 or not isinstance(obj, (dict, list)):
+        return None
+    if isinstance(obj, dict):
+        dv = obj.get("delivery_validation")
+        if isinstance(dv, dict):
+            return dv
+        for value in obj.values():
+            found = _find_delivery_validation(value, depth + 1)
+            if found is not None:
+                return found
+    else:
+        for item in obj[:12]:
+            found = _find_delivery_validation(item, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
 def _extract_failure_reason(
     result: Dict[str, Any], para_meta: Optional[Dict[str, Any]] = None
 ) -> str:
@@ -1232,6 +1283,33 @@ def _extract_failure_reason(
         return path_guard_failure
     if inner_outputs_failure:
         return inner_outputs_failure
+
+    # delivery_validation 失败：员工交付了代码（change_delivery.ok=true）但验证命令
+    # （测试/lint）失败。这是 code step 最常见的静默失败来源——_employee_result_ok
+    # 判 False 但其他分支都提不到原因。delivery_validation 由 Para 远端返回，嵌在
+    # result 任意层级，用 _find_delivery_validation 递归定位。
+    dv = _find_delivery_validation(result)
+    if isinstance(dv, dict):
+        cmds = dv.get("commands")
+        if isinstance(cmds, list):
+            failed_cmds = [
+                c
+                for c in cmds
+                if isinstance(c, dict) and c.get("exit_code") not in (0, None)
+            ]
+            if failed_cmds:
+                parts: List[str] = []
+                for c in failed_cmds[:3]:
+                    ec = c.get("exit_code")
+                    cmd = str(c.get("command") or "")[:80]
+                    tail = str(c.get("output_tail") or c.get("output") or "")[:120]
+                    seg = f"exit={ec}"
+                    if cmd:
+                        seg += f" cmd={cmd}"
+                    if tail:
+                        seg += f" tail={tail}"
+                    parts.append(seg)
+                return "delivery_validation_failed: " + " | ".join(parts)[:300]
 
     # para 层错误（走 Para bridge 时）
     if isinstance(para_meta, dict):
@@ -1430,6 +1508,139 @@ def _execute_employee_task_with_retries(
     return result
 
 
+def _run_step_with_inner_retries(
+    *,
+    employee_id: str,
+    step_name: str,
+    task_text: str,
+    extra: Dict[str, Any],
+    user_id: int,
+    run_id: str,
+) -> Tuple[Dict[str, Any], bool, str, Dict[str, Any], str, int, int]:
+    """Run a single step with inner fix-retry (code) or marker-retry (review/qa).
+
+    返回 (result, ok, failure_reason, para_meta, report_excerpt,
+           code_fix_retry_rounds, marker_retry_rounds)。
+
+    内层重试边界：
+    - code step: MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES (默认 2) 额外轮数。
+      失败时把 failure_reason 反馈给员工，强制其重新跑测试/lint 直到通过再交付。
+      攻克 30/37 静默失败：员工代码测试不过 → loop 不再立即终止，而是给员工
+      N 次修代码机会，failure_reason 直接拼进 task_text 让 LLM 看到具体错误。
+    - review/qa step: MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES (默认 1) 额外轮数。
+      dispatch 成功但缺 SELF_MAINTENANCE_*_JSON marker 时，提醒员工按格式
+      重新输出，gate 标准不变。攻克 13 条 waiting_human_strategy 中因 marker
+      缺失而误判的部分。
+
+    每次内层尝试写一条 phase=step_retry 的 ledger 记录（最终结论由调用方写
+    phase=step），保证内层痕迹可观测但不污染 steps 列表。
+    """
+    if step_name == "code":
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
+        retry_kind = "code_fix"
+    else:
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 1) + 1)
+        retry_kind = "marker"
+    marker = STRUCTURED_REVIEW_MARKER if step_name == "review" else STRUCTURED_QA_MARKER
+
+    last_task_text = task_text
+    result: Dict[str, Any] = {}
+    ok = False
+    failure_reason = ""
+    para_meta: Dict[str, Any] = {}
+    report_excerpt = ""
+    code_fix_retry_rounds = 0
+    marker_retry_rounds = 0
+
+    for attempt in range(1, inner_max + 1):
+        input_data = _base_para_input(extra)
+        result = _execute_employee_task_with_retries(
+            employee_id,
+            last_task_text,
+            input_data,
+            user_id=user_id,
+        )
+        ok = _employee_result_ok(result)
+        para_meta = _extract_para_meta(result)
+        report_excerpt = _extract_report_excerpt(result)
+        para_report_excerpt = _fetch_para_task_report_excerpt(
+            para_meta.get("task_id"),
+            para_meta.get("subtask_id"),
+        )
+        if para_report_excerpt:
+            report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
+        failure_reason = "" if ok else _extract_failure_reason(result, para_meta)
+
+        is_final = attempt >= inner_max
+
+        # 决定是否需要内层重试
+        should_retry = False
+        if not ok and not is_final:
+            # code step: dispatch/code 失败 → 反馈原因让员工修代码再交付
+            # review/qa step: dispatch 失败不重试内层（_execute_employee_task_with_retries
+            #                 已重试过瞬态失败），让外层走 _decide_post_loop_policy
+            if retry_kind == "code_fix":
+                should_retry = True
+        elif ok and retry_kind == "marker" and not is_final:
+            # dispatch 成功但 marker 缺失 → 提醒员工按格式重新输出
+            marker_obj = _structured_report_from_step(
+                {"report_excerpt": report_excerpt}, marker
+            )
+            if marker_obj is None:
+                should_retry = True
+
+        # 写非最终的 step_retry trace（最终 step 由调用方写）
+        if not is_final:
+            trace_record = {
+                "employee_id": employee_id,
+                "error": failure_reason,
+                "inner_attempt": attempt,
+                "ok": ok,
+                "para": para_meta,
+                "phase": "step_retry",
+                "report_excerpt": report_excerpt,
+                "retry_attempts": result.get("self_maintenance_retry_attempts"),
+                "run_id": run_id,
+                "status": "success" if ok else "failed",
+                "step": step_name,
+                "timestamp": _iso(_utc_now()),
+            }
+            _append_ledger(trace_record)
+
+        if not should_retry:
+            break
+
+        if retry_kind == "code_fix":
+            last_task_text = (
+                task_text
+                + f"\n\n=== PREVIOUS ATTEMPT FAILED (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"failure_reason: {failure_reason}\n"
+                + "MANDATORY: Address the failure reason above. Re-run the failing "
+                + "command locally, fix until it passes, then deliver again. Do not "
+                + "report completion unless the previously failing command now exits 0."
+            )
+            code_fix_retry_rounds = attempt
+        else:  # marker
+            last_task_text = (
+                task_text
+                + f"\n\n=== PREVIOUS REPORT MISSING REQUIRED MARKER (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"Your previous report did not include the required JSON marker {marker}. "
+                + f"Re-emit your report with exactly one JSON object after the marker {marker}. "
+                + "Schema and other requirements unchanged."
+            )
+            marker_retry_rounds = attempt
+
+    return (
+        result,
+        ok,
+        failure_reason,
+        para_meta,
+        report_excerpt,
+        code_fix_retry_rounds,
+        marker_retry_rounds,
+    )
+
+
 def _fetch_para_task_report_excerpt(
     task_id: Optional[str], subtask_id: Optional[str], limit: int = 8000
 ) -> str:
@@ -1521,6 +1732,13 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
         "NO_ACTION_REASON explaining why no source change was safe. "
         "Do not edit runtime-only, ignored, .devfleet, or .trae files. "
+        "MANDATORY SELF-VERIFICATION: Before reporting completion, you MUST run the "
+        "relevant tests/lint/type-check commands for the files you changed and paste "
+        "the passing output (exit code 0) in your report. If any command fails, fix "
+        "your changes and retry — do NOT report completion with failing tests. The "
+        "loop will reject your delivery if delivery_validation shows exit_code != 0, "
+        "and you will be given the failure_reason to fix; save everyone a round by "
+        "self-verifying first. "
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
@@ -3721,28 +3939,27 @@ def run_self_maintenance_loop(
                     "review_target_para_task_id": para_task_id,
                 }
 
-            input_data = _base_para_input(extra)
-            result = _execute_employee_task_with_retries(
-                employee_id,
-                task_text,
-                input_data,
+            (
+                result,
+                ok,
+                failure_reason,
+                para_meta,
+                report_excerpt,
+                code_fix_retry_rounds,
+                marker_retry_rounds,
+            ) = _run_step_with_inner_retries(
+                employee_id=employee_id,
+                step_name=step_name,
+                task_text=task_text,
+                extra=extra,
                 user_id=user_id,
+                run_id=run_id,
             )
-            ok = _employee_result_ok(result)
-            para_meta = _extract_para_meta(result)
-            report_excerpt = _extract_report_excerpt(result)
-            para_report_excerpt = _fetch_para_task_report_excerpt(
-                para_meta.get("task_id"),
-                para_meta.get("subtask_id"),
-            )
-            if para_report_excerpt:
-                report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
             if para_meta.get("task_id") and para_task_id is None:
                 para_task_id = str(para_meta["task_id"])
             if step_name == "code" and para_meta.get("branch"):
                 code_branch = str(para_meta["branch"])
 
-            failure_reason = "" if ok else _extract_failure_reason(result, para_meta)
             step_record = {
                 "employee_id": employee_id,
                 "error": failure_reason,
@@ -3751,6 +3968,8 @@ def run_self_maintenance_loop(
                 "phase": "step",
                 "report_excerpt": report_excerpt,
                 "retry_attempts": result.get("self_maintenance_retry_attempts"),
+                "code_fix_retry_rounds": code_fix_retry_rounds,
+                "marker_retry_rounds": marker_retry_rounds,
                 "run_id": run_id,
                 "status": "success" if ok else "failed",
                 "step": step_name,
