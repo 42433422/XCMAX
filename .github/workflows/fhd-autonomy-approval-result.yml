@@ -38,23 +38,22 @@ jobs:
             exit 1
           fi
           approver=""
-          entered_execution="false"
+          jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?filter=latest")"
+          resume_succeeded="$(jq -r '
+            any(.jobs[]?.steps[]?;
+              .name == "Resume approved autonomy action" and .conclusion == "success")
+          ' <<< "$jobs")"
           while IFS= read -r statuses_url; do
             statuses="$(gh api "$statuses_url")"
             approver="$(jq -r --arg needle "/actions/runs/${RUN_ID}/" '
               [.[] | select((.log_url // "") | contains($needle)) | select(.state == "failure") | .creator.login][0] // empty
             ' <<< "$statuses")"
-            if jq -e --arg needle "/actions/runs/${RUN_ID}/" '
-              any(.[]; select((.log_url // "") | contains($needle)); .state == "in_progress")
-            ' <<< "$statuses" >/dev/null; then
-              entered_execution="true"
-            fi
             [ -n "$approver" ] && break
           done < <(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=production&per_page=100" --jq '.[].statuses_url')
           approver="${approver:-$APPROVER_FALLBACK}"
           decision="rejected"
           reason="GitHub environment review rejected: $CONCLUSION"
-          if [ "$entered_execution" = "true" ]; then
+          if [ "$resume_succeeded" = "true" ]; then
             decision="execution_failed"
             reason="Approved workflow execution failed: $CONCLUSION"
           fi
@@ -66,9 +65,20 @@ jobs:
             --arg workflow_action "$workflow_action" \
             --arg reason "$reason" \
             '{action_id:$action_id,approval_id:$approval_id,approver:$approver,decision:$decision,workflow_action:$workflow_action,reason:$reason,outcome:{reason:$reason}}')"
-          curl --fail-with-body --silent --show-error \
+          response_body="${RUNNER_TEMP}/autonomy-result-callback.json"
+          status="$(curl --silent --show-error --output "$response_body" --write-out '%{http_code}' \
             -X POST "$AUTONOMY_CALLBACK_URL" \
             -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Actor: $approver" \
-            --data "$payload"
+            --data "$payload")"
+          cat "$response_body"
+          if [[ "$status" == 2* ]]; then
+            exit 0
+          fi
+          if [ "$status" = "409" ] && grep -qE 'already terminal|was rejected' "$response_body"; then
+            echo "Autonomy action was already terminal; fallback callback is complete."
+            exit 0
+          fi
+          echo "::error::Autonomy result callback returned HTTP $status"
+          exit 1
