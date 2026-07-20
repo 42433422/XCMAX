@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -46,6 +49,57 @@ def test_delegate_accepts_deployed_fhd_runtime_root(tmp_path, monkeypatch) -> No
 
     assert str(runtime_fhd) in sys.path
     sys.path.remove(str(runtime_fhd))
+
+
+def test_delegate_repairs_an_existing_app_namespace() -> None:
+    modstore_root = Path(__file__).resolve().parents[1]
+    fhd_root = Path(__file__).resolve().parents[3] / "FHD"
+    script = """
+import sys
+import types
+app = types.ModuleType("app")
+app.__path__ = []
+domain = types.ModuleType("app.domain")
+domain.__path__ = []
+sys.modules["app"] = app
+sys.modules["app.domain"] = domain
+from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
+ensure_fhd_on_path()
+from app.domain.autonomy.autonomy_guard import AutonomyGuard
+assert AutonomyGuard
+"""
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(modstore_root),
+        "XCAGI_FHD_RUNTIME_ROOT": str(fhd_root),
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_employee_executor_fails_closed_when_risk_middleware_errors(
+    monkeypatch,
+) -> None:
+    from modstore_server import employee_executor, employee_risk_middleware
+
+    def broken_gate(*_args, **_kwargs):
+        raise ModuleNotFoundError("risk SSOT unavailable")
+
+    monkeypatch.setattr(employee_risk_middleware, "gate_action_or_block", broken_gate)
+    decision = employee_executor._evaluate_employee_risk_gate("worker", {}, ["agent"], {})
+
+    assert decision["ok"] is False
+    assert decision["blocked"] is True
+    assert decision["pending_approval"] is False
+    assert decision["risk_level"] == "blocked"
+    assert decision["decision"] == "blocked"
 
 
 def test_daily_vibe_rejected_action_is_not_requeued() -> None:
