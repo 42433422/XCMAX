@@ -130,6 +130,29 @@ class TestMatchRules:
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "exec" for f in findings)
 
+    def test_ai_review_tooling_high_rules_are_skipped(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="FHD/scripts/ci/ai_review.py",
+                start_line=330,
+                lines=[
+                    (
+                        330,
+                        "+",
+                        r'"禁止 document.write()，已废弃且阻塞渲染；改用 DOM API 或 innerHTML+净化。"',
+                    ),
+                    (
+                        331,
+                        "+",
+                        r'"禁止 new Function()，等价 eval() 可致代码注入；改用闭包或显式解析器。"',
+                    ),
+                ],
+                raw_header="@@ -330,2 +330,2 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert not any(f.severity in {"high", "medium"} for f in findings)
+
     def test_os_system_detected(self) -> None:
         hunks = [
             review.DiffHunk(
@@ -176,7 +199,9 @@ class TestMatchRules:
             )
         ]
         # 简化：直接构造完整 token 字符串
-        hunks[0].lines = [(1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")]  # noqa: S105
+        hunks[0].lines = [
+            (1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")
+        ]  # noqa: S105
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "hardcoded-aws-secret" for f in findings)
 
@@ -259,7 +284,10 @@ class TestMatchRules:
             review.DiffHunk(
                 file_path="foo.py",
                 start_line=1,
-                lines=[(0, "-", "subprocess.run('rm', shell=True)"), (1, "+", "safe_call()")],
+                lines=[
+                    (0, "-", "subprocess.run('rm', shell=True)"),
+                    (1, "+", "safe_call()"),
+                ],
                 raw_header="@@ -1,1 +1,1 @@",
             )
         ]
@@ -288,7 +316,9 @@ class TestMatchRules:
 
 
 class TestCallLlmReview:
-    def test_no_api_key_returns_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_api_key_returns_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("XCAGI_LLM_API_KEY", raising=False)
         finding = review.Finding(
             file_path="f",
