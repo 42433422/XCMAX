@@ -137,25 +137,30 @@ class TestRiskLevelMarking:
     def test_high_risk_tools_marked_high(self, registry_by_name: dict[str, dict]):
         """delete/clear/assign 等高危工具应标记 risk_level=high。"""
         for name in _HIGH_RISK_TOOLS:
-            assert (
-                registry_by_name[name].get("risk_level") == "high"
-            ), f"{name} 应标记 risk_level=high，实际: {registry_by_name[name].get('risk_level')}"
+            assert registry_by_name[name].get("risk_level") == "high", (
+                f"{name} 应标记 risk_level=high，实际: {registry_by_name[name].get('risk_level')}"
+            )
 
     def test_list_only_tools_marked_low(self, registry_by_name: dict[str, dict]):
         """只读查询类工具应标记 risk_level=low。"""
         low_risk_new_tools = {"list_orders", "list_customers", "list_report_configs", "list_roles"}
         for name in low_risk_new_tools:
-            assert (
-                registry_by_name[name].get("risk_level") == "low"
-            ), f"{name} 应标记 risk_level=low，实际: {registry_by_name[name].get('risk_level')}"
+            assert registry_by_name[name].get("risk_level") == "low", (
+                f"{name} 应标记 risk_level=low，实际: {registry_by_name[name].get('risk_level')}"
+            )
 
     def test_update_tools_marked_medium(self, registry_by_name: dict[str, dict]):
         """更新类工具应标记 risk_level=medium。"""
-        medium_risk_new_tools = {"update_order", "update_customer", "configure_report", "update_role"}
+        medium_risk_new_tools = {
+            "update_order",
+            "update_customer",
+            "configure_report",
+            "update_role",
+        }
         for name in medium_risk_new_tools:
-            assert (
-                registry_by_name[name].get("risk_level") == "medium"
-            ), f"{name} 应标记 risk_level=medium，实际: {registry_by_name[name].get('risk_level')}"
+            assert registry_by_name[name].get("risk_level") == "medium", (
+                f"{name} 应标记 risk_level=medium，实际: {registry_by_name[name].get('risk_level')}"
+            )
 
 
 # ─── 高危工具 confirm 参数 ──────────────────────────────────────────────────
@@ -170,9 +175,9 @@ class TestHighRiskConfirmParameter:
             params = registry_by_name[name]["function"]["parameters"]
             props = params.get("properties") or {}
             assert "confirm" in props, f"{name} 缺少 confirm 参数"
-            assert (
-                props["confirm"].get("type") == "boolean"
-            ), f"{name}.confirm 类型应为 boolean，实际: {props['confirm'].get('type')}"
+            assert props["confirm"].get("type") == "boolean", (
+                f"{name}.confirm 类型应为 boolean，实际: {props['confirm'].get('type')}"
+            )
 
 
 # ─── 工具分发器 ─────────────────────────────────────────────────────────────

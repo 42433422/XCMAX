@@ -62,7 +62,16 @@ def _save_configs(configs: list[dict[str, Any]]) -> None:
 
 _VALID_REPORT_TYPES = {"sales", "inventory", "inventory_transactions", "purchase", "dashboard"}
 _VALID_CHART_TYPES = {"bar", "line", "pie", "table", "scatter"}
-_VALID_GROUP_BY = {"product", "customer", "supplier", "category", "warehouse", "month", "week", "day"}
+_VALID_GROUP_BY = {
+    "product",
+    "customer",
+    "supplier",
+    "category",
+    "warehouse",
+    "month",
+    "week",
+    "day",
+}
 
 
 def configure_report(args: dict[str, Any]) -> dict[str, Any]:

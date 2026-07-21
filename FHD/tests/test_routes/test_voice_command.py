@@ -228,9 +228,7 @@ class TestExecuteIntentToolHelper:
             "app.application.ai_chat_app_service.get_ai_chat_app_service",
             return_value=mock_app_service,
         ):
-            result = _execute_intent_tool(
-                "products", "查询产品", {"keyword": "A"}, "session-1"
-            )
+            result = _execute_intent_tool("products", "查询产品", {"keyword": "A"}, "session-1")
         assert result["executed"] is True
         assert result["reason"] == "executed"
         assert result["session_id"] == "session-1"
@@ -316,9 +314,7 @@ class TestVoiceCommandRoute:
         assert response.status_code == 500
         assert "whisper 解码失败" in response.json()["detail"]
 
-    def test_auto_execute_false_returns_text_and_intent_without_executing(
-        self, client: TestClient
-    ):
+    def test_auto_execute_false_returns_text_and_intent_without_executing(self, client: TestClient):
         """auto_execute=False：返回 text + intent，executed=false，不调用 _execute_intent_tool。"""
         intent_data = {
             "tool_key": "products",
@@ -342,9 +338,7 @@ class TestVoiceCommandRoute:
                 "app.fastapi_routes.voice_routes._recognize_intent",
                 return_value=intent_data,
             ),
-            patch(
-                "app.fastapi_routes.voice_routes._execute_intent_tool"
-            ) as mock_exec,
+            patch("app.fastapi_routes.voice_routes._execute_intent_tool") as mock_exec,
         ):
             response = client.post(
                 "/api/voice/command",
@@ -363,9 +357,7 @@ class TestVoiceCommandRoute:
         # 不应调用执行器
         mock_exec.assert_not_called()
 
-    def test_auto_execute_true_low_risk_high_confidence_executes(
-        self, client: TestClient
-    ):
+    def test_auto_execute_true_low_risk_high_confidence_executes(self, client: TestClient):
         """auto_execute=True + 低风险 + 高置信度 → 调用 _execute_intent_tool 并返回 executed=true。"""
         intent_data = {
             "tool_key": "products",
@@ -420,9 +412,7 @@ class TestVoiceCommandRoute:
         # 验证执行器收到正确参数
         mock_exec.assert_called_once_with("products", "查询A产品", {"keyword": "A"}, "s3")
 
-    def test_auto_execute_true_high_risk_intent_blocks_execution(
-        self, client: TestClient
-    ):
+    def test_auto_execute_true_high_risk_intent_blocks_execution(self, client: TestClient):
         """auto_execute=True + 高风险意图（delete/clear_all/customer_edit/wechat_send）→ 拒绝执行。"""
         # 用 HIGH_RISK_INTENTS 中第一个做测试
         high_risk_tool = next(iter(HIGH_RISK_INTENTS))
@@ -448,9 +438,7 @@ class TestVoiceCommandRoute:
                 "app.fastapi_routes.voice_routes._recognize_intent",
                 return_value=intent_data,
             ),
-            patch(
-                "app.fastapi_routes.voice_routes._execute_intent_tool"
-            ) as mock_exec,
+            patch("app.fastapi_routes.voice_routes._execute_intent_tool") as mock_exec,
         ):
             response = client.post(
                 "/api/voice/command",
@@ -465,9 +453,7 @@ class TestVoiceCommandRoute:
         # 高风险意图不调用执行器
         mock_exec.assert_not_called()
 
-    def test_auto_execute_true_low_confidence_blocks_execution(
-        self, client: TestClient
-    ):
+    def test_auto_execute_true_low_confidence_blocks_execution(self, client: TestClient):
         """auto_execute=True + 低置信度（≤ INTENT_CONFIDENCE_THRESHOLD）→ 拒绝执行。"""
         intent_data = {
             "tool_key": "products",
@@ -491,9 +477,7 @@ class TestVoiceCommandRoute:
                 "app.fastapi_routes.voice_routes._recognize_intent",
                 return_value=intent_data,
             ),
-            patch(
-                "app.fastapi_routes.voice_routes._execute_intent_tool"
-            ) as mock_exec,
+            patch("app.fastapi_routes.voice_routes._execute_intent_tool") as mock_exec,
         ):
             response = client.post(
                 "/api/voice/command",
@@ -507,9 +491,7 @@ class TestVoiceCommandRoute:
         assert data["data"]["confidence"] == INTENT_CONFIDENCE_THRESHOLD
         mock_exec.assert_not_called()
 
-    def test_auto_execute_true_negated_intent_blocks_execution(
-        self, client: TestClient
-    ):
+    def test_auto_execute_true_negated_intent_blocks_execution(self, client: TestClient):
         """auto_execute=True + 否定式意图（is_negated=true）→ 拒绝执行。"""
         intent_data = {
             "tool_key": "shipment_generate",
@@ -533,9 +515,7 @@ class TestVoiceCommandRoute:
                 "app.fastapi_routes.voice_routes._recognize_intent",
                 return_value=intent_data,
             ),
-            patch(
-                "app.fastapi_routes.voice_routes._execute_intent_tool"
-            ) as mock_exec,
+            patch("app.fastapi_routes.voice_routes._execute_intent_tool") as mock_exec,
         ):
             response = client.post(
                 "/api/voice/command",
@@ -573,9 +553,7 @@ class TestVoiceCommandRoute:
                 "app.fastapi_routes.voice_routes._recognize_intent",
                 return_value=intent_data,
             ),
-            patch(
-                "app.fastapi_routes.voice_routes._execute_intent_tool"
-            ) as mock_exec,
+            patch("app.fastapi_routes.voice_routes._execute_intent_tool") as mock_exec,
         ):
             response = client.post(
                 "/api/voice/command",
@@ -589,9 +567,7 @@ class TestVoiceCommandRoute:
         assert data["data"]["intent"] is None
         mock_exec.assert_not_called()
 
-    def test_execution_failure_returns_execution_failed_reason(
-        self, client: TestClient
-    ):
+    def test_execution_failure_returns_execution_failed_reason(self, client: TestClient):
         """auto_execute=True + 低风险 + 高置信度，但 _execute_intent_tool 抛异常 → reason=execution_failed。"""
         intent_data = {
             "tool_key": "products",

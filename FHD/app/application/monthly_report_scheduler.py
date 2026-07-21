@@ -94,20 +94,14 @@ def generate_monthly_finance_summary(
             inbound_query = db.query(
                 PurchaseInbound.status,
                 func.count(PurchaseInbound.id).label("count"),
-                func.coalesce(func.sum(PurchaseInbound.total_amount), 0).label(
-                    "amount"
-                ),
+                func.coalesce(func.sum(PurchaseInbound.total_amount), 0).label("amount"),
             ).filter(
                 PurchaseInbound.inbound_date >= start,
                 PurchaseInbound.inbound_date < end,
             )
             if tenant_id is not None:
-                inbound_query = inbound_query.filter(
-                    PurchaseInbound.tenant_id == tenant_id
-                )
-            for status, count, amount in inbound_query.group_by(
-                PurchaseInbound.status
-            ).all():
+                inbound_query = inbound_query.filter(PurchaseInbound.tenant_id == tenant_id)
+            for status, count, amount in inbound_query.group_by(PurchaseInbound.status).all():
                 count = int(count or 0)
                 amount = float(amount or 0)
                 summary["by_inbound_status"][status or "unknown"] = {
@@ -130,13 +124,9 @@ def generate_monthly_finance_summary(
                 ApprovalRequest.submitted_at < end,
             )
             if tenant_id is not None:
-                approval_query = approval_query.filter(
-                    ApprovalRequest.tenant_id == tenant_id
-                )
+                approval_query = approval_query.filter(ApprovalRequest.tenant_id == tenant_id)
             approval_count = 0
-            for status, count in approval_query.group_by(
-                ApprovalRequest.status
-            ).all():
+            for status, count in approval_query.group_by(ApprovalRequest.status).all():
                 approval_count += int(count or 0)
             summary["total_approval_count"] = approval_count
 
@@ -144,17 +134,13 @@ def generate_monthly_finance_summary(
             tx_query = db.query(
                 FinancialTransaction.transaction_type,
                 func.count(FinancialTransaction.id).label("count"),
-                func.coalesce(func.sum(FinancialTransaction.amount), 0).label(
-                    "amount"
-                ),
+                func.coalesce(func.sum(FinancialTransaction.amount), 0).label("amount"),
             ).filter(
                 FinancialTransaction.transaction_date >= start,
                 FinancialTransaction.transaction_date < end,
             )
             if tenant_id is not None:
-                tx_query = tx_query.filter(
-                    FinancialTransaction.tenant_id == tenant_id
-                )
+                tx_query = tx_query.filter(FinancialTransaction.tenant_id == tenant_id)
             for tx_type, count, amount in tx_query.group_by(
                 FinancialTransaction.transaction_type
             ).all():
@@ -245,9 +231,7 @@ def _monthly_finance_summary_task(
     return result
 
 
-def schedule_monthly_job(
-    *, tenant_id: int | None = None, hour: int = 0, minute: int = 30
-) -> None:
+def schedule_monthly_job(*, tenant_id: int | None = None, hour: int = 0, minute: int = 30) -> None:
     """注册每月 1 号 ``hour:minute`` 触发的 Celery beat 任务（幂等）。
 
     默认 00:30，覆盖月初零点高峰。

@@ -350,9 +350,7 @@ class TestApprovalCompletedApprovedUpdatesInbound:
             domain="finance",
         )
 
-        with patch(
-            "app.neuro_bus.domains.finance_domain_handlers.PurchaseService"
-        ) as MockPurchase:
+        with patch("app.neuro_bus.domains.finance_domain_handlers.PurchaseService") as MockPurchase:
             mock_instance = MockPurchase.return_value
             mock_instance.update_inbound_approval_status.return_value = {
                 "success": True,
@@ -390,9 +388,7 @@ class TestApprovalCompletedRejectedMarksRejected:
             domain="finance",
         )
 
-        with patch(
-            "app.neuro_bus.domains.finance_domain_handlers.PurchaseService"
-        ) as MockPurchase:
+        with patch("app.neuro_bus.domains.finance_domain_handlers.PurchaseService") as MockPurchase:
             mock_instance = MockPurchase.return_value
             mock_instance.update_inbound_approval_status.return_value = {
                 "success": True,
@@ -482,7 +478,11 @@ class TestPurchaseServicePublishesInboundCreated:
         mock_session.flush = MagicMock()
         mock_session.commit = MagicMock()
         mock_session.refresh = MagicMock(side_effect=lambda x: None)
-        mock_session.query = MagicMock(return_value=MagicMock(filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))))
+        mock_session.query = MagicMock(
+            return_value=MagicMock(
+                filter=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))
+            )
+        )
         # _model_to_dict 需要 __table__.columns
         mock_inbound.__table__ = MagicMock()
         mock_inbound.__table__.columns = []
@@ -490,9 +490,7 @@ class TestPurchaseServicePublishesInboundCreated:
         mock_session.execute = MagicMock()
 
         with patch("app.services.purchase_service.get_db", return_value=mock_session):
-            with patch(
-                "app.services.purchase_service.InventoryService"
-            ) as MockInv:
+            with patch("app.services.purchase_service.InventoryService") as MockInv:
                 MockInv.return_value.inventory_in = MagicMock(
                     return_value={"success": True, "message": "ok"}
                 )

@@ -10,7 +10,7 @@ Report Domain Event Handlers
 设计要点：
 - 所有 handler 必须 try/except，绝不抛出异常崩溃 NeuroBus dispatch loop。
 - ``generate_monthly_finance_summary`` 来自
-  ``app.services.monthly_report_scheduler``，由于 ``app.services`` 包存在
+  ``app.application.monthly_report_scheduler``，由于 ``app.services`` 包存在
   循环导入，采用模块级占位 + 延迟导入模式，便于测试 patch（参考
   ``inventory_domain_handlers.py`` 同模式）。
 """
@@ -69,7 +69,7 @@ def _resolve_generator():
     gen = generate_monthly_finance_summary
     if gen is not None:
         return gen
-    from app.services.monthly_report_scheduler import (
+    from app.application.monthly_report_scheduler import (
         generate_monthly_finance_summary as _lazy_gen,
     )
 
@@ -132,9 +132,7 @@ async def handle_monthly_summary_requested(event: NeuroEvent) -> dict[str, Any]:
     try:
         result = gen_fn(tenant_id, year, month)
     except Exception as exc:  # noqa: BLE001 — 任何异常都不能崩溃总线
-        logger.exception(
-            "[ReportServiceDomain] generate_monthly_finance_summary 抛异常: %s", exc
-        )
+        logger.exception("[ReportServiceDomain] generate_monthly_finance_summary 抛异常: %s", exc)
         _publish_event(
             REPORT_MONTHLY_SUMMARY_FAILED,
             {
@@ -156,9 +154,7 @@ async def handle_monthly_summary_requested(event: NeuroEvent) -> dict[str, Any]:
 
     if not result.get("success"):
         error_msg = result.get("error") or "generate_monthly_finance_summary returned failure"
-        logger.warning(
-            "[ReportServiceDomain] 月报生成业务失败: %s", error_msg
-        )
+        logger.warning("[ReportServiceDomain] 月报生成业务失败: %s", error_msg)
         _publish_event(
             REPORT_MONTHLY_SUMMARY_FAILED,
             {
@@ -220,9 +216,7 @@ class ReportServiceDomainHandlers:
 
     def register(self):
         """注册所有事件处理器"""
-        self.bus.subscribe(
-            "report.monthly_summary_requested", handle_monthly_summary_requested
-        )
+        self.bus.subscribe("report.monthly_summary_requested", handle_monthly_summary_requested)
         logger.info(
             "[ReportServiceDomain] 已注册 %d 个事件处理器",
             len(self.bus._handlers.get("report.monthly_summary_requested", [])),

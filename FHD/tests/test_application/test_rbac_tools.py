@@ -26,9 +26,7 @@ class TestCreateRole:
 
     def test_create_role_missing_name_returns_error(self):
         """缺少 name 应返回错误。"""
-        result = rbac_tools.create_role(
-            {"permissions": ["admin.manage_users"], "confirm": True}
-        )
+        result = rbac_tools.create_role({"permissions": ["admin.manage_users"], "confirm": True})
         assert result["success"] is False
         assert result["error"] == "name is required"
 
@@ -72,9 +70,7 @@ class TestAssignRole:
 
     def test_assign_role_without_confirm_returns_needs_confirm(self):
         """未传 confirm=true 时应拒绝执行。"""
-        result = rbac_tools.assign_role(
-            {"user_id": 10, "role": "manager", "confirm": False}
-        )
+        result = rbac_tools.assign_role({"user_id": 10, "role": "manager", "confirm": False})
         assert result["success"] is False
         assert result.get("needs_confirm") is True
         assert result["user_id"] == 10
@@ -88,9 +84,7 @@ class TestAssignRole:
 
     def test_assign_role_invalid_user_id_returns_error(self):
         """user_id 非 int 应返回错误。"""
-        result = rbac_tools.assign_role(
-            {"user_id": "abc", "role": "manager", "confirm": True}
-        )
+        result = rbac_tools.assign_role({"user_id": "abc", "role": "manager", "confirm": True})
         assert result["success"] is False
         assert result["error"] == "user_id is required and must be int"
 
@@ -102,9 +96,7 @@ class TestAssignRole:
             "role": "manager",
         }
         with patch.object(rbac_tools, "_get_service", return_value=mock_svc):
-            result = rbac_tools.assign_role(
-                {"user_id": 10, "role": "manager", "confirm": True}
-            )
+            result = rbac_tools.assign_role({"user_id": 10, "role": "manager", "confirm": True})
 
         mock_svc.assign_user_role.assert_called_once_with(10, "manager")
         assert result["success"] is True
@@ -117,9 +109,7 @@ class TestAssignRole:
         mock_svc = MagicMock()
         mock_svc.assign_user_role.return_value = {"user_id": 10, "role": "admin"}
         with patch.object(rbac_tools, "_get_service", return_value=mock_svc):
-            result = rbac_tools.assign_role(
-                {"user_id": 10, "role_name": "admin", "confirm": True}
-            )
+            result = rbac_tools.assign_role({"user_id": 10, "role_name": "admin", "confirm": True})
 
         mock_svc.assign_user_role.assert_called_once_with(10, "admin")
         assert result["success"] is True

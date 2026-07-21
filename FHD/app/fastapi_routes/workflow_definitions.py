@@ -122,7 +122,10 @@ def list_definitions(
 @router.get("/{definition_id}")
 def get_definition(definition_id: int, _user=Depends(_require_admin)):
     try:
-        return {"success": True, "data": get_workflow_definition_app_service().get_definition(definition_id)}
+        return {
+            "success": True,
+            "data": get_workflow_definition_app_service().get_definition(definition_id),
+        }
     except AppError as exc:
         return _handle_app_error(exc)
 
@@ -162,7 +165,10 @@ def delete_definition(definition_id: int, _user=Depends(_require_admin)):
 @router.post("/{definition_id}/activate")
 def activate_definition(definition_id: int, _user=Depends(_require_admin)):
     try:
-        return {"success": True, "data": get_workflow_definition_app_service().activate_definition(definition_id)}
+        return {
+            "success": True,
+            "data": get_workflow_definition_app_service().activate_definition(definition_id),
+        }
     except AppError as exc:
         return _handle_app_error(exc)
 
@@ -170,7 +176,10 @@ def activate_definition(definition_id: int, _user=Depends(_require_admin)):
 @router.post("/{definition_id}/deactivate")
 def deactivate_definition(definition_id: int, _user=Depends(_require_admin)):
     try:
-        return {"success": True, "data": get_workflow_definition_app_service().deactivate_definition(definition_id)}
+        return {
+            "success": True,
+            "data": get_workflow_definition_app_service().deactivate_definition(definition_id),
+        }
     except AppError as exc:
         return _handle_app_error(exc)
 

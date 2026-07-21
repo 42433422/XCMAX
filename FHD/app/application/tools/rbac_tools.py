@@ -116,9 +116,7 @@ def update_role(args: dict[str, Any]) -> dict[str, Any]:
 
     try:
         svc = _get_service()
-        data = svc.update_role(
-            role_id, description=description, permissions=permissions
-        )
+        data = svc.update_role(role_id, description=description, permissions=permissions)
         return {
             "success": True,
             "message": f"角色 {role_id} 已更新",
