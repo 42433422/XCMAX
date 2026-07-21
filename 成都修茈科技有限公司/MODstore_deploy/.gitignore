@@ -41,7 +41,8 @@ web/dist/
 .pytest_cache/
 .coverage
 htmlcov/
-catalog_data/
+catalog_data/*
+!catalog_data/duty_employee_registry.json
 modstore_server/*.db
 hero-video.mp4
 backups/
