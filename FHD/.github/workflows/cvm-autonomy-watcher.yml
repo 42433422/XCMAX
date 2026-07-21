@@ -28,9 +28,22 @@ permissions:
 
 jobs:
   watcher-tick:
-    name: CVM autonomy watcher tick
+    name: CVM autonomy watcher (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Staging first: validate autonomy before prod.
+          - target: staging
+            deploy_root: /opt/fhd-staging
+            manifest: /var/www/update/releases/staging/server/fhd-manifest.json
+            required: "false"
+          - target: prod
+            deploy_root: /opt/fhd-full
+            manifest: /var/www/update/releases/stable/server/fhd-manifest.json
+            required: "true"
     steps:
       - name: Require CVM SSH secrets
         env:
@@ -54,6 +67,10 @@ jobs:
           CVM_INCIDENT_PAT: ${{ secrets.CVM_INCIDENT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          DEPLOY_ROOT: ${{ matrix.deploy_root }}
+          MANIFEST: ${{ matrix.manifest }}
+          TARGET: ${{ matrix.target }}
+          REQUIRED: ${{ matrix.required }}
         run: |
           set -euo pipefail
           HOST="${FHD_PUSH_HOST:-119.27.178.147}"
@@ -62,8 +79,6 @@ jobs:
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
-          DEPLOY_ROOT="/opt/fhd-full"
-          MANIFEST="/var/www/update/releases/stable/server/fhd-manifest.json"
           AUDIT_DIR="${DEPLOY_ROOT}/autonomy"
 
           DRY_FLAG=""
@@ -76,6 +91,14 @@ jobs:
           # 注：使用 SendEnv 接收需 sshd 配置 AcceptEnv；这里改用 env 前缀注入更通用
           REMOTE_CMD=$(cat <<EOF
           set -euo pipefail
+          if [ ! -d "${DEPLOY_ROOT}" ]; then
+            echo "[watcher] ${TARGET}: deploy root missing: ${DEPLOY_ROOT}"
+            if [ "${REQUIRED}" = "true" ]; then
+              exit 1
+            fi
+            echo "[watcher] ${TARGET}: optional target skipped"
+            exit 0
+          fi
           cd "${DEPLOY_ROOT}"
           GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
           GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
