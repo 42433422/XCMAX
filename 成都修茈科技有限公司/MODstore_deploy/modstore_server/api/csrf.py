@@ -33,6 +33,7 @@ _CSRF_EXEMPT_PATHS = frozenset(
         "/api/xcmax/sync/receive",
         "/api/agent/butler/corp-chat",
         "/api/agent/butler/corp-tts",
+        "/api/agent/butler/corp-translate",
         "/api/agent/butler/corp-intake-fill",
     }
 )

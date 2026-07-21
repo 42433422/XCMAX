@@ -10,6 +10,14 @@ import { apiFetch } from './apiBase'
 import { readCsrfTokenFromCookie } from './csrfCookie'
 import { playOfflinePcm, synthesizeOffline, ensureOfflineReady, isOfflineReady, isOfflineLoading, getOfflineProgress, stopOffline } from './offlineTts'
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import {
+  beginTtsSubtitles,
+  endTtsSubtitles,
+  isTtsSubtitleSession,
+  setTtsSubtitleIndex,
+  updateTtsSubtitleEn,
+} from '@/composables/ttsSubtitleStore'
+import { prefetchSubtitleTranslations, splitTtsSubtitleLines } from './ttsSubtitleTranslate'
 
 const VOICE_PREF_KEY = 'xcagi_tts_voice'
 const ENGINE_PREF_KEY = 'xcagi_tts_engine' // 'auto' | 'system' | 'offline' | 'online'
@@ -417,11 +425,52 @@ async function speakWithBrowserTts(
  * 高层 API：朗读一段文本，自动按引擎模式分发。
  * 返回 Promise 在播完/出错时 resolve。
  */
+let speakSubtitleGen = 0
+let speakSubtitleTimer: ReturnType<typeof setInterval> | null = null
+
+function clearSpeakSubtitleTimer() {
+  if (speakSubtitleTimer != null) {
+    clearInterval(speakSubtitleTimer)
+    speakSubtitleTimer = null
+  }
+}
+
+function beginSpeakSubtitles(plain: string): number {
+  clearSpeakSubtitleTimer()
+  const zhLines = splitTtsSubtitleLines(plain)
+  const gen = beginTtsSubtitles(zhLines)
+  speakSubtitleGen = gen
+  setTtsSubtitleIndex(0, gen)
+  prefetchSubtitleTranslations(zhLines, (i, en) => {
+    if (isTtsSubtitleSession(gen)) updateTtsSubtitleEn(i, en, gen)
+  })
+  if (zhLines.length > 1) {
+    const stepMs = Math.max(900, Math.min(3200, Math.round((plain.length / Math.max(1, zhLines.length)) * 90)))
+    let i = 0
+    speakSubtitleTimer = setInterval(() => {
+      i += 1
+      if (i >= zhLines.length || !isTtsSubtitleSession(gen)) {
+        clearSpeakSubtitleTimer()
+        return
+      }
+      setTtsSubtitleIndex(i, gen)
+    }, stepMs)
+  }
+  return gen
+}
+
+function endSpeakSubtitles(gen: number) {
+  clearSpeakSubtitleTimer()
+  endTtsSubtitles(gen)
+}
+
 export async function speakText(text: string, options?: { onEnd?: () => void; onError?: (e: unknown) => void }): Promise<void> {
   const plain = String(text || '').trim()
   if (!plain) { options?.onEnd?.(); return }
 
   const status = getTtsStatus()
+  const subGen = beginSpeakSubtitles(plain)
+
   // 显式 offline：仅离线包，失败不回退系统 TTS
   if (status.engineMode === 'offline') {
     try {
@@ -431,6 +480,8 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
     } catch (e) {
       options?.onError?.(e)
       options?.onEnd?.()
+    } finally {
+      endSpeakSubtitles(subGen)
     }
     return
   }
@@ -442,11 +493,15 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
   } catch (e) {
     options?.onError?.(e)
     options?.onEnd?.()
+  } finally {
+    endSpeakSubtitles(subGen)
   }
 }
 
 export function stopSpeaking(): void {
   stopOnlinePlayback()
+  clearSpeakSubtitleTimer()
+  endTtsSubtitles(speakSubtitleGen)
   // Only cancel speechSynthesis when it is actually active; unconditional cancel
   // releases the Windows "communications" audio session even when idle, which
   // causes other apps' volumes to snap back (OS audio-ducking restore).
