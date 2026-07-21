@@ -1,27 +1,16 @@
 /**
  * 官网公开行动看板渲染（只读）。
  * 页面通过 body[data-board=breakpoints|goals] + data-accent=patch|update 选择看板。
- * 使用 DOM API（不用 innerHTML），避免静态扫描误报 XSS。
  */
 ;(function () {
   'use strict'
 
-  function el(tag, className, text) {
-    var node = document.createElement(tag)
-    if (className) node.className = className
-    if (text != null && text !== '') node.textContent = String(text)
-    return node
-  }
-
-  function clear(node) {
-    while (node.firstChild) node.removeChild(node.firstChild)
-  }
-
-  function sumCard(className, strongText, spanText) {
-    var card = el('div', 'progress-sum-card ' + className)
-    card.appendChild(el('strong', '', strongText))
-    card.appendChild(el('span', '', spanText))
-    return card
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
   }
 
   function renderBoard(boardKey, accent) {
@@ -31,12 +20,10 @@
     var list = document.getElementById('board-list')
     if (!meta || !sum || !list) return
 
-    clear(sum)
-    clear(list)
-
     if (!board) {
       meta.textContent = '暂无公开数据'
-      list.appendChild(el('div', 'progress-empty', '今日暂无条目（日更 digest 后自动刷新）。'))
+      sum.innerHTML = ''
+      list.innerHTML = '<div class="progress-empty">今日暂无条目（日更 digest 后自动刷新）。</div>'
       return
     }
 
@@ -48,42 +35,72 @@
     meta.textContent = day + ' · 共 ' + (s.total || 0) + ' 条 · 只读公开'
 
     if (accent === 'patch') {
-      sum.appendChild(sumCard('is-p0', String(s.p0 || 0), 'P0 紧急修复'))
-      sum.appendChild(sumCard('is-todo', String(s.p1_p2 || 0), 'P1/P2 待办'))
-      sum.appendChild(
-        sumCard('is-ok', String((s.completion_rate || 0) + '%'), '完成率 · 已闭环 ' + (s.done || 0)),
-      )
+      sum.innerHTML =
+        '<div class="progress-sum-card is-p0"><strong>' +
+        esc(s.p0 || 0) +
+        '</strong><span>P0 紧急修复</span></div>' +
+        '<div class="progress-sum-card is-todo"><strong>' +
+        esc(s.p1_p2 || 0) +
+        '</strong><span>P1/P2 待办</span></div>' +
+        '<div class="progress-sum-card is-ok"><strong>' +
+        esc((s.completion_rate || 0) + '%') +
+        '</strong><span>完成率 · 已闭环 ' +
+        esc(s.done || 0) +
+        '</span></div>'
     } else {
       var lines = Object.keys(s.by_line || {}).length
-      sum.appendChild(sumCard('is-blue', String(s.total || 0), '更新条目'))
-      sum.appendChild(sumCard('is-todo', String(lines), '覆盖产线'))
-      sum.appendChild(
-        sumCard('is-ok', String((s.completion_rate || 0) + '%'), '完成率 · 已落 ' + (s.done || 0)),
-      )
+      sum.innerHTML =
+        '<div class="progress-sum-card is-blue"><strong>' +
+        esc(s.total || 0) +
+        '</strong><span>更新条目</span></div>' +
+        '<div class="progress-sum-card is-todo"><strong>' +
+        esc(lines) +
+        '</strong><span>覆盖产线</span></div>' +
+        '<div class="progress-sum-card is-ok"><strong>' +
+        esc((s.completion_rate || 0) + '%') +
+        '</strong><span>完成率 · 已落 ' +
+        esc(s.done || 0) +
+        '</span></div>'
     }
 
     var items = board.items || []
     if (!items.length) {
-      list.appendChild(el('div', 'progress-empty', '今日暂无条目（日更 digest 后自动刷新）。'))
+      list.innerHTML = '<div class="progress-empty">今日暂无条目（日更 digest 后自动刷新）。</div>'
       return
     }
 
-    items.forEach(function (it) {
-      var done = it.status === 'merged' || it.status === 'closed'
-      var pri = done ? 'ok' : String(it.priority || 'P2').toLowerCase()
-      var priLabel = done ? '已闭环' : String(it.priority || 'P2')
-      var article = el('article', 'progress-item' + (done ? ' is-done' : ''))
-      article.appendChild(el('span', 'progress-pri ' + pri, priLabel))
-      var body = el('div')
-      body.appendChild(el('h2', '', it.title || ''))
-      var itemMeta = el('div', 'progress-item-meta')
-      itemMeta.appendChild(el('span', '', it.line_label || it.line || '—'))
-      itemMeta.appendChild(el('span', '', it.owner || 'AI 员工'))
-      body.appendChild(itemMeta)
-      article.appendChild(body)
-      article.appendChild(el('span', 'progress-status', it.status_label || it.status || ''))
-      list.appendChild(article)
-    })
+    list.innerHTML = items
+      .map(function (it) {
+        var done = it.status === 'merged' || it.status === 'closed'
+        var pri = done ? 'ok' : String(it.priority || 'P2').toLowerCase()
+        var priLabel = done ? '已闭环' : esc(it.priority || 'P2')
+        return (
+          '<article class="progress-item' +
+          (done ? ' is-done' : '') +
+          '">' +
+          '<span class="progress-pri ' +
+          pri +
+          '">' +
+          priLabel +
+          '</span>' +
+          '<div><h2>' +
+          esc(it.title) +
+          '</h2>' +
+          '<div class="progress-item-meta">' +
+          '<span>' +
+          esc(it.line_label || it.line || '—') +
+          '</span>' +
+          '<span>' +
+          esc(it.owner || 'AI 员工') +
+          '</span>' +
+          '</div></div>' +
+          '<span class="progress-status">' +
+          esc(it.status_label || it.status || '') +
+          '</span>' +
+          '</article>'
+        )
+      })
+      .join('')
   }
 
   function boot() {

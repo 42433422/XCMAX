@@ -122,7 +122,25 @@ async function fetchCorpTtsDataUri(text: string): Promise<string | null> {
   return typeof uri === 'string' && uri.startsWith('data:') ? uri : null
 }
 
-/** 服务端 MiMo → Edge 神经音；失败静默，不回退系统 TTS。带底部双语字幕。 */
+function playDataUri(uri: string, gen: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isTtsSubtitleSession(gen)) {
+      resolve()
+      return
+    }
+    const a = new Audio(uri)
+    corpIntroAudio = a
+    const done = () => {
+      if (corpIntroAudio === a) corpIntroAudio = null
+      resolve()
+    }
+    a.onended = done
+    a.onerror = done
+    void a.play().catch(done)
+  })
+}
+
+/** 服务端 MiMo → Edge 神经音；失败静默，不回退系统 TTS。按句合成以音画同步。 */
 export function speakCorpIntro(text: string): Promise<void> {
   if (typeof window === 'undefined' || !text.trim()) return Promise.resolve()
   if (prefersReducedMotion()) return Promise.resolve()
@@ -145,38 +163,24 @@ export function speakCorpIntro(text: string): Promise<void> {
 
   return (async () => {
     try {
-      // 整段合成一次（延迟更低）；字幕按句在播放过程中推进
-      const uri = await fetchCorpTtsDataUri(plain)
-      if (!uri || !isTtsSubtitleSession(gen)) return
+      // 按句请求 TTS：当前句字幕与该句音频一一对应，避免整段均分导致不同步
+      const prefetch = new Map<number, Promise<string | null>>()
+      const ensure = (i: number) => {
+        if (!prefetch.has(i)) prefetch.set(i, fetchCorpTtsDataUri(zhLines[i]!))
+        return prefetch.get(i)!
+      }
+      // 预取首句 + 下一句
+      void ensure(0)
+      if (zhLines.length > 1) void ensure(1)
 
-      await new Promise<void>((resolve) => {
-        const a = new Audio(uri)
-        corpIntroAudio = a
-        let lineTimer: number | null = null
-        const advance = () => {
-          if (!isTtsSubtitleSession(gen) || zhLines.length <= 1) return
-          const dur = Number.isFinite(a.duration) && a.duration > 0 ? a.duration : zhLines.length * 2.2
-          const step = Math.max(0.8, dur / zhLines.length)
-          let i = 0
-          lineTimer = window.setInterval(() => {
-            i += 1
-            if (i >= zhLines.length) {
-              if (lineTimer != null) window.clearInterval(lineTimer)
-              return
-            }
-            setTtsSubtitleIndex(i, gen)
-          }, step * 1000)
-        }
-        const done = () => {
-          if (lineTimer != null) window.clearInterval(lineTimer)
-          if (corpIntroAudio === a) corpIntroAudio = null
-          resolve()
-        }
-        a.onloadedmetadata = () => advance()
-        a.onended = done
-        a.onerror = done
-        void a.play().catch(done)
-      })
+      for (let i = 0; i < zhLines.length; i += 1) {
+        if (!isTtsSubtitleSession(gen)) return
+        setTtsSubtitleIndex(i, gen)
+        if (i + 1 < zhLines.length) void ensure(i + 1)
+        const uri = await ensure(i)
+        if (!uri || !isTtsSubtitleSession(gen)) continue
+        await playDataUri(uri, gen)
+      }
     } catch {
       // fail-open：不使用 speechSynthesis
     } finally {

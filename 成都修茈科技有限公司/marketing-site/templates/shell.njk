@@ -1,5 +1,5 @@
 {{ headHtml | safe }}
-<body{% if bodyAttrs %} {{ bodyAttrs | safe }}{% endif %}>
+<body{% if activeNav == 'home' %} data-page="index"{% elif activeNav == 'world-will' %} data-page="world-will"{% elif activeNav == 'contact' %} class="page-contact"{% endif %}>
 {% include "partials/header.njk" %}
 {{ mainHtml | safe }}
 {{ footerHtml | safe }}
@@ -7,6 +7,9 @@
 <script src="./main.js?v={{ assetVer }}"></script>
 {% if activeNav == 'visualization' %}
 <script src="./visualization.js?v={{ assetVer }}" defer></script>
+{% endif %}
+{% if activeNav == 'world-will' %}
+<script src="./world-will.js?v={{ assetVer }}" defer></script>
 {% endif %}
 {% if activeNav == 'contact' %}
 <script src="./contact-intake.js?v={{ assetVer }}"></script>
