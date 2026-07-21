@@ -379,6 +379,14 @@ onBeforeUnmount(() => {
   touch-action: none;
   /* 面板打开时仍须高于 .butler-panel(20002)，否则拖不动 */
   z-index: 20005;
+  min-width: 120px;
+  min-height: 56px;
+  height: 56px;
+  padding: 8px 14px 8px 9px;
+}
+
+.butler-ball.butler-ball--corp-anchor .butler-ball__label {
+  display: inline;
 }
 
 .butler-ball.butler-ball--corp-anchor.butler-ball--open {
