@@ -511,12 +511,19 @@ def main(argv: list[str] | None = None) -> int:
     if blocking_findings:
         print(f"[review] BLOCK - {len(blocking_findings)} blocking finding(s)")
         return 1
-    if unavailable_findings or comment_failures:
+    if unavailable_findings:
+        # LLM 不可用时 fail-open 不阻断合并（仅评论），符合 cicd-e2e-prompt.md
+        # 决策矩阵约定："LLM 故障 fail-open 不阻断，confirmed-high 才阻断"。
+        # 仍尝试评论，若评论失败也不阻断（comment_failures 仅记录，不影响退出码）。
         print(
-            "::error::[review] BLOCK - review evidence incomplete "
+            "::warning::[review] LLM evidence unavailable - failing open per policy "
             f"(unavailable={len(unavailable_findings)}, comment_failures={comment_failures})"
         )
-        return 2
+        return 0
+    if comment_failures:
+        # 评论失败本身不阻断（非证据缺失，仅 UX 降级）。
+        print(f"::warning::[review] comment_failures={comment_failures} (non-blocking)")
+        return 0
 
     print("[review] PASS - no blocking findings")
     return 0
