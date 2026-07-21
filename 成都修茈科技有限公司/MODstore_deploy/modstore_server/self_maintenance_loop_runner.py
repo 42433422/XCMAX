@@ -190,6 +190,11 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_flag_enabled(name: str) -> bool:
+    """Master switches that default OFF when unset (deploy auto-dispatch, dry-run)."""
+    return _env_bool(name, False)
+
+
 def _env_list(name: str, default: List[str]) -> List[str]:
     raw = os.environ.get(name)
     if raw is None or not str(raw).strip():
@@ -2244,7 +2249,7 @@ def _validate_structured_review_protocol(obj: Optional[Dict[str, Any]]) -> Tuple
 
 def _validate_structured_qa_protocol(obj: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
     if not isinstance(obj, dict):
-        return False, "missing_structured_qa_object"
+        return False, "missing_structured_qa_result"
     if str(obj.get("verdict") or "").strip().upper() not in {"PASS", "FAIL"}:
         return False, "invalid_qa_verdict"
     if not isinstance(obj.get("blocking_findings"), list):
@@ -7274,6 +7279,25 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
+            # L4 closure: deploy step after merge (default off → "三步半")
+            "auto_dispatch_deploy": _env_flag_enabled(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"
+            ),
+            "auto_dispatch_deploy_envs": _auto_dispatch_deploy_envs(),
+            "auto_dispatch_deploy_dry_run": _env_flag_enabled(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"
+            ),
+        },
+        "l4_closure": {
+            "target": "L4",
+            "auto_dispatch_deploy": _env_flag_enabled(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"
+            ),
+            "auto_dispatch_deploy_envs": _auto_dispatch_deploy_envs(),
+            "half_closed_without_deploy": not _env_flag_enabled(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"
+            ),
+            "open_items_count": len(open_items[-20:]),
         },
     }
 
