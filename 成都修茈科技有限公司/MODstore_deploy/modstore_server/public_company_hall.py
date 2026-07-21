@@ -346,7 +346,8 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 or DEPARTMENT_COLORS.get(
                     _LINE_TO_DEPT.get(str(t.get("line") or ""), ""), "#94a3b8"
                 ),
-                "presence": emp.get("presence") or ("working" if t.get("status") in _WORKING_STATUSES else "idle"),
+                "presence": emp.get("presence")
+                or ("working" if t.get("status") in _WORKING_STATUSES else "idle"),
                 "status": t.get("status"),
                 "status_label": t.get("status_label"),
                 "text": t.get("title") or t.get("text") or "",
@@ -385,7 +386,11 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
 
     busiest = None
     if departments:
-        busiest = max(departments, key=lambda d: int((d.get("counts") or {}).get("working") or 0) + int((d.get("counts") or {}).get("alert") or 0))
+        busiest = max(
+            departments,
+            key=lambda d: int((d.get("counts") or {}).get("working") or 0)
+            + int((d.get("counts") or {}).get("alert") or 0),
+        )
     mvp = None
     if employees:
         mvp = max(
@@ -430,29 +435,35 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         "feed": feed,
         "last_activity": last_activity,
         "board": {
-            "breakpoints_total": int(((board.get("breakpoints") or {}).get("summary") or {}).get("total") or 0),
+            "breakpoints_total": int(
+                ((board.get("breakpoints") or {}).get("summary") or {}).get("total") or 0
+            ),
             "goals_total": int(((board.get("goals") or {}).get("summary") or {}).get("total") or 0),
             "trajectory_total": len(board.get("trajectory") or []),
             "breakpoints": bp_items,
             "goals": goal_items,
         },
         "report": {
-            "busiest_dept": {
-                "id": (busiest or {}).get("id"),
-                "label": (busiest or {}).get("label"),
-                "working": int(((busiest or {}).get("counts") or {}).get("working") or 0),
-                "alert": int(((busiest or {}).get("counts") or {}).get("alert") or 0),
-            }
-            if busiest
-            else None,
-            "mvp": {
-                "employee_id": (mvp or {}).get("employee_id"),
-                "name": (mvp or {}).get("name"),
-                "open_action_items": int((mvp or {}).get("open_action_items") or 0),
-                "runs_24h": int((mvp or {}).get("runs_24h") or 0),
-            }
-            if mvp
-            else None,
+            "busiest_dept": (
+                {
+                    "id": (busiest or {}).get("id"),
+                    "label": (busiest or {}).get("label"),
+                    "working": int(((busiest or {}).get("counts") or {}).get("working") or 0),
+                    "alert": int(((busiest or {}).get("counts") or {}).get("alert") or 0),
+                }
+                if busiest
+                else None
+            ),
+            "mvp": (
+                {
+                    "employee_id": (mvp or {}).get("employee_id"),
+                    "name": (mvp or {}).get("name"),
+                    "open_action_items": int((mvp or {}).get("open_action_items") or 0),
+                    "runs_24h": int((mvp or {}).get("runs_24h") or 0),
+                }
+                if mvp
+                else None
+            ),
         },
     }
 

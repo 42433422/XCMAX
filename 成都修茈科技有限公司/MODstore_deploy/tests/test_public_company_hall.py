@@ -36,9 +36,10 @@ def test_build_company_hall_has_six_departments_and_presence_model(monkeypatch):
     assert len(hall["departments"]) == 6
     assert [d["id"] for d in hall["departments"]] == list(DEPARTMENT_ORDER)
     assert hall["counts"]["roster"] >= 40
-    assert hall["counts"]["working"] + hall["counts"]["alert"] + hall["counts"]["idle"] == hall[
-        "counts"
-    ]["roster"]
+    assert (
+        hall["counts"]["working"] + hall["counts"]["alert"] + hall["counts"]["idle"]
+        == hall["counts"]["roster"]
+    )
     # at least the patch owner should be working or alert (P0)
     workers = [e for e in hall["employees"] if e["employee_id"] == "task-router-officer"]
     assert workers
