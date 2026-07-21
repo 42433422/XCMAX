@@ -26,6 +26,8 @@
       </Transition>
 
       <CorpContactIntakeModal v-if="showMobileContactIntake" />
+      <!-- 双语字幕仅官网小C；软件工作台/桌面不挂 -->
+      <TtsSubtitleOverlay />
     </div>
   </Teleport>
 </template>
@@ -51,6 +53,7 @@ import AgentPermissionDialog from '../components/floating-agent/AgentPermissionD
 import FloatingAgentBall from '../components/floating-agent/FloatingAgentBall.vue'
 import FloatingAgentPanel from '../components/floating-agent/FloatingAgentPanel.vue'
 import CorpContactIntakeModal from '../components/floating-agent/CorpContactIntakeModal.vue'
+import TtsSubtitleOverlay from '../components/TtsSubtitleOverlay.vue'
 
 const agentStore = useAgentStore()
 const { isOpen, showPermissionDialog, position } = storeToRefs(agentStore)

@@ -214,7 +214,6 @@
       </div>
     </main>
     <Teleport to="body">
-      <TtsSubtitleOverlay />
       <CorpButlerRoot v-if="shouldShowGuestCorpButler" />
       <FloatingAgentRoot v-if="shouldShowButler" />
       <div
@@ -319,7 +318,6 @@ import { connectRealtime, disconnectRealtime } from './realtimeClient'
 import { api } from './api'
 import FloatingAgentRoot from './components/floating-agent/FloatingAgentRoot.vue'
 import CorpButlerRoot from './corp-butler/CorpButlerRoot.vue'
-import TtsSubtitleOverlay from './components/TtsSubtitleOverlay.vue'
 import { useWorkbenchSidebarStore } from './stores/workbenchSidebar'
 import { resolveTopLevelRouterCacheKey } from './router/topLevelCacheKey'
 import { installVisualViewportInset } from './composables/useVisualViewportInset'
