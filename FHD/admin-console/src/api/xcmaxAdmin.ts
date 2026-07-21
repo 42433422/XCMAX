@@ -65,6 +65,25 @@ export type ForcePushUserEntitlementsPayload = {
   installed_mods?: Record<string, unknown>[];
 };
 
+export interface AutonomyPendingAction {
+  action_id: string;
+  action: string;
+  state: string;
+  source: string;
+  executor_name?: string;
+  payload?: Record<string, unknown>;
+  risk_decision?: {
+    risk_level: string;
+    decision: string;
+    reason?: string;
+    policy?: string;
+    rollback_path?: string;
+  };
+  timestamp?: string;
+  approval_id?: string;
+  approval_requested_at?: string;
+}
+
 export const xcmaxAdminApi = {
   listUsers() {
     return api.get('/api/xcmax/admin/market/users');
@@ -156,5 +175,22 @@ export const xcmaxAdminApi = {
     return api.put(`/api/xcmax/admin/market/users/${userId}/wechat-customers`, {
       contact_ids: contactIds,
     });
+  },
+  fetchPendingAutonomyActions() {
+    return api.get<{ ok: boolean; count: number; items: AutonomyPendingAction[] }>(
+      '/api/ops/autonomy/actions/pending',
+    );
+  },
+  resumeAutonomyAction(actionId: string, approver: string, approvalId?: string) {
+    return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
+      `/api/ops/autonomy/actions/${encodeURIComponent(actionId)}/resume`,
+      { approver, approval_id: approvalId },
+    );
+  },
+  rejectAutonomyAction(actionId: string, approver: string, reason?: string, approvalId?: string) {
+    return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
+      `/api/ops/autonomy/actions/${encodeURIComponent(actionId)}/reject`,
+      { approver, reason, approval_id: approvalId },
+    );
   },
 };

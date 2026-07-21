@@ -1,0 +1,16 @@
+{
+  "skills": [
+    {
+      "name": "trace-validation",
+      "description": "Verify that a trace_id is consistent across all events written to the evolution_decisions.jsonl ledger, and that the closed loop reaches final_status=closed_loop_completed.",
+      "inputs": ["trace_id"],
+      "outputs": ["is_consistent", "event_count", "final_status"]
+    },
+    {
+      "name": "ledger-append",
+      "description": "Append a structured event to the evolution_decisions.jsonl ledger via the append_event tool. The event must include event_type, trace_id, and final_status.",
+      "inputs": ["event_type", "trace_id", "final_status"],
+      "outputs": ["event_id"]
+    }
+  ]
+}
