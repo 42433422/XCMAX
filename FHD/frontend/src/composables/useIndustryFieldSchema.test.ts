@@ -135,4 +135,157 @@ describe('useIndustryFieldSchema.validate（行业规则·数据驱动）', () =
     expect(s.validate({ expire_date: '2099-12-31' })).toEqual([]);
     expect(s.validate({ expire_date: '' })).toEqual([]);
   });
+
+  it('range：低于 min / 高于 max / 非数字 / 空值放行', () => {
+    const industry = useIndustryStore();
+    industry.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: {
+              fields: [
+                {
+                  key: 'quantity',
+                  label: '数量',
+                  validators: [{ type: 'range', params: { min: 1, max: 100 } }],
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+    const s = useIndustryFieldSchema('products');
+    // 合法区间：放行
+    expect(s.validate({ quantity: 50 })).toEqual([]);
+    // 边界值
+    expect(s.validate({ quantity: 1 })).toEqual([]);
+    expect(s.validate({ quantity: 100 })).toEqual([]);
+    // 低于 min
+    const tooSmall = s.validate({ quantity: 0 });
+    expect(tooSmall).toHaveLength(1);
+    expect(tooSmall[0].message).toContain('不能小于');
+    // 高于 max
+    const tooBig = s.validate({ quantity: 101 });
+    expect(tooBig).toHaveLength(1);
+    expect(tooBig[0].message).toContain('不能大于');
+    // 空值 / null / undefined → 放行
+    expect(s.validate({ quantity: '' })).toEqual([]);
+    expect(s.validate({ quantity: null })).toEqual([]);
+    expect(s.validate({ quantity: undefined })).toEqual([]);
+    // 非数字字符串 → Number.isNaN → 放行
+    expect(s.validate({ quantity: 'abc' })).toEqual([]);
+    // 数字字符串 → 转换后参与校验
+    expect(s.validate({ quantity: '50' })).toEqual([]);
+    expect(s.validate({ quantity: '0' })).toHaveLength(1);
+    // params 非 object → 不报错（直接放行）
+    const industry2 = useIndustryStore();
+    industry2.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: { fields: [{ key: 'quantity', label: '数量', validators: [{ type: 'range', params: 'bad' }] }] },
+          },
+        },
+      },
+    });
+    const s2 = useIndustryFieldSchema('products');
+    expect(s2.validate({ quantity: 50 })).toEqual([]);
+  });
+
+  it('regex：pattern 不匹配 / 匹配 / 空 pattern 放行 / 无效 pattern 容错', () => {
+    const industry = useIndustryStore();
+    industry.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: {
+              fields: [
+                {
+                  key: 'code',
+                  label: '编码',
+                  validators: [{ type: 'regex', params: { pattern: '^[A-Z]{3}-\\d+$' } }],
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+    const s = useIndustryFieldSchema('products');
+    // 匹配
+    expect(s.validate({ code: 'ABC-123' })).toEqual([]);
+    // 不匹配
+    const errs = s.validate({ code: 'abc-123' });
+    expect(errs).toHaveLength(1);
+    expect(errs[0].message).toBe('编码格式不正确');
+    // 空值 / null / undefined → 放行
+    expect(s.validate({ code: '' })).toEqual([]);
+    expect(s.validate({ code: null })).toEqual([]);
+    expect(s.validate({ code: undefined })).toEqual([]);
+
+    // params 为字符串（直接当 pattern 用）
+    const industry2 = useIndustryStore();
+    industry2.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: { fields: [{ key: 'code', label: '编码', validators: [{ type: 'regex', params: '^\\d+$' }] }] },
+          },
+        },
+      },
+    });
+    const s2 = useIndustryFieldSchema('products');
+    expect(s2.validate({ code: '123' })).toEqual([]);
+    expect(s2.validate({ code: 'abc' })).toHaveLength(1);
+
+    // params 为对象但无 pattern → 放行
+    const industry3 = useIndustryStore();
+    industry3.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: { fields: [{ key: 'code', label: '编码', validators: [{ type: 'regex', params: {} }] }] },
+          },
+        },
+      },
+    });
+    const s3 = useIndustryFieldSchema('products');
+    expect(s3.validate({ code: 'anything' })).toEqual([]);
+
+    // 无效 pattern → 容错放行
+    const industry4 = useIndustryStore();
+    industry4.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: {
+              fields: [{ key: 'code', label: '编码', validators: [{ type: 'regex', params: { pattern: '[' } }] }],
+            },
+          },
+        },
+      },
+    });
+    const s4 = useIndustryFieldSchema('products');
+    expect(s4.validate({ code: 'anything' })).toEqual([]);
+  });
+
+  it('未知 validator type 直接跳过（不报错）', () => {
+    const industry = useIndustryStore();
+    industry.$patch({
+      currentConfig: {
+        config: {
+          subsystems: {
+            products: {
+              fields: [
+                { key: 'name', label: '姓名', validators: [{ type: 'unknown_validator', params: {} }] },
+              ],
+            },
+          },
+        },
+      },
+    });
+    const s = useIndustryFieldSchema('products');
+    expect(s.validate({ name: '张三' })).toEqual([]);
+  });
 });
