@@ -44,7 +44,6 @@ jobs:
           host: ${{ secrets.FHD_PUSH_HOST }}
           username: root
           key: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          script_stop: true
           command_timeout: 25m
           script: |
             set -euo pipefail

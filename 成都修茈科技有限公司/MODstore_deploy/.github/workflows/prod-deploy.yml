@@ -57,7 +57,6 @@ jobs:
           host: ${{ secrets.FHD_PUSH_HOST }}
           username: root
           key: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          script_stop: true
           command_timeout: 45m
           envs: TARGET_SHA,STRICT_KEY
           script: |
