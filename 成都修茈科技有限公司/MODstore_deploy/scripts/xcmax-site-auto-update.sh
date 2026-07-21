@@ -251,12 +251,62 @@ sync_site_static() {
   local paths=(
     '*.html' 'styles.css' 'main.js' 'contact-intake.js'
     'sitemap.xml' 'baidu_urls.txt' 'download-release.json'
-    'images' 'site' 'assets' 'corp-butler'
+    'images' 'site' 'assets' 'corp-butler' 'partials'
   )
   for p in "${paths[@]}"; do
     git -C "$XCMAX_ROOT" checkout "origin/${BRANCH}" -- "${SITE_SUBDIR}/${p}" >>"$LOG" 2>&1 || true
   done
+  publish_site_static_to_live
   log "官网静态文件已同步"
+}
+
+# Git checkout updates $XCMAX_ROOT/... only. Production nginx root is usually the
+# immutable-release symlink at $SITE_ROOT (/root/成都修茈科技有限公司). Without this
+# publish step, homepage/nav fixes never become visible on xiu-ci.com.
+publish_site_static_to_live() {
+  local git_site="${XCMAX_ROOT}/${SITE_SUBDIR}"
+  local live_site
+  live_site="$(readlink -f "$SITE_ROOT" 2>/dev/null || printf '%s' "$SITE_ROOT")"
+  local git_real
+  git_real="$(readlink -f "$git_site" 2>/dev/null || printf '%s' "$git_site")"
+  if [[ ! -d "$git_site" ]]; then
+    log "WARN: git site tree missing: $git_site"
+    return 0
+  fi
+  if [[ -z "$live_site" || ! -d "$live_site" ]]; then
+    log "WARN: live site root missing: $SITE_ROOT"
+    return 0
+  fi
+  if [[ "$live_site" == "$git_real" ]]; then
+    log "live site root == git tree，无需二次发布"
+    return 0
+  fi
+  log "发布官网静态到 live root: $live_site"
+  chmod u+w "$live_site" 2>/dev/null || true
+  mkdir -p "$live_site/partials" "$live_site/assets" "$live_site/corp-butler"
+  chmod u+w "$live_site/partials" "$live_site/assets" 2>/dev/null || true
+  local f base
+  shopt -s nullglob
+  for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
+           "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json; do
+    [[ -e "$f" ]] || continue
+    base="$(basename "$f")"
+    chmod u+w "$live_site/$base" 2>/dev/null || true
+    cp -f "$f" "$live_site/$base"
+  done
+  shopt -u nullglob
+  if [[ -d "$git_site/partials" ]]; then
+    cp -af "$git_site/partials/." "$live_site/partials/"
+  fi
+  if [[ -d "$git_site/assets" ]]; then
+    cp -af "$git_site/assets/." "$live_site/assets/"
+  fi
+  if [[ -d "$git_site/corp-butler" ]]; then
+    cp -af "$git_site/corp-butler/." "$live_site/corp-butler/"
+  fi
+  # Keep release root traversable for unprivileged nginx after chmod u+w above.
+  chmod a+rx "$live_site" 2>/dev/null || true
+  log "live root 静态发布完成"
 }
 
 pip_sync() {
@@ -365,7 +415,14 @@ fi
 if [[ "$REPO_CHANGED" == true && -n "$OLD_XCMAX_SHA" ]]; then
   sync_site_static "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA"
 elif [[ "$REPO_CHANGED" == true && -z "$OLD_XCMAX_SHA" ]]; then
-  log "首次单仓 state，跳过增量官网 checkout"
+  log "首次单仓 state，强制发布当前官网静态到 live root"
+  publish_site_static_to_live
+else
+  # Branch deploys / manual reruns may leave SHA unchanged while live root is stale.
+  if [[ "${XCMAX_FORCE_SITE_PUBLISH:-0}" == "1" ]]; then
+    log "XCMAX_FORCE_SITE_PUBLISH=1，强制发布官网静态到 live root"
+    publish_site_static_to_live
+  fi
 fi
 
 if [[ "$REPO_CHANGED" != true ]]; then
