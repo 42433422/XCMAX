@@ -78,6 +78,7 @@ def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
         "line": str(it.get("line") or "P-S"),
         "line_label": _LINE_PUBLIC.get(str(it.get("line") or "P-S"), str(it.get("line") or "—")),
         "owner": str(it.get("employee_label") or "AI 员工").strip()[:64] or "AI 员工",
+        "employee_id": str(it.get("employee_id") or "").strip()[:80],
         "kind": str(it.get("kind") or ""),
         "day": str(it.get("day") or ""),
         "updated_at": updated[:40],
@@ -141,6 +142,7 @@ def build_trajectory(
                 "href": href,
                 "day": str(it.get("day") or ""),
                 "owner": owner,
+                "employee_id": str(it.get("employee_id") or "").strip()[:80],
                 "priority": str(it.get("priority") or "P2"),
                 "title": str(it.get("title") or ""),
                 "updated_at": str(it.get("updated_at") or "")[:40],
@@ -258,4 +260,10 @@ def write_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
         (payload.get("goals") or {}).get("summary", {}).get("total"),
         len(written),
     )
+    try:
+        from modstore_server.public_company_hall import write_public_company_hall
+
+        write_public_company_hall(day=day)
+    except Exception:
+        logger.exception("public_action_board: company hall refresh failed")
     return {"ok": True, "day": payload.get("day"), "written": written, "payload": payload}

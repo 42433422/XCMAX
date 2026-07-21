@@ -1,9 +1,12 @@
 /**
- * 世界意志页：渲染公开行动看板真实轨迹 / 断点 / 目标。
- * 数据：/download-action-board.json（cache: no-store）
+ * 世界意志 · XCMAX AI 公司大厅
+ * 数据：/download-company-hall.json（编制 + 真实状态投影）
+ * 回退：/download-action-board.json
  */
 ;(function () {
   'use strict'
+
+  var STATE = { data: null, filter: 'all' }
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -24,144 +27,390 @@
     }
   }
 
-  function badgeClass(status) {
-    if (status === 'merged' || status === 'closed') return 'is-done'
-    if (status === 'open' || status === 'dispatched' || status === 'in_progress') return 'is-open'
-    return ''
+  function initial(name) {
+    var s = String(name || '?').trim()
+    return s ? s.charAt(0) : '?'
   }
 
-  function emptyHtml(msg) {
-    return '<div class="ww-empty">' + esc(msg) + '</div>'
+  function presenceLabel(p) {
+    if (p === 'working') return '工作中'
+    if (p === 'alert') return '告警'
+    return '编制待命'
   }
 
-  function renderList(el, items, emptyMsg) {
-    if (!el) return
-    if (!items || !items.length) {
-      el.innerHTML = emptyHtml(emptyMsg)
-      return
-    }
-    el.innerHTML = items
-      .slice(0, 12)
-      .map(function (it) {
+  function emptyBox(lines) {
+    return (
+      '<div class="ww-feed-empty">' +
+      (lines || [])
+        .map(function (line, i) {
+          return '<p class="' + (i ? 'muted' : '') + '">' + line + '</p>'
+        })
+        .join('') +
+      '</div>'
+    )
+  }
+
+  function renderDots(emps) {
+    return (emps || [])
+      .slice(0, 18)
+      .map(function (e) {
         return (
-          '<article class="ww-row">' +
-          '<h3>' +
-          esc(it.title || '') +
-          '</h3>' +
-          '<div class="ww-item-meta">' +
-          '<span class="ww-badge ' +
-          badgeClass(it.status) +
-          '">' +
-          esc(it.status_label || it.status || '') +
-          '</span>' +
-          '<span>' +
-          esc(it.line_label || it.line || '—') +
-          '</span>' +
-          '<span>' +
-          esc(it.owner || 'AI 员工') +
-          '</span>' +
-          (it.ts ? '<span>' + esc(it.ts) + '</span>' : '') +
-          (it.priority ? '<span>' + esc(it.priority) + '</span>' : '') +
-          '</div></article>'
+          '<span class="hall-dot hall-dot--' +
+          esc(e.presence || 'idle') +
+          '" title="' +
+          esc(e.name) +
+          ' · ' +
+          esc(presenceLabel(e.presence)) +
+          '"></span>'
         )
       })
       .join('')
   }
 
-  function renderTrajectory(el, items) {
-    if (!el) return
-    if (!items || !items.length) {
-      el.innerHTML = emptyHtml('暂无公开轨迹（digest 写入后自动出现真实条目）。')
-      return
-    }
-    el.innerHTML = items
-      .map(function (it) {
-        var href = it.href || (it.kind === 'patch' ? '/download/breakpoints' : '/download/goals')
-        var title = it.title || it.text || ''
+  function renderDepartments(depts) {
+    var root = document.getElementById('hall-depts')
+    if (!root) return
+    root.innerHTML = (depts || [])
+      .map(function (d) {
+        var c = d.counts || {}
         return (
-          '<a class="ww-item" href="' +
-          esc(href) +
+          '<button type="button" class="hall-dept" data-dept="' +
+          esc(d.id) +
+          '" style="--dept:' +
+          esc(d.color || '#79c0ff') +
           '">' +
-          '<time datetime="' +
-          esc(it.updated_at || it.day || '') +
-          '">' +
-          esc(it.ts || '—') +
-          '</time>' +
-          '<div><h3>' +
-          esc(title) +
-          '</h3>' +
-          '<div class="ww-item-meta">' +
-          '<span class="ww-badge ' +
-          badgeClass(it.status) +
-          '">' +
-          esc(it.status_label || it.status || '') +
-          '</span>' +
-          '<span>' +
-          esc(it.owner || '') +
-          '</span>' +
-          '<span>' +
-          esc(it.line || '') +
-          '</span>' +
-          (it.day ? '<span>' + esc(it.day) + '</span>' : '') +
-          '</div></div></a>'
+          '<header><strong>' +
+          esc(d.label) +
+          '</strong><span>' +
+          esc(d.employee_count || 0) +
+          ' 人编制</span></header>' +
+          '<div class="hall-dots">' +
+          renderDots(d.employees) +
+          '</div>' +
+          '<footer>' +
+          '<span class="is-work">' +
+          esc(c.working || 0) +
+          ' 工作中</span>' +
+          '<span class="is-alert">' +
+          esc(c.alert || 0) +
+          ' 告警</span>' +
+          '<span class="is-idle">' +
+          esc(c.idle || 0) +
+          ' 待命</span>' +
+          '</footer></button>'
         )
       })
       .join('')
+
+    root.querySelectorAll('.hall-dept').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-dept')
+        var panel = document.getElementById('hall-dept-detail')
+        if (!panel) return
+        var dept = (depts || []).find(function (x) {
+          return x.id === id
+        })
+        if (!dept) return
+        panel.hidden = false
+        panel.innerHTML =
+          '<div class="hall-detail-head" style="--dept:' +
+          esc(dept.color) +
+          '"><h2>' +
+          esc(dept.label) +
+          '</h2><button type="button" class="hall-close" id="hall-close">收起</button></div>' +
+          '<div class="hall-emp-grid">' +
+          (dept.employees || [])
+            .map(function (e) {
+              return (
+                '<article class="hall-emp hall-emp--' +
+                esc(e.presence) +
+                '">' +
+                '<div class="hall-avatar" style="--dept:' +
+                esc(e.dept_color || dept.color) +
+                '">' +
+                esc(initial(e.name)) +
+                '</div>' +
+                '<div><h3>' +
+                esc(e.name) +
+                '</h3>' +
+                '<p class="hall-emp-id">' +
+                esc(e.employee_id) +
+                '</p>' +
+                '<p class="hall-emp-act">' +
+                esc(e.activity || presenceLabel(e.presence)) +
+                '</p>' +
+                '<p class="hall-emp-meta">' +
+                esc(presenceLabel(e.presence)) +
+                ' · 未闭环 ' +
+                esc(e.open_action_items || 0) +
+                ' · 24h 执行 ' +
+                esc(e.runs_24h || 0) +
+                '</p></div></article>'
+              )
+            })
+            .join('') +
+          '</div>'
+        var close = document.getElementById('hall-close')
+        if (close) {
+          close.addEventListener('click', function () {
+            panel.hidden = true
+            panel.innerHTML = ''
+          })
+        }
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    })
+  }
+
+  function filteredFeed(feed) {
+    var list = feed || []
+    if (STATE.filter === 'alert') {
+      return list.filter(function (f) {
+        return f.presence === 'alert' || f.status === 'open' || /P0|失败|告警/.test(String(f.status_label || f.text || ''))
+      })
+    }
+    if (STATE.filter === 'working') {
+      return list.filter(function (f) {
+        return f.presence === 'working' || f.status === 'in_progress' || f.status === 'dispatched'
+      })
+    }
+    if (STATE.filter === 'idle') {
+      return list.filter(function (f) {
+        return f.presence === 'idle'
+      })
+    }
+    return list
+  }
+
+  function renderFeed(data) {
+    var el = document.getElementById('hall-feed')
+    if (!el) return
+    var feed = filteredFeed(data.feed || [])
+    var day = data.day || '—'
+    var last = data.last_activity
+    var cadence = data.cadence || {}
+
+    if (!feed.length) {
+      var lines = ['今日（' + esc(day) + '）筛选下暂无公开行动轨迹']
+      if (last && last.text) {
+        lines.push(
+          '最近一次公开活动：' +
+            esc(last.day || day) +
+            ' ' +
+            esc(last.ts || '') +
+            ' — ' +
+            esc(last.employee_name || '') +
+            ' · ' +
+            esc(last.text)
+        )
+      } else {
+        lines.push('最近一次快照：' + esc(fmtGen(data.generated_at)))
+      }
+      if (cadence.next_window) {
+        lines.push('下次预计窗口：' + esc(cadence.next_window))
+      }
+      if (STATE.filter !== 'all') {
+        lines[0] = '当前筛选「' + esc(STATE.filter) + '」下暂无条目（未造假填充）'
+      }
+      el.innerHTML = emptyBox(lines)
+      return
+    }
+
+    el.innerHTML =
+      '<ol class="hall-timeline">' +
+      feed
+        .map(function (f) {
+          return (
+            '<li class="hall-timeline-item hall-timeline-item--' +
+            esc(f.presence || 'idle') +
+            '">' +
+            '<a href="' +
+            esc(f.href || '/download/breakpoints') +
+            '">' +
+            '<time>' +
+            esc(f.ts || '—') +
+            '</time>' +
+            '<span class="hall-timeline-dot" style="background:' +
+            esc(f.dept_color || '#94a3b8') +
+            '"></span>' +
+            '<div><strong>' +
+            esc(f.dept_label || '') +
+            ' · ' +
+            esc(f.employee_name || '') +
+            '</strong>' +
+            '<span class="hall-feed-status">' +
+            esc(f.status_label || presenceLabel(f.presence)) +
+            '</span>' +
+            '<p>' +
+            esc(f.text || '') +
+            '</p></div></a></li>'
+          )
+        })
+        .join('') +
+      '</ol>'
+  }
+
+  function renderBoardLists(data) {
+    var board = data.board || {}
+    var bpEl = document.getElementById('hall-breakpoints')
+    var gEl = document.getElementById('hall-goals')
+    var day = data.day || '—'
+    var last = data.last_activity
+    var cadence = data.cadence || {}
+
+    function listOrEmpty(el, items, emptyTitle) {
+      if (!el) return
+      if (!items || !items.length) {
+        var lines = [emptyTitle + '（' + esc(day) + '）']
+        if (last && last.text) {
+          lines.push('最近公开活动：' + esc(last.ts || '') + ' — ' + esc(last.text))
+        }
+        if (cadence.next_window) lines.push('下次预计窗口：' + esc(cadence.next_window))
+        el.innerHTML = emptyBox(lines)
+        return
+      }
+      el.innerHTML = items
+        .map(function (it) {
+          return (
+            '<article class="ww-row">' +
+            '<h3>' +
+            esc(it.title || '') +
+            '</h3>' +
+            '<div class="ww-item-meta">' +
+            '<span class="ww-badge">' +
+            esc(it.status_label || it.status || '') +
+            '</span>' +
+            '<span>' +
+            esc(it.owner || '') +
+            '</span>' +
+            '<span>' +
+            esc(it.priority || '') +
+            '</span>' +
+            '</div></article>'
+          )
+        })
+        .join('')
+    }
+
+    listOrEmpty(bpEl, board.breakpoints || [], '今日暂无公开断点')
+    listOrEmpty(gEl, board.goals || [], '今日暂无公开工作目标')
+  }
+
+  function renderReport(data) {
+    var el = document.getElementById('hall-report')
+    if (!el) return
+    var c = data.counts || {}
+    var r = data.report || {}
+    var b = data.board || {}
+    var busiest = r.busiest_dept || {}
+    var mvp = r.mvp || {}
+    var pm = data.presence_model || {}
+    el.innerHTML =
+      '<div class="hall-report-grid">' +
+      '<div><strong>' +
+      esc(c.roster || 0) +
+      '</strong><span>编制员工</span></div>' +
+      '<div><strong>' +
+      esc(c.working || 0) +
+      '</strong><span>工作中</span></div>' +
+      '<div><strong>' +
+      esc(c.alert || 0) +
+      '</strong><span>告警</span></div>' +
+      '<div title="' +
+      esc(pm.idle || '') +
+      '"><strong>' +
+      esc(c.idle || 0) +
+      '</strong><span>编制待命</span></div>' +
+      '<div><strong>' +
+      esc(b.breakpoints_total || 0) +
+      '</strong><span>断点</span></div>' +
+      '<div><strong>' +
+      esc(b.goals_total || 0) +
+      '</strong><span>工作目标</span></div>' +
+      '</div>' +
+      '<p class="hall-report-line">最忙部门：' +
+      esc(busiest.label || '—') +
+      '（工作中 ' +
+      esc(busiest.working || 0) +
+      ' / 告警 ' +
+      esc(busiest.alert || 0) +
+      '）</p>' +
+      '<p class="hall-report-line">负载领先：' +
+      esc(mvp.name || '—') +
+      '（未闭环 ' +
+      esc(mvp.open_action_items || 0) +
+      ' · 24h 执行 ' +
+      esc(mvp.runs_24h || 0) +
+      '）</p>' +
+      '<p class="hall-report-note">编制待命 = 编制表已注册、当日无公开活跃任务；含按需触发岗位，不是离线伪装。</p>'
+  }
+
+  function bindSumFilters() {
+    var sum = document.getElementById('ww-sum')
+    if (!sum || sum._bound) return
+    sum._bound = true
+    sum.addEventListener('click', function (ev) {
+      var card = ev.target.closest('[data-filter]')
+      if (!card) return
+      var f = card.getAttribute('data-filter') || 'all'
+      STATE.filter = STATE.filter === f ? 'all' : f
+      sum.querySelectorAll('[data-filter]').forEach(function (el) {
+        el.classList.toggle('is-active', el.getAttribute('data-filter') === STATE.filter)
+      })
+      if (STATE.data) renderFeed(STATE.data)
+      var feedPanel = document.getElementById('hall-feed')
+      if (feedPanel) feedPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
   }
 
   function render(data) {
-    var day = (data && data.day) || '—'
-    var gen = fmtGen(data && data.generated_at)
-    var bp = (data && data.breakpoints) || {}
-    var goals = (data && data.goals) || {}
-    var traj = (data && data.trajectory) || []
-    var bpItems = bp.items || []
-    var goalItems = goals.items || []
-    var bpSum = bp.summary || {}
-    var gSum = goals.summary || {}
-
+    STATE.data = data
+    var cadence = data.cadence || {}
     var meta = document.getElementById('ww-meta')
     if (meta) {
-      meta.textContent =
-        '业务日 ' + day + ' · 快照刷新 ' + gen + ' · 只读公开 · schema ' + ((data && data.schema) || '—')
+      meta.innerHTML =
+        '业务日 ' +
+        esc(data.day || '—') +
+        ' · 快照 ' +
+        esc(fmtGen(data.generated_at)) +
+        ' · 编制 ' +
+        esc((data.counts || {}).roster || 0) +
+        ' · ' +
+        esc(cadence.label || '事件驱动快照') +
+        ' <span class="ww-pulse" title="快照随 digest/派发/部署回写刷新，非秒级推流">● SNAPSHOT</span>'
     }
-
     var sum = document.getElementById('ww-sum')
     if (sum) {
+      var c = data.counts || {}
+      var pm = data.presence_model || {}
       sum.innerHTML =
-        '<div class="ww-sum-card is-live"><strong>' +
-        esc(traj.length) +
-        '</strong><span>真实轨迹条数</span></div>' +
-        '<div class="ww-sum-card is-p0"><strong>' +
-        esc(bpSum.p0 || 0) +
-        '</strong><span>P0 断点</span></div>' +
-        '<div class="ww-sum-card is-todo"><strong>' +
-        esc(bpSum.total || bpItems.length || 0) +
-        '</strong><span>断点合计</span></div>' +
-        '<div class="ww-sum-card is-blue"><strong>' +
-        esc(gSum.total || goalItems.length || 0) +
-        '</strong><span>工作目标</span></div>'
+        '<button type="button" class="ww-sum-card is-live" data-filter="all" title="显示全部动态"><strong>' +
+        esc(c.roster || 0) +
+        '</strong><span>编制员工</span></button>' +
+        '<button type="button" class="ww-sum-card is-todo" data-filter="working" title="' +
+        esc(pm.working || '') +
+        '"><strong>' +
+        esc(c.working || 0) +
+        '</strong><span>真实工作中</span></button>' +
+        '<button type="button" class="ww-sum-card is-p0" data-filter="alert" title="' +
+        esc(pm.alert || '') +
+        '"><strong>' +
+        esc(c.alert || 0) +
+        '</strong><span>告警</span></button>' +
+        '<button type="button" class="ww-sum-card is-blue" data-filter="idle" title="' +
+        esc(pm.idle || '') +
+        '"><strong>' +
+        esc(c.idle || 0) +
+        '</strong><span>编制待命</span></button>'
+      sum.querySelectorAll('[data-filter]').forEach(function (el) {
+        el.classList.toggle('is-active', el.getAttribute('data-filter') === STATE.filter)
+      })
     }
-
-    var count = document.getElementById('ww-traj-count')
-    if (count) count.textContent = traj.length + ' 条'
-
-    // 轨迹条目补 status_label / title，便于列表展示
-    var enriched = traj.map(function (it) {
-      var row = Object.assign({}, it)
-      if (!row.title && row.text) {
-        var parts = String(row.text).split('：')
-        row.title = parts.length > 1 ? parts.slice(1).join('：') : row.text
-        if (!row.status_label && parts[0]) {
-          row.status_label = parts[0].split(' · ')[0]
-        }
-      }
-      return row
-    })
-
-    renderTrajectory(document.getElementById('ww-traj'), enriched)
-    renderList(document.getElementById('ww-breakpoints'), bpItems, '当日暂无公开断点。')
-    renderList(document.getElementById('ww-goals'), goalItems, '当日暂无公开工作目标。')
+    bindSumFilters()
+    renderDepartments(data.departments || [])
+    renderFeed(data)
+    renderBoardLists(data)
+    renderReport(data)
   }
 
   function bootEmpty(msg) {
@@ -171,19 +420,79 @@
       day: '—',
       generated_at: '',
       schema: 'unavailable',
-      trajectory: [],
-      breakpoints: { items: [], summary: {} },
-      goals: { items: [], summary: {} },
+      cadence: { label: '暂无快照', next_window: '等待 digest / 状态回写' },
+      counts: { roster: 0, working: 0, alert: 0, idle: 0 },
+      departments: [],
+      feed: [],
+      board: { breakpoints: [], goals: [] },
+      report: {},
+      presence_model: {},
     })
   }
 
-  fetch('/download-action-board.json', { cache: 'no-store' })
+  fetch('/download-company-hall.json', { cache: 'no-store' })
     .then(function (res) {
-      if (!res.ok) throw new Error('board ' + res.status)
+      if (!res.ok) throw new Error('hall ' + res.status)
       return res.json()
     })
     .then(render)
     .catch(function () {
-      bootEmpty('公开看板暂不可用（未造假数据）。')
+      fetch('/download-action-board.json', { cache: 'no-store' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('board')
+          return res.json()
+        })
+        .then(function (board) {
+          var traj = board.trajectory || []
+          render({
+            day: board.day,
+            generated_at: board.generated_at,
+            schema: 'fallback-action-board',
+            cadence: {
+              label: '大厅投影暂不可用，已回退行动板',
+              next_window: '通常每日 08:00–08:30 晨报编排窗口',
+            },
+            counts: {
+              roster: '—',
+              working: traj.filter(function (t) {
+                return t.status !== 'merged' && t.status !== 'closed'
+              }).length,
+              alert: traj.filter(function (t) {
+                return t.status === 'open'
+              }).length,
+              idle: 0,
+            },
+            departments: [],
+            feed: traj.map(function (t) {
+              return {
+                ts: t.ts,
+                employee_name: t.owner,
+                dept_label: t.line_label,
+                dept_color: '#facc15',
+                status_label: t.status_label,
+                text: t.title || t.text,
+                href: t.href,
+                presence: t.status === 'open' ? 'alert' : 'working',
+                status: t.status,
+              }
+            }),
+            last_activity: traj[0]
+              ? { ts: traj[0].ts, day: board.day, employee_name: traj[0].owner, text: traj[0].title || traj[0].text }
+              : null,
+            board: {
+              breakpoints_total: ((board.breakpoints || {}).summary || {}).total || 0,
+              goals_total: ((board.goals || {}).summary || {}).total || 0,
+              breakpoints: ((board.breakpoints || {}).items || []).slice(0, 12),
+              goals: ((board.goals || {}).items || []).slice(0, 12),
+            },
+            report: {},
+            presence_model: {
+              idle: '编制待命说明见大厅完整投影',
+            },
+          })
+        })
+        .catch(function () {
+          bootEmpty('公开大厅暂不可用（未造假数据）。')
+        })
     })
 })()

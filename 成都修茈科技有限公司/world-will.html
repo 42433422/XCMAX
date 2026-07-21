@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>世界意志 · AI 工作轨迹 | 成都修茈科技有限公司</title>
+    <title>世界意志 · XCMAX AI 公司大厅 | 成都修茈科技有限公司</title>
     <meta
       name="description"
-      content="世界意志：公开只读展示 XCAGI 无人公司当日真实 AI 工作轨迹、断点清单与工作目标，数据同源 daily_action_items 脱敏快照。"
+      content="世界意志：公开只读展示 XCMAX 六线约 55 名 AI 员工的公司大厅——编制、真实工作/告警/待命状态与公司动态，数据来自 duty_roster 与行动条目/执行度量投影。"
     />
-    <meta name="keywords" content="世界意志, AI 工作轨迹, 无人公司, XCAGI, 断点清单, 工作目标" />
+    <meta name="keywords" content="世界意志, AI 公司大厅, 无人公司, XCAGI, 六线部门, AI 员工" />
     <link rel="canonical" href="https://xiu-ci.com/world-will" />
     <link rel="stylesheet" href="./styles.css?v=20260719b" />
     <style>
@@ -75,6 +75,126 @@
         border: 1px solid #e2e6ec;
         border-radius: 14px;
         background: #fff;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+      }
+      body[data-page='world-will'] .ww-sum-card.is-active {
+        border-color: #0b63f6;
+        box-shadow: 0 0 0 3px rgba(11, 99, 246, 0.12);
+      }
+      body[data-page='world-will'] .ww-pulse {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 8px;
+        color: #0b63f6;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.06em;
+      }
+      body[data-page='world-will'] .ww-pulse::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #0b63f6;
+        box-shadow: 0 0 0 0 rgba(11, 99, 246, 0.45);
+        animation: ww-pulse 1.8s ease-out infinite;
+      }
+      @keyframes ww-pulse {
+        70% { box-shadow: 0 0 0 8px rgba(11, 99, 246, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(11, 99, 246, 0); }
+      }
+      body[data-page='world-will'] .ww-feed-empty {
+        padding: 28px 18px;
+        color: #51627a;
+        font-size: 13px;
+        line-height: 1.65;
+      }
+      body[data-page='world-will'] .ww-feed-empty .muted,
+      body[data-page='world-will'] .ww-feed-empty p.muted {
+        color: #8b94a0;
+        font-size: 12px;
+      }
+      body[data-page='world-will'] .ww-badge {
+        display: inline-flex;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #f3f5f8;
+        color: #5f6874;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      body[data-page='world-will'] .ww-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        color: #8b94a0;
+        font-size: 11px;
+      }
+      body[data-page='world-will'] .ww-row {
+        padding: 14px 18px;
+        border-bottom: 1px solid #f0f3f7;
+      }
+      body[data-page='world-will'] .ww-row:last-child { border-bottom: 0; }
+      body[data-page='world-will'] .ww-row h3 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+      body[data-page='world-will'] .hall-timeline {
+        list-style: none;
+        margin: 0;
+        padding: 8px 18px 18px;
+      }
+      body[data-page='world-will'] .hall-timeline-item {
+        position: relative;
+        padding: 0 0 16px 0;
+      }
+      body[data-page='world-will'] .hall-timeline-item:last-child { padding-bottom: 0; }
+      body[data-page='world-will'] .hall-timeline-item a {
+        display: grid;
+        grid-template-columns: 48px 16px 1fr;
+        gap: 10px;
+        text-decoration: none;
+        color: inherit;
+      }
+      body[data-page='world-will'] .hall-timeline-item time {
+        color: #94a3b8;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        padding-top: 2px;
+      }
+      body[data-page='world-will'] .hall-timeline-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-top: 5px;
+        position: relative;
+        z-index: 1;
+        box-shadow: 0 0 0 3px #fff;
+      }
+      body[data-page='world-will'] .hall-timeline-item::before {
+        content: '';
+        position: absolute;
+        left: 52px;
+        top: 14px;
+        bottom: -2px;
+        width: 2px;
+        background: #e8edf3;
+      }
+      body[data-page='world-will'] .hall-timeline-item:last-child::before { display: none; }
+      body[data-page='world-will'] .hall-timeline-item strong { display: block; font-size: 12px; }
+      body[data-page='world-will'] .hall-timeline-item p {
+        margin: 4px 0 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #334155;
       }
       body[data-page='world-will'] .ww-sum-card strong {
         display: block;
@@ -199,9 +319,102 @@
         font-size: 11px;
         line-height: 1.6;
       }
+      body[data-page='world-will'] .hall-depts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin: 8px 0 22px;
+      }
+      body[data-page='world-will'] .hall-dept {
+        text-align: left;
+        cursor: pointer;
+        border: 1px solid color-mix(in srgb, var(--dept) 35%, #e2e6ec);
+        border-radius: 16px;
+        background:
+          linear-gradient(180deg, color-mix(in srgb, var(--dept) 14%, #fff), #fff 55%);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--dept) 0%, transparent);
+        padding: 16px;
+        transition: box-shadow 0.25s ease, transform 0.2s ease;
+      }
+      body[data-page='world-will'] .hall-dept:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px color-mix(in srgb, var(--dept) 22%, transparent);
+      }
+      body[data-page='world-will'] .hall-dept header {
+        display: flex; justify-content: space-between; gap: 8px; margin-bottom: 12px;
+      }
+      body[data-page='world-will'] .hall-dept header strong { font-size: 15px; }
+      body[data-page='world-will'] .hall-dept header span { color: #8b94a0; font-size: 11px; }
+      body[data-page='world-will'] .hall-dots { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+      body[data-page='world-will'] .hall-dot {
+        width: 10px; height: 10px; border-radius: 50%; background: #cbd5e1;
+      }
+      body[data-page='world-will'] .hall-dot--working { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.18); }
+      body[data-page='world-will'] .hall-dot--alert { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+      body[data-page='world-will'] .hall-dot--idle { background: #22c55e; }
+      body[data-page='world-will'] .hall-dept footer {
+        display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; color: #64748b; font-size: 11px; font-weight: 650;
+      }
+      body[data-page='world-will'] .hall-dept footer .is-work { color: #b45309; }
+      body[data-page='world-will'] .hall-dept footer .is-alert { color: #b91c1c; }
+      body[data-page='world-will'] #hall-dept-detail {
+        margin-bottom: 22px; border: 1px solid #e2e6ec; border-radius: 16px; background: #fff; padding: 16px 18px;
+      }
+      body[data-page='world-will'] .hall-detail-head {
+        display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
+        border-left: 4px solid var(--dept); padding-left: 10px;
+      }
+      body[data-page='world-will'] .hall-detail-head h2 { margin: 0; font-size: 18px; }
+      body[data-page='world-will'] .hall-close {
+        border: 1px solid #e2e6ec; background: #f8fafc; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+      }
+      body[data-page='world-will'] .hall-emp-grid {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+      }
+      body[data-page='world-will'] .hall-emp {
+        display: grid; grid-template-columns: 42px 1fr; gap: 10px; padding: 12px;
+        border: 1px solid #eef1f5; border-radius: 12px; background: #fbfdff;
+      }
+      body[data-page='world-will'] .hall-emp--working { border-color: #fcd34d; }
+      body[data-page='world-will'] .hall-emp--alert { border-color: #fca5a5; }
+      body[data-page='world-will'] .hall-avatar {
+        width: 42px; height: 42px; border-radius: 50%;
+        display: grid; place-items: center; color: #0f172a; font-weight: 800;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--dept) 55%, #fff), var(--dept));
+      }
+      body[data-page='world-will'] .hall-emp h3 { margin: 0 0 2px; font-size: 13px; }
+      body[data-page='world-will'] .hall-emp-id { margin: 0; color: #94a3b8; font-size: 10px; }
+      body[data-page='world-will'] .hall-emp-act { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: #334155; }
+      body[data-page='world-will'] .hall-emp-meta { margin: 4px 0 0; color: #94a3b8; font-size: 11px; }
+      body[data-page='world-will'] .hall-layout {
+        display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 18px; align-items: start;
+      }
+      body[data-page='world-will'] .hall-feed-item {
+        display: grid; grid-template-columns: 10px 48px 1fr; gap: 10px; padding: 12px 0;
+        border-bottom: 1px solid #f0f3f7; text-decoration: none; color: inherit;
+      }
+      body[data-page='world-will'] .hall-feed-item i { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
+      body[data-page='world-will'] .hall-feed-item time { color: #94a3b8; font-size: 12px; font-variant-numeric: tabular-nums; }
+      body[data-page='world-will'] .hall-feed-item strong { display: block; font-size: 12px; }
+      body[data-page='world-will'] .hall-feed-status { color: #64748b; font-size: 11px; margin-left: 6px; }
+      body[data-page='world-will'] .hall-feed-item p { margin: 4px 0 0; font-size: 12px; line-height: 1.45; color: #334155; }
+      body[data-page='world-will'] .hall-report-grid {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px;
+      }
+      body[data-page='world-will'] .hall-report-grid div {
+        border: 1px solid #e2e6ec; border-radius: 12px; padding: 12px; background: #fff;
+      }
+      body[data-page='world-will'] .hall-report-grid strong { display: block; font-size: 22px; letter-spacing: -0.03em; }
+      body[data-page='world-will'] .hall-report-grid span { color: #7b8490; font-size: 11px; font-weight: 650; }
+      body[data-page='world-will'] .hall-report-line { margin: 8px 0; font-size: 13px; color: #334155; }
+      body[data-page='world-will'] .hall-report-note { margin: 10px 0 0; color: #9aa3ad; font-size: 11px; line-height: 1.6; }
       @media (max-width: 900px) {
         body[data-page='world-will'] .ww-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         body[data-page='world-will'] .ww-grid { grid-template-columns: 1fr; }
+        body[data-page='world-will'] .hall-depts { grid-template-columns: 1fr; }
+        body[data-page='world-will'] .hall-emp-grid { grid-template-columns: 1fr; }
+        body[data-page='world-will'] .hall-layout { grid-template-columns: 1fr; }
+        body[data-page='world-will'] .hall-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
     </style>
   </head>
@@ -252,16 +465,16 @@
 <main>
       <section class="ww-hero">
         <div class="container">
-          <p class="eyebrow"><i aria-hidden="true"></i> World Will · Live</p>
-          <h1>世界意志</h1>
+          <p class="eyebrow"><i aria-hidden="true"></i> World Will · Company Hall</p>
+          <h1>世界意志 · AI 公司大厅</h1>
           <p>
-            无人公司当日真实 AI 工作轨迹。数据来自公开行动看板（断点清单 / 工作目标同源），只读脱敏，不含源码路径与内部标识。
+            六线约 55 名 AI 员工的公开公司大厅。编制来自 duty_roster；工作中 / 告警 / 编制待命由行动条目与执行度量真实推导，不做虚构「全员在线」。
           </p>
           <p class="ww-meta" id="ww-meta">加载中…</p>
           <div class="ww-actions">
-            <a class="btn btn-primary" href="/download/breakpoints">断点清单</a>
-            <a class="btn btn-secondary" href="/download/goals">工作目标</a>
-            <a class="btn btn-secondary" href="/visualization">可视化展示</a>
+            <a class="btn btn-primary" href="/download/breakpoints">查看断点清单</a>
+            <a class="btn btn-secondary" href="/download/goals">查看工作目标</a>
+            <a class="btn btn-secondary" href="/visualization">可视化展示 →</a>
           </div>
         </div>
       </section>
@@ -269,33 +482,44 @@
       <section class="ww-section">
         <div class="container">
           <div class="ww-sum" id="ww-sum" aria-live="polite"></div>
-          <div class="ww-grid">
-            <section class="ww-panel" aria-labelledby="ww-traj-title">
+          <div class="hall-depts" id="hall-depts" aria-label="六线部门全景"></div>
+          <div id="hall-dept-detail" hidden></div>
+          <div class="hall-layout">
+            <section class="ww-panel" aria-labelledby="hall-feed-title">
               <div class="ww-panel-head">
-                <h2 id="ww-traj-title">AI 工作轨迹</h2>
-                <span id="ww-traj-count">—</span>
+                <h2 id="hall-feed-title">公司动态</h2>
+                <a href="/download/breakpoints">查看断点 →</a>
               </div>
-              <div class="ww-feed" id="ww-traj" aria-live="polite"></div>
+              <div class="ww-feed" id="hall-feed" aria-live="polite"></div>
             </section>
-            <div class="ww-side">
-              <section class="ww-panel" aria-labelledby="ww-bp-title" style="margin-bottom: 22px">
-                <div class="ww-panel-head">
-                  <h2 id="ww-bp-title">断点清单</h2>
-                  <a href="/download/breakpoints">详看 →</a>
-                </div>
-                <div class="ww-list" id="ww-breakpoints" aria-live="polite"></div>
-              </section>
-              <section class="ww-panel" aria-labelledby="ww-goals-title">
-                <div class="ww-panel-head">
-                  <h2 id="ww-goals-title">工作目标</h2>
-                  <a href="/download/goals">详看 →</a>
-                </div>
-                <div class="ww-list" id="ww-goals" aria-live="polite"></div>
-              </section>
-            </div>
+            <section class="ww-panel" aria-labelledby="hall-report-title">
+              <div class="ww-panel-head">
+                <h2 id="hall-report-title">今日战报</h2>
+                <a href="/download/goals">查看目标 →</a>
+              </div>
+              <div id="hall-report" style="padding: 16px 18px"></div>
+            </section>
+          </div>
+          <div class="hall-layout" style="margin-top: 18px">
+            <section class="ww-panel" aria-labelledby="hall-bp-title">
+              <div class="ww-panel-head">
+                <h2 id="hall-bp-title">断点清单</h2>
+                <a href="/download/breakpoints">查看全部 →</a>
+              </div>
+              <div id="hall-breakpoints" aria-live="polite"></div>
+            </section>
+            <section class="ww-panel" aria-labelledby="hall-goals-title">
+              <div class="ww-panel-head">
+                <h2 id="hall-goals-title">工作目标</h2>
+                <a href="/download/goals">查看全部 →</a>
+              </div>
+              <div id="hall-goals" aria-live="polite"></div>
+            </section>
           </div>
           <p class="ww-note">
-            世界意志页只展示 digest / 派发后写出的公开 JSON（<code>/download-action-board.json</code>）。空列表表示当日暂无公开条目，不会用占位叙事冒充运行中。
+            数据文件：<code>/download-company-hall.json</code>（编制+状态）与
+            <code>/download-action-board.json</code>（断点/目标）。快照随 digest / 派发 / 部署回写刷新（事件驱动，非秒级推流）。
+            编制待命 = 编制表已注册、当日无公开活跃任务，含按需触发岗位；空列表不造假填充。
           </p>
         </div>
       </section>
@@ -331,7 +555,7 @@
 <script src="./main.js?v=20260719b"></script>
 
 
-<script src="./world-will.js?v=20260719b" defer></script>
+<script src="./world-will.js?v=20260722e" defer></script>
 
 
 <div id="xc-corp-butler-root"></div>
