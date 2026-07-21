@@ -106,6 +106,18 @@ DATASET_ADMIN_PERMISSION = "dataset.admin"
 REBUILD_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 
+def _semantic_embedding_available(embedding_count: int = 0) -> bool:
+    """UI contract: true when a live embedder exists or chunks already carry vectors."""
+    if int(embedding_count or 0) > 0:
+        return True
+    try:
+        from app.infrastructure.rag import get_default_embedder
+
+        return get_default_embedder() is not None
+    except RECOVERABLE_ERRORS:
+        return False
+
+
 @dataclass(frozen=True)
 class DatasetAccessContext:
     actor_id: str = ""
@@ -1360,6 +1372,10 @@ class DatasetRagApplicationService:
         tenant_id_filter: str = "",
     ) -> dict[str, Any]:
         if state is None:
+            empty_index = {
+                "semantic_embedding_available": _semantic_embedding_available(0),
+                "embedding_count": 0,
+            }
             return {
                 "success": True,
                 "dataset_id": dataset_id,
@@ -1368,7 +1384,7 @@ class DatasetRagApplicationService:
                 "documents": [],
                 "tenant_ids": [],
                 "versions": [],
-                "index": {},
+                "index": empty_index,
                 "rebuild_jobs": [],
                 "rebuild_job_count": 0,
                 "rebuild_queue": _empty_rebuild_queue_summary(
@@ -1410,6 +1426,10 @@ class DatasetRagApplicationService:
                     "filtered_by_tenant": tenant_id_filter,
                 }
             )
+        index["embedding_count"] = int(index.get("embedding_count") or embedding_count or 0)
+        index["semantic_embedding_available"] = _semantic_embedding_available(
+            int(index.get("embedding_count") or 0)
+        )
         rebuild_jobs = [
             self._rebuild_job_to_dict_locked(state, job)
             for job in sorted(

@@ -136,6 +136,19 @@ def _resolve_dataset_id(run: AgentRun, artifact: AgentArtifact) -> str:
         value = str(candidate or "").strip()
         if value:
             return value
+    # Platform omniscient default: shared Persy space (override with env).
+    import os
+
+    default_dataset = str(os.environ.get("XCAGI_KNOWLEDGE_DEFAULT_DATASET") or "").strip()
+    if default_dataset:
+        return default_dataset
+    if str(os.environ.get("XCAGI_KNOWLEDGE_MIRROR_ARTIFACTS_TO_PERSY", "1")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return "persy-knowledge"
     return f"user_{run.user_id or 'anonymous'}"
 
 

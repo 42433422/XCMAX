@@ -84,19 +84,21 @@ class TestKnowledgeIndex:
 
 
 class TestIngestEndpoint:
+    @patch("app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": True, "chunk_count": 3})
     @patch("app.fastapi_routes.knowledge_v1._index")
-    def test_successful_ingest(self, mock_index):
+    def test_successful_ingest(self, mock_index, _mock_mirror):
         mock_index.ingest.return_value = 3
         req = IngestRequest(text="Some text to ingest", source="test")
-        result = ingest(req)
+        result = ingest(req, request=MagicMock())
         assert result.success is True
         assert result.chunk_count == 3
 
+    @patch("app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False})
     @patch("app.fastapi_routes.knowledge_v1._index")
-    def test_ingest_error(self, mock_index):
+    def test_ingest_error(self, mock_index, _mock_mirror):
         mock_index.ingest.side_effect = ValueError("bad input")
         req = IngestRequest(text="Some text", source="test")
-        result = ingest(req)
+        result = ingest(req, request=MagicMock())
         assert result.success is False
         assert result.chunk_count == 0
 
@@ -120,23 +122,43 @@ class TestQueryEndpoint:
 
 
 class TestStatusEndpoint:
-    @patch("app.fastapi_routes.knowledge_v1._index")
-    @patch("app.fastapi_routes.knowledge_v1.is_rag_enabled", return_value=True)
-    @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=MagicMock())
-    def test_status(self, mock_embedder, mock_rag, mock_index):
-        mock_index.status.return_value = {"sources": 2, "chunks": 10}
-        result = status()
+    @patch(
+        "app.fastapi_routes.knowledge_v1._knowledge_runtime_snapshot",
+        return_value={
+            "rag_enabled": True,
+            "embedder_available": True,
+            "indexed_sources": 2,
+            "indexed_chunks": 10,
+            "dataset_count": 1,
+            "dataset_document_count": 2,
+            "dataset_chunk_count": 10,
+            "semantic_embedding_available": True,
+            "recommended_dataset_id": "persy-knowledge",
+        },
+    )
+    def test_status(self, _snap):
+        result = status(request=MagicMock())
         assert result.rag_enabled is True
         assert result.indexed_sources == 2
         assert result.indexed_chunks == 10
 
 
 class TestHealthEndpoint:
-    @patch("app.fastapi_routes.knowledge_v1._index")
-    @patch("app.fastapi_routes.knowledge_v1.is_rag_enabled", return_value=False)
-    @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
-    def test_health(self, mock_embedder, mock_rag, mock_index):
-        mock_index.status.return_value = {"sources": 0, "chunks": 0}
-        result = health()
+    @patch(
+        "app.fastapi_routes.knowledge_v1._knowledge_runtime_snapshot",
+        return_value={
+            "rag_enabled": False,
+            "embedder_available": False,
+            "indexed_sources": 0,
+            "indexed_chunks": 0,
+            "dataset_count": 0,
+            "dataset_document_count": 0,
+            "dataset_chunk_count": 0,
+            "semantic_embedding_available": False,
+            "recommended_dataset_id": "persy-knowledge",
+        },
+    )
+    def test_health(self, _snap):
+        result = health(request=MagicMock())
         assert result["success"] is True
         assert result["rag_enabled"] is False
