@@ -265,6 +265,41 @@ def _presence_for(
     return "idle", "编制待命"
 
 
+def _load_published_action_board() -> Optional[Dict[str, Any]]:
+    """DB 空时回退到已发布的公开行动板 JSON（仍是公开只读文件，不造假）。"""
+    root = _repo_root()
+    candidates = [
+        root / "成都修茈科技有限公司" / "download-action-board.json",
+        root
+        / "成都修茈科技有限公司"
+        / "MODstore_deploy"
+        / "market"
+        / "public"
+        / "download-action-board.json",
+    ]
+    for raw in ("/root/成都修茈科技有限公司", "/opt/xcmax/current/成都修茈科技有限公司"):
+        try:
+            live = Path(raw)
+            if live.is_dir():
+                candidates.append(live.resolve() / "download-action-board.json")
+        except OSError:
+            pass
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and (
+                data.get("trajectory")
+                or ((data.get("breakpoints") or {}).get("items"))
+                or ((data.get("goals") or {}).get("items"))
+            ):
+                return data
+        except Exception:
+            logger.exception("company_hall: read published action board failed %s", path)
+    return None
+
+
 def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     from modstore_server.duty_roster import SIX_LINE_DEPARTMENTS
     from modstore_server.public_action_board import build_public_action_board
@@ -323,6 +358,20 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         )
 
     board = build_public_action_board(day=day)
+    board_empty = not (
+        board.get("trajectory")
+        or ((board.get("breakpoints") or {}).get("items"))
+        or ((board.get("goals") or {}).get("items"))
+    )
+    if board_empty:
+        published = _load_published_action_board()
+        if published:
+            board = published
+            logger.info(
+                "company_hall: DB action board empty; using published download-action-board.json day=%s",
+                board.get("day"),
+            )
+
     feed: List[Dict[str, Any]] = []
     for t in board.get("trajectory") or []:
         owner = str(t.get("owner") or "")
