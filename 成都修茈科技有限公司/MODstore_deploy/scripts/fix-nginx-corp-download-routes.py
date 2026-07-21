@@ -46,7 +46,7 @@ def main() -> None:
         print(f"skip: {CONF} missing")
         return
     text = CONF.read_text(encoding="utf-8")
-    if MARKER in text:
+    if MARKER in text or "location = /download/releases" in text:
         print("corp download routes already present")
         return
     idx = text.find("server_name xiu-ci.com;")
