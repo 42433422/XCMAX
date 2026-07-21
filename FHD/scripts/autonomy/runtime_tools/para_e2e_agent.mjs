@@ -18,6 +18,10 @@ import {
   isTraeProviderFailoverEligible,
   parseTraeStream,
 } from './trae_failover.mjs';
+import {
+  activeTaskId,
+  enqueueByPriority,
+} from './para_queue_policy.mjs';
 
 const require = createRequire(import.meta.url);
 const WebSocket = require('ws');
@@ -1286,6 +1290,7 @@ async function handleTask(ws, task) {
 const supportedToolNames = ['trae', 'codex', 'cursor', 'claude_code'];
 const taskQueuesByTool = new Map(supportedToolNames.map((tool) => [tool, []]));
 const runningTools = new Set();
+const runningTaskIdsByTool = new Map();
 const knownSubtasks = new Set();
 
 function taskToolName(task) {
@@ -1298,7 +1303,7 @@ function enqueueTask(ws, task) {
   if (subtaskId && knownSubtasks.has(subtaskId)) return false;
   if (subtaskId) knownSubtasks.add(subtaskId);
   const tool = taskToolName(task);
-  taskQueuesByTool.get(tool).push({ ws, task, tool });
+  enqueueByPriority(taskQueuesByTool.get(tool), { ws, task, tool });
   publishToolStatus(ws);
   drainToolQueue(tool);
   return true;
@@ -1338,6 +1343,7 @@ function drainToolQueue(tool) {
   const next = queue.shift();
   if (!next) return;
   runningTools.add(tool);
+  runningTaskIdsByTool.set(tool, String(next.task?.task_id || ''));
   publishToolStatus(next.ws);
   handleTask(next.ws, next.task)
     .catch((err) => {
@@ -1352,6 +1358,7 @@ function drainToolQueue(tool) {
       const subtaskId = String(next.task?.subtask_id || '').trim();
       if (subtaskId) knownSubtasks.delete(subtaskId);
       runningTools.delete(tool);
+      runningTaskIdsByTool.delete(tool);
       publishToolStatus(next.ws);
       setImmediate(() => drainToolQueue(tool));
       setTimeout(() => recoverPendingTask(next.ws), 500);
@@ -1372,10 +1379,29 @@ function publishToolStatus(ws) {
   send(ws, {
     type: 'tool_status',
     tools: [
-      { tool_name: 'trae', status: toolExecutionStatus('trae', traeInstalled) },
-      { tool_name: 'codex', status: toolExecutionStatus('codex', codexInstalled) },
-      { tool_name: 'cursor', status: toolExecutionStatus('cursor', cursorInstalled) },
-      { tool_name: 'claude_code', status: toolExecutionStatus('claude_code', claudeInstalled) },
+      {
+        tool_name: 'trae',
+        status: toolExecutionStatus('trae', traeInstalled),
+        current_task: activeTaskId(runningTaskIdsByTool.get('trae'), taskQueuesByTool.get('trae')),
+      },
+      {
+        tool_name: 'codex',
+        status: toolExecutionStatus('codex', codexInstalled),
+        current_task: activeTaskId(runningTaskIdsByTool.get('codex'), taskQueuesByTool.get('codex')),
+      },
+      {
+        tool_name: 'cursor',
+        status: toolExecutionStatus('cursor', cursorInstalled),
+        current_task: activeTaskId(runningTaskIdsByTool.get('cursor'), taskQueuesByTool.get('cursor')),
+      },
+      {
+        tool_name: 'claude_code',
+        status: toolExecutionStatus('claude_code', claudeInstalled),
+        current_task: activeTaskId(
+          runningTaskIdsByTool.get('claude_code'),
+          taskQueuesByTool.get('claude_code'),
+        ),
+      },
     ],
     capabilities: {
       ...defaultCapabilities(),

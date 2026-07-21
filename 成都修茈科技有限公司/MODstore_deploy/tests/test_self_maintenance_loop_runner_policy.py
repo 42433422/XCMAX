@@ -242,6 +242,43 @@ def test_diff_semantic_scan_still_flags_added_subprocess_call():
     assert result["penalty"] == 16
 
 
+def test_diff_semantic_scan_ignores_risky_api_named_only_by_regression_test():
+    diff = """diff --git a/tests/test_worker.py b/tests/test_worker.py
+--- /dev/null
++++ b/tests/test_worker.py
+@@ -0,0 +1,2 @@
++def test_subprocess_uses_current_interpreter():
++    assert worker.subprocess.run.called
+"""
+
+    result = loop_runner._diff_semantic_penalty(diff)
+
+    assert result["high_hits"] == []
+    assert result["penalty"] == 0
+
+
+def test_validate_remediation_branch_delivery_requires_advanced_work_branch(monkeypatch):
+    heads = {
+        "candidate": "a" * 40,
+        "work-unchanged": "a" * 40,
+        "work-advanced": "b" * 40,
+    }
+    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads.get(branch))
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+
+    unchanged = loop_runner._validate_remediation_branch_delivery(
+        base_branch="candidate", delivered_branch="work-unchanged"
+    )
+    advanced = loop_runner._validate_remediation_branch_delivery(
+        base_branch="candidate", delivered_branch="work-advanced"
+    )
+
+    assert unchanged["ok"] is False
+    assert unchanged["reason"] == "remediation_branch_not_advanced"
+    assert advanced["ok"] is True
+    assert advanced["reason"] == "remediation_branch_advanced"
+
+
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
     files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
@@ -1849,6 +1886,24 @@ def test_code_task_text_includes_strict_kb_schema_example_and_validate_instructi
     assert "safety_score_v2 target of at least 90" in text
     assert "smallest production change" in text
     assert "independent report-only employees" in text
+
+
+def test_score_remediation_prompt_keeps_employee_on_isolated_work_branch():
+    text = _code_task_text(
+        "run-prompt-remediation",
+        {"gaps": ["missing focused test"]},
+        {"open_items": [], "recent_runs": []},
+        {
+            "branch": "devfleet/codex/immutable-candidate",
+            "failed_run_id": "failed-run",
+            "reason": "resume_safety_score_remediation",
+        },
+    )
+
+    assert "newly created isolated remediation work branch" in text
+    assert "immutable base is `devfleet/codex/immutable-candidate`" in text
+    assert "Do not checkout, switch to, reset, commit, or push directly" in text
+    assert "push HEAD to that same work-branch name" in text
 
 
 def test_gh_pr_add_label_is_best_effort_and_returns_false_on_failure(monkeypatch):
