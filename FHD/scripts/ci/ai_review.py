@@ -328,6 +328,77 @@ _RULES: list[tuple[str, str, str, str, str]] = [
         "同一行 for-loop 内触发 DB/ORM 查询，典型 N+1；改为批量预加载。",
         "性能：同行 N+1 查询",
     ),
+    # ---- static site security (官网静态资源 / nginx / market 前端) ----
+    (
+        "html-inline-event-handler",
+        "high",
+        re.compile(r"<(?:a|img|button|input|body|svg|iframe)\b[^>]*\bon\w+\s*=", re.I),
+        "HTML 内联事件处理器（onclick/onerror 等）可致 XSS；改用 addEventListener 或 CSP。",
+        "静态站点：HTML 内联事件处理器 XSS 风险",
+    ),
+    (
+        "html-innerhtml-assignment",
+        "high",
+        re.compile(r"\.innerHTML\s*=\s*[^;\n]+"),
+        "禁止 .innerHTML 直接赋值字符串，可致 DOM XSS；改用 textContent 或 DOMPurify 净化。",
+        "静态站点：innerHTML 赋值致 DOM XSS",
+    ),
+    (
+        "html-document-write",
+        "high",
+        re.compile(r"\bdocument\.write\s*\("),
+        "禁止 document.write()，已废弃且阻塞渲染；改用 DOM API 或 innerHTML+净化。",
+        "静态站点：document.write 已废弃且高危",
+    ),
+    (
+        "html-remote-script-http",
+        "medium",
+        re.compile(r'<script\b[^>]+src\s*=\s*"http://', re.I),
+        "禁止 http:// 远程脚本（mixed-content）；改用 https:// 或本地打包。",
+        "静态站点：http:// 远程脚本 mixed-content",
+    ),
+    (
+        "js-new-function-string",
+        "high",
+        re.compile(r"\bnew\s+Function\s*\("),
+        "禁止 new Function()，等价 eval() 可致代码注入；改用闭包或显式解析器。",
+        "静态站点：new Function() 代码注入",
+    ),
+    (
+        "js-settimeout-string",
+        "high",
+        re.compile(r"\b(?:setTimeout|setInterval)\s*\(\s*['\"]"),
+        "禁止 setTimeout/setInterval 传字符串，等价 eval()；改用函数引用。",
+        "静态站点：setTimeout(string) 等价 eval",
+    ),
+    (
+        "js-hardcoded-third-party-key",
+        "high",
+        re.compile(r"['\"](?:sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{35}|pk_live_[A-Za-z0-9]{20,})['\"]"),
+        "前端禁止硬编码第三方 API key（OpenAI/Google/Stripe）；改用服务端代理 + 环境变量。",
+        "静态站点：前端硬编码第三方 API key",
+    ),
+    (
+        "html-dangerous-href-javascript",
+        "high",
+        re.compile(r'href\s*=\s*"javascript:', re.I),
+        "禁止 javascript: 伪协议 href，可致 XSS；改用 onclick + preventDefault。",
+        "静态站点：javascript: 伪协议 XSS",
+    ),
+    (
+        "css-expression",
+        "low",
+        re.compile(r"expression\s*\(", re.I),
+        "CSS expression() 已废弃且高危（IE only）；移除或改用现代 CSS。",
+        "静态站点：CSS expression() 已废弃",
+    ),
+    (
+        "html-mixed-content-asset",
+        "medium",
+        re.compile(r'<(?:img|link|script|iframe|video|audio|source)\b[^>]+src\s*=\s*"http://', re.I),
+        "https:// 页面引用 http:// 资源会被浏览器拦截（mixed-content）；改用 https://。",
+        "静态站点：mixed-content http:// 资源",
+    ),
 ]
 
 
