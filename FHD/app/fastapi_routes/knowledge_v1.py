@@ -596,9 +596,7 @@ def _mirror_ingest_to_persy(
     try:
         from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
-        access = (
-            _dataset_access_context_from_request(request) if request is not None else None
-        )
+        access = _dataset_access_context_from_request(request) if request is not None else None
         return cast(
             "dict[str, Any]",
             get_dataset_rag_app_service().ingest_document(
@@ -626,9 +624,7 @@ def _knowledge_runtime_snapshot(request: Request | None = None) -> dict[str, Any
     try:
         from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
-        access = (
-            _dataset_access_context_from_request(request) if request is not None else None
-        )
+        access = _dataset_access_context_from_request(request) if request is not None else None
         overview = get_dataset_rag_app_service().status(access_context=access)
         datasets = overview.get("datasets") if isinstance(overview, dict) else {}
         if isinstance(datasets, dict):
