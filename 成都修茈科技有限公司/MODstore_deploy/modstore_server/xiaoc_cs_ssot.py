@@ -5,6 +5,7 @@ SSOT 口径（2026-07）：
 - 知识库：FHD 管理端 persy-knowledge（经 /api/ops/autonomy/cs-ssot/retrieve）
 - 客来来暂不纳入
 """
+
 from __future__ import annotations
 
 import logging
@@ -167,11 +168,7 @@ def _format_permission_block(mode: str) -> str:
     p = permission_policy(mode=mode)
     allowed = "；".join(p.get("allowed") or [])
     denied = "；".join(p.get("denied") or [])
-    return (
-        f"【权限契约·{p.get('label')}】\n"
-        f"允许：{allowed}\n"
-        f"禁止：{denied}"
-    )
+    return f"【权限契约·{p.get('label')}】\n" f"允许：{allowed}\n" f"禁止：{denied}"
 
 
 XIAOC_CORE_PERSONA = """你是「XC AGI 数字管家」，叫小C，是这个平台的老熟人。
@@ -242,19 +239,11 @@ def format_knowledge_block(chunks: List[Dict[str, Any]], *, limit: int = 5) -> s
     for i, chunk in enumerate(chunks[:limit], 1):
         if not isinstance(chunk, dict):
             continue
-        text = str(
-            chunk.get("text")
-            or chunk.get("content")
-            or chunk.get("snippet")
-            or ""
-        ).strip()
+        text = str(chunk.get("text") or chunk.get("content") or chunk.get("snippet") or "").strip()
         if not text:
             continue
         source = str(
-            chunk.get("source")
-            or chunk.get("document_id")
-            or chunk.get("filename")
-            or ""
+            chunk.get("source") or chunk.get("document_id") or chunk.get("filename") or ""
         ).strip()
         head = f"{i}. ({source}) " if source else f"{i}. "
         lines.append(head + text[:800])
@@ -265,9 +254,7 @@ def format_knowledge_block(chunks: List[Dict[str, Any]], *, limit: int = 5) -> s
 
 def _http_retrieve(query: str, *, top_k: int) -> List[Dict[str, Any]]:
     base = (
-        os.environ.get("FHD_API_BASE_URL")
-        or os.environ.get("XCAGI_FHD_API_BASE")
-        or ""
+        os.environ.get("FHD_API_BASE_URL") or os.environ.get("XCAGI_FHD_API_BASE") or ""
     ).strip()
     token = (
         os.environ.get("AUTONOMY_WEBHOOK_TOKEN")
@@ -338,9 +325,7 @@ def _local_retrieve(query: str, *, top_k: int) -> List[Dict[str, Any]]:
             access = DatasetAccessContext(
                 actor_id="xiaoc-cs-ssot",
                 tenant_id="",
-                permissions=frozenset(
-                    {DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}
-                ),
+                permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
                 is_admin=True,
             )
             result = get_dataset_rag_app_service().query(

@@ -544,7 +544,6 @@ def _maybe_dispatch_employee_followup(
         return action
 
 
-
 def _xiaoc_general_reply(user_text: str) -> str:
     """general 意图走小C SSOT（管理端知识库摘录 + 模板兜底）。"""
     try:

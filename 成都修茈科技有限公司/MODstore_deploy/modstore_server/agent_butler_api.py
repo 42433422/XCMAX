@@ -640,20 +640,17 @@ def _build_messages(body: ButlerChatDTO, page_context: str | None) -> List[Dict[
     system_content = xiaoc_system_prompt(mode="admin")
     # 保留工具职责补充（导航/风险等）
     if "enhance_current_page" in BUTLER_SYSTEM_PROMPT:
-        system_content += (
-            "\n\n【工具能力补充】\n"
-            + "\n".join(
-                line
-                for line in BUTLER_SYSTEM_PROMPT.splitlines()
-                if line.startswith("6.")
-                or line.startswith("可识别")
-                or line.startswith("- /workbench")
-                or line.startswith("操作原则")
-                or line.startswith("- 低风险")
-                or line.startswith("- 中风险")
-                or line.startswith("- 高风险")
-                or line.startswith("回复要简洁")
-            )
+        system_content += "\n\n【工具能力补充】\n" + "\n".join(
+            line
+            for line in BUTLER_SYSTEM_PROMPT.splitlines()
+            if line.startswith("6.")
+            or line.startswith("可识别")
+            or line.startswith("- /workbench")
+            or line.startswith("操作原则")
+            or line.startswith("- 低风险")
+            or line.startswith("- 中风险")
+            or line.startswith("- 高风险")
+            or line.startswith("回复要简洁")
         )
     user_q = last_user_text(body.messages)
     kb = knowledge_block_for_query(user_q) if user_q else ""
