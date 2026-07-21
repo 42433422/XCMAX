@@ -93,6 +93,7 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
             rf"\1fhd-{wf}",
             content,
         )
+
     def repl_path(m: re.Match[str]) -> str:
         indent = m.group(1)
         raw = m.group(2)
@@ -188,6 +189,14 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
     content = content.replace(
         "cache-dependency-path: market/package-lock.json",
         f"cache-dependency-path: {mod_root}/market/package-lock.json",
+    )
+    content = content.replace(
+        "working-directory: java_payment_service",
+        f"working-directory: {mod_root}/java_payment_service",
+    )
+    content = content.replace(
+        "cache-dependency-path: java_payment_service/pom.xml",
+        f"cache-dependency-path: {mod_root}/java_payment_service/pom.xml",
     )
     content = content.replace(
         "path: market/playwright-report/",

@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
 
+from app.build_identity import build_identity
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,15 @@ def _distinct_product_names(keyword: str | None = None) -> list[str]:
 @router.get("/health", include_in_schema=False)
 @router.get("/api/health", include_in_schema=False)
 def compat_health():
-    return _ok({"status": "ok", "timestamp": datetime.now().isoformat()})
+    identity = build_identity()
+    return _ok(
+        {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "build": identity,
+        },
+        build=identity,
+    )
 
 
 @router.post("/api/generate")

@@ -140,12 +140,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     }
 
     def __init__(
-        self,
-        provider: str = "xiaomi",
-        model: str = None,
-        api_key: str = None,
-        base_url: str = None,
-        model_router: Any = None,
+        self, provider: str = "xiaomi", model: str = None, api_key: str = None, base_url: str = None
     ):
         """
         初始化LLM适配器
@@ -155,10 +150,6 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             model: 模型名称 (可选，不设则用默认值)
             api_key: API密钥 (可选，不设则从环境变量读取)
             base_url: API基础URL (可选，不设则用默认值)
-            model_router: :class:`app.infrastructure.llm.model_router.ModelRouter`
-                实例（可选）。注入后调用方可在 ``chat_completion`` 通过
-                ``model`` kwarg 传入路由决策的模型名覆盖默认 ``self._model``；
-                适配器自身不主动调用 router，避免重复决策。
         """
         self.provider = provider.lower().strip()
         self._api_key = api_key or self._resolve_api_key(self.provider)
@@ -171,8 +162,6 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         if self.provider == "xiaomi":
             raw_model = self._XIAOMI_MODEL_ALIASES.get(raw_model, raw_model)
         self._model = raw_model
-        # ModelRouter 注入点（可选）：保持向后兼容，None 时行为完全不变
-        self._model_router = model_router
 
         self._client: Optional[httpx.AsyncClient] = None
         self._stream_client: Optional[httpx.AsyncClient] = None
@@ -252,8 +241,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             messages: 对话消息列表 [{"role": "user/assistant/system", "content": "..."}]
             temperature: 温度参数 (0-2)
             max_tokens: 最大生成token数
-            **kwargs: 其他OpenAI API参数。特殊 kwarg ``model``（str）若提供，
-                将覆盖 ``self._model`` 用于本次请求（供 ModelRouter 路由决策落地）。
+            **kwargs: 其他OpenAI API参数
 
         Returns:
             API响应字典 (标准OpenAI格式)
@@ -268,12 +256,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         base_url = self._normalize_base_url()
         url = f"{base_url}/chat/completions"
 
-        # ModelRouter 路由决策落地：调用方可通过 kwargs["model"] 传入覆盖模型名
-        # 不传或传空 → 退回 self._model（保持原行为）
-        effective_model = kwargs.pop("model", None) or self._model
-
         payload: Dict[str, Any] = {
-            "model": effective_model,
+            "model": self._model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -285,7 +269,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         logger.debug(
             "调用 [%s/%s] messages=%s, temp=%s, max_tokens=%s",
             self.provider,
-            effective_model,
+            self._model,
             len(messages),
             temperature,
             max_tokens,
@@ -325,11 +309,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         base_url = self._normalize_base_url()
         url = f"{base_url}/chat/completions"
 
-        # ModelRouter 路由决策落地（与同步路径一致）
-        effective_model = kwargs.pop("model", None) or self._model
-
         payload: Dict[str, Any] = {
-            "model": effective_model,
+            "model": self._model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -340,7 +321,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
-        logger.info("启动流式请求 [%s/%s]", self.provider, effective_model)
+        logger.info("启动流式请求 [%s/%s]", self.provider, self._model)
 
         client = await self._get_stream_client()
         async with client.stream("POST", url, headers=headers, json=payload) as response:

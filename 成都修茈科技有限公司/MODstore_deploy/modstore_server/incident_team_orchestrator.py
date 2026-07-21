@@ -3,33 +3,18 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
-from modstore_server.llm_failure_classifier import (
-    FAILURE_KIND_PROMPT,
-    FAILURE_KIND_QUOTA,
-    FAILURE_KIND_TRANSIENT,
-    classify_failure_kind,
-)
 from modstore_server.models import IncidentEvent, User, get_session_factory
-
-logger = logging.getLogger(__name__)
 
 ROLE_FALLBACKS = {
     "scout": ["change-request-auditor", "daily-orchestrator"],
     "fix": ["vibe-coding-maintainer", "daily-orchestrator"],
     "verify": ["test-qa-runner", "change-request-auditor"],
 }
-
-# 闭环开关：handler_failed 后是否自动 follow-up（按 failure_kind 分流）。
-# 默认开启。设为 0 可关闭（旧行为：仅写 _team_claim 后 return）。
-_HANDLER_FAILED_FOLLOWUP_ENV = "MODSTORE_INCIDENT_TEAM_HANDLER_FAILED_FOLLOWUP"
-# transient 失败自动重试上限（防止限流抖动导致死亡螺旋）
-_TRANSIENT_RETRY_LIMIT_ENV = "MODSTORE_INCIDENT_TEAM_TRANSIENT_RETRY_LIMIT"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -226,12 +211,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
     team_plan = build_incident_team(event_id)
     team = team_plan.get("team") if isinstance(team_plan.get("team"), list) else []
     if len(team) < 2:
-        return {
-            **team_plan,
-            "claimed": False,
-            "ok": False,
-            "reason": "insufficient_team",
-        }
+        return {**team_plan, "claimed": False, "ok": False, "reason": "insufficient_team"}
 
     sf = get_session_factory()
     with sf() as session:
@@ -241,11 +221,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         if int(ev.dispatched_count or 0) > 0 and not _env_bool(
             "MODSTORE_INCIDENT_TEAM_REDISPATCH", False
         ):
-            return {
-                "claimed": False,
-                "ok": True,
-                "reason": "incident_already_dispatched",
-            }
+            return {"claimed": False, "ok": True, "reason": "incident_already_dispatched"}
         payload = _payload(ev)
         event_type = str(ev.event_type or "")
         source = str(ev.source or "")
@@ -335,23 +311,6 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             fix_result = row
 
     ok = bool(results) and all(bool(row.get("ok")) for row in results if row.get("role") != "fix")
-
-    # ---- 闭环：handler_failed → 按 failure_kind 自动 follow-up ----
-    # 旧版：handler_failed 仅写 _team_claim 后 return，184 个 handler_failed 全靠人工接手。
-    # 新版：transient 自动重试 1 次；quota 标记 quota_blocked 不重试（避免 403 死亡螺旋）；
-    # prompt 走 fallback 到 task market（让 self-evolution 重写 prompt）。
-    follow_ups: List[Dict[str, Any]] = []
-    if _env_bool(_HANDLER_FAILED_FOLLOWUP_ENV, True):
-        follow_ups = _follow_up_handler_failures(
-            event_id=event_id,
-            results=results,
-            team_plan=team_plan,
-            payload=payload,
-            event_type=event_type,
-            source=source,
-            uid=uid,
-        )
-
     with sf() as session:
         ev2 = session.get(IncidentEvent, int(event_id))
         if ev2 is not None:
@@ -361,7 +320,6 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 "ok": ok,
                 "recovery": recovery,
                 "team": [{k: v for k, v in row.items() if k != "result"} for row in results],
-                "follow_ups": follow_ups,
             }
             ev2.payload_json = json.dumps(updated, ensure_ascii=False)[:8000]
             ev2.dispatched_count = int(ev2.dispatched_count or 0) + 1
@@ -373,203 +331,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         "recovery": recovery,
         "results": results,
         "team": team_plan,
-        "follow_ups": follow_ups,
     }
-
-
-def _follow_up_handler_failures(
-    *,
-    event_id: int,
-    results: List[Dict[str, Any]],
-    team_plan: Dict[str, Any],
-    payload: Dict[str, Any],
-    event_type: str,
-    source: str,
-    uid: int,
-) -> List[Dict[str, Any]]:
-    """对每个 handler_failed 的角色按 failure_kind 分流自动 follow-up。
-
-    返回 follow_up 记录列表，写入 _team_claim.follow_ups 便于追踪与可视化。
-
-    分流策略：
-      - quota：不重试（避免 403 死亡螺旋）。标记 need_human=true，由人工或 boss_report 处理。
-      - transient：调一次 execute_employee_task 自动重试（同 employee + 同 task）。
-      - prompt：fallback 到 task market（dispatch_incident_via_market），让 self-evolution 重写 prompt。
-    """
-    follow_ups: List[Dict[str, Any]] = []
-    team = team_plan.get("team") if isinstance(team_plan.get("team"), list) else []
-    member_by_role = {str(m.get("role") or ""): m for m in team if isinstance(m, dict)}
-
-    # transient 重试上限（env 可调，默认 1，避免无限重试占满调度）
-    try:
-        transient_retry_limit = max(0, int(os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV) or "1"))
-    except ValueError:
-        transient_retry_limit = 1
-
-    for row in results:
-        role = str(row.get("role") or "")
-        employee_id = str(row.get("employee_id") or "")
-        result = row.get("result") if isinstance(row.get("result"), dict) else {}
-        is_handler_failed = (
-            bool(result.get("handler_failed"))
-            or str(result.get("status") or "").strip().lower() == "handler_failed"
-        )
-        if not is_handler_failed:
-            continue
-
-        error_text = str(result.get("error") or result.get("reason") or "")
-        failure_kind = classify_failure_kind(error_text)
-        follow_up: Dict[str, Any] = {
-            "role": role,
-            "employee_id": employee_id,
-            "failure_kind": failure_kind,
-            "error": error_text[:500],
-            "action": "",
-            "ok": False,
-            "retry_result": None,
-        }
-
-        if failure_kind == FAILURE_KIND_QUOTA:
-            # 配额/计费类：不重试，标记需要人工处理。飞书告警由 boss_daily_im_report 消费 _team_claim.follow_ups。
-            follow_up["action"] = "quota_blocked_need_human"
-            follow_up["ok"] = False
-            logger.warning(
-                "incident_team: event_id=%s role=%s handler_failed quota_blocked error=%s",
-                event_id,
-                role,
-                error_text[:200],
-            )
-        elif failure_kind == FAILURE_KIND_TRANSIENT and transient_retry_limit > 0:
-            # 瞬时网络/限流抖动：自动重试 1 次（同 employee + 同 task）。
-            follow_up["action"] = "transient_retry"
-            try:
-                retry_result = _retry_member(
-                    event_id=event_id,
-                    member=member_by_role.get(role, {"employee_id": employee_id, "role": role}),
-                    team_plan=team_plan,
-                    payload=payload,
-                    event_type=event_type,
-                    source=source,
-                    uid=uid,
-                    prev_results={r.get("role"): r for r in results if isinstance(r, dict)},
-                )
-                follow_up["retry_result"] = {
-                    k: v
-                    for k, v in retry_result.items()
-                    if k in {"status", "ok", "error", "handler_failed"}
-                }
-                retry_status = str(retry_result.get("status") or "").strip().lower()
-                follow_up["ok"] = (
-                    retry_status == "success"
-                    and not retry_result.get("handler_failed")
-                    and not retry_result.get("error")
-                )
-            except Exception as exc:
-                follow_up["retry_result"] = {"error": str(exc)[:500]}
-                follow_up["ok"] = False
-                logger.exception(
-                    "incident_team: transient retry failed event_id=%s role=%s",
-                    event_id,
-                    role,
-                )
-        elif failure_kind == FAILURE_KIND_PROMPT:
-            # prompt/逻辑类：fallback 到 task market，让 self-evolution 重写 prompt 后重新分发。
-            follow_up["action"] = "fallback_task_market"
-            try:
-                from modstore_server.employee_task_market import (
-                    dispatch_incident_via_market,
-                )
-
-                market_result = dispatch_incident_via_market(event_id)
-                follow_up["retry_result"] = {
-                    k: v
-                    for k, v in market_result.items()
-                    if k in {"ok", "claimed", "employee_id", "reason"}
-                }
-                follow_up["ok"] = bool(market_result.get("ok") and market_result.get("claimed"))
-            except Exception as exc:
-                follow_up["retry_result"] = {"error": str(exc)[:500]}
-                follow_up["ok"] = False
-                logger.exception(
-                    "incident_team: fallback task market failed event_id=%s role=%s",
-                    event_id,
-                    role,
-                )
-        else:
-            follow_up["action"] = "no_action_unknown_kind"
-            follow_up["ok"] = False
-
-        follow_ups.append(follow_up)
-
-    return follow_ups
-
-
-def _retry_member(
-    *,
-    event_id: int,
-    member: Dict[str, Any],
-    team_plan: Dict[str, Any],
-    payload: Dict[str, Any],
-    event_type: str,
-    source: str,
-    uid: int,
-    prev_results: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """对 transient 失败的员工重新调用 execute_employee_task 一次。
-
-    复用 _task_for_role 构造 prompt（带 scout/fix_result 上下文），env/route 与首次一致。
-    """
-    role = str(member.get("role") or "")
-    employee_id = str(member.get("employee_id") or "")
-    if not employee_id:
-        return {"status": "failed", "error": "no_employee_id"}
-
-    scout_result = prev_results.get("scout")
-    fix_result = prev_results.get("fix")
-    code_ownership = (
-        team_plan.get("code_owner_match")
-        if role == "fix" and isinstance(team_plan.get("code_owner_match"), dict)
-        else None
-    )
-    task = _task_for_role(
-        code_ownership=code_ownership,
-        event_type=event_type,
-        fix_result=fix_result,
-        payload=payload,
-        role=role,
-        scout_result=scout_result,
-    )
-
-    try:
-        from modstore_server.incident_model_router import (
-            bench_override_for_route,
-            route_for_incident,
-        )
-
-        route = route_for_incident(event_type=event_type, payload=payload, role=role)
-        bench_override = bench_override_for_route(route)
-    except Exception:
-        route = {"provider": "auto", "model": "auto", "reason": "router_error"}
-        bench_override = None
-
-    return execute_employee_task(
-        employee_id,
-        task,
-        {
-            "allow_high_risk_real_run": role in {"fix", "verify"},
-            "allow_medium_risk": True,
-            "incident": payload,
-            "incident_team": team_plan,
-            "is_transient_retry": True,
-            "model_route": route,
-            "role": role,
-            "source": source,
-            "suppress_lifecycle_events": True,
-            "unified_incident_bus": True,
-        },
-        user_id=uid,
-        bench_llm_override=bench_override,
-    )
 
 
 __all__ = ["build_incident_team", "dispatch_incident_team"]

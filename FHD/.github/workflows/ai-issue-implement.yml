@@ -29,11 +29,17 @@ permissions:
 
 jobs:
   implement:
-    # 仅当 issue 带 ai-implement 标签时触发
+    # 标签事件只处理开放 issue；评论事件必须是开放 issue 的 owner 明确确认。
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && github.event.label.name == 'ai-implement') ||
-      (github.event_name == 'issue_comment' && contains(github.event.issue.labels.*.name, 'ai-implement'))
+      (github.event_name == 'issues' &&
+       github.event.issue.state == 'open' &&
+       github.event.label.name == 'ai-implement') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.state == 'open' &&
+       github.event.comment.author_association == 'OWNER' &&
+       contains(github.event.comment.body, '确认') &&
+       contains(github.event.issue.labels.*.name, 'ai-implement'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
