@@ -6,6 +6,7 @@ from pathlib import Path
 from modstore_server.public_action_board import (
     _clean_public_text,
     build_public_action_board,
+    build_trajectory,
     write_public_action_board,
 )
 
@@ -52,6 +53,15 @@ def test_build_public_board_has_no_internal_fields(monkeypatch):
     assert board["breakpoints"]["summary"]["total"] >= 1
     assert board["goals"]["summary"]["total"] >= 1
     assert all("title" in it for it in board["breakpoints"]["items"])
+    traj = board.get("trajectory") or []
+    assert len(traj) >= 1
+    assert all("ts" in x and "text" in x and "href" in x for x in traj)
+
+
+def test_build_trajectory_fallback_when_empty():
+    traj = build_trajectory([], [])
+    assert len(traj) >= 4
+    assert any("晨报" in x["text"] or "P6" in x["text"] for x in traj)
 
 
 def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
@@ -64,3 +74,5 @@ def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
     assert target.is_file()
     data = json.loads(target.read_text(encoding="utf-8"))
     assert data["schema"] == "xcagi.public_action_board/v1"
+    assert isinstance(data.get("trajectory"), list)
+    assert len(data["trajectory"]) >= 1

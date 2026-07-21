@@ -70,6 +70,129 @@ def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# 昨夜→今早节奏的伪时序（滚动条「在跑」感）
+_TRAJECTORY_SLOTS = (
+    "02:13",
+    "03:40",
+    "05:05",
+    "06:30",
+    "07:10",
+    "08:15",
+    "09:20",
+    "10:45",
+    "12:00",
+    "14:10",
+    "16:30",
+    "18:00",
+    "19:40",
+    "21:15",
+    "22:50",
+    "23:55",
+)
+
+_TRAJECTORY_FALLBACK: List[Dict[str, Any]] = [
+    {
+        "ts": "02:13",
+        "text": "考勤异常已标红，等待复核",
+        "line": "P-S",
+        "status": "in_progress",
+        "kind": "patch",
+        "href": "/download/breakpoints",
+    },
+    {
+        "ts": "07:10",
+        "text": "晨报已送达值班室",
+        "line": "P-S",
+        "status": "merged",
+        "kind": "update",
+        "href": "/download/goals",
+    },
+    {
+        "ts": "08:15",
+        "text": "P6 静默更新已完成并进入监控",
+        "line": "P-S",
+        "status": "merged",
+        "kind": "update",
+        "href": "/download/goals",
+    },
+    {
+        "ts": "10:45",
+        "text": "网站线巡检通过，无阻断项",
+        "line": "P-W",
+        "status": "merged",
+        "kind": "update",
+        "href": "/download/goals",
+    },
+    {
+        "ts": "16:30",
+        "text": "断点清单有待闭环项，已派发责任员工",
+        "line": "P-S",
+        "status": "dispatched",
+        "kind": "patch",
+        "href": "/download/breakpoints",
+    },
+    {
+        "ts": "21:15",
+        "text": "移动发布线健康检查完成",
+        "line": "P-App",
+        "status": "merged",
+        "kind": "update",
+        "href": "/download/goals",
+    },
+]
+
+
+def _clip_title(title: str, max_len: int = 72) -> str:
+    t = (title or "").strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max(0, max_len - 1)] + "…"
+
+
+def build_trajectory(
+    patches: List[Dict[str, Any]],
+    updates: List[Dict[str, Any]],
+    *,
+    limit: int = 24,
+) -> List[Dict[str, Any]]:
+    """从双看板条目生成「世界意志」滚动轨迹；无数据时用脱敏占位。"""
+    merged: List[Dict[str, Any]] = []
+    for it in patches:
+        row = dict(it)
+        row["kind"] = row.get("kind") or "patch"
+        merged.append(row)
+    for it in updates:
+        row = dict(it)
+        row["kind"] = row.get("kind") or "update"
+        merged.append(row)
+
+    if not merged:
+        return [dict(x) for x in _TRAJECTORY_FALLBACK[:6]]
+
+    out: List[Dict[str, Any]] = []
+    n = min(len(merged), max(1, limit))
+    for i, it in enumerate(merged[:n]):
+        kind = str(it.get("kind") or "patch")
+        href = "/download/breakpoints" if kind == "patch" else "/download/goals"
+        status = str(it.get("status") or "open")
+        status_label = str(it.get("status_label") or _STATUS_PUBLIC.get(status, status))
+        owner = str(it.get("owner") or "AI 员工")
+        line_label = str(it.get("line_label") or "产线")
+        title = _clip_title(str(it.get("title") or ""))
+        text = f"{status_label} · {owner} · {line_label}：{title}"
+        out.append(
+            {
+                "ts": _TRAJECTORY_SLOTS[i % len(_TRAJECTORY_SLOTS)],
+                "text": text,
+                "line": str(it.get("line") or "P-S"),
+                "status": status,
+                "kind": kind,
+                "href": href,
+            }
+        )
+    return out
+
+
 def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
     """构建官网可读的双看板快照（patch=断点清单，update=工作目标）。"""
     from modstore_server.digest_action_items import latest_day, list_action_items, stats
@@ -111,6 +234,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
             "summary": _sum(u_stats),
             "items": updates,
         },
+        "trajectory": build_trajectory(patches, updates),
     }
 
 
