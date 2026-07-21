@@ -37,6 +37,16 @@ export function clampCorpBallPosition(x: number, y: number): { x: number; y: num
   }
 }
 
+/** 旧坐标落在顶栏/首页主文案区时视为脏数据，回默认右下角 */
+function isCorruptDesktopPosition(x: number, y: number): boolean {
+  if (typeof window === 'undefined') return false
+  if (isCorpMobileViewport() || isContactPagePath()) return false
+  // 顶栏与首屏标题带：避免挡导航 / 「让 AI 员工…」
+  if (y < 120) return true
+  if (x < Math.min(480, window.innerWidth * 0.42) && y < window.innerHeight * 0.55) return true
+  return false
+}
+
 export function loadCorpBallPosition(): { x: number; y: number } {
   try {
     const raw = localStorage.getItem(CORP_BALL_STORAGE)
@@ -44,7 +54,7 @@ export function loadCorpBallPosition(): { x: number; y: number } {
       const p = JSON.parse(raw) as { x?: number; y?: number }
       if (typeof p.x === 'number' && typeof p.y === 'number') {
         const clamped = clampCorpBallPosition(p.x, p.y)
-        if (overlapsMobileBackToTop(clamped.x, clamped.y)) {
+        if (overlapsMobileBackToTop(clamped.x, clamped.y) || isCorruptDesktopPosition(clamped.x, clamped.y)) {
           return getCorpDefaultBallPosition()
         }
         return clamped

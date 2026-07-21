@@ -82,9 +82,8 @@ async function runProactivePageIntro(reason: 'consent' | 'page') {
   if (!text) return
 
   markPageIntroduced(pageId)
-  agentStore.openPanel()
 
-  // 避免连发重复气泡
+  // 主动介绍：只播 TTS + 底部双语字幕，不强制拉开聊天面板（面板像工作台会显「错」）
   const last = agentStore.messages[agentStore.messages.length - 1]
   if (!(last && last.role === 'assistant' && last.content === text)) {
     agentStore.addMessage({
