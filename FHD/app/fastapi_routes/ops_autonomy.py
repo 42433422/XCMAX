@@ -341,3 +341,58 @@ async def reject_autonomy_action(
     except ApprovalStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": True, "action": item}
+
+
+@router.post("/cs-ssot/retrieve")
+async def cs_ssot_retrieve(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+) -> dict[str, Any]:
+    """小C 客服 SSOT：从管理端 persy-knowledge 检索片段（机器调用）。
+
+    供 MODstore butler / 市场客服同源读取管理端知识库。
+    """
+    _auth(authorization, x_autonomy_token, request=request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    query = str(body.get("query") or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    try:
+        top_k = int(body.get("top_k") or 5)
+    except (TypeError, ValueError):
+        top_k = 5
+    top_k = max(1, min(top_k, 12))
+    dataset_id = str(body.get("dataset_id") or "persy-knowledge").strip() or "persy-knowledge"
+
+    from app.application.dataset_rag_app_service import (
+        DATASET_ADMIN_PERMISSION,
+        DATASET_READ_PERMISSION,
+        DatasetAccessContext,
+        get_dataset_rag_app_service,
+    )
+
+    access = DatasetAccessContext(
+        actor_id="xiaoc-cs-ssot",
+        tenant_id="",
+        permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
+        is_admin=True,
+    )
+    result = get_dataset_rag_app_service().query(
+        dataset_id=dataset_id,
+        query=query,
+        top_k=top_k,
+        access_context=access,
+    )
+    chunks = result.get("chunks") if isinstance(result, dict) else []
+    if not isinstance(chunks, list):
+        chunks = []
+    return {
+        "ok": bool(result.get("success")) if isinstance(result, dict) else True,
+        "dataset_id": dataset_id,
+        "query": query,
+        "chunks": chunks,
+        "ssot": "admin_persy_knowledge",
+    }
