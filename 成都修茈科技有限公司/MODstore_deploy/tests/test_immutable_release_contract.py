@@ -25,6 +25,36 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "rollback" in script
     assert "reset --hard" not in script
     assert "/etc/xcmax" in script
+    assert script.index('migrate_env_file "$ENV_FILE"') < script.index(
+        "import fastapi, uvicorn, modstore_server.app"
+    )
+    assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    assert "MODSTORE_ENV=production" in script
+    assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
+    assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
+    assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
+    assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
+    assert "node scripts/install-native-bindings.mjs" in script
+    assert script.index("--ignore-scripts") < script.index("npm run build")
+    assert "resolve_java_home" in script
+    assert "/usr/lib/jvm/java-17-*" in script
+    assert 'PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"' in script
+    assert "ExecStart=${PAYMENT_JAVA_BIN} -jar" in script
+    assert script.index(
+        "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
+    ) < script.index("mvn -B -q -DskipTests package")
+
+    source_ci = yaml.safe_load((ROOT / ".github/workflows/ci-backend-python.yml").read_text())
+    published_ci = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/modstore-ci-backend-python.yml").read_text()
+    )
+    source_java_job = source_ci["jobs"]["java-payment-test"]
+    published_java_job = published_ci["jobs"]["java-payment-test"]
+    assert source_java_job["defaults"]["run"]["working-directory"] == "java_payment_service"
+    assert published_java_job["defaults"]["run"]["working-directory"] == (
+        "成都修茈科技有限公司/MODstore_deploy/java_payment_service"
+    )
+    assert any(step.get("run") == "mvn -B test package" for step in source_java_job["steps"])
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:

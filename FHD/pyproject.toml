@@ -70,8 +70,6 @@ ml = [
     "scikit-learn>=1.3.0",
     "soundcard>=0.4.3",
     "statsmodels>=0.14.6",
-    # 真实 embedding / cross-encoder reranker（FHD_EMBEDDING_MODE=local / FHD_RERANKER_MODE=local 时使用）
-    "sentence-transformers>=2.2.0",
 ]
 dev = [
     "pytest>=7.4",

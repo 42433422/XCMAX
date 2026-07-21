@@ -37,13 +37,8 @@ class AIConversationService(
     PromptsMixin,
     ApiMixin,
 ):
-    def __init__(self, model_router: Any = None):
+    def __init__(self):
         self.contexts: dict[str, ConversationContext] = {}
-
-        # ========== ModelRouter 注入（可选）==========
-        # 默认 None → 行为完全等同于改造前；外部注入后由调用方在 LLM 请求前
-        # 调用 router.route(RoutingRequest(...)) 决策 model，并通过 chat_completion(model=...) 覆盖。
-        self.model_router = model_router
 
         # ========== LLM调用架构初始化（三级优先级）==========
         self.llm_adapter = None

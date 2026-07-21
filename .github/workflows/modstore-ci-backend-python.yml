@@ -95,3 +95,23 @@ jobs:
           flags: backend
           name: modstore-backend
           fail_ci_if_error: false
+
+  java-payment-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/java_payment_service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/java_payment_service/pom.xml
+
+      - name: Run Java payment tests and package
+        run: mvn -B test package

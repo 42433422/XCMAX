@@ -2314,17 +2314,6 @@ def _rerank_chunks(
     *,
     top_k: int,
 ) -> list[RetrievedChunk]:
-    # 优先用 cross-encoder 神经重排；disabled / 不可用时回退到 lexical overlap 启发式。
-    try:
-        from app.infrastructure.rag.cross_encoder_reranker import get_default_reranker
-
-        reranker = get_default_reranker()
-        if reranker is not None and reranker.is_available():
-            return reranker.rerank(query, chunks, top_k=top_k)
-    except RECOVERABLE_ERRORS:
-        pass
-
-    # lexical overlap fallback（原有逻辑，保持向后兼容）
     query_terms = set(_tokenize_for_rerank(query))
     if not query_terms:
         return chunks[:top_k]

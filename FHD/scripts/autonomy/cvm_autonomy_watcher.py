@@ -21,34 +21,16 @@
 
 from __future__ import annotations
 
-# ⚠️ 导入顺序敏感：scripts/autonomy/types.py 与 stdlib types 同名，直接调用脚本时
-# Python 自动把 scripts/autonomy/ 加到 sys.path[0]，导致后续 import argparse / pathlib / os
-# 触发 stdlib 内部 `import types` 时找到错误的 types 模块而崩。
-# 因此 sys 必须最先导入（built-in，不依赖任何 stdlib），并在 import argparse 前完成 sys.path 清理。
+import argparse
 import sys
+import time
+from datetime import datetime, timezone
+from typing import Any
 
-if __package__ in (None, ""):  # pragma: no cover - 仅脚本直接调用时触发
-    # 用纯字符串操作算出路径（pathlib / os.path 内部 import types，不能用）
-    # __file__ 形如 /opt/fhd-full/scripts/autonomy/cvm_autonomy_watcher.py
-    _script_dir = __file__.rpartition("/")[0]  # .../scripts/autonomy
-    _fhd_root = _script_dir.rpartition("/")[0].rpartition("/")[0]  # /opt/fhd-full
-
-    # 清掉 Python 自动加的脚本目录，避免遮蔽 stdlib（types.py 同名问题）
-    sys.path[:] = [p for p in sys.path if not p or not p.rstrip("/").endswith("/scripts/autonomy")]
-    if _fhd_root and _fhd_root not in sys.path:
-        sys.path.insert(0, _fhd_root)
-    __package__ = "scripts.autonomy"
-
-# 上面完成 sys.path 清理后，才能安全 import argparse / pathlib / datetime 等
-import argparse  # noqa: E402
-import time  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
-from typing import Any  # noqa: E402
-
-from .cvm_adapter import CvmAutonomyAdapter  # noqa: E402
-from .impact_predictor import predict  # noqa: E402
-from .policies import ALL_POLICIES  # noqa: E402
-from .types import (  # noqa: E402
+from .cvm_adapter import CvmAutonomyAdapter
+from .impact_predictor import predict
+from .policies import ALL_POLICIES
+from .types import (
     Action,
     ActionTracker,
     ActionType,

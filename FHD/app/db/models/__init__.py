@@ -49,15 +49,6 @@ from app.db.models.shipment import ShipmentRecord
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
-from app.db.models.workflow import (
-    WorkflowDefinition,
-    WorkflowRun,
-    WorkflowRunStep,
-    WorkflowRunStatus,
-    WorkflowRunStepStatus,
-    WorkflowTriggerSource,
-    WorkflowTriggerType,
-)
 from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
 
 # 所有模型映射完成后安装全局多租户过滤事件（继承 TenantScopedMixin 的业务模型自动隔离）。
@@ -112,11 +103,4 @@ __all__ = [
     "PersonaProfileModel",
     "PersonaEventLogModel",
     "NeuroEventLog",
-    "WorkflowDefinition",
-    "WorkflowRun",
-    "WorkflowRunStep",
-    "WorkflowRunStatus",
-    "WorkflowRunStepStatus",
-    "WorkflowTriggerSource",
-    "WorkflowTriggerType",
 ]

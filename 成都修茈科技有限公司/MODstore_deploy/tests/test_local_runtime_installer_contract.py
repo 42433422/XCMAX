@@ -24,5 +24,6 @@ def test_manual_trigger_requires_manifest_and_uses_absolute_sqlite_url() -> None
 
     assert "runtime provenance manifest missing" in script
     assert 'DATABASE_URL="sqlite:///$MODSTORE_RUNTIME_DB_PATH"' in script
+    assert 'MODSTORE_CATALOG_DIR="$STATE_ROOT/catalog"' in script
     assert 'XCAGI_FHD_RUNTIME_ROOT="$RUNTIME_ROOT/FHD"' in script
     assert "Desktop/XCMAX/FHD" not in script

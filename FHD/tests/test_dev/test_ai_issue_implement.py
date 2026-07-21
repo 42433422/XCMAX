@@ -25,11 +25,24 @@ import pytest
 # ai_issue_implement 在 scripts/dev/ 下，不是包内模块，需要用 spec 加载
 # 必须先注册到 sys.modules 否则 @dataclass 装饰器在解析 __module__ 时会失败
 _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ai_issue_implement.py"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_WORKFLOW_PATHS = (
+    _REPO_ROOT / "FHD" / ".github" / "workflows" / "ai-issue-implement.yml",
+    _REPO_ROOT / ".github" / "workflows" / "fhd-ai-issue-implement.yml",
+)
 _spec = importlib.util.spec_from_file_location("ai_issue_implement", _SCRIPT_PATH)
 assert _spec is not None and _spec.loader is not None
 _ai_impl = importlib.util.module_from_spec(_spec)
 sys.modules["ai_issue_implement"] = _ai_impl
 _spec.loader.exec_module(_ai_impl)
+
+
+def test_workflow_comment_trigger_requires_open_issue_owner_confirmation() -> None:
+    for workflow_path in _WORKFLOW_PATHS:
+        workflow = workflow_path.read_text(encoding="utf-8")
+        assert "github.event.issue.state == 'open'" in workflow
+        assert "github.event.comment.author_association == 'OWNER'" in workflow
+        assert "contains(github.event.comment.body, '确认')" in workflow
 
 
 class TestHasAimplementLabel:

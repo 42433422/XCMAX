@@ -1355,10 +1355,6 @@ def ensure_postgresql_auth_bootstrap(
                     text("CREATE INDEX IF NOT EXISTS ix_users_wx_unionid ON users (wx_unionid)")
                 )
 
-        # 空库新建 users 时 DDL 仅含基础列，补齐 seed/登录所需的
-        # failed_login_attempts / email_verified / locked_until 等列
-        ensure_user_profile_columns(real_engine)
-
         insp = inspect(real_engine)
         tables = set(insp.get_table_names() or [])
 

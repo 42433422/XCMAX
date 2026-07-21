@@ -440,42 +440,6 @@ class PurchaseService(NeuroEventPublisherMixin):
                 if data.get("order_id"):
                     self._update_order_received_quantity(db, data.get("order_id"))
 
-                # NeuroBus：发布入库创建事件（下游消费者：财务对账 / 月报汇总 /
-                # 审批链路追踪）。失败不阻断入库主流程。
-                try:
-                    self._publish_event(
-                        "inventory.inbound_created",
-                        {
-                            "inbound_id": inbound.id,
-                            "inbound_no": inbound.inbound_no,
-                            "supplier_id": inbound.supplier_id,
-                            "warehouse_id": inbound.warehouse_id,
-                            "total_amount": (
-                                float(inbound.total_amount)
-                                if inbound.total_amount is not None
-                                else 0.0
-                            ),
-                            "status": inbound.status,
-                            "items": [
-                                {
-                                    "product_id": it.product_id,
-                                    "quantity": (
-                                        float(it.quantity) if it.quantity is not None else 0
-                                    ),
-                                    "unit_price": (
-                                        float(it.unit_price) if it.unit_price is not None else 0
-                                    ),
-                                }
-                                for it in (inbound.items or [])
-                            ],
-                        },
-                    )
-                except RECOVERABLE_ERRORS as publish_exc:
-                    logger.warning(
-                        "发布 inventory.inbound_created 失败（不阻断入库）: %s",
-                        publish_exc,
-                    )
-
                 return {
                     "success": True,
                     "data": self._model_to_dict(inbound),
@@ -484,68 +448,6 @@ class PurchaseService(NeuroEventPublisherMixin):
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("创建采购入库单失败: %s", e)
-                return {"success": False, "message": str(e)}
-
-    def update_inbound_approval_status(
-        self, inbound_id: int, decision: str
-    ) -> dict[str, Any]:
-        """更新采购入库单的审批状态（供 NeuroBus finance.approval_completed handler 调用）。
-
-        Args:
-            inbound_id: 入库单 ID
-            decision: ``approved`` / ``rejected``
-
-        Returns:
-            ``{"success": bool, "status": str, "message": str}``
-        """
-        if decision not in {"approved", "rejected"}:
-            return {"success": False, "message": f"未知 decision: {decision}"}
-
-        with get_db() as db:
-            try:
-                inbound = (
-                    db.query(PurchaseInbound)
-                    .filter(PurchaseInbound.id == inbound_id)
-                    .first()
-                )
-                if not inbound:
-                    return {"success": False, "message": "入库单不存在"}
-
-                # status 字段语义：draft/completed/approved/rejected
-                inbound.status = decision
-                inbound.updated_at = datetime.now()
-                db.commit()
-                db.refresh(inbound)
-
-                # 发布状态变更事件（便于审计 / 月报汇总）
-                try:
-                    self._publish_event(
-                        "inventory.inbound_approval_updated",
-                        {
-                            "inbound_id": inbound.id,
-                            "inbound_no": inbound.inbound_no,
-                            "decision": decision,
-                            "total_amount": (
-                                float(inbound.total_amount)
-                                if inbound.total_amount is not None
-                                else 0.0
-                            ),
-                        },
-                    )
-                except RECOVERABLE_ERRORS as publish_exc:
-                    logger.warning(
-                        "发布 inventory.inbound_approval_updated 失败: %s", publish_exc
-                    )
-
-                return {
-                    "success": True,
-                    "status": decision,
-                    "inbound_id": inbound.id,
-                    "message": f"入库单审批状态已更新为 {decision}",
-                }
-            except RECOVERABLE_ERRORS as e:
-                db.rollback()
-                logger.error("更新入库单审批状态失败: %s", e)
                 return {"success": False, "message": str(e)}
 
     def _update_order_received_quantity(self, db, order_id: int):

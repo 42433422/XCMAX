@@ -1,5 +1,35 @@
 const MAX_SUMMARY_CHARS = 800;
 
+const POLICY_FAILURES = [
+  'content filter',
+  'permission denied',
+  'policy violation',
+  'prompt rejected',
+  'safety policy',
+];
+
+const PROVIDER_FAILURES = [
+  '429',
+  '502',
+  '503',
+  '504',
+  'authentication expired',
+  'connection reset',
+  'model usage has reached',
+  'overloaded',
+  'personal quota limit',
+  'provider unavailable',
+  'quota exceeded',
+  'rate limit',
+  'request timed out',
+  'service unavailable',
+  'stream disconnected',
+  'temporarily unavailable',
+  'timed out',
+  'too many requests',
+  'usage limit',
+];
+
 function asText(value) {
   if (Buffer.isBuffer(value)) return value.toString('utf8');
   return typeof value === 'string' ? value : '';
@@ -23,12 +53,8 @@ export function parseTraeStream(output) {
     : typeof lastResult.output === 'string'
       ? lastResult.output
       : '';
-  let error = typeof lastResult.error === 'string' ? lastResult.error.trim() : '';
-  if (!error && lastResult.is_error) {
-    error = resultOutput || `Trae stream result is_error subtype=${lastResult.subtype || 'unknown'}`;
-  }
   return {
-    error,
+    error: typeof lastResult.error === 'string' ? lastResult.error.trim() : '',
     output: resultOutput.trim(),
     subtype: String(lastResult.subtype || ''),
   };
@@ -41,13 +67,11 @@ export function describeTraeFailure(error) {
   const exitCode = Number.isInteger(error?.code) ? error.code : null;
   let summary = structured.error;
   if (!summary && stderr) summary = stderr.split(/\r?\n/).slice(-8).join('\n').trim();
-  if (!summary && error?.message) summary = String(error.message).trim();
   if (!summary) summary = `Trae CLI exited${exitCode === null ? '' : ` with code ${exitCode}`}`;
   summary = summary.slice(0, MAX_SUMMARY_CHARS);
-  const message = asText(error?.message).trim();
   return {
     exitCode,
-    raw: `${structured.error}\n${stderr}\n${message}`.trim().toLowerCase(),
+    raw: `${structured.error}\n${stderr}`.trim().toLowerCase(),
     subtype: structured.subtype,
     summary,
   };
@@ -59,32 +83,34 @@ export function isTraeProviderFailoverEligible(value) {
     : String(value?.raw || value?.summary || '').toLowerCase();
   if (!raw) return false;
 
-  const policyFailures = [
-    'content filter',
-    'permission denied',
-    'policy violation',
-    'prompt rejected',
-    'safety policy',
-  ];
-  if (policyFailures.some((pattern) => raw.includes(pattern))) return false;
+  if (POLICY_FAILURES.some((pattern) => raw.includes(pattern))) return false;
+  return PROVIDER_FAILURES.some((pattern) => raw.includes(pattern));
+}
 
-  const providerFailures = [
-    '429',
-    '502',
-    '503',
-    '504',
-    'authentication expired',
-    'connection reset',
-    'model usage has reached',
-    'overloaded',
-    'personal quota limit',
-    'provider unavailable',
-    'quota exceeded',
-    'rate limit',
-    'service unavailable',
-    'temporarily unavailable',
-    'timed out',
-    'too many requests',
-  ];
-  return providerFailures.some((pattern) => raw.includes(pattern));
+export function formatCodexNonZeroOutput(
+  { code, signal = '', stdout = '', stderr = '' },
+  maxChars = 4000,
+) {
+  const header = `[codex exit=${code}${signal ? ` signal=${signal}` : ''}]`;
+  const diagnostic = [asText(stdout).trim(), asText(stderr).trim()].filter(Boolean).join('\n').trim();
+  if (!diagnostic) return header;
+  const full = `${header}\n${diagnostic}`;
+  if (full.length <= maxChars) return full;
+  const marker = '\n[diagnostic tail]\n';
+  const tailChars = Math.max(0, maxChars - header.length - marker.length);
+  return `${header}${marker}${diagnostic.slice(-tailChars)}`;
+}
+
+export function describeCodexFailure(output) {
+  const text = asText(output).trim();
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const tail = lines.slice(-8).join('\n').trim();
+  return {
+    raw: tail.toLowerCase(),
+    summary: (tail || 'Codex CLI exited non-zero').slice(0, MAX_SUMMARY_CHARS),
+  };
+}
+
+export function isCodexProviderFailoverEligible(value) {
+  return isTraeProviderFailoverEligible(value);
 }

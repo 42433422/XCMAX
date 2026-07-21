@@ -209,10 +209,14 @@ if [[ "$APPLY_NOW" == "1" ]]; then
     echo "[err] 远端健康检查不可达；发布未通过" >&2
     exit 1
   fi
+  EXPECTED_RUNTIME_IMAGE_DIGEST=""
+  if [[ "${DEPLOY_MODE:-tarball}" == "image" ]]; then
+    EXPECTED_RUNTIME_IMAGE_DIGEST="${IMAGE_DIGEST:-}"
+  fi
   if ! verify_release_identity_payload \
       "$REMOTE_HEALTH_PAYLOAD" \
       "$GIT_SHA" \
-      "${IMAGE_DIGEST:-}" \
+      "$EXPECTED_RUNTIME_IMAGE_DIGEST" \
       "$SHA256"; then
     deploy_emit verify failed "remote_identity_mismatch"
     echo "[err] 远端运行版本与本次发布身份不一致；发布未通过" >&2
