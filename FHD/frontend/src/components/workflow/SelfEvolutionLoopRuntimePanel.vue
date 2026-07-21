@@ -285,6 +285,15 @@ function governanceSummaryText(row: AnyRecord): string {
   }
   return firstText(row.status, row.ok === false ? '失败' : '成功')
 }
+// item.review_dimensions 类型为 unknown，模板中直接 ?.[dimKey] 索引会触发 TS7053。
+// 在 script 中通过 asRecord 收口为 AnyRecord 后再索引，让模板只调函数。
+function reviewDimStatus(item: AnyRecord, dimKey: string): string {
+  const dims = asRecord(item.review_dimensions)
+  return asString(asRecord(dims[dimKey]).status) || 'n/a'
+}
+function reviewDimFailed(item: AnyRecord, dimKey: string): boolean {
+  return reviewDimStatus(item, dimKey).toLowerCase() === 'fail'
+}
 const uiBridgeDutyRosterLocation = computed<RouteLocationRaw | null>(() => {
   if (!router.hasRoute('duty-roster-graph')) return null
   const view = normalizeDutyRosterView(uiBridge.value.primary_view)
@@ -1356,9 +1365,9 @@ function gapTone(status: AutonomyGapStatus): string {
                   v-for="dimKey in ['security', 'business_logic', 'performance']"
                   :key="`${item.run_id || ''}-${dimKey}`"
                   class="selp-report-pill"
-                  :class="String(item.review_dimensions?.[dimKey]?.status || '').toLowerCase() === 'fail' ? 'selp-report-pill--bad' : 'selp-report-pill--ok'"
+                  :class="reviewDimFailed(item, dimKey) ? 'selp-report-pill--bad' : 'selp-report-pill--ok'"
                 >
-                  {{ dimKey }} {{ item.review_dimensions?.[dimKey]?.status || 'n/a' }}
+                  {{ dimKey }} {{ reviewDimStatus(item, dimKey) }}
                 </span>
               </template>
             </div>
