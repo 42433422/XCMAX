@@ -25,6 +25,8 @@ RUNTIME_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["
 export PYTHONUNBUFFERED=1
 export MODSTORE_DAILY_ENV_CLEANROOM=1
 export MODSTORE_DAILY_ROLE=scheduler
+# A manual self-maintenance verification must not enqueue unrelated incident teams.
+export MODSTORE_INCIDENT_TEAM_ENABLED=0
 export MODSTORE_RUNTIME_ROOT="$RUNTIME_ROOT"
 export MODSTORE_RUNTIME_STATE_ROOT="$STATE_ROOT"
 export MODSTORE_RUNTIME_DB_PATH="$STATE_ROOT/modstore.db"

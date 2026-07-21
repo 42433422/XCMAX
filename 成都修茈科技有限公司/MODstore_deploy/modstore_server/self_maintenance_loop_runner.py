@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -2437,6 +2438,24 @@ def _run_cmd(args: List[str], cwd: Optional[Path] = None, timeout: int = 120) ->
     return output
 
 
+def _cleanup_merge_workspace(workspace: Path) -> bool:
+    """Remove one ephemeral merge workspace without widening the delete scope."""
+
+    root = (_runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT).resolve()
+    candidate = workspace.resolve()
+    if candidate == root or root not in candidate.parents:
+        logger.error("refusing to clean merge workspace outside root: %s", candidate)
+        return False
+    try:
+        shutil.rmtree(candidate)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        logger.exception("failed to clean merge workspace: %s", candidate)
+        return False
+    return True
+
+
 def _remote_branch_head(repo_url: str, branch: str) -> Optional[str]:
     """Resolve a Para branch head without mutating a workspace."""
     if not repo_url or not branch:
@@ -2514,6 +2533,8 @@ def _changed_files_for_branch(
     *, repo_url: str, base_branch: str, branch: str, workspace: Path
 ) -> List[str]:
     workspace.parent.mkdir(parents=True, exist_ok=True)
+    if workspace.exists() and not _cleanup_merge_workspace(workspace):
+        raise RuntimeError(f"stale merge workspace cleanup failed: {workspace}")
     _run_cmd(["git", "clone", "--no-tags", repo_url, str(workspace)], timeout=300)
     # Para 创建的分支可能只存在于 Para 本地工作区，尚未 push 到 origin。
     # 先 fetch base_branch（一定在远程），再 best-effort fetch branch。
@@ -2718,6 +2739,26 @@ def _early_kb_validation_for_branch(
             "clone_error": None,
         }
     workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / f"{run_id}-kb-early"
+    try:
+        return _early_kb_validation_in_workspace(
+            base_branch=base_branch,
+            branch=branch,
+            repo_url=repo_url,
+            run_id=run_id,
+            workspace=workspace,
+        )
+    finally:
+        _cleanup_merge_workspace(workspace)
+
+
+def _early_kb_validation_in_workspace(
+    *,
+    base_branch: str,
+    branch: str,
+    repo_url: str,
+    run_id: str,
+    workspace: Path,
+) -> Dict[str, Any]:
     try:
         files = _changed_files_for_branch(
             repo_url=repo_url,
@@ -4502,6 +4543,32 @@ def _auto_merge_low_risk_branch(
         }
 
     workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / run_id
+    try:
+        return _auto_merge_local_repo(
+            api_base=api_base,
+            base_branch=base_branch,
+            branch=branch,
+            repo_url=repo_url,
+            run_id=run_id,
+            steps=steps,
+            task_id=task_id,
+            workspace=workspace,
+        )
+    finally:
+        _cleanup_merge_workspace(workspace)
+
+
+def _auto_merge_local_repo(
+    *,
+    api_base: str,
+    base_branch: str,
+    branch: str,
+    repo_url: str,
+    run_id: str,
+    steps: Optional[List[Dict[str, Any]]],
+    task_id: str,
+    workspace: Path,
+) -> Dict[str, Any]:
     files = _changed_files_for_branch(
         repo_url=repo_url,
         base_branch=base_branch,

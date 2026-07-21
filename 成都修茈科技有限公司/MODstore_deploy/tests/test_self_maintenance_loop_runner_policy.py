@@ -121,6 +121,98 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     assert result["reason"] == "autonomy_guard_blocked"
 
 
+def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+
+    def no_changes(**kwargs):
+        workspace = kwargs["workspace"]
+        workspace.mkdir(parents=True)
+        (workspace / "clone-marker").write_text("created", encoding="utf-8")
+        return []
+
+    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", no_changes)
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="cleanup-return",
+        task_id="task-local",
+        branch="devfleet/codex/sub-1",
+        steps=[],
+    )
+
+    assert result["reason"] == "branch_not_on_remote_or_empty"
+    assert not (runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-return").exists()
+
+
+def test_local_auto_merge_cleans_ephemeral_workspace_on_exception(monkeypatch, tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+
+    def failed_clone(**kwargs):
+        workspace = kwargs["workspace"]
+        workspace.mkdir(parents=True)
+        (workspace / "partial-clone").write_text("created", encoding="utf-8")
+        raise RuntimeError("clone failed")
+
+    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", failed_clone)
+
+    try:
+        loop_runner._auto_merge_low_risk_branch(
+            run_id="cleanup-exception",
+            task_id="task-local",
+            branch="devfleet/codex/sub-1",
+            steps=[],
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "clone failed"
+    else:
+        raise AssertionError("expected clone failure")
+
+    assert not (
+        runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-exception"
+    ).exists()
+
+
+def test_early_kb_validation_cleans_ephemeral_workspace(monkeypatch, tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+
+    def no_changes(**kwargs):
+        workspace = kwargs["workspace"]
+        workspace.mkdir(parents=True)
+        (workspace / "clone-marker").write_text("created", encoding="utf-8")
+        return []
+
+    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", no_changes)
+
+    result = loop_runner._early_kb_validation_for_branch(
+        run_id="cleanup-kb",
+        branch="devfleet/codex/sub-1",
+    )
+
+    assert result["reason"] == "early_kb_validation_no_changed_files"
+    assert not (
+        runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-kb-kb-early"
+    ).exists()
+
+
+def test_merge_workspace_cleanup_refuses_outside_runtime_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    assert loop_runner._cleanup_merge_workspace(outside) is False
+    assert outside.exists()
+
+
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
