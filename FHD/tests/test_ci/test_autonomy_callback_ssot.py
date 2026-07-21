@@ -8,9 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-_SSOT = (
-    Path(__file__).resolve().parents[2] / "scripts" / "autonomy" / "autonomy_callback.py"
-)
+_SSOT = Path(__file__).resolve().parents[2] / "scripts" / "autonomy" / "autonomy_callback.py"
 
 
 def _load_ssot():
