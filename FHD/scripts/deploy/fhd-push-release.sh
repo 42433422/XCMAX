@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # 本机：打包 FHD API 发布物并原子 scp 到 update 服务器（供 cron 拉取式应用）。
 #
 # 用法（FHD 根目录或任意目录）:
@@ -19,7 +20,6 @@
 #   FHD_PUSH_REMOTE_SERVICE      默认 stable=fhd-full.service；staging=fhd-staging.service
 #   FHD_PUSH_REMOTE_ENV_FILE     默认 stable=/root/fhd-full.env；staging=/root/fhd-staging.env
 #   FHD_PUSH_REMOTE_AUTO_LOCK    默认与 channel 对齐的独立锁文件
-set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
