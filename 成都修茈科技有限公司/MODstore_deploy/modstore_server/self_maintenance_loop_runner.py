@@ -732,6 +732,7 @@ def _resume_dispatch_context(
         return None, code_branch
     return None, None
 
+
 def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_RESUME_REVIEW_QA", True):
         return None
@@ -1841,9 +1842,7 @@ def _build_synthetic_review_qa_steps(
 
     Used only when _merge_review_qa_into_code() is True.
     """
-    report_excerpt = _ensure_merged_structured_markers(
-        str(code_step.get("report_excerpt") or "")
-    )
+    report_excerpt = _ensure_merged_structured_markers(str(code_step.get("report_excerpt") or ""))
     employee_id = str(code_step.get("employee_id") or "")
     para = code_step.get("para") or {}
     timestamp = _iso(_utc_now())
