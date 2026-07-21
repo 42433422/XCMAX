@@ -5,7 +5,12 @@ https://xiu-ci.com/services.html
 https://xiu-ci.com/solutions.html
 https://xiu-ci.com/cases.html
 https://xiu-ci.com/news.html
+https://xiu-ci.com/honors.html
 https://xiu-ci.com/contact.html
+https://xiu-ci.com/developer.html
+https://xiu-ci.com/download
+https://xiu-ci.com/download/releases
+https://xiu-ci.com/visualization
 https://xiu-ci.com/case-manufacture.html
 https://xiu-ci.com/case-edu.html
 https://xiu-ci.com/case-park.html
