@@ -601,12 +601,12 @@ def _xiaoc_general_reply(
                 member_hint = f"（{ident.membership}）"
             elif ident.account_role == "admin":
                 member_hint = "（管理员）"
-        kb = knowledge_block_for_query(user_text, top_k=4)
+        kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
     except Exception:  # noqa: BLE001
         try:
             from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query
 
-            kb = knowledge_block_for_query(user_text, top_k=4)
+            kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
         except Exception:  # noqa: BLE001
             return ""
     hello = (

@@ -27,6 +27,7 @@ def get_unified_intent_recognizer():
 
     return impl()
 
+
 __all__ = [
     "get_ai_chat_app_service",
     "get_products_service",

@@ -1,6 +1,5 @@
 """LLM infrastructure (Phase 5 facade over app.legacy.llm_config)."""
 
-
 from __future__ import annotations
 
 
@@ -27,6 +26,7 @@ def __dir__():
         "EmbeddingService",
         "get_default_embedding_service",
     ]
+
 
 __all__ = [
     "EmbeddingMode",

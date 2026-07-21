@@ -35,7 +35,11 @@ class TestXiaocPersona:
         assert p["knowledge"]["write_persy"] is False
 
     def test_permission_policy_admin_has_tools(self):
-        from modstore_server.xiaoc_cs_ssot import permission_policy
+        from modstore_server.xiaoc_cs_ssot import (
+            INTERNAL_DATASET_ID,
+            PUBLIC_DATASET_ID,
+            permission_policy,
+        )
 
         p = permission_policy(mode="admin")
         assert p["tools"]["navigate"] is True
@@ -47,6 +51,68 @@ class TestXiaocPersona:
         assert "get_my_tickets" in names
         assert "get_ops_update_brief" in names
         assert "查询他人账户/订单/工单" in p["denied"]
+        kn = p["knowledge"]["datasets"]
+        assert PUBLIC_DATASET_ID in kn["read"]
+        assert INTERNAL_DATASET_ID in kn["read"]
+        assert PUBLIC_DATASET_ID in kn["write"]
+        assert INTERNAL_DATASET_ID in kn["write"]
+
+    def test_kb_isolation_corp_public_only(self):
+        from unittest.mock import patch
+
+        from modstore_server.xiaoc_cs_ssot import (
+            INTERNAL_DATASET_ID,
+            PUBLIC_DATASET_ID,
+            dataset_allowed_for_mode,
+            knowledge_block_for_query,
+            permission_policy,
+            retrieve_knowledge_for_mode,
+        )
+
+        ext = permission_policy(mode="corp")
+        assert ext["knowledge"]["datasets"]["read"] == [PUBLIC_DATASET_ID]
+        assert INTERNAL_DATASET_ID not in ext["knowledge"]["datasets"]["read"]
+        assert dataset_allowed_for_mode(INTERNAL_DATASET_ID, mode="corp") is False
+        assert dataset_allowed_for_mode("user_acme", mode="admin") is False
+
+        corp_calls: list[str] = []
+        admin_calls: list[str] = []
+
+        def _corp_retrieve(query, *, dataset_id, top_k=5):
+            corp_calls.append(dataset_id)
+            return [{"text": "public-hit", "source": "faq.md"}]
+
+        def _admin_retrieve(query, *, dataset_id, top_k=5):
+            admin_calls.append(dataset_id)
+            return [{"text": f"hit-{dataset_id}", "source": "t.md"}]
+
+        with patch(
+            "modstore_server.xiaoc_cs_ssot.retrieve_dataset_knowledge",
+            side_effect=_corp_retrieve,
+        ):
+            corp_chunks = retrieve_knowledge_for_mode("报价", mode="external", top_k=4)
+        with patch(
+            "modstore_server.xiaoc_cs_ssot.retrieve_dataset_knowledge",
+            side_effect=_corp_retrieve,
+        ):
+            block = knowledge_block_for_query("报价", mode="corp", top_k=4)
+
+        with patch(
+            "modstore_server.xiaoc_cs_ssot.retrieve_dataset_knowledge",
+            side_effect=_admin_retrieve,
+        ):
+            admin_chunks = retrieve_knowledge_for_mode("报价", mode="admin", top_k=4)
+
+        assert set(corp_calls) == {PUBLIC_DATASET_ID}
+        assert INTERNAL_DATASET_ID not in corp_calls
+        assert all(c.get("dataset_id") == PUBLIC_DATASET_ID for c in corp_chunks)
+        assert admin_calls == [PUBLIC_DATASET_ID, INTERNAL_DATASET_ID]
+        assert {c.get("dataset_id") for c in admin_chunks} == {
+            PUBLIC_DATASET_ID,
+            INTERNAL_DATASET_ID,
+        }
+        assert "公开库" in block
+        assert "内部库" not in block
 
 
 class TestKnowledgeFormat:
