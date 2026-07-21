@@ -228,7 +228,8 @@ onBeforeUnmount(() => {
 /* Teleport 到 body 后仅作包装，不铺满视口 */
 .butler-float-root--corp {
   --corp-ball-bottom: 24px;
-  --corp-ball-size: 52px;
+  --corp-ball-w: 120px;
+  --corp-ball-h: 56px;
   --corp-panel-gap: 10px;
   position: relative;
   z-index: 20000;
