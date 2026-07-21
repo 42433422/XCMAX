@@ -78,6 +78,23 @@ def _csrf_exempt_kellai_pairing(scope: Scope) -> bool:
     return headers.get(b"x-kellai-local-pairing", b"") == b"1"
 
 
+def _csrf_exempt_ops_autonomy(scope: Scope) -> bool:
+    """CI / CVM watcher → approval ledger：机器调用只有 X-Autonomy-Token，无浏览器 CSRF。
+
+    路由层 ``ops_autonomy._auth`` 仍校验 webhook token；此处仅免除双提交 Cookie。
+    要求带 ``X-Autonomy-Token`` 或 ``Authorization: Bearer``，避免裸 POST 绕过 CSRF。
+    """
+    path = (scope.get("path") or "").rstrip("/")
+    # Also match nginx path prefix /fhd-api/api/ops/autonomy/...
+    if "/api/ops/autonomy" not in path:
+        return False
+    headers = {k: v for k, v in (scope.get("headers") or [])}
+    if (headers.get(b"x-autonomy-token") or b"").strip():
+        return True
+    auth = (headers.get(b"authorization") or b"").strip().lower()
+    return auth.startswith(b"bearer ")
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -128,6 +145,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_kellai_pairing(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_ops_autonomy(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")

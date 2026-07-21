@@ -45,7 +45,7 @@ const props = withDefaults(
     isMobileContact?: boolean
   }>(),
   {
-    title: 'Hi，我是修茈科技 AI 管家',
+    title: 'Hi，我是小C',
     isContactPage: false,
     isMobileContact: false,
   },

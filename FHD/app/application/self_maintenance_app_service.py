@@ -32,6 +32,19 @@ async def governance_review_local(
     )
 
 
+async def force_run_local(
+    reason: str = "admin_force_run",
+    *,
+    authorization: str | None = None,
+) -> dict[str, Any]:
+    return await modstore_post(
+        "/api/ops/self-maintenance/run",
+        json_body={"reason": reason},
+        authorization=authorization,
+        timeout=900.0,
+    )
+
+
 async def get_yuangon_onboard_status_local() -> dict[str, Any]:
     return await modstore_get("/api/admin/yuangon-onboard/status")
 

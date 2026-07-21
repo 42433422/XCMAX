@@ -10,11 +10,14 @@ FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 XCMAX_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
 LABEL="com.xcmax.modstore-daily"
 SCHEDULER_LABEL="com.xcmax.modstore-scheduler"
+DIGEST_SYNC_LABEL="com.xcmax.modstore-digest-sync"
 LOGIN_ITEM_NAME="XCMAX MODstore Daily"
 PLIST_SRC="${SCRIPT_DIR}/com.xcmax.modstore-daily.plist"
 SCHEDULER_PLIST_SRC="${SCRIPT_DIR}/com.xcmax.modstore-scheduler.plist"
+DIGEST_SYNC_PLIST_SRC="${SCRIPT_DIR}/com.xcmax.modstore-digest-sync.plist"
 PLIST_DST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 SCHEDULER_PLIST_DST="${HOME}/Library/LaunchAgents/${SCHEDULER_LABEL}.plist"
+DIGEST_SYNC_PLIST_DST="${HOME}/Library/LaunchAgents/${DIGEST_SYNC_LABEL}.plist"
 LOG_DIR="${HOME}/Library/Logs/XCMAX"
 RUN_SCRIPT="${SCRIPT_DIR}/run_modstore_daily_local.sh"
 SUPPORT_DIR="${HOME}/Library/Application Support/XCMAX"
@@ -500,10 +503,22 @@ if [[ "${sched}" != "True" && "${sched}" != "true" ]]; then
   launchctl kickstart -k "gui/${UID_NUM}/${SCHEDULER_LABEL}" 2>/dev/null || true
 fi
 
+# 日更落在 Mac SQLite，管理端读公网 Postgres：每天 08:45 同步存档
+if [[ -f "${DIGEST_SYNC_PLIST_SRC}" ]]; then
+  mkdir -p "${LOG_DIR}"
+  sed "s|/Users/a4243342|${HOME}|g" "${DIGEST_SYNC_PLIST_SRC}" > "${DIGEST_SYNC_PLIST_DST}"
+  UID_NUM="$(id -u)"
+  launchctl bootout "gui/${UID_NUM}/${DIGEST_SYNC_LABEL}" 2>/dev/null || true
+  launchctl bootstrap "gui/${UID_NUM}" "${DIGEST_SYNC_PLIST_DST}" 2>/dev/null \
+    || launchctl load -w "${DIGEST_SYNC_PLIST_DST}" 2>/dev/null || true
+  log "已安装 ${DIGEST_SYNC_LABEL}（每日 08:45 同步摘要存档 → 公网）"
+fi
+
 log "MODstore API :8788 scheduler_running=${api_sched}"
 log "MODstore scheduler :8789 scheduler_running=${sched}"
 log "状态目录: ${STATE_ROOT}"
 log "08:00 自动 digest：全开 FHD/Vite/模拟器 → 跑完自动关（MODSTORE_SURFACE_AUDIT_STOP_AFTER=1）"
 log "日志: ${LOG_DIR}/modstore-{daily,scheduler}.launchd.{log,err.log}"
 log "手动触发: bash FHD/scripts/dev/trigger_digest_now_local.sh"
+log "摘要同步公网: python3 FHD/scripts/dev/sync_daily_digests_to_prod.py"
 log "一键验证: bash FHD/scripts/dev/run_digest_full_stack.sh"

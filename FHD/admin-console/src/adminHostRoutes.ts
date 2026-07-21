@@ -4,8 +4,10 @@ import AutomationPolicyView from './views/AutomationPolicyView.vue'
 import DutyTimeArchitectureView from './views/DutyTimeArchitectureView.vue'
 import DutyRosterGraphView from './views/DutyRosterGraphView.vue'
 import ServerFunctionsView from './views/ServerFunctionsView.vue'
+import ApprovalHubView from './views/ApprovalHubView.vue'
+import EmployeeAutonomyView from './views/EmployeeAutonomyView.vue'
 
-/** 管理端运维五页（同步 import，避免懒加载期间仍渲染对话页） */
+/** 管理端运维宿主页（同步 import，避免懒加载期间仍渲染对话页） */
 export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
   {
     path: '/xcmax-admin',
@@ -36,5 +38,18 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     name: 'server-functions',
     component: ServerFunctionsView,
     meta: { title: '服务器功能模块', requiresAdminAccount: true, hostAdmin: true },
+  },
+  // 菜单 key 仍为 approval-hub；path 避开企业端 ERP /approval-hub 冲突
+  {
+    path: '/autonomy-approval-hub',
+    name: 'autonomy-approval-hub',
+    component: ApprovalHubView,
+    meta: { title: '自治审批中心', requiresAdminAccount: true, hostAdmin: true },
+  },
+  {
+    path: '/employee-autonomy',
+    name: 'employee-autonomy',
+    component: EmployeeAutonomyView,
+    meta: { title: '员工自治', requiresAdminAccount: true, hostAdmin: true },
   },
 ]

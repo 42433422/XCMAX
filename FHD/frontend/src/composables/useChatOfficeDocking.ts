@@ -369,13 +369,15 @@ async function ingestKnowledge(item: ChatOfficeDockingReviewItem): Promise<void>
   const text = item.knowledgeText.trim()
   if (!text) throw new Error('知识库文本为空')
   await primeCsrfCookie()
-  const res = await apiFetch('/api/knowledge/v1/ingest', {
+  // Governed Persy dataset path (legacy /ingest still dual-writes server-side).
+  const res = await apiFetch('/api/knowledge/v1/datasets/persy-knowledge/documents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       source: item.fileName,
       text,
       chunk_strategy: 'semantic',
+      metadata: { entrypoint: 'chat_office_docking' },
     }),
   })
   const body = await res.json().catch(() => ({}))

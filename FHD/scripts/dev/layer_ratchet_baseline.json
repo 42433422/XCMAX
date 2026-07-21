@@ -6,6 +6,7 @@
     "fastapi_routes/domains/misc/routes.py",
     "fastapi_routes/domains/wechat/routes.py",
     "fastapi_routes/finance_invoices_api.py",
-    "fastapi_routes/user_cs_wechat_passive_compat.py"
+    "fastapi_routes/user_cs_wechat_passive_compat.py",
+    "fastapi_routes/voice_routes.py"
   ]
 }

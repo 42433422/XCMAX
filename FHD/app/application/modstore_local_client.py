@@ -30,16 +30,27 @@ def modstore_base_url() -> str:
 
 
 def modstore_digest_base_url() -> str:
-    """日更 digest / action-items / artifacts — 默认 :8788，勿与轻量 MODstore :8765 混用。"""
-    return (
+    """日更 digest / action-items / artifacts — 默认 :8788，勿与轻量 MODstore :8765 混用。
+
+    若 ``MODSTORE_LOCAL_BASE_URL`` 误配成带 ``/market`` 的 SPA 前缀，回退到
+    ``XCAGI_MARKET_BASE_URL``（API 根），避免读摘要打到前端 HTML。
+    """
+    raw = (
         (
             os.environ.get("MODSTORE_DIGEST_BASE_URL")
             or os.environ.get("MODSTORE_LOCAL_BASE_URL")
+            or os.environ.get("XCAGI_MARKET_BASE_URL")
             or "http://127.0.0.1:8788"
         )
         .strip()
         .rstrip("/")
     )
+    if raw.endswith("/market"):
+        alt = (os.environ.get("XCAGI_MARKET_BASE_URL") or "").strip().rstrip("/")
+        if alt and not alt.endswith("/market"):
+            return alt
+        return raw[: -len("/market")] or raw
+    return raw
 
 
 def internal_api_key() -> str:

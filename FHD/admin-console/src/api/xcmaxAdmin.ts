@@ -65,6 +65,25 @@ export type ForcePushUserEntitlementsPayload = {
   installed_mods?: Record<string, unknown>[];
 };
 
+export interface AutonomyPendingAction {
+  action_id: string;
+  action: string;
+  state: string;
+  source: string;
+  executor_name?: string;
+  payload?: Record<string, unknown>;
+  risk_decision?: {
+    risk_level: string;
+    decision: string;
+    reason?: string;
+    policy?: string;
+    rollback_path?: string;
+  };
+  timestamp?: string;
+  approval_id?: string;
+  approval_requested_at?: string;
+}
+
 export const xcmaxAdminApi = {
   listUsers() {
     return api.get('/api/xcmax/admin/market/users');
@@ -157,4 +176,92 @@ export const xcmaxAdminApi = {
       contact_ids: contactIds,
     });
   },
+  fetchPendingAutonomyActions() {
+    return api.get<{ ok: boolean; count: number; items: AutonomyPendingAction[] }>(
+      '/api/xcmax/admin/autonomy/actions/pending',
+    );
+  },
+  resumeAutonomyAction(actionId: string, approver: string, approvalId?: string) {
+    return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
+      `/api/xcmax/admin/autonomy/actions/${encodeURIComponent(actionId)}/resume`,
+      { approver, approval_id: approvalId },
+    );
+  },
+  rejectAutonomyAction(actionId: string, approver: string, reason?: string, approvalId?: string) {
+    return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
+      `/api/xcmax/admin/autonomy/actions/${encodeURIComponent(actionId)}/reject`,
+      { approver, reason, approval_id: approvalId },
+    );
+  },
+  fetchAutonomyAuditLog(params: {
+    limit?: number;
+    days?: number;
+    risk_level?: string;
+    decision?: string;
+    veto_only?: boolean;
+  } = {}) {
+    return api.get<{
+      success?: boolean;
+      items?: Record<string, unknown>[];
+      count?: number;
+      summary?: Record<string, unknown>;
+    }>('/api/xcmax/admin/autonomy/audit-log', params);
+  },
+  fetchAutonomyHealth() {
+    return api.get<{ ok: boolean; service?: string }>('/api/xcmax/admin/autonomy/health');
+  },
+  fetchAutonomyOverview() {
+    return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/overview');
+  },
+  fetchAutonomyDeployEvents(params: { limit?: number; since_cursor?: string } = {}) {
+    return api.get<{ ok: boolean; items?: AutonomyDeployEvent[]; count?: number }>(
+      '/api/xcmax/admin/autonomy/deploy-events',
+      params,
+    );
+  },
+  fetchAutonomyOperatingMetrics() {
+    return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/operating-metrics');
+  },
+  fetchAutonomyGithubItems(limit = 30) {
+    return api.get<{ ok: boolean; items?: AutonomyGithubItem[]; errors?: string[] }>(
+      '/api/xcmax/admin/autonomy/github-items',
+      { limit },
+    );
+  },
+  fetchAutonomyCrossTierGate() {
+    return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/cross-tier-gate');
+  },
+  fetchAutonomyAuditCrossTier(params: { tier?: string; limit?: number } = {}) {
+    return api.get<{ ok: boolean; items?: Record<string, unknown>[]; tier?: string }>(
+      '/api/xcmax/admin/autonomy/audit-cross-tier',
+      params,
+    );
+  },
+  forceSelfMaintenanceRun(reason = 'admin_console_force_run') {
+    return api.post<{ ok: boolean; result?: Record<string, unknown>; message?: string }>(
+      '/api/xcmax/admin/autonomy/self-maintenance/run',
+      { reason },
+    );
+  },
+};
+
+export type AutonomyDeployEvent = {
+  deploy_id?: string;
+  deployed_at?: string;
+  commit_at?: string;
+  status?: string;
+  restored_at?: string | null;
+  source_workflow?: string;
+  head_branch?: string;
+};
+
+export type AutonomyGithubItem = {
+  kind?: string;
+  number?: number;
+  title?: string;
+  url?: string;
+  labels?: string[];
+  updated_at?: string;
+  author?: string;
+  head_ref?: string;
 };

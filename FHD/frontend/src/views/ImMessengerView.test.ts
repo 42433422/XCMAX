@@ -188,8 +188,8 @@ describe('ImMessengerView.vue', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('企业专属客服')
-    expect(wrapper.text()).not.toContain('客户消息 · 客来来')
-    expect(wrapper.find('.im-channel-entry').exists()).toBe(false)
+    expect(wrapper.text()).toContain('客户消息 · 客来来')
+    expect(wrapper.find('.im-channel-entry').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('小C助理')
     expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')

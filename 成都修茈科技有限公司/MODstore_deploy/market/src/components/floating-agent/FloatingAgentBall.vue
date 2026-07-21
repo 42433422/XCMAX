@@ -9,6 +9,7 @@
       'butler-ball--open': isOpen,
       'butler-ball--corp-anchor': props.corpMode,
       'butler-ball--dragging': isDraggingUi,
+      'butler-ball--speaking': !!props.isSpeaking,
     }"
     :style="ballStyle"
     :aria-label="consentGiven ? (isOpen ? '关闭 AI 管家' : '打开 AI 管家') : '启用 AI 数字管家'"
@@ -230,6 +231,20 @@ onBeforeUnmount(() => {
 
 .butler-ball--consent-pending {
   opacity: 0.82;
+}
+
+.butler-ball--speaking .butler-ball__logo-wrap {
+  animation: butler-speak-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes butler-speak-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
 }
 
 .butler-ball__logo-wrap {

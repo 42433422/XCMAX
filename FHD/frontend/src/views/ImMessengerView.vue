@@ -761,9 +761,10 @@ const pinnedContacts = computed<PinnedImEntry[]>(() => {
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
 });
 
-const externalChannelEntries = computed<ExternalAppEntry[]>(() =>
-  isAdminCustomerServiceConsole.value ? [] : [KELLAI_CUSTOMER_IM_ENTRY],
-);
+const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
+  // 企业端与管理端信息列表顶部均展示客来来客户通道
+  KELLAI_CUSTOMER_IM_ENTRY,
+]);
 
 const sidebarListItems = computed<ImSidebarListItem[]>(() => {
   const pinnedConversationIds = new Set<number>();

@@ -139,6 +139,10 @@ def handle_customer_message(
     reply, cards = build_reply(
         ticket=ticket, decision=decision, actions=actions, extracted=extracted
     )
+    if intent == "general":
+        xiaoc_reply = _xiaoc_general_reply(text)
+        if xiaoc_reply:
+            reply = xiaoc_reply
     assistant_msg = CustomerServiceMessage(
         session_id=session.id,
         ticket_id=ticket.id,
@@ -538,6 +542,28 @@ def _maybe_dispatch_employee_followup(
         action.error = str(exc)[:1000]
         db.flush()
         return action
+
+
+def _xiaoc_general_reply(user_text: str) -> str:
+    """general 意图走小C SSOT（管理端知识库摘录 + 模板兜底）。"""
+    try:
+        from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query
+
+        kb = knowledge_block_for_query(user_text, top_k=4)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not kb:
+        return (
+            "我是小C。这个问题我先记在工单里了；"
+            "你也可以直接问产品/报价/怎么上手，或去 /contact.html 留言。"
+        )
+    # 有知识库时给出基于摘录的简短答复（规则引擎阶段不做二次 LLM，避免阻塞）
+    excerpt = kb.splitlines()
+    tips = [ln for ln in excerpt[1:4] if ln.strip()]
+    body = "；".join(t.split(". ", 1)[-1][:120] for t in tips) if tips else ""
+    if body:
+        return f"我是小C。根据管理端知识库：{body} 若还要细聊，可以说具体场景或留个联系方式。"
+    return ""
 
 
 def build_reply(

@@ -440,6 +440,17 @@ class PurchaseService(NeuroEventPublisherMixin):
                 if data.get("order_id"):
                     self._update_order_received_quantity(db, data.get("order_id"))
 
+                self._publish_event(
+                    "inventory.inbound_created",
+                    {
+                        "inbound_id": inbound.id,
+                        "inbound_no": inbound.inbound_no,
+                        "supplier_id": inbound.supplier_id,
+                        "warehouse_id": inbound.warehouse_id,
+                        "total_amount": float(inbound.total_amount or 0),
+                        "items": data.get("items", []),
+                    },
+                )
                 return {
                     "success": True,
                     "data": self._model_to_dict(inbound),
