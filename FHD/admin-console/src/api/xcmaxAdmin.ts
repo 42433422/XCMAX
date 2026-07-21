@@ -178,18 +178,18 @@ export const xcmaxAdminApi = {
   },
   fetchPendingAutonomyActions() {
     return api.get<{ ok: boolean; count: number; items: AutonomyPendingAction[] }>(
-      '/api/ops/autonomy/actions/pending',
+      '/api/xcmax/admin/autonomy/actions/pending',
     );
   },
   resumeAutonomyAction(actionId: string, approver: string, approvalId?: string) {
     return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
-      `/api/ops/autonomy/actions/${encodeURIComponent(actionId)}/resume`,
+      `/api/xcmax/admin/autonomy/actions/${encodeURIComponent(actionId)}/resume`,
       { approver, approval_id: approvalId },
     );
   },
   rejectAutonomyAction(actionId: string, approver: string, reason?: string, approvalId?: string) {
     return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
-      `/api/ops/autonomy/actions/${encodeURIComponent(actionId)}/reject`,
+      `/api/xcmax/admin/autonomy/actions/${encodeURIComponent(actionId)}/reject`,
       { approver, reason, approval_id: approvalId },
     );
   },

@@ -9,6 +9,7 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'xcmax-admin', name: '服务器后台总览', iconClass: 'fa-dashboard' },
   { key: 'automation-policy', name: '自动化方针', iconClass: 'fa-random' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
+  { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },
 ]
 
 /** 管理端侧栏顶置顺序：智能对话首位 + 运维顶栏三项 */
@@ -20,9 +21,9 @@ export const ADMIN_SIDEBAR_PINNED_TOP_KEYS = ['chat', ...ADMIN_OPERATOR_MENU_ITE
  */
 export const ADMIN_OPERATOR_AUX_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'im', name: '信息', iconClass: 'fa-envelope-o' },
+  { key: 'persy-knowledge', name: '知识库', iconClass: 'fa-book' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'tools', name: '工具表', iconClass: 'fa-wrench' },
-  { key: 'mod-store', name: '能力库', iconClass: 'fa-puzzle-piece' },
 ]
 
 /** 管理员宿主 core/aux 可见 key（不含运维顶栏三项） */
@@ -32,7 +33,7 @@ export const ADMIN_OPERATOR_VISIBLE_CORE_KEYS = new Set([
   'employee-workflow',
   'workflow-employee-space',
   'workflow-visualization',
-  'mod-store',
+  'persy-knowledge',
   'im',
   'tools',
   'data-sources',
@@ -102,12 +103,12 @@ export const ADMIN_OPERATOR_HIDDEN_HOST_KEYS = new Set([
   'shipment-records',
   'customers',
   'print',
-  'approval-hub',
   'printer-list',
   'template-preview',
   'enterprise-customer-service',
   'internal-customer-service',
   'mod-internal-customer-service',
+  'mod-store',
 ])
 
 export const ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES = new Set([
@@ -120,7 +121,6 @@ export const ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES = new Set([
   'shipment-records',
   'customers',
   'print',
-  'approval-hub',
   'approval-workspace',
   'approval-flow-management',
   'approval-rules',
@@ -131,4 +131,5 @@ export const ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES = new Set([
   'mod-internal-customer-service',
   'printer-list',
   'template-preview',
+  'mod-store',
 ])

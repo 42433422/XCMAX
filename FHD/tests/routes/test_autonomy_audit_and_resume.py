@@ -153,3 +153,44 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
         json={"action": "freeze_manifest", "action_id": "bad id\nworkflow"},
     )
     assert invalid.status_code == 400
+
+
+def test_admin_pending_resume_reject_use_session_not_webhook(tmp_path, monkeypatch) -> None:
+    """管理端审批中心走 /api/xcmax/admin/autonomy/*，管理员会话即可，无需 webhook token。"""
+    _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
+    reload_autonomy_guard()
+    request_action("rollback_release", action_id="admin-pending-1", source="route-test")
+    request_action("rollback_release", action_id="admin-pending-2", source="route-test")
+    monkeypatch.setattr(xcmax_admin, "_require_market_admin_session", lambda request: None)
+    monkeypatch.setattr(
+        xcmax_admin,
+        "_admin_approver_from_session",
+        lambda request, body_approver="": str(body_approver or "console-admin"),
+    )
+    app = FastAPI()
+    app.include_router(xcmax_admin.router)
+    client = TestClient(app)
+
+    pending = client.get("/api/xcmax/admin/autonomy/actions/pending")
+    assert pending.status_code == 200
+    body = pending.json()
+    assert body["ok"] is True
+    assert body["count"] >= 2
+    ids = {item["action_id"] for item in body["items"]}
+    assert "admin-pending-1" in ids
+    assert "admin-pending-2" in ids
+
+    resumed = client.post(
+        "/api/xcmax/admin/autonomy/actions/admin-pending-1/resume",
+        json={"approver": "alice"},
+    )
+    assert resumed.status_code == 200
+    assert resumed.json()["action"]["state"] == "approved"
+
+    rejected = client.post(
+        "/api/xcmax/admin/autonomy/actions/admin-pending-2/reject",
+        json={"approver": "bob", "reason": "nope"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["action"]["state"] == "rejected"
