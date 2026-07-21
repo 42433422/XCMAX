@@ -95,7 +95,19 @@ def _release_manifest_path() -> Path:
     configured = (os.environ.get("XIUCI_VISUALIZATION_RELEASE_MANIFEST") or "").strip()
     if configured:
         return Path(configured).expanduser()
-    return Path(__file__).resolve().parents[2] / "download-release.json"
+    site_root = Path(__file__).resolve().parents[2]
+    candidates = (
+        site_root / "download-release.json",
+        site_root.parent / "FHD" / "config" / "download_release.json",
+    )
+    for path in candidates:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(raw, dict) and isinstance(raw.get("release_history"), list) and raw["release_history"]:
+            return path
+    return candidates[0]
 
 
 def _access_log_paths() -> list[Path]:
