@@ -1,10 +1,13 @@
 {{ headHtml | safe }}
-<body>
+<body{% if bodyAttrs %} {{ bodyAttrs | safe }}{% endif %}>
 {% include "partials/header.njk" %}
 {{ mainHtml | safe }}
 {{ footerHtml | safe }}
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
 <script src="./main.js?v={{ assetVer }}"></script>
+{% if activeNav == 'visualization' %}
+<script src="./visualization.js?v={{ assetVer }}" defer></script>
+{% endif %}
 {% if activeNav == 'contact' %}
 <script src="./contact-intake.js?v={{ assetVer }}"></script>
 {% include "partials/contact-intake-fallback.njk" %}
