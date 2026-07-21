@@ -14,6 +14,10 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
     assert 'git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA"' in script
     assert "releases/${TARGET_SHA}" in script
+    assert 'chmod 0555 "$FINAL_ROOT"' in script
+    assert script.index('chmod 0555 "$FINAL_ROOT"') < script.index(
+        'ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"'
+    )
     assert 'mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"' in script
     assert "exact-SHA local health verification failed" in script
     assert 'sha256sum "$SOURCE_ARCHIVE"' in script
@@ -72,3 +76,21 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
         assert "TARGET_SHA" in rendered
         assert "xcmax-immutable-release.sh" in rendered
         assert "reset --hard" not in rendered
+
+
+def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
+    updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
+
+    canonical_vhost = "/etc/nginx/conf.d/xiu-ci.com.conf"
+    assert canonical_vhost in updater
+    assert canonical_vhost in workflow
+    assert "skip conflicting standalone corp vhost" in workflow
+    for public_url in (
+        "https://xiu-ci.com/",
+        "https://xiu-ci.com/developer.html",
+        "https://xiu-ci.com/market/download",
+        "https://xiu-ci.com/market/",
+    ):
+        assert public_url in workflow
+    assert "developer.html | head -8 | grep -i title || true" not in workflow
