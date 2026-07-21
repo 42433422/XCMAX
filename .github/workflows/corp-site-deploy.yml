@@ -31,6 +31,9 @@ on:
       - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-partials.py'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
+      - '成都修茈科技有限公司/download-action-board.json'
+      - '成都修茈科技有限公司/MODstore_deploy/market/public/download-action-board.json'
+      - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/views/SoftwareDownloadView.vue'
       - '.github/workflows/corp-site-deploy.yml'
 
@@ -89,7 +92,8 @@ jobs:
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
               mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
               chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
-              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" "${GIT_SITE}/visualization.js"; do
+              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" "${GIT_SITE}/visualization.js" \
+                       "${GIT_SITE}/download-release.json" "${GIT_SITE}/download-action-board.json"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
@@ -144,6 +148,11 @@ jobs:
             echo "[verify] download center is new product page (not old stub):"
             xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
+            echo "[verify] public action board on download page:"
+            grep -E -q 'id="breakpoints"|断点清单' /tmp/xc-download.html
+            grep -E -q 'id="goals"|工作目标' /tmp/xc-download.html
+            xc_curl -o /tmp/xc-action-board.json https://xiu-ci.com/download-action-board.json
+            grep -E -q 'public_action_board|breakpoints|goals' /tmp/xc-action-board.json
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
               head -n 2 "${LIVE_SITE}/partials/header.html"
