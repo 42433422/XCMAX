@@ -199,9 +199,7 @@ class TestMatchRules:
             )
         ]
         # 简化：直接构造完整 token 字符串
-        hunks[0].lines = [
-            (1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")
-        ]  # noqa: S105
+        hunks[0].lines = [(1, "+", "TOKEN = 'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789'")]  # noqa: S105
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "hardcoded-aws-secret" for f in findings)
 
@@ -316,9 +314,7 @@ class TestMatchRules:
 
 
 class TestCallLlmReview:
-    def test_no_api_key_returns_unavailable(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_api_key_returns_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_LLM_API_KEY", raising=False)
         finding = review.Finding(
             file_path="f",
