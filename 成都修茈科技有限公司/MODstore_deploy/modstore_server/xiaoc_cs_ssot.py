@@ -17,6 +17,163 @@ logger = logging.getLogger(__name__)
 
 PERSY_DATASET_ID = "persy-knowledge"
 
+# ─── 权限矩阵（SSOT，代码即契约）────────────────────────────────────
+# external = 官网 / 未登录公开入口（corp-chat、官网浮窗）
+# market_cs = 市场 AI 客服页 / 工作台客服 Bot（已登录，无页面工具）
+# admin = 管理端 / 市场已登录浮窗 butler（可工具，按风险确认）
+
+XIAOC_PERMISSIONS: Dict[str, Dict[str, Any]] = {
+    "external": {
+        "label": "外部小C（官网公开）",
+        "auth": "none",
+        "knowledge": {
+            "read_persy": True,
+            "write_persy": False,
+            "dataset_id": PERSY_DATASET_ID,
+        },
+        "tools": {
+            "navigate": False,
+            "click": False,
+            "fill": False,
+            "scroll": False,
+            "read_page": False,
+            "enhance_current_page": False,
+            "wallet_pay": False,
+            "refund": False,
+            "admin_ops": False,
+        },
+        "allowed": [
+            "产品/方案/案例介绍",
+            "引导联系表单 /contact.html",
+            "引导产品页 /services.html、市场 /market/",
+            "基于管理端知识库只读摘录回答",
+            "报价口径：需定制，引导留资（不编造合同金额）",
+        ],
+        "denied": [
+            "浏览器工具调用（跳转/点击/填表/滚动/读页）",
+            "vibe-coding / 改 Mod/工作流/员工",
+            "支付、退款、下架、改价、改权限",
+            "读取他人订单/隐私数据",
+            "编造未公示资质/合同金额",
+        ],
+        "limits": {
+            "max_reply_chars": 200,
+            "rate_limit": "corp_chat_bucket",
+            "llm_tools": False,
+        },
+    },
+    "market_cs": {
+        "label": "市场客服小C（已登录）",
+        "auth": "login",
+        "knowledge": {
+            "read_persy": True,
+            "write_persy": False,
+            "dataset_id": PERSY_DATASET_ID,
+        },
+        "tools": {
+            "navigate": False,
+            "click": False,
+            "fill": False,
+            "scroll": False,
+            "read_page": False,
+            "enhance_current_page": False,
+            "wallet_pay": False,
+            "refund": False,  # 只建工单，不直接退款
+            "admin_ops": False,
+            "create_ticket": True,
+        },
+        "allowed": [
+            "投诉/申诉/退款咨询并创建工单",
+            "上架审核与账号权益问答",
+            "基于管理端知识库只读摘录回答产品问题",
+        ],
+        "denied": [
+            "直接执行退款/下架",
+            "页面自动化工具",
+            "管理端运维操作",
+        ],
+        "limits": {
+            "max_reply_chars": 600,
+            "llm_tools": False,
+        },
+    },
+    "admin": {
+        "label": "管理端小C（已登录工作台）",
+        "auth": "login",
+        "knowledge": {
+            "read_persy": True,
+            "write_persy": False,
+            "dataset_id": PERSY_DATASET_ID,
+        },
+        "tools": {
+            "navigate": True,  # low
+            "read_page": True,  # low
+            "scroll": True,  # low
+            "click": True,  # medium — 需预览确认
+            "fill": True,  # medium — 需预览确认
+            "enhance_current_page": True,  # high — 须明确确认
+            "wallet_pay": False,  # 只引导到充值页，不代付
+            "refund": False,
+            "admin_ops": False,
+        },
+        "allowed": [
+            "全站导航与页面摘要",
+            "搜索/推荐 AI 员工",
+            "引导充值与会员购买（不代付）",
+            "在用户明确意图下发起 vibe-coding（高风险确认）",
+            "基于管理端知识库只读摘录回答",
+        ],
+        "denied": [
+            "未确认的高风险改文件/支付",
+            "直接退款或后台运维危险操作",
+            "写入 persy 知识库（编辑走管理端知识库 UI）",
+        ],
+        "limits": {
+            "risk_model": "low_direct / medium_preview / high_confirm",
+            "llm_tools": True,
+            "tool_names": [
+                "navigate",
+                "click",
+                "fill",
+                "scroll",
+                "read",
+                "enhance_current_page",
+            ],
+        },
+    },
+}
+
+
+def permission_policy(*, mode: str = "admin") -> Dict[str, Any]:
+    key = {
+        "corp": "external",
+        "external": "external",
+        "market_cs": "market_cs",
+        "customer_service": "market_cs",
+        "admin": "admin",
+        "butler": "admin",
+    }.get(mode, "admin")
+    policy = dict(XIAOC_PERMISSIONS[key])
+    policy["mode"] = key
+    policy["ssot"] = {
+        "brain": "admin_xiaoc_butler",
+        "knowledge": "admin_persy_knowledge",
+        "deferred": ["kellai"],
+    }
+    return policy
+
+
+def _format_permission_block(mode: str) -> str:
+    p = permission_policy(mode=mode)
+    allowed = "；".join(p.get("allowed") or [])
+    denied = "；".join(p.get("denied") or [])
+    return (
+        f"【权限契约·{p.get('label')}】\n"
+        f"允许：{allowed}\n"
+        f"禁止：{denied}"
+    )
+
+
 XIAOC_CORE_PERSONA = """你是「XC AGI 数字管家」，叫小C，是这个平台的老熟人。
 
 你的性格和说话方式：
@@ -53,11 +210,29 @@ XIAOC_CORP_DUTIES = """你同时是成都修茈科技有限公司官网对外客
 - 若下方提供了「管理端知识库」摘录，优先依据摘录回答
 """
 
+XIAOC_MARKET_CS_DUTIES = """你是市场侧客服入口的小C（与管理端小C同源）。
+
+你能做的事：
+- 处理投诉申诉、订单退款咨询、上架审核、账号与购买权益问题（只建工单/给口径，不直接退款或下架）
+- 回答产品/使用问题，优先依据管理端知识库摘录
+- 引导用户补充订单号、商品 ID、证据链接
+
+限制：
+- 无页面自动化工具，不代付、不直接退款
+- 不要承诺已退款或已下架
+- 口径与官网/管理端小C一致，不要自称另一套客服系统
+"""
+
 
 def xiaoc_system_prompt(*, mode: str = "admin") -> str:
     if mode == "corp":
-        return XIAOC_CORE_PERSONA + "\n" + XIAOC_CORP_DUTIES
-    return XIAOC_CORE_PERSONA + "\n" + XIAOC_ADMIN_DUTIES
+        base = XIAOC_CORE_PERSONA + "\n" + XIAOC_CORP_DUTIES
+        return base + "\n\n" + _format_permission_block("external")
+    if mode in ("market_cs", "customer_service"):
+        base = XIAOC_CORE_PERSONA + "\n" + XIAOC_MARKET_CS_DUTIES
+        return base + "\n\n" + _format_permission_block("market_cs")
+    base = XIAOC_CORE_PERSONA + "\n" + XIAOC_ADMIN_DUTIES
+    return base + "\n\n" + _format_permission_block("admin")
 
 
 def format_knowledge_block(chunks: List[Dict[str, Any]], *, limit: int = 5) -> str:
@@ -214,6 +389,8 @@ def last_user_text(messages: Optional[List[Any]]) -> str:
 
 __all__ = [
     "PERSY_DATASET_ID",
+    "XIAOC_PERMISSIONS",
+    "permission_policy",
     "xiaoc_system_prompt",
     "format_knowledge_block",
     "retrieve_persy_knowledge",

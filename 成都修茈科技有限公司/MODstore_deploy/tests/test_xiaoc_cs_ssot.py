@@ -13,6 +13,7 @@ class TestXiaocPersona:
         assert "小C" in text
         assert "数字管家" in text
         assert "导航" in text
+        assert "权限契约" in text
 
     def test_corp_prompt_is_xiaoc_not_legacy_name(self):
         from modstore_server.xiaoc_cs_ssot import xiaoc_system_prompt
@@ -21,6 +22,25 @@ class TestXiaocPersona:
         assert "小C" in text
         assert "小茈" not in text
         assert "官网" in text
+        assert "禁止" in text
+
+    def test_permission_policy_external_no_tools(self):
+        from modstore_server.xiaoc_cs_ssot import permission_policy
+
+        p = permission_policy(mode="external")
+        assert p["auth"] == "none"
+        assert p["tools"]["navigate"] is False
+        assert p["tools"]["enhance_current_page"] is False
+        assert p["knowledge"]["read_persy"] is True
+        assert p["knowledge"]["write_persy"] is False
+
+    def test_permission_policy_admin_has_tools(self):
+        from modstore_server.xiaoc_cs_ssot import permission_policy
+
+        p = permission_policy(mode="admin")
+        assert p["tools"]["navigate"] is True
+        assert p["tools"]["enhance_current_page"] is True
+        assert p["tools"]["wallet_pay"] is False
 
 
 class TestKnowledgeFormat:
