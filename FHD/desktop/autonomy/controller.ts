@@ -186,13 +186,13 @@ export class AutonomyController {
         return
       }
     }
-    // CrossTierGate 跨端门禁（默认启用；XCAGI_CROSS_TIER_GATE=0 关闭；查询失败 fail-open）
+    // CrossTierGate 跨端门禁（默认启用；XCAGI_CROSS_TIER_GATE=0 关闭；查询失败 fail-closed）
     if (crossTierGateEnabled()) {
       let remoteState: Record<string, unknown> | null = null
       try {
         remoteState = (await this.adapter.getRemoteState?.()) ?? null
       } catch (e) {
-        // 查询失败：记 audit；remoteState=null → Gate fail-open 放行（不引入新单点故障）
+        // 查询失败：记 audit；remoteState=null → Gate fail-closed 阻断
         const detail = e instanceof Error ? e.message : String(e)
         this.adapter.audit({
           ts: new Date().toISOString(),

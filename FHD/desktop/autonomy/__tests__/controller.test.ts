@@ -78,6 +78,12 @@ const noopPolicy = {
 describe('AutonomyController', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    // 非门禁用例默认关闭 CrossTierGate，避免无 getRemoteState 时 fail-closed 干扰
+    process.env.XCAGI_CROSS_TIER_GATE = '0'
+  })
+
+  afterEach(() => {
+    delete process.env.XCAGI_CROSS_TIER_GATE
   })
 
   it('start() 设置定时器并启动', () => {
@@ -375,7 +381,7 @@ describe('AutonomyController — crossTierGate integration', () => {
     }
   }
 
-  it('env 未设时 crossTierGate 默认启用 + adapter 无 getRemoteState → fail-open 放行', async () => {
+  it('env 未设时 crossTierGate 默认启用 + adapter 无 getRemoteState → fail-closed 阻断', async () => {
     delete process.env[ENV_KEY]
     const adapter = makeMockAdapter({
       truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
@@ -383,8 +389,7 @@ describe('AutonomyController — crossTierGate integration', () => {
     const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
     ctrl.ingest(makeSignal('trigger', Date.now()))
     await ctrl.tick()
-    expect(adapter.executed.length).toBe(1)
-    expect(adapter.executed[0].type).toBe('rollback_version')
+    expect(adapter.executed.length).toBe(0)
   })
 
   it('env=0 显式关闭 crossTierGate → 动作正常执行不走门禁', async () => {
@@ -403,16 +408,16 @@ describe('AutonomyController — crossTierGate integration', () => {
     expect(adapter.executed[0].type).toBe('rollback_version')
   })
 
-  it('env=1 且 adapter 未实现 getRemoteState → fail-open 放行', async () => {
+  it('env=1 且 adapter 未实现 getRemoteState → fail-closed 阻断', async () => {
     process.env[ENV_KEY] = '1'
     const adapter = makeMockAdapter({
       truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
     })
-    // 不设置 getRemoteState → null → fail-open 放行
+    // 不设置 getRemoteState → null → fail-closed
     const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
     ctrl.ingest(makeSignal('trigger', Date.now()))
     await ctrl.tick()
-    expect(adapter.executed.length).toBe(1)
+    expect(adapter.executed.length).toBe(0)
   })
 
   it('env=1 且 getRemoteState 返回 server_manifest_frozen=true → 拦截 rollback_version', async () => {
@@ -450,7 +455,7 @@ describe('AutonomyController — crossTierGate integration', () => {
     expect(adapter.executed.length).toBe(1)
   })
 
-  it('env=1 且 getRemoteState 抛错 → fail-open 放行 + 写 audit', async () => {
+  it('env=1 且 getRemoteState 抛错 → fail-closed 阻断 + 写 audit', async () => {
     process.env[ENV_KEY] = '1'
     const adapter = makeMockAdapter({
       truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
@@ -461,13 +466,18 @@ describe('AutonomyController — crossTierGate integration', () => {
     const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
     ctrl.ingest(makeSignal('trigger', Date.now()))
     await ctrl.tick()
-    expect(adapter.executed.length).toBe(1)
-    // 应有 cross_tier_query_failed 的 skipped 审计（fail-open 写 audit 但放行）
+    expect(adapter.executed.length).toBe(0)
     const failedAudit = adapter.audits.find(
       a => a.action && typeof a.action === 'object' && 'type' in a.action && a.action.type === 'skipped'
         && Array.isArray((a.action as { reasons: string[] }).reasons)
         && (a.action as { reasons: string[] }).reasons.some(r => r.includes('cross_tier_query_failed')),
     )
     expect(failedAudit).toBeDefined()
+    const denied = adapter.audits.find(
+      a => a.action && typeof a.action === 'object' && 'type' in a.action && a.action.type === 'skipped'
+        && Array.isArray((a.action as { reasons: string[] }).reasons)
+        && (a.action as { reasons: string[] }).reasons.some(r => r.includes('fail-closed')),
+    )
+    expect(denied).toBeDefined()
   })
 })

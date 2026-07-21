@@ -68,6 +68,7 @@ class TestLedgerCall:
             patch.object(esc.subprocess, "run"),
             patch.object(esc, "append_event"),
             patch.object(esc, "post_to_approval_ledger") as mock_ledger,
+            patch.object(esc, "notify_boss_im"),
         ):
             esc.escalate(
                 issue_number=42,
@@ -83,6 +84,7 @@ class TestLedgerCall:
                 "proposal": proposal,
             },
             source="ci_escalate",
+            action_id="escalate:42",
         )
 
     def test_ledger_returns_none_does_not_break(
@@ -96,6 +98,7 @@ class TestLedgerCall:
             patch.object(esc.subprocess, "run") as mock_run,
             patch.object(esc, "append_event") as mock_append,
             patch.object(esc, "post_to_approval_ledger", return_value=None) as mock_ledger,
+            patch.object(esc, "notify_boss_im"),
         ):
             # 不应抛异常
             esc.escalate(
@@ -120,6 +123,7 @@ class TestLedgerCall:
             patch.object(esc.subprocess, "run"),
             patch.object(esc, "append_event", manager.append_event),
             patch.object(esc, "post_to_approval_ledger", manager.post_to_approval_ledger),
+            patch.object(esc, "notify_boss_im"),
         ):
             esc.escalate(
                 issue_number=1,
@@ -150,6 +154,7 @@ class TestExistingBehavior:
             patch.object(esc.subprocess, "run") as mock_run,
             patch.object(esc, "append_event"),
             patch.object(esc, "post_to_approval_ledger"),
+            patch.object(esc, "notify_boss_im"),
         ):
             esc.escalate(
                 issue_number=7,
@@ -177,6 +182,7 @@ class TestExistingBehavior:
             patch.object(esc.subprocess, "run"),
             patch.object(esc, "append_event") as mock_append,
             patch.object(esc, "post_to_approval_ledger"),
+            patch.object(esc, "notify_boss_im"),
         ):
             esc.escalate(
                 issue_number=99,
