@@ -686,6 +686,15 @@
         .header-nav .nav-kellai {
           display: none;
         }
+        .progress-sum {
+          grid-template-columns: 1fr;
+        }
+        .progress-item {
+          grid-template-columns: auto 1fr;
+        }
+        .progress-status {
+          grid-column: 2;
+        }
         .xcagi-grid {
           gap: 36px;
           padding: 45px 0 40px;
@@ -748,6 +757,149 @@
           padding: 22px 0;
         }
       }
+
+      .progress-section {
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+        padding: 56px 0 64px;
+      }
+      .progress-section + .progress-section {
+        border-top: 0;
+        background: var(--soft);
+      }
+      .progress-head {
+        max-width: 640px;
+        margin-bottom: 28px;
+      }
+      .progress-head .section-label {
+        margin: 0 0 10px;
+        color: #8b94a0;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .progress-head h2 {
+        margin: 0 0 10px;
+        font-size: clamp(28px, 3.4vw, 36px);
+        letter-spacing: -0.04em;
+        line-height: 1.15;
+      }
+      .progress-head p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+      .progress-meta {
+        margin-top: 8px;
+        color: #8b94a0;
+        font-size: 12px;
+      }
+      .progress-sum {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+      .progress-sum-card {
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+      }
+      .progress-section + .progress-section .progress-sum-card {
+        background: #fff;
+      }
+      .progress-sum-card strong {
+        display: block;
+        font-size: 22px;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+      }
+      .progress-sum-card span {
+        display: block;
+        margin-top: 6px;
+        color: #7b8490;
+        font-size: 11px;
+        font-weight: 650;
+      }
+      .progress-sum-card.is-p0 strong { color: #c0392b; }
+      .progress-sum-card.is-todo strong { color: #b86a12; }
+      .progress-sum-card.is-ok strong { color: var(--green); }
+      .progress-sum-card.is-blue strong { color: var(--blue); }
+      .progress-list {
+        display: grid;
+        gap: 10px;
+      }
+      .progress-item {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px 16px;
+        align-items: start;
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+      }
+      .progress-item.is-done {
+        opacity: 0.72;
+      }
+      .progress-pri {
+        min-width: 42px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 800;
+        text-align: center;
+      }
+      .progress-pri.p0 { color: #c0392b; background: #fdecea; }
+      .progress-pri.p1 { color: #b86a12; background: #fff4e5; }
+      .progress-pri.p2 { color: #1267e8; background: #eaf2ff; }
+      .progress-pri.ok { color: var(--green); background: var(--green-soft); }
+      .progress-item h3 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        line-height: 1.45;
+      }
+      .progress-item.is-done h3 {
+        color: #7b8490;
+        text-decoration: line-through;
+        text-decoration-color: rgba(123, 132, 144, 0.45);
+      }
+      .progress-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        color: #8b94a0;
+        font-size: 11px;
+      }
+      .progress-status {
+        padding: 4px 9px;
+        border-radius: 999px;
+        color: #5f6874;
+        background: var(--soft);
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .progress-empty {
+        padding: 28px 18px;
+        border: 1px dashed var(--line-dark);
+        border-radius: 14px;
+        color: #8b94a0;
+        font-size: 13px;
+        text-align: center;
+        background: rgba(255,255,255,0.65);
+      }
+      .progress-note {
+        margin: 18px 0 0;
+        color: #9aa3ad;
+        font-size: 11px;
+        line-height: 1.6;
+      }
     </style>
   </head>
   <body>
@@ -760,6 +912,8 @@
         <nav class="header-nav" aria-label="下载页导航">
           <a class="nav-home" href="/index.html">官网</a>
           <a class="product-link" href="#xcagi">XCAGI</a>
+          <a href="#breakpoints">断点清单</a>
+          <a href="#goals">工作目标</a>
           <a href="/download/releases">更新日志</a>
           <a class="nav-kellai" href="#kellai">客来来</a>
           <a class="market-link" href="/market/">AI 市场</a>
@@ -949,13 +1103,43 @@
           </details>
         </div>
       </section>
+
+      <section class="progress-section" id="breakpoints" aria-labelledby="breakpoints-title">
+        <div class="container">
+          <div class="progress-head">
+            <p class="section-label">Public roadmap</p>
+            <h2 id="breakpoints-title">断点清单</h2>
+            <p>当日 AI 补丁与紧急修复进度（只读公开）。不含源码路径与内部标识。</p>
+            <p class="progress-meta" id="breakpoints-meta">加载中…</p>
+          </div>
+          <div class="progress-sum" id="breakpoints-sum" aria-live="polite"></div>
+          <div class="progress-list" id="breakpoints-list" aria-live="polite"></div>
+          <p class="progress-note">公开看板仅供查阅进度，不提供下载、导出或源码访问。</p>
+        </div>
+      </section>
+
+      <section class="progress-section" id="goals" aria-labelledby="goals-title">
+        <div class="container">
+          <div class="progress-head">
+            <p class="section-label">Work goals</p>
+            <h2 id="goals-title">工作目标</h2>
+            <p>当日 AI 更新与推进目标（只读公开）。状态随日更产线流转自动刷新。</p>
+            <p class="progress-meta" id="goals-meta">加载中…</p>
+          </div>
+          <div class="progress-sum" id="goals-sum" aria-live="polite"></div>
+          <div class="progress-list" id="goals-list" aria-live="polite"></div>
+          <p class="progress-note">公开看板仅供查阅进度，不提供下载、导出或源码访问。</p>
+        </div>
+      </section>
+
     </main>
 
     <footer class="footer">
       <div class="container footer-inner">
         <span>© 2026 成都修茈科技有限公司 · 官方产品下载</span>
         <nav class="footer-links" aria-label="页脚导航">
-          <a href="/index.html">公司官网</a><a href="/market/">AI 市场</a
+          <a href="/index.html">公司官网</a><a href="#breakpoints">断点清单</a
+          ><a href="#goals">工作目标</a><a href="/market/">AI 市场</a
           ><a href="/download/releases">更新日志</a><a href="/contact.html">联系支持</a>
         </nav>
       </div>
@@ -1154,6 +1338,87 @@
         if (state.preferredPlatform === 'android') state.tab = 'android'
         setTab(state.tab)
         loadReleaseInfo().then(loadManifest).then(render)
+
+        function esc(s) {
+          return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+        }
+
+        function renderBoard(boardKey, prefix, accent) {
+          var board = (window.__ACTION_BOARD__ && window.__ACTION_BOARD__[boardKey]) || null
+          var meta = document.getElementById(prefix + '-meta')
+          var sum = document.getElementById(prefix + '-sum')
+          var list = document.getElementById(prefix + '-list')
+          if (!meta || !sum || !list) return
+          if (!board) {
+            meta.textContent = '暂无公开数据'
+            sum.innerHTML = ''
+            list.innerHTML = '<div class="progress-empty">今日暂无条目（日更 digest 后自动刷新）。</div>'
+            return
+          }
+          var s = board.summary || {}
+          var day = (window.__ACTION_BOARD__ && window.__ACTION_BOARD__.day) || board.items && board.items[0] && board.items[0].day || '—'
+          meta.textContent = day + ' · 共 ' + (s.total || 0) + ' 条 · 只读公开'
+          if (accent === 'patch') {
+            sum.innerHTML =
+              '<div class="progress-sum-card is-p0"><strong>' + esc(s.p0 || 0) + '</strong><span>P0 紧急修复</span></div>' +
+              '<div class="progress-sum-card is-todo"><strong>' + esc(s.p1_p2 || 0) + '</strong><span>P1/P2 待办</span></div>' +
+              '<div class="progress-sum-card is-ok"><strong>' + esc((s.completion_rate || 0) + '%') + '</strong><span>完成率 · 已闭环 ' + esc(s.done || 0) + '</span></div>'
+          } else {
+            var lines = Object.keys(s.by_line || {}).length
+            sum.innerHTML =
+              '<div class="progress-sum-card is-blue"><strong>' + esc(s.total || 0) + '</strong><span>更新条目</span></div>' +
+              '<div class="progress-sum-card is-todo"><strong>' + esc(lines) + '</strong><span>覆盖产线</span></div>' +
+              '<div class="progress-sum-card is-ok"><strong>' + esc((s.completion_rate || 0) + '%') + '</strong><span>完成率 · 已落 ' + esc(s.done || 0) + '</span></div>'
+          }
+          var items = board.items || []
+          if (!items.length) {
+            list.innerHTML = '<div class="progress-empty">今日暂无条目（日更 digest 后自动刷新）。</div>'
+            return
+          }
+          list.innerHTML = items
+            .map(function (it) {
+              var done = it.status === 'merged' || it.status === 'closed'
+              var pri = done ? 'ok' : String(it.priority || 'P2').toLowerCase()
+              var priLabel = done ? '已闭环' : esc(it.priority || 'P2')
+              return (
+                '<article class="progress-item' + (done ? ' is-done' : '') + '">' +
+                '<span class="progress-pri ' + pri + '">' + priLabel + '</span>' +
+                '<div><h3>' + esc(it.title) + '</h3>' +
+                '<div class="progress-item-meta">' +
+                '<span>' + esc(it.line_label || it.line || '—') + '</span>' +
+                '<span>' + esc(it.owner || 'AI 员工') + '</span>' +
+                '</div></div>' +
+                '<span class="progress-status">' + esc(it.status_label || it.status || '') + '</span>' +
+                '</article>'
+              )
+            })
+            .join('')
+        }
+
+        function loadActionBoard() {
+          return fetch('/download-action-board.json', { cache: 'no-store' })
+            .then(function (r) {
+              var ct = r.headers.get('content-type') || ''
+              return r.ok && ct.indexOf('json') >= 0 ? r.json() : null
+            })
+            .then(function (data) {
+              window.__ACTION_BOARD__ = data || null
+              renderBoard('breakpoints', 'breakpoints', 'patch')
+              renderBoard('goals', 'goals', 'update')
+            })
+            .catch(function () {
+              window.__ACTION_BOARD__ = null
+              renderBoard('breakpoints', 'breakpoints', 'patch')
+              renderBoard('goals', 'goals', 'update')
+            })
+        }
+
+        loadActionBoard()
+
       })()
     </script>
   </body>

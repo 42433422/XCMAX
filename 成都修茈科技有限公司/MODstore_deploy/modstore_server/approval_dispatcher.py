@@ -139,6 +139,12 @@ def deploy_staged_change(
         sync_record_after_status_writeback()
     except Exception:
         logger.exception("strategic action bridge after deploy failed staged_id=%s", staged_id)
+    try:
+        from modstore_server.public_action_board import write_public_action_board
+
+        write_public_action_board()
+    except Exception:
+        logger.exception("public action board after deploy failed staged_id=%s", staged_id)
 
     # 自动 merge PR（若启用）
     auto_pr = os.environ.get("MODSTORE_AUTO_PR_ENABLED", "1").strip().lower() in (
