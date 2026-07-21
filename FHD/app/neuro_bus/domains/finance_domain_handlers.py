@@ -21,11 +21,10 @@ Finance Domain Event Handlers
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import uuid
-from typing import Any
-from typing import Callable
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
@@ -56,7 +55,9 @@ def _resolve_approval_service():
     global get_approval_service
     if get_approval_service is not None:
         return get_approval_service
-    from app.application.workflow.approval_service import get_approval_service as _get_approval_service
+    from app.application.workflow.approval_service import (
+        get_approval_service as _get_approval_service,
+    )
 
     get_approval_service = _get_approval_service
     return _get_approval_service
