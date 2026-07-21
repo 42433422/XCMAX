@@ -14,6 +14,7 @@ from app.application.ports.embedder import EmbedderPort
 from app.application.ports.vector_store import VectorStorePort
 from app.infrastructure.persistence.pg_vector_store import PgVectorStore
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
 
 
@@ -69,6 +70,23 @@ class HashEmbedder(EmbedderPort):
         return self._embed(text)
 
 
+def _get_default_embedder() -> EmbedderPort:
+    """优先用真实 EmbeddingService（local/remote），不可用时回退到 HashEmbedder。
+
+    保持向后兼容：FHD_EMBEDDING_MODE=disabled（默认）时返回 HashEmbedder，
+    行为与改造前完全一致。
+    """
+    try:
+        from app.infrastructure.llm import get_default_embedding_service
+
+        svc = get_default_embedding_service()
+        if svc is not None and svc.is_available():
+            return svc
+    except RECOVERABLE_ERRORS:
+        pass
+    return HashEmbedder()
+
+
 class ExcelVectorIngestApplicationService:
     def __init__(
         self,
@@ -77,7 +95,7 @@ class ExcelVectorIngestApplicationService:
         chunk_window_size: int = 20,
     ) -> None:
         self._vector_store = vector_store or get_vector_store()
-        self._embedder = embedder or HashEmbedder()
+        self._embedder = embedder or _get_default_embedder()
         self._chunk_window_size = max(5, int(chunk_window_size))
 
     def ingest_excel(
@@ -212,7 +230,7 @@ class ExcelVectorSearchApplicationService:
         embedder: EmbedderPort | None = None,
     ) -> None:
         self._vector_store = vector_store or get_vector_store()
-        self._embedder = embedder or HashEmbedder()
+        self._embedder = embedder or _get_default_embedder()
 
     def query(self, index_id: str, query_text: str, top_k: int = 5) -> dict[str, Any]:
         if not index_id:
