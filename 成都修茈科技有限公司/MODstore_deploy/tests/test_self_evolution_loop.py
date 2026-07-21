@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 from modstore_server import employee_orchestrator as eo
 from modstore_server.cr_narrow_ci import (
     _copytree_filtered,
+    _run_py_compile,
     infer_related_test_files,
     run_narrow_ci_validation,
 )
@@ -47,6 +50,26 @@ def test_run_narrow_ci_validation_py_compile_ok():
     assert out.get("ok") is True
     steps = out.get("steps") or []
     assert any(s.get("step") == "py_compile" for s in steps)
+
+
+def test_run_py_compile_uses_sys_executable_and_returns_real_exit_code(monkeypatch):
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+        assert args[0] == sys.executable
+        assert args[1:3] == ["-m", "py_compile"]
+        return subprocess.CompletedProcess(args=args, returncode=7, stdout="", stderr="bad syntax")
+
+    monkeypatch.setattr("modstore_server.cr_narrow_ci.subprocess.run", fake_run)
+
+    result = _run_py_compile("def oops(\n", "modstore_server/bad.py")
+
+    assert result["ok"] is False
+    assert result["step"] == "py_compile"
+    assert result["stderr"] == "bad syntax"
+    assert len(calls) == 1
+    assert calls[0]["args"][0] == sys.executable
 
 
 def test_run_narrow_ci_validation_pytest_uses_modstore_deploy_tests(tmp_path, monkeypatch):

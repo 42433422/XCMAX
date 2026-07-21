@@ -187,7 +187,7 @@ def _run_py_compile(content: str, rel_path: str) -> Dict[str, Any]:
             env = os.environ.copy()
             env.setdefault("PYTHONPYCACHEPREFIX", pycache_dir)
             proc = subprocess.run(
-                ["python3", "-m", "py_compile", tmp_path],
+                [sys.executable, "-m", "py_compile", tmp_path],
                 capture_output=True,
                 text=True,
                 timeout=30,
