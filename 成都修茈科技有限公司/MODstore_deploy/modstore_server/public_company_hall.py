@@ -372,6 +372,46 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 board.get("day"),
             )
 
+    # DB 无行动信号时，用公开板条目推导 working/alert（与轨迹同源，不造假心跳）
+    if not any(int((actions.get(eid) or {}).get("open") or 0) for eid in all_ids):
+        name_to_id = {str(e.get("name") or ""): e["employee_id"] for e in employees}
+        changed = False
+        for it in (
+            list(((board.get("breakpoints") or {}).get("items") or []))
+            + list(((board.get("goals") or {}).get("items") or []))
+            + list(board.get("trajectory") or [])
+        ):
+            eid = str(it.get("employee_id") or "").strip()
+            if not eid:
+                eid = name_to_id.get(str(it.get("owner") or "").strip(), "")
+            emp = by_emp.get(eid)
+            if not emp:
+                continue
+            st = str(it.get("status") or "")
+            pri = str(it.get("priority") or "").upper()
+            title = str(it.get("title") or it.get("text") or "")
+            if st in {"merged", "closed", "done", "resolved"}:
+                continue
+            if pri == "P0" or title.startswith("P0") or st == "blocked":
+                if emp.get("presence") != "alert":
+                    emp["presence"] = "alert"
+                    emp["activity"] = title or emp.get("activity")
+                    changed = True
+            elif st in _WORKING_STATUSES or st in {"open", "todo", "pending"}:
+                if emp.get("presence") == "idle":
+                    emp["presence"] = "working"
+                    emp["activity"] = title or emp.get("activity")
+                    changed = True
+        if changed:
+            counts = {"working": 0, "alert": 0, "idle": 0, "roster": len(employees)}
+            for e in employees:
+                counts[e["presence"]] = int(counts.get(e["presence"]) or 0) + 1
+            for d in departments:
+                dc = {"working": 0, "alert": 0, "idle": 0}
+                for e in d.get("employees") or []:
+                    dc[e["presence"]] = int(dc.get(e["presence"]) or 0) + 1
+                d["counts"] = dc
+
     feed: List[Dict[str, Any]] = []
     for t in board.get("trajectory") or []:
         owner = str(t.get("owner") or "")
