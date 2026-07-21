@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import CorpButlerRoot from './CorpButlerRoot.vue'
+import CorpButlerApp from './CorpButlerApp.vue'
 import { useAgentStore } from '../stores/agent'
 import { loadCorpBallPosition } from './corpBallPosition'
 
@@ -30,7 +30,7 @@ async function bootCorpButler() {
   }
 
   const pinia = createPinia()
-  const app = createApp(CorpButlerRoot)
+  const app = createApp(CorpButlerApp)
   app.use(pinia)
   app.use(corpRouter)
   await corpRouter.isReady()
