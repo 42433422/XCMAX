@@ -121,9 +121,7 @@ class AIChatApplicationService(
         self.ai_service = get_ai_conversation_service()
         self.workflow_planner = _self.LLMWorkflowPlanner()
         self.risk_gate = _self.HybridRiskGate()
-        self.workflow_engine = _self.WorkflowEngine(
-            tool_dispatcher=self._dispatch_workflow_tool
-        )
+        self.workflow_engine = _self.WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)
         self.approval_service = _self.get_approval_service()
         self._pending_workflows: dict[str, dict[str, Any]] = {}
 
