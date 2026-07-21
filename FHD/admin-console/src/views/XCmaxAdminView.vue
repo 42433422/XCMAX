@@ -303,7 +303,7 @@ import {
   xcmaxDutyTimeArchitectureEmbedUrl,
 } from '@/constants/xcmaxDashboardEmbed'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
-import { xcmaxMarketProxy } from '@/api/xcmaxMarketProxy'
+import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 
 const adminTabs = [
   { id: 'overview', label: '总览' },
