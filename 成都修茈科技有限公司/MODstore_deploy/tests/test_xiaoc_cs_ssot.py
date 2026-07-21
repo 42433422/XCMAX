@@ -41,6 +41,12 @@ class TestXiaocPersona:
         assert p["tools"]["navigate"] is True
         assert p["tools"]["enhance_current_page"] is True
         assert p["tools"]["wallet_pay"] is False
+        assert p["tools"]["get_my_account_snapshot"] is True
+        assert p["tools"]["get_ops_update_brief"] is True
+        names = p["limits"]["tool_names"]
+        assert "get_my_tickets" in names
+        assert "get_ops_update_brief" in names
+        assert "查询他人账户/订单/工单" in p["denied"]
 
 
 class TestKnowledgeFormat:

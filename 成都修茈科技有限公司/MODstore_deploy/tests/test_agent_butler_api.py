@@ -269,6 +269,137 @@ class TestButlerSystemPrompt:
         assert "fill" in tool_names
         assert "read" in tool_names
 
+    def test_admin_readonly_tools_merged_only_for_admin(self):
+        from types import SimpleNamespace
+
+        from modstore_server.agent_butler_api import (
+            ADMIN_READONLY_TOOL_NAMES,
+            _butler_tools_for_user,
+        )
+
+        admin = SimpleNamespace(is_admin=True)
+        user = SimpleNamespace(is_admin=False)
+        admin_names = {t["function"]["name"] for t in _butler_tools_for_user(admin)}
+        user_names = {t["function"]["name"] for t in _butler_tools_for_user(user)}
+        assert ADMIN_READONLY_TOOL_NAMES.issubset(admin_names)
+        assert not (ADMIN_READONLY_TOOL_NAMES & user_names)
+
+    def test_execute_readonly_rejects_non_admin(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from modstore_server.agent_butler_api import _execute_admin_readonly_tool
+
+        user = SimpleNamespace(id=1, is_admin=False)
+        out = _execute_admin_readonly_tool(
+            "get_my_account_snapshot", {}, user=user, db=MagicMock()
+        )
+        assert "仅管理员" in out
+
+    def test_execute_ops_update_brief_and_self_tickets(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        from modstore_server.agent_butler_api import (
+            _execute_admin_readonly_tool,
+            _partition_butler_tool_calls,
+        )
+
+        admin = SimpleNamespace(
+            id=42,
+            username="boss",
+            email="boss@x.com",
+            is_admin=True,
+            is_enterprise=False,
+        )
+        digest = SimpleNamespace(
+            id=1,
+            day="2026-07-21",
+            subject="日更标题",
+            body_text="今日更新了运维推送",
+            meeting_minutes_html="",
+            recipients_json="[]",
+            delivery_json="[]",
+            delivered=True,
+            source="test",
+            created_at=None,
+            vibe_prep_meta_json="",
+            vibe_prep_line_dispatch_json="",
+            vibe_line_execute_json="",
+            vibe_prep_updates_md="",
+            vibe_prep_patches_md="",
+            vibe_prep_pw_md="",
+            vibe_prep_ps_md="",
+            vibe_prep_app_md="",
+            vibe_prep_sr_md="",
+        )
+        ticket = SimpleNamespace(
+            id=9,
+            session_id=1,
+            ticket_no="T-1",
+            title="本人工单",
+            intent="general",
+            subject_type="",
+            subject_id="",
+            status="open",
+            priority="normal",
+            evidence_json="{}",
+            summary="",
+            decision_status="",
+            automation_level="",
+            user_id=42,
+            created_at=None,
+            updated_at=None,
+            closed_at=None,
+        )
+
+        db = MagicMock()
+
+        def _query(model):
+            q = MagicMock()
+            name = getattr(model, "__name__", str(model))
+            if "DailyDigest" in name:
+                q.order_by.return_value.limit.return_value.all.return_value = [digest]
+            elif "Ticket" in name:
+                # ensure filter chained and forced to self
+                q.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+                    ticket
+                ]
+            else:
+                q.filter.return_value.order_by.return_value.first.return_value = None
+                q.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
+            return q
+
+        db.query.side_effect = _query
+
+        with patch(
+            "modstore_server.release_train.snapshot_public",
+            return_value={"current": "1.0.0.0", "product_version": "1.0.0.0", "day_index": 1},
+        ):
+            brief = _execute_admin_readonly_tool(
+                "get_ops_update_brief", {"limit": 2}, user=admin, db=db
+            )
+        assert "运维更新" in brief
+        assert "日更标题" in brief or "2026-07-21" in brief
+        assert "1.0.0.0" in brief
+
+        tickets = _execute_admin_readonly_tool(
+            "get_my_tickets", {"limit": 5}, user=admin, db=db
+        )
+        assert "T-1" in tickets
+        assert "本人工单" in tickets
+
+        page, readonly = _partition_butler_tool_calls(
+            [
+                {"name": "navigate", "args": {"route": "/wallet"}},
+                {"name": "get_ops_update_brief", "args": {}},
+            ],
+            user=admin,
+            db=db,
+        )
+        assert len(page) == 1 and page[0]["name"] == "navigate"
+        assert "运维更新" in readonly
+
     def test_build_messages_injects_system(self):
         from modstore_server.agent_butler_api import (
             ButlerChatDTO,
