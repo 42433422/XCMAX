@@ -58,17 +58,21 @@
         maximumFractionDigits: decimals,
       })
     }
+    const previous = Number(element.dataset.value)
+    const from = Number.isFinite(previous) ? previous : target
     element.dataset.value = String(target)
-    if (reduceMotion) {
+    // 首次赋值直接落最终值，避免从 0 起动画闪成「查看 0 个版本节点」
+    if (reduceMotion || from === target) {
       render(target)
       return
     }
     const start = performance.now()
     const duration = 900
+    const delta = target - from
     const tick = (now) => {
       const progress = Math.min(1, (now - start) / duration)
       const eased = 1 - Math.pow(1 - progress, 3)
-      render(target * eased)
+      render(from + delta * eased)
       if (progress < 1) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
