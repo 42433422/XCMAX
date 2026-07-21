@@ -309,6 +309,23 @@ def run_daily_release_train_orchestrator_job(
         logger.exception("release_train orchestrator: strategic_layer dispatch failed")
         result["strategic_layer"] = {"ok": False, "error": "strategic_layer failed"}
 
+    # 行动条目 → 战略层镜像（复用上一步 decision_id；日常成功日由 bridge 自建追踪决策）
+    try:
+        from modstore_server.strategic_layer.digest_strategic_bridge import (
+            sync_daily_to_strategic,
+        )
+
+        sl = result.get("strategic_layer") or {}
+        result["strategic_action_bridge"] = sync_daily_to_strategic(
+            record_id=int(rid),
+            decision_id=sl.get("decision_id") if isinstance(sl, dict) else None,
+            release_kind=kind,
+            release_train=rt_after,
+        )
+    except Exception:
+        logger.exception("release_train orchestrator: strategic action bridge failed")
+        result["strategic_action_bridge"] = {"ok": False, "error": "strategic action bridge failed"}
+
     return result
 
 
