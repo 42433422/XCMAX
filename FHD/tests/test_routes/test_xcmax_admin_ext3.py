@@ -1207,6 +1207,10 @@ class TestDigestLocalOrProxyDeep:
                 "app.fastapi_routes.xcmax_admin._market_admin_proxy",
                 new=AsyncMock(return_value={"success": True, "proxied": True}),
             ) as mock_proxy,
+            patch(
+                "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=10"
@@ -1228,7 +1232,7 @@ class TestDigestLocalOrProxyDeep:
             ),
             patch(
                 "app.application.digest_email_app_service.list_daily_digests_local",
-                new=AsyncMock(return_value={"success": True, "data": []}),
+                new=AsyncMock(return_value={"success": True, "data": [{"id": 9}]}),
             ),
         ):
             result = await admin_routes._digest_local_or_proxy(
@@ -1236,6 +1240,7 @@ class TestDigestLocalOrProxyDeep:
             )
         assert isinstance(result, dict)
         assert result["success"] is True
+        assert result["data"][0]["id"] == 9
 
     @pytest.mark.asyncio
     async def test_local_path_with_query_params(self):
@@ -1248,7 +1253,7 @@ class TestDigestLocalOrProxyDeep:
             ),
             patch(
                 "app.application.digest_email_app_service.list_daily_digests_local",
-                new=AsyncMock(return_value={"success": True, "data": []}),
+                new=AsyncMock(return_value={"success": True, "data": [{"id": 1}]}),
             ) as mock_list,
         ):
             result = await admin_routes._digest_local_or_proxy(

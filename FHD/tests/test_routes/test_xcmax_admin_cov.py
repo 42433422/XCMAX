@@ -317,6 +317,10 @@ class TestDigestLocalOrProxyBranches:
                 "app.application.digest_email_app_service.list_daily_digests_local",
                 new=AsyncMock(return_value=svc_result),
             ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             result = await admin_routes._digest_local_or_proxy(
                 req, "GET", "/api/agent/butler/daily-digests?limit=10&offset=5"
@@ -395,6 +399,10 @@ class TestDigestLocalOrProxyBranches:
             patch(
                 "app.application.digest_email_app_service.list_daily_digests_local",
                 new=AsyncMock(side_effect=RuntimeError("boom")),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
+                new=AsyncMock(return_value=None),
             ),
         ):
             result = await admin_routes._digest_local_or_proxy(

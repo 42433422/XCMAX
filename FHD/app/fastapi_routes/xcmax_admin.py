@@ -469,6 +469,84 @@ async def _market_admin_proxy(
     return payload
 
 
+def _is_daily_digest_list_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    return bare in {
+        "/api/xcmax/admin/daily-digests",
+        "/api/agent/butler/daily-digests",
+    }
+
+
+def _is_daily_digest_detail_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    if bare.endswith("/artifacts"):
+        return False
+    return bare.startswith("/api/xcmax/admin/daily-digests/") or bare.startswith(
+        "/api/agent/butler/daily-digests/"
+    )
+
+
+def _is_daily_digest_artifacts_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    return bare.endswith("/artifacts") and (
+        bare.startswith("/api/xcmax/admin/daily-digests/")
+        or bare.startswith("/api/agent/butler/daily-digests/")
+    )
+
+
+def _digest_record_id_from_path(path: str) -> int:
+    bare = path.split("?", 1)[0]
+    if bare.endswith("/artifacts"):
+        bare = bare[: -len("/artifacts")]
+    return int(bare.rstrip("/").rsplit("/", 1)[-1])
+
+
+async def _fetch_remote_xcmax_daily_digests(path: str) -> dict[str, Any] | None:
+    """直连修茈 ``/api/xcmax/admin/daily-digests``（生产落库副本；不依赖 butler 会话）。"""
+    import httpx
+
+    from app.application.modstore_local_client import internal_auth_headers
+
+    base = (os.environ.get("XCAGI_MARKET_BASE_URL") or "https://xiu-ci.com").strip().rstrip("/")
+    # 避免误打到 SPA /market 前缀
+    if base.endswith("/market"):
+        base = base[: -len("/market")]
+    # 统一改走 xcmax 管理端读接口（butler 路径需管理员 JWT，管理端常拿不到）
+    bare, _, query = path.partition("?")
+    if bare.startswith("/api/agent/butler/daily-digests"):
+        bare = bare.replace("/api/agent/butler/daily-digests", "/api/xcmax/admin/daily-digests", 1)
+    elif not bare.startswith("/api/xcmax/admin/daily-digests"):
+        return None
+    url = f"{base}{bare}"
+    if query:
+        url = f"{url}?{query}"
+    headers = {"Accept": "application/json", **internal_auth_headers()}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code >= 400:
+                logger.warning(
+                    "remote xcmax daily-digests HTTP %s path=%s", resp.status_code, bare
+                )
+                return None
+            data = resp.json()
+            return data if isinstance(data, dict) else {"success": True, "data": data}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("remote xcmax daily-digests failed path=%s: %s", bare, exc)
+        return None
+
+
+def _digest_payload_nonempty(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    data = payload.get("data")
+    if isinstance(data, list):
+        return len(data) > 0
+    if isinstance(data, dict):
+        return bool(data.get("id") or data.get("body_html") or data.get("subject"))
+    return False
+
+
 async def _digest_local_or_proxy(
     request: Request,
     method: str,
@@ -476,14 +554,15 @@ async def _digest_local_or_proxy(
     *,
     json_body: dict[str, Any] | None = None,
 ):
-    """本地 MODstore :8788 日更读接口：无 FHD 会话时用 admin 服务账号。"""
+    """日更读接口：本地 MODstore → 市场代理 → 直连生产 xcmax 存档（三选一回退）。"""
     from app.application.modstore_local_client import prefer_local_modstore
 
     if prefer_local_modstore() and method.upper() == "GET":
         from app.application import digest_email_app_service as digest_svc
 
+        local_payload: dict[str, Any] | None = None
         try:
-            if path.startswith("/api/agent/butler/daily-digests?"):
+            if _is_daily_digest_list_path(path):
                 q = path.split("?", 1)[1] if "?" in path else ""
                 limit, offset = 20, 0
                 for part in q.split("&"):
@@ -491,14 +570,20 @@ async def _digest_local_or_proxy(
                         limit = int(part.split("=", 1)[1])
                     elif part.startswith("offset="):
                         offset = int(part.split("=", 1)[1])
-                return await digest_svc.list_daily_digests_local(limit=limit, offset=offset)
-            if path.startswith("/api/agent/butler/daily-digests/") and path.endswith("/artifacts"):
-                rid = path.split("/daily-digests/", 1)[1].split("/", 1)[0]
+                local_payload = await digest_svc.list_daily_digests_local(
+                    limit=limit, offset=offset
+                )
+                if _digest_payload_nonempty(local_payload):
+                    return local_payload
+            elif _is_daily_digest_artifacts_path(path):
+                rid = _digest_record_id_from_path(path)
                 return await digest_svc.get_daily_digest_artifacts_local(int(rid))
-            if path.startswith("/api/agent/butler/daily-digests/"):
-                rid = path.rsplit("/", 1)[-1]
-                return await digest_svc.get_daily_digest_local(int(rid))
-            if path.startswith("/api/admin/action-items/stats?"):
+            elif _is_daily_digest_detail_path(path):
+                rid = _digest_record_id_from_path(path)
+                local_payload = await digest_svc.get_daily_digest_local(int(rid))
+                if _digest_payload_nonempty(local_payload):
+                    return local_payload
+            elif path.startswith("/api/admin/action-items/stats?"):
                 q = path.split("?", 1)[1] if "?" in path else ""
                 kind = day = ""
                 for part in q.split("&"):
@@ -507,7 +592,7 @@ async def _digest_local_or_proxy(
                     elif part.startswith("day="):
                         day = part.split("=", 1)[1]
                 return await digest_svc.action_items_stats_local(kind=kind, day=day)
-            if path.startswith("/api/admin/action-items?"):
+            elif path.startswith("/api/admin/action-items?"):
                 q = path.split("?", 1)[1] if "?" in path else ""
                 kind = day = ""
                 for part in q.split("&"):
@@ -516,17 +601,37 @@ async def _digest_local_or_proxy(
                     elif part.startswith("day="):
                         day = part.split("=", 1)[1]
                 return await digest_svc.list_action_items_local(kind=kind, day=day)
+            # 本地空库时回退生产 xcmax 存档，避免管理端「暂无每日摘要」
+            if _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path):
+                remote = await _fetch_remote_xcmax_daily_digests(path)
+                if remote is not None:
+                    return remote
+                if local_payload is not None:
+                    return local_payload
         except RECOVERABLE_ERRORS as exc:
             logger.warning("local digest/action-items read failed path=%s: %s", path, exc)
+            if _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path):
+                remote = await _fetch_remote_xcmax_daily_digests(path)
+                if remote is not None:
+                    return remote
             return JSONResponse({"success": False, "message": str(exc)}, status_code=502)
 
-    return await _market_admin_proxy(
+    proxied = await _market_admin_proxy(
         request,
         method,
         path,
         json_body=json_body,
         require_admin_session=not prefer_local_modstore(),
     )
+    # 市场 JWT 调 butler 常 401/403；生产摘要在 xcmax 管理端读接口
+    if method.upper() == "GET" and (
+        _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path)
+    ):
+        if isinstance(proxied, JSONResponse) or not _digest_payload_nonempty(proxied):
+            remote = await _fetch_remote_xcmax_daily_digests(path)
+            if remote is not None:
+                return remote
+    return proxied
 
 
 async def _self_maintenance_local_or_proxy(
@@ -1864,7 +1969,7 @@ async def list_daily_digests(
     return await _digest_local_or_proxy(
         request,
         "GET",
-        f"/api/agent/butler/daily-digests?limit={limit}&offset={offset}",
+        f"/api/xcmax/admin/daily-digests?limit={limit}&offset={offset}",
     )
 
 
@@ -1874,7 +1979,7 @@ async def get_daily_digest(request: Request, record_id: int):
     return await _digest_local_or_proxy(
         request,
         "GET",
-        f"/api/agent/butler/daily-digests/{record_id}",
+        f"/api/xcmax/admin/daily-digests/{record_id}",
     )
 
 
@@ -1884,7 +1989,7 @@ async def get_daily_digest_artifacts(request: Request, record_id: int):
     return await _digest_local_or_proxy(
         request,
         "GET",
-        f"/api/agent/butler/daily-digests/{record_id}/artifacts",
+        f"/api/xcmax/admin/daily-digests/{record_id}/artifacts",
     )
 
 
