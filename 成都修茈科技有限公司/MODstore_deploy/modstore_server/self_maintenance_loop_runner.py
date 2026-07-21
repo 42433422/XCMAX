@@ -1988,13 +1988,16 @@ def _code_task_text(
         }
         score_remediation = (
             "\n\n=== EXISTING BRANCH SCORE REMEDIATION ===\n"
-            f"Continue from the existing candidate base branch "
-            f"`{str(selected_remediation.get('branch') or '').strip()}`; do not replace its production fix with an "
+            "Your workspace is already checked out on a newly created isolated remediation work branch "
+            f"whose immutable base is `{str(selected_remediation.get('branch') or '').strip()}`. "
+            "Do not checkout, switch to, reset, commit, or push directly to that immutable base branch. "
+            "Make the follow-up on the current checked-out work branch only; do not replace its production fix with an "
             "unrelated change. The previous independent review/score did not authorize merge. "
             "Address its missing evidence on this candidate, especially any promised focused "
             "regression test that is absent. A test-only follow-up commit is valid here because "
             "the existing candidate already contains the production fix. Run that focused test "
-            "and the mandatory loop policy suite, then commit and push the amended candidate. "
+            "and the mandatory loop policy suite, then commit the current work branch and push HEAD to that same "
+            "work-branch name. Report `git branch --show-current` and `git rev-parse HEAD` as delivery evidence. "
             "Do not lower, bypass, or game either safety threshold. Evidence: "
             f"{json.dumps(remediation_evidence, ensure_ascii=False, sort_keys=True)}"
         )
@@ -2432,6 +2435,79 @@ def _run_cmd(args: List[str], cwd: Optional[Path] = None, timeout: int = 120) ->
     if proc.returncode != 0:
         raise RuntimeError(f"command failed ({proc.returncode}): {' '.join(args)}\n{output}")
     return output
+
+
+def _remote_branch_head(repo_url: str, branch: str) -> Optional[str]:
+    """Resolve a Para branch head without mutating a workspace."""
+    if not repo_url or not branch:
+        return None
+    repositories = [repo_url]
+    para_bare_repo = os.environ.get("MODSTORE_PARA_BARE_REPO", "").strip()
+    if para_bare_repo and para_bare_repo not in repositories:
+        repositories.append(para_bare_repo)
+    for repository in repositories:
+        try:
+            proc = subprocess.run(
+                ["git", "ls-remote", "--heads", repository, f"refs/heads/{branch}"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if proc.returncode != 0:
+            continue
+        line = next((item.strip() for item in (proc.stdout or "").splitlines() if item.strip()), "")
+        sha = line.split(None, 1)[0] if line else ""
+        if re.fullmatch(r"[0-9a-fA-F]{40,64}", sha):
+            return sha.lower()
+    return None
+
+
+def _validate_remediation_branch_delivery(
+    *, base_branch: str, delivered_branch: str
+) -> Dict[str, Any]:
+    """Require a resumed code employee to advance its isolated work branch."""
+    if not base_branch:
+        return {"ok": True, "reason": "not_score_remediation"}
+    if not delivered_branch:
+        return {"ok": False, "reason": "missing_delivered_branch"}
+    if delivered_branch == base_branch:
+        return {
+            "ok": False,
+            "reason": "remediation_wrote_to_immutable_base_branch",
+            "base_branch": base_branch,
+            "delivered_branch": delivered_branch,
+        }
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    base_head = _remote_branch_head(repo_url, base_branch)
+    delivered_head = _remote_branch_head(repo_url, delivered_branch)
+    if not delivered_head:
+        return {
+            "ok": False,
+            "reason": "delivered_branch_head_unavailable",
+            "base_branch": base_branch,
+            "base_head": base_head,
+            "delivered_branch": delivered_branch,
+        }
+    if base_head and delivered_head == base_head:
+        return {
+            "ok": False,
+            "reason": "remediation_branch_not_advanced",
+            "base_branch": base_branch,
+            "base_head": base_head,
+            "delivered_branch": delivered_branch,
+            "delivered_head": delivered_head,
+        }
+    return {
+        "ok": True,
+        "reason": "remediation_branch_advanced",
+        "base_branch": base_branch,
+        "base_head": base_head,
+        "delivered_branch": delivered_branch,
+        "delivered_head": delivered_head,
+    }
 
 
 def _changed_files_for_branch(
@@ -3375,6 +3451,14 @@ def _diff_semantic_penalty(diff_excerpt: str) -> Dict[str, Any]:
             continue
         normalized_path = current_path.lower()
         if any(normalized_path.startswith(prefix) for prefix in excluded_added_line_prefixes):
+            continue
+        # Tests may legitimately name/mock a risky production API in order to
+        # prove a narrow fix. Treating that test evidence as newly introduced
+        # production behavior made adding the promised regression test lower
+        # the score by 16 points. Production additions remain scanned.
+        path_parts = [part for part in normalized_path.split("/") if part]
+        file_name = path_parts[-1] if path_parts else ""
+        if "tests" in path_parts or file_name.startswith(("test_", "spec_")):
             continue
         added_source_lines.append(line[1:])
 
@@ -5157,6 +5241,10 @@ def _run_self_maintenance_loop_unlocked(
                     "review_target_para_task_id": para_task_id,
                 }
 
+            remediation_base_branch = (
+                str(extra.get("branch") or "").strip() if step_name == "code" else ""
+            )
+
             (
                 result,
                 ok,
@@ -5178,6 +5266,16 @@ def _run_self_maintenance_loop_unlocked(
             if step_name == "code" and para_meta.get("branch"):
                 code_branch = str(para_meta["branch"])
 
+            branch_delivery_validation: Optional[Dict[str, Any]] = None
+            if step_name == "code" and ok and remediation_base_branch:
+                branch_delivery_validation = _validate_remediation_branch_delivery(
+                    base_branch=remediation_base_branch,
+                    delivered_branch=str(code_branch or ""),
+                )
+                if not branch_delivery_validation.get("ok"):
+                    ok = False
+                    failure_reason = str(branch_delivery_validation.get("reason") or "")
+
             step_record = {
                 "employee_id": employee_id,
                 "error": failure_reason,
@@ -5193,6 +5291,8 @@ def _run_self_maintenance_loop_unlocked(
                 "step": step_name,
                 "timestamp": _iso(_utc_now()),
             }
+            if branch_delivery_validation is not None:
+                step_record["branch_delivery_validation"] = branch_delivery_validation
             steps.append(step_record)
             _append_ledger(step_record)
 
