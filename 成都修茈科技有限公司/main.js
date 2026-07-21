@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     toggle.classList.remove('active')
     toggle.setAttribute('aria-expanded', 'false')
     toggle.setAttribute('aria-label', '打开菜单')
+    menu.setAttribute('aria-hidden', 'true')
+    menu.setAttribute('inert', '')
     document.body.classList.remove('nav-open')
   }
 
@@ -24,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
       toggle.classList.toggle('active', open)
       toggle.setAttribute('aria-expanded', String(open))
       toggle.setAttribute('aria-label', open ? '关闭菜单' : '打开菜单')
+      menu.setAttribute('aria-hidden', String(!open))
+      if (open) menu.removeAttribute('inert')
+      else menu.setAttribute('inert', '')
       document.body.classList.toggle('nav-open', open)
     })
     overlay.addEventListener('click', closeMenu)
