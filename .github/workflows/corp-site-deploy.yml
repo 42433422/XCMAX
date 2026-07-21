@@ -117,19 +117,31 @@ jobs:
             nginx -t
             systemctl reload nginx
             echo "[ok] nginx reloaded"
+            # Loopback HTTPS over h2 is flaky on this host (curl exit 16); prefer http1.1 + retry.
+            xc_curl() {
+              local attempt=1
+              while [ "$attempt" -le 4 ]; do
+                if curl --http1.1 -fsS --connect-timeout 10 --max-time 30 "$@"; then
+                  return 0
+                fi
+                attempt=$((attempt + 1))
+                sleep 1
+              done
+              return 1
+            }
             echo "[verify] public corp/download/market surfaces:"
-            curl -fsS https://xiu-ci.com/ >/dev/null
-            curl -fsS https://xiu-ci.com/developer.html >/dev/null
-            curl -fsS https://xiu-ci.com/download >/dev/null
-            curl -fsS https://xiu-ci.com/download/releases >/dev/null
-            curl -fsSL https://xiu-ci.com/market/download >/dev/null
-            curl -fsS https://xiu-ci.com/market/ >/dev/null
+            xc_curl https://xiu-ci.com/ >/dev/null
+            xc_curl https://xiu-ci.com/developer.html >/dev/null
+            xc_curl https://xiu-ci.com/download >/dev/null
+            xc_curl https://xiu-ci.com/download/releases >/dev/null
+            xc_curl -L https://xiu-ci.com/market/download >/dev/null
+            xc_curl https://xiu-ci.com/market/ >/dev/null
             echo "[verify] homepage nav present:"
-            curl -fsS -o /tmp/xc-home.html https://xiu-ci.com/
+            xc_curl -o /tmp/xc-home.html https://xiu-ci.com/
             grep -E -q 'site-header|>首页<|/download' /tmp/xc-home.html
             grep -E -q '产品下载|软件下载' /tmp/xc-home.html
             echo "[verify] download center is new product page (not old stub):"
-            curl -fsS -o /tmp/xc-download.html https://xiu-ci.com/download
+            xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
@@ -139,8 +151,8 @@ jobs:
               echo "[warn] ${LIVE_SITE:-unset}/partials/header.html missing on disk"
             fi
             echo "[verify] HTTPS /partials must return fragments, not homepage SPA fallback:"
-            curl -fsS -o /tmp/xc-partial-header.html https://xiu-ci.com/partials/header.html
-            curl -fsS -o /tmp/xc-partial-loader.js https://xiu-ci.com/partials/loader.js
+            xc_curl -o /tmp/xc-partial-header.html https://xiu-ci.com/partials/header.html
+            xc_curl -o /tmp/xc-partial-loader.js https://xiu-ci.com/partials/loader.js
             grep -E -q '^<header class="site-header">' /tmp/xc-partial-header.html
             grep -E -q 'site-header|nav-menu|/download' /tmp/xc-partial-header.html
             ! grep -E -q '<!DOCTYPE html>' /tmp/xc-partial-header.html
