@@ -15,3 +15,18 @@
 ## Staging 路径
 
 `cvm-autonomy-watcher` 矩阵：`/opt/fhd-staging`（optional）+ `/opt/fhd-full`（required）。
+
+独立健康检查（不依赖 prod `/fhd-api`）：
+
+```bash
+bash FHD/scripts/deploy/check-staging-health.sh          # 公网 path
+bash FHD/scripts/deploy/check-staging-health.sh --ssh    # + CVM 本机 :5101
+```
+
+## P1 闭环补齐（2026-07-21）
+
+| 缺口 | 落地 |
+|------|------|
+| 显式 callback | `FHD/scripts/autonomy/autonomy_callback.py`（`autonomy_callback` / `report_callback` / `deploy_callback`）；deploy 失败 freeze 经 callback 通知 ingest |
+| runtime↔source | `MODstore_deploy/scripts/sync-runtime-to-source.sh` + `install-sync-runtime-to-source-cron.sh` |
+| 连接点 4 | ledger `implement-pack` → `gh workflow run fhd-ai-issue-implement.yml`；orchestrator 开 issue 时不再打 `ai-implement` 标签 |
