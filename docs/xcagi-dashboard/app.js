@@ -83,7 +83,7 @@ async function dashFetchJson(resource, init) {
  * 2. router — 顶部 Tab 切换 (含 a11y 键盘导航)
  * ========================================================================== */
 const Router = (() => {
-  const VALID = new Set(['loops', 'workflow', 'events', 'monitor', 'aibiz', 'tree', 'gaps', 'roadmap', 'evolution']);
+  const VALID = new Set(['loops', 'workflow', 'events', 'monitor', 'aibiz', 'tree', 'gaps', 'roadmap']);
 
   function notifyTab(tabId) {
     try {
@@ -2067,7 +2067,7 @@ function xcmiInit() {
   const params = new URLSearchParams(window.location.search);
   const embed = params.get('embed');
   const hashTab = (window.location.hash || '').replace(/^#/, '');
-  const validTabs = new Set(['loops', 'workflow', 'events', 'monitor', 'aibiz', 'tree', 'gaps', 'roadmap', 'evolution']);
+  const validTabs = new Set(['loops', 'workflow', 'events', 'monitor', 'aibiz', 'tree', 'gaps', 'roadmap']);
   if (embed === 'shell') {
     document.body.classList.add('embed-shell');
     const viewPref = (params.get('view') || '').trim().toLowerCase();
