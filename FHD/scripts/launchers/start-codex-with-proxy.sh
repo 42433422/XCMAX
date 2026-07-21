@@ -17,11 +17,11 @@ if [[ ! -d "$CODEX_APP" ]]; then
   exit 1
 fi
 
-echo "使用代理 ${http_proxy} 启动 Codex..."
+echo "使用代理 ${http_proxy} 启动 Codex（NO_PROXY=${NO_PROXY}）..."
 exec env \
   http_proxy="$http_proxy" https_proxy="$https_proxy" \
   HTTP_PROXY="$HTTP_PROXY" HTTPS_PROXY="$HTTPS_PROXY" \
   all_proxy="$all_proxy" ALL_PROXY="$ALL_PROXY" \
-  no_proxy="$no_proxy" NO_PROXY="$NO_PROXY" \
+  no_proxy="$no_proxy" NO_PROXY="$NO_PROXY" CURL_NOPROXY="${CURL_NOPROXY:-$NO_PROXY}" \
   XCMAX_CLI_PROXY="$XCMAX_CLI_PROXY" \
   "$CODEX_BIN" "$@"
