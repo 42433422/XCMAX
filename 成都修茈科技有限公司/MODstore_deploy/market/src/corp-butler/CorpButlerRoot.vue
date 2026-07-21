@@ -2,21 +2,26 @@
   <Teleport to="body">
     <div
       class="butler-float-root butler-float-root--corp"
-      :class="{ 'butler-float-root--contact-page': isContactPage }"
+      :class="{
+        'butler-float-root--contact-page': isContactPage,
+        'butler-float-root--speaking': introSpeaking,
+      }"
     >
       <AgentPermissionDialog
         v-if="showPermissionDialog"
-        @agree="onIntakeAssistAgreed"
+        corp-mode
+        @agree="onConsentAgreed"
         @dismiss="agentStore.dismissLater()"
       />
 
-      <FloatingAgentBall :is-speaking="false" force-light corp-mode />
+      <FloatingAgentBall :is-speaking="introSpeaking" force-light corp-mode />
       <Transition name="panel-pop">
         <FloatingAgentPanel
           v-if="isOpen"
           corp-mode
           :handle-input="handleInput"
           :run-intake-task="runIntakeTask"
+          @proactive-intro-change="onProactiveIntroChange"
         />
       </Transition>
 
@@ -29,11 +34,19 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAgentStore } from '../stores/agent'
-import { clampCorpBallPosition, saveCorpBallPosition } from './corpBallPosition'
+import { saveCorpBallPosition } from './corpBallPosition'
 import { isCorpMobileViewport } from './corpViewport'
 import { useCorpAgentEngine } from '../composables/agent/useCorpAgentEngine'
 import { isContactPagePath } from '../content/siteKnowledge'
 import type { QuickAction } from '../content/siteKnowledge'
+import {
+  buildCorpPageIntroScript,
+  hasIntroducedPageThisSession,
+  isCorpProactiveIntroEnabled,
+  markPageIntroduced,
+  speakCorpIntro,
+  stopCorpIntroSpeech,
+} from './corpPageIntro'
 import AgentPermissionDialog from '../components/floating-agent/AgentPermissionDialog.vue'
 import FloatingAgentBall from '../components/floating-agent/FloatingAgentBall.vue'
 import FloatingAgentPanel from '../components/floating-agent/FloatingAgentPanel.vue'
@@ -43,6 +56,9 @@ const agentStore = useAgentStore()
 const { isOpen, showPermissionDialog, position } = storeToRefs(agentStore)
 const { handleInput, runIntakeTask } = useCorpAgentEngine()
 const pendingIntakeAction = ref<QuickAction | null>(null)
+const introSpeaking = ref(false)
+let introTimer: number | null = null
+let introSeq = 0
 
 function flushPendingIntakeFill() {
   const action = pendingIntakeAction.value
@@ -52,9 +68,61 @@ function flushPendingIntakeFill() {
   void runIntakeTask(action)
 }
 
-function onIntakeAssistAgreed() {
+async function runProactivePageIntro(reason: 'consent' | 'page') {
+  if (typeof window === 'undefined') return
+  if (!agentStore.consentGiven) return
+  if (!isCorpProactiveIntroEnabled()) return
+
+  const pathname = window.location.pathname || '/'
+  const { pageId, text } = buildCorpPageIntroScript(pathname)
+  if (reason === 'page' && hasIntroducedPageThisSession(pageId)) return
+  if (!text) return
+
+  markPageIntroduced(pageId)
+  agentStore.openPanel()
+
+  // 避免连发重复气泡
+  const last = agentStore.messages[agentStore.messages.length - 1]
+  if (!(last && last.role === 'assistant' && last.content === text)) {
+    agentStore.addMessage({
+      id: `corp-intro-${pageId}-${Date.now()}`,
+      role: 'assistant',
+      content: text,
+      timestamp: Date.now(),
+    })
+  }
+
+  const seq = ++introSeq
+  introSpeaking.value = true
+  try {
+    await speakCorpIntro(text)
+  } finally {
+    if (seq === introSeq) introSpeaking.value = false
+  }
+}
+
+function scheduleProactiveIntro(reason: 'consent' | 'page', delayMs = 600) {
+  if (introTimer != null) {
+    window.clearTimeout(introTimer)
+    introTimer = null
+  }
+  introTimer = window.setTimeout(() => {
+    introTimer = null
+    void runProactivePageIntro(reason)
+  }, delayMs)
+}
+
+function onConsentAgreed() {
   agentStore.grantConsent()
   flushPendingIntakeFill()
+  scheduleProactiveIntro('consent', 480)
+}
+
+function onProactiveIntroChange(enabled: boolean) {
+  if (!enabled) {
+    stopCorpIntroSpeech()
+    introSpeaking.value = false
+  }
 }
 
 /** 联系页右侧是问卷主栏，管家改锚定左下角避免遮挡选项 */
@@ -126,12 +194,19 @@ onMounted(() => {
   const mq = window.matchMedia('(max-width: 960px)')
   mq.addEventListener('change', onMobileMqChange)
   tryAutoOpenMobileContactButler()
+  // 已同意且开启主动介绍：进页后自动讲一嘴（每页每会话一次）
+  if (agentStore.consentGiven && isCorpProactiveIntroEnabled()) {
+    scheduleProactiveIntro('page', 900)
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportResize)
   window.removeEventListener('xc-corp-intake-assist', onIntakeAssist)
   window.matchMedia('(max-width: 960px)').removeEventListener('change', onMobileMqChange)
+  if (introTimer != null) window.clearTimeout(introTimer)
+  stopCorpIntroSpeech()
+  introSpeaking.value = false
 })
 </script>
 
@@ -168,5 +243,21 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.butler-float-root--corp.butler-float-root--speaking .butler-ball__logo-wrap {
+  animation: corp-ball-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes corp-ball-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 10px rgba(37, 99, 235, 0.45));
+  }
 }
 </style>
