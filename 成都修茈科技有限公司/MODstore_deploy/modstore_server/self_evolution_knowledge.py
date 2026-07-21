@@ -169,11 +169,37 @@ def validate_code_pattern_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
+def validate_failure_pattern_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise _validation_error("failure_pattern payload must be an object")
+    if payload.get("schema_version") != 1:
+        raise _validation_error("failure_pattern schema_version must be 1")
+    if payload.get("kind") != "failure_pattern":
+        raise _validation_error("failure_pattern kind must be 'failure_pattern'")
+    for field in ("created_at", "failure_signature", "symptom", "failure_reason", "step", "corrective_hint"):
+        _require_non_empty_string(payload, field)
+    for field in ("retry_count", "occurrence_count"):
+        val = payload.get(field)
+        if not isinstance(val, int) or val < 1:
+            raise _validation_error(f"failure_pattern {field} must be a positive integer")
+    if not isinstance(payload.get("last_seen_at"), str) or not str(payload.get("last_seen_at") or "").strip():
+        raise _validation_error("failure_pattern last_seen_at must be a non-empty string")
+    failed_approach = payload.get("failed_approach")
+    if failed_approach is not None and not isinstance(failed_approach, str):
+        raise _validation_error("failure_pattern failed_approach must be a string")
+    metadata = payload.get("metadata")
+    if metadata is not None and not isinstance(metadata, dict):
+        raise _validation_error("failure_pattern metadata must be an object")
+    return payload
+
+
 def validate_kb_payload(kind: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if kind == "fixes":
         return validate_fix_knowledge_payload(payload)
     if kind == "patterns":
         return validate_code_pattern_payload(payload)
+    if kind == "failures":
+        return validate_failure_pattern_payload(payload)
     return payload
 
 
@@ -438,6 +464,101 @@ def search_code_patterns(query: str, *, limit: int = DEFAULT_PATTERN_LIMIT) -> L
     )
 
 
+DEFAULT_FAILURE_LIMIT = 3
+
+
+def _find_failure_by_signature(signature: str) -> Optional[Dict[str, Any]]:
+    """Find an existing failure_pattern doc by its failure_signature."""
+    docs = _load_kb_docs("failures")
+    for doc in docs:
+        if str(doc.get("failure_signature") or "") == signature:
+            return doc
+    return None
+
+
+def record_failure_pattern(
+    *,
+    failure_signature: str,
+    symptom: str,
+    failure_reason: str,
+    step: str,
+    corrective_hint: str,
+    retry_count: int = 1,
+    failed_approach: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Persist or update a failure pattern. Deduplicates by failure_signature."""
+    existing = _find_failure_by_signature(failure_signature)
+    now = _iso_now()
+    if existing:
+        existing["occurrence_count"] = existing.get("occurrence_count", 1) + 1
+        existing["last_seen_at"] = now
+        if retry_count > existing.get("retry_count", 0):
+            existing["retry_count"] = retry_count
+        if failed_approach and not existing.get("failed_approach"):
+            existing["failed_approach"] = _truncate(failed_approach, 6000)
+        if corrective_hint and not existing.get("corrective_hint"):
+            existing["corrective_hint"] = _truncate(corrective_hint, 4000)
+        path = Path(existing.get("_path") or "")
+        if path.parent.exists():
+            with path.open("w", encoding="utf-8") as fh:
+                json.dump(existing, fh, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default)
+                fh.write("\n")
+        return existing
+
+    payload: Dict[str, Any] = {
+        "schema_version": 1,
+        "kind": "failure_pattern",
+        "created_at": now,
+        "last_seen_at": now,
+        "failure_signature": _truncate(failure_signature, 1000),
+        "symptom": _truncate(symptom, 4000),
+        "failed_approach": _truncate(failed_approach, 6000),
+        "failure_reason": _truncate(failure_reason, 4000),
+        "step": _truncate(step, 100),
+        "retry_count": max(1, int(retry_count)),
+        "occurrence_count": 1,
+        "corrective_hint": _truncate(corrective_hint, 4000),
+        "metadata": metadata or {},
+    }
+    path = _write_kb_doc("failures", "failure", payload)
+    payload["_path"] = str(path)
+    return payload
+
+
+def search_failure_patterns(query: str, *, limit: int = DEFAULT_FAILURE_LIMIT) -> List[Dict[str, Any]]:
+    docs = _load_kb_docs("failures")
+    return _search_docs(
+        query,
+        docs=docs,
+        fields=("failure_signature", "symptom", "failure_reason", "failed_approach"),
+        kind="failures",
+        limit=limit,
+    )
+
+
+def mark_failure_pattern_promoted(
+    failure_path: str, *, promoted_to_fix: str, promoted_at: Optional[str] = None
+) -> bool:
+    """Mark a failure_pattern as promoted to a fix document. Returns True on success."""
+    try:
+        path = Path(failure_path)
+        if not path.exists():
+            return False
+        with path.open("r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+        if not isinstance(doc, dict):
+            return False
+        doc.setdefault("metadata", {})["promoted_to_fix"] = promoted_to_fix
+        doc["metadata"]["promoted_at"] = promoted_at or _iso_now()
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(doc, fh, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default)
+            fh.write("\n")
+        return True
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 def _coverage_candidates(root: Path) -> List[Path]:
     explicit = os.environ.get("XCMAX_COVERAGE_JSON")
     candidates = [Path(explicit).expanduser()] if explicit else []
@@ -682,6 +803,7 @@ def build_self_evolution_context(
     proactive = collect_proactive_signals()
     fix_hits = search_fix_knowledge(query, limit=3)
     pattern_hits = search_code_patterns(query, limit=5)
+    failure_hits = search_failure_patterns(query, limit=3)
     try:
         from modstore_server.self_evolution_kb_redisvl import status as redisvl_status
 
@@ -694,9 +816,11 @@ def build_self_evolution_context(
         }
     context = {
         "fix_knowledge_hits": fix_hits,
+        "failure_pattern_hits": failure_hits,
         "kb_root": str(kb_root()),
         "kb_search": {
             "engine": "redisvl_primary_with_fhd_rag_lexical_fallback",
+            "failure_hit_count": len(failure_hits),
             "fix_hit_count": len(fix_hits),
             "pattern_hit_count": len(pattern_hits),
             "redisvl_status": kb_backend_status,
@@ -809,10 +933,22 @@ def record_loop_evolution_knowledge(
         summary=pattern_info["summary"],
         metadata={**metadata, "fix_path": fix_doc.get("_path")},
     )
+    # Mark matching failure patterns as promoted to this fix
+    promoted_failures = []
+    try:
+        failure_hits = search_failure_patterns(symptom, limit=5)
+        for hit in failure_hits:
+            if hit.get("metadata", {}).get("promoted_to_fix") is None:
+                fp = str(hit.get("_path") or "")
+                if fp and mark_failure_pattern_promoted(fp, promoted_to_fix=fix_doc.get("_path", "")):
+                    promoted_failures.append(fp)
+    except Exception:
+        pass
     return {
         "fix_path": fix_doc.get("_path"),
         "pattern": pattern_doc.get("pattern"),
         "pattern_path": pattern_doc.get("_path"),
+        "promoted_failures": promoted_failures,
     }
 
 
@@ -946,15 +1082,19 @@ __all__ = [
     "evaluate_evolution_regression",
     "infer_pattern_from_diff",
     "kb_root",
+    "mark_failure_pattern_promoted",
     "record_code_pattern",
     "record_evolution_metrics",
+    "record_failure_pattern",
     "record_fix_knowledge",
     "record_loop_evolution_knowledge",
     "render_self_evolution_context",
     "salvage_kb_from_workspace",
     "search_code_patterns",
+    "search_failure_patterns",
     "search_fix_knowledge",
     "validate_code_pattern_payload",
+    "validate_failure_pattern_payload",
     "validate_fix_knowledge_payload",
     "validate_kb_payload",
     "workspace_root",

@@ -1492,6 +1492,95 @@ def _extract_failure_reason(
     return "ok_false_unknown_reason"
 
 
+# ── Failure pattern sedimentation ────────────────────────────────────────────
+
+_FAILURE_RULE_HINTS: Dict[str, str] = {
+    "output_failed": "The handler output was rejected. Check handler imports and function signatures before reporting completion.",
+    "path_guard_violation": "Your change touched paths outside the allowed scope. Restrict changes to the specified module.",
+    "handler_failed": "The employee handler crashed. Verify the handler entrypoint exists and is callable.",
+    "delivery_validation_failed": "Delivery validation command failed. Run the exact command locally and fix until exit 0.",
+    "para_error": "Para API dispatch failed. Check device online status and API connectivity before dispatch.",
+    "para_status": "Para task reported failure. Verify the task completed successfully before reporting.",
+    "inner_status": "Inner employee execution reported failure status. Check the employee's own error output.",
+    "blocked_by_risk_middleware": "Risk middleware blocked the change. Reduce scope or add safety evidence.",
+    "codex_cli_failed": "Codex CLI execution failed. Check CLI availability and retry with simpler instructions.",
+    "codex_cli_timeout": "Codex CLI timed out. Break the task into smaller steps.",
+    "report_only_executor_failed": "Report-only executor failed. Ensure the report-only task does not mutate files.",
+    "agent_gave_up": "Agent gave up. Simplify the task or break into smaller subtasks.",
+    "agent_needs_human": "Agent requested human intervention. Escalate if this recurs.",
+    "agent_max_rounds_reached": "Agent hit max tool-call rounds. Reduce task complexity.",
+    "ok_false_unknown_reason": "Unknown failure. Inspect report excerpt and logs for clues.",
+}
+
+
+def _normalize_failure_signature(
+    step: str, failure_reason: str, gaps: List[str]
+) -> str:
+    """Normalize a failure into a stable signature for dedup."""
+    reason = (failure_reason or "").strip()
+    prefix = reason.split(":")[0].strip() if ":" in reason else reason
+    if not prefix:
+        prefix = "unknown"
+    detail = ""
+    if ":" in reason:
+        rest = reason.split(":", 1)[1].strip()
+        detail = rest.split()[0] if rest.split() else ""
+    detail = re.sub(r"[^a-zA-Z0-9_-]", "", detail).lower()
+    gap_category = ""
+    if gaps and isinstance(gaps, list):
+        gap_category = str(gaps[0] or "").split(".")[0].split(":")[0][:50]
+    return f"{step}:{prefix}:{detail}:{gap_category}"
+
+
+def _extract_corrective_hint(failure_reason: str, report_excerpt: str) -> str:
+    """Extract a corrective hint using rules only (no LLM on failure path)."""
+    prefix = (failure_reason or "").split(":")[0].strip()
+    if prefix in _FAILURE_RULE_HINTS:
+        return _FAILURE_RULE_HINTS[prefix]
+    tail = (report_excerpt or "").strip()[-500:]
+    if tail:
+        return f"Unknown failure. Last report excerpt: {tail}"
+    return "No corrective hint available."
+
+
+def _sediment_failure_pattern(
+    *,
+    step: str,
+    failure_reason: str,
+    report_excerpt: str,
+    gaps: List[str],
+    retry_count: int,
+    run_id: str,
+    branch: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Sediment a failure pattern into the KB. Never raises."""
+    try:
+        from modstore_server.self_evolution_knowledge import record_failure_pattern
+
+        signature = _normalize_failure_signature(step, failure_reason, gaps)
+        symptom = "; ".join(str(g) for g in gaps[:3]) if gaps else failure_reason[:200]
+        hint = _extract_corrective_hint(failure_reason, report_excerpt)
+        metadata: Dict[str, Any] = {
+            "run_id": run_id,
+            "component": "self_maintenance_loop_runner",
+        }
+        if branch:
+            metadata["branch"] = branch
+        return record_failure_pattern(
+            failure_signature=signature,
+            symptom=symptom,
+            failure_reason=failure_reason[:4000],
+            step=step,
+            corrective_hint=hint,
+            retry_count=retry_count,
+            failed_approach=(report_excerpt or "")[:6000],
+            metadata=metadata,
+        )
+    except Exception:
+        logger.exception("failed to sediment failure pattern for run=%s", run_id)
+        return None
+
+
 def _extract_para_meta(result: Dict[str, Any]) -> Dict[str, Any]:
     inner = result.get("result") if isinstance(result.get("result"), dict) else result
     outputs = inner.get("outputs") if isinstance(inner, dict) else None
@@ -1924,6 +2013,31 @@ def _code_task_text(
     fix_digest = (
         "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
     )
+    # Inject known failure patterns so the LLM avoids approaches that have
+    # failed before. Uses the same evolution_context_dict already built above.
+    failure_hits = evolution_context_dict.get("failure_pattern_hits") or []
+    failure_digest_parts = []
+    for idx, hit in enumerate(failure_hits[:3], 1):
+        f_signature = str(hit.get("failure_signature") or "")[:200]
+        f_symptom = str(hit.get("symptom") or "")[:200]
+        f_failed = str(hit.get("failed_approach") or "")[:300]
+        f_reason = str(hit.get("failure_reason") or "")[:200]
+        f_hint = str(hit.get("corrective_hint") or "")[:500]
+        f_count = hit.get("occurrence_count", 1)
+        if not f_signature and not f_symptom:
+            continue
+        failure_digest_parts.append(
+            f"[KNOWN FAILURE #{idx} — AVOID THIS APPROACH]\n"
+            f"  signature: {f_signature}\n"
+            f"  symptom: {f_symptom}\n"
+            f"  failed_approach: {f_failed}\n"
+            f"  failure_reason: {f_reason}\n"
+            f"  corrective_hint: {f_hint}\n"
+            f"  occurrence_count: {f_count}"
+        )
+    failure_digest = (
+        "\n\n".join(failure_digest_parts) if failure_digest_parts else "(no known failure patterns matched)"
+    )
     last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
     selected_remediation: Optional[Dict[str, Any]] = None
     if (
@@ -2073,6 +2187,11 @@ def _code_task_text(
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"{score_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
+        f"\n=== KNOWN FAILURE PATTERNS (MUST AVOID) ===\n"
+        f"CRITICAL: Before writing code, review the KNOWN FAILURE PATTERNS below. "
+        f"If the current gap matches a known failure signature, you MUST follow the "
+        f"corrective_hint and avoid the failed_approach. Do not repeat approaches "
+        f"that have failed before.\n{failure_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
 
@@ -5035,6 +5154,39 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             if final.get("para_task_id"):
                 new_item["para_task_id"] = final.get("para_task_id")
             open_items.append(new_item)
+
+        # Failure pattern sedimentation: when retries are exhausted, write the
+        # failure mode to the KB so future runs can avoid the same approach.
+        if failed_steps:
+            gate_gaps = gate.get("gaps") if isinstance(gate, dict) else []
+            if not isinstance(gate_gaps, list):
+                gate_gaps = []
+            # Find the matched/created item to get its retry_count
+            sediment_item = None
+            if existing_idx is not None and existing_idx < len(open_items):
+                sediment_item = open_items[existing_idx]
+            elif open_items and open_items[-1].get("kind") == "failed_steps":
+                sediment_item = open_items[-1]
+            if sediment_item is not None:
+                _sediment_failure_pattern(
+                    step=",".join(failed_steps),
+                    failure_reason=str(
+                        next(
+                            (s.get("error") for s in steps if not s.get("ok")),
+                            "unknown",
+                        )
+                    ),
+                    report_excerpt=str(
+                        next(
+                            (s.get("report_excerpt") for s in steps if not s.get("ok")),
+                            "",
+                        )
+                    ),
+                    gaps=gate_gaps,
+                    retry_count=int(sediment_item.get("retry_count") or 1),
+                    run_id=str(final.get("run_id") or ""),
+                    branch=final.get("branch"),
+                )
     if decision.get("action") == "hold_for_automated_remediation":
         open_items.append(
             {

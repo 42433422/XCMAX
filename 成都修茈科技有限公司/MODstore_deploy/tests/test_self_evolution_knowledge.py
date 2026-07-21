@@ -7,12 +7,16 @@ from modstore_server.self_evolution_knowledge import (
     collect_proactive_signals,
     evaluate_evolution_regression,
     infer_pattern_from_diff,
+    mark_failure_pattern_promoted,
     record_code_pattern,
     record_evolution_metrics,
+    record_failure_pattern,
     record_fix_knowledge,
     record_loop_evolution_knowledge,
     search_code_patterns,
+    search_failure_patterns,
     search_fix_knowledge,
+    validate_failure_pattern_payload,
     validate_fix_knowledge_payload,
 )
 
@@ -207,3 +211,179 @@ def test_auto_merged_loop_records_fix_and_pattern_knowledge(monkeypatch, tmp_pat
     assert record is not None
     assert (tmp_path / "kb" / "fixes").exists()
     assert (tmp_path / "kb" / "patterns").exists()
+
+
+# ── Failure pattern tests ─────────────────────────────────────────────────────
+
+
+def test_failure_pattern_schema_rejects_missing_fields(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+    try:
+        validate_failure_pattern_payload({
+            "schema_version": 1,
+            "kind": "failure_pattern",
+            "created_at": "2026-07-22T00:00:00+00:00",
+            # missing failure_signature, symptom, failure_reason, step, corrective_hint
+            "retry_count": 1,
+            "occurrence_count": 1,
+            "last_seen_at": "2026-07-22T00:00:00+00:00",
+        })
+    except ValueError as exc:
+        assert "failure_signature" in str(exc) or "must be a non-empty string" in str(exc)
+    else:
+        raise AssertionError("missing required fields should fail validation")
+
+
+def test_failure_pattern_schema_rejects_bad_kind(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+    try:
+        validate_failure_pattern_payload({
+            "schema_version": 1,
+            "kind": "fix",
+            "created_at": "2026-07-22T00:00:00+00:00",
+            "failure_signature": "sig",
+            "symptom": "sym",
+            "failure_reason": "reason",
+            "step": "code",
+            "corrective_hint": "hint",
+            "retry_count": 1,
+            "occurrence_count": 1,
+            "last_seen_at": "2026-07-22T00:00:00+00:00",
+        })
+    except ValueError as exc:
+        assert "kind" in str(exc)
+    else:
+        raise AssertionError("wrong kind should fail validation")
+
+
+def test_record_and_search_failure_pattern(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+
+    record_failure_pattern(
+        failure_signature="code:output_failed:handler=vibe-coding-maintainer:gap1",
+        symptom="code step output failed",
+        failure_reason="output_failed: handler=vibe-coding-maintainer error=timeout",
+        step="code",
+        corrective_hint="Check handler imports before reporting completion.",
+        retry_count=3,
+        failed_approach="Tried adding time.sleep to wait for output",
+        metadata={"run_id": "r1", "component": "self_maintenance_loop_runner"},
+    )
+
+    hits = search_failure_patterns("code output failed handler", limit=3)
+    assert hits
+    assert "output_failed" in hits[0].get("failure_reason", "")
+
+
+def test_failure_pattern_dedup_increments_occurrence_count(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+
+    sig = "code:output_failed:handler=test:gap1"
+    record_failure_pattern(
+        failure_signature=sig,
+        symptom="symptom A",
+        failure_reason="output_failed: handler=test",
+        step="code",
+        corrective_hint="hint A",
+        retry_count=1,
+        metadata={"run_id": "r1"},
+    )
+    record_failure_pattern(
+        failure_signature=sig,
+        symptom="symptom A again",
+        failure_reason="output_failed: handler=test",
+        step="code",
+        corrective_hint="hint A v2",
+        retry_count=2,
+        metadata={"run_id": "r2"},
+    )
+
+    docs = search_failure_patterns("output_failed handler test", limit=5)
+    assert len(docs) == 1
+    assert docs[0]["occurrence_count"] == 2
+    assert docs[0]["retry_count"] == 2
+
+
+def test_mark_failure_pattern_promoted(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+
+    fp = record_failure_pattern(
+        failure_signature="code:blocked_by_risk_middleware:gap2",
+        symptom="risk middleware blocked change",
+        failure_reason="blocked_by_risk_middleware",
+        step="code",
+        corrective_hint="Reduce scope or add safety evidence.",
+        retry_count=2,
+        metadata={"run_id": "r1"},
+    )
+    fp_path = fp["_path"]
+    assert fp_path
+
+    result = mark_failure_pattern_promoted(fp_path, promoted_to_fix="/fake/fix/path.json")
+    assert result is True
+
+    hits = search_failure_patterns("risk middleware blocked", limit=3)
+    assert hits
+    assert hits[0].get("metadata", {}).get("promoted_to_fix") == "/fake/fix/path.json"
+
+
+def test_build_self_evolution_context_includes_failure_hits(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+
+    record_failure_pattern(
+        failure_signature="code:codex_cli_timeout:gap3",
+        symptom="codex cli timed out during code generation",
+        failure_reason="codex_cli_timeout",
+        step="code",
+        corrective_hint="Break the task into smaller steps.",
+        retry_count=3,
+        metadata={"run_id": "r1"},
+    )
+
+    context = build_self_evolution_context(
+        run_id="r2",
+        evaluation={"gaps": ["codex cli timed out"], "incident_count": 1, "incident_signals": []},
+        memory={"open_items": [], "recent_runs": [], "last_policy_decision": None},
+    )
+
+    assert "failure_pattern_hits" in context
+    assert context["failure_pattern_hits"]
+
+
+def test_record_loop_evolution_knowledge_promotes_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
+
+    # First, record a failure pattern
+    record_failure_pattern(
+        failure_signature="code:output_failed:handler=test:gap4",
+        symptom="output failed during code step",
+        failure_reason="output_failed: handler=test",
+        step="code",
+        corrective_hint="Check handler imports.",
+        retry_count=3,
+        metadata={"run_id": "r1"},
+    )
+
+    # Now simulate a successful merge for the same symptom
+    final = {
+        "run_id": "r2",
+        "branch": "fix-branch",
+        "para_task_id": "t1",
+        "policy_decision": {
+            "action": "auto_merged_low_risk",
+            "merge_result": {
+                "diff_excerpt": "+import os\n+def fixed():\n+    pass\n",
+                "changed_files": ["modstore_server/foo.py"],
+                "merge_commit_sha": "abc123",
+            },
+            "reason": "low risk fix",
+        },
+        "status": "completed_merged",
+        "steps": [{"step": "qa", "report_excerpt": "QA PASS"}],
+    }
+
+    record = record_loop_evolution_knowledge(final, {"gaps": ["output failed during code step"]})
+
+    assert record is not None
+    assert "promoted_failures" in record
+    assert len(record["promoted_failures"]) >= 1
