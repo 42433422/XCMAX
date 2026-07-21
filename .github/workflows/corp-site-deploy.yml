@@ -73,11 +73,18 @@ jobs:
             bash "${AUTO_SCRIPT}"
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
-            if [ -f "${NGINX_SRC}" ]; then
+            if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
+              echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
+            elif [ -f "${NGINX_SRC}" ]; then
               install -m 644 "${NGINX_SRC}" /etc/nginx/conf.d/xiu-ci-corp-root.conf
-              if nginx -t; then systemctl reload nginx; echo "[ok] nginx reloaded"; fi
             fi
-            echo "[verify] developer.html title:"
-            curl -fsS http://127.0.0.1/developer.html | head -8 | grep -i title || true
+            nginx -t
+            systemctl reload nginx
+            echo "[ok] nginx reloaded"
+            echo "[verify] public corp/download/market surfaces:"
+            curl -fsS https://xiu-ci.com/ >/dev/null
+            curl -fsS https://xiu-ci.com/developer.html >/dev/null
+            curl -fsSL https://xiu-ci.com/market/download >/dev/null
+            curl -fsS https://xiu-ci.com/market/ >/dev/null
             echo "[verify] logo bytes:"
             wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true

@@ -14,6 +14,10 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
     assert 'git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA"' in script
     assert "releases/${TARGET_SHA}" in script
+    assert 'chmod 0555 "$FINAL_ROOT"' in script
+    assert script.index('chmod 0555 "$FINAL_ROOT"') < script.index(
+        'ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"'
+    )
     assert 'mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"' in script
     assert "exact-SHA local health verification failed" in script
     assert 'sha256sum "$SOURCE_ARCHIVE"' in script
@@ -28,7 +32,9 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert script.index('migrate_env_file "$ENV_FILE"') < script.index(
         "import fastapi, uvicorn, modstore_server.app"
     )
-    assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    assert (
+        'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    )
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
@@ -44,17 +50,24 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
     ) < script.index("mvn -B -q -DskipTests package")
 
-    source_ci = yaml.safe_load((ROOT / ".github/workflows/ci-backend-python.yml").read_text())
+    source_ci = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-backend-python.yml").read_text()
+    )
     published_ci = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/modstore-ci-backend-python.yml").read_text()
     )
     source_java_job = source_ci["jobs"]["java-payment-test"]
     published_java_job = published_ci["jobs"]["java-payment-test"]
-    assert source_java_job["defaults"]["run"]["working-directory"] == "java_payment_service"
+    assert (
+        source_java_job["defaults"]["run"]["working-directory"]
+        == "java_payment_service"
+    )
     assert published_java_job["defaults"]["run"]["working-directory"] == (
         "成都修茈科技有限公司/MODstore_deploy/java_payment_service"
     )
-    assert any(step.get("run") == "mvn -B test package" for step in source_java_job["steps"])
+    assert any(
+        step.get("run") == "mvn -B test package" for step in source_java_job["steps"]
+    )
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
@@ -72,3 +85,25 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
         assert "TARGET_SHA" in rendered
         assert "xcmax-immutable-release.sh" in rendered
         assert "reset --hard" not in rendered
+
+
+def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> (
+    None
+):
+    updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    canonical_vhost = "/etc/nginx/conf.d/xiu-ci.com.conf"
+    assert canonical_vhost in updater
+    assert canonical_vhost in workflow
+    assert "skip conflicting standalone corp vhost" in workflow
+    for public_url in (
+        "https://xiu-ci.com/",
+        "https://xiu-ci.com/developer.html",
+        "https://xiu-ci.com/market/download",
+        "https://xiu-ci.com/market/",
+    ):
+        assert public_url in workflow
+    assert "developer.html | head -8 | grep -i title || true" not in workflow
