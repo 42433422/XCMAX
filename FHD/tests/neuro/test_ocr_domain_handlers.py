@@ -60,7 +60,7 @@ class TestPublishEvent:
 
         assert event_id
         assert captured[0].event_type == "ocr.test"
-        assert captured[0].source == "UnitTest"
+        assert captured[0].payload.get("source") == "UnitTest"
 
     def test_returns_empty_string_on_recoverable_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -231,11 +231,9 @@ class TestHandleOcrCompleted:
             lambda event_type, payload, **kw: "evt-id",
         )
 
-        event = NeuroEvent(
-            event_type="ocr.completed",
-            payload=None,
-            source="test",
-        )
+        event = MagicMock()
+        event.event_type = "ocr.completed"
+        event.payload = None
         result = await handle_ocr_completed(event)
 
         assert result["success"] is False  # empty doc_type → unsupported

@@ -76,7 +76,7 @@ class TestPublishEvent:
 
         assert event_id
         assert captured[0].event_type == "inventory.test"
-        assert captured[0].source == "UnitTest"
+        assert captured[0].payload.get("source") == "UnitTest"
 
     def test_returns_empty_string_on_recoverable_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -306,11 +306,9 @@ class TestHandleAutoInboundRequested:
             lambda event_type, payload, **kw: "evt-id",
         )
 
-        event = NeuroEvent(
-            event_type="inventory.auto_inbound_requested",
-            payload=None,
-            source="test",
-        )
+        event = MagicMock()
+        event.event_type = "inventory.auto_inbound_requested"
+        event.payload = None
         result = await handle_auto_inbound_requested(event)
 
         assert result["success"] is True

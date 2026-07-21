@@ -70,8 +70,8 @@ class TestPublishEvent:
 
         assert event_id  # non-empty string
         assert captured_event[0].event_type == "report.test"
-        assert captured_event[0].payload == {"k": "v"}
-        assert captured_event[0].source == "UnitTest"
+        assert captured_event[0].payload.get("k") == "v"
+        assert captured_event[0].payload.get("source") == "UnitTest"
 
     def test_returns_empty_string_on_recoverable_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -264,11 +264,9 @@ class TestHandleMonthlySummaryRequested:
             lambda event_type, payload, **kw: "evt-id",
         )
 
-        event = NeuroEvent(
-            event_type="report.monthly_summary_requested",
-            payload=None,
-            source="test",
-        )
+        event = MagicMock()
+        event.event_type = "report.monthly_summary_requested"
+        event.payload = None
         result = await handle_monthly_summary_requested(event)
 
         assert result["success"] is True

@@ -95,7 +95,7 @@ class TestPublishEvent:
 
         assert event_id
         assert captured[0].event_type == "finance.test"
-        assert captured[0].source == "UnitTest"
+        assert captured[0].payload.get("source") == "UnitTest"
 
     def test_returns_empty_string_on_recoverable_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -300,11 +300,9 @@ class TestHandleApprovalRequested:
             lambda event_type, payload, **kw: "evt-id",
         )
 
-        event = NeuroEvent(
-            event_type="finance.approval_requested",
-            payload=None,
-            source="test",
-        )
+        event = MagicMock()
+        event.event_type = "finance.approval_requested"
+        event.payload = None
         result = await handle_approval_requested(event)
 
         assert result["success"] is True
@@ -489,11 +487,9 @@ class TestHandleApprovalCompleted:
             lambda event_type, payload, **kw: "evt-id",
         )
 
-        event = NeuroEvent(
-            event_type="finance.approval_completed",
-            payload=None,
-            source="test",
-        )
+        event = MagicMock()
+        event.event_type = "finance.approval_completed"
+        event.payload = None
         result = await handle_approval_completed(event)
 
         # None payload → decision="" → unknown decision path
