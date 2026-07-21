@@ -282,18 +282,7 @@
 
   function paintMonitor(data) {
     const grid = document.querySelector('[data-viz-monitor-grid]')
-    const issuesHost = document.querySelector('[data-viz-monitor-issues]')
     const monitor = data.monitor || null
-    if (issuesHost) {
-      const issues = Array.isArray(monitor && monitor.issues) ? monitor.issues : []
-      issuesHost.replaceChildren(
-        ...issues.map((text) => {
-          const li = document.createElement('li')
-          li.textContent = String(text)
-          return li
-        }),
-      )
-    }
     if (!grid) return
     const dashboards = Array.isArray(monitor && monitor.dashboards) ? monitor.dashboards : []
     if (dashboards.length === 0) {

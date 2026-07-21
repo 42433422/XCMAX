@@ -30,11 +30,43 @@
           decoding="async"
         />
         <div class="panel-head__titles">
-          <span class="panel-head__title">AI 管家</span>
+          <span class="panel-head__title">{{ corpMode ? '小C' : 'AI 管家' }}</span>
           <span class="panel-head__sub">{{ corpMode ? '官网咨询助手' : '当前页面助手' }}</span>
         </div>
       </div>
       <div class="panel-head__actions" @pointerdown.stop>
+        <button
+          v-if="corpMode"
+          type="button"
+          class="panel-icon-btn"
+          :class="{ 'panel-icon-btn--active': proactiveIntroOn }"
+          :aria-label="proactiveIntroOn ? '关闭主动介绍' : '开启主动介绍'"
+          :title="proactiveIntroOn ? '主动介绍：开（点击关闭）' : '主动介绍：关（点击开启）'"
+          @click.stop="toggleProactiveIntro"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M11 5L6 9H3v6h3l5 4V5z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <path
+              v-if="proactiveIntroOn"
+              d="M16 9a4 4 0 010 6M18.5 7a7 7 0 010 10"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+            <path
+              v-else
+              d="M16 10l4 4M20 10l-4 4"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
         <button
           v-if="!corpMode"
           type="button"
@@ -179,6 +211,11 @@ import type { AgentHandleInputFn } from '../../composables/agent/agentEngineInje
 import { useVoiceInput } from '../../composables/agent/useVoiceInput'
 import { getActionLog } from '../../composables/agent/useActionExecutor'
 import { saveCorpBallPosition } from '../../corp-butler/corpBallPosition'
+import {
+  isCorpProactiveIntroEnabled,
+  setCorpProactiveIntroEnabled,
+  stopCorpIntroSpeech,
+} from '../../corp-butler/corpPageIntro'
 import AgentStatusBar from './AgentStatusBar.vue'
 import AgentChatHistory from './AgentChatHistory.vue'
 import ButlerFilesDrawer from './ButlerFilesDrawer.vue'
@@ -196,6 +233,20 @@ const props = withDefaults(
   }>(),
   { corpMode: false },
 )
+
+const emit = defineEmits<{
+  (e: 'proactive-intro-change', enabled: boolean): void
+}>()
+
+const proactiveIntroOn = ref(isCorpProactiveIntroEnabled())
+
+function toggleProactiveIntro() {
+  const next = !proactiveIntroOn.value
+  proactiveIntroOn.value = next
+  setCorpProactiveIntroEnabled(next)
+  if (!next) stopCorpIntroSpeech()
+  emit('proactive-intro-change', next)
+}
 
 const agentStore = useAgentStore()
 const trayStore = useButlerWorkbenchTrayStore()
@@ -505,6 +556,11 @@ function autoResize() {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.panel-icon-btn--active {
+  color: rgba(96, 165, 250, 0.95);
+  background: rgba(59, 130, 246, 0.12);
+}
+
 /* 操作日志 */
 .panel-log {
   padding: 8px 12px;
@@ -665,6 +721,11 @@ function autoResize() {
 .butler-panel--light .panel-icon-btn:hover {
   background: rgba(219, 234, 254, 0.72);
   color: #1e3a8a;
+}
+
+.butler-panel--light .panel-icon-btn--active {
+  color: #1d4ed8;
+  background: rgba(191, 219, 254, 0.85);
 }
 
 .butler-panel--light .panel-log {
