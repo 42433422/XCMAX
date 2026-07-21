@@ -2024,10 +2024,11 @@
 
 
     <div class="section" id="s-gaps" role="tabpanel" aria-labelledby="nav-gaps">
-      <div class="arch-title">断点清单 — 战略-执行分层机制（2026-07-20 快照）</div>
+      <div class="arch-title">断点清单 — 战略-执行分层机制（2026-07-21 快照）</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7">
-        数据源：<code>strategic_layer_api.py</code> + <code>tests/test_strategic_layer.py</code>（43 通过 / 0.60s） · 状态随战略层服务回写
-        · <strong>单一数据源</strong></div>
+        看板 SSOT：<code>daily_action_items</code>（API <code>/api/admin/action-items?kind=patch</code>）·
+        战略层镜像：<code>digest_strategic_bridge</code> → <code>strategic_action_items</code> ·
+        状态随 digest / line-execute / deploy 回写</div>
       <div id="ai-patch-board" class="ai-board ai-board-slot" aria-label="今日 AI 补丁清单（固定看板）">
         <div class="gap-grid">
 
@@ -2059,17 +2060,19 @@
               council_meeting.py</a>
           </div>
 
-          <div class="gap-card">
-            <span class="gap-pri p1">P1 · PARTIAL</span>
-            <div class="gap-name">daily-digest 自治决策</div>
-            <div class="gap-desc">daily-digest 骨架已存在（<code>digest_daily_line_chain.py</code> Phase A/B/C），但 digest
-              触发战略决策记录的链路未打通。下一步：在 daily-digest 派发完成后，调用 <code>StrategicDecisionLedger.propose()</code> 自动入账"待审批"决策。
+          <div class="gap-card resolved">
+            <span class="gap-pri ok">DONE</span>
+            <div class="gap-name">daily-digest → 战略层行动项桥接</div>
+            <div class="gap-desc">Vibe 双清单落库后由 <code>digest_strategic_bridge.sync_daily_to_strategic</code>
+              幂等镜像到 <code>strategic_action_items</code>（稳定 <code>act-dai-{id}</code>）；日常成功日自动提案
+              <code>track_digest_action_items</code>（report_only）；失败 / installer / major 复用
+              <code>trigger_strategic_layer_dispatch</code> 的 decision_id。line-execute / deploy 回写后再次 sync。
             </div>
-            <div class="gap-loop build">digest_daily_line_chain → strategic_layer</div>
-            <div class="gap-resolved" style="color:var(--orange)">骨架 100% / 集成 0% — 待 todo 11</div>
+            <div class="gap-loop build">daily_action_items → digest_strategic_bridge → strategic_action_items</div>
+            <div class="gap-resolved">2026-07-21 已打通</div>
             <a class="gap-fix-link"
-              href="file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_daily_line_chain.py">→
-              digest_daily_line_chain.py</a>
+              href="file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_layer/digest_strategic_bridge.py">→
+              digest_strategic_bridge.py</a>
           </div>
 
           <div class="gap-card resolved">
@@ -2143,10 +2146,11 @@
     </div>
 
     <div class="section" id="s-roadmap" role="tabpanel" aria-labelledby="nav-roadmap">
-      <div class="arch-title">实现目标 / 路线图 — 战略-执行分层（2026-07-20 快照）</div>
+      <div class="arch-title">实现目标 / 路线图 — 战略-执行分层（2026-07-21 快照）</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7">
-        数据源：<code>strategic_layer_api.py</code> 24 路由 + <code>tests/test_strategic_layer.py</code> 43 测试 ·
-        状态随战略层服务派发自动闭环 · <strong>单一数据源</strong></div>
+        看板 SSOT：<code>daily_action_items</code>（API <code>/api/admin/action-items?kind=update</code>）·
+        战略层镜像：<code>digest_strategic_bridge</code> → <code>strategic_action_items</code> ·
+        状态随 digest / line-execute / deploy 回写</div>
       <div id="ai-update-board" class="ai-board ai-board-slot" aria-label="今日 AI 更新清单（固定看板）">
         <div class="gap-grid">
 
@@ -2231,17 +2235,19 @@
               strategic_layer_api.py</a>
           </div>
 
-          <div class="gap-card">
-            <span class="gap-pri p1">P1 · NEXT</span>
-            <div class="gap-name">daily-digest → 战略决策 集成</div>
-            <div class="gap-desc">在 <code>digest_daily_line_chain.py</code> Phase C 完成后，自动调用
-              <code>StrategicDecisionLedger.propose()</code> 把当日 digest 结果入账为"待审批"决策。包含：每日 incident 数 ≥ 阈值触发
-              incident_review 会议、连续 3 天 SLO 未达触发 weekly_review 提前召开。</div>
-            <div class="gap-loop build">digest_daily_line_chain → strategic_layer</div>
-            <div class="gap-resolved" style="color:var(--orange)">规划中 — todo 11</div>
+          <div class="gap-card resolved">
+            <span class="gap-pri ok">SHIPPED</span>
+            <div class="gap-name">daily-digest → 战略决策 / 行动项集成</div>
+            <div class="gap-desc">失败 review / installer·major 复盘由
+              <code>trigger_strategic_layer_dispatch</code> 提案；日常成功日由
+              <code>digest_strategic_bridge</code> 提案 <code>track_digest_action_items</code>（report_only）并镜像
+              <code>daily_action_items</code>。后续可选：incident 阈值 / SLO 连续未达触发
+              incident_review / weekly_review 会议。</div>
+            <div class="gap-loop build">digest_strategic_bridge + digest_daily_line_chain → strategic_layer</div>
+            <div class="gap-resolved">2026-07-21 行动项桥接已交付</div>
             <a class="gap-fix-link"
-              href="file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_daily_line_chain.py">→
-              digest_daily_line_chain.py</a>
+              href="file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_layer/digest_strategic_bridge.py">→
+              digest_strategic_bridge.py</a>
           </div>
 
           <div class="gap-card">

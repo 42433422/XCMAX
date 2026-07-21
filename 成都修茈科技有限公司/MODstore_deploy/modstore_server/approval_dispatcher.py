@@ -131,6 +131,14 @@ def deploy_staged_change(
         sync_merged_on_deploy()
     except Exception:
         logger.exception("action_items merge writeback failed staged_id=%s", staged_id)
+    try:
+        from modstore_server.strategic_layer.digest_strategic_bridge import (
+            sync_record_after_status_writeback,
+        )
+
+        sync_record_after_status_writeback()
+    except Exception:
+        logger.exception("strategic action bridge after deploy failed staged_id=%s", staged_id)
 
     # 自动 merge PR（若启用）
     auto_pr = os.environ.get("MODSTORE_AUTO_PR_ENABLED", "1").strip().lower() in (

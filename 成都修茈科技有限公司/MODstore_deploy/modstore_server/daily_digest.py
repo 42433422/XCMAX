@@ -488,6 +488,24 @@ def _run_scheduled_digest_vibe_prep(
                 report_action_items(day=day, record_id=record_id)
             except Exception:
                 logger.exception("collab report (action items) failed record_id=%s", record_id)
+            try:
+                from modstore_server.strategic_layer.digest_strategic_bridge import (
+                    sync_daily_to_strategic,
+                )
+
+                bridge = sync_daily_to_strategic(
+                    record_id=int(record_id),
+                    release_train=rt_after,
+                )
+                logger.info(
+                    "daily digest: strategic bridge record_id=%s created=%s updated=%s ok=%s",
+                    record_id,
+                    bridge.get("created"),
+                    bridge.get("updated"),
+                    bridge.get("ok"),
+                )
+            except Exception:
+                logger.exception("daily digest: strategic bridge failed record_id=%s", record_id)
         except Exception:
             logger.exception("daily digest: action items store failed record_id=%s", record_id)
     if result.get("ok"):
