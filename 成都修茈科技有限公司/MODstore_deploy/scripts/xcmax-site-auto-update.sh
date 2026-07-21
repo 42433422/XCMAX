@@ -253,7 +253,7 @@ sync_site_static() {
   fi
   local paths=(
     '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'visualization.js'
-    'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.json' 'download-action-board.js'
+    'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.json' 'download-action-board.js' 'download-company-hall.json'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
   for p in "${paths[@]}"; do
