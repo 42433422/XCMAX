@@ -11,6 +11,7 @@ from modstore_server.models import User
 from modstore_server.self_maintenance_loop_runner import (
     get_self_maintenance_runtime_status,
     record_governance_audit_review,
+    run_self_maintenance_loop,
 )
 
 router = APIRouter(prefix="/api/ops/self-maintenance", tags=["ops"])
@@ -23,6 +24,22 @@ async def get_self_maintenance_status(
     """Read the scheduler/ledger/memory state consumed by the loop."""
 
     return get_self_maintenance_runtime_status(limit=limit)
+
+
+@router.post("/run", summary="Force-run one self-maintenance loop transaction")
+async def force_run_self_maintenance_loop(
+    body: Dict[str, Any] = Body(default_factory=dict),
+    admin_user: User = Depends(require_admin),
+):
+    """Admin break-glass: run one loop cycle now (force=True bypasses cooldown gate)."""
+
+    reason = str(body.get("reason") or "admin_force_run").strip() or "admin_force_run"
+    result = run_self_maintenance_loop(
+        triggered_by=f"admin:{getattr(admin_user, 'id', '') or 'unknown'}",
+        force=True,
+        reason=reason,
+    )
+    return {"ok": True, "result": result}
 
 
 @router.post("/governance-review", summary="Acknowledge self-maintenance governance audit")

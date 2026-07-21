@@ -254,18 +254,34 @@ jobs:
           AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${AUTONOMY_CALLBACK_URL:-}" ] || [ -z "${AUTONOMY_WEBHOOK_TOKEN:-}" ]; then
+            echo "Autonomy callback config missing; skip ledger write (deploy already succeeded)."
+            exit 0
+          fi
           payload="$(jq -nc \
             --arg action_id "$ACTION_ID" \
             --arg approval_id "$APPROVAL_ID" \
             --arg approver "$APPROVER" \
             --arg workflow_action "${{ inputs.action }}" \
             '{action_id:$action_id,approval_id:$approval_id,approver:$approver,workflow_action:$workflow_action,decision:"executed",outcome:{workflow_action:$workflow_action}}')"
-          curl --fail-with-body --silent --show-error \
+          body="${RUNNER_TEMP}/autonomy-executed-callback.json"
+          status="$(curl --silent --show-error --output "$body" --write-out '%{http_code}' \
             -X POST "$AUTONOMY_CALLBACK_URL" \
             -H "Authorization: Bearer $AUTONOMY_WEBHOOK_TOKEN" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Actor: $APPROVER" \
-            --data "$payload"
+            --data "$payload" || true)"
+          cat "$body" || true
+          if [[ "$status" == 2* ]]; then
+            exit 0
+          fi
+          # Break-glass / manual action_id 不在 pending ledger 时 404/409：部署已成功，不把整次 run 打成失败
+          if [ "$status" = "404" ] || [ "$status" = "409" ]; then
+            echo "No pending autonomy action for action_id=$ACTION_ID (HTTP $status); non-fatal after successful deploy."
+            exit 0
+          fi
+          echo "::error::Autonomy executed callback returned HTTP $status"
+          exit 1
 
   report-autonomy-failure:
     name: Report autonomy execution failure
@@ -308,8 +324,12 @@ jobs:
           if [[ "$status" == 2* ]]; then
             exit 0
           fi
-          if [ "$status" = "409" ] && grep -qE 'already terminal|was rejected' "$response_body"; then
-            echo "Autonomy action was already terminal; callback is idempotently complete."
+          if [ "$status" = "409" ] && grep -qE 'already terminal|was rejected|approved action not found' "$response_body"; then
+            echo "Autonomy action already terminal or absent; callback idempotent/non-fatal."
+            exit 0
+          fi
+          if [ "$status" = "404" ]; then
+            echo "Autonomy action not found (HTTP 404); non-fatal for break-glass action_id."
             exit 0
           fi
           echo "::error::Autonomy failure callback returned HTTP $status"
