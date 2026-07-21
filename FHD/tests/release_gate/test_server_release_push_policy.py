@@ -252,7 +252,9 @@ def test_autonomy_deploy_has_no_human_environment_approval() -> None:
     assert "needs: cvm-rolling" in deploy
     assert "needs['cvm-rolling'].result != 'success'" in deploy
     assert 'decision="execution_failed"' in deploy
-    assert "Autonomy action was already terminal" in deploy
+    assert ("Autonomy action was already terminal" in deploy) or (
+        "Autonomy action already terminal or absent" in deploy
+    )
     assert "\n    environment:\n" not in deploy
     assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
     assert "Resume approved autonomy action" not in deploy

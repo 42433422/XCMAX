@@ -191,6 +191,7 @@
   "/api/neurobus/health",
   "/api/neurobus/stats",
   "/api/ops/autonomy/actions/evaluate",
+  "/api/ops/autonomy/actions/ingest",
   "/api/ops/autonomy/actions/pending",
   "/api/ops/autonomy/actions/request",
   "/api/ops/autonomy/actions/{action_id}/reject",
