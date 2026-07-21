@@ -207,18 +207,18 @@ async def admin_autonomy_overview(request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
+    from app.application import self_maintenance_app_service as sm_svc
     from app.application.autonomy.admin_overview import (
         closure_gap_count,
         extract_loop_run_summary,
         list_deploy_events,
         operating_metrics_windows,
     )
+    from app.application.autonomy.approval_resume import list_pending_actions
     from app.application.autonomy.audit_log import (
         list_autonomy_audit,
         summarize_autonomy_audit,
     )
-    from app.application.autonomy.approval_resume import list_pending_actions
-    from app.application import self_maintenance_app_service as sm_svc
     from app.application.ops_closure_status import build_ops_closure_status
 
     audit_items = list_autonomy_audit(limit=20)
@@ -236,7 +236,10 @@ async def admin_autonomy_overview(request: Request):
 
     closure: dict[str, Any] = {}
     try:
-        closure = {"success": True, "data": build_ops_closure_status(await _remote_duty_health(request))}
+        closure = {
+            "success": True,
+            "data": build_ops_closure_status(await _remote_duty_health(request)),
+        }
     except RECOVERABLE_ERRORS as exc:
         logger.warning("autonomy overview closure status failed: %s", exc)
         closure = {"success": False, "error": str(exc)}
@@ -333,7 +336,9 @@ async def admin_force_self_maintenance_run(request: Request):
         body = {}
     if not isinstance(body, dict):
         body = {}
-    reason = str(body.get("reason") or "admin_console_force_run").strip() or "admin_console_force_run"
+    reason = (
+        str(body.get("reason") or "admin_console_force_run").strip() or "admin_console_force_run"
+    )
     try:
         result = await sm_svc.force_run_local(reason=reason)
         return {"ok": True, "result": result}

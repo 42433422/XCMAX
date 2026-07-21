@@ -7,13 +7,13 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-UTC = timezone.utc
+UTC = UTC
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -150,10 +150,7 @@ def extract_loop_run_summary(runtime: dict[str, Any] | None) -> dict[str, Any]:
     timelines = data.get("run_timelines") if isinstance(data.get("run_timelines"), list) else []
     latest_timeline = timelines[0] if timelines and isinstance(timelines[0], dict) else {}
     status = (
-        last_run.get("status")
-        or latest_timeline.get("status")
-        or data.get("status")
-        or "unknown"
+        last_run.get("status") or latest_timeline.get("status") or data.get("status") or "unknown"
     )
     run_id = last_run.get("run_id") or latest_timeline.get("run_id")
     return {
@@ -387,8 +384,7 @@ def read_cross_tier_audit(
     path_map = {
         "desktop": Path.home() / ".xcagi" / "autonomy" / "audit.jsonl",
         "server": Path(
-            os.environ.get("XCAGI_AUTONOMY_AUDIT_LOG_PATH")
-            or "/opt/fhd-full/autonomy/audit.jsonl"
+            os.environ.get("XCAGI_AUTONOMY_AUDIT_LOG_PATH") or "/opt/fhd-full/autonomy/audit.jsonl"
         ),
         "ci": _FHD_ROOT / ".trae" / "autonomy-ci" / "audit.jsonl",
     }
