@@ -636,13 +636,14 @@ def _build_messages(
     page_context: str | None,
     *,
     user: User | None = None,
+    db: Session | None = None,
 ) -> List[Dict[str, Any]]:
     """组装最终 messages：小C SSOT 人设 + 对话对象 + 管理端知识库 + 页面上下文。"""
     from modstore_server.xiaoc_cs_ssot import (
         format_visitor_block,
-        identity_from_user,
         knowledge_block_for_query,
         last_user_text,
+        resolve_user_identity,
         xiaoc_system_prompt,
     )
 
@@ -662,7 +663,9 @@ def _build_messages(
             or line.startswith("回复要简洁")
         )
     if user is not None:
-        vb = format_visitor_block(identity_from_user(user, source="butler"))
+        vb = format_visitor_block(
+            resolve_user_identity(user, db=db, source="butler")
+        )
         if vb:
             system_content += f"\n\n{vb}"
     user_q = last_user_text(body.messages)
@@ -755,21 +758,23 @@ def _build_corp_messages(
     body: CorpChatDTO,
     *,
     user: User | None = None,
+    db: Session | None = None,
 ) -> List[Dict[str, Any]]:
     """官网公开咨询：统一小C 人设 + 对话对象 + 管理端 persy 知识库。"""
     from modstore_server.xiaoc_cs_ssot import (
         format_visitor_block,
         identity_from_guest,
-        identity_from_user,
         knowledge_block_for_query,
         last_user_text,
+        resolve_user_identity,
         xiaoc_system_prompt,
     )
 
     system_content = xiaoc_system_prompt(mode="corp")
     if user is not None:
-        identity = identity_from_user(
+        identity = resolve_user_identity(
             user,
+            db=db,
             source="corp",
             visitor_id=body.visitor_id or "",
         )
@@ -877,7 +882,7 @@ async def butler_corp_chat(
         optional_user = get_optional_user(authorization)
     except Exception:  # noqa: BLE001
         optional_user = None
-    msgs = _build_corp_messages(body, user=optional_user)
+    msgs = _build_corp_messages(body, user=optional_user, db=db)
     if not any(m.get("role") == "user" for m in msgs):
         raise HTTPException(400, "messages 须包含至少一条 user 消息")
 
@@ -1113,7 +1118,7 @@ async def butler_chat(
     """非流式 Butler 对话。"""
     provider, model, api_key, key_source, base_url = _resolve_butler_credentials(db, user.id)
     is_byok = key_source == "user_override"
-    msgs = _build_messages(body, body.page_context, user=user)
+    msgs = _build_messages(body, body.page_context, user=user, db=db)
 
     if not msgs:
         raise HTTPException(400, "messages 不能为空")
@@ -1241,7 +1246,7 @@ async def butler_chat_stream(
 ):
     """SSE 流式 Butler 对话（工具调用降级为非流式）。"""
     provider, model, api_key, key_source, base_url = _resolve_butler_credentials(db, user.id)
-    msgs = _build_messages(body, body.page_context, user=user)
+    msgs = _build_messages(body, body.page_context, user=user, db=db)
     is_byok = key_source == "user_override"
 
     if not msgs:

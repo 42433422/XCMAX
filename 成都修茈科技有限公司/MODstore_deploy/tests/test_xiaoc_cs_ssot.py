@@ -135,13 +135,58 @@ class TestVisitorIdentity:
         assert mask_email("ab@x.com") == "a*@x.com"
         assert mask_email("alice@example.com").startswith("a***e@")
         user = SimpleNamespace(id=42, username="alice", email="alice@example.com")
-        ident = identity_from_user(user, source="butler", membership_tier="vip")
+        ident = identity_from_user(user, source="butler", membership_tier="VIP+")
         block = format_visitor_block(ident)
         assert "kind=user" in block
         assert "user_id=42" in block
         assert "alice" in block
-        assert "会员=vip" in block
+        assert "会员=VIP+" in block
         assert "alice@example.com" not in block
+
+    def test_admin_enterprise_and_plan_from_db(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
+
+        user = SimpleNamespace(
+            id=9,
+            username="boss",
+            email="boss@x.com",
+            is_admin=True,
+            is_enterprise=True,
+        )
+        plan_row = SimpleNamespace(plan_id="plan_enterprise", id=1)
+        q = MagicMock()
+        q.filter.return_value.order_by.return_value.first.return_value = plan_row
+        db = MagicMock()
+        db.query.return_value = q
+        ident = resolve_user_identity(user, db=db, source="butler")
+        block = format_visitor_block(ident)
+        assert ident.account_role == "admin"
+        assert ident.membership == "svip"
+        assert "角色=管理员" in block
+        assert "会员=svip" in block
+        assert "套餐=plan_enterprise" in block
+
+    def test_free_user_is_ordinary(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
+
+        user = SimpleNamespace(
+            id=3, username="newbie", email="", is_admin=False, is_enterprise=False
+        )
+        q = MagicMock()
+        q.filter.return_value.order_by.return_value.first.return_value = None
+        db = MagicMock()
+        db.query.return_value = q
+        ident = resolve_user_identity(user, db=db, source="market_cs")
+        block = format_visitor_block(ident)
+        assert ident.membership == "普通用户"
+        assert "会员=普通用户" in block
+        assert "角色=" not in block
 
 
 class TestButlerUsesSsot:
