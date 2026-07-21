@@ -27,19 +27,11 @@ from typing import Any
 
 import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
 
-from app.application.workflow import (
-    HybridRiskGate,
-    LLMWorkflowPlanner,
-    WorkflowEngine,
-    get_approval_service,
-)
 from app.di.registry import get_service_registry
-from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
-
 
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
 from app.application.ai_chat.excel_import_policy import (
@@ -51,6 +43,23 @@ from app.application.ai_chat.excel_import_policy import (
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+
+def _import_workflow_components():
+    from app.application.workflow import (
+        HybridRiskGate,
+        LLMWorkflowPlanner,
+        WorkflowEngine,
+        get_approval_service,
+    )
+
+    return HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service
+
+
+def _import_ai_conversation_service():
+    from app.services import get_ai_conversation_service
+
+    return get_ai_conversation_service
 
 
 class AIChatApplicationService(
@@ -68,6 +77,10 @@ class AIChatApplicationService(
     """
 
     def __init__(self):
+        get_ai_conversation_service = _import_ai_conversation_service()
+        HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service = (
+            _import_workflow_components()
+        )
         self.ai_service = get_ai_conversation_service()
         self.workflow_planner = LLMWorkflowPlanner()
         self.risk_gate = HybridRiskGate()
