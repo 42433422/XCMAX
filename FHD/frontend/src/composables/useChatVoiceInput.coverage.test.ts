@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
-import * as apiBase from '@/utils/apiBase'
+import { voiceApi, type VoiceCommandData } from '@/api/voice'
 import { useChatVoiceInput } from './useChatVoiceInput'
 
 // ── BlobEvent polyfill（jsdom 不提供） ────────────────────────────────
@@ -152,6 +152,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       'voice-input-btn-recording': false,
       'voice-input-btn-transcribing': false,
       'voice-input-btn-error': false,
+      'voice-input-btn-command': false,
     })
     expect(api.voiceButtonIcon.value).toBe('fa-microphone')
     expect(api.voiceButtonText.value).toBe('按住说话')
@@ -329,12 +330,19 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    // mock fetch 转录 API
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, data: { text: '你好世界' } }),
-    } as unknown as Response)
+    // mock voiceApi.voiceCommand 转录 API
+    const voiceCommandSpy = vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValueOnce({
+      success: true,
+      data: {
+        text: '你好世界',
+        intent: null,
+        primary_intent: null,
+        confidence: 0,
+        executed: false,
+        result: null,
+        reason: 'auto_execute_disabled',
+      } as VoiceCommandData,
+    })
 
     const messageInput = ref('')
     const api = useChatVoiceInput({ messageInput, isLoading: ref(false) })
@@ -350,17 +358,17 @@ describe('useChatVoiceInput – coverage ramp', () => {
     // 先触发 dataavailable 事件（填充 voiceChunks），再停止录音
     mockRecorder.dispatchDataAvailable(new Blob(['audio-data'], { type: 'audio/webm' }))
 
-    // 停止录音（非取消）→ 触发 stop 事件 → 读取 voiceChunks → submitVoiceBlob
+    // 停止录音（非取消）→ 触发 stop 事件 → 读取 voiceChunks → submitVoiceCommand
     api.stopVoiceRecording(false)
 
     await nextTick()
     await vi.advanceTimersByTimeAsync(10)
     await nextTick()
 
-    // 验证 fetch 被调用
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/voice/transcribe',
-      expect.objectContaining({ method: 'POST' }),
+    // 验证 voiceApi.voiceCommand 被调用
+    expect(voiceCommandSpy).toHaveBeenCalledWith(
+      expect.any(Blob),
+      expect.objectContaining({ autoExecute: false }),
     )
 
     // 验证转录文字填入
@@ -382,11 +390,18 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, data: { text: '追加文字' } }),
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValueOnce({
+      success: true,
+      data: {
+        text: '追加文字',
+        intent: null,
+        primary_intent: null,
+        confidence: 0,
+        executed: false,
+        result: null,
+        reason: 'auto_execute_disabled',
+      } as VoiceCommandData,
+    })
 
     const messageInput = ref('已有文字')
     const api = useChatVoiceInput({ messageInput, isLoading: ref(false) })
@@ -418,11 +433,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: async () => JSON.stringify({ success: false, message: '服务器错误' }),
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockRejectedValueOnce(new Error('服务器错误'))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -454,11 +465,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: false, error: '模型不可用' }),
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockRejectedValueOnce(new Error('模型不可用'))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -489,7 +496,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'))
+    vi.spyOn(voiceApi, 'voiceCommand').mockRejectedValue(new Error('Network error'))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -520,11 +527,18 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, data: { text: '' } }),
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValueOnce({
+      success: true,
+      data: {
+        text: '',
+        intent: null,
+        primary_intent: null,
+        confidence: 0,
+        executed: false,
+        result: null,
+        reason: 'asr_empty',
+      } as VoiceCommandData,
+    })
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -556,11 +570,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 502,
-      text: async () => 'Bad Gateway',
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockRejectedValueOnce(new Error('Bad Gateway'))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -591,7 +601,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const voiceCommandSpy = vi.spyOn(voiceApi, 'voiceCommand')
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -606,8 +616,8 @@ describe('useChatVoiceInput – coverage ramp', () => {
     await vi.advanceTimersByTimeAsync(10)
     await nextTick()
 
-    // fetch 不应被调用
-    expect(fetchSpy).not.toHaveBeenCalled()
+    // voiceCommand 不应被调用
+    expect(voiceCommandSpy).not.toHaveBeenCalled()
     expect(api.voiceButtonIcon.value).toBe('fa-microphone')
   })
 
@@ -808,11 +818,18 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, data: { text: '超时录音' } }),
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValueOnce({
+      success: true,
+      data: {
+        text: '超时录音',
+        intent: null,
+        primary_intent: null,
+        confidence: 0,
+        executed: false,
+        result: null,
+        reason: 'auto_execute_disabled',
+      } as VoiceCommandData,
+    })
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -871,7 +888,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
     })
 
     const longMsg = 'A'.repeat(100)
-    vi.spyOn(apiBase, 'apiFetch').mockRejectedValueOnce(new Error(longMsg))
+    vi.spyOn(voiceApi, 'voiceCommand').mockRejectedValueOnce(new Error(longMsg))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -905,7 +922,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue('string error')
+    vi.spyOn(voiceApi, 'voiceCommand').mockRejectedValue('string error')
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -918,7 +935,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
     await vi.advanceTimersByTimeAsync(10)
     await flushVoiceAsyncWork()
 
-    expect(api.voiceButtonText.value).toContain('语音识别失败')
+    expect(api.voiceButtonText.value).toContain('语音指令失败')
   })
 
   // ── 转录成功后聚焦输入框 ─────────────────────────────────────────
@@ -936,11 +953,18 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ success: true, data: { text: '测试' } }),
-    } as unknown as Response)
+    vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValueOnce({
+      success: true,
+      data: {
+        text: '测试',
+        intent: null,
+        primary_intent: null,
+        confidence: 0,
+        executed: false,
+        result: null,
+        reason: 'auto_execute_disabled',
+      } as VoiceCommandData,
+    })
 
     // 创建一个 mock DOM 元素
     const mockInput = {
@@ -1049,8 +1073,8 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    // fetch 永不 resolve，保持 transcribing 状态
-    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}))
+    // voiceApi.voiceCommand 永不 resolve，保持 transcribing 状态
+    vi.spyOn(voiceApi, 'voiceCommand').mockReturnValue(new Promise(() => {}))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 

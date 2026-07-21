@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 from app.db.models.workflow import (
     WorkflowDefinition,
@@ -21,7 +21,7 @@ from app.db.models.workflow import (
     WorkflowTriggerSource,
     WorkflowTriggerType,
 )
-from app.errors import AppError, ErrorCode, WorkflowError
+from app.errors import AppError, WorkflowError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -451,7 +451,7 @@ class WorkflowDefinitionAppService:
             from dataclasses import asdict
 
             return asdict(node)
-        except Exception:  # pragma: no cover - 兜底
+        except Exception:  # noqa: BLE001 - 兜底序列化，所有异常都退化为 node_id 字符串
             return {"node_id": str(node)}
 
 

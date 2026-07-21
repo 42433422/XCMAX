@@ -76,7 +76,7 @@ def generate_monthly_finance_summary(
         from sqlalchemy import func
 
         from app.db.models import PurchaseInbound
-        from app.db.models.approval import ApprovalRequest, ApprovalStatus
+        from app.db.models.approval import ApprovalRequest
         from app.db.models.finance import FinancialTransaction
         from app.db.session import get_db
     except RECOVERABLE_ERRORS as exc:
