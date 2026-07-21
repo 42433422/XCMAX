@@ -715,6 +715,7 @@ class DatasetRagApplicationService:
         *,
         tenant_id: str = "",
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        include_documents: bool = True,
     ) -> dict[str, Any]:
         tenant_filter, denied = _resolve_tenant_for_access(
             access_context,
@@ -729,9 +730,19 @@ class DatasetRagApplicationService:
             if dataset_id.strip():
                 dataset_key = _clean_key(dataset_id, default="default")
                 state = self._datasets.get(dataset_key)
-                return self._status_for_state(dataset_key, state, tenant_id_filter=tenant_filter)
+                return self._status_for_state(
+                    dataset_key,
+                    state,
+                    tenant_id_filter=tenant_filter,
+                    include_documents=include_documents,
+                )
             datasets = {
-                key: self._status_for_state(key, state, tenant_id_filter=tenant_filter)
+                key: self._status_for_state(
+                    key,
+                    state,
+                    tenant_id_filter=tenant_filter,
+                    include_documents=include_documents,
+                )
                 for key, state in sorted(self._datasets.items())
             }
         return {
@@ -1370,6 +1381,7 @@ class DatasetRagApplicationService:
         state: _DatasetState | None,
         *,
         tenant_id_filter: str = "",
+        include_documents: bool = True,
     ) -> dict[str, Any]:
         if state is None:
             empty_index = {
@@ -1443,7 +1455,8 @@ class DatasetRagApplicationService:
             "dataset_id": dataset_id,
             "document_count": len(documents),
             "chunk_count": len(chunks),
-            "documents": [doc.to_dict() for doc in documents],
+            # Omniscient/graph HUD only needs counts; full document rows are heavy (hundreds+).
+            "documents": [doc.to_dict() for doc in documents] if include_documents else [],
             "tenant_ids": sorted({doc.tenant_id for doc in documents}),
             "versions": sorted({doc.version_label for doc in documents}),
             "index": index,

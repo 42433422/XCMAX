@@ -888,7 +888,14 @@ def dataset_status_all(request: Request) -> dict[str, Any]:
 
 
 @router.get("/datasets/{dataset_id}/status")
-def dataset_status(dataset_id: str, request: Request) -> dict[str, Any]:
+def dataset_status(
+    dataset_id: str,
+    request: Request,
+    include_documents: bool = FastAPIQuery(
+        True,
+        description="When false, omit document rows (counts/index only) for lighter graph HUD loads",
+    ),
+) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
     access = _dataset_access_context_from_request(request)
@@ -899,6 +906,7 @@ def dataset_status(dataset_id: str, request: Request) -> dict[str, Any]:
                 dataset_id,
                 tenant_id=_dataset_read_tenant_scope(access),
                 access_context=access,
+                include_documents=bool(include_documents),
             )
         ),
     )
@@ -908,7 +916,7 @@ def dataset_status(dataset_id: str, request: Request) -> dict[str, Any]:
 def dataset_graph(
     dataset_id: str,
     request: Request,
-    limit: int = FastAPIQuery(120, ge=20, le=240),
+    limit: int = FastAPIQuery(80, ge=20, le=240),
 ) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
     from app.application.persy_memory_app_service import merge_memory_graph

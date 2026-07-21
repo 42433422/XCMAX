@@ -633,7 +633,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useIndustryStore } from '@/stores/industry'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import PersyKnowledgeGraph, {
@@ -1002,12 +1002,17 @@ function nodeIcon(type: string): string {
 
 let refreshEpoch = 0
 
-async function refreshStatus(expectedDatasetId?: string, epoch?: number): Promise<void> {
+async function refreshStatus(
+  expectedDatasetId?: string,
+  epoch?: number,
+  options: { includeDocuments?: boolean } = {},
+): Promise<void> {
   const datasetId = expectedDatasetId || activeDatasetId.value
   const token = epoch ?? refreshEpoch
+  const includeDocuments = options.includeDocuments === true || viewMode.value === 'sources'
   loadingStatus.value = true
   try {
-    const next = await knowledgeBaseApi.status(datasetId)
+    const next = await knowledgeBaseApi.status(datasetId, { includeDocuments })
     if (token !== refreshEpoch || datasetId !== activeDatasetId.value) return
     status.value = next
   } finally {
@@ -1509,6 +1514,12 @@ function handleOnboardingAction(action: 'upload' | 'paste' | 'chat'): void {
 function resetGraphView(): void {
   graphComponent.value?.resetView()
 }
+
+watch(viewMode, (mode) => {
+  if (mode !== 'sources') return
+  if ((status.value?.documents || []).length > 0) return
+  void refreshStatus(undefined, undefined, { includeDocuments: true })
+})
 
 onMounted(() => {
   void refreshAll()
