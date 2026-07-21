@@ -65,6 +65,9 @@ jobs:
             export XCMAX_ROOT="${REMOTE_ROOT}"
             export XCMAX_GIT_BRANCH="${BRANCH}"
             export XCMAX_GIT_RESET_HARD=1
+            # Always republish static chrome into the nginx live root (immutable
+            # release symlink). Git sync alone only updates /root/XCMAX.
+            export XCMAX_FORCE_SITE_PUBLISH=1
             AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
             if [ ! -f "${AUTO_SCRIPT}" ]; then
               echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
@@ -73,6 +76,33 @@ jobs:
             fi
             bash "${AUTO_SCRIPT}"
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
+            # Publish git-tree site chrome into nginx live root. Production serves
+            # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
+            LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
+            if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
+            GIT_SITE="${SITE_ROOT}"
+            if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
+              echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
+              chmod u+w "${LIVE_SITE}" 2>/dev/null || true
+              mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
+              chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
+              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js"; do
+                [ -e "$f" ] || continue
+                base="$(basename "$f")"
+                chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
+                cp -f "$f" "${LIVE_SITE}/${base}"
+              done
+              if [ -d "${GIT_SITE}/partials" ]; then
+                cp -af "${GIT_SITE}/partials/." "${LIVE_SITE}/partials/"
+              fi
+              if [ -d "${GIT_SITE}/assets" ]; then
+                cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
+              fi
+              chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
+              echo "[ok] live site chrome published"
+            else
+              echo "[info] live site root coincides with git tree or missing; skip publish copy"
+            fi
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
               echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
@@ -87,5 +117,10 @@ jobs:
             curl -fsS https://xiu-ci.com/developer.html >/dev/null
             curl -fsSL https://xiu-ci.com/market/download >/dev/null
             curl -fsS https://xiu-ci.com/market/ >/dev/null
+            echo "[verify] homepage nav + partials are real files (not index fallback):"
+            curl -fsS https://xiu-ci.com/ | grep -q 'site-header\|data-nav="index"\|>首页<'
+            PARTIAL_HEAD="$(curl -fsS https://xiu-ci.com/partials/header.html | head -c 80)"
+            echo "$PARTIAL_HEAD" | grep -qv '<!DOCTYPE html>'
+            echo "$PARTIAL_HEAD" | grep -q 'site-header\|nav-menu'
             echo "[verify] logo bytes:"
             wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true
