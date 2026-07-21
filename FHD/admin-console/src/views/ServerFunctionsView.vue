@@ -486,12 +486,23 @@ async function loadModules() {
   }
 }
 
+function normalizeDigestListPayload(res: any): AnyRow[] {
+  if (Array.isArray(res?.data)) return res.data
+  if (Array.isArray(res?.records)) return res.records
+  if (Array.isArray(res)) return res
+  if (Array.isArray(res?.data?.items)) return res.data.items
+  return []
+}
+
 async function loadDigestRecords() {
   digestLoading.value = true
   digestError.value = ''
   try {
     const res = await api.get<any>('/api/xcmax/admin/daily-digests', { limit: 30 })
-    const rows = Array.isArray(res?.data) ? res.data : []
+    if (res && typeof res === 'object' && res.success === false) {
+      throw new Error(String(res.message || '读取每日摘要失败'))
+    }
+    const rows = normalizeDigestListPayload(res)
     digestRecords.value = rows
     digestLastSynced.value = new Date().toLocaleTimeString()
     await syncDigestIdentityBadge()
