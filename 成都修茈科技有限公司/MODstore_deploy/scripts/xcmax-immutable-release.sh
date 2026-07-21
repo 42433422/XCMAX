@@ -212,6 +212,11 @@ PY
 fi
 unset BUILD_JWT_SECRET
 
+# mktemp creates the build root with mode 0700. The release stays immutable,
+# but the public-site symlink is served by an unprivileged nginx worker, so the
+# release root itself must remain traversable after both build and reuse paths.
+chmod 0555 "$FINAL_ROOT"
+
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
