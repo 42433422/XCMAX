@@ -4460,14 +4460,20 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                             "reason": "online_after_stale_current_task_clear",
                         }
                 if online and current_task:
+                    # Device is online but busy. Do not rewrite online→False (that made
+                    # force-loops burn the full wait window then look "offline").
                     last_status = {
                         "codex_tool": codex_tool,
                         "device_id": device_id,
                         "name": target.get("name"),
-                        "online": False,
+                        "online": True,
+                        "busy": True,
                         "stale_clear": stale_clear,
                         "status": target.get("status"),
                     }
+                    if _env_bool("MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE", False):
+                        return {**last_status, "reason": "online_busy_allowed"}
+                    # Keep polling until idle or timeout; kickstart once in case agent wedged.
                     if kickstart_result is None:
                         kickstart_result = _kickstart_para_agent()
                         headers = None
@@ -4497,12 +4503,17 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                 headers = None
 
         if time.monotonic() >= deadline:
+            was_online = bool(last_status.get("online")) or bool(last_status.get("busy"))
             return {
                 **last_status,
                 "error": last_error,
                 "kickstart": kickstart_result,
-                "online": False,
-                "reason": "device_online_wait_timeout",
+                "online": was_online,
+                "reason": (
+                    "device_busy_wait_timeout"
+                    if last_status.get("busy")
+                    else "device_online_wait_timeout"
+                ),
                 "timeout_sec": timeout_sec,
             }
         time.sleep(poll_sec)

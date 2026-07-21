@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Body, Depends, Query
@@ -34,11 +35,28 @@ async def force_run_self_maintenance_loop(
     """Admin break-glass: run one loop cycle now (force=True bypasses cooldown gate)."""
 
     reason = str(body.get("reason") or "admin_force_run").strip() or "admin_force_run"
-    result = run_self_maintenance_loop(
-        triggered_by=f"admin:{getattr(admin_user, 'id', '') or 'unknown'}",
-        force=True,
-        reason=reason,
+    # Force break-glass: do not stall on a busy Mac codex currentTask.
+    prev_busy = os.environ.get("MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE")
+    prev_wait = os.environ.get("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC")
+    os.environ["MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE"] = "1"
+    os.environ["MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC"] = (
+        prev_wait if (prev_wait or "").strip() else "15"
     )
+    try:
+        result = run_self_maintenance_loop(
+            triggered_by=f"admin:{getattr(admin_user, 'id', '') or 'unknown'}",
+            force=True,
+            reason=reason,
+        )
+    finally:
+        if prev_busy is None:
+            os.environ.pop("MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE", None)
+        else:
+            os.environ["MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE"] = prev_busy
+        if prev_wait is None:
+            os.environ.pop("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC", None)
+        else:
+            os.environ["MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC"] = prev_wait
     return {"ok": True, "result": result}
 
 

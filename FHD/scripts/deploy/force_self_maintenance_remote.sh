@@ -86,7 +86,7 @@ post_run_http() {
   elif [ -n "${TOKEN}" ]; then
     auth_args+=(-H "Authorization: Bearer ${TOKEN}")
   fi
-  local code
+  local code ok_run
   code="$(curl --noproxy '*' -sS --max-time 900 -o /tmp/loop-run.json -w '%{http_code}' \
     -X POST "${base}/api/ops/self-maintenance/run" \
     "${auth_args[@]}" \
@@ -95,7 +95,30 @@ post_run_http() {
   echo "POST /run HTTP ${code}"
   head -c 3000 /tmp/loop-run.json || true
   echo
-  [[ "${code}" == 2* ]]
+  [[ "${code}" == 2* ]] || return 1
+  # HTTP 200 + skipped_active_lease must not count as success.
+  ok_run="$(python3 - <<'PY'
+import json
+try:
+    d = json.load(open("/tmp/loop-run.json"))
+except Exception:
+    print("0")
+    raise SystemExit(0)
+result = d.get("result") if isinstance(d, dict) else None
+status = ""
+if isinstance(result, dict):
+    status = str(result.get("status") or "")
+elif isinstance(d, dict):
+    status = str(d.get("status") or "")
+fail = {
+    "skipped_active_lease",
+    "skipped_runtime_provenance_blocked",
+    "disabled",
+}
+print("0" if status in fail else "1")
+PY
+)"
+  [[ "${ok_run}" == "1" ]]
 }
 
 run_inprocess_with_live_env() {
@@ -128,8 +151,12 @@ if pid and Path(f"/proc/{pid}/environ").exists():
         os.environ[k] = v
 # Break-glass: production worktree is often dirty vs PARA branch=main.
 os.environ["MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME"] = "0"
+# Force path: don't stall when Mac already has a codex currentTask.
+os.environ["MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE"] = "1"
+os.environ["MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC"] = os.environ.get(
+    "MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC", "15"
+)
 # PARA dispatches to Mac agents that need HTTPS GitHub URLs (SSH host aliases are CVM-only).
-# Keep HTTPS for MODSTORE_PARA_REPO_URL; CVM-local clone uses GIT_SSH_COMMAND / skip preflight.
 os.environ["MODSTORE_PARA_REPO_URL"] = "https://github.com/42433422/XCMAX.git"
 os.environ["MODSTORE_PARA_SKIP_GIT_PREFLIGHT"] = "1"
 if not (os.environ.get("GIT_SSH_COMMAND") or "").strip():
@@ -149,9 +176,20 @@ result = run_self_maintenance_loop(
 )
 print(json.dumps(result, ensure_ascii=False, default=str)[:4000])
 status = str(result.get("status") or "")
-raise SystemExit(0 if status not in {"skipped_runtime_provenance_blocked", "disabled"} else 3)
+fail_statuses = {
+    "skipped_runtime_provenance_blocked",
+    "skipped_active_lease",
+    "disabled",
+}
+raise SystemExit(0 if status not in fail_statuses else 3)
 PY
 }
+
+# Prefer known MODstore listeners even when /status probe was flaky.
+preferred_http_bases=(
+  "http://127.0.0.1:9999"
+  "http://127.0.0.1:9990"
+)
 
 if choose_base_via_http; then
   echo "Using base=${CHOSEN_BASE}"
@@ -162,9 +200,18 @@ if choose_base_via_http; then
     echo "Loop force-run via HTTP succeeded"
     exit 0
   fi
-  echo "HTTP /run unavailable; falling back to in-process with live env"
+  echo "HTTP /run unavailable on chosen base; trying preferred MODstore ports"
 fi
 
+for base in "${preferred_http_bases[@]}"; do
+  ensure_bearer_token "$base" || true
+  if post_run_http "$base"; then
+    echo "Loop force-run via HTTP succeeded on ${base}"
+    exit 0
+  fi
+done
+
+echo "HTTP /run unavailable; falling back to in-process with live env"
 if run_inprocess_with_live_env; then
   echo "Loop force-run via in-process python succeeded"
   exit 0
