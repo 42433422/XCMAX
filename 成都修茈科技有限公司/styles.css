@@ -1576,7 +1576,35 @@ body.page-contact .intake-wizard-actions {
 .viz-section-head h2 { margin: 10px 0 0; color: #122540; font-size: clamp(38px, 5vw, 58px); line-height: 1.04; letter-spacing: -.055em; }
 .viz-section-head > p { margin: 0; color: #647386; font-size: 14px; line-height: 1.8; }
 
-.viz-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.viz-kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.viz-kpi-card--cyan {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(14, 165, 233, .16), transparent 42%),
+    #fff;
+}
+.viz-made-sources {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.viz-made-source-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #5b6b7f;
+}
+.viz-made-source-row b { color: #1c3556; font-size: 13px; }
+.viz-made-source-row small {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #fff7e6;
+  color: #b45309;
+  font-size: 10px;
+  font-weight: 700;
+}
 .viz-kpi-card {
   position: relative;
   overflow: hidden;
@@ -1784,6 +1812,7 @@ body.page-contact .intake-wizard-actions {
 @media (max-width: 1120px) {
   .viz-hero-inner { grid-template-columns: minmax(0, .85fr) minmax(400px, 1.15fr); gap: 38px; }
   .viz-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .viz-kpi-grid .viz-kpi-card--orange { grid-column: 1 / -1; }
   .viz-flow-card { grid-template-columns: 1fr; gap: 28px; }
   .viz-delivery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

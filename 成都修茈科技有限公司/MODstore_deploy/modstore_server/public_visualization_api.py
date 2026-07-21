@@ -366,9 +366,77 @@ def _as_shanghai_datetime(value: Any) -> datetime | None:
     return parsed.astimezone(_SHANGHAI)
 
 
+def _platform_made_snapshot_path() -> Path:
+    configured = (os.environ.get("XIUCI_PLATFORM_MADE_TOKENS_PATH") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    site_root = Path(__file__).resolve().parents[2]
+    return site_root / "data" / "platform_made_tokens.json"
+
+
+def _empty_made_token_metrics() -> dict[str, Any]:
+    return {
+        "platform_made_tokens": None,
+        "platform_made_prompt_tokens": None,
+        "platform_made_completion_tokens": None,
+        "platform_made_sources": [],
+        "platform_made_collected_at": None,
+        # 兼容旧字段名：制作 Token（管理端算法），不再表示线上使用量
+        "platform_tokens": None,
+    }
+
+
+def _read_platform_made_metrics() -> tuple[dict[str, Any], dict[str, Any]]:
+    """读取管理端同源的「平台制作 Token」公开快照。"""
+    path = _platform_made_snapshot_path()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("platform made snapshot root must be an object")
+        made = int(raw.get("platform_made_tokens") or 0)
+        sources_raw = raw.get("sources")
+        sources: list[dict[str, Any]] = []
+        if isinstance(sources_raw, list):
+            for item in sources_raw:
+                if not isinstance(item, dict):
+                    continue
+                sources.append(
+                    {
+                        "key": str(item.get("key") or ""),
+                        "label": str(item.get("label") or item.get("key") or ""),
+                        "available": bool(item.get("available")),
+                        "total_tokens": int(item.get("total_tokens") or 0),
+                        "estimated": bool(item.get("estimated")),
+                    }
+                )
+        metrics = {
+            "platform_made_tokens": made,
+            "platform_made_prompt_tokens": int(raw.get("platform_made_prompt_tokens") or 0),
+            "platform_made_completion_tokens": int(
+                raw.get("platform_made_completion_tokens") or 0
+            ),
+            "platform_made_sources": sources,
+            "platform_made_collected_at": str(raw.get("collected_at") or raw.get("generated_at") or "")
+            or None,
+            "platform_tokens": made,
+        }
+        source_updated_at = str(raw.get("generated_at") or raw.get("collected_at") or "") or None
+        return metrics, {
+            "status": "live",
+            "source_updated_at": source_updated_at,
+            "snapshot_path": str(path),
+        }
+    except (OSError, ValueError, json.JSONDecodeError, TypeError):
+        return _empty_made_token_metrics(), {
+            "status": "unavailable",
+            "source_updated_at": None,
+            "snapshot_path": str(path),
+        }
+
+
 def _empty_token_metrics() -> dict[str, Any]:
     return {
-        "platform_tokens": None,
+        "platform_usage_tokens": None,
         "chat_tokens": None,
         "employee_tokens": None,
         "prompt_tokens": None,
@@ -458,8 +526,9 @@ def _read_token_metrics() -> tuple[dict[str, Any], dict[str, Any]]:
         for row in model_rows
     ]
     top_model = chat_models[0] if chat_models else None
+    usage_tokens = chat_tokens + employee_tokens
     metrics = {
-        "platform_tokens": chat_tokens + employee_tokens,
+        "platform_usage_tokens": usage_tokens,
         "chat_tokens": chat_tokens,
         "employee_tokens": employee_tokens,
         "prompt_tokens": int(chat["prompt_tokens"] or 0),
@@ -490,8 +559,11 @@ def _build_public_visualization_data() -> dict[str, Any]:
     log_paths = _access_log_paths()
     ai, downloads, traffic_source = _read_traffic_metrics(log_paths)
     token_metrics, token_source = _read_token_metrics()
+    made_metrics, made_source = _read_platform_made_metrics()
     ai.update(token_metrics)
+    ai.update(made_metrics)
     product, release_source = _read_product_metrics(_release_manifest_path())
+    # 制作快照可选；缺失时不把整页打成 offline，仅该指标为空
     source_statuses = (traffic_source["status"], token_source["status"], release_source["status"])
     data_status = "live" if all(status == "live" for status in source_statuses) else "degraded"
     generated_at = datetime.now(tz=_SHANGHAI).isoformat(timespec="seconds")
@@ -500,6 +572,7 @@ def _build_public_visualization_data() -> dict[str, Any]:
         for value in (
             traffic_source.get("source_updated_at"),
             token_source.get("source_updated_at"),
+            made_source.get("source_updated_at"),
             release_source.get("source_updated_at"),
         )
         if value
@@ -516,12 +589,20 @@ def _build_public_visualization_data() -> dict[str, Any]:
         "sources": {
             "gateway_logs": traffic_source,
             "token_ledger": token_source,
+            "platform_made_tokens": made_source,
             "release_manifest": release_source,
         },
         "definitions": {
             "ai_requests": "生产网关滚动日志内 POST /api/llm/chat/stream 的请求数",
             "ai_success": "上述请求中 HTTP 200 的响应数",
-            "platform_tokens": "对话计费日志 total_tokens 与 AI 员工执行度量 llm_tokens 之和，不重复汇总 Duty 节点副本",
+            "platform_made_tokens": (
+                "管理端同源算法：FHD 本地账本 + Cursor + Codex + Trae + mimo 五源合计"
+            ),
+            "platform_usage_tokens": (
+                "线上平台使用量：对话计费日志 total_tokens 与 AI 员工执行度量 llm_tokens 之和，"
+                "不重复汇总 Duty 节点副本"
+            ),
+            "platform_tokens": "同 platform_made_tokens（兼容旧字段）",
             "model_usage": "模型分布仅按可精确归属的对话计费日志统计；历史 AI 员工度量未存模型名，不做推断",
             "complete_downloads": "安装包 GET 请求完整返回 HTTP 200 的响应数；排除 HEAD、分片与更新 ZIP",
         },
