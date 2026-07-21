@@ -304,7 +304,7 @@ def _load_cross_tier_check():
     mod_name = "xcagi_cross_tier_gate"
     spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None or spec.loader is None:
-    raise ImportError(f"cannot load cross_tier_gate script at {path}")
+        raise ImportError(f"cannot load cross_tier_gate script at {path}")
     mod = importlib.util.module_from_spec(spec)
     # dataclasses needs the module registered before exec_module
     sys.modules[mod_name] = mod
