@@ -20,6 +20,7 @@ on:
     branches: [main]
     paths:
       - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/partials/**'
       - '成都修茈科技有限公司/styles.css'
       - '成都修茈科技有限公司/main.js'
       - '成都修茈科技有限公司/assets/**'
