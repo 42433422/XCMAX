@@ -7,11 +7,25 @@
 
 from __future__ import annotations
 
-from app.application.ai_chat_app_service import get_ai_chat_app_service  # noqa: F401
-from app.services import get_products_service  # noqa: F401
-from app.services.unified_intent_recognizer import (  # noqa: F401
-    get_unified_intent_recognizer,
-)
+
+def get_ai_chat_app_service():
+    from app.application.ai_chat_app_service import get_ai_chat_app_service as impl
+
+    return impl()
+
+
+def get_products_service():
+    from app.services import get_products_service as impl
+
+    return impl()
+
+
+def get_unified_intent_recognizer():
+    from app.services.unified_intent_recognizer import (
+        get_unified_intent_recognizer as impl,
+    )
+
+    return impl()
 
 __all__ = [
     "get_ai_chat_app_service",
