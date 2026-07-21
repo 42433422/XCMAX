@@ -264,7 +264,11 @@ def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90(
             "report_excerpt": (
                 f"{loop_runner.STRUCTURED_REVIEW_MARKER}: "
                 '{"max_severity":"none","blocking_findings":[],"risk_class":"low",'
-                '"target_branch_available":true,"tested_commands":[]}'
+                '"target_branch_available":true,"tested_commands":[],'
+                '"dimensions":{'
+                '"security":{"status":"pass","findings":[]},'
+                '"business_logic":{"status":"pass","findings":[]},'
+                '"performance":{"status":"pass","findings":[]}}}'
             ),
         },
         {
@@ -891,7 +895,10 @@ def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
             "report_excerpt": (
                 'SELF_MAINTENANCE_REVIEW_JSON: {"max_severity":"low",'
                 '"blocking_findings":[],"risk_class":"low","target_branch_available":true,'
-                '"tested_commands":[]}'
+                '"tested_commands":[],"dimensions":{'
+                '"security":{"status":"pass","findings":[]},'
+                '"business_logic":{"status":"pass","findings":[]},'
+                '"performance":{"status":"pass","findings":[]}}}'
             ),
         },
         {

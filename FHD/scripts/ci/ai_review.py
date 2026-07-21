@@ -227,6 +227,66 @@ _RULES: list[tuple[str, str, str, str, str]] = [
         "pragma: no cover 需审查是否属于允许场景（TYPE_CHECKING / 平台特定）。",
         "pragma: no cover 需人工审查",
     ),
+    # ---- business_logic ----
+    (
+        "bare-except-pass",
+        "medium",
+        re.compile(r"except\s*(?:\([^)]*\)|\w+)?\s*:\s*(?:pass|\.\.\.)\s*$"),
+        "禁止空 except/pass 吞掉业务异常；至少记录日志或向上抛出。",
+        "业务逻辑：空 except 吞异常",
+    ),
+    (
+        "todo-fixme-critical",
+        "low",
+        re.compile(r"\b(?:TODO|FIXME|XXX)\b.*(auth|payment|security|迁移|权限)", re.I),
+        "关键路径遗留 TODO/FIXME，需确认是否应阻断合并。",
+        "业务逻辑：关键路径未完成标记",
+    ),
+    (
+        "assert-false-prod",
+        "medium",
+        re.compile(r"\bassert\s+False\b"),
+        "生产路径禁止 assert False；改用显式异常与错误码。",
+        "业务逻辑：assert False 占位",
+    ),
+    # ---- performance ----
+    (
+        "unbounded-while-true",
+        "medium",
+        re.compile(r"\bwhile\s+True\s*:"),
+        "无界 while True 需确认有明确 break/超时/背压，否则可能拖垮事件循环。",
+        "性能：无界 while True",
+    ),
+    (
+        "time-sleep-hot-path",
+        "medium",
+        re.compile(r"\btime\.sleep\s*\("),
+        "请求/热路径避免同步 sleep；改用异步等待或队列退避。",
+        "性能：热路径 time.sleep",
+    ),
+    (
+        "select-star-no-limit",
+        "medium",
+        re.compile(r"(?i)select\s+\*\s+from\s+\w+(?![^;]*\blimit\b)"),
+        "热路径 SELECT * 且无 LIMIT，易造成慢查询；补投影与分页。",
+        "性能：疑似无界 SELECT *",
+    ),
+    (
+        "fetchall-unbounded",
+        "medium",
+        re.compile(r"\.fetchall\s*\(\s*\)"),
+        "fetchall() 可能拉全表；确认有 WHERE/LIMIT，或改为流式/分页。",
+        "性能：无界 fetchall",
+    ),
+    (
+        "n-plus-one-inline",
+        "medium",
+        re.compile(
+            r"for\s+\w+\s+in\s+[^:]+:\s*.*\.(?:query|execute|get|filter|fetchone|fetchall)\s*\("
+        ),
+        "同一行 for-loop 内触发 DB/ORM 查询，典型 N+1；改为批量预加载。",
+        "性能：同行 N+1 查询",
+    ),
 ]
 
 
