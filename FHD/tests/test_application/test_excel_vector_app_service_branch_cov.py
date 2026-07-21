@@ -267,7 +267,13 @@ class TestIngestServiceInitBranches:
         )
         assert svc._chunk_window_size == 1000
 
-    def test_default_embedder_is_hash_embedder(self):
+    def test_default_embedder_is_hash_embedder(self, monkeypatch: pytest.MonkeyPatch):
+        # 显式 disabled mode：_get_default_embedder 回退到 HashEmbedder。
+        # 必须先 reset EmbeddingService 单例，否则之前的 hash mode 单例会被复用。
+        from app.infrastructure.llm.embedding_service import EmbeddingService
+
+        EmbeddingService.reset_singleton_for_tests()
+        monkeypatch.setenv("FHD_EMBEDDING_MODE", "disabled")
         svc = ExcelVectorIngestApplicationService(vector_store=MagicMock())
         assert isinstance(svc._embedder, HashEmbedder)
 
@@ -459,7 +465,13 @@ class TestBuildChunksBranches:
 
 
 class TestSearchServiceBranches:
-    def test_init_default_embedder(self):
+    def test_init_default_embedder(self, monkeypatch: pytest.MonkeyPatch):
+        # 显式 disabled mode：_get_default_embedder 回退到 HashEmbedder。
+        # 必须先 reset EmbeddingService 单例，否则之前的 hash mode 单例会被复用。
+        from app.infrastructure.llm.embedding_service import EmbeddingService
+
+        EmbeddingService.reset_singleton_for_tests()
+        monkeypatch.setenv("FHD_EMBEDDING_MODE", "disabled")
         svc = ExcelVectorSearchApplicationService(vector_store=MagicMock())
         assert isinstance(svc._embedder, HashEmbedder)
 

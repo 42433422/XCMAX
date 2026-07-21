@@ -114,12 +114,17 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
     """
     默认 embedder：尝试用 app.infrastructure.ai 提供的 embedding。
     返回 None 时调用方需自带 embedder。
+
+    返回的 callable 接受单条文本、返回单条向量（list[float]），
+    与 EmbedderPort.embed_query 签名一致；不要用 svc.embed（批量）。
     """
     try:
         from app.infrastructure.llm import get_default_embedding_service
 
         svc = get_default_embedding_service()
-        return lambda text: svc.embed(text)
+        if svc is None:
+            return None
+        return lambda text: svc.embed_query(text)
     except RECOVERABLE_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None
