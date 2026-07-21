@@ -74,4 +74,10 @@ async def post_action_item_status(item_id: int, body: StatusDTO, _: User = Depen
     out = set_status(item_id, body.status)
     if not out.get("ok"):
         raise HTTPException(400, str(out.get("error") or "状态更新失败"))
+    try:
+        from modstore_server.public_action_board import write_public_action_board
+
+        write_public_action_board()
+    except Exception:
+        logger.exception("public action board after status update failed item_id=%s", item_id)
     return {"ok": True, "data": out}

@@ -46,18 +46,12 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
   z-index: 9200;
   width: min(720px, calc(100vw - 32px));
   padding: 14px 40px 16px 20px;
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(18, 22, 32, 0.72) 0%, rgba(10, 12, 18, 0.82) 100%);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow:
-    0 10px 40px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   pointer-events: none;
   text-align: center;
-  color: #fff;
+  color: #111;
 }
 
 .tts-sub__close {
@@ -69,16 +63,16 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
   height: 28px;
   border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  color: rgba(17, 17, 17, 0.72);
   display: grid;
   place-items: center;
   cursor: pointer;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .tts-sub__close:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  color: #000;
 }
 
 .tts-sub__stack {
@@ -123,7 +117,10 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
   font-weight: 650;
   letter-spacing: 0.02em;
   line-height: 1.45;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  color: #111;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 10px rgba(255, 255, 255, 0.55);
 }
 
 .tts-sub__en {
@@ -131,8 +128,11 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
   font-size: clamp(12px, 1.6vw, 14px);
   font-weight: 450;
   line-height: 1.4;
-  color: rgba(210, 220, 255, 0.88);
+  color: #222;
   letter-spacing: 0.01em;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0 8px rgba(255, 255, 255, 0.45);
 }
 
 .tts-sub__en--pending {
