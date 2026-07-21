@@ -368,6 +368,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.release_train_api",
     "modstore_server.action_items_api",
     "modstore_server.public_action_board_api",
+    "modstore_server.public_company_hall_api",
     "modstore_server.redline_approval_api",
     "modstore_server.ai_employee_account_api",
     "modstore_server.employee_change_request_api",

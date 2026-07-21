@@ -47,12 +47,13 @@ def test_build_public_board_has_no_internal_fields(monkeypatch):
     board = build_public_action_board(day="2026-07-21")
     blob = json.dumps(board, ensure_ascii=False)
     assert "scope_path" not in blob
-    assert "employee_id" not in blob
     assert "FHD/" not in blob
     assert board["readonly"] is True
     assert board["breakpoints"]["summary"]["total"] >= 1
     assert board["goals"]["summary"]["total"] >= 1
     assert all("title" in it for it in board["breakpoints"]["items"])
+    # 岗位 employee_id 可公开（用于公司大厅映射），但仍禁止路径类内部字段
+    assert all(it.get("employee_id") for it in board["breakpoints"]["items"])
     traj = board.get("trajectory") or []
     assert len(traj) >= 1
     assert all("ts" in x and "text" in x and "href" in x for x in traj)
