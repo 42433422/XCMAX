@@ -207,7 +207,7 @@ export function useAgentEngine() {
       ? `\n当前页面说明（${pageGuide.title}）：\n${pageGuide.summary}\n要点：${pageGuide.highlights.join('；')}\n`
       : ''
 
-    return `你是"XC AGI 数字管家"——这个平台的专属 AI 助手，不是用户购买的 AI 员工。
+    return `你是「XC AGI 数字管家」小C——这个平台的专属 AI 助手，不是用户购买的 AI 员工。
 你可以帮用户：
 - 导航到任意页面（plans/ai-store/wallet/recharge/account/workbench-shell/orders/templates/dev 等路由）
 - 读取当前页面内容并回答问题

@@ -114,22 +114,32 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
     """
     默认 embedder：尝试用 app.infrastructure.ai 提供的 embedding。
     返回 None 时调用方需自带 embedder。
+
+    返回的 callable 接受单条文本、返回单条向量（list[float]），
+    与 EmbedderPort.embed_query 签名一致；不要用 svc.embed（批量）。
     """
     try:
         from app.infrastructure.llm import get_default_embedding_service
 
         svc = get_default_embedding_service()
-        return lambda text: svc.embed(text)
+        if svc is None:
+            return None
+        return lambda text: svc.embed_query(text)
     except RECOVERABLE_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None
 
 
 def is_rag_enabled() -> bool:
-    """环境变量开关。"""
-    return str(os.environ.get("XCAGI_RAG_ENABLED", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    """RAG 开关：显式 off 关闭；显式 on 打开；未配置时网页模式默认开、桌面默认关。"""
+    raw = str(os.environ.get("XCAGI_RAG_ENABLED", "")).strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if raw in {"1", "true", "yes", "on", "auto"}:
+        return True
+    try:
+        from app.utils.deployment import is_desktop_mode
+
+        return not bool(is_desktop_mode())
+    except RECOVERABLE_ERRORS:
+        return True

@@ -130,6 +130,29 @@ class TestMatchRules:
         findings = review.match_high_risk_rules(hunks)
         assert any(f.rule == "exec" for f in findings)
 
+    def test_ai_review_tooling_high_rules_are_skipped(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="FHD/scripts/ci/ai_review.py",
+                start_line=330,
+                lines=[
+                    (
+                        330,
+                        "+",
+                        r'"禁止 document.write()，已废弃且阻塞渲染；改用 DOM API 或 innerHTML+净化。"',
+                    ),
+                    (
+                        331,
+                        "+",
+                        r'"禁止 new Function()，等价 eval() 可致代码注入；改用闭包或显式解析器。"',
+                    ),
+                ],
+                raw_header="@@ -330,2 +330,2 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert not any(f.severity in {"high", "medium"} for f in findings)
+
     def test_os_system_detected(self) -> None:
         hunks = [
             review.DiffHunk(
@@ -231,13 +254,38 @@ class TestMatchRules:
         assert findings[0].rule == "pragma-no-cover"
         assert findings[0].severity == "low"
 
+    def test_business_and_performance_rules_detected(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="svc.py",
+                start_line=1,
+                lines=[
+                    (1, "+", "while True:"),
+                    (2, "+", "    time.sleep(1)"),
+                    (3, "+", "    rows = cur.fetchall()"),
+                    (4, "+", "for u in users: db.query(User).get(u.id)"),
+                    (5, "+", "except Exception: pass"),
+                ],
+                raw_header="@@ -1,1 +1,5 @@",
+            )
+        ]
+        rules = {f.rule for f in review.match_high_risk_rules(hunks)}
+        assert "unbounded-while-true" in rules
+        assert "time-sleep-hot-path" in rules
+        assert "fetchall-unbounded" in rules
+        assert "n-plus-one-inline" in rules
+        assert "bare-except-pass" in rules
+
     def test_only_added_lines_checked(self) -> None:
         """删除行（'-'）中的高危代码不应触发 finding。"""
         hunks = [
             review.DiffHunk(
                 file_path="foo.py",
                 start_line=1,
-                lines=[(0, "-", "subprocess.run('rm', shell=True)"), (1, "+", "safe_call()")],
+                lines=[
+                    (0, "-", "subprocess.run('rm', shell=True)"),
+                    (1, "+", "safe_call()"),
+                ],
                 raw_header="@@ -1,1 +1,1 @@",
             )
         ]
@@ -479,10 +527,11 @@ class TestMain:
         rc = review.main(["--pr-number", "1"])
         assert rc == 1
 
-    def test_medium_llm_failure_fails_closed(
+    def test_medium_llm_failure_fails_open(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """LLM 不可用时 fail-open 不阻断（符合 cicd-e2e-prompt.md 决策矩阵）。"""
         diff = (
             "diff --git a/client.py b/client.py\n"
             "@@ -1,1 +1,1 @@\n"
@@ -496,7 +545,7 @@ class TestMain:
         )
         monkeypatch.setattr(review, "post_line_comment", lambda *a, **k: True)
         rc = review.main(["--pr-number", "1"])
-        assert rc == 2
+        assert rc == 0  # fail-open：LLM 不可用不阻断
 
     def test_pragma_no_cover_does_not_block(
         self,

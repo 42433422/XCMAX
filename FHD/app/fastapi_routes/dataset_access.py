@@ -60,6 +60,28 @@ def dataset_access_context_from_request(
         except RECOVERABLE_ERRORS:
             permissions = set()
 
+        # Market/admin-console sessions may not map role=admin on the User row;
+        # promote from session account meta so Persy memory scope + cross-tenant work.
+        try:
+            from app.application.session_account_meta import is_session_market_admin
+            from app.infrastructure.auth.dependencies import session_id_from_request
+
+            sid = session_id_from_request(request)
+            if sid and is_session_market_admin(sid):
+                is_admin = True
+                role = "admin"
+                from app.application.session_account_meta import load_session_account_meta
+
+                meta = load_session_account_meta(sid) or {}
+                if not actor_id:
+                    actor_id = str(
+                        meta.get("username") or meta.get("market_username") or "admin"
+                    ).strip()
+                if not tenant:
+                    tenant = str(meta.get("tenant_id") or "platform").strip() or "platform"
+        except RECOVERABLE_ERRORS:
+            pass
+
         # Existing installations may predate dataset permissions in RBAC rows.
         # Preserve the established role policy while the bootstrap converges.
         if role in {"viewer", "operator", "user"}:
@@ -68,6 +90,19 @@ def dataset_access_context_from_request(
         # be able to grow Persy. Viewer remains the explicit read-only role.
         if role in {"operator", "user"}:
             permissions.add(DATASET_WRITE_PERMISSION)
+        if is_admin:
+            permissions.add(DATASET_READ_PERMISSION)
+            permissions.add(DATASET_WRITE_PERMISSION)
+            try:
+                from app.application.dataset_rag_app_service import DATASET_ADMIN_PERMISSION
+
+                permissions.add(DATASET_ADMIN_PERMISSION)
+            except RECOVERABLE_ERRORS:
+                pass
+            if not tenant:
+                tenant = "platform"
+            if not actor_id:
+                actor_id = "admin"
         return DatasetAccessContext(
             actor_id=actor_id,
             tenant_id=tenant,

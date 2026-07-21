@@ -164,7 +164,7 @@ export interface AutonomyAdapter {
   executeAction(action: Action): Promise<ActionResult>
   /** 写审计条目（同步、不抛错） */
   audit(entry: AuditEntry): void
-  /** Phase 4 新增：跨端门禁查询其他端状态。未实现时 controller fail-open（不阻断） */
+  /** Phase 4 新增：跨端门禁查询其他端状态。未实现 / 抛错 → fail-closed（阻断） */
   getRemoteState?(): Promise<Record<string, unknown> | null>
 }
 

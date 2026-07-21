@@ -112,6 +112,10 @@ def public_subset(rel: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "manifest_url": f"{base}/xcagi-v{dv}/manifest.json",
         "auto_update_base": "https://xiu-ci.com/releases/stable",
     }
+    # 官网可视化 /download/releases 依赖版本节点列表；生成公开清单时不得丢弃。
+    history = r.get("release_history")
+    if isinstance(history, list) and history:
+        out["release_history"] = history
     return out
 
 

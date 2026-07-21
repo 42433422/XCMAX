@@ -344,6 +344,10 @@ def test_attach_chat_trace_run_records_ocr_artifact(tmp_path, monkeypatch) -> No
     )
 
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "dataset_store.json"))
+    # 关闭 persy-knowledge mirror：让 _resolve_dataset_id 回退到 user_{user_id}，
+    # 保持本测试的原意图（ingest 到 user_u1 dataset，再从 user_u1 查询）。
+    # 默认行为（mirror=1）会将 artifact ingest 到 persy-knowledge 共享空间。
+    monkeypatch.setenv("XCAGI_KNOWLEDGE_MIRROR_ARTIFACTS_TO_PERSY", "0")
     reset_dataset_rag_app_service_for_tests()
     repo = InMemoryAgentRunRepository()
     payload = {

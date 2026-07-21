@@ -38,8 +38,9 @@ async def trigger_digest_now_local() -> dict[str, Any]:
 
 async def list_daily_digests_local(*, limit: int = 20, offset: int = 0) -> dict[str, Any]:
     q = f"limit={max(1, min(int(limit), 100))}&offset={max(0, int(offset))}"
+    # 与生产一致走 xcmax 管理端读接口；butler 路径依赖市场管理员 JWT，管理端易空列表
     return await modstore_get(
-        "/api/agent/butler/daily-digests",
+        "/api/xcmax/admin/daily-digests",
         query=q,
         base_url=modstore_digest_base_url(),
     )
@@ -47,14 +48,14 @@ async def list_daily_digests_local(*, limit: int = 20, offset: int = 0) -> dict[
 
 async def get_daily_digest_local(record_id: int) -> dict[str, Any]:
     return await modstore_get(
-        f"/api/agent/butler/daily-digests/{int(record_id)}",
+        f"/api/xcmax/admin/daily-digests/{int(record_id)}",
         base_url=modstore_digest_base_url(),
     )
 
 
 async def get_daily_digest_artifacts_local(record_id: int) -> dict[str, Any]:
     return await modstore_get(
-        f"/api/agent/butler/daily-digests/{int(record_id)}/artifacts",
+        f"/api/xcmax/admin/daily-digests/{int(record_id)}/artifacts",
         base_url=modstore_digest_base_url(),
     )
 

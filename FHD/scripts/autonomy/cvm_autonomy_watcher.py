@@ -19,30 +19,102 @@
 部署模式：GitHub Actions cron 每 10 分钟 SSH 触发，不在服务器端常驻 systemd。
 """
 
-from __future__ import annotations
+import os
+import sys
+
+
+def _bootstrap_direct_script_import() -> None:
+    if __package__ not in (None, ""):
+        return
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    script_dir_name = os.path.basename(script_dir)
+    fhd_root = os.path.dirname(os.path.dirname(script_dir))
+    cleaned: list[str] = []
+    for entry in list(sys.path):
+        try:
+            real_entry = os.path.realpath(entry)
+        except Exception:
+            real_entry = entry
+        if real_entry == script_dir:
+            continue
+        if os.path.basename(real_entry) == script_dir_name and real_entry.endswith(
+            os.path.join(os.sep, "autonomy")
+        ):
+            continue
+        cleaned.append(entry)
+    sys.path[:] = cleaned
+    if fhd_root not in sys.path:
+        sys.path.insert(0, fhd_root)
+
+
+_bootstrap_direct_script_import()
 
 import argparse
-import sys
 import time
 from datetime import datetime, timezone
 from typing import Any
 
-from .cvm_adapter import CvmAutonomyAdapter
-from .impact_predictor import predict
-from .policies import ALL_POLICIES
-from .types import (
-    Action,
-    ActionTracker,
-    ActionType,
-    AuditEntry,
-    AutonomyAdapter,
-    Diagnosis,
-    Plan,
-    Policy,
-    RiskLevel,
-    RuntimeTruthSnapshot,
-    Signal,
-)
+# 支持直接 ``python scripts/autonomy/cvm_autonomy_watcher.py --help``：
+# 当直接执行脚本时，__package__ 为 None，需将 FHD 根目录放到 sys.path
+# 并使用绝对导入，避免 ``import types`` 命名冲突（脚本目录下有同名 types.py）。
+if __package__ in (None, ""):
+    from scripts.autonomy.cross_tier_gate import check_before_action, is_enabled as cross_tier_gate_enabled
+    from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
+    from scripts.autonomy.impact_predictor import predict
+    from scripts.autonomy.policies import ALL_POLICIES
+    from scripts.autonomy.types import (  # noqa: F401  # 仅导出供模块内使用
+        Action,
+        ActionTracker,
+        ActionType,
+        AuditEntry,
+        AutonomyAdapter,
+        Diagnosis,
+        Plan,
+        Policy,
+        RiskLevel,
+        RuntimeTruthSnapshot,
+        Signal,
+        ActionResult,
+    )
+else:
+    from .cross_tier_gate import check_before_action, is_enabled as cross_tier_gate_enabled
+    from .cvm_adapter import CvmAutonomyAdapter
+    from .impact_predictor import predict
+    from .policies import ALL_POLICIES
+    from .types import (
+        Action,
+        ActionTracker,
+        ActionType,
+        ActionResult,
+        AuditEntry,
+        AutonomyAdapter,
+        Diagnosis,
+        Plan,
+        Policy,
+        RiskLevel,
+        RuntimeTruthSnapshot,
+        Signal,
+    )
+
+# 显式 autonomy callback（优先）+ 旁路 approval ledger client（fail-open）
+try:
+    from autonomy_callback import autonomy_callback as _autonomy_callback  # noqa: E402
+except ImportError:  # pragma: no cover
+    _autonomy_callback = None  # type: ignore[assignment]
+
+try:
+    _ci_scripts_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+        "scripts",
+        "ci",
+    )
+    if _ci_scripts_dir not in sys.path:
+        sys.path.insert(0, _ci_scripts_dir)
+    from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
+    from _im_notify_client import notify_boss_im  # noqa: E402
+except ImportError:  # pragma: no cover - 测试环境路径可能不通
+    post_to_approval_ledger = None  # type: ignore[assignment]
+    notify_boss_im = None  # type: ignore[assignment]
 
 
 # --------------------------------------------------------------------------- #
@@ -59,7 +131,8 @@ def derive_signals(truth: RuntimeTruthSnapshot) -> list[Signal]:
       - manifest_exists=True + manifest_frozen=False + 部署 digest 与 manifest 不一致
         → manifest_drift（warn）—— 简化判定：manifest_exists=True + manifest_frozen=False
         且 health_ok=False 时派生（需进一步证据时由 policy 拒绝）
-      - compose_status != 'running' → compose_unhealthy（crit）
+      - compose_status 非 running，且不是「systemd-only + health_ok」→ compose_unhealthy（crit）
+        （CVM staging/prod 常无 compose.yml，absent + health_ok 视为正常）
 
     纯函数：使用 truth.ts 作为信号 ts，禁止 time.time() / datetime.now()
     """
@@ -110,7 +183,9 @@ def derive_signals(truth: RuntimeTruthSnapshot) -> list[Signal]:
             )
         )
 
-    if truth.compose_status != "running":
+    # systemd-only 部署（无 compose.yml → absent）且 API 健康：不报警。
+    systemd_only_ok = truth.compose_status == "absent" and truth.health_ok
+    if truth.compose_status != "running" and not systemd_only_ok:
         signals.append(
             Signal(
                 source="runtime_truth",
@@ -252,6 +327,21 @@ def _try_execute_single(
         adapter.audit(entry)
         return entry
 
+    # CrossTierGate 跨端门禁（默认启用，env XCAGI_CROSS_TIER_GATE=0 关闭；fail-open）
+    # 服务器端无法直接查询桌面端 pending marker；用 truth.pending_rollback_marker
+    # 作为代理信号（桌面端通过 IPC 触发服务器端 rollback 时会创建 rollback-marker.json）
+    if cross_tier_gate_enabled():
+        remote_state = {
+            "desktop_pending_rollback_marker": bool(truth.pending_rollback_marker),
+        }
+        gate_result = check_before_action("server", action.type.value, remote_state)
+        if not gate_result.allow:
+            entry = _build_skipped_audit(
+                source_signal, diagnosis, action, truth, gate_result.reasons
+            )
+            adapter.audit(entry)
+            return entry
+
     # 执行
     tracker.attempts += 1
     tracker.last_attempt_ts = int(time.time() * 1000)
@@ -269,6 +359,24 @@ def _try_execute_single(
         truth_snapshot=truth,
     )
     adapter.audit(entry)
+
+    # 回调 /github-approval：成功 → executed（fail-open）
+    if getattr(result, "ok", False):
+        try:
+            from autonomy_callback import report_executed
+
+            report_executed(
+                action_id=action.idempotency_key,
+                approver="cvm-autonomy-watcher",
+                outcome={
+                    "action_type": action.type.value,
+                    "ok": True,
+                    "detail": getattr(result, "detail", ""),
+                },
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
 
     # 失败且耗尽 attempts → escalate
     if not result.ok and tracker.attempts >= action.max_attempts and not tracker.escalated:
@@ -319,6 +427,64 @@ def _escalate(
         truth_snapshot=truth,
     )
     adapter.audit(entry)
+    # 显式 callback → approval ledger（fire-and-forget，fail-open）
+    _escalate_payload = {
+        "original_action": original_action.type.value,
+        "reason": reason,
+        "diagnosis_root_cause": diagnosis.root_cause,
+        "idempotency_key": original_action.idempotency_key,
+        "escalate_ok": bool(getattr(result, "ok", False)),
+        "signal_kind": getattr(source_signal, "kind", "") if source_signal else "",
+    }
+    if _autonomy_callback is not None:
+        try:
+            _autonomy_callback(
+                "cvm_escalate",
+                _escalate_payload,
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
+    elif post_to_approval_ledger is not None:
+        try:
+            post_to_approval_ledger(
+                action="cvm_escalate",
+                payload=_escalate_payload,
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
+    # 回调 /github-approval：decision=execution_failed（fail-open）
+    try:
+        from autonomy_callback import report_execution_failed
+
+        report_execution_failed(
+            action_id=original_action.idempotency_key,
+            approver="cvm-autonomy-watcher",
+            error=reason,
+            outcome={
+                "action_type": original_action.type.value,
+                "escalate_ok": bool(getattr(result, "ok", False)),
+                "signal_kind": getattr(source_signal, "kind", "") if source_signal else "",
+            },
+            source="cvm_watcher",
+        )
+    except Exception:  # pragma: no cover - fail-open
+        pass
+    # 管理端 IM（fail-open）：needs-human 及时触达
+    if notify_boss_im is not None:
+        try:
+            notify_boss_im(
+                f"[CVM escalate] action={original_action.type.value} "
+                f"reason={reason}\n"
+                f"root_cause={diagnosis.root_cause}\n"
+                f"key={original_action.idempotency_key}",
+                employee_id="cvm-autonomy",
+                display_name="CVM 自治",
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
     return entry
 
 
@@ -347,8 +513,6 @@ def _build_skipped_audit(
 
 def _make_error_result(action: Action, detail: str) -> Any:
     """构造执行抛错时的 ActionResult（避免循环导入）。"""
-    from .types import ActionResult
-
     return ActionResult(
         action=action,
         ok=False,

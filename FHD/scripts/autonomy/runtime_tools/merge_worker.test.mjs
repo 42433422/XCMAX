@@ -3,6 +3,9 @@ import test from 'node:test';
 
 import {
   AUTO_PR_LABELS,
+  CI_TIMEOUT_POLICY,
+  CI_WAIT_MODE,
+  CI_WAIT_TIMEOUT_MS,
   forbiddenAutoMergePaths,
   isTransientMergeFailure,
   mergeRetryDelayMs,
@@ -69,4 +72,14 @@ test('operational failures retry but review and identity vetoes are terminal', (
   assert.equal(isTransientMergeFailure('REJECT: unsafe behavior'), false);
   assert.equal(isTransientMergeFailure('GitHub actor mismatch: expected=bot actual=user'), false);
   assert.equal(isTransientMergeFailure('forbidden-auto-merge-paths: .env'), false);
+  assert.equal(isTransientMergeFailure('ci-wait-timeout-fail: required checks'), false);
+  assert.equal(isTransientMergeFailure('ci-wait-timeout-needs-human: escalate'), false);
+  assert.equal(isTransientMergeFailure('required checks failed or unavailable'), false);
+});
+
+
+test('CI wait policy is explicit in code', () => {
+  assert.equal(CI_WAIT_MODE, 'required');
+  assert.equal(CI_WAIT_TIMEOUT_MS >= 60_000, true);
+  assert.equal(['fail', 'human'].includes(CI_TIMEOUT_POLICY), true);
 });

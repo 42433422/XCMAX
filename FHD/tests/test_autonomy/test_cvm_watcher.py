@@ -103,6 +103,18 @@ class TestDeriveSignals:
         kinds = [s.kind for s in signals]
         assert "compose_unhealthy" in kinds
 
+    def test_derive_skips_compose_absent_when_health_ok(
+        self,
+        sample_truth: RuntimeTruthSnapshot,
+    ) -> None:
+        """systemd-only：compose absent + health_ok → 不派生 compose_unhealthy。"""
+        sample_truth.compose_status = "absent"
+        sample_truth.service_running = False
+        signals = derive_signals(sample_truth)
+
+        kinds = [s.kind for s in signals]
+        assert "compose_unhealthy" not in kinds
+
     def test_derive_no_signals_when_healthy(
         self,
         sample_truth: RuntimeTruthSnapshot,
@@ -779,3 +791,185 @@ class TestCli:
         )
 
         assert exit_code == 1
+
+
+# --------------------------------------------------------------------------- #
+# CrossTierGate 集成测试
+# --------------------------------------------------------------------------- #
+
+
+class TestCrossTierGateIntegration:
+    """服务器端 _try_execute_single 中 CrossTierGate 调用点集成测试。
+
+    覆盖三个场景：
+    1. truth.pending_rollback_marker=True → 门禁拦截 rollback_to_last_tarball
+    2. truth.pending_rollback_marker=False → 门禁放行
+    3. env XCAGI_CROSS_TIER_GATE=0 → 门禁关闭，ImpactPredictor 仍拦截
+    """
+
+    def test_rollback_blocked_when_pending_marker_true(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """pending_rollback_marker=True → CrossTierGate 拦截 rollback_to_last_tarball。"""
+        # 默认启用，确保未被前序测试污染
+        monkeypatch.delenv("XCAGI_CROSS_TIER_GATE", raising=False)
+
+        # 构造 truth：有 .deploy-last.tar.gz（ImpactPredictor 放行）+ pending marker
+        rollback_tarball = tmp_path / ".deploy-last.tar.gz"
+        rollback_tarball.write_bytes(b"fake tarball")
+        truth = RuntimeTruthSnapshot(
+            ts=int(time.time() * 1000),
+            deploy_root=str(tmp_path),
+            manifest_path=str(tmp_path / "fhd-manifest.json"),
+            compose_status="absent",
+            health_ok=True,
+            service_running=True,
+            pending_rollback_marker=True,
+            disk_usage_percent=50.0,
+            config_fingerprint_changed=False,
+            last_backup_ts=int(time.time() * 1000),
+            app_version="10.0.0",
+            build_sha="abc123",
+            restart_count=0,
+            manifest_exists=True,
+            manifest_frozen=False,
+        )
+
+        action = Action(
+            type=ActionType.ROLLBACK_TO_LAST_TARBALL,
+            params={"reason": "test"},
+            idempotency_key="test:rollback:gate",
+            max_attempts=1,
+            risk=RiskLevel.HIGH,
+        )
+        plan = Plan(
+            diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
+            actions=[action],
+        )
+        state = WatcherState()
+
+        audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
+
+        assert len(audits) == 1
+        audit_action = audits[0].action
+        assert isinstance(audit_action, dict)
+        assert audit_action["type"] == "skipped"
+        all_reasons = " ".join(audit_action["reasons"])
+        # CrossTierGate 或 ImpactPredictor 应拦截（两者都对 pending marker 拦截）
+        assert (
+            "桌面端存在 pending rollback marker" in all_reasons
+            or "已存在 pending rollback marker" in all_reasons
+        ), f"应被门禁或 ImpactPredictor 拦截，实际 reasons: {audit_action['reasons']}"
+
+    def test_rollback_allowed_when_pending_marker_false(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """pending_rollback_marker=False → CrossTierGate 放行（execute_action 会被调用）。"""
+        monkeypatch.delenv("XCAGI_CROSS_TIER_GATE", raising=False)
+
+        rollback_tarball = tmp_path / ".deploy-last.tar.gz"
+        rollback_tarball.write_bytes(b"fake tarball")
+        truth = RuntimeTruthSnapshot(
+            ts=int(time.time() * 1000),
+            deploy_root=str(tmp_path),
+            manifest_path=str(tmp_path / "fhd-manifest.json"),
+            compose_status="absent",
+            health_ok=True,
+            service_running=True,
+            pending_rollback_marker=False,
+            disk_usage_percent=50.0,
+            config_fingerprint_changed=False,
+            last_backup_ts=int(time.time() * 1000),
+            app_version="10.0.0",
+            build_sha="abc123",
+            restart_count=0,
+            manifest_exists=True,
+            manifest_frozen=False,
+        )
+
+        action = Action(
+            type=ActionType.ROLLBACK_TO_LAST_TARBALL,
+            params={"reason": "test"},
+            idempotency_key="test:rollback:gate2",
+            max_attempts=1,
+            risk=RiskLevel.HIGH,
+        )
+        plan = Plan(
+            diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
+            actions=[action],
+        )
+        state = WatcherState()
+
+        audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
+
+        assert len(audits) == 1
+        # 应执行（ImpactPredictor + CrossTierGate 都放行；adapter.execute_action 真实调用会失败但不影响断言）
+        audit_action = audits[0].action
+        # action 不应是 skipped
+        if isinstance(audit_action, dict):
+            assert audit_action["type"] != "skipped", (
+                f"门禁放行时不应 skipped，实际：{audit_action}"
+            )
+        # 应有真实执行（result.ok 可能为 False 因为 tarball 是假的，但不是 skipped）
+
+    def test_rollback_allowed_when_gate_disabled(
+        self,
+        adapter_for_test: CvmAutonomyAdapter,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """env XCAGI_CROSS_TIER_GATE=0 → 门禁关闭，ImpactPredictor 仍拦截 pending marker。"""
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "0")
+
+        rollback_tarball = tmp_path / ".deploy-last.tar.gz"
+        rollback_tarball.write_bytes(b"fake tarball")
+        truth = RuntimeTruthSnapshot(
+            ts=int(time.time() * 1000),
+            deploy_root=str(tmp_path),
+            manifest_path=str(tmp_path / "fhd-manifest.json"),
+            compose_status="absent",
+            health_ok=True,
+            service_running=True,
+            pending_rollback_marker=True,  # 会触发 ImpactPredictor 拦截
+            disk_usage_percent=50.0,
+            config_fingerprint_changed=False,
+            last_backup_ts=int(time.time() * 1000),
+            app_version="10.0.0",
+            build_sha="abc123",
+            restart_count=0,
+            manifest_exists=True,
+            manifest_frozen=False,
+        )
+
+        action = Action(
+            type=ActionType.ROLLBACK_TO_LAST_TARBALL,
+            params={"reason": "test"},
+            idempotency_key="test:rollback:gate3",
+            max_attempts=1,
+            risk=RiskLevel.HIGH,
+        )
+        plan = Plan(
+            diagnosis=Diagnosis(root_cause="test", confidence=0.8, detail="test", evidence=[]),
+            actions=[action],
+        )
+        state = WatcherState()
+
+        audits = execute_plan(adapter_for_test, plan, truth, None, state, dry_run=False)
+
+        assert len(audits) == 1
+        audit_action = audits[0].action
+        # 应 skipped（ImpactPredictor 拦截）
+        assert isinstance(audit_action, dict)
+        assert audit_action["type"] == "skipped"
+        all_reasons = " ".join(audit_action["reasons"])
+        # ImpactPredictor 仍拦截，但 CrossTierGate 的 reasons 不应出现
+        assert "桌面端存在 pending rollback marker" not in all_reasons, (
+            "门禁关闭时不应出现 CrossTierGate 的 reasons"
+        )
+        assert "已存在 pending rollback marker" in all_reasons, "ImpactPredictor 应仍拦截"

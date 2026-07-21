@@ -52,6 +52,12 @@ const emit = defineEmits<{
 const chartEl = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+let renderTimer: ReturnType<typeof setTimeout> | null = null
+let lastRenderKey = ''
+/** Above this, turn off continuous force animation — main source of UI jank. */
+const FORCE_ANIMATION_NODE_LIMIT = 36
+/** Soft cap for rendered content nodes (core/onboarding/recall still kept). */
+const MAX_RENDERED_CONTENT_NODES = 56
 
 const nodeTheme: Record<
   string,
@@ -97,10 +103,20 @@ const recalledNodeIds = computed(() => {
   return ids
 })
 
+function prioritizeGraphNodes(nodes: KnowledgeGraphNode[]): KnowledgeGraphNode[] {
+  const stickyTypes = new Set(['core', 'onboarding', 'recall', 'topic', 'memory'])
+  const sticky = nodes.filter((node) => stickyTypes.has(node.type))
+  const rest = nodes
+    .filter((node) => !stickyTypes.has(node.type))
+    .sort((a, b) => Number(b.strength || 0) - Number(a.strength || 0))
+  const room = Math.max(0, MAX_RENDERED_CONTENT_NODES - sticky.length)
+  return sticky.concat(rest.slice(0, room))
+}
+
 const graphNodes = computed<KnowledgeGraphNode[]>(() => {
   const base: KnowledgeGraphNode[] = (props.graph?.nodes || []).map((node) => ({
     ...node,
-    metadata: { ...node.metadata },
+    metadata: { ...(node.metadata || {}) },
   }))
   const rootId = `persy:${props.graph?.dataset_id || 'persy-knowledge'}`
   if (!base.some((node) => node.type === 'core')) {
@@ -156,11 +172,15 @@ const graphNodes = computed<KnowledgeGraphNode[]>(() => {
       metadata: { query },
     })
   }
-  return base
+  if (base.length <= MAX_RENDERED_CONTENT_NODES + 8) return base
+  return prioritizeGraphNodes(base)
 })
 
 const graphEdges = computed<KnowledgeGraphEdge[]>(() => {
-  const base = (props.graph?.edges || []).map((edge) => ({ ...edge }))
+  const nodeIds = new Set(graphNodes.value.map((node) => node.id))
+  const base = (props.graph?.edges || [])
+    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .map((edge) => ({ ...edge }))
   const root = graphNodes.value.find((node) => node.type === 'core')
   if (!root) return base
 
@@ -177,8 +197,10 @@ const graphEdges = computed<KnowledgeGraphEdge[]>(() => {
 
   const queryNode = graphNodes.value.find((node) => node.id === 'recall:current-query')
   if (queryNode) {
-    const targets = recalledNodeIds.value.size ? Array.from(recalledNodeIds.value) : [root.id]
-    for (const target of targets) {
+    const targets = recalledNodeIds.value.size
+      ? Array.from(recalledNodeIds.value).filter((id) => nodeIds.has(id))
+      : [root.id]
+    for (const target of targets.length ? targets : [root.id]) {
       base.push({
         id: `edge:${queryNode.id}:${target}`,
         source: queryNode.id,
@@ -219,27 +241,30 @@ function compactNodeLabel(node: KnowledgeGraphNode): string {
 }
 
 function buildOption(): EChartsCoreOption {
-  const data = graphNodes.value.map((node) => {
+  const nodes = graphNodes.value
+  const heavy = nodes.length >= FORCE_ANIMATION_NODE_LIMIT
+  const data = nodes.map((node) => {
     const theme = nodeTheme[node.type] || nodeTheme.knowledge
     const selected = node.id === props.selectedNodeId
     const recalled = recalledNodeIds.value.has(node.id)
     const pending = node.type === 'memory' && node.metadata?.status === 'pending'
-    const showLabel = selected || recalled || node.type !== 'knowledge'
+    const showLabel =
+      selected || recalled || node.type === 'core' || node.type === 'topic' || node.type === 'onboarding'
     return {
       id: node.id,
       name: node.label,
       value: Number(node.strength || 0.5),
       category: categoryIndex.get(theme.category) ?? 0,
-      symbolSize: Math.max(18, Number(node.size || 24) + (recalled ? 9 : 0)),
-      draggable: node.type !== 'core',
+      symbolSize: Math.max(16, Number(node.size || 24) + (recalled ? 8 : 0) - (heavy ? 2 : 0)),
+      draggable: !heavy && node.type !== 'core',
       rawNode: node,
       itemStyle: {
         color: theme.color,
         borderColor: recalled ? '#f7c84a' : theme.border,
-        borderWidth: selected ? 4 : recalled ? 3 : node.type === 'onboarding' ? 2 : 1.5,
+        borderWidth: selected ? 3 : recalled ? 2 : node.type === 'onboarding' ? 2 : 1,
         borderType: node.type === 'onboarding' || pending ? 'dashed' : 'solid',
         opacity: pending && !selected && !recalled ? 0.72 : 1,
-        shadowBlur: selected || recalled ? 18 : node.type === 'core' ? 12 : 5,
+        shadowBlur: selected || recalled ? 12 : node.type === 'core' ? 8 : 0,
         shadowColor: selected || recalled ? 'rgba(211, 154, 41, 0.34)' : 'rgba(23, 33, 29, 0.12)',
       },
       label: {
@@ -253,7 +278,7 @@ function buildOption(): EChartsCoreOption {
               : 'right',
         distance: node.type === 'core' ? 0 : 7,
         color: node.type === 'core' ? '#ffffff' : theme.labelColor,
-        fontSize: node.type === 'core' ? 15 : 12,
+        fontSize: node.type === 'core' ? 15 : 11,
         fontWeight: node.type === 'core' || recalled ? 700 : 600,
       },
     }
@@ -269,17 +294,18 @@ function buildOption(): EChartsCoreOption {
       value: edge.label || edge.type,
       lineStyle: {
         color: isRecall ? '#d39a29' : isOnboarding ? '#aab5af' : '#8fa29a',
-        width: isRecall ? 2.6 : Math.max(0.8, Number(edge.weight || 0.5) * 1.8),
-        opacity: isRecall ? 0.92 : isOnboarding ? 0.42 : 0.48,
+        width: isRecall ? 2.2 : Math.max(0.7, Number(edge.weight || 0.5) * 1.4),
+        opacity: isRecall ? 0.9 : isOnboarding ? 0.4 : 0.42,
         type: isOnboarding ? 'dashed' : 'solid',
-        curveness: 0.08,
+        curveness: 0.06,
       },
     }
   })
 
   return {
-    animationDuration: 620,
-    animationDurationUpdate: 520,
+    animation: !heavy,
+    animationDuration: heavy ? 0 : 420,
+    animationDurationUpdate: heavy ? 0 : 280,
     tooltip: {
       trigger: 'item',
       borderWidth: 0,
@@ -314,24 +340,27 @@ function buildOption(): EChartsCoreOption {
         labelLayout: { hideOverlap: true },
         force: {
           initLayout: 'circular',
-          repulsion: 330,
-          gravity: 0.075,
-          edgeLength: [68, 148],
-          friction: 0.25,
-          layoutAnimation: true,
+          repulsion: heavy ? 220 : 300,
+          gravity: heavy ? 0.1 : 0.08,
+          edgeLength: heavy ? [48, 110] : [68, 140],
+          friction: heavy ? 0.55 : 0.35,
+          // Continuous force ticks are the main jank source on large graphs.
+          layoutAnimation: !heavy,
         },
-        lineStyle: { color: '#8fa29a', opacity: 0.48, width: 1.2 },
+        lineStyle: { color: '#8fa29a', opacity: 0.42, width: 1 },
         emphasis: {
-          focus: 'adjacency',
-          scale: 1.12,
+          focus: heavy ? 'none' : 'adjacency',
+          scale: heavy ? 1.04 : 1.1,
           label: { show: true, color: '#17211d', fontWeight: 700 },
-          lineStyle: { opacity: 0.9, width: 2.2 },
+          lineStyle: { opacity: 0.85, width: 2 },
         },
-        blur: {
-          itemStyle: { opacity: 0.2 },
-          lineStyle: { opacity: 0.08 },
-          label: { show: false },
-        },
+        blur: heavy
+          ? undefined
+          : {
+              itemStyle: { opacity: 0.2 },
+              lineStyle: { opacity: 0.08 },
+              label: { show: false },
+            },
       },
     ],
   }
@@ -351,31 +380,69 @@ function handleChartClick(params: unknown): void {
   emit('selectNode', node)
 }
 
-function renderGraph(): void {
+function graphRenderKey(): string {
+  const nodes = props.graph?.nodes || []
+  const edges = props.graph?.edges || []
+  const recall = props.recall
+  return [
+    props.graph?.dataset_id || '',
+    props.loading ? '1' : '0',
+    props.selectedNodeId || '',
+    nodes.length,
+    edges.length,
+    nodes[0]?.id || '',
+    nodes[nodes.length - 1]?.id || '',
+    recall?.query || '',
+    recall?.chunks?.length || 0,
+  ].join('|')
+}
+
+function renderGraph(force = false): void {
   if (!chartEl.value) return
+  const key = graphRenderKey()
+  if (!force && key === lastRenderKey && chart) return
+  lastRenderKey = key
   if (!chart) {
-    chart = echarts.init(chartEl.value)
+    chart = echarts.init(chartEl.value, undefined, { renderer: 'canvas' })
     chart.on('click', handleChartClick)
   }
-  chart.setOption(buildOption(), true)
-  chart.resize()
+  chart.setOption(buildOption(), { notMerge: true, lazyUpdate: true })
+}
+
+function scheduleRender(force = false): void {
+  if (renderTimer) clearTimeout(renderTimer)
+  renderTimer = setTimeout(() => {
+    renderTimer = null
+    renderGraph(force)
+  }, 16)
+}
+
+function handleWindowResize(): void {
+  chart?.resize()
 }
 
 function resetView(): void {
-  if (!chart) return
-  chart.setOption(buildOption(), true)
-  chart.resize()
+  lastRenderKey = ''
+  renderGraph(true)
+  chart?.resize()
 }
 
 watch(
-  () => [props.graph, props.selectedNodeId, props.recall, props.loading],
-  () => nextTick(renderGraph),
-  { deep: true },
+  () => [
+    props.graph?.dataset_id,
+    props.graph?.nodes?.length,
+    props.graph?.edges?.length,
+    props.selectedNodeId,
+    props.recall?.query,
+    props.recall?.chunks?.length,
+    props.loading,
+  ],
+  () => nextTick(() => scheduleRender()),
 )
 
 onMounted(() => {
-  nextTick(renderGraph)
-  window.addEventListener('resize', renderGraph)
+  nextTick(() => renderGraph(true))
+  window.addEventListener('resize', handleWindowResize)
   if (chartEl.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => chart?.resize())
     resizeObserver.observe(chartEl.value)
@@ -383,7 +450,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', renderGraph)
+  if (renderTimer) clearTimeout(renderTimer)
+  renderTimer = null
+  window.removeEventListener('resize', handleWindowResize)
   resizeObserver?.disconnect()
   resizeObserver = null
   chart?.off('click', handleChartClick)

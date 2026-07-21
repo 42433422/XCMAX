@@ -827,3 +827,384 @@ def test_autonomy_metrics_cli_works_when_executed_by_file_path() -> None:
     report = json.loads(metrics.stdout)
     assert report["status"] == "collecting"
     assert report["complete"] is False
+
+
+# --------------------------------------------------------------------------- #
+# 补充：覆盖 _audit_sink 边界、_normalize_action 边界、_cooldown_active 各路径、
+# delegate 方法、module-level 函数。目标：提升变异测试 kill rate。
+# --------------------------------------------------------------------------- #
+
+
+def test_audit_sink_returning_non_dict_falls_back_to_original_record() -> None:
+    """audit_sink 返回非 dict 时，_audit 应回退到原始 record（line 56 分支）。"""
+    sink_calls: list[dict] = []
+
+    def sink(record: dict) -> str:  # 返回非 dict
+        sink_calls.append(record)
+        return "ok"
+
+    guard = AutonomyGuard(audit_sink=sink)
+    decision = guard.evaluate("restart_service", action_id="sink-non-dict")
+
+    assert decision.allowed is True
+    assert sink_calls, "audit_sink should have been invoked"
+    assert any(row.get("event_type") == "decision" for row in sink_calls)
+
+
+def test_audit_sink_returning_dict_is_used_as_audit_result() -> None:
+    """audit_sink 返回 dict 时，_audit 应使用返回值（line 56 真分支）。"""
+
+    def sink(record: dict) -> dict:
+        return {**record, "captured": True}
+
+    guard = AutonomyGuard(audit_sink=sink)
+    result = guard._audit({"action_id": "x", "event_type": "decision"})
+    assert result.get("captured") is True
+    assert result.get("action_id") == "x"
+
+
+def test_audit_sink_none_path_writes_to_real_audit_log() -> None:
+    """audit_sink=None 时，_audit 应委托给 append_autonomy_audit（line 57-59）。"""
+    from app.domain.autonomy.audit_log import list_autonomy_audit
+
+    guard = AutonomyGuard()  # audit_sink=None
+    guard._audit(
+        {
+            "action_id": "sink-none-test",
+            "action": "test_action",
+            "risk_level": "LOW",
+            "decision": "allow",
+            "outcome": "allowed",
+        }
+    )
+    rows = list_autonomy_audit(limit=10, action_id="sink-none-test")
+    assert rows
+    assert rows[0]["action_id"] == "sink-none-test"
+
+
+def test_cooldown_active_returns_false_when_audit_sink_is_set() -> None:
+    """audit_sink 非 None 时，_cooldown_active 直接返回 False（line 361-362）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    assert guard._cooldown_active("rollback_release") is False
+
+
+def test_cooldown_active_returns_false_when_timestamp_invalid() -> None:
+    """latest_action_event 返回的 timestamp 无效时，_cooldown_active 返回 False（line 372-373）。"""
+    from app.domain.autonomy.audit_log import append_autonomy_audit
+
+    append_autonomy_audit(
+        {
+            "action_id": "bad-ts",
+            "action": "rollback_release",
+            "risk_level": "MEDIUM",
+            "decision": "allow",
+            "outcome": "allowed",
+            "timestamp": "not-an-iso-timestamp",
+        }
+    )
+    guard = AutonomyGuard()  # audit_sink=None → 走 latest_action_event 路径
+    assert guard._cooldown_active("rollback_release") is False
+
+
+def test_cooldown_active_returns_false_when_no_previous_event() -> None:
+    """latest_action_event 返回 None 时，_cooldown_active 返回 False（line 366-367）。"""
+    guard = AutonomyGuard()
+    assert guard._cooldown_active("never_seen_action_xyz") is False
+
+
+def test_cooldown_active_returns_false_when_timestamp_naive_but_valid() -> None:
+    """timestamp 无 tzinfo 但有效时，应补 UTC 后继续判断（line 371）。"""
+    from app.domain.autonomy.audit_log import append_autonomy_audit
+
+    # 写入一条 naive timestamp（无 tzinfo）的记录，时间设为很久以前 → cooldown 不活跃
+    append_autonomy_audit(
+        {
+            "action_id": "naive-ts",
+            "action": "rollback_release",
+            "risk_level": "MEDIUM",
+            "decision": "allow",
+            "outcome": "allowed",
+            "timestamp": "2020-01-01T00:00:00",  # naive，无 tzinfo
+        }
+    )
+    guard = AutonomyGuard()  # audit_sink=None
+    # 时间很久以前，cooldown 窗口已过 → False
+    assert guard._cooldown_active("rollback_release") is False
+
+
+def test_normalize_action_dict_with_risk_key_instead_of_risk_level() -> None:
+    """dict 输入用 'risk' 键（而非 'risk_level'）时应正确解析（line 341 fallback）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    name, explicit, tool_id, operation, _metadata = guard._normalize_action(
+        {"action": "restart_service", "risk": "LOW"}
+    )
+    assert name == "restart_service"
+    assert explicit is RiskLevel.LOW
+    assert tool_id == ""
+    assert operation == ""
+
+
+def test_normalize_action_dict_with_tool_action_instead_of_operation() -> None:
+    """dict 输入用 'tool_action' 键（而非 'operation'）时应正确解析（line 338 fallback）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    name, _explicit, tool_id, operation, _metadata = guard._normalize_action(
+        {"tool_id": "customers", "tool_action": "query"}
+    )
+    assert name == "customers.query"
+    assert tool_id == "customers"
+    assert operation == "query"
+
+
+def test_normalize_action_dict_missing_action_name_and_tool_id_returns_unknown() -> None:
+    """dict 缺 action/name/tool_id 时应返回 'unknown'（line 343）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    name, _explicit, _tool_id, _operation, _metadata = guard._normalize_action({"risk": "LOW"})
+    assert name == "unknown"
+
+
+def test_normalize_action_object_without_type_falls_back_to_action_attribute() -> None:
+    """object 无 type 属性时，应回退到 .action 属性（line 345）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    obj = SimpleNamespace(action="restart_service", risk="LOW", idempotency_key="obj-1")
+    name, explicit, _tool_id, _operation, metadata = guard._normalize_action(obj)
+    assert name == "restart_service"
+    assert explicit is RiskLevel.LOW
+    assert metadata["idempotency_key"] == "obj-1"
+    assert metadata["params"] == {}
+
+
+def test_normalize_action_object_with_none_params_uses_empty_dict() -> None:
+    """object 的 params 为 None 时，metadata['params'] 应为 {}（line 351）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    obj = SimpleNamespace(type="restart_service", params=None, idempotency_key=None)
+    _name, _explicit, _tool_id, _operation, metadata = guard._normalize_action(obj)
+    assert metadata["params"] == {}
+    assert metadata["idempotency_key"] == ""
+
+
+def test_evaluate_resolves_action_id_from_metadata_action_id() -> None:
+    """metadata 中带 action_id 时应被用作 resolved_action_id（line 150）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    decision = guard.evaluate({"action": "restart_service", "action_id": "meta-action-id"})
+    assert decision.action_id == "meta-action-id"
+
+
+def test_evaluate_resolves_action_id_from_metadata_idempotency_key() -> None:
+    """metadata 中带 idempotency_key（无 action_id）时应被用作 resolved_action_id（line 151）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    decision = guard.evaluate({"action": "restart_service", "idempotency_key": "meta-idem-key"})
+    assert decision.action_id == "meta-idem-key"
+
+
+def test_evaluate_unregistered_action_with_explicit_low_risk_fails_open() -> None:
+    """spec=None 但 explicit_level=LOW 时，应继续评估（line 174-186 不触发 blocked）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    decision = guard.evaluate({"action": "custom_unregistered", "risk_level": "LOW"})
+    assert decision.risk_level is RiskLevel.LOW
+    assert decision.allowed is True
+    assert decision.decision == "allow"
+
+
+def test_evaluate_unregistered_action_with_explicit_blocked_risk_blocks() -> None:
+    """spec=None 但 explicit_level=BLOCKED 时，应进入 BLOCKED 分支（line 238-250）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    decision = guard.evaluate({"action": "custom_unregistered", "risk_level": "BLOCKED"})
+    assert decision.risk_level is RiskLevel.BLOCKED
+    assert decision.allowed is False
+    assert decision.decision == "blocked"
+
+
+def test_evaluate_explicit_level_lower_than_spec_risk_does_not_escalate() -> None:
+    """explicit_level < spec risk 时，risk 保持 spec 值（line 191-199 不升级）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    decision = guard.evaluate({"action": "apply_release_to_cvm", "risk_level": "LOW"})
+    assert decision.risk_level is RiskLevel.HIGH
+
+
+def test_evaluate_low_risk_with_allow_auto_false_requires_human(tmp_path: Path) -> None:
+    """LOW risk 但 spec.allow_auto_execute=False 时应要求人工审批。"""
+    registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    modified = json.loads(json.dumps(registry))
+    modified["autonomous_actions"]["restart_service"]["allow_auto_execute"] = False
+    tmp_registry = tmp_path / "test-registry-low-no-auto.json"
+    tmp_registry.write_text(json.dumps(modified), encoding="utf-8")
+    guard = AutonomyGuard(registry_path=tmp_registry, audit_sink=lambda r: r)
+    decision = guard.evaluate("restart_service", action_id="low-no-auto")
+    assert decision.risk_level is RiskLevel.LOW
+    assert decision.allowed is False
+    assert decision.requires_confirmation is True
+    assert decision.decision == "require_human"
+
+
+def test_evaluate_high_risk_without_auto_approval_requires_human(tmp_path: Path) -> None:
+    """HIGH risk 且 allow_auto=False 时应进入 require_human。"""
+    registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    modified = json.loads(json.dumps(registry))
+    modified["autonomous_actions"]["apply_release_to_cvm"]["allow_auto_execute"] = False
+    tmp_registry = tmp_path / "test-registry-high-no-auto.json"
+    tmp_registry.write_text(json.dumps(modified), encoding="utf-8")
+    guard = AutonomyGuard(registry_path=tmp_registry, audit_sink=lambda r: r)
+    decision = guard.evaluate("apply_release_to_cvm", action_id="high-no-auto")
+    assert decision.risk_level is RiskLevel.HIGH
+    assert decision.allowed is False
+    assert decision.decision == "require_human"
+
+
+def test_aggregate_decisions_delegate_combines_node_decisions() -> None:
+    """AutonomyGuard.aggregate_decisions 应委托到 aggregate_risk_decisions。"""
+    from app.domain.autonomy.risk_types import RiskDecision
+
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    nodes = [
+        ("node-a", RiskDecision(requires_confirmation=False, reason="ok", allowed=True)),
+        ("node-b", RiskDecision(requires_confirmation=True, reason="blocked", allowed=False)),
+    ]
+    result = guard.aggregate_decisions(nodes, action="composite", action_id="agg-1")
+    assert result.action == "composite"
+    assert result.action_id == "agg-1"
+    assert result.requires_confirmation is True
+    assert "node-b" in result.blocking_nodes
+
+
+def test_assess_employee_risk_delegate_returns_tuple() -> None:
+    """AutonomyGuard.assess_employee_risk 应委托到 RiskPolicyCatalog。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    level, reason = guard.assess_employee_risk({}, ["agent"])
+    assert level is RiskLevel.MEDIUM
+    assert "handlers inferred" in reason
+
+
+def test_requires_write_approval_and_write_tools_delegates() -> None:
+    """覆盖 requires_write_approval / requires_write_approval_for_spec / list_write_tools / list_code_write_tools。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    assert guard.requires_write_approval("patch_file") is True
+    assert guard.requires_write_approval("customers", "query") is False
+    assert guard.requires_write_approval_for_spec({"requires_write_approval": True}) is True
+    assert guard.requires_write_approval_for_spec({"action_class": "im.send"}) is False
+    write_tools = guard.list_write_tools()
+    assert {"patch_file", "write_file", "customers"} <= write_tools
+    assert guard.list_code_write_tools() == frozenset({"patch_file", "write_file"})
+
+
+def test_get_action_spec_delegate_returns_spec_or_none() -> None:
+    """覆盖 get_action_spec 委托（含 None 路径）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    spec = guard.get_action_spec("customers", "create")
+    assert spec is not None
+    assert spec.get("requires_write_approval") is True
+    assert guard.get_action_spec("missing", "execute") is None
+
+
+def test_registry_and_boundaries_snapshots_return_copies() -> None:
+    """覆盖 registry_snapshot / boundaries_snapshot / veto_boundaries_snapshot / autonomous_action_names。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    snap = guard.registry_snapshot()
+    snap["mutated"] = True
+    assert "mutated" not in guard._policy.registry
+    b_snap = guard.boundaries_snapshot()
+    b_snap.clear()
+    assert guard._policy.boundaries
+    v_snap = guard.veto_boundaries_snapshot()
+    assert v_snap == {}
+    names = guard.autonomous_action_names()
+    assert "restart_service" in names
+    assert isinstance(names, frozenset)
+
+
+def test_evaluate_risk_module_level_function_uses_global_guard() -> None:
+    """evaluate_risk 应使用 get_autonomy_guard() 返回的实例。"""
+    from app.domain.autonomy.autonomy_guard import evaluate_risk
+
+    decision = evaluate_risk("restart_service", action_id="module-level")
+    assert decision.risk_level is RiskLevel.LOW
+    assert decision.allowed is True
+
+
+def test_reload_autonomy_guard_returns_fresh_instance() -> None:
+    """reload_autonomy_guard 应返回新的 AutonomyGuard 实例。"""
+    from app.domain.autonomy import autonomy_guard as ag_module
+
+    first = ag_module.get_autonomy_guard()
+    reloaded = ag_module.reload_autonomy_guard()
+    assert first is not reloaded
+    assert ag_module._GUARD is reloaded
+
+
+def test_record_config_state_with_audit_sink_emits_config_loaded() -> None:
+    """audit_sink 非 None 时，_record_config_state 应走 config_loaded 路径（previous=None）。"""
+    events: list[dict] = []
+    guard = AutonomyGuard(audit_sink=events.append)
+    config_events = [e for e in events if e.get("event_type") == "config"]
+    assert len(config_events) == 1
+    assert config_events[0]["decision"] == "config_loaded"
+    assert config_events[0]["policy"] == guard.medium_risk_policy.value
+
+
+def test_record_config_state_skips_audit_when_policy_unchanged() -> None:
+    """audit_sink=None 时，若上次配置相同，_record_config_state 应跳过审计（line 69-70）。"""
+    from app.domain.autonomy.audit_log import append_autonomy_audit, list_autonomy_audit
+
+    append_autonomy_audit(
+        {
+            "action_id": "config-prev",
+            "action": "__configuration__",
+            "risk_level": "LOW",
+            "decision": "config_loaded",
+            "outcome": "medium_risk_policy_active",
+            "event_type": "config",
+            "policy": "auto_approve",
+            "metadata": {},
+        }
+    )
+    AutonomyGuard()  # audit_sink=None → 走 latest_action_event 路径；policy 相同不应新增
+    config_rows = list_autonomy_audit(limit=50, action_id="config-prev")
+    assert len(config_rows) == 1  # 只有预置的那条
+
+
+def test_medium_risk_policy_require_human_falls_through_to_human_approval(
+    tmp_path: Path,
+) -> None:
+    """MEDIUM + REQUIRE_HUMAN 时，automatic_reason 为空，应走 approval_evidence 路径。"""
+    registry = _registry_with_policy(tmp_path, "require_human")
+    guard = AutonomyGuard(registry_path=registry, audit_sink=lambda r: r)
+    decision = guard.evaluate("rollback_release", action_id="req-human-no-approve")
+    assert decision.risk_level is RiskLevel.MEDIUM
+    assert decision.allowed is False
+    assert decision.decision == "require_human"
+    assert "medium_risk_policy=require_human" in decision.reason
+
+
+def test_medium_risk_policy_require_human_with_legacy_medium_approval_allows(
+    tmp_path: Path,
+) -> None:
+    """MEDIUM + REQUIRE_HUMAN + allow_medium_risk=True 时，应走 approval_evidence 通过。"""
+    registry = _registry_with_policy(tmp_path, "require_human")
+    guard = AutonomyGuard(registry_path=registry, audit_sink=lambda r: r)
+    decision = guard.evaluate(
+        "rollback_release",
+        {"allow_medium_risk": True, "approved_by": "operator"},
+        action_id="req-human-approved",
+    )
+    assert decision.allowed is True
+    assert decision.decision == "approved"
+    assert decision.approver == "operator"
+
+
+def test_evaluate_prohibited_action_audits_with_rollback_path() -> None:
+    """prohibited action 的审计事件应包含 risk_level=BLOCKED 和 outcome=exception_raised。"""
+    events: list[dict] = []
+    guard = AutonomyGuard(audit_sink=events.append)
+    with pytest.raises(ProhibitedActionError):
+        guard.evaluate("db_migration", action_id="prohibited-audit")
+    prohibited_events = [e for e in events if e.get("decision") == "prohibited"]
+    assert len(prohibited_events) == 1
+    assert prohibited_events[0]["risk_level"] == "BLOCKED"
+    assert prohibited_events[0]["outcome"] == "exception_raised"
+
+
+def test_evaluate_strips_action_string_whitespace() -> None:
+    """string 输入带空白时，_normalize_action 应 strip（line 333）。"""
+    guard = AutonomyGuard(audit_sink=lambda r: r)
+    decision = guard.evaluate("  restart_service  ", action_id="strip-test")
+    assert decision.action == "restart_service"
+    assert decision.allowed is True

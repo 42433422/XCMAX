@@ -1,0 +1,390 @@
+{
+  "schema": 1,
+  "packages": [
+    {
+      "id": "artifact-generator",
+      "pkg_id": "artifact-generator",
+      "name": "artifact-generator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "change-request-auditor",
+      "pkg_id": "change-request-auditor",
+      "name": "change-request-auditor",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "code-validator",
+      "pkg_id": "code-validator",
+      "name": "code-validator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "daily-orchestrator",
+      "pkg_id": "daily-orchestrator",
+      "name": "daily-orchestrator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "dbops-engineer",
+      "pkg_id": "dbops-engineer",
+      "name": "dbops-engineer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "delivery-receipt-officer",
+      "pkg_id": "delivery-receipt-officer",
+      "name": "delivery-receipt-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "deploy-release-officer",
+      "pkg_id": "deploy-release-officer",
+      "name": "deploy-release-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "doc-knowledge-curator",
+      "pkg_id": "doc-knowledge-curator",
+      "name": "doc-knowledge-curator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "ecosystem-delivery-reporter",
+      "pkg_id": "ecosystem-delivery-reporter",
+      "name": "ecosystem-delivery-reporter",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "ecosystem-investor-portal-officer",
+      "pkg_id": "ecosystem-investor-portal-officer",
+      "name": "ecosystem-investor-portal-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "ecosystem-joint-catalog-officer",
+      "pkg_id": "ecosystem-joint-catalog-officer",
+      "name": "ecosystem-joint-catalog-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "ecosystem-partner-onboard-officer",
+      "pkg_id": "ecosystem-partner-onboard-officer",
+      "name": "ecosystem-partner-onboard-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "ecosystem-revenue-share-reconciler",
+      "pkg_id": "ecosystem-revenue-share-reconciler",
+      "name": "ecosystem-revenue-share-reconciler",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "employee-interview-assistant",
+      "pkg_id": "employee-interview-assistant",
+      "name": "employee-interview-assistant",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "employee-pack-curator",
+      "pkg_id": "employee-pack-curator",
+      "name": "employee-pack-curator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "employee-pack-quality-interviewer",
+      "pkg_id": "employee-pack-quality-interviewer",
+      "name": "employee-pack-quality-interviewer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "employee-planner",
+      "pkg_id": "employee-planner",
+      "name": "employee-planner",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "enterprise-adoption-officer",
+      "pkg_id": "enterprise-adoption-officer",
+      "name": "enterprise-adoption-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "fhd-core-maintainer",
+      "pkg_id": "fhd-core-maintainer",
+      "name": "fhd-core-maintainer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "flask-entry-keeper",
+      "pkg_id": "flask-entry-keeper",
+      "name": "flask-entry-keeper",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "github-pr-gatekeeper",
+      "pkg_id": "github-pr-gatekeeper",
+      "name": "github-pr-gatekeeper",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "hex-quality-assessor",
+      "pkg_id": "hex-quality-assessor",
+      "name": "hex-quality-assessor",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "host-checker",
+      "pkg_id": "host-checker",
+      "name": "host-checker",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "intake-dispatcher",
+      "pkg_id": "intake-dispatcher",
+      "name": "intake-dispatcher",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "intent-analyst",
+      "pkg_id": "intent-analyst",
+      "name": "intent-analyst",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "java-payment-bridge-officer",
+      "pkg_id": "java-payment-bridge-officer",
+      "name": "java-payment-bridge-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "legacy-archive-curator",
+      "pkg_id": "legacy-archive-curator",
+      "name": "legacy-archive-curator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "llm-ops-engineer",
+      "pkg_id": "llm-ops-engineer",
+      "name": "llm-ops-engineer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "log-monitor-incident",
+      "pkg_id": "log-monitor-incident",
+      "name": "log-monitor-incident",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "market-frontend-dev",
+      "pkg_id": "market-frontend-dev",
+      "name": "market-frontend-dev",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "marketing-site-builder",
+      "pkg_id": "marketing-site-builder",
+      "name": "marketing-site-builder",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "miniapp-builder",
+      "pkg_id": "miniapp-builder",
+      "name": "miniapp-builder",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "mobile-android-release-officer",
+      "pkg_id": "mobile-android-release-officer",
+      "name": "mobile-android-release-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "mobile-ios-release-officer",
+      "pkg_id": "mobile-ios-release-officer",
+      "name": "mobile-ios-release-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "mods-and-eskill-curator",
+      "pkg_id": "mods-and-eskill-curator",
+      "name": "mods-and-eskill-curator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "modstore-backend-api",
+      "pkg_id": "modstore-backend-api",
+      "name": "modstore-backend-api",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "nginx-config-engineer",
+      "pkg_id": "nginx-config-engineer",
+      "name": "nginx-config-engineer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "pack-registrar",
+      "pkg_id": "pack-registrar",
+      "name": "pack-registrar",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "payment-billing-reconciler",
+      "pkg_id": "payment-billing-reconciler",
+      "name": "payment-billing-reconciler",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "push-update-context-officer",
+      "pkg_id": "push-update-context-officer",
+      "name": "push-update-context-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "quality-validator",
+      "pkg_id": "quality-validator",
+      "name": "quality-validator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "retention-officer",
+      "pkg_id": "retention-officer",
+      "name": "retention-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "sandbox-tester",
+      "pkg_id": "sandbox-tester",
+      "name": "sandbox-tester",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "script-binder",
+      "pkg_id": "script-binder",
+      "name": "script-binder",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "security-secrets-guard",
+      "pkg_id": "security-secrets-guard",
+      "name": "security-secrets-guard",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "self-checker",
+      "pkg_id": "self-checker",
+      "name": "self-checker",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "seo-sitemap-curator",
+      "pkg_id": "seo-sitemap-curator",
+      "name": "seo-sitemap-curator",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "site-content-editor",
+      "pkg_id": "site-content-editor",
+      "name": "site-content-editor",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "task-router-officer",
+      "pkg_id": "task-router-officer",
+      "name": "task-router-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "test-qa-runner",
+      "pkg_id": "test-qa-runner",
+      "name": "test-qa-runner",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "top-architect",
+      "pkg_id": "top-architect",
+      "name": "top-architect",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "user-customer-service-officer",
+      "pkg_id": "user-customer-service-officer",
+      "name": "user-customer-service-officer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "vibe-coding-maintainer",
+      "pkg_id": "vibe-coding-maintainer",
+      "name": "vibe-coding-maintainer",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "workbench-ux-stylist",
+      "pkg_id": "workbench-ux-stylist",
+      "name": "workbench-ux-stylist",
+      "artifact": "employee_pack",
+      "status": "active"
+    },
+    {
+      "id": "workflow-automator",
+      "pkg_id": "workflow-automator",
+      "name": "workflow-automator",
+      "artifact": "employee_pack",
+      "status": "active"
+    }
+  ]
+}

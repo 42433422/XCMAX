@@ -8,14 +8,29 @@
   >
     <div class="perm-card">
       <div class="perm-icon"><svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="4" width="10" height="7" rx="1.5"/><circle cx="6" cy="7.5" r="0.75" fill="currentColor" stroke="none"/><circle cx="10" cy="7.5" r="0.75" fill="currentColor" stroke="none"/><path d="M6 11v1.5M10 11v1.5M5 4V2.5M11 4V2.5"/></svg></div>
-      <h2 id="perm-title" class="perm-title">AI 数字管家 — 隐私提示</h2>
+      <h2 id="perm-title" class="perm-title">
+        {{ corpMode ? '小C — 隐私提示' : 'AI 数字管家 — 隐私提示' }}
+      </h2>
       <p class="perm-sub">为了提供更好的服务，AI 助手需要：</p>
       <ul class="perm-list">
-        <li>📊 记录您的使用习惯，以便主动建议</li>
-        <li>📄 读取当前页面内容，以便理解上下文</li>
-        <li>🖱️ 代替您执行操作，提高使用效率</li>
+        <template v-if="corpMode">
+          <li>📄 读取当前页面内容，以便介绍本页能做什么</li>
+          <li>🔊 同意后可用语音简短介绍本页（可随时在面板关闭）</li>
+          <li>💬 回答产品、案例与预约咨询相关问题</li>
+        </template>
+        <template v-else>
+          <li>📊 记录您的使用习惯，以便主动建议</li>
+          <li>📄 读取当前页面内容，以便理解上下文</li>
+          <li>🖱️ 代替您执行操作，提高使用效率</li>
+        </template>
       </ul>
-      <p class="perm-note">所有数据仅用于改善您的使用体验，不会分享给第三方。</p>
+      <p class="perm-note">
+        {{
+          corpMode
+            ? '语音介绍可在悬浮窗随时关闭；对话仅用于本站咨询体验，不会分享给第三方。'
+            : '所有数据仅用于改善您的使用体验，不会分享给第三方。'
+        }}
+      </p>
       <div class="perm-actions">
         <button type="button" class="perm-btn perm-btn--primary" @click="$emit('agree')">
           同意并继续
@@ -29,6 +44,13 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(
+  defineProps<{
+    corpMode?: boolean
+  }>(),
+  { corpMode: false },
+)
+
 defineEmits<{
   (e: 'agree'): void
   (e: 'dismiss'): void

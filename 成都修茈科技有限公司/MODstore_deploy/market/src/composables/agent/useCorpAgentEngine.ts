@@ -33,7 +33,7 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
 
 function fallbackReply(origin: string): string {
   return (
-    `我是修茈科技官网 AI 管家，可以解答产品、案例与预约咨询。\n\n` +
+    `我是小C（修茈科技官网客服），可以解答产品、案例与预约咨询。\n\n` +
     `• 产品能力 → ${origin}${CORP_LINKS.services}\n` +
     `• 预约沟通 → ${origin}${CORP_LINKS.contact}\n` +
     `• 登录 AI 市场 → ${origin}${CORP_LINKS.market}\n\n` +

@@ -70,8 +70,18 @@ def dedupe_signal(proposal: Dict[str, Any]) -> None:
             )
 
 
-def open_issue_for_proposal(proposal: Dict[str, Any]) -> str:
-    """调 gh CLI 创建 issue，返回 issue URL。"""
+def open_issue_for_proposal(
+    proposal: Dict[str, Any],
+    *,
+    add_implement_label: bool = True,
+) -> str:
+    """调 gh CLI 创建 issue，返回 issue URL。
+
+    Args:
+        proposal: LLM 提议字典。
+        add_implement_label: 默认 True（兼容旧路径：靠标签间接触发 implement）。
+            演化 ledger 连接点 4 显式 dispatch 时应传 False，避免双重触发。
+    """
     dedupe_signal(proposal)
 
     repo = os.environ.get("GITHUB_REPO", "")
@@ -91,9 +101,9 @@ def open_issue_for_proposal(proposal: Dict[str, Any]) -> str:
         title,
         "--body",
         body,
-        "--label",
-        AI_IMPLEMENT_LABEL,
     ]
+    if add_implement_label:
+        cmd.extend(["--label", AI_IMPLEMENT_LABEL])
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"gh issue create failed (rc={result.returncode}): {result.stderr}")
