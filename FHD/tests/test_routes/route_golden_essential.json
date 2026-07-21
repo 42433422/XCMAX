@@ -146,6 +146,8 @@
   "/api/knowledge/v1/datasets/{dataset_id}/versions/rollback",
   "/api/knowledge/v1/health",
   "/api/knowledge/v1/ingest",
+  "/api/knowledge/v1/omniscient",
+  "/api/knowledge/v1/omniscient/query",
   "/api/knowledge/v1/query",
   "/api/knowledge/v1/status",
   "/api/lan/access-requests",
