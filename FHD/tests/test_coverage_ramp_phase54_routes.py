@@ -900,9 +900,9 @@ def test_ai_tts_fallback_on_error(ai_client: TestClient, monkeypatch: pytest.Mon
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("edge offline")),
     )
     r = ai_client.post("/api/tts", json={"text": "回退测试"})
-    assert r.status_code == 200
+    assert r.status_code == 503
     assert r.json()["success"] is False
-    assert "浏览器语音" in r.json()["message"]
+    assert "MiMo" in r.json()["message"] or "Edge" in r.json()["message"]
 
 
 def test_ai_purchase_units_create_name_alias(

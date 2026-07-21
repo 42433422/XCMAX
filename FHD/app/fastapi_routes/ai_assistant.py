@@ -515,6 +515,7 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                     "voice": tts_payload.get("voice"),
                     "speakerId": speaker_id,
                     "lang": tts_payload.get("lang") or lang,
+                    "provider": tts_payload.get("provider") or "edge",
                 },
             },
             route="/api/tts",
@@ -523,15 +524,15 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
         )
         return JSONResponse(traced)
     except RECOVERABLE_ERRORS as e:
-        logger.warning("Edge TTS 不可用，回退浏览器语音: %s", e)
+        logger.warning("TTS 不可用（MiMo/Edge）: %s", e)
         traced = _trace_ai_assistant_route(
             {
                 "success": False,
-                "message": "TTS 服务未启用，将使用浏览器语音",
+                "message": "TTS 服务暂不可用（已尝试 MiMo 与 Edge 神经音）",
                 "data": {},
             },
             route="/api/tts",
             action="tts_synthesize",
             body=payload,
         )
-        return JSONResponse(traced, status_code=200)
+        return JSONResponse(traced, status_code=503)

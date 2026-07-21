@@ -7,13 +7,13 @@ export interface PersonalSettings {
   fontPx: number
   memory: string
   suggestions: string[]
-  /** 朗读引擎：`edge-online` 为微软在线神经音（经服务端 edge-tts）；`browser` 为本机合成 */
-  ttsEngine: 'edge-online' | 'browser'
-  /** Edge 神经语音 ID，如 zh-CN-XiaoxiaoNeural */
+  /** 朗读引擎：`auto`=MiMo→Edge；`edge-online`=仅 Edge；历史 `browser` 加载时映射为 auto */
+  ttsEngine: 'auto' | 'edge-online' | 'browser'
+  /** Edge 神经语音 ID（回退或仅 Edge 模式），如 zh-CN-XiaoxiaoNeural */
   ttsEdgeVoice: string
-  /** 浏览器朗读音色：`SpeechSynthesisVoice.name`，空字符串表示自动（优先中文） */
+  /** 历史字段：系统 TTS 已禁用，保留兼容 */
   ttsVoiceName: string
-  /** 朗读语速：浏览器为 utterance.rate；云端为相对倍率映射到 Edge rate% */
+  /** 朗读语速：相对倍率，映射到 Edge rate% */
   ttsRate: number
   /**
    * 语音对话管线：`cascade` = ASR→LLM→客户端 TTS；`s2s` = 单 WebSocket（LLM+服务端 TTS 编排，更接近豆包）
@@ -35,7 +35,7 @@ export function defaultPersonalSettings(): PersonalSettings {
     fontPx: 15,
     memory: '',
     suggestions: DEFAULT_SUGGESTIONS.slice(),
-    ttsEngine: 'edge-online',
+    ttsEngine: 'auto',
     ttsEdgeVoice: 'zh-CN-XiaoxiaoNeural',
     ttsVoiceName: '',
     ttsRate: 1,
@@ -53,8 +53,13 @@ export function loadPersonalSettings(): PersonalSettings {
     const rawTtsRate = Number(obj.ttsRate)
     const ttsRate = Number.isFinite(rawTtsRate) ? Math.max(0.6, Math.min(1.6, rawTtsRate)) : def.ttsRate
     const ttsVoiceName = typeof obj.ttsVoiceName === 'string' ? obj.ttsVoiceName.slice(0, 256) : def.ttsVoiceName
+    // 废弃浏览器系统 TTS：旧 browser 偏好升级为 auto（MiMo→Edge）
     const ttsEngine =
-      obj.ttsEngine === 'browser' || obj.ttsEngine === 'edge-online' ? obj.ttsEngine : def.ttsEngine
+      obj.ttsEngine === 'edge-online'
+        ? 'edge-online'
+        : obj.ttsEngine === 'auto' || obj.ttsEngine === 'browser'
+          ? 'auto'
+          : def.ttsEngine
     const ttsEdgeVoice =
       typeof obj.ttsEdgeVoice === 'string' && obj.ttsEdgeVoice.trim()
         ? obj.ttsEdgeVoice.trim().slice(0, 120)

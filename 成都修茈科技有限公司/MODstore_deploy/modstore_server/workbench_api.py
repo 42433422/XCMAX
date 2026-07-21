@@ -4880,6 +4880,15 @@ class WorkbenchEdgeTtsBody(BaseModel):
     rate: float = Field(1.0, ge=0.6, le=1.6, description="相对语速，约映射到 Edge 的 rate 百分比")
 
 
+class WorkbenchUnifiedTtsBody(BaseModel):
+    """统一 TTS：优先 MiMo，失败回退 Edge 神经音。"""
+
+    text: str = Field(..., min_length=1, max_length=5000)
+    voice: str = Field("", max_length=120, description="MiMo 音色（如 冰糖）；空则用默认")
+    edge_voice: str = Field("zh-CN-XiaoxiaoNeural", max_length=120)
+    rate: float = Field(1.0, ge=0.6, le=1.6)
+
+
 class WorkbenchVibeCodeSkillBody(BaseModel):
     """工作台「AI 代码技能」: NL → vibe-coding CodeSkill → 试跑 → 可选发布。"""
 
@@ -5175,6 +5184,68 @@ async def _edge_tts_stream_chunks(text: str, voice: str, rate_str: str):
 
     async for data in stream_audio(text, voice, rate_str):
         yield data
+
+
+@router.post("/tts", summary="统一 TTS（MiMo → Edge 神经音，返回完整音频）")
+async def workbench_unified_tts(
+    body: WorkbenchUnifiedTtsBody,
+    _user: User = Depends(_get_current_user),
+):
+    """优先小米 MiMo-V2.5 TTS，失败回退 edge-tts；不提供浏览器系统 TTS。"""
+    from fastapi.responses import Response
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "text 不能为空")
+
+    try:
+        from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
+        from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
+
+        mimo_voice = (body.voice or "").strip() or MIMO_VOICE
+        audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice)
+        if audio and not err:
+            mime = str(meta.get("mime") or "audio/wav")
+            return Response(
+                content=audio,
+                media_type=mime,
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-TTS-Provider": "mimo",
+                    "X-TTS-Voice": str(meta.get("voice") or mimo_voice),
+                },
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+    if _EDGE_TTS is None:
+        raise HTTPException(
+            503,
+            "MiMo 与 edge-tts 均不可用。请配置 MIMO_API_KEY 或 pip install edge-tts",
+        )
+    edge_voice = (body.edge_voice or "zh-CN-XiaoxiaoNeural").strip()
+    rate_str = _edge_tts_rate_str(body.rate)
+    try:
+        chunks: list[bytes] = []
+        async for data in _edge_tts_stream_chunks(text, edge_voice, rate_str):
+            if data:
+                chunks.append(data)
+        mp3 = b"".join(chunks)
+        if not mp3:
+            raise RuntimeError("edge-tts empty")
+        return Response(
+            content=mp3,
+            media_type="audio/mpeg",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-TTS-Provider": "edge",
+                "X-TTS-Voice": edge_voice,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"TTS 合成失败: {exc}") from exc
 
 
 @router.post("/tts/edge", summary="微软在线神经 TTS（edge-tts，返回 MP3）")

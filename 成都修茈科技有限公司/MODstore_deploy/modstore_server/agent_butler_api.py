@@ -815,6 +815,11 @@ class CorpChatDTO(BaseModel):
     visitor_label: Optional[str] = Field(None, max_length=64)
 
 
+class CorpTtsDTO(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+    voice: Optional[str] = Field(None, max_length=64)
+
+
 CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。
 
 你的性格和说话方式：
@@ -1182,6 +1187,66 @@ async def butler_corp_chat(
         )
 
     return {"success": True, "content": text, "message": text}
+
+
+@router.post("/corp-tts")
+async def butler_corp_tts(request: Request, body: CorpTtsDTO):
+    """官网公开 TTS：优先 MiMo，失败回退 Edge 神经音；不使用浏览器系统 TTS。"""
+    import base64
+
+    _corp_chat_rate_allow(_public_contact_client_key(request))
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text 不能为空")
+
+    # 1) MiMo
+    try:
+        from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
+        from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
+
+        voice = (body.voice or "").strip() or MIMO_VOICE
+        audio, err, meta = await synthesize_mimo_tts_async(text, voice=voice)
+        if audio and not err:
+            mime = str(meta.get("mime") or "audio/wav")
+            b64 = base64.b64encode(audio).decode("ascii")
+            return {
+                "success": True,
+                "data": {
+                    "audioBase64": f"data:{mime};base64,{b64}",
+                    "provider": "mimo",
+                    "voice": meta.get("voice") or voice,
+                },
+            }
+        if err:
+            logger.info("corp-tts MiMo unavailable, fallback Edge: %s", err)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("corp-tts MiMo failed, fallback Edge: %s", exc)
+
+    # 2) Edge neural
+    try:
+        from modstore_server.edge_tts_service import DEFAULT_VOICE as EDGE_VOICE
+        from modstore_server.edge_tts_service import rate_str_from_float, stream_audio
+
+        edge_voice = EDGE_VOICE
+        chunks: list[bytes] = []
+        async for data in stream_audio(text, edge_voice, rate_str_from_float(1.05)):
+            if data:
+                chunks.append(data)
+        mp3 = b"".join(chunks)
+        if not mp3:
+            raise RuntimeError("edge-tts empty")
+        b64 = base64.b64encode(mp3).decode("ascii")
+        return {
+            "success": True,
+            "data": {
+                "audioBase64": f"data:audio/mpeg;base64,{b64}",
+                "provider": "edge",
+                "voice": edge_voice,
+            },
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("corp-tts Edge failed: %s", exc)
+        raise HTTPException(503, "语音合成暂不可用") from exc
 
 
 # ─── 联系页问卷智能预填 ─────────────────────────────────────────────────

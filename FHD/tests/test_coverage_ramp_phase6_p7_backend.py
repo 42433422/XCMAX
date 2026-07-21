@@ -988,7 +988,7 @@ def test_compat_tts_trace_redacts_audio_payload() -> None:
     assert "redacted" in serialized
 
 
-def test_compat_tts_recoverable_error_falls_back_to_browser_voice() -> None:
+def test_compat_tts_recoverable_error_returns_503_without_browser_voice() -> None:
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tts_facade.synthesize_to_data_uri") as mock_synth,
@@ -997,11 +997,11 @@ def test_compat_tts_recoverable_error_falls_back_to_browser_voice() -> None:
         mock_warmup.return_value = None
         mock_synth.side_effect = RuntimeError("edge tts offline")
         resp = client.post("/api/tts", json={"text": "你好"})
-    # 注意：源码中 TTS 不可用时返回 200（让前端使用浏览器语音）
-    assert resp.status_code == 200
+    # MiMo/Edge 均不可用时 503；前端不再回退系统 TTS
+    assert resp.status_code == 503
     body = resp.json()
     assert body["success"] is False
-    assert "浏览器语音" in body["message"]
+    assert "MiMo" in body["message"] or "Edge" in body["message"]
     assert body["data"] == {}
 
 

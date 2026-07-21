@@ -4,6 +4,7 @@ import { getCorpPageKnowledge, resolveCorpPageId } from '../content/siteKnowledg
 
 export const CORP_PROACTIVE_INTRO_KEY = 'xc_corp_proactive_intro'
 const SESSION_PREFIX = 'xc-corp-intro-done:'
+const CORP_TTS_PATH = '/api/agent/butler/corp-tts'
 
 export function isCorpProactiveIntroEnabled(): boolean {
   try {
@@ -72,39 +73,64 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
+let corpIntroAudio: HTMLAudioElement | null = null
+
 export function stopCorpIntroSpeech(): void {
   if (typeof window === 'undefined') return
-  try {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-  } catch {
-    // ignore
+  if (corpIntroAudio) {
+    try {
+      corpIntroAudio.pause()
+      corpIntroAudio.removeAttribute('src')
+      corpIntroAudio.load()
+    } catch {
+      // ignore
+    }
+    corpIntroAudio = null
   }
 }
 
-/** 浏览器原生 TTS；fail-open。 */
+async function fetchCorpTtsDataUri(text: string): Promise<string | null> {
+  const res = await fetch(CORP_TTS_PATH, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ text }),
+    credentials: 'same-origin',
+  })
+  if (!res.ok) return null
+  let json: Record<string, unknown> = {}
+  try {
+    json = (await res.json()) as Record<string, unknown>
+  } catch {
+    return null
+  }
+  const data = (json.data && typeof json.data === 'object' ? json.data : json) as Record<string, unknown>
+  const uri = data.audioBase64
+  return typeof uri === 'string' && uri.startsWith('data:') ? uri : null
+}
+
+/** 服务端 MiMo → Edge 神经音；失败静默，不回退系统 TTS。 */
 export function speakCorpIntro(text: string): Promise<void> {
   if (typeof window === 'undefined' || !text.trim()) return Promise.resolve()
-  if (!('speechSynthesis' in window)) return Promise.resolve()
   if (prefersReducedMotion()) return Promise.resolve()
 
-  return new Promise((resolve) => {
+  stopCorpIntroSpeech()
+  return (async () => {
     try {
-      const synth = window.speechSynthesis
-      synth.cancel()
-      const u = new SpeechSynthesisUtterance(text.trim())
-      u.lang = 'zh-CN'
-      u.rate = 1.05
-      u.pitch = 1
-      u.onend = () => resolve()
-      u.onerror = () => resolve()
-      try {
-        synth.resume()
-      } catch {
-        // ignore
-      }
-      synth.speak(u)
+      const uri = await fetchCorpTtsDataUri(text.trim())
+      if (!uri) return
+      await new Promise<void>((resolve) => {
+        const a = new Audio(uri)
+        corpIntroAudio = a
+        const done = () => {
+          if (corpIntroAudio === a) corpIntroAudio = null
+          resolve()
+        }
+        a.onended = done
+        a.onerror = done
+        void a.play().catch(done)
+      })
     } catch {
-      resolve()
+      // fail-open：不使用 speechSynthesis
     }
-  })
+  })()
 }
