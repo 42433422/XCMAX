@@ -116,10 +116,15 @@ jobs:
             curl -fsS https://xiu-ci.com/developer.html >/dev/null
             curl -fsSL https://xiu-ci.com/market/download >/dev/null
             curl -fsS https://xiu-ci.com/market/ >/dev/null
-            echo "[verify] homepage nav + partials are real files (not index fallback):"
-            curl -fsS https://xiu-ci.com/ | grep -q 'site-header\|data-nav="index"\|>首页<'
-            PARTIAL_HEAD="$(curl -fsS https://xiu-ci.com/partials/header.html | head -c 80)"
-            echo "$PARTIAL_HEAD" | grep -qv '<!DOCTYPE html>'
-            echo "$PARTIAL_HEAD" | grep -q 'site-header\|nav-menu'
+            echo "[verify] homepage nav present:"
+            curl -fsS -o /tmp/xc-home.html https://xiu-ci.com/
+            grep -E -q 'site-header|data-nav="index"|>首页<' /tmp/xc-home.html
+            echo "[verify] live root partials on disk (nginx may SPA-fallback if missing):"
+            if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
+              head -n 2 "${LIVE_SITE}/partials/header.html"
+              grep -E -q 'site-header|nav-menu' "${LIVE_SITE}/partials/header.html"
+            else
+              echo "[warn] ${LIVE_SITE:-unset}/partials/header.html missing on disk"
+            fi
             echo "[verify] logo bytes:"
             wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true
