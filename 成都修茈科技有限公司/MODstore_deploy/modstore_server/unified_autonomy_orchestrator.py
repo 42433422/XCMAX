@@ -122,6 +122,19 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
         payload["scope"] = scope
         ev.payload_json = json.dumps(payload, ensure_ascii=False)[:8000]
         session.commit()
+
+        # website scope 端侧 runner：消费 web_pool 字段，触发 redeploy / escalate
+        # （fail-open：runner 异常不影响 orchestrator 的 plan commit；
+        #  runner 内部已自增 IncidentEvent.dispatched_count 并写 JSONL audit）
+        if scope == "website":
+            try:
+                from modstore_server.website_runner import dispatch_incident as _website_dispatch
+
+                runner_report = _website_dispatch(event_id=int(event_id))
+                plan["website_runner"] = runner_report.to_dict()
+            except Exception as exc:  # noqa: BLE001 - fail-open：runner 故障不影响 orchestrator
+                plan["website_runner"] = {"ok": False, "error": str(exc)[:300]}
+
         return {"ok": True, **plan}
 
 
