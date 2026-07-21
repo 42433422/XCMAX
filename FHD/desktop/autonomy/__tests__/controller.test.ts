@@ -375,10 +375,26 @@ describe('AutonomyController — crossTierGate integration', () => {
     }
   }
 
-  it('env 未设时 crossTierGate 跳过，动作正常执行', async () => {
+  it('env 未设时 crossTierGate 默认启用 + adapter 无 getRemoteState → fail-open 放行', async () => {
     delete process.env[ENV_KEY]
     const adapter = makeMockAdapter({
       truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed.length).toBe(1)
+    expect(adapter.executed[0].type).toBe('rollback_version')
+  })
+
+  it('env=0 显式关闭 crossTierGate → 动作正常执行不走门禁', async () => {
+    process.env[ENV_KEY] = '0'
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
+    })
+    // 即使 frozen=true 也应放行（门禁关闭）
+    ;(adapter as unknown as { getRemoteState: () => Promise<Record<string, unknown>> }).getRemoteState = async () => ({
+      server_manifest_frozen: true,
     })
     const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
     ctrl.ingest(makeSignal('trigger', Date.now()))
@@ -392,7 +408,7 @@ describe('AutonomyController — crossTierGate integration', () => {
     const adapter = makeMockAdapter({
       truth: makeBaseTruth({ pending_rollback_marker: false, last_backup_ts: Date.now() }),
     })
-    // 不设置 getRemoteState，应 fail-open
+    // 不设置 getRemoteState → null → fail-open 放行
     const ctrl = new AutonomyController(adapter, [makeRollbackPolicy()], { enabled: false })
     ctrl.ingest(makeSignal('trigger', Date.now()))
     await ctrl.tick()
@@ -446,7 +462,7 @@ describe('AutonomyController — crossTierGate integration', () => {
     ctrl.ingest(makeSignal('trigger', Date.now()))
     await ctrl.tick()
     expect(adapter.executed.length).toBe(1)
-    // 应有 cross_tier_query_failed 的 skipped 审计
+    // 应有 cross_tier_query_failed 的 skipped 审计（fail-open 写 audit 但放行）
     const failedAudit = adapter.audits.find(
       a => a.action && typeof a.action === 'object' && 'type' in a.action && a.action.type === 'skipped'
         && Array.isArray((a.action as { reasons: string[] }).reasons)

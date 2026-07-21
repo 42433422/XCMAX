@@ -259,20 +259,20 @@ env:
   XCAGI_CROSS_TIER_GATE: '1'
 ```
 
-**默认禁用**：env 未设时跨端门禁完全跳过，与未引入此功能时行为一致。
+**默认启用（opt-out）**：env 未设时门禁开启；`XCAGI_CROSS_TIER_GATE=0/false/no` 关闭。
 
-### 5.2 fail-open 原则
+### 5.2 fail-closed 原则
 
-跨端查询失败时**不阻断**主流程，避免引入新单点故障。
+跨端查询失败时**阻断**动作，避免在未知跨端状态下误执行。
 
 | 场景 | 行为 |
 |---|---|
-| env 未设 | 跳过门禁检查 |
-| env=1 + adapter 未实现 `getRemoteState` | `?.()` 返回 undefined → `?? null` → fail-open |
-| env=1 + 查询抛错 | catch 写 audit + fail-open |
-| env=1 + 查询返回 null | fail-open |
-| env=1 + 查询返回 {} | allow=true（无规则命中） |
-| env=1 + 查询返回 frozen=true | **allow=false**（写 audit + return） |
+| env=0/false/no | 跳过门禁检查 |
+| env 未设/1 + adapter 未实现 `getRemoteState` | `?.()` 返回 undefined → `?? null` → **fail-closed** |
+| env 未设/1 + 查询抛错 | catch 写 audit + **fail-closed** |
+| env 未设/1 + 查询返回 null | **fail-closed** |
+| env 未设/1 + 查询返回 {} | allow=true（无规则命中） |
+| env 未设/1 + 查询返回 frozen=true | **allow=false**（写 audit + return） |
 
 ### 5.3 三个跨端场景
 
@@ -452,8 +452,8 @@ XCAGI_DESKTOP_TEST=1 XCAGI_CROSS_TIER_GATE=1 npx vitest run autonomy/__tests__/c
 
 1. **Policy 纯函数**：禁止 `Date.now()`，时间窗口用 signals 自身 `ts`
 2. **ImpactPredictor 拦截不阻断**：误判仅记录，不抛错
-3. **CrossTierGate fail-open**：查询失败不阻断，避免引入新单点故障
-4. **CrossTierGate 默认禁用**：env `XCAGI_CROSS_TIER_GATE=1` 启用，渐进式推广
+3. **CrossTierGate fail-closed**：查询失败（`remote_state=null`）阻断动作并写 audit，避免盲操作
+4. **CrossTierGate 默认启用**：env `XCAGI_CROSS_TIER_GATE=0/false/no` 关闭（opt-out）
 5. **同指纹 24h 去重**：CI 自愈避免相同错误反复创建 PR
 6. **autonomy/ 分支不递归**：ai-self-heal 不处理 autonomy/* 分支失败
 7. **LLM fail-open**：30s 超时不阻断主流程

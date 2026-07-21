@@ -111,8 +111,10 @@ try:
     if _ci_scripts_dir not in sys.path:
         sys.path.insert(0, _ci_scripts_dir)
     from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
+    from _im_notify_client import notify_boss_im  # noqa: E402
 except ImportError:  # pragma: no cover - 测试环境路径可能不通
     post_to_approval_ledger = None  # type: ignore[assignment]
+    notify_boss_im = None  # type: ignore[assignment]
 
 
 # --------------------------------------------------------------------------- #
@@ -325,7 +327,7 @@ def _try_execute_single(
         adapter.audit(entry)
         return entry
 
-    # CrossTierGate 跨端门禁（默认启用，env XCAGI_CROSS_TIER_GATE=0 关闭）
+    # CrossTierGate 跨端门禁（默认启用，env XCAGI_CROSS_TIER_GATE=0 关闭；fail-open）
     # 服务器端无法直接查询桌面端 pending marker；用 truth.pending_rollback_marker
     # 作为代理信号（桌面端通过 IPC 触发服务器端 rollback 时会创建 rollback-marker.json）
     if cross_tier_gate_enabled():
@@ -357,6 +359,24 @@ def _try_execute_single(
         truth_snapshot=truth,
     )
     adapter.audit(entry)
+
+    # 回调 /github-approval：成功 → executed（fail-open）
+    if getattr(result, "ok", False):
+        try:
+            from autonomy_callback import report_executed
+
+            report_executed(
+                action_id=action.idempotency_key,
+                approver="cvm-autonomy-watcher",
+                outcome={
+                    "action_type": action.type.value,
+                    "ok": True,
+                    "detail": getattr(result, "detail", ""),
+                },
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
 
     # 失败且耗尽 attempts → escalate
     if not result.ok and tracker.attempts >= action.max_attempts and not tracker.escalated:
@@ -430,6 +450,37 @@ def _escalate(
             post_to_approval_ledger(
                 action="cvm_escalate",
                 payload=_escalate_payload,
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
+    # 回调 /github-approval：decision=execution_failed（fail-open）
+    try:
+        from autonomy_callback import report_execution_failed
+
+        report_execution_failed(
+            action_id=original_action.idempotency_key,
+            approver="cvm-autonomy-watcher",
+            error=reason,
+            outcome={
+                "action_type": original_action.type.value,
+                "escalate_ok": bool(getattr(result, "ok", False)),
+                "signal_kind": getattr(source_signal, "kind", "") if source_signal else "",
+            },
+            source="cvm_watcher",
+        )
+    except Exception:  # pragma: no cover - fail-open
+        pass
+    # 管理端 IM（fail-open）：needs-human 及时触达
+    if notify_boss_im is not None:
+        try:
+            notify_boss_im(
+                f"[CVM escalate] action={original_action.type.value} "
+                f"reason={reason}\n"
+                f"root_cause={diagnosis.root_cause}\n"
+                f"key={original_action.idempotency_key}",
+                employee_id="cvm-autonomy",
+                display_name="CVM 自治",
                 source="cvm_watcher",
             )
         except Exception:  # pragma: no cover - fail-open

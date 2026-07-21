@@ -1,6 +1,6 @@
 """test_cross_tier_gate.py — 跨端门禁纯函数测试。
 
-覆盖 3 个跨端场景 + 失败默认 allow + 无匹配默认 allow。
+覆盖 3 个跨端场景 + 查询失败 fail-open + 无匹配默认 allow。
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from scripts.autonomy.cross_tier_gate import GateResult, check_before_action, is
 
 
 class TestFailOpen:
-    """跨端查询失败默认 allow=True。"""
+    """跨端查询失败默认 allow=True（fail-open，不阻断主流程）。"""
 
     def test_remote_state_none_returns_allow(self):
         result = check_before_action("desktop", "rollback_version", None)
@@ -104,18 +104,42 @@ class TestUnmatchedAction:
 
 
 class TestIsEnabled:
-    """env XCAGI_CROSS_TIER_GATE 检查。"""
+    """env XCAGI_CROSS_TIER_GATE 检查（默认启用，opt-out）。"""
 
-    def test_disabled_by_default(self, monkeypatch):
+    def test_enabled_by_default(self, monkeypatch):
         monkeypatch.delenv("XCAGI_CROSS_TIER_GATE", raising=False)
-        assert is_enabled() is False
+        assert is_enabled() is True
+
+    def test_enabled_when_env_empty(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "")
+        assert is_enabled() is True
 
     def test_enabled_when_env_is_1(self, monkeypatch):
         monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "1")
         assert is_enabled() is True
 
-    def test_disabled_when_env_is_other(self, monkeypatch):
+    def test_enabled_when_env_is_true(self, monkeypatch):
         monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "true")
+        assert is_enabled() is True
+
+    def test_enabled_when_env_is_yes(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "yes")
+        assert is_enabled() is True
+
+    def test_enabled_when_env_is_true_uppercase(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "TRUE")
+        assert is_enabled() is True
+
+    def test_disabled_when_env_is_0(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "0")
+        assert is_enabled() is False
+
+    def test_disabled_when_env_is_false(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "false")
+        assert is_enabled() is False
+
+    def test_disabled_when_env_is_no(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_CROSS_TIER_GATE", "no")
         assert is_enabled() is False
 
 
