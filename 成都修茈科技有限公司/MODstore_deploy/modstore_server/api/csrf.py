@@ -32,6 +32,7 @@ _CSRF_EXEMPT_PATHS = frozenset(
         # 机器对机器同步入口：本地管理端强制推送账号权益到企业端，无浏览器 csrf_token。
         "/api/xcmax/sync/receive",
         "/api/agent/butler/corp-chat",
+        "/api/agent/butler/corp-tts",
         "/api/agent/butler/corp-intake-fill",
     }
 )

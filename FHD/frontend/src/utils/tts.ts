@@ -1,15 +1,9 @@
 /**
- * 统一 TTS 入口，支持多种引擎：
- *   - system：浏览器 `speechSynthesis`（零成本，音质取决于操作系统里装的语音包）
- *   - online：经本机后端 `POST /api/tts` 调用 Microsoft Edge TTS（edge-tts），需联网，
- *     默认神经网络音色如 zh-CN-XiaoxiaoNeural；失败时 `speakText` 自动回退 offline/system
- *   - offline：transformers.js + MMS-TTS 中文 ONNX 模型（首次下载约 60MB，
- *     之后通过 Cache API / IndexedDB 离线可用，全平台统一音质）
- *
- * 默认策略（auto）：
- *   - 优先使用 online
- *   - 离线包默认不后台预热，避免受限网络启动时刷屏失败；用户点击下载或显式启用后再缓存
- *   - online 不可用时优先用 offline，最后才回退 system
+ * 统一 TTS 入口：
+ *   - online（默认 / auto）：`POST /api/tts` → 服务端优先 MiMo-V2.5 TTS，失败回退 Edge 神经音
+ *     （默认回退音色 zh-CN-XiaoxiaoNeural）。**不使用**浏览器系统 `speechSynthesis`。
+ *   - offline：可选 MMS-TTS（需用户显式启用）；auto 模式不再回退到 offline/system
+ *   - system：保留设置项兼容，但 `speakText` 在 auto/online 路径下不会调用
  */
 
 import { apiFetch } from './apiBase'
@@ -428,7 +422,8 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
   if (!plain) { options?.onEnd?.(); return }
 
   const status = getTtsStatus()
-  if (status.effectiveEngine === 'offline') {
+  // 显式 offline：仅离线包，失败不回退系统 TTS
+  if (status.engineMode === 'offline') {
     try {
       const { audio, samplingRate } = await synthesizeOffline(plain)
       await playOfflinePcm(audio, samplingRate)
@@ -440,28 +435,14 @@ export async function speakText(text: string, options?: { onEnd?: () => void; on
     return
   }
 
-  if (status.effectiveEngine === 'online') {
-    try {
-      await playOnlineTts(plain)
-      options?.onEnd?.()
-    } catch (e) {
-      options?.onError?.(e)
-      if (isOfflineReady()) {
-        try {
-          const { audio, samplingRate } = await synthesizeOffline(plain)
-          await playOfflinePcm(audio, samplingRate)
-          options?.onEnd?.()
-          return
-        } catch {
-          // Fall through to system TTS.
-        }
-      }
-      await speakWithBrowserTts(plain, { onEnd: options?.onEnd })
-    }
-    return
+  // auto / online / 历史 system 偏好：统一走后端 MiMo → Edge，禁止 speechSynthesis
+  try {
+    await playOnlineTts(plain)
+    options?.onEnd?.()
+  } catch (e) {
+    options?.onError?.(e)
+    options?.onEnd?.()
   }
-
-  await speakWithBrowserTts(plain, options)
 }
 
 export function stopSpeaking(): void {

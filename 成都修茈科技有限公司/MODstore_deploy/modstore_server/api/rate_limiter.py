@@ -25,7 +25,7 @@ _HIGH_RATE_GET_PREFIXES: tuple[str, ...] = (
     "/api/market/facets",
 )
 # 流式 TTS 会在一轮回复内连续 POST 多句；单独提高上限，避免 60/min 误伤。
-_HIGH_RATE_POST_PREFIXES: tuple[str, ...] = ("/api/workbench/tts/",)
+_HIGH_RATE_POST_PREFIXES: tuple[str, ...] = ("/api/workbench/tts",)
 _HIGH_RATE_DEFAULT_LIMIT = 600
 
 
