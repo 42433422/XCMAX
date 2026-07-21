@@ -131,9 +131,7 @@ async def handle_approval_requested(event: NeuroEvent) -> dict[str, Any]:
         approval_service = get_approval_service()
         request = approval_service.create_approval_request(plan_id, node)
     except RECOVERABLE_ERRORS as exc:
-        logger.exception(
-            "[FinanceServiceDomain] create_approval_request 失败: %s", exc
-        )
+        logger.exception("[FinanceServiceDomain] create_approval_request 失败: %s", exc)
         _publish_event(
             "finance.approval_failed",
             {
@@ -153,15 +151,11 @@ async def handle_approval_requested(event: NeuroEvent) -> dict[str, Any]:
         }
 
     # request 可能是 ApprovalRequest dataclass 或 MagicMock（测试）
-    approval_id = getattr(request, "request_id", None) or str(
-        getattr(request, "id", "") or ""
-    )
+    approval_id = getattr(request, "request_id", None) or str(getattr(request, "id", "") or "")
     status_value = ""
     status_attr = getattr(request, "status", None)
     if status_attr is not None:
-        status_value = (
-            getattr(status_attr, "value", None) or str(status_attr) or ""
-        )
+        status_value = getattr(status_attr, "value", None) or str(status_attr) or ""
 
     approval_event_id = _publish_event(
         "finance.approval_created",
@@ -223,9 +217,7 @@ async def handle_approval_completed(event: NeuroEvent) -> dict[str, Any]:
     )
 
     if decision not in {"approved", "rejected"}:
-        logger.warning(
-            "[FinanceServiceDomain] 未知 decision=%s，跳过入库单状态更新", decision
-        )
+        logger.warning("[FinanceServiceDomain] 未知 decision=%s，跳过入库单状态更新", decision)
         _publish_event(
             "finance.approval_completion_failed",
             {
@@ -247,9 +239,7 @@ async def handle_approval_completed(event: NeuroEvent) -> dict[str, Any]:
     try:
         purchase_service_cls = _resolve_purchase_service_cls()
     except RECOVERABLE_ERRORS as exc:
-        logger.exception(
-            "[FinanceServiceDomain] PurchaseService 延迟导入失败: %s", exc
-        )
+        logger.exception("[FinanceServiceDomain] PurchaseService 延迟导入失败: %s", exc)
         _publish_event(
             "finance.approval_completion_failed",
             {
@@ -272,9 +262,7 @@ async def handle_approval_completed(event: NeuroEvent) -> dict[str, Any]:
         service = purchase_service_cls()
         result = service.update_inbound_approval_status(business_id, decision)
     except Exception as exc:  # noqa: BLE001 — 任何异常都不能崩溃总线
-        logger.exception(
-            "[FinanceServiceDomain] update_inbound_approval_status 抛异常: %s", exc
-        )
+        logger.exception("[FinanceServiceDomain] update_inbound_approval_status 抛异常: %s", exc)
         _publish_event(
             "finance.approval_completion_failed",
             {

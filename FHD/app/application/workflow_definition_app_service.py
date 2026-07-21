@@ -137,9 +137,7 @@ class WorkflowDefinitionAppService:
         is_active: bool | None = None,
     ) -> dict[str, Any]:
         """更新工作流定义；每次更新自增 version。"""
-        if trigger_type is not None and trigger_type not in {
-            t.value for t in WorkflowTriggerType
-        }:
+        if trigger_type is not None and trigger_type not in {t.value for t in WorkflowTriggerType}:
             raise WorkflowError(
                 message=f"未知触发类型: {trigger_type}",
                 status_code=422,
@@ -477,9 +475,7 @@ def _coerce_serializable(value: Any) -> Any:
     # dataclass
     if hasattr(value, "__dict__"):
         return {
-            k: _coerce_serializable(v)
-            for k, v in value.__dict__.items()
-            if not k.startswith("_")
+            k: _coerce_serializable(v) for k, v in value.__dict__.items() if not k.startswith("_")
         }
     return str(value)
 

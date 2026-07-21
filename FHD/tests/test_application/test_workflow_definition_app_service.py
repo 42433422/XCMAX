@@ -109,30 +109,22 @@ class TestWorkflowDefinitionCRUD:
         self, service: WorkflowDefinitionAppService
     ):
         with pytest.raises(WorkflowError) as exc:
-            service.create_definition(
-                tenant_id=1, name="x", trigger_type="bogus"
-            )
+            service.create_definition(tenant_id=1, name="x", trigger_type="bogus")
         assert "触发类型" in exc.value.message
 
     def test_get_definition_returns_stored_data(self, service: WorkflowDefinitionAppService):
-        created = service.create_definition(
-            tenant_id=1, name="d1", nodes=_sample_nodes()
-        )
+        created = service.create_definition(tenant_id=1, name="d1", nodes=_sample_nodes())
         fetched = service.get_definition(created["id"])
         assert fetched["id"] == created["id"]
         assert fetched["name"] == "d1"
         assert len(fetched["nodes"]) == 2
 
-    def test_get_definition_not_found_raises_404(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_get_definition_not_found_raises_404(self, service: WorkflowDefinitionAppService):
         with pytest.raises(WorkflowError) as exc:
             service.get_definition(9999)
         assert exc.value.status_code == 404
 
-    def test_list_definitions_filters_active_only(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_list_definitions_filters_active_only(self, service: WorkflowDefinitionAppService):
         a = service.create_definition(tenant_id=1, name="a")
         b = service.create_definition(tenant_id=1, name="b")
         service.update_definition(b["id"], is_active=False)
@@ -146,9 +138,7 @@ class TestWorkflowDefinitionCRUD:
     def test_update_definition_increments_version_and_applies_fields(
         self, service: WorkflowDefinitionAppService
     ):
-        created = service.create_definition(
-            tenant_id=1, name="orig", nodes=_sample_nodes()
-        )
+        created = service.create_definition(tenant_id=1, name="orig", nodes=_sample_nodes())
         updated = service.update_definition(
             created["id"],
             name="renamed",
@@ -169,9 +159,7 @@ class TestWorkflowDefinitionCRUD:
         with pytest.raises(WorkflowError):
             service.update_definition(created["id"], trigger_type="invalid")
 
-    def test_update_definition_not_found_raises_404(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_update_definition_not_found_raises_404(self, service: WorkflowDefinitionAppService):
         with pytest.raises(WorkflowError) as exc:
             service.update_definition(9999, name="x")
         assert exc.value.status_code == 404
@@ -190,9 +178,7 @@ class TestWorkflowDefinitionCRUD:
         with pytest.raises(WorkflowError):
             service.get_run(run["id"])
 
-    def test_delete_definition_not_found_raises_404(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_delete_definition_not_found_raises_404(self, service: WorkflowDefinitionAppService):
         with pytest.raises(WorkflowError) as exc:
             service.delete_definition(9999)
         assert exc.value.status_code == 404
@@ -223,12 +209,8 @@ class TestWorkflowDefinitionActivation:
 class TestWorkflowRunManagement:
     """start_run / get_run / list_runs / cancel_run。"""
 
-    def test_start_run_creates_pending_run_and_steps(
-        self, service: WorkflowDefinitionAppService
-    ):
-        created = service.create_definition(
-            tenant_id=1, name="r1", nodes=_sample_nodes()
-        )
+    def test_start_run_creates_pending_run_and_steps(self, service: WorkflowDefinitionAppService):
+        created = service.create_definition(tenant_id=1, name="r1", nodes=_sample_nodes())
         run = service.start_run(
             created["id"],
             triggered_by=WorkflowTriggerSource.USER.value,
@@ -259,16 +241,12 @@ class TestWorkflowRunManagement:
             service.start_run(created["id"])
         assert exc.value.status_code == 409
 
-    def test_start_run_definition_not_found_raises_404(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_start_run_definition_not_found_raises_404(self, service: WorkflowDefinitionAppService):
         with pytest.raises(WorkflowError) as exc:
             service.start_run(9999)
         assert exc.value.status_code == 404
 
-    def test_start_run_rejects_invalid_triggered_by(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_start_run_rejects_invalid_triggered_by(self, service: WorkflowDefinitionAppService):
         created = service.create_definition(tenant_id=1, name="r3", nodes=_sample_nodes())
         with pytest.raises(WorkflowError):
             service.start_run(created["id"], triggered_by="bogus")
@@ -282,12 +260,8 @@ class TestWorkflowRunManagement:
         detail = service.get_run(run["id"])
         assert detail["steps"] == []
 
-    def test_list_runs_returns_recent_first(
-        self, service: WorkflowDefinitionAppService
-    ):
-        created = service.create_definition(
-            tenant_id=1, name="r5", nodes=_sample_nodes()
-        )
+    def test_list_runs_returns_recent_first(self, service: WorkflowDefinitionAppService):
+        created = service.create_definition(tenant_id=1, name="r5", nodes=_sample_nodes())
         run1 = service.start_run(created["id"])
         run2 = service.start_run(created["id"])
         run3 = service.start_run(created["id"])
@@ -296,9 +270,7 @@ class TestWorkflowRunManagement:
         assert [r["id"] for r in runs] == [run3["id"], run2["id"], run1["id"]]
 
     def test_list_runs_respects_limit(self, service: WorkflowDefinitionAppService):
-        created = service.create_definition(
-            tenant_id=1, name="r6", nodes=_sample_nodes()
-        )
+        created = service.create_definition(tenant_id=1, name="r6", nodes=_sample_nodes())
         for _ in range(5):
             service.start_run(created["id"])
         runs = service.list_runs(created["id"], limit=2)
@@ -312,9 +284,7 @@ class TestWorkflowRunManagement:
     def test_cancel_run_marks_cancelled_and_skips_pending_steps(
         self, service: WorkflowDefinitionAppService
     ):
-        created = service.create_definition(
-            tenant_id=1, name="r7", nodes=_sample_nodes()
-        )
+        created = service.create_definition(tenant_id=1, name="r7", nodes=_sample_nodes())
         run = service.start_run(created["id"])
         cancelled = service.cancel_run(run["id"])
         assert cancelled["status"] == WorkflowRunStatus.CANCELLED.value
@@ -322,25 +292,17 @@ class TestWorkflowRunManagement:
 
         detail = service.get_run(run["id"])
         # 两个 step 都应被标 skipped
-        assert {s["status"] for s in detail["steps"]} == {
-            WorkflowRunStepStatus.SKIPPED.value
-        }
+        assert {s["status"] for s in detail["steps"]} == {WorkflowRunStepStatus.SKIPPED.value}
 
-    def test_cancel_run_on_terminal_state_raises_409(
-        self, service: WorkflowDefinitionAppService
-    ):
-        created = service.create_definition(
-            tenant_id=1, name="r8", nodes=_sample_nodes()
-        )
+    def test_cancel_run_on_terminal_state_raises_409(self, service: WorkflowDefinitionAppService):
+        created = service.create_definition(tenant_id=1, name="r8", nodes=_sample_nodes())
         run = service.start_run(created["id"])
         service.cancel_run(run["id"])
         with pytest.raises(WorkflowError) as exc:
             service.cancel_run(run["id"])
         assert exc.value.status_code == 409
 
-    def test_cancel_run_not_found_raises_404(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_cancel_run_not_found_raises_404(self, service: WorkflowDefinitionAppService):
         with pytest.raises(WorkflowError) as exc:
             service.cancel_run(9999)
         assert exc.value.status_code == 404
@@ -406,9 +368,7 @@ class TestPlanGraphIntegration:
 class TestTenantIsolation:
     """多租户隔离：tenant=1 写入的数据 tenant=2 不可见。"""
 
-    def test_list_definitions_scoped_by_tenant(
-        self, service: WorkflowDefinitionAppService
-    ):
+    def test_list_definitions_scoped_by_tenant(self, service: WorkflowDefinitionAppService):
         from app.infrastructure.tenant_scope import tenant_scope
 
         service.create_definition(tenant_id=1, name="t1-def")

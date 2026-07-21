@@ -32,9 +32,7 @@ class TestDeleteOrder:
 
     def test_delete_order_invalid_order_number_returns_error(self):
         """非数字 order_number 应返回 invalid_order_number。"""
-        result = shipment_crud_tools.delete_order(
-            {"order_number": "abc", "confirm": True}
-        )
+        result = shipment_crud_tools.delete_order({"order_number": "abc", "confirm": True})
         assert result["success"] is False
         assert result["error"] == "invalid_order_number"
 
@@ -68,9 +66,7 @@ class TestUpdateOrder:
 
     def test_update_order_missing_fields_returns_error(self):
         """缺少 fields 参数应返回错误。"""
-        result = shipment_crud_tools.update_order(
-            {"order_number": "42", "confirm": True}
-        )
+        result = shipment_crud_tools.update_order({"order_number": "42", "confirm": True})
         assert result["success"] is False
         assert result["error"] == "fields must be a non-empty dict"
 
@@ -130,9 +126,7 @@ class TestListOrders:
         mock_svc = MagicMock()
         mock_svc.search_orders.return_value = [{"id": i} for i in range(50)]
         with patch.object(shipment_crud_tools, "_get_service", return_value=mock_svc):
-            result = shipment_crud_tools.list_orders(
-                {"filters": {"keyword": "abc"}, "limit": 5}
-            )
+            result = shipment_crud_tools.list_orders({"filters": {"keyword": "abc"}, "limit": 5})
 
         mock_svc.search_orders.assert_called_once_with("abc")
         assert result["success"] is True

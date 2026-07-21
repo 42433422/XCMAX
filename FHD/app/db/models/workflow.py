@@ -74,9 +74,7 @@ class WorkflowDefinition(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMix
     """
 
     __tablename__ = "workflow_definitions"
-    __table_args__ = (
-        Index("ix_workflow_definitions_tenant_active", "tenant_id", "is_active"),
-    )
+    __table_args__ = (Index("ix_workflow_definitions_tenant_active", "tenant_id", "is_active"),)
 
     name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text)
