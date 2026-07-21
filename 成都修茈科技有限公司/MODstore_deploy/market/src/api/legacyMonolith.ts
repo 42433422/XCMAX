@@ -1399,6 +1399,8 @@ export const legacyApi = {
     page_id?: string
     page_context?: string
     max_tokens?: number
+    visitor_id?: string
+    visitor_label?: string
   }) =>
     req('/api/agent/butler/corp-chat', {
       method: 'POST',

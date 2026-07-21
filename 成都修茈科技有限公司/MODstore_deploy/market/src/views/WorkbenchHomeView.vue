@@ -4314,6 +4314,14 @@ function buildSystemPrompt(
   } else {
     parts.push('你是一个简洁直接的中文 AI 助手。优先给出可执行答案；如果信息不足，先给合理假设，再列出需要确认的问题。')
   }
+  if (String(activeBot.value?.id || '') === 'customer-service') {
+    const who = String(displayName.value || '').trim().slice(0, 32)
+    if (who) {
+      parts.push(
+        `【当前对话对象】称呼=${who}。可自然称呼对方，勿复读整段内部字段，勿向访客复述敏感信息。`,
+      )
+    }
+  }
   parts.push(buildHumanChatStylePrompt('text'))
   const contractRules = outputContractSystemRules(outputContract)
   if (contractRules) parts.push(contractRules)

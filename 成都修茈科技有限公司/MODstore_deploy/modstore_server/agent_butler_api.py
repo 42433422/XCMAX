@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
@@ -539,6 +539,8 @@ class CorpChatDTO(BaseModel):
     page_id: Optional[str] = Field(None, max_length=64)
     page_context: Optional[str] = Field(None, max_length=3500)
     max_tokens: Optional[int] = Field(512, ge=1, le=2000)
+    visitor_id: Optional[str] = Field(None, max_length=80)
+    visitor_label: Optional[str] = Field(None, max_length=64)
 
 
 CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。
@@ -629,9 +631,16 @@ def _resolve_butler_credentials(db: Session, user_id: int):
     return provider, model, api_key, key_source, base_url
 
 
-def _build_messages(body: ButlerChatDTO, page_context: str | None) -> List[Dict[str, Any]]:
-    """组装最终 messages：小C SSOT 人设 + 管理端知识库 + 页面上下文。"""
+def _build_messages(
+    body: ButlerChatDTO,
+    page_context: str | None,
+    *,
+    user: User | None = None,
+) -> List[Dict[str, Any]]:
+    """组装最终 messages：小C SSOT 人设 + 对话对象 + 管理端知识库 + 页面上下文。"""
     from modstore_server.xiaoc_cs_ssot import (
+        format_visitor_block,
+        identity_from_user,
         knowledge_block_for_query,
         last_user_text,
         xiaoc_system_prompt,
@@ -652,6 +661,10 @@ def _build_messages(body: ButlerChatDTO, page_context: str | None) -> List[Dict[
             or line.startswith("- 高风险")
             or line.startswith("回复要简洁")
         )
+    if user is not None:
+        vb = format_visitor_block(identity_from_user(user, source="butler"))
+        if vb:
+            system_content += f"\n\n{vb}"
     user_q = last_user_text(body.messages)
     kb = knowledge_block_for_query(user_q) if user_q else ""
     if kb:
@@ -738,15 +751,37 @@ def _resolve_corp_credentials(db: Session):
     return provider, model, api_key, base_url
 
 
-def _build_corp_messages(body: CorpChatDTO) -> List[Dict[str, Any]]:
-    """官网公开咨询：统一小C 人设 + 管理端 persy 知识库。"""
+def _build_corp_messages(
+    body: CorpChatDTO,
+    *,
+    user: User | None = None,
+) -> List[Dict[str, Any]]:
+    """官网公开咨询：统一小C 人设 + 对话对象 + 管理端 persy 知识库。"""
     from modstore_server.xiaoc_cs_ssot import (
+        format_visitor_block,
+        identity_from_guest,
+        identity_from_user,
         knowledge_block_for_query,
         last_user_text,
         xiaoc_system_prompt,
     )
 
     system_content = xiaoc_system_prompt(mode="corp")
+    if user is not None:
+        identity = identity_from_user(
+            user,
+            source="corp",
+            visitor_id=body.visitor_id or "",
+        )
+    else:
+        identity = identity_from_guest(
+            visitor_id=body.visitor_id or "",
+            visitor_label=body.visitor_label or "",
+            source="corp",
+        )
+    vb = format_visitor_block(identity)
+    if vb:
+        system_content += f"\n\n{vb}"
     user_q = last_user_text(body.messages)
     kb = knowledge_block_for_query(user_q) if user_q else ""
     if kb:
@@ -830,11 +865,19 @@ async def butler_corp_chat(
     request: Request,
     body: CorpChatDTO,
     db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
 ):
     """官网公开咨询（无登录、无钱包扣费、无工具调用）。"""
     _corp_chat_rate_allow(_public_contact_client_key(request))
     provider, model, api_key, base_url = _resolve_corp_credentials(db)
-    msgs = _build_corp_messages(body)
+    optional_user: User | None = None
+    try:
+        from modstore_server.api.auth_deps import get_optional_user
+
+        optional_user = get_optional_user(authorization)
+    except Exception:  # noqa: BLE001
+        optional_user = None
+    msgs = _build_corp_messages(body, user=optional_user)
     if not any(m.get("role") == "user" for m in msgs):
         raise HTTPException(400, "messages 须包含至少一条 user 消息")
 
@@ -1070,7 +1113,7 @@ async def butler_chat(
     """非流式 Butler 对话。"""
     provider, model, api_key, key_source, base_url = _resolve_butler_credentials(db, user.id)
     is_byok = key_source == "user_override"
-    msgs = _build_messages(body, body.page_context)
+    msgs = _build_messages(body, body.page_context, user=user)
 
     if not msgs:
         raise HTTPException(400, "messages 不能为空")
@@ -1198,7 +1241,7 @@ async def butler_chat_stream(
 ):
     """SSE 流式 Butler 对话（工具调用降级为非流式）。"""
     provider, model, api_key, key_source, base_url = _resolve_butler_credentials(db, user.id)
-    msgs = _build_messages(body, body.page_context)
+    msgs = _build_messages(body, body.page_context, user=user)
     is_byok = key_source == "user_override"
 
     if not msgs:

@@ -106,6 +106,44 @@ class TestRetrieve:
         )
 
 
+class TestVisitorIdentity:
+    def test_guest_and_format(self):
+        from modstore_server.xiaoc_cs_ssot import (
+            format_visitor_block,
+            identity_from_guest,
+            sanitize_visitor_id,
+        )
+
+        assert sanitize_visitor_id("bad") == ""
+        assert sanitize_visitor_id("v_abcdefgh") == "v_abcdefgh"
+        ident = identity_from_guest(visitor_id="v_abcdefgh", visitor_label="小张")
+        block = format_visitor_block(ident)
+        assert "当前对话对象" in block
+        assert "kind=guest" in block
+        assert "小张" in block
+        assert "v_abcdefgh" in block
+
+    def test_user_masks_email(self):
+        from types import SimpleNamespace
+
+        from modstore_server.xiaoc_cs_ssot import (
+            format_visitor_block,
+            identity_from_user,
+            mask_email,
+        )
+
+        assert mask_email("ab@x.com") == "a*@x.com"
+        assert mask_email("alice@example.com").startswith("a***e@")
+        user = SimpleNamespace(id=42, username="alice", email="alice@example.com")
+        ident = identity_from_user(user, source="butler", membership_tier="vip")
+        block = format_visitor_block(ident)
+        assert "kind=user" in block
+        assert "user_id=42" in block
+        assert "alice" in block
+        assert "会员=vip" in block
+        assert "alice@example.com" not in block
+
+
 class TestButlerUsesSsot:
     def test_build_corp_messages_uses_xiaoc(self):
         from modstore_server.agent_butler_api import (
@@ -122,8 +160,40 @@ class TestButlerUsesSsot:
                 CorpChatDTO(
                     messages=[ButlerMessageDTO(role="user", content="你们做什么")],
                     page_id="index",
+                    visitor_id="v_testguest01",
+                    visitor_label="小李",
                 )
             )
         assert msgs[0]["role"] == "system"
         assert "小C" in msgs[0]["content"]
         assert "persy-knowledge" in msgs[0]["content"]
+        assert "当前对话对象" in msgs[0]["content"]
+        assert "小李" in msgs[0]["content"]
+        assert "v_testguest01" in msgs[0]["content"]
+
+    def test_build_messages_injects_logged_in_user(self):
+        from types import SimpleNamespace
+
+        from modstore_server.agent_butler_api import (
+            ButlerChatDTO,
+            ButlerMessageDTO,
+            _build_messages,
+        )
+
+        user = SimpleNamespace(id=7, username="bob", email="bob@x.com")
+        with patch(
+            "modstore_server.xiaoc_cs_ssot.knowledge_block_for_query",
+            return_value="",
+        ):
+            msgs = _build_messages(
+                ButlerChatDTO(
+                    messages=[ButlerMessageDTO(role="user", content="你好")],
+                    page_context="当前页面: 首页",
+                ),
+                "当前页面: 首页",
+                user=user,
+            )
+        assert "当前对话对象" in msgs[0]["content"]
+        assert "kind=user" in msgs[0]["content"]
+        assert "bob" in msgs[0]["content"]
+        assert "user_id=7" in msgs[0]["content"]
