@@ -20,7 +20,5 @@ def test_auto_dispatch_explicit_off(monkeypatch):
 
 def test_production_requires_explicit_envs(monkeypatch):
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
-    monkeypatch.setenv(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging,production"
-    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging,production")
     assert sm._auto_dispatch_deploy_envs() == ["staging", "production"]
