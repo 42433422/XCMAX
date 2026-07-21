@@ -58,10 +58,9 @@ def test_build_public_board_has_no_internal_fields(monkeypatch):
     assert all("ts" in x and "text" in x and "href" in x for x in traj)
 
 
-def test_build_trajectory_fallback_when_empty():
+def test_build_trajectory_empty_when_no_items():
     traj = build_trajectory([], [])
-    assert len(traj) >= 4
-    assert any("晨报" in x["text"] or "P6" in x["text"] for x in traj)
+    assert traj == []
 
 
 def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
@@ -75,4 +74,3 @@ def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
     data = json.loads(target.read_text(encoding="utf-8"))
     assert data["schema"] == "xcagi.public_action_board/v1"
     assert isinstance(data.get("trajectory"), list)
-    assert len(data["trajectory"]) >= 1

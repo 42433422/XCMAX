@@ -1,16 +1,9 @@
 /**
- * 世界意志 · AI 工作轨迹滚动条
- * 数据：/download-action-board.json → trajectory
+ * 世界意志滚动条（可选挂载）。推荐使用独立页 /world-will。
+ * 数据：/download-action-board.json → trajectory（真实条目；空则不造假）
  */
 ;(function () {
   'use strict'
-
-  var FALLBACK = [
-    { ts: '02:13', text: '考勤异常已标红，等待复核', href: '/download/breakpoints' },
-    { ts: '07:10', text: '晨报已送达值班室', href: '/download/goals' },
-    { ts: '08:15', text: 'P6 静默更新已完成并进入监控', href: '/download/goals' },
-    { ts: '16:30', text: '断点清单有待闭环项，已派发责任员工', href: '/download/breakpoints' },
-  ]
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -21,7 +14,7 @@
   }
 
   function itemHtml(it) {
-    var href = it.href || (it.kind === 'patch' ? '/download/breakpoints' : '/download/goals')
+    var href = it.href || '/world-will'
     return (
       '<a class="world-will__item" href="' +
       esc(href) +
@@ -30,61 +23,50 @@
       esc(it.ts || '—') +
       '</time>' +
       '<span class="world-will__text">' +
-      esc(it.text || '') +
+      esc(it.text || it.title || '') +
       '</span>' +
       '</a>'
     )
   }
 
   function render(items) {
-    var list = items && items.length ? items : FALLBACK
-    var railInner = list.map(itemHtml).join('')
-    // 双份内容做无缝循环
+    if (!items || !items.length) {
+      return (
+        '<aside class="world-will" aria-label="世界意志 · AI 工作轨迹">' +
+        '<a class="world-will__label" href="/world-will" title="打开世界意志">' +
+        '<span class="world-will__dot" aria-hidden="true"></span>世界意志</a>' +
+        '<div class="world-will__track"><div class="world-will__rail">' +
+        '<span class="world-will__item"><span class="world-will__text">暂无公开轨迹 · 进入世界意志页查看</span></span>' +
+        '</div></div></aside>'
+      )
+    }
+    var railInner = items.map(itemHtml).join('')
     return (
       '<aside class="world-will" aria-label="世界意志 · AI 工作轨迹">' +
-      '<div class="world-will__label" title="AI 工作轨迹实时滚动">' +
-      '<span class="world-will__dot" aria-hidden="true"></span>' +
-      '世界意志' +
-      '</div>' +
-      '<div class="world-will__track">' +
-      '<div class="world-will__rail">' +
+      '<a class="world-will__label" href="/world-will" title="打开世界意志">' +
+      '<span class="world-will__dot" aria-hidden="true"></span>世界意志</a>' +
+      '<div class="world-will__track"><div class="world-will__rail">' +
       railInner +
       railInner +
-      '</div>' +
-      '</div>' +
-      '</aside>'
+      '</div></div></aside>'
     )
   }
 
   function mount(html) {
     var header = document.querySelector('header.site-header')
-    if (!header) return
-    if (document.querySelector('.world-will')) return
+    if (!header || document.querySelector('.world-will')) return
     header.insertAdjacentHTML('afterend', html)
   }
 
-  function boot(items) {
-    mount(render(items))
-  }
-
-  function load() {
-    fetch('/download-action-board.json', { cache: 'no-store' })
-      .then(function (res) {
-        if (!res.ok) throw new Error('board ' + res.status)
-        return res.json()
-      })
-      .then(function (data) {
-        var traj = (data && data.trajectory) || []
-        boot(traj)
-      })
-      .catch(function () {
-        boot(FALLBACK)
-      })
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', load)
-  } else {
-    load()
-  }
+  fetch('/download-action-board.json', { cache: 'no-store' })
+    .then(function (res) {
+      if (!res.ok) throw new Error('board ' + res.status)
+      return res.json()
+    })
+    .then(function (data) {
+      mount(render((data && data.trajectory) || []))
+    })
+    .catch(function () {
+      mount(render([]))
+    })
 })()

@@ -55,8 +55,21 @@ def _clean_public_text(text: str) -> str:
     return s or "（条目摘要）"
 
 
+def _public_clock(raw: Any) -> str:
+    """从 created_at/updated_at 抽出公开可读时刻（HH:MM），无则空串。"""
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    # 常见：2026-07-16T08:15:22+00:00 / 2026-07-16 08:15:22
+    m = re.search(r"(\d{2}):(\d{2})", s)
+    if m:
+        return f"{m.group(1)}:{m.group(2)}"
+    return ""
+
+
 def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
     status = str(it.get("status") or "open")
+    updated = str(it.get("updated_at") or it.get("created_at") or "")
     return {
         "title": _clean_public_text(str(it.get("text") or "")),
         "priority": str(it.get("priority") or "P2"),
@@ -67,79 +80,9 @@ def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
         "owner": str(it.get("employee_label") or "AI 员工").strip()[:64] or "AI 员工",
         "kind": str(it.get("kind") or ""),
         "day": str(it.get("day") or ""),
+        "updated_at": updated[:40],
+        "ts": _public_clock(updated),
     }
-
-
-# 昨夜→今早节奏的伪时序（滚动条「在跑」感）
-_TRAJECTORY_SLOTS = (
-    "02:13",
-    "03:40",
-    "05:05",
-    "06:30",
-    "07:10",
-    "08:15",
-    "09:20",
-    "10:45",
-    "12:00",
-    "14:10",
-    "16:30",
-    "18:00",
-    "19:40",
-    "21:15",
-    "22:50",
-    "23:55",
-)
-
-_TRAJECTORY_FALLBACK: List[Dict[str, Any]] = [
-    {
-        "ts": "02:13",
-        "text": "考勤异常已标红，等待复核",
-        "line": "P-S",
-        "status": "in_progress",
-        "kind": "patch",
-        "href": "/download/breakpoints",
-    },
-    {
-        "ts": "07:10",
-        "text": "晨报已送达值班室",
-        "line": "P-S",
-        "status": "merged",
-        "kind": "update",
-        "href": "/download/goals",
-    },
-    {
-        "ts": "08:15",
-        "text": "P6 静默更新已完成并进入监控",
-        "line": "P-S",
-        "status": "merged",
-        "kind": "update",
-        "href": "/download/goals",
-    },
-    {
-        "ts": "10:45",
-        "text": "网站线巡检通过，无阻断项",
-        "line": "P-W",
-        "status": "merged",
-        "kind": "update",
-        "href": "/download/goals",
-    },
-    {
-        "ts": "16:30",
-        "text": "断点清单有待闭环项，已派发责任员工",
-        "line": "P-S",
-        "status": "dispatched",
-        "kind": "patch",
-        "href": "/download/breakpoints",
-    },
-    {
-        "ts": "21:15",
-        "text": "移动发布线健康检查完成",
-        "line": "P-App",
-        "status": "merged",
-        "kind": "update",
-        "href": "/download/goals",
-    },
-]
 
 
 def _clip_title(title: str, max_len: int = 72) -> str:
@@ -155,7 +98,7 @@ def build_trajectory(
     *,
     limit: int = 24,
 ) -> List[Dict[str, Any]]:
-    """从双看板条目生成「世界意志」滚动轨迹；无数据时用脱敏占位。"""
+    """从双看板真实条目生成「世界意志」轨迹；无数据时返回空列表（不造假）。"""
     merged: List[Dict[str, Any]] = []
     for it in patches:
         row = dict(it)
@@ -167,11 +110,14 @@ def build_trajectory(
         merged.append(row)
 
     if not merged:
-        return [dict(x) for x in _TRAJECTORY_FALLBACK[:6]]
+        return []
+
+    # 按真实更新时间倒序，避免伪时序
+    merged.sort(key=lambda x: str(x.get("updated_at") or x.get("day") or ""), reverse=True)
 
     out: List[Dict[str, Any]] = []
     n = min(len(merged), max(1, limit))
-    for i, it in enumerate(merged[:n]):
+    for it in merged[:n]:
         kind = str(it.get("kind") or "patch")
         href = "/download/breakpoints" if kind == "patch" else "/download/goals"
         status = str(it.get("status") or "open")
@@ -180,14 +126,24 @@ def build_trajectory(
         line_label = str(it.get("line_label") or "产线")
         title = _clip_title(str(it.get("title") or ""))
         text = f"{status_label} · {owner} · {line_label}：{title}"
+        ts = str(it.get("ts") or "") or _public_clock(it.get("updated_at"))
+        if not ts and it.get("day"):
+            ts = str(it.get("day"))[-5:] if len(str(it.get("day"))) >= 5 else str(it.get("day"))
         out.append(
             {
-                "ts": _TRAJECTORY_SLOTS[i % len(_TRAJECTORY_SLOTS)],
+                "ts": ts or "—",
                 "text": text,
                 "line": str(it.get("line") or "P-S"),
+                "line_label": line_label,
                 "status": status,
+                "status_label": status_label,
                 "kind": kind,
                 "href": href,
+                "day": str(it.get("day") or ""),
+                "owner": owner,
+                "priority": str(it.get("priority") or "P2"),
+                "title": str(it.get("title") or ""),
+                "updated_at": str(it.get("updated_at") or "")[:40],
             }
         )
     return out
