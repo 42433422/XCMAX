@@ -103,6 +103,95 @@ async def autonomy_audit_log(
     }
 
 
+def _admin_approver_from_session(request: Request, body_approver: str = "") -> str:
+    """Prefer body approver; else session username / market username."""
+    explicit = str(body_approver or "").strip()
+    if explicit:
+        return explicit
+    from app.application.session_account_meta import load_session_account_meta
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    sid = _session_id_from_request(request)
+    meta = load_session_account_meta(sid) if sid else {}
+    for key in ("username", "market_username", "display_name"):
+        value = str((meta or {}).get(key) or "").strip()
+        if value:
+            return value
+    return "admin"
+
+
+@router.get("/admin/autonomy/actions/pending", response_model=None)
+async def admin_pending_autonomy_actions(request: Request):
+    """管理端审批中心：用管理员会话拉取待办（勿走 webhook token）。"""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.approval_resume import list_pending_actions
+
+    items = list_pending_actions()
+    return {"ok": True, "count": len(items), "items": items}
+
+
+@router.post("/admin/autonomy/actions/{action_id}/resume", response_model=None)
+async def admin_resume_autonomy_action(action_id: str, request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.approval_resume import ApprovalStateError, resume_action
+
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
+    # 管理端人工通过：默认只落审批态，执行由 CI/部署回调继续（避免无本地 executor 409）
+    defer = body.get("defer_execution")
+    defer_execution = True if defer is None else bool(defer)
+    try:
+        item = resume_action(
+            action_id,
+            approver=approver,
+            approval_id=str(body.get("approval_id") or ""),
+            defer_execution=defer_execution,
+        )
+    except ApprovalStateError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=409)
+    return {"ok": True, "action": item}
+
+
+@router.post("/admin/autonomy/actions/{action_id}/reject", response_model=None)
+async def admin_reject_autonomy_action(action_id: str, request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.approval_resume import ApprovalStateError, reject_action
+
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
+    if not approver:
+        return JSONResponse(
+            {"ok": False, "message": "approver is required"},
+            status_code=400,
+        )
+    try:
+        item = reject_action(
+            action_id,
+            approver=approver,
+            reason=str(body.get("reason") or ""),
+            approval_id=str(body.get("approval_id") or ""),
+        )
+    except ApprovalStateError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=409)
+    return {"ok": True, "action": item}
+
+
 def _release_train_snapshot() -> dict[str, Any]:
     """读取 release_train SSOT；优先 modstore 模块，回退 FHD/config JSON。"""
     from pathlib import Path
