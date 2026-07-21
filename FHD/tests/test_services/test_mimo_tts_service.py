@@ -22,7 +22,6 @@ import pytest
 
 from app.services import mimo_tts_service as mimo
 
-
 # ---------------------------------------------------------------------------
 # resolve_mimo_credentials
 # ---------------------------------------------------------------------------
