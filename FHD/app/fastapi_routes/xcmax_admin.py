@@ -411,6 +411,12 @@ async def _self_maintenance_local_or_proxy(
                 note=note,
                 authorization=authorization,
             )
+        if path == "/api/ops/self-maintenance/run" and method.upper() == "POST":
+            reason = str((json_body or {}).get("reason") or "admin_force_run")
+            return await sm_svc.force_run_local(
+                reason=reason,
+                authorization=authorization,
+            )
         return None
 
     if prefer_local_modstore():
