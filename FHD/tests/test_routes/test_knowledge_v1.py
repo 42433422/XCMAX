@@ -167,3 +167,35 @@ class TestHealthEndpoint:
         result = health(request=MagicMock())
         assert result["success"] is True
         assert result["rag_enabled"] is False
+
+
+class TestDatasetReadTenantScope:
+    def test_admin_sees_all_tenants_inside_dataset(self):
+        from app.application.dataset_rag_app_service import (
+            DATASET_ADMIN_PERMISSION,
+            DatasetAccessContext,
+        )
+        from app.fastapi_routes.knowledge_v1 import _dataset_read_tenant_scope
+
+        admin = DatasetAccessContext(
+            actor_id="admin",
+            tenant_id="platform",
+            permissions=frozenset({DATASET_ADMIN_PERMISSION}),
+            is_admin=True,
+        )
+        assert _dataset_read_tenant_scope(admin) == ""
+
+    def test_non_admin_stays_tenant_scoped(self):
+        from app.application.dataset_rag_app_service import (
+            DATASET_READ_PERMISSION,
+            DatasetAccessContext,
+        )
+        from app.fastapi_routes.knowledge_v1 import _dataset_read_tenant_scope
+
+        user = DatasetAccessContext(
+            actor_id="u1",
+            tenant_id="tenant-a",
+            permissions=frozenset({DATASET_READ_PERMISSION}),
+            is_admin=False,
+        )
+        assert _dataset_read_tenant_scope(user) == "tenant-a"
