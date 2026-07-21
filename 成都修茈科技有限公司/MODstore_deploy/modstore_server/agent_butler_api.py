@@ -820,6 +820,11 @@ class CorpTtsDTO(BaseModel):
     voice: Optional[str] = Field(None, max_length=64)
 
 
+class CorpTranslateDTO(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+    target: str = Field("en", max_length=8)
+
+
 CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。
 
 你的性格和说话方式：
@@ -1187,6 +1192,56 @@ async def butler_corp_chat(
         )
 
     return {"success": True, "content": text, "message": text}
+
+
+@router.post("/corp-translate")
+async def butler_corp_translate(
+    request: Request,
+    body: CorpTranslateDTO,
+    db: Session = Depends(get_db),
+):
+    """朗读字幕短译：中文 → 英文（公开、限流、仅返回译文）。"""
+    _corp_chat_rate_allow(_public_contact_client_key(request))
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text 不能为空")
+    target = (body.target or "en").strip().lower()
+    if target != "en":
+        raise HTTPException(400, "仅支持 target=en")
+
+    provider, model, api_key, base_url = _resolve_corp_credentials(db)
+    if not api_key:
+        raise HTTPException(503, "翻译暂不可用")
+
+    msgs = [
+        {
+            "role": "system",
+            "content": (
+                "You are a concise translator. Translate the user's Chinese text into natural English. "
+                "Output ONLY the English translation, no quotes, no explanation."
+            ),
+        },
+        {"role": "user", "content": text[:500]},
+    ]
+    try:
+        raw_response = await chat_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=msgs,
+            max_tokens=180,
+        )
+        if not raw_response.get("ok"):
+            raise RuntimeError(raw_response.get("error") or "translate failed")
+        en = (raw_response.get("content") or "").strip().strip('"').strip("'")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("corp-translate failed: %s", exc)
+        raise HTTPException(503, "翻译暂不可用") from exc
+
+    if not en:
+        raise HTTPException(503, "翻译为空")
+    return {"success": True, "data": {"translation": en, "target": "en"}}
 
 
 @router.post("/corp-tts")

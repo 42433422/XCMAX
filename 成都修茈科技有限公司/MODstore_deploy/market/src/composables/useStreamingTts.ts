@@ -2,6 +2,15 @@ import { ref, type Ref } from 'vue'
 import { requestStreamBlob, requestStreamResponse, ApiError } from '../infrastructure/http/client'
 import { splitSentences, createStreamSplitter, subtractEmittedSegments, type SplitOptions } from '../utils/ttsSentenceSplit'
 import { cleanTextForTts } from '../utils/ttsTextClean'
+import {
+  appendTtsSubtitleLine,
+  beginTtsSubtitles,
+  endTtsSubtitles,
+  isTtsSubtitleSession,
+  setTtsSubtitleIndex,
+  updateTtsSubtitleEn,
+} from './ttsSubtitleStore'
+import { prefetchSubtitleTranslations, translateZhToEn } from '../utils/ttsSubtitleTranslate'
 
 export type TtsState = 'idle' | 'synthesizing' | 'playing'
 
@@ -44,8 +53,50 @@ export class StreamingTtsPlayer {
   /** edge TTS 429 冷却：此时间戳之前暂缓 edge 流，仍可走统一 /tts（MiMo） */
   private edgeBlockedUntil = 0
   private lastWarmUpAt = 0
+  private subtitleGen = 0
+  private subtitleAbort: AbortController | null = null
+  /** 当前会话已播出的句子（用于字幕索引） */
+  private spokenLines: string[] = []
 
   constructor(private getConfig: () => StreamingTtsConfig) {}
+
+  private beginSubtitles(zhLines: string[]) {
+    this.subtitleAbort?.abort()
+    this.subtitleAbort = new AbortController()
+    this.spokenLines = []
+    this.subtitleGen = beginTtsSubtitles(zhLines)
+    const gen = this.subtitleGen
+    prefetchSubtitleTranslations(
+      zhLines,
+      (i, en) => {
+        if (isTtsSubtitleSession(gen)) updateTtsSubtitleEn(i, en, gen)
+      },
+      { signal: this.subtitleAbort.signal, concurrency: 2 },
+    )
+  }
+
+  private showSubtitleForSentence(sentence: string) {
+    const gen = this.subtitleGen
+    if (!isTtsSubtitleSession(gen)) return
+    let idx = this.spokenLines.indexOf(sentence)
+    if (idx < 0) {
+      idx = appendTtsSubtitleLine(sentence, gen)
+      if (idx >= 0) {
+        this.spokenLines.push(sentence)
+        void translateZhToEn(sentence, this.subtitleAbort?.signal).then((en) => {
+          if (en && isTtsSubtitleSession(gen)) updateTtsSubtitleEn(idx, en, gen)
+        })
+      }
+    }
+    if (idx >= 0) setTtsSubtitleIndex(idx, gen)
+  }
+
+  private endSubtitles() {
+    this.subtitleAbort?.abort()
+    this.subtitleAbort = null
+    endTtsSubtitles(this.subtitleGen)
+    this.spokenLines = []
+  }
 
   private markEdgeRateLimited(retryAfterSec?: number) {
     const backoffMs =
@@ -105,9 +156,15 @@ export class StreamingTtsPlayer {
     const gen = ++this.generation
     this.enqueuedSentences = []
     this.queue = splitSentences(cleaned)
+    this.spokenLines = [...this.queue]
+    this.beginSubtitles(this.queue)
     this.streamFirstSentencePending = true
     this.schedulePrefetch(gen, 0)
-    await this.runQueue(gen)
+    try {
+      await this.runQueue(gen)
+    } finally {
+      if (gen === this.generation) this.endSubtitles()
+    }
   }
 
   feed(soFar: string) {
@@ -133,6 +190,10 @@ export class StreamingTtsPlayer {
     this.enqueuedSentences = []
     this.streamFirstSentencePending = true
     this.resetEdgeBackoff()
+    this.spokenLines = []
+    this.subtitleAbort?.abort()
+    this.subtitleAbort = new AbortController()
+    this.subtitleGen = beginTtsSubtitles([])
   }
 
   stop() {
@@ -153,6 +214,7 @@ export class StreamingTtsPlayer {
     }
     this.streamFirstSentencePending = true
     this.state.value = 'idle'
+    this.endSubtitles()
   }
 
   private resetEdgeBackoff() {
@@ -174,6 +236,17 @@ export class StreamingTtsPlayer {
     this.enqueuedSentences.push(...fresh)
     for (const part of fresh) {
       this.queue.push(part)
+      // 流式入队时补字幕行（speak() 已预填则跳过）
+      if (!this.spokenLines.includes(part)) {
+        const gen = this.subtitleGen
+        const idx = appendTtsSubtitleLine(part, gen)
+        if (idx >= 0) {
+          this.spokenLines.push(part)
+          void translateZhToEn(part, this.subtitleAbort?.signal).then((en) => {
+            if (en && isTtsSubtitleSession(gen)) updateTtsSubtitleEn(idx, en, gen)
+          })
+        }
+      }
     }
     if (!this.running) void this.runQueue(this.generation)
   }
@@ -240,6 +313,7 @@ export class StreamingTtsPlayer {
 
     while (this.queue.length > 0 && gen === this.generation) {
       const sentence = this.queue.shift()!
+      this.showSubtitleForSentence(sentence)
       this.schedulePrefetch(gen, 0)
 
       this.state.value = 'synthesizing'
