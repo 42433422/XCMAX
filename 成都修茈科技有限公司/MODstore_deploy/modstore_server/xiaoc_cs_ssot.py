@@ -10,13 +10,141 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 PERSY_DATASET_ID = "persy-knowledge"
+
+_VISITOR_ID_RE = re.compile(r"^v_[A-Za-z0-9_-]{8,64}$")
+
+
+@dataclass(frozen=True)
+class VisitorIdentity:
+    """小C 对话对象（注入 system prompt，不落敏感明文）。"""
+
+    kind: str  # guest | user
+    source: str  # corp | butler | market_cs
+    display_name: str = ""
+    user_id: Optional[int] = None
+    visitor_id: str = ""
+    membership: str = ""
+    email_hint: str = ""
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "source": self.source,
+            "display_name": self.display_name,
+            "user_id": self.user_id,
+            "visitor_id": self.visitor_id,
+            "membership": self.membership,
+            "email_hint": self.email_hint,
+        }
+
+
+def sanitize_visitor_id(raw: Optional[str]) -> str:
+    v = (raw or "").strip()
+    if not v or not _VISITOR_ID_RE.match(v):
+        return ""
+    return v
+
+
+def sanitize_visitor_label(raw: Optional[str], *, max_len: int = 32) -> str:
+    label = re.sub(r"\s+", " ", (raw or "").strip())
+    if not label:
+        return ""
+    # 去掉控制字符
+    label = "".join(ch for ch in label if ch.isprintable())
+    return label[:max_len]
+
+
+def mask_email(email: Optional[str]) -> str:
+    e = (email or "").strip()
+    if "@" not in e:
+        return ""
+    local, _, domain = e.partition("@")
+    if not local or not domain:
+        return ""
+    if len(local) <= 1:
+        head = "*"
+    elif len(local) == 2:
+        head = local[0] + "*"
+    else:
+        head = local[0] + "***" + local[-1]
+    return f"{head}@{domain}"
+
+
+def identity_from_guest(
+    *,
+    visitor_id: str = "",
+    visitor_label: str = "",
+    source: str = "corp",
+) -> VisitorIdentity:
+    vid = sanitize_visitor_id(visitor_id)
+    label = sanitize_visitor_label(visitor_label) or ("访客" if vid else "匿名访客")
+    return VisitorIdentity(
+        kind="guest",
+        source=source or "corp",
+        display_name=label,
+        visitor_id=vid,
+    )
+
+
+def identity_from_user(
+    user: Any,
+    *,
+    source: str = "butler",
+    membership_tier: Optional[str] = None,
+    visitor_id: str = "",
+) -> VisitorIdentity:
+    uid = getattr(user, "id", None)
+    try:
+        user_id = int(uid) if uid is not None else None
+    except (TypeError, ValueError):
+        user_id = None
+    username = str(getattr(user, "username", None) or "").strip()
+    email = str(getattr(user, "email", None) or "").strip()
+    display = username or (email.split("@")[0] if email else "") or (
+        f"用户{user_id}" if user_id else "用户"
+    )
+    tier = (membership_tier or "").strip().lower()
+    return VisitorIdentity(
+        kind="user",
+        source=source or "butler",
+        display_name=sanitize_visitor_label(display) or "用户",
+        user_id=user_id,
+        visitor_id=sanitize_visitor_id(visitor_id),
+        membership=tier,
+        email_hint=mask_email(email),
+    )
+
+
+def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
+    if identity is None:
+        return ""
+    parts = [
+        f"kind={identity.kind}",
+        f"称呼={identity.display_name or '访客'}",
+    ]
+    if identity.user_id is not None:
+        parts.append(f"user_id={identity.user_id}")
+    if identity.membership:
+        parts.append(f"会员={identity.membership}")
+    if identity.visitor_id:
+        parts.append(f"visitor_id={identity.visitor_id}")
+    if identity.email_hint:
+        parts.append(f"邮箱={identity.email_hint}")
+    parts.append(f"入口={identity.source}")
+    return (
+        "【当前对话对象】"
+        + "；".join(parts)
+        + "。可自然称呼对方，勿复读整段 ID/内部字段，勿向访客复述敏感信息。"
+    )
 
 # ─── 权限矩阵（SSOT，代码即契约）────────────────────────────────────
 # external = 官网 / 未登录公开入口（corp-chat、官网浮窗）
@@ -190,6 +318,7 @@ XIAOC_ADMIN_DUTIES = """你的核心职责（管理端 / 市场工作台）：
 
 操作原则：低风险直接执行；中风险展示预览；高风险必须用户明确确认。
 若下方提供了「管理端知识库」摘录，优先依据摘录回答，不要编造未出现的价格/合同/资质。
+若下方提供了「当前对话对象」，可自然称呼，勿复读 ID。
 """
 
 XIAOC_CORP_DUTIES = """你同时是成都修茈科技有限公司官网对外客服（小C）。
@@ -205,6 +334,7 @@ XIAOC_CORP_DUTIES = """你同时是成都修茈科技有限公司官网对外客
 - 回复控制在 200 字以内
 - 可提供相对路径链接，如 /contact.html、/services.html、/market/
 - 若下方提供了「管理端知识库」摘录，优先依据摘录回答
+- 若下方提供了「当前对话对象」，可自然称呼，勿复读 ID/内部字段
 """
 
 XIAOC_MARKET_CS_DUTIES = """你是市场侧客服入口的小C（与管理端小C同源）。
@@ -218,6 +348,7 @@ XIAOC_MARKET_CS_DUTIES = """你是市场侧客服入口的小C（与管理端小
 - 无页面自动化工具，不代付、不直接退款
 - 不要承诺已退款或已下架
 - 口径与官网/管理端小C一致，不要自称另一套客服系统
+- 若下方提供了「当前对话对象」，可自然称呼，勿复读 ID/内部字段
 """
 
 
@@ -375,9 +506,16 @@ def last_user_text(messages: Optional[List[Any]]) -> str:
 __all__ = [
     "PERSY_DATASET_ID",
     "XIAOC_PERMISSIONS",
+    "VisitorIdentity",
     "permission_policy",
     "xiaoc_system_prompt",
     "format_knowledge_block",
+    "format_visitor_block",
+    "identity_from_guest",
+    "identity_from_user",
+    "sanitize_visitor_id",
+    "sanitize_visitor_label",
+    "mask_email",
     "retrieve_persy_knowledge",
     "knowledge_block_for_query",
     "last_user_text",
