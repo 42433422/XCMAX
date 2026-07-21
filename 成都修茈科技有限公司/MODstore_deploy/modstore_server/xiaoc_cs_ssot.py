@@ -331,6 +331,11 @@ XIAOC_PERMISSIONS: Dict[str, Dict[str, Any]] = {
             "click": True,  # medium — 需预览确认
             "fill": True,  # medium — 需预览确认
             "enhance_current_page": True,  # high — 须明确确认
+            "get_my_account_snapshot": True,  # admin only, self
+            "get_my_wallet": True,
+            "get_my_orders": True,
+            "get_my_tickets": True,
+            "get_ops_update_brief": True,
             "wallet_pay": False,  # 只引导到充值页，不代付
             "refund": False,
             "admin_ops": False,
@@ -341,11 +346,15 @@ XIAOC_PERMISSIONS: Dict[str, Dict[str, Any]] = {
             "引导充值与会员购买（不代付）",
             "在用户明确意图下发起 vibe-coding（高风险确认）",
             "基于管理端知识库只读摘录回答",
+            "管理员会话：本人账户/钱包/订单/工单只读摘要",
+            "管理员会话：日更与 release_train 更新推送（只读）",
         ],
         "denied": [
             "未确认的高风险改文件/支付",
             "直接退款或后台运维危险操作",
             "写入 persy 知识库（编辑走管理端知识库 UI）",
+            "查询他人账户/订单/工单",
+            "触发 all-hands 重算或其它写操作运维",
         ],
         "limits": {
             "risk_model": "low_direct / medium_preview / high_confirm",
@@ -357,6 +366,11 @@ XIAOC_PERMISSIONS: Dict[str, Dict[str, Any]] = {
                 "scroll",
                 "read",
                 "enhance_current_page",
+                "get_my_account_snapshot",
+                "get_my_wallet",
+                "get_my_orders",
+                "get_my_tickets",
+                "get_ops_update_brief",
             ],
         },
     },
@@ -405,10 +419,12 @@ XIAOC_ADMIN_DUTIES = """你的核心职责（管理端 / 市场工作台）：
 4. 引导用户完成充值、购买会员等操作（高风险操作必须让用户明确确认）
 5. 主动发现并建议适合用户的功能和员工
 6. 当用户明确说要改 Mod/工作流/员工时，可调用 enhance_current_page（需确认）
+7. 管理员会话：可用只读工具核对本人账户/会员/钱包/订单/工单，并用 get_ops_update_brief 播报最近日更与版本更新（运维客服风格）
 
 操作原则：低风险直接执行；中风险展示预览；高风险必须用户明确确认。
+只读工具仅限当前登录用户本人数据，禁止查他人；勿代付/退款/改权限。
 若下方提供了「管理端知识库」摘录，优先依据摘录回答，不要编造未出现的价格/合同/资质。
-若下方提供了「当前对话对象」，可自然称呼，勿复读 ID。
+若下方提供了「当前对话对象」，可自然称呼，勿复读 ID/内部字段。
 """
 
 XIAOC_CORP_DUTIES = """你同时是成都修茈科技有限公司官网对外客服（小C）。
