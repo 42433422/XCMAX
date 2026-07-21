@@ -1258,8 +1258,11 @@ def should_run_self_maintenance_loop(
 
     evaluation = evaluate_self_maintenance_need()
     runtime_provenance = evaluation.get("runtime_provenance")
+    # force=True is break-glass: allow ops/GHA to run even when the CVM worktree
+    # is dirty or branch/sha provenance cannot be verified.
     if (
-        _env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True)
+        not force
+        and _env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True)
         and isinstance(runtime_provenance, dict)
         and not runtime_provenance.get("ok")
     ):
