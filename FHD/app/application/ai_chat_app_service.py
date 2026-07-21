@@ -110,10 +110,20 @@ class AIChatApplicationService(
     """
 
     def __init__(self):
-        # 通过模块级 ``__getattr__`` 暴露的 lazy 符号查表；这样单测
-        # ``patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")``
-        # 替换的 MagicMock 才会真正生效。首次访问触发 ``_import_workflow_components``
-        # 解析并缓存到 ``globals()``，后续访问直接命中 ``__dict__``。
+        # PEP 562 模块级 ``__getattr__`` 仅在 ``module.attr`` 访问时触发，不在
+        # 普通名字查找时触发；因此这里需显式确保 ``LLMWorkflowPlanner`` 等符号
+        # 已注入 ``globals()``。未注入时调用 ``_import_workflow_components`` 解析
+        # 并缓存；已注入（含单测 ``patch(...)`` 替换的 MagicMock）则直接复用。
+        if "LLMWorkflowPlanner" not in globals():
+            _HybridRiskGate, _LLMWorkflowPlanner, _WorkflowEngine, _get_approval_service = (
+                _import_workflow_components()
+            )
+            globals().update(
+                HybridRiskGate=_HybridRiskGate,
+                LLMWorkflowPlanner=_LLMWorkflowPlanner,
+                WorkflowEngine=_WorkflowEngine,
+                get_approval_service=_get_approval_service,
+            )
         self.ai_service = get_ai_conversation_service()
         self.workflow_planner = LLMWorkflowPlanner()  # noqa: F821
         self.risk_gate = HybridRiskGate()  # noqa: F821
