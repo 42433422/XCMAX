@@ -52,6 +52,12 @@ BLOCK = f"""    ## CORP_SITE_DOWNLOAD_ROUTES_BEGIN —— 断点清单 / 工作�
         default_type application/javascript;
         add_header Cache-Control "no-cache";
     }}
+    location = /download-company-hall.json {{
+        root {SITE_ROOT};
+        try_files /download-company-hall.json =404;
+        default_type application/json;
+        add_header Cache-Control "no-cache";
+    }}
     ## CORP_SITE_DOWNLOAD_ROUTES_END
 """
 
@@ -79,6 +85,7 @@ def _strip_orphan_board_locations(text: str) -> str:
         r"\n\s*location = /download-goals\.html\s*\{[\s\S]*?\n\s*\}\n",
         r"\n\s*location = /download-action-board\.json\s*\{[\s\S]*?\n\s*\}\n",
         r"\n\s*location = /download-action-board\.js\s*\{[\s\S]*?\n\s*\}\n",
+        r"\n\s*location = /download-company-hall\.json\s*\{[\s\S]*?\n\s*\}\n",
     ]
     for pat in patterns:
         text = re.sub(pat, "\n", text)
