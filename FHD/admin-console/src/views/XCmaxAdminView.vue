@@ -94,6 +94,30 @@
           </div>
         </div>
 
+        <!-- 自治健康 -->
+        <div class="admin-card">
+          <div class="card-header">
+            <i class="fa fa-heartbeat card-icon" aria-hidden="true"></i>
+            <h3>自治健康</h3>
+            <span class="status-badge" :class="autonomyHealth.alive ? 'badge-ok' : 'badge-err'">
+              {{ autonomyHealth.alive ? '服务存活' : '不可达' }}
+            </span>
+          </div>
+          <dl class="card-info">
+            <dt>审批服务</dt><dd>{{ autonomyHealth.service || '—' }}</dd>
+            <dt>最近 loop</dt><dd>{{ autonomyHealth.loopStatus || '—' }}</dd>
+            <dt>run_id</dt><dd class="mono small">{{ autonomyHealth.loopRunId || '—' }}</dd>
+            <dt>闭环缺口</dt><dd>{{ autonomyHealth.gapCount ?? '—' }}</dd>
+          </dl>
+          <p v-if="autonomyHealth.error" class="release-error">{{ autonomyHealth.error }}</p>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" :disabled="autonomyHealthLoading" @click="loadAutonomyHealth">
+              {{ autonomyHealthLoading ? '检测中...' : '刷新自治健康' }}
+            </button>
+            <button class="btn btn-primary btn-sm" type="button" @click="activeTab = 'autonomy'">打开自治总览</button>
+          </div>
+        </div>
+
         <!-- 同步状态 -->
         <div class="admin-card">
           <div class="card-header">
@@ -237,6 +261,9 @@
       </div>
     </div>
 
+    <div v-show="activeTab === 'autonomy'" class="page-content admin-tab-panel">
+      <XCmaxAdminAutonomyTab />
+    </div>
     <div v-show="activeTab === 'infra'" class="page-content admin-tab-panel">
       <XCmaxAdminInfraTab />
     </div>
@@ -268,15 +295,19 @@ export default { name: 'XCmaxAdminView' }
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
+import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
 import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
 import {
   xcmaxAutomationPolicyEmbedUrl,
   xcmaxDutyTimeArchitectureEmbedUrl,
 } from '@/constants/xcmaxDashboardEmbed'
+import { xcmaxOpsApi } from '@/api/xcmaxOps'
+import { xcmaxMarketProxy } from '@/api/xcmaxMarketProxy'
 
 const adminTabs = [
   { id: 'overview', label: '总览' },
+  { id: 'autonomy', label: '自治总览' },
   { id: 'infra', label: '基础设施' },
   { id: 'duty', label: '编制与调度' },
   { id: 'automation-policy', label: '自动化方针' },
@@ -312,8 +343,55 @@ const deployModalOpen = ref(false)
 const deployStatus = ref(null)
 const deployStatusLoading = ref(false)
 const deployStatusError = ref('')
+const autonomyHealthLoading = ref(false)
+const autonomyHealth = ref({
+  alive: false,
+  service: '',
+  loopStatus: '',
+  loopRunId: '',
+  gapCount: null,
+  error: '',
+})
 /** 首次进入时拉取；之后依赖缓存与「刷新状态」 */
 const overviewBootstrapped = ref(false)
+
+async function loadAutonomyHealth() {
+  autonomyHealthLoading.value = true
+  autonomyHealth.value = { ...autonomyHealth.value, error: '' }
+  try {
+    const [health, runtime, closure] = await Promise.all([
+      xcmaxAdminApi.fetchAutonomyHealth().catch(() => null),
+      xcmaxMarketProxy.selfMaintenanceRuntimeStatus(20).catch(() => null),
+      xcmaxOpsApi.closureStatus().catch(() => null),
+    ])
+    const mem = runtime?.memory || {}
+    const last = mem.last_run || {}
+    const timelines = Array.isArray(runtime?.run_timelines) ? runtime.run_timelines : []
+    const latest = timelines[0] || {}
+    const closureData = closure?.data || closure || {}
+    let gapCount = closureData.gap_count ?? closureData.closure_gap_count ?? null
+    if (gapCount == null && Array.isArray(closureData.gaps)) gapCount = closureData.gaps.length
+    if (gapCount == null && Array.isArray(closureData.missing_remote)) {
+      gapCount = closureData.missing_remote.length
+    }
+    autonomyHealth.value = {
+      alive: Boolean(health?.ok),
+      service: health?.service || '',
+      loopStatus: last.status || latest.status || runtime?.status || 'unknown',
+      loopRunId: last.run_id || latest.run_id || '',
+      gapCount,
+      error: '',
+    }
+  } catch (e) {
+    autonomyHealth.value = {
+      ...autonomyHealth.value,
+      alive: false,
+      error: e?.message || String(e),
+    }
+  } finally {
+    autonomyHealthLoading.value = false
+  }
+}
 
 const deployBadgeText = computed(() => {
   if (deployStatusLoading.value) return '检测中'
@@ -588,6 +666,7 @@ async function refreshAll() {
       loadModules(),
       loadRemoteEmployees(),
       loadDeployStatus(),
+      loadAutonomyHealth(),
     ])
     if (syncStatus.value.conflictCount > 0) await loadConflicts()
   } finally {

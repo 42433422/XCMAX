@@ -10,6 +10,7 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'automation-policy', name: '自动化方针', iconClass: 'fa-random' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
   { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },
+  { key: 'employee-autonomy', name: '员工自治', iconClass: 'fa-users' },
 ]
 
 /** 管理端侧栏顶置顺序：智能对话首位 + 运维顶栏三项 */
@@ -63,6 +64,8 @@ export function isAdminOperatorNavContext(
 /** 管理员可访问的路由 name */
 export const ADMIN_OPERATOR_ROUTE_NAMES = new Set([
   ...ADMIN_OPERATOR_MENU_ITEMS.map((m) => m.key),
+  'autonomy-approval-hub',
+  'employee-autonomy',
   ...ADMIN_OPERATOR_VISIBLE_CORE_KEYS,
   'admin-entitlements',
   'settings',
