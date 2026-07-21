@@ -81,6 +81,8 @@ export VITE_XCAGI_PLATFORM_SHELL="0"
 export VITE_XCAGI_DEFAULT_PLATFORM_SHELL="0"
 export VITE_API_BASE="${API_URL}"
 export XCAGI_DESKTOP_MODE="1"
+export XCAGI_MARKET_HTTP_TIMEOUT="${XCAGI_MARKET_HTTP_TIMEOUT:-10}"
+export XCAGI_MARKET_HTTP_RETRIES="${XCAGI_MARKET_HTTP_RETRIES:-2}"
 export XCAGI_DESKTOP_FAST_START="${XCAGI_DESKTOP_FAST_START:-0}"
 export XCAGI_DATA_DIR="${E2E_DATA_DIR}"
 unset DATABASE_URL
@@ -91,7 +93,7 @@ wait_http() {
   local label="$2"
   local attempts="${3:-60}"
   for _ in $(seq 1 "${attempts}"); do
-    if curl -sf "${url}" >/dev/null 2>&1; then
+    if curl --noproxy '*' --connect-timeout 2 --max-time 8 -sf "${url}" >/dev/null 2>&1; then
       log "${label} 就绪: ${url}"
       return 0
     fi
@@ -100,10 +102,10 @@ wait_http() {
   fail "${label} 超时未就绪: ${url}"
 }
 
-if [[ "${E2E_REUSE_SERVICES}" == "1" ]] && curl -sf "${API_URL}/api/health" >/dev/null 2>&1; then
+if [[ "${E2E_REUSE_SERVICES}" == "1" ]] && curl --noproxy '*' --connect-timeout 2 --max-time 8 -sf "${API_URL}/api/health" >/dev/null 2>&1; then
   log "复用已有后端 ${API_URL}"
 else
-  if curl -sf "${API_URL}/api/health" >/dev/null 2>&1; then
+  if curl --noproxy '*' --connect-timeout 2 --max-time 8 -sf "${API_URL}/api/health" >/dev/null 2>&1; then
     fail "${API_URL} 已被占用；门禁拒绝复用未知后端（调试时可设置 E2E_REUSE_SERVICES=1）"
   fi
   log "启动 FastAPI ${API_URL} …"
@@ -120,10 +122,10 @@ else
   wait_http "${API_URL}/api/health" "FastAPI"
 fi
 
-if [[ "${E2E_REUSE_SERVICES}" == "1" ]] && curl -sf "${WEB_URL}/" >/dev/null 2>&1; then
+if [[ "${E2E_REUSE_SERVICES}" == "1" ]] && curl --noproxy '*' --connect-timeout 2 --max-time 8 -sf "${WEB_URL}/" >/dev/null 2>&1; then
   log "复用已有 Vite ${WEB_URL}"
 else
-  if curl -sf "${WEB_URL}/" >/dev/null 2>&1; then
+  if curl --noproxy '*' --connect-timeout 2 --max-time 8 -sf "${WEB_URL}/" >/dev/null 2>&1; then
     fail "${WEB_URL} 已被占用；门禁拒绝复用未知前端（调试时可设置 E2E_REUSE_SERVICES=1）"
   fi
   log "构建并启动 Vite preview ${WEB_URL} …"
