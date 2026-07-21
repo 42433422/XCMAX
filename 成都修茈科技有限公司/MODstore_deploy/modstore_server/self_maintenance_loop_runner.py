@@ -4006,14 +4006,16 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 select id, email
                 from users
                 where email = 'guest@devfleet.local'
                    or (email like 'guest_%@devfleet.local')
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
-                """).fetchone()
+                """
+            ).fetchone()
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint",
@@ -4687,6 +4689,7 @@ def _auto_dispatch_deploy_envs() -> List[str]:
             requested.append(env)
     return [env for env in ("staging", "production") if env in requested]
 
+
 def _dispatch_fhd_deploy_action(
     *,
     environment: str,
@@ -4760,6 +4763,7 @@ def _dispatch_fhd_deploy_action(
             "action_id": action_id,
         }
 
+
 def _dispatch_deploy_for_merge(
     *,
     run_id: str,
@@ -4825,6 +4829,7 @@ def _dispatch_deploy_for_merge(
             logger.exception("failed to append deploy_freeze governance audit")
         break
     return results
+
 
 def _decide_post_loop_policy(
     *,
