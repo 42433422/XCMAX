@@ -44,7 +44,7 @@ jobs:
 
       - name: Sync dependencies
         working-directory: FHD
-        run: uv sync --frozen
+        run: uv sync --frozen --extra server-api
 
       - name: Install mutmut
         working-directory: FHD
