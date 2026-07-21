@@ -111,24 +111,20 @@ class AIChatApplicationService(
 
     def __init__(self):
         # PEP 562 模块级 ``__getattr__`` 仅在 ``module.attr`` 访问时触发，不在
-        # 普通名字查找时触发；因此这里需显式确保 ``LLMWorkflowPlanner`` 等符号
-        # 已注入 ``globals()``。未注入时调用 ``_import_workflow_components`` 解析
-        # 并缓存；已注入（含单测 ``patch(...)`` 替换的 MagicMock）则直接复用。
-        if "LLMWorkflowPlanner" not in globals():
-            _HybridRiskGate, _LLMWorkflowPlanner, _WorkflowEngine, _get_approval_service = (
-                _import_workflow_components()
-            )
-            globals().update(
-                HybridRiskGate=_HybridRiskGate,
-                LLMWorkflowPlanner=_LLMWorkflowPlanner,
-                WorkflowEngine=_WorkflowEngine,
-                get_approval_service=_get_approval_service,
-            )
+        # 普通名字查找时触发；通过 ``_self`` 显式走属性访问，既能让
+        # ``mock.patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")``
+        # 替换的 MagicMock 生效，也能在无 mock 时触发 lazy 解析并缓存到
+        # ``__dict__``，避免 ``NameError``。
+        import sys as _sys
+
+        _self = _sys.modules[__name__]
         self.ai_service = get_ai_conversation_service()
-        self.workflow_planner = LLMWorkflowPlanner()  # noqa: F821
-        self.risk_gate = HybridRiskGate()  # noqa: F821
-        self.workflow_engine = WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)  # noqa: F821
-        self.approval_service = get_approval_service()  # noqa: F821
+        self.workflow_planner = _self.LLMWorkflowPlanner()
+        self.risk_gate = _self.HybridRiskGate()
+        self.workflow_engine = _self.WorkflowEngine(
+            tool_dispatcher=self._dispatch_workflow_tool
+        )
+        self.approval_service = _self.get_approval_service()
         self._pending_workflows: dict[str, dict[str, Any]] = {}
 
     @staticmethod
