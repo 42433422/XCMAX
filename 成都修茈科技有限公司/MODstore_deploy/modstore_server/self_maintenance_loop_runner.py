@@ -4531,6 +4531,9 @@ def _dispatch_fhd_deploy_action(
         f"-f action={action} "
         f"-f action_id={action_id}"
     )
+    # gh workflow run needs a git repo cwd to resolve the remote; the runtime
+    # copy under XCMAX-runtime/ is not a git repo, so use MODSTORE_GIT_REPO_ROOT.
+    deploy_cwd = os.environ.get("MODSTORE_GIT_REPO_ROOT") or None
     if _env_flag_enabled("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"):
         return {
             "ok": True,
@@ -4541,6 +4544,7 @@ def _dispatch_fhd_deploy_action(
             "gh_output": "",
             "gh_exit_code": 0,
             "action_id": action_id,
+            "deploy_cwd": deploy_cwd,
         }
     try:
         proc = subprocess.run(
@@ -4560,6 +4564,7 @@ def _dispatch_fhd_deploy_action(
             text=True,
             timeout=120,
             check=False,
+            cwd=deploy_cwd,
         )
         ok = proc.returncode == 0
         output = f"{proc.stdout or ''}{proc.stderr or ''}".strip()
@@ -4572,6 +4577,7 @@ def _dispatch_fhd_deploy_action(
             "gh_output": output,
             "gh_exit_code": int(proc.returncode),
             "action_id": action_id,
+            "deploy_cwd": deploy_cwd,
         }
     except Exception as exc:  # noqa: BLE001 — surface to ledger
         return {
