@@ -120,11 +120,17 @@ jobs:
             echo "[verify] public corp/download/market surfaces:"
             curl -fsS https://xiu-ci.com/ >/dev/null
             curl -fsS https://xiu-ci.com/developer.html >/dev/null
+            curl -fsS https://xiu-ci.com/download >/dev/null
+            curl -fsS https://xiu-ci.com/download/releases >/dev/null
             curl -fsSL https://xiu-ci.com/market/download >/dev/null
             curl -fsS https://xiu-ci.com/market/ >/dev/null
             echo "[verify] homepage nav present:"
             curl -fsS -o /tmp/xc-home.html https://xiu-ci.com/
-            grep -E -q 'site-header|data-nav="index"|>首页<' /tmp/xc-home.html
+            grep -E -q 'site-header|>首页<|/download' /tmp/xc-home.html
+            grep -E -q '产品下载|软件下载' /tmp/xc-home.html
+            echo "[verify] download center is new product page (not old stub):"
+            curl -fsS -o /tmp/xc-download.html https://xiu-ci.com/download
+            grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
               head -n 2 "${LIVE_SITE}/partials/header.html"
