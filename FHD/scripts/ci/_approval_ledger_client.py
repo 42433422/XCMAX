@@ -2,7 +2,7 @@
 
 供 CI 自愈脚本（ai_self_heal.py）、人工升级脚本（escalate_to_human.py）、
 CVM 自治 watcher（cvm_autonomy_watcher.py）复用，避免三处重复实现 POST
-`/api/ops/autonomy/actions/request` 的逻辑。
+`/api/ops/autonomy/actions/ingest` 的逻辑。
 
 铁律：fail-open。任何异常（网络/超时/非 2xx/env 缺失）都只打 stderr 日志，
 返回 None，绝不让 ledger 写入失败阻断主流程。
@@ -26,7 +26,7 @@ def post_to_approval_ledger(
     source: str = "runtime",
     action_id: str | None = None,
 ) -> dict | None:
-    """旁路调用后端 `POST /api/ops/autonomy/actions/request` 写入待办。
+    """旁路调用后端 `POST /api/ops/autonomy/actions/ingest` 写入待办。
 
     env 依赖：
     - `FHD_API_BASE_URL`：后端基址（如 `https://xiu-ci.com`），缺失 fail-open。
@@ -62,7 +62,7 @@ def post_to_approval_ledger(
         )
         return None
 
-    url = f"{base_url.rstrip('/')}/api/ops/autonomy/actions/request"
+    url = f"{base_url.rstrip('/')}/api/ops/autonomy/actions/ingest"
     headers = {"X-Autonomy-Token": token, "Content-Type": "application/json"}
     body: dict[str, Any] = {
         "action": action,

@@ -92,6 +92,19 @@ else:
         Signal,
     )
 
+# 旁路 approval ledger client（fire-and-forget，fail-open）
+try:
+    _ci_scripts_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+        "scripts",
+        "ci",
+    )
+    if _ci_scripts_dir not in sys.path:
+        sys.path.insert(0, _ci_scripts_dir)
+    from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
+except ImportError:  # pragma: no cover - 测试环境路径可能不通
+    post_to_approval_ledger = None  # type: ignore[assignment]
+
 
 # --------------------------------------------------------------------------- #
 # Truth → Signal 派生（与桌面端 runtime-truth.ts deriveSignalsFromTruth 对称）
@@ -367,6 +380,23 @@ def _escalate(
         truth_snapshot=truth,
     )
     adapter.audit(entry)
+    # 旁路写 approval ledger（fire-and-forget，fail-open 在 client 内处理）
+    if post_to_approval_ledger is not None:
+        try:
+            post_to_approval_ledger(
+                action="cvm_escalate",
+                payload={
+                    "original_action": original_action.type.value,
+                    "reason": reason,
+                    "diagnosis_root_cause": diagnosis.root_cause,
+                    "idempotency_key": original_action.idempotency_key,
+                    "escalate_ok": bool(getattr(result, "ok", False)),
+                    "signal_kind": getattr(source_signal, "kind", "") if source_signal else "",
+                },
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
     return entry
 
 
