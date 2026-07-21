@@ -19,30 +19,78 @@
 部署模式：GitHub Actions cron 每 10 分钟 SSH 触发，不在服务器端常驻 systemd。
 """
 
-from __future__ import annotations
+import os
+import sys
+
+
+def _bootstrap_direct_script_import() -> None:
+    if __package__ not in (None, ""):
+        return
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    script_dir_name = os.path.basename(script_dir)
+    fhd_root = os.path.dirname(os.path.dirname(script_dir))
+    cleaned: list[str] = []
+    for entry in list(sys.path):
+        try:
+            real_entry = os.path.realpath(entry)
+        except Exception:
+            real_entry = entry
+        if real_entry == script_dir:
+            continue
+        if os.path.basename(real_entry) == script_dir_name and real_entry.endswith(os.path.join(os.sep, "autonomy")):
+            continue
+        cleaned.append(entry)
+    sys.path[:] = cleaned
+    if fhd_root not in sys.path:
+        sys.path.insert(0, fhd_root)
+
+
+_bootstrap_direct_script_import()
 
 import argparse
-import sys
 import time
 from datetime import datetime, timezone
 from typing import Any
 
-from .cvm_adapter import CvmAutonomyAdapter
-from .impact_predictor import predict
-from .policies import ALL_POLICIES
-from .types import (
-    Action,
-    ActionTracker,
-    ActionType,
-    AuditEntry,
-    AutonomyAdapter,
-    Diagnosis,
-    Plan,
-    Policy,
-    RiskLevel,
-    RuntimeTruthSnapshot,
-    Signal,
-)
+# 支持直接 ``python scripts/autonomy/cvm_autonomy_watcher.py --help``：
+# 当直接执行脚本时，__package__ 为 None，需将 FHD 根目录放到 sys.path
+# 并使用绝对导入，避免 ``import types`` 命名冲突（脚本目录下有同名 types.py）。
+if __package__ in (None, ""):
+    from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
+    from scripts.autonomy.impact_predictor import predict
+    from scripts.autonomy.policies import ALL_POLICIES
+    from scripts.autonomy.types import (  # noqa: F401  # 仅导出供模块内使用
+        Action,
+        ActionTracker,
+        ActionType,
+        AuditEntry,
+        AutonomyAdapter,
+        Diagnosis,
+        Plan,
+        Policy,
+        RiskLevel,
+        RuntimeTruthSnapshot,
+        Signal,
+        ActionResult,
+    )
+else:
+    from .cvm_adapter import CvmAutonomyAdapter
+    from .impact_predictor import predict
+    from .policies import ALL_POLICIES
+    from .types import (
+        Action,
+        ActionTracker,
+        ActionType,
+        ActionResult,
+        AuditEntry,
+        AutonomyAdapter,
+        Diagnosis,
+        Plan,
+        Policy,
+        RiskLevel,
+        RuntimeTruthSnapshot,
+        Signal,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -347,8 +395,6 @@ def _build_skipped_audit(
 
 def _make_error_result(action: Action, detail: str) -> Any:
     """构造执行抛错时的 ActionResult（避免循环导入）。"""
-    from .types import ActionResult
-
     return ActionResult(
         action=action,
         ok=False,

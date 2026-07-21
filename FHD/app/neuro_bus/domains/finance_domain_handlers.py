@@ -21,12 +21,12 @@ Finance Domain Event Handlers
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import logging
 import uuid
 from typing import Any
+from typing import Callable
 
-from app.application.workflow.approval_service import get_approval_service
-from app.application.workflow.types import WorkflowNode
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -36,6 +36,30 @@ logger = logging.getLogger(__name__)
 # 模块级占位：测试通过 patch("...PurchaseService") 替换；生产环境在 handler 内延迟导入。
 # app.services 包存在循环导入，不能在模块加载时直接 from app.services.purchase_service import ...
 PurchaseService = None
+get_approval_service = None
+
+
+@dataclass
+class _FallbackWorkflowNode:
+    node_id: str
+    tool_id: str
+    action: str
+    params: dict[str, Any] = field(default_factory=dict)
+    risk: str = "low"
+    idempotent: bool = False
+    description: str = ""
+    depends_on: list[str] = field(default_factory=list)
+
+
+def _resolve_approval_service():
+    """返回 ``get_approval_service``：优先复用模块级打补丁，必要时延迟导入。"""
+    global get_approval_service
+    if get_approval_service is not None:
+        return get_approval_service
+    from app.application.workflow.approval_service import get_approval_service as _get_approval_service
+
+    get_approval_service = _get_approval_service
+    return _get_approval_service
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +133,7 @@ async def handle_approval_requested(event: NeuroEvent) -> dict[str, Any]:
     )
 
     # 构造 WorkflowNode：business_type 作为 tool_id，business 信息存 params
-    node = WorkflowNode(
+    node = _FallbackWorkflowNode(
         node_id=f"approval-{business_type}-{business_id}",
         tool_id=business_type,
         action="approve",
@@ -128,7 +152,8 @@ async def handle_approval_requested(event: NeuroEvent) -> dict[str, Any]:
     plan_id = f"finance-{business_type}-{business_id or 'x'}-{uuid.uuid4().hex[:8]}"
 
     try:
-        approval_service = get_approval_service()
+        approval_service_factory: Callable[..., Any] = _resolve_approval_service()
+        approval_service = approval_service_factory()
         request = approval_service.create_approval_request(plan_id, node)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("[FinanceServiceDomain] create_approval_request 失败: %s", exc)
