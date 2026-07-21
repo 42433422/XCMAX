@@ -88,7 +88,7 @@ jobs:
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
               mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
               chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
-              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js"; do
+              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" "${GIT_SITE}/visualization.js"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
