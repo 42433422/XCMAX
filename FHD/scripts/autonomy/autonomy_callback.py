@@ -1,29 +1,19 @@
 #!/usr/bin/env python3
-"""显式 autonomy callback：运行态事件回写 approval ledger / ingest。
+"""显式 autonomy callback（SSOT）。
 
 契约符号（供搜索与验收）:
-  - autonomy_callback
-  - report_callback
-  - deploy_callback
+  - autonomy_callback / report_callback / deploy_callback  → POST /actions/ingest
+  - report_executed / report_execution_failed / report_rejected /
+    report_approval_requested                               → POST /github-approval
 
 设计：
-  - 统一走 POST /api/ops/autonomy/actions/ingest（复用 _approval_ledger_client）
+  - ingest：写 pending_approval / 运行态事件
+  - github-approval：推进终态（executed / execution_failed / rejected / approval_requested）
   - fail-open：网络/鉴权/依赖缺失只打 stderr，不阻断主流程
-  - deploy_dispatch 失败后的 freeze_manifest 除流程内嵌外，必须经 deploy_callback 通知
-
-用法::
-
-    from autonomy_callback import deploy_callback, report_callback
-
-    deploy_callback(
-        "freeze_manifest",
-        {"environment": "staging", "triggered_by": "loop:…:deploy:staging", "ok": True},
-        source="self_maintenance",
-        action_id="loop:…:freeze:staging",
-    )
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -36,6 +26,11 @@ try:
     from _approval_ledger_client import post_to_approval_ledger
 except ImportError:  # pragma: no cover
     post_to_approval_ledger = None  # type: ignore[assignment]
+
+try:
+    import httpx
+except ImportError:  # pragma: no cover
+    httpx = None  # type: ignore[assignment]
 
 
 def autonomy_callback(
@@ -107,8 +102,186 @@ def deploy_callback(
     )
 
 
+def _resolve_github_approval_endpoint() -> Optional[str]:
+    base = os.environ.get("FHD_API_BASE_URL") or os.environ.get("MODSTORE_OPS_BASE_URL")
+    if not base:
+        return None
+    return base.rstrip("/") + "/api/ops/autonomy/github-approval"
+
+
+def _resolve_token() -> Optional[str]:
+    return os.environ.get("AUTONOMY_WEBHOOK_TOKEN") or os.environ.get(
+        "MODSTORE_OPS_INGEST_TOKEN"
+    )
+
+
+def _post_github_decision(
+    *,
+    action_id: str,
+    decision: str,
+    approver: str = "",
+    approval_id: str = "",
+    reason: str = "",
+    outcome: Optional[dict[str, Any]] = None,
+    workflow_action: str = "",
+    source: str = "autonomy_callback",
+) -> Optional[dict[str, Any]]:
+    """统一 POST /github-approval；fail-open。"""
+    if not action_id:
+        print("[autonomy_callback] skip: action_id empty", file=sys.stderr)
+        return None
+    endpoint = _resolve_github_approval_endpoint()
+    token = _resolve_token()
+    if not endpoint or not token:
+        print(
+            f"[autonomy_callback] skip: endpoint or token missing "
+            f"(decision={decision} action_id={action_id})",
+            file=sys.stderr,
+        )
+        return None
+    if httpx is None:
+        print("[autonomy_callback] skip: httpx unavailable", file=sys.stderr)
+        return None
+
+    payload: dict[str, Any] = {
+        "action_id": action_id,
+        "decision": decision,
+        "approver": approver or source,
+        "approval_id": approval_id,
+    }
+    if reason:
+        payload["reason"] = reason
+    if outcome:
+        payload["outcome"] = outcome
+    if workflow_action:
+        payload["workflow_action"] = workflow_action
+
+    try:
+        resp = httpx.post(
+            endpoint,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Autonomy-Token": token,
+                "X-Autonomy-Source": source,
+                "Content-Type": "application/json",
+            },
+            timeout=10.0,
+        )
+    except Exception as exc:  # pragma: no cover
+        print(f"[autonomy_callback] http error: {exc!r}", file=sys.stderr)
+        return None
+
+    if resp.status_code < 200 or resp.status_code >= 300:
+        print(
+            f"[autonomy_callback] non-2xx status={resp.status_code} "
+            f"body={resp.text[:500]} decision={decision} action_id={action_id}",
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        data = resp.json()
+    except Exception as exc:  # pragma: no cover
+        print(f"[autonomy_callback] json decode error: {exc!r}", file=sys.stderr)
+        return None
+    if not isinstance(data, dict):
+        print(
+            f"[autonomy_callback] unexpected response type: {type(data).__name__}",
+            file=sys.stderr,
+        )
+        return None
+    return data
+
+
+def report_executed(
+    action_id: str,
+    *,
+    approver: str = "",
+    approval_id: str = "",
+    outcome: Optional[dict[str, Any]] = None,
+    workflow_action: str = "",
+    source: str = "autonomy_callback",
+) -> Optional[dict[str, Any]]:
+    """回调 /github-approval：decision=executed。"""
+    return _post_github_decision(
+        action_id=action_id,
+        decision="executed",
+        approver=approver,
+        approval_id=approval_id,
+        outcome=outcome,
+        workflow_action=workflow_action,
+        source=source,
+    )
+
+
+def report_execution_failed(
+    action_id: str,
+    *,
+    approver: str = "",
+    approval_id: str = "",
+    error: str = "",
+    outcome: Optional[dict[str, Any]] = None,
+    workflow_action: str = "",
+    source: str = "autonomy_callback",
+) -> Optional[dict[str, Any]]:
+    """回调 /github-approval：decision=execution_failed。"""
+    merged_outcome = dict(outcome or {})
+    if error:
+        merged_outcome.setdefault("error", error)
+    return _post_github_decision(
+        action_id=action_id,
+        decision="execution_failed",
+        approver=approver,
+        approval_id=approval_id,
+        outcome=merged_outcome or None,
+        workflow_action=workflow_action,
+        source=source,
+    )
+
+
+def report_rejected(
+    action_id: str,
+    *,
+    approver: str = "",
+    reason: str = "",
+    approval_id: str = "",
+    source: str = "autonomy_callback",
+) -> Optional[dict[str, Any]]:
+    """回调 /github-approval：decision=rejected。"""
+    return _post_github_decision(
+        action_id=action_id,
+        decision="rejected",
+        approver=approver,
+        approval_id=approval_id,
+        reason=reason,
+        source=source,
+    )
+
+
+def report_approval_requested(
+    action_id: str,
+    *,
+    approval_id: str = "",
+    workflow_action: str = "",
+    source: str = "autonomy_callback",
+) -> Optional[dict[str, Any]]:
+    """回调 /github-approval：decision=approval_requested。"""
+    return _post_github_decision(
+        action_id=action_id,
+        decision="approval_requested",
+        approval_id=approval_id,
+        workflow_action=workflow_action,
+        source=source,
+    )
+
+
 __all__ = [
     "autonomy_callback",
     "report_callback",
     "deploy_callback",
+    "report_executed",
+    "report_execution_failed",
+    "report_rejected",
+    "report_approval_requested",
 ]
