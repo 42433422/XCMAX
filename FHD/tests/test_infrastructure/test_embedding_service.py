@@ -71,7 +71,9 @@ class TestEmbeddingServiceDisabled:
         # 通过 get_singleton 路径触发单例创建
         assert get_default_embedding_service() is None
 
-    def test_default_mode_when_env_unset_is_hash_for_non_desktop(self, monkeypatch: pytest.MonkeyPatch):
+    def test_default_mode_when_env_unset_is_hash_for_non_desktop(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """env 未设置时非 desktop 默认 hash（web omniscient 关键词+向量混合检索）。
 
         代码逻辑见 embedding_service._resolve_mode：未配置 FHD_EMBEDDING_MODE

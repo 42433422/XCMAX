@@ -128,10 +128,10 @@ if pid and Path(f"/proc/{pid}/environ").exists():
         os.environ[k] = v
 # Break-glass: production worktree is often dirty vs PARA branch=main.
 os.environ["MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME"] = "0"
-# CVM HTTPS to github.com is flaky; prefer the SSH host alias that /root/XCMAX uses.
-https_url = (os.environ.get("MODSTORE_PARA_REPO_URL") or "").strip()
-if "github.com/42433422/XCMAX" in https_url and not https_url.startswith("git@"):
-    os.environ["MODSTORE_PARA_REPO_URL"] = "git@github-xcagi-modstore:42433422/XCMAX.git"
+# PARA dispatches to Mac agents that need HTTPS GitHub URLs (SSH host aliases are CVM-only).
+# Keep HTTPS for MODSTORE_PARA_REPO_URL; CVM-local clone uses GIT_SSH_COMMAND / skip preflight.
+os.environ["MODSTORE_PARA_REPO_URL"] = "https://github.com/42433422/XCMAX.git"
+os.environ["MODSTORE_PARA_SKIP_GIT_PREFLIGHT"] = "1"
 if not (os.environ.get("GIT_SSH_COMMAND") or "").strip():
     key = Path("/root/.ssh/xcagi_modstore_deploy")
     if key.exists():

@@ -37,7 +37,9 @@ def _bootstrap_direct_script_import() -> None:
             real_entry = entry
         if real_entry == script_dir:
             continue
-        if os.path.basename(real_entry) == script_dir_name and real_entry.endswith(os.path.join(os.sep, "autonomy")):
+        if os.path.basename(real_entry) == script_dir_name and real_entry.endswith(
+            os.path.join(os.sep, "autonomy")
+        ):
             continue
         cleaned.append(entry)
     sys.path[:] = cleaned
@@ -120,7 +122,8 @@ def derive_signals(truth: RuntimeTruthSnapshot) -> list[Signal]:
       - manifest_exists=True + manifest_frozen=False + 部署 digest 与 manifest 不一致
         → manifest_drift（warn）—— 简化判定：manifest_exists=True + manifest_frozen=False
         且 health_ok=False 时派生（需进一步证据时由 policy 拒绝）
-      - compose_status != 'running' → compose_unhealthy（crit）
+      - compose_status 非 running，且不是「systemd-only + health_ok」→ compose_unhealthy（crit）
+        （CVM staging/prod 常无 compose.yml，absent + health_ok 视为正常）
 
     纯函数：使用 truth.ts 作为信号 ts，禁止 time.time() / datetime.now()
     """
@@ -171,7 +174,9 @@ def derive_signals(truth: RuntimeTruthSnapshot) -> list[Signal]:
             )
         )
 
-    if truth.compose_status != "running":
+    # systemd-only 部署（无 compose.yml → absent）且 API 健康：不报警。
+    systemd_only_ok = truth.compose_status == "absent" and truth.health_ok
+    if truth.compose_status != "running" and not systemd_only_ok:
         signals.append(
             Signal(
                 source="runtime_truth",

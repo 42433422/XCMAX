@@ -91,7 +91,8 @@
             </p>
             <div class="viz-hero-actions">
               <a class="viz-primary-link" href="#ai-business">查看 AI 业务数据</a>
-              <a class="viz-text-link" href="#software-downloads">查看软件下载 <span>↓</span></a>
+              <a class="viz-text-link" href="#monitor-dashboard">监控仪表盘 <span>↓</span></a>
+              <a class="viz-text-link" href="#software-downloads">软件下载 <span>↓</span></a>
             </div>
             <div class="viz-update-line">
               <span class="viz-live-dot" aria-hidden="true"></span>
@@ -239,6 +240,43 @@
         </div>
       </section>
 
+
+      <section class="viz-section viz-section--soft" id="monitor-dashboard">
+        <div class="container">
+          <div class="viz-section-head reveal">
+            <div>
+              <p class="viz-kicker">OBSERVABILITY / 01B</p>
+              <h2>监控仪表盘</h2>
+            </div>
+            <p>
+              沿用全景页监控 Tab 的四块 Grafana 面板结构：API、基础设施、Mod 商店与神经总线。
+              公开页只展示聚合健康度，优先本机 Prometheus，回退网关访问日志。
+            </p>
+          </div>
+
+          <div class="viz-mon-hero reveal">
+            <div class="viz-mon-hero-copy">
+              <h3 data-viz-text="monitor.title">监控仪表盘 · Grafana / Prometheus / Loki</h3>
+              <p data-viz-text="monitor.subtitle">—</p>
+              <small data-viz-text="monitor.live_note">—</small>
+            </div>
+            <div class="viz-mon-stack">
+              <div><b>4</b><span>Grafana 仪表盘</span></div>
+              <div><b>Prom</b><span data-viz-text="monitor.stack.prometheus">—</span></div>
+              <div><b>Loki</b><span>LogQL</span></div>
+              <div><b>AM</b><span>Alertmanager</span></div>
+            </div>
+          </div>
+
+          <div class="viz-mon-grid" data-viz-monitor-grid aria-live="polite"></div>
+
+          <div class="viz-mon-issues reveal">
+            <h4>口径说明</h4>
+            <ul data-viz-monitor-issues></ul>
+          </div>
+        </div>
+      </section>
+
       <section class="viz-section viz-section--soft" id="software-downloads">
         <div class="container">
           <div class="viz-section-head reveal">
@@ -351,6 +389,7 @@
           </div>
           <div class="viz-method-list">
             <div><span>01</span><p><b>AI 指标</b>汇总生产网关日志。<b>平台制作 Token</b>走管理端同源五源合计（本地账本 / Cursor / Codex / Trae / mimo）；<b>平台使用 Token</b>为线上对话计费与 AI 员工执行度量之和，二者分开统计。上游未返回 usage 的少量对话记录会明确标记为估算。</p></div>
+            <div><span>01B</span><p><b>监控仪表盘</b>沿用全景页四块 Grafana 面板（API / 基础设施 / Mod / 神经总线）；公开页聚合优先本机 Prometheus，回退网关日志，不暴露截图与告警明细。</p></div>
             <div><span>02</span><p><b>模型归属</b>仅统计可精确归属的历史对话计费日志；AI 员工旧执行度量没有保存模型名，不以当前配置倒推历史模型。</p></div>
             <div><span>03</span><p><b>下载量</b>按成功返回完整安装包的请求统计，不等同于安装、激活或独立用户数。</p></div>
             <div><span>04</span><p><b>公开边界</b>只展示聚合健康度，不包含客户身份、对话内容、单用户 Token 账单与内部截图。</p></div>
@@ -378,7 +417,7 @@
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
 <script src="./main.js?v=20260719b"></script>
 
-<script src="./visualization.js?v=20260721c" defer></script>
+<script src="./visualization.js?v=20260721d" defer></script>
 
 
 <div id="xc-corp-butler-root"></div>

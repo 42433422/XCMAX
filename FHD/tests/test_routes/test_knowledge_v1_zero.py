@@ -155,7 +155,9 @@ class TestKnowledgeIndex:
 class TestIngestEndpoint:
     """Tests for ingest endpoint function."""
 
-    @patch("app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False})
+    @patch(
+        "app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False}
+    )
     @patch("app.fastapi_routes.knowledge_v1._index")
     def test_ingest_success(self, mock_index: MagicMock, _mock_mirror: MagicMock) -> None:
         mock_index.ingest.return_value = 3
@@ -164,7 +166,9 @@ class TestIngestEndpoint:
         assert result.success is True
         assert result.chunk_count == 3
 
-    @patch("app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False})
+    @patch(
+        "app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False}
+    )
     @patch("app.fastapi_routes.knowledge_v1._index")
     def test_ingest_value_error(self, mock_index: MagicMock, _mock_mirror: MagicMock) -> None:
         mock_index.ingest.side_effect = ValueError("bad input")

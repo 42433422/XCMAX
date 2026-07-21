@@ -85,6 +85,8 @@ def _configure_sources(monkeypatch, tmp_path):
     monkeypatch.setenv("XIUCI_VISUALIZATION_RELEASE_MANIFEST", str(manifest))
     monkeypatch.setenv("XIUCI_PLATFORM_MADE_TOKENS_PATH", str(made_snapshot))
     monkeypatch.setenv("XIUCI_VISUALIZATION_CACHE_TTL_SECONDS", "30")
+    # 单测不打本机 Prometheus，避免 urlopen 超时拖慢用例
+    monkeypatch.setattr(public_visualization_api, "_prom_instant", lambda _expr: None)
 
     token_engine = create_engine(f"sqlite:///{tmp_path / 'tokens.db'}")
     with token_engine.begin() as connection:
@@ -139,6 +141,11 @@ def test_live_aggregates_use_logs_and_release_manifest(monkeypatch, tmp_path):
     assert payload["ai"]["top_chat_model"] == "alpha-pro"
     assert payload["ai"]["token_records"] == 3
     assert payload["sources"]["platform_made_tokens"]["status"] == "live"
+    assert payload["monitor"]["stack"]["grafana_dashboards"] == 4
+    assert len(payload["monitor"]["dashboards"]) == 4
+    assert payload["monitor"]["dashboards"][0]["id"] == "api"
+    assert payload["sources"]["monitor"]["status"] in {"live", "unavailable"}
+    assert payload["sources"]["gateway_logs"]["api_requests"] >= 3
     assert payload["downloads"]["total"] == 3
     assert payload["downloads"]["platforms"] == {"windows": 1, "macos": 1, "android": 1}
     assert payload["downloads"]["products"] == {"xcagi": 2, "kellai": 1}
@@ -201,6 +208,7 @@ def test_missing_sources_are_honestly_degraded(monkeypatch, tmp_path):
     monkeypatch.setenv("XIUCI_VISUALIZATION_ACCESS_LOG_GLOB", str(tmp_path / "missing*.log"))
     monkeypatch.setenv("XIUCI_VISUALIZATION_RELEASE_MANIFEST", str(tmp_path / "missing.json"))
     monkeypatch.setenv("XIUCI_PLATFORM_MADE_TOKENS_PATH", str(tmp_path / "missing-made.json"))
+    monkeypatch.setattr(public_visualization_api, "_prom_instant", lambda _expr: None)
     monkeypatch.setattr(
         public_visualization_api,
         "_token_engine",

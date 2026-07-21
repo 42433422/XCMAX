@@ -68,6 +68,10 @@ def client():
     def kellai_pairing_start():
         return {"success": True}
 
+    @app.post("/api/ops/autonomy/actions/ingest")
+    def autonomy_ingest():
+        return {"ok": True}
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -208,6 +212,19 @@ def test_kellai_pairing_requires_dedicated_local_header(client):
 
     assert rejected.status_code == 403
     assert allowed.status_code == 200
+
+
+def test_ops_autonomy_ingest_requires_token_header(client):
+    """CI/CVM callback：无 CSRF，但必须带 X-Autonomy-Token（或 Bearer）。"""
+    rejected = client.post("/api/ops/autonomy/actions/ingest", json={"action": "x"})
+    allowed = client.post(
+        "/api/ops/autonomy/actions/ingest",
+        headers={"X-Autonomy-Token": "probe-token"},
+        json={"action": "x"},
+    )
+    assert rejected.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json() == {"ok": True}
 
 
 def test_non_http_scope_passthrough():

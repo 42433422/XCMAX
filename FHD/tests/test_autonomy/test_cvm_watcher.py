@@ -103,6 +103,18 @@ class TestDeriveSignals:
         kinds = [s.kind for s in signals]
         assert "compose_unhealthy" in kinds
 
+    def test_derive_skips_compose_absent_when_health_ok(
+        self,
+        sample_truth: RuntimeTruthSnapshot,
+    ) -> None:
+        """systemd-only：compose absent + health_ok → 不派生 compose_unhealthy。"""
+        sample_truth.compose_status = "absent"
+        sample_truth.service_running = False
+        signals = derive_signals(sample_truth)
+
+        kinds = [s.kind for s in signals]
+        assert "compose_unhealthy" not in kinds
+
     def test_derive_no_signals_when_healthy(
         self,
         sample_truth: RuntimeTruthSnapshot,

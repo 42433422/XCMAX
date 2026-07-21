@@ -45,6 +45,20 @@
       "rollback_path": "revert_merge_commit",
       "entrypoints": ["modstore_server/approval_dispatcher.py"]
     },
+    "self_maintenance_merge": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "revert_merge_commit",
+      "entrypoints": ["scripts/ci/ai_self_heal.py", "app/application/autonomy/approval_resume.py"],
+      "scope": "CI self-heal PR created; human confirms merge via approval ledger"
+    },
+    "cvm_escalate": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "close_or_dismiss_escalation",
+      "entrypoints": ["scripts/autonomy/cvm_autonomy_watcher.py"],
+      "scope": "CVM watcher escalate-to-human; must appear in pending approval ledger"
+    },
     "self_maintenance_l1_merge": {
       "risk": "LOW",
       "allow_auto_execute": true,
