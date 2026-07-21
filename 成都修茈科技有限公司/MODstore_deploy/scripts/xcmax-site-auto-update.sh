@@ -430,6 +430,10 @@ sync_nginx_corp_root() {
     log "WARN: 未找到 nginx，跳过 corp root 配置"
     return 0
   fi
+  if [[ -f /etc/nginx/conf.d/xiu-ci.com.conf ]]; then
+    log "canonical xiu-ci.com.conf 已存在，跳过会产生 server_name 冲突的 standalone corp root vhost"
+    return 0
+  fi
   install -m 644 "$conf_src" /etc/nginx/conf.d/xiu-ci-corp-root.conf
   if nginx -t >>"$LOG" 2>&1; then
     systemctl reload nginx >>"$LOG" 2>&1 || true
