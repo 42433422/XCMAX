@@ -143,7 +143,9 @@ def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> N
     assert record["ledger_schema_version"] == 2
 
 
-def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
+def test_force_bypasses_dirty_worktree_for_break_glass(monkeypatch) -> None:
+    # force=True is break-glass: ops/GHA must be able to run the loop even when
+    # the CVM worktree is dirty (e.g. mid-deploy). See commit 0043fef8a.
     monkeypatch.setattr(
         loop_runner,
         "evaluate_self_maintenance_need",
@@ -158,9 +160,29 @@ def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
 
     result = loop_runner.should_run_self_maintenance_loop(force=True)
 
+    assert result["should_run"] is True
+    assert result["reason"] == "force"
+
+
+def test_no_force_blocks_untrusted_runtime_provenance(monkeypatch) -> None:
+    # Safety guard: without force, dirty worktree must block the loop.
+    monkeypatch.setattr(
+        loop_runner,
+        "evaluate_self_maintenance_need",
+        lambda: {
+            "runtime_provenance": {
+                "ok": False,
+                "reasons": ["dirty_worktree"],
+            },
+            "signal_count": 99,
+        },
+    )
+
+    result = loop_runner.should_run_self_maintenance_loop(force=False)
+
     assert result["should_run"] is False
     assert result["reason"] == "runtime_provenance_blocked"
-    assert result["force_requested"] is True
+    assert result["force_requested"] is False
 
 
 def test_loop_lease_is_exclusive(monkeypatch, tmp_path: Path) -> None:
