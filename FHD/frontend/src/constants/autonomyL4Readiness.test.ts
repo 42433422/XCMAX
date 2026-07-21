@@ -41,6 +41,12 @@ describe('AUTONOMY_L4_READINESS', () => {
   it('contains the p0-auto-deploy gap that overlay targets', () => {
     expect(AUTO_DEPLOY_GAP_IDS).toContain('p0-auto-deploy')
   })
+
+  it('tracks callback / runtime-sync / implement-pack gaps', () => {
+    expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-callback')
+    expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-runtime-sync')
+    expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-implement-pack')
+  })
 })
 
 describe('overlayDeployGap', () => {

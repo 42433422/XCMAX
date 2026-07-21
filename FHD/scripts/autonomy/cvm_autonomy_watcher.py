@@ -58,6 +58,7 @@ from typing import Any
 # 当直接执行脚本时，__package__ 为 None，需将 FHD 根目录放到 sys.path
 # 并使用绝对导入，避免 ``import types`` 命名冲突（脚本目录下有同名 types.py）。
 if __package__ in (None, ""):
+    from scripts.autonomy.cross_tier_gate import check_before_action, is_enabled as cross_tier_gate_enabled
     from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
     from scripts.autonomy.impact_predictor import predict
     from scripts.autonomy.policies import ALL_POLICIES
@@ -76,6 +77,7 @@ if __package__ in (None, ""):
         ActionResult,
     )
 else:
+    from .cross_tier_gate import check_before_action, is_enabled as cross_tier_gate_enabled
     from .cvm_adapter import CvmAutonomyAdapter
     from .impact_predictor import predict
     from .policies import ALL_POLICIES
@@ -94,7 +96,12 @@ else:
         Signal,
     )
 
-# 旁路 approval ledger client（fire-and-forget，fail-open）
+# 显式 autonomy callback（优先）+ 旁路 approval ledger client（fail-open）
+try:
+    from autonomy_callback import autonomy_callback as _autonomy_callback  # noqa: E402
+except ImportError:  # pragma: no cover
+    _autonomy_callback = None  # type: ignore[assignment]
+
 try:
     _ci_scripts_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
@@ -318,6 +325,21 @@ def _try_execute_single(
         adapter.audit(entry)
         return entry
 
+    # CrossTierGate 跨端门禁（默认启用，env XCAGI_CROSS_TIER_GATE=0 关闭）
+    # 服务器端无法直接查询桌面端 pending marker；用 truth.pending_rollback_marker
+    # 作为代理信号（桌面端通过 IPC 触发服务器端 rollback 时会创建 rollback-marker.json）
+    if cross_tier_gate_enabled():
+        remote_state = {
+            "desktop_pending_rollback_marker": bool(truth.pending_rollback_marker),
+        }
+        gate_result = check_before_action("server", action.type.value, remote_state)
+        if not gate_result.allow:
+            entry = _build_skipped_audit(
+                source_signal, diagnosis, action, truth, gate_result.reasons
+            )
+            adapter.audit(entry)
+            return entry
+
     # 执行
     tracker.attempts += 1
     tracker.last_attempt_ts = int(time.time() * 1000)
@@ -385,19 +407,29 @@ def _escalate(
         truth_snapshot=truth,
     )
     adapter.audit(entry)
-    # 旁路写 approval ledger（fire-and-forget，fail-open 在 client 内处理）
-    if post_to_approval_ledger is not None:
+    # 显式 callback → approval ledger（fire-and-forget，fail-open）
+    _escalate_payload = {
+        "original_action": original_action.type.value,
+        "reason": reason,
+        "diagnosis_root_cause": diagnosis.root_cause,
+        "idempotency_key": original_action.idempotency_key,
+        "escalate_ok": bool(getattr(result, "ok", False)),
+        "signal_kind": getattr(source_signal, "kind", "") if source_signal else "",
+    }
+    if _autonomy_callback is not None:
+        try:
+            _autonomy_callback(
+                "cvm_escalate",
+                _escalate_payload,
+                source="cvm_watcher",
+            )
+        except Exception:  # pragma: no cover - fail-open
+            pass
+    elif post_to_approval_ledger is not None:
         try:
             post_to_approval_ledger(
                 action="cvm_escalate",
-                payload={
-                    "original_action": original_action.type.value,
-                    "reason": reason,
-                    "diagnosis_root_cause": diagnosis.root_cause,
-                    "idempotency_key": original_action.idempotency_key,
-                    "escalate_ok": bool(getattr(result, "ok", False)),
-                    "signal_kind": getattr(source_signal, "kind", "") if source_signal else "",
-                },
+                payload=_escalate_payload,
                 source="cvm_watcher",
             )
         except Exception:  # pragma: no cover - fail-open

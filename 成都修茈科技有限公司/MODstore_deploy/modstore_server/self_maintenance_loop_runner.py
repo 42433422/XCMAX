@@ -5009,8 +5009,82 @@ def _dispatch_deploy_for_merge(
             _append_governance_audit({**freeze_record, "kind": "deploy_freeze"})
         except Exception:  # noqa: BLE001
             logger.exception("failed to append deploy_freeze governance audit")
+        # 显式 callback 通知（非仅流程内嵌）：deploy 失败 + freeze 结果回写 ingest
+        try:
+            _emit_deploy_callback(
+                phase="dispatch_failed",
+                payload={
+                    **record,
+                    "freeze_ok": bool(freeze_result.get("ok")),
+                    "freeze_action_id": freeze_id,
+                },
+                action_id=action_id,
+            )
+            _emit_deploy_callback(
+                phase="freeze_manifest",
+                payload=freeze_record,
+                action_id=freeze_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to emit deploy_callback after freeze")
         break
     return results
+
+
+def _emit_deploy_callback(
+    *,
+    phase: str,
+    payload: Dict[str, Any],
+    action_id: Optional[str] = None,
+) -> None:
+    """Fail-open 调用 FHD autonomy deploy_callback（或等价 ingest HTTP）。"""
+    try:
+        autonomy_scripts = Path(__file__).resolve().parents[3] / "FHD" / "scripts" / "autonomy"
+        candidates = [
+            autonomy_scripts,
+            Path(os.environ.get("XCAGI_FHD_RUNTIME_ROOT", "")) / "scripts" / "autonomy",
+            Path(__file__).resolve().parents[2] / "FHD" / "scripts" / "autonomy",
+        ]
+        for candidate in candidates:
+            if candidate and (candidate / "autonomy_callback.py").is_file():
+                if str(candidate) not in sys.path:
+                    sys.path.insert(0, str(candidate))
+                from autonomy_callback import deploy_callback  # type: ignore[import-not-found]
+
+                deploy_callback(
+                    phase, payload, source="self_maintenance", action_id=action_id
+                )
+                return
+    except Exception:  # noqa: BLE001
+        logger.debug("deploy_callback import path failed", exc_info=True)
+
+    base_url = (os.environ.get("FHD_API_BASE_URL") or "").strip()
+    token = (
+        os.environ.get("AUTONOMY_WEBHOOK_TOKEN")
+        or os.environ.get("MODSTORE_OPS_INGEST_TOKEN")
+        or ""
+    ).strip()
+    if not base_url or not token:
+        return
+    body: Dict[str, Any] = {
+        "action": f"deploy:{phase}",
+        "payload": {**payload, "callback_event": f"deploy:{phase}"},
+        "source": "self_maintenance",
+    }
+    if action_id:
+        body["action_id"] = action_id
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            client.post(
+                f"{base_url.rstrip('/')}/api/ops/autonomy/actions/ingest",
+                headers={
+                    "X-Autonomy-Token": token,
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+    except Exception:  # noqa: BLE001
+        logger.debug("deploy_callback HTTP fallback failed", exc_info=True)
 
 
 def _decide_post_loop_policy(
