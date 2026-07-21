@@ -14,12 +14,13 @@ const TEMPLATE_DIR = path.join(SITE_DIR, 'templates')
 const DATA_DIR = path.join(SITE_DIR, 'data')
 
 /** 全站静态资源缓存版本（styles / main / corp-butler） */
-const ASSET_VER = '20260610f'
+const ASSET_VER = '20260719b'
 
 /** @type {{ file: string, activeNav: string }[]} */
 const WRAP_PAGES = [
   { file: 'index.html', activeNav: 'home' },
   { file: 'about.html', activeNav: 'about' },
+  { file: 'visualization.html', activeNav: 'visualization' },
   { file: 'services.html', activeNav: 'services' },
   { file: 'solutions.html', activeNav: 'solutions' },
   { file: 'cases.html', activeNav: 'cases' },
@@ -89,6 +90,12 @@ function wrapPages() {
       mainHtml,
       footerHtml,
       assetVer: ASSET_VER,
+      bodyAttrs:
+        activeNav === 'home'
+          ? 'data-page="index"'
+          : activeNav === 'contact'
+            ? 'class="page-contact"'
+            : '',
     })
     fs.writeFileSync(srcPath, html, 'utf8')
   }
@@ -98,7 +105,11 @@ function main() {
   const newsItems = readNewsData()
   buildNews(newsItems)
   wrapPages()
-  console.log('marketing-site build: wrote news.html + news.json, re-wrapped', WRAP_PAGES.length, 'pages')
+  console.log(
+    'marketing-site build: wrote news.html + news.json, re-wrapped',
+    WRAP_PAGES.length,
+    'pages',
+  )
 }
 
 main()
