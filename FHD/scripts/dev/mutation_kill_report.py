@@ -58,16 +58,28 @@ def run_mutmut_results() -> str:
     在 ``FHD_ROOT`` 下执行，便于 mutmut 找到 ``pyproject.toml`` 与缓存目录。
     超时 300s（``mutmut results`` 通常秒级返回，超时视为异常）。
     """
-    result = subprocess.run(
+    candidates = [
         ["mutmut", "results"],
-        cwd=FHD_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    # mutmut results 在无缓存时也可能以非零退出，但仍输出有用信息；
-    # 这里统一返回 stdout + stderr 供 parse_results 容错。
-    return result.stdout + ("\n" + result.stderr if result.stderr else "")
+        ["uv", "run", "mutmut", "results"],
+        [sys.executable, "-m", "mutmut", "results"],
+    ]
+    for cmd in candidates:
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=FHD_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+        except FileNotFoundError:
+            continue
+        output = result.stdout + ("\n" + result.stderr if result.stderr else "")
+        if output.strip() or result.returncode == 0:
+            return output
+
+    raise FileNotFoundError
+
 
 
 def parse_results(output: str) -> dict:
