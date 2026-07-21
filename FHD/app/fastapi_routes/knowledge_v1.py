@@ -319,6 +319,30 @@ def _dataset_access_payload_from_request(request: Request) -> dict[str, Any]:
     return dataset_access_payload_from_request(request)
 
 
+def _dataset_read_tenant_scope(access: Any | None) -> str:
+    """Tenant filter for per-dataset status/graph reads.
+
+    Omniscient overview counts all tenants inside each dataset for admins. Per-dataset
+    status/graph must use the same scope; otherwise admin console shows e.g. 1013 docs
+    in the strip while the active space graph stays empty (filtered by admin's
+    synthetic ``platform`` tenant).
+    """
+
+    if access is None:
+        return ""
+    if bool(getattr(access, "is_admin", False)):
+        return ""
+    permissions = getattr(access, "permissions", None) or ()
+    try:
+        from app.application.dataset_rag_app_service import DATASET_ADMIN_PERMISSION
+
+        if DATASET_ADMIN_PERMISSION in permissions:
+            return ""
+    except Exception:  # noqa: BLE001 - keep read path resilient
+        pass
+    return str(getattr(access, "tenant_id", "") or "")
+
+
 def _persy_memory_service():
     from app.application.persy_memory_app_service import get_persy_memory_app_service
 
@@ -873,7 +897,7 @@ def dataset_status(dataset_id: str, request: Request) -> dict[str, Any]:
         _public_dataset_payload(
             get_dataset_rag_app_service().status(
                 dataset_id,
-                tenant_id=str(getattr(access, "tenant_id", "") or ""),
+                tenant_id=_dataset_read_tenant_scope(access),
                 access_context=access,
             )
         ),
@@ -890,7 +914,7 @@ def dataset_graph(
     from app.application.persy_memory_app_service import merge_memory_graph
 
     access = _dataset_access_context_from_request(request)
-    tenant_id = str(getattr(access, "tenant_id", "") or "")
+    tenant_id = _dataset_read_tenant_scope(access)
     memory_graph: dict[str, Any] = {"success": True, "nodes": [], "edges": [], "stats": {}}
     graph_limit = limit
     if dataset_id == _PERSY_DATASET_ID:
