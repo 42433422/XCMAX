@@ -241,6 +241,8 @@ export default defineConfig(() => ({
     format: 'es',
   },
   optimizeDeps: {
+    // mermaid@11 parser uses modern destructuring that breaks chrome87 prebundle target
+    exclude: ['mermaid', '@mermaid-js/parser'],
     esbuildOptions: {
       target: 'esnext',
     },

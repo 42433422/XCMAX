@@ -208,4 +208,5 @@ const xcmaxMarketProxy = {
     api.post('/api/xcmax/admin/all-hands-report/sessions', payload) as Promise<unknown>,
 }
 
+export { xcmaxMarketProxy }
 export default xcmaxMarketProxy

@@ -28,12 +28,28 @@ BEARER_TOKEN=""
 CHOSEN_BASE=""
 
 choose_base_via_http() {
-  local base code login_code
+  local base code ok_flag
   for base in "${try_bases[@]}"; do
     code="$(curl --noproxy '*' -sS --max-time 8 -o /tmp/ms-status.json -w '%{http_code}' \
       "${base}/api/ops/self-maintenance/status?limit=3" || true)"
-    echo "status ${base} -> HTTP ${code}"
-    if [[ "${code}" == 2* ]]; then
+    ok_flag="$(python3 - <<'PY'
+import json
+try:
+    d = json.load(open("/tmp/ms-status.json"))
+except Exception:
+    print("0")
+    raise SystemExit(0)
+# FHD catch-all may return HTTP 200 + success:false for missing ops routes.
+if d.get("ok") is True or d.get("success") is True:
+    print("1")
+elif isinstance(d.get("cron"), dict) or d.get("memory") is not None:
+    print("1")
+else:
+    print("0")
+PY
+)"
+    echo "status ${base} -> HTTP ${code} ok_flag=${ok_flag}"
+    if [[ "${code}" == 2* && "${ok_flag}" == "1" ]]; then
       CHOSEN_BASE="$base"
       return 0
     fi
@@ -84,15 +100,18 @@ post_run_http() {
 
 run_inprocess_with_live_env() {
   # Prefer env from live modstore uvicorn (ports 9999/9990).
-  local pid mod
+  local pid mod py
   pid="$(pgrep -af 'uvicorn modstore_server.app:app' | awk 'NR==1{print $1}' || true)"
   mod="$(ls -d /opt/xcmax/current/*/MODstore_deploy 2>/dev/null | head -1 || true)"
   [ -n "$mod" ] || mod="$(ls -d /root/*/MODstore_deploy 2>/dev/null | head -1 || true)"
   [ -n "$mod" ] || return 1
+  # System python3 often lacks apscheduler; prefer deploy venv.
+  py="${mod}/.venv/bin/python"
+  [ -x "$py" ] || py="$(command -v python3)"
   export LOOP_REASON="$REASON"
   export LOOP_MOD="$mod"
   export LOOP_PID="${pid:-}"
-  python3 - <<'PY'
+  "$py" - <<'PY'
 import json, os, sys
 from pathlib import Path
 
@@ -109,6 +128,16 @@ if pid and Path(f"/proc/{pid}/environ").exists():
         os.environ[k] = v
 # Break-glass: production worktree is often dirty vs PARA branch=main.
 os.environ["MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME"] = "0"
+# CVM HTTPS to github.com is flaky; prefer the SSH host alias that /root/XCMAX uses.
+https_url = (os.environ.get("MODSTORE_PARA_REPO_URL") or "").strip()
+if "github.com/42433422/XCMAX" in https_url and not https_url.startswith("git@"):
+    os.environ["MODSTORE_PARA_REPO_URL"] = "git@github-xcagi-modstore:42433422/XCMAX.git"
+if not (os.environ.get("GIT_SSH_COMMAND") or "").strip():
+    key = Path("/root/.ssh/xcagi_modstore_deploy")
+    if key.exists():
+        os.environ["GIT_SSH_COMMAND"] = (
+            f"ssh -i {key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+        )
 sys.path.insert(0, mod)
 os.chdir(mod)
 from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
