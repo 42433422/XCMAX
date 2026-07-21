@@ -2434,11 +2434,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
             }
         severity = str(review_json.get("max_severity") or "high").lower()
         blocking = review_json.get("blocking_findings")
-        dimensions = (
-            review_json.get("dimensions")
-            if isinstance(review_json.get("dimensions"), dict)
-            else {}
-        )
+        dimensions = review_json.get("dimensions") if isinstance(review_json.get("dimensions"), dict) else {}
         failed_dims = [
             key
             for key in _REVIEW_DIMENSION_KEYS
