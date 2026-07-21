@@ -541,7 +541,7 @@ class CorpChatDTO(BaseModel):
     max_tokens: Optional[int] = Field(512, ge=1, le=2000)
 
 
-CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小茈，平时在这边帮忙接待访客。
+CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。
 
 你的性格和说话方式：
 - 像真人前台一样聊天，口语化、自然，别用「尊敬的用户」「您好」「竭诚为您服务」这种客服腔
@@ -630,8 +630,35 @@ def _resolve_butler_credentials(db: Session, user_id: int):
 
 
 def _build_messages(body: ButlerChatDTO, page_context: str | None) -> List[Dict[str, Any]]:
-    """组装最终 messages，注入 system prompt 和页面上下文。"""
-    system_content = BUTLER_SYSTEM_PROMPT
+    """组装最终 messages：小C SSOT 人设 + 管理端知识库 + 页面上下文。"""
+    from modstore_server.xiaoc_cs_ssot import (
+        knowledge_block_for_query,
+        last_user_text,
+        xiaoc_system_prompt,
+    )
+
+    system_content = xiaoc_system_prompt(mode="admin")
+    # 保留工具职责补充（导航/风险等）
+    if "enhance_current_page" in BUTLER_SYSTEM_PROMPT:
+        system_content += (
+            "\n\n【工具能力补充】\n"
+            + "\n".join(
+                line
+                for line in BUTLER_SYSTEM_PROMPT.splitlines()
+                if line.startswith("6.")
+                or line.startswith("可识别")
+                or line.startswith("- /workbench")
+                or line.startswith("操作原则")
+                or line.startswith("- 低风险")
+                or line.startswith("- 中风险")
+                or line.startswith("- 高风险")
+                or line.startswith("回复要简洁")
+            )
+        )
+    user_q = last_user_text(body.messages)
+    kb = knowledge_block_for_query(user_q) if user_q else ""
+    if kb:
+        system_content += f"\n\n{kb}"
     if page_context:
         system_content += f"\n\n当前页面上下文：\n{page_context}"
 
@@ -715,7 +742,18 @@ def _resolve_corp_credentials(db: Session):
 
 
 def _build_corp_messages(body: CorpChatDTO) -> List[Dict[str, Any]]:
-    system_content = CORP_BUTLER_SYSTEM_PROMPT
+    """官网公开咨询：统一小C 人设 + 管理端 persy 知识库。"""
+    from modstore_server.xiaoc_cs_ssot import (
+        knowledge_block_for_query,
+        last_user_text,
+        xiaoc_system_prompt,
+    )
+
+    system_content = xiaoc_system_prompt(mode="corp")
+    user_q = last_user_text(body.messages)
+    kb = knowledge_block_for_query(user_q) if user_q else ""
+    if kb:
+        system_content += f"\n\n{kb}"
     if body.page_context:
         system_content += (
             f"\n\n当前页面（{body.page_id or 'unknown'}）上下文：\n{body.page_context[:3500]}"
@@ -751,6 +789,30 @@ def _get_or_create_conversation(
 
 
 # ─── 路由 ─────────────────────────────────────────────────────────────
+
+
+class CsSsotRetrieveDTO(BaseModel):
+    query: str = Field(..., min_length=1, max_length=4000)
+    top_k: int = 5
+
+
+@router.post("/cs-ssot/retrieve")
+async def butler_cs_ssot_retrieve(
+    body: CsSsotRetrieveDTO,
+    user: User = Depends(_get_current_user),
+):
+    """已登录市场/管理端：同源检索管理端 persy 知识库（小C SSOT）。"""
+    _ = user
+    from modstore_server.xiaoc_cs_ssot import PERSY_DATASET_ID, retrieve_persy_knowledge
+
+    chunks = retrieve_persy_knowledge(body.query, top_k=body.top_k)
+    return {
+        "ok": True,
+        "dataset_id": PERSY_DATASET_ID,
+        "query": body.query,
+        "chunks": chunks,
+        "ssot": "admin_persy_knowledge",
+    }
 
 
 @router.post("/corp-chat")

@@ -139,3 +139,36 @@ class TestRequestSourcePassthrough:
         assert response.status_code == 200
         _, kwargs = mock_req.call_args
         assert kwargs["source"] == "ops_autonomy.request"
+
+
+class TestCsSsotRetrieve:
+    def test_cs_ssot_retrieve_requires_query(self, autonomy_client: TestClient) -> None:
+        response = autonomy_client.post(
+            "/api/ops/autonomy/cs-ssot/retrieve",
+            headers=_AUTH_HEADERS,
+            json={},
+        )
+        assert response.status_code == 400
+
+    def test_cs_ssot_retrieve_ok(self, autonomy_client: TestClient) -> None:
+        fake_svc = MagicMock()
+        fake_svc.query.return_value = {
+            "success": True,
+            "chunks": [{"text": "会员年付", "source": "faq"}],
+        }
+        with patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=fake_svc,
+        ):
+            response = autonomy_client.post(
+                "/api/ops/autonomy/cs-ssot/retrieve",
+                headers=_AUTH_HEADERS,
+                json={"query": "会员怎么买", "top_k": 3},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["dataset_id"] == "persy-knowledge"
+        assert data["ssot"] == "admin_persy_knowledge"
+        assert data["chunks"][0]["text"] == "会员年付"
+        fake_svc.query.assert_called_once()

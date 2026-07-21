@@ -4421,6 +4421,31 @@ async function retrieveKnowledgeForDirect(
   let knowledgePack = ''
   let citations: DirectKbResult['citations'] = []
   if (!userText.trim()) return { knowledgePack, citations }
+  // AI 客服 Bot：优先管理端 persy 知识库（小C SSOT）
+  if (String(activeBot.value?.id || '') === 'customer-service') {
+    try {
+      const res: any = await withRequestTimeout(
+        api.csSsotRetrieve({ query: userText, top_k: 6 }),
+        DIRECT_KB_RETRIEVE_MS,
+      )
+      const chunks = Array.isArray(res?.chunks) ? res.chunks : []
+      if (chunks.length > 0) {
+        const lines = chunks.slice(0, 6).map((c: any, i: number) => {
+          const text = String(c?.text || c?.content || c?.snippet || '').trim()
+          const source = String(c?.source || c?.document_id || c?.filename || 'persy').trim()
+          return `[${i + 1}] (${source}) ${text.slice(0, 500)}`
+        })
+        knowledgePack = `【管理端知识库·persy-knowledge】\n${lines.join('\n')}`
+        citations = chunks.slice(0, 6).map((c: any, i: number) => ({
+          title: `${i + 1}. ${String(c?.source || c?.filename || '管理端知识库')}`,
+          snippet: String(c?.text || c?.content || '').trim().slice(0, 200),
+        }))
+        return { knowledgePack, citations }
+      }
+    } catch {
+      /* fall through to market knowledge */
+    }
+  }
   try {
     const pickedEmp = String(directChatEmployeeId.value || '').trim()
     const botEmp = String(activeBot.value?.id || '').trim()

@@ -38,7 +38,7 @@ export interface PageKnowledge {
   quickActions: QuickAction[]
 }
 
-const CORP_DEFAULT_WELCOME_TITLE = 'Hi，我是修茈科技 AI 管家'
+const CORP_DEFAULT_WELCOME_TITLE = 'Hi，我是小C'
 
 const CORP_CONTACT_NAV: QuickAction = {
   label: '预约方案沟通',
