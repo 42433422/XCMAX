@@ -291,9 +291,7 @@ class TestButlerSystemPrompt:
         from modstore_server.agent_butler_api import _execute_admin_readonly_tool
 
         user = SimpleNamespace(id=1, is_admin=False)
-        out = _execute_admin_readonly_tool(
-            "get_my_account_snapshot", {}, user=user, db=MagicMock()
-        )
+        out = _execute_admin_readonly_tool("get_my_account_snapshot", {}, user=user, db=MagicMock())
         assert "仅管理员" in out
 
     def test_execute_ops_update_brief_and_self_tickets(self):
@@ -383,9 +381,7 @@ class TestButlerSystemPrompt:
         assert "日更标题" in brief or "2026-07-21" in brief
         assert "1.0.0.0" in brief
 
-        tickets = _execute_admin_readonly_tool(
-            "get_my_tickets", {"limit": 5}, user=admin, db=db
-        )
+        tickets = _execute_admin_readonly_tool("get_my_tickets", {"limit": 5}, user=admin, db=db)
         assert "T-1" in tickets
         assert "本人工单" in tickets
 

@@ -659,9 +659,7 @@ def _execute_admin_readonly_tool(
             lim = _limit(5, 20)
             wallet = db.query(Wallet).filter(Wallet.user_id == user.id).first()
             balance = float(wallet.balance) if wallet else 0.0
-            updated = (
-                wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
-            )
+            updated = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
             rows = (
                 db.query(Transaction)
                 .filter(Transaction.user_id == user.id)
@@ -735,10 +733,7 @@ def _execute_admin_readonly_tool(
         if tool == "get_ops_update_brief":
             lim = _limit(3, 5)
             digests = (
-                db.query(DailyDigestRecord)
-                .order_by(DailyDigestRecord.id.desc())
-                .limit(lim)
-                .all()
+                db.query(DailyDigestRecord).order_by(DailyDigestRecord.id.desc()).limit(lim).all()
             )
             lines = ["【运维更新推送】"]
             if digests:
@@ -940,13 +935,11 @@ def _build_messages(
             or line.startswith("回复要简洁")
         )
     if user is not None:
-        vb = format_visitor_block(
-            resolve_user_identity(user, db=db, source="butler")
-        )
+        vb = format_visitor_block(resolve_user_identity(user, db=db, source="butler"))
         if vb:
             system_content += f"\n\n{vb}"
     user_q = last_user_text(body.messages)
-    kb = knowledge_block_for_query(user_q) if user_q else ""
+    kb = knowledge_block_for_query(user_q, mode="admin") if user_q else ""
     if kb:
         system_content += f"\n\n{kb}"
     if page_context:
@@ -1065,7 +1058,7 @@ def _build_corp_messages(
     if vb:
         system_content += f"\n\n{vb}"
     user_q = last_user_text(body.messages)
-    kb = knowledge_block_for_query(user_q) if user_q else ""
+    kb = knowledge_block_for_query(user_q, mode="corp") if user_q else ""
     if kb:
         system_content += f"\n\n{kb}"
     if body.page_context:
@@ -1128,17 +1121,21 @@ async def butler_cs_ssot_retrieve(
     body: CsSsotRetrieveDTO,
     user: User = Depends(_get_current_user),
 ):
-    """已登录市场/管理端：同源检索管理端 persy 知识库（小C SSOT）。"""
-    _ = user
-    from modstore_server.xiaoc_cs_ssot import PERSY_DATASET_ID, retrieve_persy_knowledge
+    """已登录市场/管理端：按身份检索公开库（管理员另含内部库）。"""
+    from modstore_server.xiaoc_cs_ssot import (
+        PUBLIC_DATASET_ID,
+        retrieve_knowledge_for_mode,
+    )
 
-    chunks = retrieve_persy_knowledge(body.query, top_k=body.top_k)
+    mode = "admin" if bool(getattr(user, "is_admin", False)) else "market_cs"
+    chunks = retrieve_knowledge_for_mode(body.query, mode=mode, top_k=body.top_k)
     return {
         "ok": True,
-        "dataset_id": PERSY_DATASET_ID,
+        "dataset_id": PUBLIC_DATASET_ID,
+        "mode": mode,
         "query": body.query,
         "chunks": chunks,
-        "ssot": "admin_persy_knowledge",
+        "ssot": "xiaoc_kb_isolation",
     }
 
 
@@ -1478,9 +1475,7 @@ async def butler_chat(
             usage = raw_response.get("usage") or {}
 
         # 管理员只读工具：服务端执行并拼进回复；页面工具仍回前端
-        page_tool_calls, readonly_brief = _partition_butler_tool_calls(
-            tool_calls, user=user, db=db
-        )
+        page_tool_calls, readonly_brief = _partition_butler_tool_calls(tool_calls, user=user, db=db)
         tool_calls = page_tool_calls
         if readonly_brief:
             text = ((text or "").strip() + "\n\n" + readonly_brief).strip()
