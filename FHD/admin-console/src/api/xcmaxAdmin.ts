@@ -193,4 +193,75 @@ export const xcmaxAdminApi = {
       { approver, reason, approval_id: approvalId },
     );
   },
+  fetchAutonomyAuditLog(params: {
+    limit?: number;
+    days?: number;
+    risk_level?: string;
+    decision?: string;
+    veto_only?: boolean;
+  } = {}) {
+    return api.get<{
+      success?: boolean;
+      items?: Record<string, unknown>[];
+      count?: number;
+      summary?: Record<string, unknown>;
+    }>('/api/xcmax/admin/autonomy/audit-log', params);
+  },
+  fetchAutonomyHealth() {
+    return api.get<{ ok: boolean; service?: string }>('/api/xcmax/admin/autonomy/health');
+  },
+  fetchAutonomyOverview() {
+    return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/overview');
+  },
+  fetchAutonomyDeployEvents(params: { limit?: number; since_cursor?: string } = {}) {
+    return api.get<{ ok: boolean; items?: AutonomyDeployEvent[]; count?: number }>(
+      '/api/xcmax/admin/autonomy/deploy-events',
+      params,
+    );
+  },
+  fetchAutonomyOperatingMetrics() {
+    return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/operating-metrics');
+  },
+  fetchAutonomyGithubItems(limit = 30) {
+    return api.get<{ ok: boolean; items?: AutonomyGithubItem[]; errors?: string[] }>(
+      '/api/xcmax/admin/autonomy/github-items',
+      { limit },
+    );
+  },
+  fetchAutonomyCrossTierGate() {
+    return api.get<Record<string, unknown>>('/api/xcmax/admin/autonomy/cross-tier-gate');
+  },
+  fetchAutonomyAuditCrossTier(params: { tier?: string; limit?: number } = {}) {
+    return api.get<{ ok: boolean; items?: Record<string, unknown>[]; tier?: string }>(
+      '/api/xcmax/admin/autonomy/audit-cross-tier',
+      params,
+    );
+  },
+  forceSelfMaintenanceRun(reason = 'admin_console_force_run') {
+    return api.post<{ ok: boolean; result?: Record<string, unknown>; message?: string }>(
+      '/api/xcmax/admin/autonomy/self-maintenance/run',
+      { reason },
+    );
+  },
+};
+
+export type AutonomyDeployEvent = {
+  deploy_id?: string;
+  deployed_at?: string;
+  commit_at?: string;
+  status?: string;
+  restored_at?: string | null;
+  source_workflow?: string;
+  head_branch?: string;
+};
+
+export type AutonomyGithubItem = {
+  kind?: string;
+  number?: number;
+  title?: string;
+  url?: string;
+  labels?: string[];
+  updated_at?: string;
+  author?: string;
+  head_ref?: string;
 };

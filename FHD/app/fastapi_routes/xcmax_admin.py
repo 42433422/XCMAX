@@ -192,6 +192,156 @@ async def admin_reject_autonomy_action(action_id: str, request: Request):
     return {"ok": True, "action": item}
 
 
+@router.get("/admin/autonomy/health", response_model=None)
+async def admin_autonomy_health(request: Request):
+    """Admin-session health for autonomy approval service (avoids /api/ops vite→modstore proxy)."""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    return {"ok": True, "service": "ops-autonomy-approval", "via": "xcmax-admin"}
+
+
+@router.get("/admin/autonomy/overview", response_model=None)
+async def admin_autonomy_overview(request: Request):
+    """One-shot autonomy dashboard payload for the admin console."""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import (
+        closure_gap_count,
+        extract_loop_run_summary,
+        list_deploy_events,
+        operating_metrics_windows,
+    )
+    from app.application.autonomy.audit_log import (
+        list_autonomy_audit,
+        summarize_autonomy_audit,
+    )
+    from app.application.autonomy.approval_resume import list_pending_actions
+    from app.application import self_maintenance_app_service as sm_svc
+    from app.application.ops_closure_status import build_ops_closure_status
+
+    audit_items = list_autonomy_audit(limit=20)
+    audit_summary = summarize_autonomy_audit(days=30)
+    metrics = operating_metrics_windows()
+    deploy = list_deploy_events(limit=20)
+    pending = list_pending_actions()
+
+    runtime: dict[str, Any] = {}
+    try:
+        runtime = await sm_svc.get_runtime_status_local(limit=40)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("autonomy overview runtime status failed: %s", exc)
+        runtime = {"ok": False, "error": str(exc)}
+
+    closure: dict[str, Any] = {}
+    try:
+        closure = {"success": True, "data": build_ops_closure_status(await _remote_duty_health(request))}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("autonomy overview closure status failed: %s", exc)
+        closure = {"success": False, "error": str(exc)}
+
+    return {
+        "ok": True,
+        "health": {"ok": True, "service": "ops-autonomy-approval"},
+        "pending": {"count": len(pending), "items": pending[:20]},
+        "audit": {"items": audit_items, "count": len(audit_items), "summary": audit_summary},
+        "loop": extract_loop_run_summary(runtime if isinstance(runtime, dict) else {}),
+        "runtime": runtime,
+        "closure": {
+            "gap_count": closure_gap_count(closure),
+            "payload": closure,
+        },
+        "deploy_events": deploy,
+        "operating_metrics": metrics,
+    }
+
+
+@router.get("/admin/autonomy/deploy-events", response_model=None)
+async def admin_autonomy_deploy_events(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=200),
+    since_cursor: str | None = None,
+):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import list_deploy_events
+
+    data = list_deploy_events(limit=limit, since_cursor=since_cursor)
+    return {"ok": True, **data}
+
+
+@router.get("/admin/autonomy/operating-metrics", response_model=None)
+async def admin_autonomy_operating_metrics(request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import operating_metrics_windows
+
+    return {"ok": True, **operating_metrics_windows()}
+
+
+@router.get("/admin/autonomy/github-items", response_model=None)
+async def admin_autonomy_github_items(
+    request: Request,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import list_github_human_items
+
+    return {"ok": True, **list_github_human_items(limit=limit)}
+
+
+@router.get("/admin/autonomy/cross-tier-gate", response_model=None)
+async def admin_autonomy_cross_tier_gate(request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import evaluate_cross_tier_gate_snapshot
+
+    return {"ok": True, **evaluate_cross_tier_gate_snapshot(None)}
+
+
+@router.get("/admin/autonomy/audit-cross-tier", response_model=None)
+async def admin_autonomy_audit_cross_tier(
+    request: Request,
+    tier: str = Query(default="server"),
+    limit: int = Query(default=50, ge=1, le=300),
+):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import read_cross_tier_audit
+
+    return {"ok": True, **read_cross_tier_audit(tier=tier, limit=limit)}
+
+
+@router.post("/admin/autonomy/self-maintenance/run", response_model=None)
+async def admin_force_self_maintenance_run(request: Request):
+    """Admin break-glass: force one self-maintenance loop via local MODstore."""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application import self_maintenance_app_service as sm_svc
+
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    reason = str(body.get("reason") or "admin_console_force_run").strip() or "admin_console_force_run"
+    try:
+        result = await sm_svc.force_run_local(reason=reason)
+        return {"ok": True, "result": result}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("admin force self-maintenance failed: %s", exc)
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=502)
+
+
 def _release_train_snapshot() -> dict[str, Any]:
     """读取 release_train SSOT；优先 modstore 模块，回退 FHD/config JSON。"""
     from pathlib import Path
