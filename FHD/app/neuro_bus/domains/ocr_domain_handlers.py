@@ -95,7 +95,7 @@ class OCRServiceDomainHandlers:
     """OCRService 领域事件处理器"""
 
     def __init__(self):
-        self.bus = get_neuro_bus()
+        self.bus = neuro_bus.get_neuro_bus()
 
     def register(self):
         """注册所有事件处理器"""
