@@ -68,10 +68,10 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
     {
       id: 'p0-auto-deploy',
       severity: 'P0',
-      title: '自治部署默认关闭',
-      status: 'blocked',
-      impact: '闭环只到「合」就停，需人工 dispatch 部署（三步半）',
-      nextStep: '仅在 staging 开 MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY=1，跑满 7 天再谈 prod',
+      title: 'staging 自动部署默认开启',
+      status: 'partial',
+      impact: '主开关未设时默认开；ENVS 空则仅 staging；production 须显式列入 ENVS',
+      nextStep: '观察 staging 自动部署 7 日；确认 production 未误入 ENVS',
       ownerSurface: 'modstore',
     },
     {
@@ -119,10 +119,10 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
     {
       id: 'p1-im',
       severity: 'P1',
-      title: 'CI/CVM 主动通知缺失',
-      status: 'blocked',
-      impact: 'needs-human 只能靠 GitHub Issue/PR，人无法及时介入',
-      nextStep: '复用 MODstore notification_service 给 CI escalate / watcher 推 IM',
+      title: 'CI/CVM 主动通知已接管理端 IM',
+      status: 'ok',
+      impact: 'escalate_to_human / cvm watcher 旁路推老板 IM（fail-open）；需配内部 URL + API key + boss uid',
+      nextStep: '在 CI/CVM 配置 XCAGI_FHD_INTERNAL_URL + XCAGI_MARKET_INTERNAL_API_KEY + XCAGI_AUTONOMY_IM_BOSS_USER_ID 并实战验证一条 escalate',
       ownerSurface: 'ci',
     },
     {
@@ -137,10 +137,10 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
     {
       id: 'p2-mutation',
       severity: 'P2',
-      title: '变异测试 kill rate ~43%（目标 80%）',
+      title: '变异测试 PR gate（阈值 80%）',
       status: 'partial',
-      impact: '自治 PR 修复正确性无量化门禁',
-      nextStep: '先 weekly 监控，再升为 PR gate',
+      impact: 'gate 作用域收紧为 app/di + app/contexts；kill rate 达标后阻断 PR',
+      nextStep: '确认 mutation-smoke 在 PR 上绿；逐步扩大 source_paths',
       ownerSurface: 'ci',
     },
   ],

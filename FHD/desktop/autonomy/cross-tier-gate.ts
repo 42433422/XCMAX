@@ -31,8 +31,8 @@ export interface GateResult {
  * @returns GateResult.allow=true 可执行；allow=false 应跳过并写 audit
  *
  * 语义：
- * - remoteState=null（查询失败）→ allow=true（fail-open，不阻断）
- * - remoteState={}（无可用状态）→ allow=true
+ * - remoteState=null（查询失败）→ allow=false（fail-closed）
+ * - remoteState={}（已知空状态）→ allow=true
  * - 命中门禁规则 → allow=false + reasons
  */
 export function checkBeforeAction(
@@ -40,9 +40,9 @@ export function checkBeforeAction(
   actionType: string,
   remoteState: Record<string, unknown> | null,
 ): GateResult {
-  // 跨端查询失败：fail-open，不阻断
+  // 跨端查询失败：fail-closed，阻断动作
   if (remoteState === null) {
-    return { allow: true, reasons: ['remote_state unavailable, fail-open'] }
+    return { allow: false, reasons: ['remote_state unavailable, fail-closed'] }
   }
 
   // 桌面端 rollback_version 前检查服务器端 manifest 是否 frozen

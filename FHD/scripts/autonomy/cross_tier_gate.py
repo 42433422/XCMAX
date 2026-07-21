@@ -6,7 +6,7 @@
 设计：
 - 纯函数 check_before_action(tier, action, remote_state) → GateResult
 - 默认启用（env XCAGI_CROSS_TIER_GATE=0 关闭，opt-out）
-- 失败模式：跨端查询失败默认 allow=true（不阻断主流程，避免引入新单点故障）
+- 失败模式：跨端查询失败（remote_state=None）fail-closed，allow=false
 - 与桌面端 controller.ts / 服务器端 cvm_watcher.py 共用同一语义
 """
 
@@ -42,13 +42,13 @@ def check_before_action(
         GateResult(allow=True) 可执行；GateResult(allow=False, reasons) 应跳过并写 audit
 
     语义：
-    - remote_state=None（查询失败）→ allow=True（fail-open，不阻断）
-    - remote_state={}（无可用状态）→ allow=True
+    - remote_state=None（查询失败）→ allow=False（fail-closed）
+    - remote_state={}（已知空状态）→ allow=True
     - 命中门禁规则 → allow=False + reasons
     """
-    # 跨端查询失败：fail-open，不阻断
+    # 跨端查询失败：fail-closed，阻断动作
     if remote_state is None:
-        return GateResult(allow=True, reasons=["remote_state unavailable, fail-open"])
+        return GateResult(allow=False, reasons=["remote_state unavailable, fail-closed"])
 
     # 桌面端 rollback_version 前检查服务器端 manifest 是否 frozen
     if tier == "desktop" and action_type == "rollback_version":

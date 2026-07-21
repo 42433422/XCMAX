@@ -25,7 +25,7 @@ XCMAX 自治系统覆盖三个执行端，组成完整闭环：
              ┌──────────────────────────────────────┐
              │   CrossTierGate（跨端门禁）          │
              │   env XCAGI_CROSS_TIER_GATE=1 启用    │
-             │   fail-open：查询失败不阻断          │
+             │   fail-closed：查询失败阻断          │
              └──────────────────────────────────────┘
 ```
 
@@ -112,7 +112,7 @@ Policy 决策的输出，由 Adapter 执行。`type` / `params` / `idempotency_k
 - `subscribeSignals(emit)` → 订阅外部信号
 - `executeAction(action)` → 执行动作
 - `audit(entry)` → 写审计（同步、不抛错）
-- `getRemoteState?()` → **Phase 4 新增**，跨端门禁查询其他端状态（可选，未实现时 fail-open）
+- `getRemoteState?()` → **Phase 4 新增**，跨端门禁查询其他端状态（可选，未实现时 fail-closed）
 
 ### 2.6 RuntimeTruthSnapshot（现实快照）
 
@@ -182,7 +182,7 @@ Policy 决策的输出，由 Adapter 执行。`type` / `params` / `idempotency_k
 │  │ c. ImpactPredictor 预检：predict(action, truth)                  │  │
 │  │    - allow=false → 写 audit + return                             │  │
 │  │ d. CrossTierGate 跨端门禁（env 启用）：                          │  │
-│  │    - getRemoteState() 查询失败 → fail-open                       │  │
+│  │    - getRemoteState() 查询失败 → fail-closed                     │  │
 │  │    - checkBeforeAction() → allow=false → 写 audit + return       │  │
 │  │ e. 执行 adapter.executeAction(action)                            │  │
 │  │ f. 写 audit（含 result + truth_snapshot）                        │  │

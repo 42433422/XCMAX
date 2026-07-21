@@ -191,8 +191,16 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _env_flag_enabled(name: str) -> bool:
-    """Master switches that default OFF when unset (deploy auto-dispatch, dry-run)."""
+    """Master switches that default OFF when unset (dry-run 等显式危险开关)。"""
     return _env_bool(name, False)
+
+
+def _auto_dispatch_deploy_enabled() -> bool:
+    """staging 自动部署主开关：未设置时默认开启；显式 0/false/off 关闭。"""
+    raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY")
+    if raw is None or not str(raw).strip():
+        return True
+    return _env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", True)
 
 
 def _env_list(name: str, default: List[str]) -> List[str]:
@@ -4855,15 +4863,16 @@ def _auto_merge_local_repo(
 def _auto_dispatch_deploy_envs() -> List[str]:
     """Return ordered deploy envs when auto-dispatch master switch is on.
 
+    默认仅 staging；production 必须显式写在 ENVS 中才会出现。
     staging always precedes production when both are requested.
     """
-    if not _env_flag_enabled("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"):
+    if not _auto_dispatch_deploy_enabled():
         return []
     raw = str(
         os.environ.get("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "") or ""
     ).strip()
     if not raw:
-        return []
+        return ["staging"]
     requested: List[str] = []
     for part in raw.split(","):
         env = part.strip().lower()
@@ -7365,10 +7374,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
-            # L4 closure: deploy step after merge (default off → "三步半")
-            "auto_dispatch_deploy": _env_flag_enabled(
-                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"
-            ),
+            # L4 closure: deploy step after merge（默认开 staging；prod 须显式 ENVS）
+            "auto_dispatch_deploy": _auto_dispatch_deploy_enabled(),
             "auto_dispatch_deploy_envs": _auto_dispatch_deploy_envs(),
             "auto_dispatch_deploy_dry_run": _env_flag_enabled(
                 "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"
@@ -7376,13 +7383,9 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         },
         "l4_closure": {
             "target": "L4",
-            "auto_dispatch_deploy": _env_flag_enabled(
-                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"
-            ),
+            "auto_dispatch_deploy": _auto_dispatch_deploy_enabled(),
             "auto_dispatch_deploy_envs": _auto_dispatch_deploy_envs(),
-            "half_closed_without_deploy": not _env_flag_enabled(
-                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY"
-            ),
+            "half_closed_without_deploy": not _auto_dispatch_deploy_enabled(),
             "open_items_count": len(open_items[-20:]),
         },
     }
