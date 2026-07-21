@@ -796,6 +796,19 @@ class CsSsotRetrieveDTO(BaseModel):
     top_k: int = 5
 
 
+@router.get("/cs-ssot/policy")
+async def butler_cs_ssot_policy(mode: str = "admin"):
+    """公开可读：小C 分角色权限契约（external / market_cs / admin）。"""
+    from modstore_server.xiaoc_cs_ssot import XIAOC_PERMISSIONS, permission_policy
+
+    key = (mode or "admin").strip().lower()
+    if key in ("corp", "public", "官网"):
+        key = "external"
+    if key not in XIAOC_PERMISSIONS:
+        key = "admin"
+    return {"ok": True, "policy": permission_policy(mode=key), "modes": list(XIAOC_PERMISSIONS)}
+
+
 @router.post("/cs-ssot/retrieve")
 async def butler_cs_ssot_retrieve(
     body: CsSsotRetrieveDTO,
