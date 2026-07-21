@@ -128,13 +128,20 @@ else
   if curl --noproxy '*' --connect-timeout 2 --max-time 8 -sf "${WEB_URL}/" >/dev/null 2>&1; then
     fail "${WEB_URL} 已被占用；门禁拒绝复用未知前端（调试时可设置 E2E_REUSE_SERVICES=1）"
   fi
-  log "构建并启动 Vite preview ${WEB_URL} …"
+  # Build synchronously first so wait_http only needs to wait for preview
+  # startup (a few seconds). Previously build:strict ran inside the async
+  # subshell, eating the 60s wait_http budget and causing spurious timeouts.
+  log "构建前端 (build:strict) ${WEB_URL} …"
   (
     cd "${FRONTEND}"
     npm run build:strict
-    # Keep the tracked PID on the actual Vite process.  `npm run preview`
-    # leaves a child Node process behind on failure and previously made the
-    # EXIT trap wait until the GitHub job hit its 30 minute hard timeout.
+  )
+  log "启动 Vite preview ${WEB_URL} …"
+  # Keep the tracked PID on the actual Vite process.  `npm run preview`
+  # leaves a child Node process behind on failure and previously made the
+  # EXIT trap wait until the GitHub job hit its 30 minute hard timeout.
+  (
+    cd "${FRONTEND}"
     exec node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port "${WEB_PORT}"
   ) &
   FRONTEND_PID=$!
