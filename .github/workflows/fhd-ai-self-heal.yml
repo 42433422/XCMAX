@@ -53,6 +53,10 @@ jobs:
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
       XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
       XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      # Approval ledger callback（fail-open client needs both）
+      FHD_API_BASE_URL: https://xiu-ci.com/fhd-api
+      AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
+      MODSTORE_OPS_INGEST_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

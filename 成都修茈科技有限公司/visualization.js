@@ -274,6 +274,93 @@
     )
   }
 
+  function formatMonitorValue(value) {
+    if (value == null || value === '') return '—'
+    if (typeof value === 'number') return value.toLocaleString('zh-CN')
+    return String(value)
+  }
+
+  function paintMonitor(data) {
+    const grid = document.querySelector('[data-viz-monitor-grid]')
+    const issuesHost = document.querySelector('[data-viz-monitor-issues]')
+    const monitor = data.monitor || null
+    if (issuesHost) {
+      const issues = Array.isArray(monitor && monitor.issues) ? monitor.issues : []
+      issuesHost.replaceChildren(
+        ...issues.map((text) => {
+          const li = document.createElement('li')
+          li.textContent = String(text)
+          return li
+        }),
+      )
+    }
+    if (!grid) return
+    const dashboards = Array.isArray(monitor && monitor.dashboards) ? monitor.dashboards : []
+    if (dashboards.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'viz-chart-empty'
+      empty.textContent = '监控聚合数据暂不可用'
+      grid.replaceChildren(empty)
+      return
+    }
+    const statusLabel = {
+      live: 'LIVE',
+      prom: 'PROM',
+      logs: 'LOGS',
+      k8s: 'K8S',
+      offline: '离线',
+      unavailable: '不可用',
+    }
+    grid.replaceChildren(
+      ...dashboards.map((dash) => {
+        const card = document.createElement('article')
+        card.className = 'viz-mon-card reveal visible'
+        card.dataset.monDash = String(dash.id || '')
+
+        const head = document.createElement('div')
+        head.className = 'viz-mon-card-head'
+        const tag = document.createElement('span')
+        tag.className = 'viz-mon-tag'
+        tag.textContent = 'GRAF'
+        const title = document.createElement('h3')
+        title.textContent = String(dash.title || '—')
+        const status = document.createElement('span')
+        const mode = String(dash.status || 'offline')
+        status.className = `viz-mon-status is-${mode}`
+        status.textContent = statusLabel[mode] || mode
+        head.append(tag, title, status)
+
+        const desc = document.createElement('p')
+        desc.className = 'viz-mon-desc'
+        desc.textContent = String(dash.desc || '')
+
+        const panels = document.createElement('div')
+        panels.className = 'viz-mon-panels'
+        const panelList = Array.isArray(dash.panels) ? dash.panels : []
+        panels.append(
+          ...panelList.map((panel) => {
+            const cell = document.createElement('div')
+            cell.className = 'viz-mon-panel'
+            const label = document.createElement('span')
+            label.textContent = String(panel.title || '—')
+            const valueRow = document.createElement('div')
+            const strong = document.createElement('strong')
+            strong.className = `is-${panel.cls || 'c'}`
+            strong.textContent = formatMonitorValue(panel.value)
+            const unit = document.createElement('small')
+            unit.textContent = String(panel.unit || '')
+            valueRow.append(strong, unit)
+            cell.append(label, valueRow)
+            return cell
+          }),
+        )
+
+        card.append(head, desc, panels)
+        return card
+      }),
+    )
+  }
+
   function clearLiveValues() {
     document.querySelectorAll('[data-viz-text], [data-viz-number], [data-viz-compact-number]').forEach((element) => {
       element.textContent = '—'
@@ -283,6 +370,7 @@
     paintTrend({ downloads: { daily: [] } })
     paintReleaseState({ product: null })
     paintMadeSources({ ai: null })
+    paintMonitor({ monitor: null })
   }
 
   async function loadData() {
@@ -312,6 +400,7 @@
       paintTrend(data)
       paintReleaseState(data)
       paintMadeSources(data)
+      paintMonitor(data)
       setStatus(data.data_status === 'live' ? 'live' : 'degraded')
     } catch (error) {
       if (sequence !== requestSequence) return

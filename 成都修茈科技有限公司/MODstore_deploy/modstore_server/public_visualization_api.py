@@ -20,7 +20,9 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, TextIO
-from urllib.parse import unquote
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Response
@@ -172,6 +174,9 @@ def _read_traffic_metrics(
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     ai_total = 0
     ai_success = 0
+    api_requests = 0
+    api_5xx = 0
+    mod_requests = 0
     downloads_total = 0
     download_platforms: Counter[str] = Counter()
     download_products: Counter[str] = Counter()
@@ -206,13 +211,20 @@ def _read_traffic_metrics(
                     method = match.group("method")
                     status = int(match.group("status"))
                     target = unquote(match.group("target").partition("?")[0])
+                    target_lower = target.lower()
+
+                    if target.startswith("/api/"):
+                        api_requests += 1
+                        if 500 <= status <= 599:
+                            api_5xx += 1
+                        if target_lower.startswith(("/api/mod-store", "/api/mods")):
+                            mod_requests += 1
 
                     if method == "POST" and target == "/api/llm/chat/stream":
                         ai_total += 1
                         if status == 200:
                             ai_success += 1
 
-                    target_lower = target.lower()
                     if method != "GET" or status != 200:
                         continue
                     if not target_lower.startswith(_DOWNLOAD_PREFIXES):
@@ -246,6 +258,9 @@ def _read_traffic_metrics(
                 "files_unreadable": unreadable_files,
                 "parsed_lines": 0,
                 "source_updated_at": None,
+                "api_requests": 0,
+                "api_5xx": 0,
+                "mod_requests": 0,
             },
         )
 
@@ -305,8 +320,258 @@ def _read_traffic_metrics(
             "files_unreadable": unreadable_files,
             "parsed_lines": parsed_lines,
             "source_updated_at": source_updated_at,
+            "api_requests": api_requests,
+            "api_5xx": api_5xx,
+            "mod_requests": mod_requests,
+            "window_days": (
+                (retained_end - retained_start).days + 1
+                if retained_start and retained_end
+                else None
+            ),
         },
     )
+
+
+def _prometheus_base_url() -> str:
+    return (os.environ.get("XIUCI_VISUALIZATION_PROMETHEUS_URL") or "http://127.0.0.1:9090").rstrip(
+        "/"
+    )
+
+
+def _prometheus_job() -> str:
+    return (os.environ.get("XIUCI_VISUALIZATION_PROM_JOB") or "xcagi-backend").strip() or (
+        "xcagi-backend"
+    )
+
+
+def _prom_instant(expr: str) -> float | None:
+    url = f"{_prometheus_base_url()}/api/v1/query?query={quote(expr)}"
+    request = Request(url, headers={"Accept": "application/json"})
+    try:
+        with urlopen(request, timeout=0.8) as response:  # noqa: S310 — ops localhost/env URL
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("status") != "success":
+        return None
+    result = ((payload.get("data") or {}).get("result")) if isinstance(payload.get("data"), dict) else None
+    if not isinstance(result, list) or not result:
+        return None
+    try:
+        value = float(result[0]["value"][1])
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None
+    return value if value == value else None  # NaN guard
+
+
+def _panel(title: str, value: Any, unit: str = "", *, cls: str = "c") -> dict[str, Any]:
+    return {"title": title, "value": value, "unit": unit, "cls": cls}
+
+
+def _fmt_num(value: float | None, *, digits: int = 0) -> float | int | None:
+    if value is None:
+        return None
+    if digits <= 0:
+        return int(round(value))
+    return round(value, digits)
+
+
+def _build_monitor_payload(traffic_source: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """公开监控仪表盘：优先本机 Prometheus，回退网关访问日志聚合。"""
+    job = _prometheus_job()
+    p95 = _prom_instant(
+        f'histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{{job="{job}"}}[5m]))) * 1000'
+    )
+    rps = _prom_instant(f'sum(rate(api_requests_total{{job="{job}"}}[1m]))')
+    err_rate = _prom_instant(
+        f'sum(rate(api_requests_total{{job="{job}",status=~"5.."}}[5m])) '
+        f'/ clamp_min(sum(rate(api_requests_total{{job="{job}"}}[5m])), 1) * 100'
+    )
+    active = _prom_instant("sum(active_requests)")
+    pod_cpu = _prom_instant(
+        'sum(rate(container_cpu_usage_seconds_total{pod=~"xcagi.*",container!=""}[5m])) * 100'
+    )
+    pod_mem = _prom_instant('sum(container_memory_usage_bytes{pod=~"xcagi.*",container!=""})')
+    disk = _prom_instant(
+        '100 * (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}))'
+    )
+    restarts = _prom_instant(
+        'sum(increase(kube_pod_container_status_restarts_total{pod=~"xcagi.*"}[1h]))'
+    )
+    mod_qps = _prom_instant(
+        f'sum(rate(api_requests_total{{job="{job}",endpoint=~"/api/(mod-store|mods).*"}}[1m]))'
+    )
+    sqlite_ready = _prom_instant(
+        f'sum(mod_sqlite_copy_present{{job="{job}"}}) / clamp_min(count(mod_sqlite_copy_present{{job="{job}"}}), 1) * 100'
+    )
+    neuro_delivery = _prom_instant(
+        "100 * (1 - (sum(rate(neurobus_events_lost_total[5m])) + sum(rate(neurobus_events_dead_lettered_total[5m]))) "
+        "/ clamp_min(sum(rate(neurobus_events_published_total[5m])), 1))"
+    )
+    mod_p95 = _prom_instant(
+        f'histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{{job="{job}",'
+        f'endpoint=~"/api/(mod-store|mods).*"}}[5m]))) * 1000'
+    )
+    bus_publish = _prom_instant("sum(rate(neurobus_events_published_total[1m]))")
+    bus_loss = _prom_instant(
+        "sum(increase(neurobus_events_lost_total[5m])) + sum(increase(neurobus_events_dead_lettered_total[5m]))"
+    )
+    breaker = _prom_instant("max(circuit_breaker_state) or on() vector(0)")
+    ai_p95 = _prom_instant(
+        f'histogram_quantile(0.95, sum by (le) (rate(ai_request_duration_seconds_bucket{{job="{job}"}}[5m]))) * 1000'
+    )
+
+    prom_hits = sum(
+        1
+        for value in (
+            p95,
+            rps,
+            err_rate,
+            active,
+            pod_cpu,
+            pod_mem,
+            disk,
+            restarts,
+            mod_qps,
+            sqlite_ready,
+            neuro_delivery,
+            mod_p95,
+            bus_publish,
+            bus_loss,
+            breaker,
+            ai_p95,
+        )
+        if value is not None
+    )
+    prom_live = prom_hits > 0
+
+    api_requests = int(traffic_source.get("api_requests") or 0)
+    api_5xx = int(traffic_source.get("api_5xx") or 0)
+    mod_requests = int(traffic_source.get("mod_requests") or 0)
+    window_days = int(traffic_source.get("window_days") or 0) or None
+    log_err_rate = round(api_5xx / api_requests * 100, 2) if api_requests else None
+    log_rps = round(api_requests / (window_days * 86400), 4) if api_requests and window_days else None
+    log_mod_qps = (
+        round(mod_requests / (window_days * 86400), 4) if mod_requests and window_days else None
+    )
+
+    api_mode = "live" if any(v is not None for v in (p95, rps, err_rate, active)) else (
+        "logs" if api_requests else "offline"
+    )
+    infra_mode = (
+        "live"
+        if any(v is not None for v in (pod_cpu, pod_mem, disk, restarts))
+        else "k8s"
+        if not prom_live
+        else "offline"
+    )
+    mod_mode = "live" if any(v is not None for v in (mod_qps, sqlite_ready, neuro_delivery, mod_p95)) else (
+        "logs" if mod_requests else "offline"
+    )
+    bus_mode = "live" if any(v is not None for v in (bus_publish, bus_loss, breaker, ai_p95)) else "offline"
+
+    monitor = {
+        "title": "监控仪表盘 · Grafana / Prometheus / Loki",
+        "subtitle": "4 块公开聚合面板 · 优先 Prometheus，网关日志回退 · 不含内部截图与告警明细",
+        "stack": {
+            "grafana_dashboards": 4,
+            "prometheus": "live" if prom_live else "unavailable",
+            "loki": "provisioned",
+            "alertmanager": "provisioned",
+        },
+        "live_note": (
+            f"Prometheus 命中 {prom_hits} 项"
+            if prom_live
+            else "Prometheus 暂不可达，API/Mod 面板回退网关日志窗口聚合"
+        ),
+        "dashboards": [
+            {
+                "id": "api",
+                "title": "XCAGI · API 总览",
+                "desc": "xcagi-api-overview · RED 指标 · api_request_duration_seconds / api_requests_total",
+                "status": api_mode,
+                "panels": [
+                    _panel("API 延迟 P95", _fmt_num(p95), "ms", cls="c"),
+                    _panel(
+                        "请求量 / 秒",
+                        _fmt_num(rps, digits=2) if rps is not None else _fmt_num(log_rps, digits=4),
+                        "次/秒",
+                        cls="b",
+                    ),
+                    _panel(
+                        "5xx 错误率",
+                        _fmt_num(err_rate, digits=2)
+                        if err_rate is not None
+                        else _fmt_num(log_err_rate, digits=2),
+                        "%",
+                        cls="g",
+                    ),
+                    _panel("活跃请求", _fmt_num(active), "个", cls="o"),
+                ],
+            },
+            {
+                "id": "infra",
+                "title": "XCAGI · 基础设施",
+                "desc": "xcagi-infrastructure · node / container 指标；无 K8s 指标时面板为空",
+                "status": infra_mode,
+                "panels": [
+                    _panel("Pod CPU 使用率", _fmt_num(pod_cpu, digits=1), "%", cls="c"),
+                    _panel(
+                        "Pod 内存",
+                        _fmt_num(pod_mem / 1024 / 1024 / 1024, digits=2) if pod_mem is not None else None,
+                        "GiB",
+                        cls="b",
+                    ),
+                    _panel("磁盘 /（根分区）", _fmt_num(disk), "%", cls="y"),
+                    _panel("Pod 重启（1 小时）", _fmt_num(restarts), "次", cls="g"),
+                ],
+            },
+            {
+                "id": "mod",
+                "title": "XCAGI · Mod 商店",
+                "desc": "xcagi-mod-store · Mod API 与目录流量",
+                "status": mod_mode,
+                "panels": [
+                    _panel(
+                        "目录 QPS",
+                        _fmt_num(mod_qps, digits=2)
+                        if mod_qps is not None
+                        else _fmt_num(log_mod_qps, digits=4),
+                        "次/秒",
+                        cls="c",
+                    ),
+                    _panel("SQLite 就绪率", _fmt_num(sqlite_ready), "%", cls="b"),
+                    _panel("NeuroBus 投递率", _fmt_num(neuro_delivery, digits=2), "%", cls="g"),
+                    _panel("Mod API P95", _fmt_num(mod_p95), "ms", cls="p"),
+                ],
+            },
+            {
+                "id": "bus",
+                "title": "XCAGI · 神经总线",
+                "desc": "xcagi-neurobus · neurobus_events_* · circuit_breaker_state",
+                "status": bus_mode,
+                "panels": [
+                    _panel("事件量 / 秒", _fmt_num(bus_publish, digits=2), "条/秒", cls="c"),
+                    _panel("丢失+DLQ 5m", _fmt_num(bus_loss), "条", cls="g"),
+                    _panel("断路器 OPEN", _fmt_num(breaker), "路", cls="g"),
+                    _panel("AI 请求 P95", _fmt_num(ai_p95), "ms", cls="p"),
+                ],
+            },
+        ],
+        "issues": [
+            "公开页不暴露 Grafana 截图、告警规则表达式与内部运维入口。",
+            "基础设施面板依赖 container_/node_ 指标；纯网关环境会显示为空。",
+            "Prometheus 不可达时，API/Mod 流量类指标回退到网关访问日志窗口均值。",
+        ],
+    }
+    source = {
+        "status": "live" if prom_live or api_requests else "unavailable",
+        "prometheus": "live" if prom_live else "unavailable",
+        "gateway_logs": traffic_source.get("status") or "unavailable",
+        "source_updated_at": traffic_source.get("source_updated_at"),
+        "prom_hits": prom_hits,
+    }
+    return monitor, source
 
 
 def _read_product_metrics(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -563,7 +828,8 @@ def _build_public_visualization_data() -> dict[str, Any]:
     ai.update(token_metrics)
     ai.update(made_metrics)
     product, release_source = _read_product_metrics(_release_manifest_path())
-    # 制作快照可选；缺失时不把整页打成 offline，仅该指标为空
+    monitor, monitor_source = _build_monitor_payload(traffic_source)
+    # 制作快照 / 监控 Prom 可选；缺失时不把整页打成 offline
     source_statuses = (traffic_source["status"], token_source["status"], release_source["status"])
     data_status = "live" if all(status == "live" for status in source_statuses) else "degraded"
     generated_at = datetime.now(tz=_SHANGHAI).isoformat(timespec="seconds")
@@ -573,6 +839,7 @@ def _build_public_visualization_data() -> dict[str, Any]:
             traffic_source.get("source_updated_at"),
             token_source.get("source_updated_at"),
             made_source.get("source_updated_at"),
+            monitor_source.get("source_updated_at"),
             release_source.get("source_updated_at"),
         )
         if value
@@ -586,10 +853,12 @@ def _build_public_visualization_data() -> dict[str, Any]:
         "ai": ai,
         "downloads": downloads,
         "product": product,
+        "monitor": monitor,
         "sources": {
             "gateway_logs": traffic_source,
             "token_ledger": token_source,
             "platform_made_tokens": made_source,
+            "monitor": monitor_source,
             "release_manifest": release_source,
         },
         "definitions": {
@@ -605,6 +874,7 @@ def _build_public_visualization_data() -> dict[str, Any]:
             "platform_tokens": "同 platform_made_tokens（兼容旧字段）",
             "model_usage": "模型分布仅按可精确归属的对话计费日志统计；历史 AI 员工度量未存模型名，不做推断",
             "complete_downloads": "安装包 GET 请求完整返回 HTTP 200 的响应数；排除 HEAD、分片与更新 ZIP",
+            "monitor": "监控仪表盘公开聚合：优先本机 Prometheus，回退网关访问日志；不含 Grafana 截图与告警明细",
         },
         "privacy": "仅提供聚合指标，不包含 IP、账户、对话内容、单用户 Token 账单或请求明细",
     }
