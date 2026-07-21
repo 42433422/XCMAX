@@ -2927,7 +2927,7 @@ def _collect_mimo_usage() -> dict[str, Any]:
 
 
 def _build_token_usage_summary() -> dict[str, Any]:
-    """聚合 5 个来源的 token 用量。"""
+    """聚合 5 个来源的 token 用量（平台制作 Token）。"""
     local = _collect_local_ledger()
     cursor = _collect_cursor_usage()
     codex = _collect_codex_usage()
@@ -2941,7 +2941,7 @@ def _build_token_usage_summary() -> dict[str, Any]:
     grand_prompt = sum(_to_int(s.get("prompt_tokens")) for s in sources.values())
     grand_completion = sum(_to_int(s.get("completion_tokens")) for s in sources.values())
     grand_cost = round(sum(s.get("estimated_cost_usd", 0.0) for s in sources.values()), 2)
-    return {
+    summary = {
         "success": True,
         "grand_total_tokens": grand_total,
         "grand_prompt_tokens": grand_prompt,
@@ -2950,11 +2950,19 @@ def _build_token_usage_summary() -> dict[str, Any]:
         "sources": sources,
         "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    try:
+        from app.infrastructure.billing.platform_made_tokens import write_public_snapshot
+
+        snapshot_path = write_public_snapshot(summary)
+        summary["public_snapshot_path"] = str(snapshot_path)
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        logger.warning("platform_made_tokens snapshot write failed: %s", exc)
+    return summary
 
 
 @router.get("/admin/token-usage", response_model=None)
 async def admin_token_usage(request: Request):
-    """Token 用量聚合：本地账本 + Cursor + Codex + Trae。"""
+    """平台制作 Token：本地账本 + Cursor + Codex + Trae + mimo。"""
     from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
 
     if not _session_id_from_request(request):

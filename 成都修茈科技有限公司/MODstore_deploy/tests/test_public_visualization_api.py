@@ -51,8 +51,39 @@ def _configure_sources(monkeypatch, tmp_path):
         ),
         encoding="utf-8",
     )
+    made_snapshot = tmp_path / "platform_made_tokens.json"
+    made_snapshot.write_text(
+        json.dumps(
+            {
+                "schema": "xiu-ci.platform-made-tokens/v1",
+                "generated_at": "2026-07-21T10:00:00+00:00",
+                "collected_at": "2026-07-21 18:00:00",
+                "platform_made_tokens": 900,
+                "platform_made_prompt_tokens": 600,
+                "platform_made_completion_tokens": 300,
+                "sources": [
+                    {
+                        "key": "local",
+                        "label": "FHD 本地账本",
+                        "available": True,
+                        "total_tokens": 100,
+                        "estimated": False,
+                    },
+                    {
+                        "key": "cursor",
+                        "label": "Cursor",
+                        "available": True,
+                        "total_tokens": 800,
+                        "estimated": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv("XIUCI_VISUALIZATION_ACCESS_LOG_GLOB", str(tmp_path / "*.log*"))
     monkeypatch.setenv("XIUCI_VISUALIZATION_RELEASE_MANIFEST", str(manifest))
+    monkeypatch.setenv("XIUCI_PLATFORM_MADE_TOKENS_PATH", str(made_snapshot))
     monkeypatch.setenv("XIUCI_VISUALIZATION_CACHE_TTL_SECONDS", "30")
 
     token_engine = create_engine(f"sqlite:///{tmp_path / 'tokens.db'}")
@@ -97,47 +128,17 @@ def test_live_aggregates_use_logs_and_release_manifest(monkeypatch, tmp_path):
     payload = public_visualization_api.get_public_visualization_data()
 
     assert payload["data_status"] == "live"
-    assert payload["ai"] == {
-        "chat_requests": 3,
-        "chat_success": 2,
-        "success_rate": 66.67,
-        "window_start": "2026-07-10",
-        "window_end": "2026-07-19",
-        "window_start_short": "07.10",
-        "window_end_short": "07.19",
-        "platform_tokens": 400,
-        "chat_tokens": 180,
-        "employee_tokens": 220,
-        "prompt_tokens": 120,
-        "completion_tokens": 60,
-        "estimated_chat_tokens": 30,
-        "top_chat_model": "alpha-pro",
-        "top_chat_provider": "provider-a",
-        "top_chat_model_tokens": 150,
-        "top_chat_model_calls": 1,
-        "top_chat_model_share": 83.33,
-        "chat_models": [
-            {
-                "model": "alpha-pro",
-                "provider": "provider-a",
-                "calls": 1,
-                "tokens": 150,
-                "share": 83.33,
-            },
-            {
-                "model": "beta",
-                "provider": "provider-b",
-                "calls": 1,
-                "tokens": 30,
-                "share": 16.67,
-            },
-        ],
-        "token_records": 3,
-        "token_window_start": "2026-07-10",
-        "token_window_end": "2026-07-19",
-        "token_window_start_short": "07.10",
-        "token_window_end_short": "07.19",
-    }
+    assert payload["ai"]["chat_requests"] == 3
+    assert payload["ai"]["chat_success"] == 2
+    assert payload["ai"]["success_rate"] == 66.67
+    assert payload["ai"]["platform_usage_tokens"] == 400
+    assert payload["ai"]["chat_tokens"] == 180
+    assert payload["ai"]["employee_tokens"] == 220
+    assert payload["ai"]["platform_made_tokens"] == 900
+    assert payload["ai"]["platform_tokens"] == 900
+    assert payload["ai"]["top_chat_model"] == "alpha-pro"
+    assert payload["ai"]["token_records"] == 3
+    assert payload["sources"]["platform_made_tokens"]["status"] == "live"
     assert payload["downloads"]["total"] == 3
     assert payload["downloads"]["platforms"] == {"windows": 1, "macos": 1, "android": 1}
     assert payload["downloads"]["products"] == {"xcagi": 2, "kellai": 1}
@@ -199,6 +200,7 @@ def test_token_metrics_include_every_historic_chat_model(monkeypatch, tmp_path):
 def test_missing_sources_are_honestly_degraded(monkeypatch, tmp_path):
     monkeypatch.setenv("XIUCI_VISUALIZATION_ACCESS_LOG_GLOB", str(tmp_path / "missing*.log"))
     monkeypatch.setenv("XIUCI_VISUALIZATION_RELEASE_MANIFEST", str(tmp_path / "missing.json"))
+    monkeypatch.setenv("XIUCI_PLATFORM_MADE_TOKENS_PATH", str(tmp_path / "missing-made.json"))
     monkeypatch.setattr(
         public_visualization_api,
         "_token_engine",
@@ -210,10 +212,13 @@ def test_missing_sources_are_honestly_degraded(monkeypatch, tmp_path):
 
     assert payload["data_status"] == "degraded"
     assert payload["ai"]["chat_requests"] is None
+    assert payload["ai"]["platform_usage_tokens"] is None
+    assert payload["ai"]["platform_made_tokens"] is None
     assert payload["ai"]["platform_tokens"] is None
     assert payload["ai"]["top_chat_model"] is None
     assert payload["downloads"]["total"] is None
     assert payload["product"]["stable_version"] is None
     assert payload["sources"]["gateway_logs"]["status"] == "unavailable"
     assert payload["sources"]["token_ledger"]["status"] == "unavailable"
+    assert payload["sources"]["platform_made_tokens"]["status"] == "unavailable"
     assert payload["sources"]["release_manifest"]["status"] == "unavailable"

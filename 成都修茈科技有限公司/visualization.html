@@ -123,11 +123,11 @@
               </div>
               <div>
                 <span>平台制作 Token</span>
-                <b data-viz-compact-number="ai.platform_tokens">—</b>
+                <b data-viz-compact-number="ai.platform_made_tokens">—</b>
               </div>
               <div>
-                <span>公开平台</span>
-                <b><span data-viz-number="product.delivery_platforms">—</span> 端</b>
+                <span>平台使用 Token</span>
+                <b data-viz-compact-number="ai.platform_usage_tokens">—</b>
               </div>
             </div>
             <div class="viz-signal" aria-hidden="true">
@@ -173,9 +173,18 @@
               <div class="viz-kpi-index">03</div>
               <span class="viz-kpi-label">平台制作 Token</span>
               <div class="viz-kpi-value viz-kpi-value--token">
-                <strong data-viz-number="ai.platform_tokens">—</strong><small>Token</small>
+                <strong data-viz-number="ai.platform_made_tokens">—</strong><small>Token</small>
               </div>
-              <p>平台生产累计：<span data-viz-number="ai.chat_tokens">—</span> 对话 + <span data-viz-number="ai.employee_tokens">—</span> AI 员工制作<br /><small>其中 <span data-viz-number="ai.estimated_chat_tokens">—</span> Token 标记为估算</small></p>
+              <p>管理端同源五源合计：本地账本 + Cursor + Codex + Trae + mimo<br /><small>采集 <span data-viz-text="ai.platform_made_collected_at">—</span></small></p>
+              <div class="viz-made-sources" data-viz-made-sources></div>
+            </article>
+            <article class="viz-kpi-card viz-kpi-card--cyan reveal" data-delay="175">
+              <div class="viz-kpi-index">04</div>
+              <span class="viz-kpi-label">平台使用 Token</span>
+              <div class="viz-kpi-value viz-kpi-value--token">
+                <strong data-viz-number="ai.platform_usage_tokens">—</strong><small>Token</small>
+              </div>
+              <p>线上使用累计：<span data-viz-number="ai.chat_tokens">—</span> 对话 + <span data-viz-number="ai.employee_tokens">—</span> AI 员工<br /><small>其中 <span data-viz-number="ai.estimated_chat_tokens">—</span> Token 标记为估算</small></p>
               <div class="viz-model-line">
                 <span>对话主力模型</span>
                 <b data-viz-text="ai.top_chat_model">—</b>
@@ -183,7 +192,7 @@
               </div>
             </article>
             <article class="viz-kpi-card viz-kpi-card--orange reveal" data-delay="210">
-              <div class="viz-kpi-index">04</div>
+              <div class="viz-kpi-index">05</div>
               <span class="viz-kpi-label">AI 请求观测窗口</span>
               <div class="viz-kpi-value viz-kpi-value--date">
                 <strong data-viz-text="ai.window_start_short">—</strong><small>— <span data-viz-text="ai.window_end_short">—</span></small>
@@ -341,7 +350,7 @@
             <h2>每个数字，都有边界。</h2>
           </div>
           <div class="viz-method-list">
-            <div><span>01</span><p><b>AI 指标</b>汇总生产网关日志；Token 为对话计费日志与 AI 员工执行度量之和，不重复统计 Duty 节点副本，上游未返回 usage 的少量对话记录会明确标记为估算。</p></div>
+            <div><span>01</span><p><b>AI 指标</b>汇总生产网关日志。<b>平台制作 Token</b>走管理端同源五源合计（本地账本 / Cursor / Codex / Trae / mimo）；<b>平台使用 Token</b>为线上对话计费与 AI 员工执行度量之和，二者分开统计。上游未返回 usage 的少量对话记录会明确标记为估算。</p></div>
             <div><span>02</span><p><b>模型归属</b>仅统计可精确归属的历史对话计费日志；AI 员工旧执行度量没有保存模型名，不以当前配置倒推历史模型。</p></div>
             <div><span>03</span><p><b>下载量</b>按成功返回完整安装包的请求统计，不等同于安装、激活或独立用户数。</p></div>
             <div><span>04</span><p><b>公开边界</b>只展示聚合健康度，不包含客户身份、对话内容、单用户 Token 账单与内部截图。</p></div>
@@ -369,7 +378,7 @@
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
 <script src="./main.js?v=20260719b"></script>
 
-<script src="./visualization.js?v=20260721b" defer></script>
+<script src="./visualization.js?v=20260721c" defer></script>
 
 
 <div id="xc-corp-butler-root"></div>

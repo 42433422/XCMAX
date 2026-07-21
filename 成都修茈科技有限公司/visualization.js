@@ -237,6 +237,43 @@
     element.classList.toggle('viz-ready', value === 'READY')
   }
 
+  function formatCompactToken(value) {
+    const number = Number(value) || 0
+    if (Math.abs(number) >= 100000000) return `${(number / 100000000).toFixed(2)} 亿`
+    if (Math.abs(number) >= 10000) return `${(number / 10000).toFixed(1)} 万`
+    return number.toLocaleString('zh-CN')
+  }
+
+  function paintMadeSources(data) {
+    const host = document.querySelector('[data-viz-made-sources]')
+    if (!host) return
+    const sources = Array.isArray(data.ai && data.ai.platform_made_sources)
+      ? data.ai.platform_made_sources.filter((item) => item && item.available && Number(item.total_tokens) > 0)
+      : []
+    if (sources.length === 0) {
+      host.replaceChildren()
+      return
+    }
+    host.replaceChildren(
+      ...sources.map((item) => {
+        const row = document.createElement('div')
+        row.className = 'viz-made-source-row'
+        const label = document.createElement('span')
+        label.textContent = String(item.label || item.key || '—')
+        const value = document.createElement('b')
+        value.textContent = formatCompactToken(item.total_tokens)
+        if (item.estimated) {
+          const tip = document.createElement('small')
+          tip.textContent = '估'
+          row.append(label, value, tip)
+        } else {
+          row.append(label, value)
+        }
+        return row
+      }),
+    )
+  }
+
   function clearLiveValues() {
     document.querySelectorAll('[data-viz-text], [data-viz-number], [data-viz-compact-number]').forEach((element) => {
       element.textContent = '—'
@@ -245,6 +282,7 @@
     paintModelUsage({ ai: null })
     paintTrend({ downloads: { daily: [] } })
     paintReleaseState({ product: null })
+    paintMadeSources({ ai: null })
   }
 
   async function loadData() {
@@ -273,6 +311,7 @@
       paintModelUsage(data)
       paintTrend(data)
       paintReleaseState(data)
+      paintMadeSources(data)
       setStatus(data.data_status === 'live' ? 'live' : 'degraded')
     } catch (error) {
       if (sequence !== requestSequence) return
