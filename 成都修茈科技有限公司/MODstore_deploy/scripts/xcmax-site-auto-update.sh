@@ -138,6 +138,9 @@ sync_corp_butler_assets() {
   if [[ -f "${MODSTORE_ROOT}/market/public/download-release.json" ]]; then
     cp -af "${MODSTORE_ROOT}/market/public/download-release.json" "${corp_dir}/download-release.json"
   fi
+  if [[ -f "${MODSTORE_ROOT}/market/public/download-action-board.json" ]]; then
+    cp -af "${MODSTORE_ROOT}/market/public/download-action-board.json" "${corp_dir}/download-action-board.json"
+  fi
   if [[ -f "${corp_dir}/corp-butler.js" && -f "${corp_dir}/corp-butler.css" ]]; then
     log "corp-butler 产物已存在（js+css）"
     return 0
@@ -250,7 +253,7 @@ sync_site_static() {
   fi
   local paths=(
     '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'visualization.js'
-    'sitemap.xml' 'baidu_urls.txt' 'download-release.json'
+    'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.json'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
   for p in "${paths[@]}"; do
@@ -289,7 +292,8 @@ publish_site_static_to_live() {
   shopt -s nullglob
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
            "$git_site"/visualization.js \
-           "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json; do
+           "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json \
+           "$git_site"/download-action-board.json; do
     [[ -e "$f" ]] || continue
     base="$(basename "$f")"
     chmod u+w "$live_site/$base" 2>/dev/null || true
