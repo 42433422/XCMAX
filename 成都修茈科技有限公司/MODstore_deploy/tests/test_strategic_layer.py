@@ -65,12 +65,14 @@ class TestAutonomyEvaluator:
         inserted = seed_default_boundaries()
         assert inserted == 0
 
-    def test_list_rules_returns_thirteen_defaults(self):
+    def test_list_rules_returns_default_set(self):
         evaluator = AutonomyEvaluator.from_db()
         rules = evaluator.list_rules()
-        assert len(rules) == 13
+        # 14 = 13 (原始默认) + 1 (exec-track-digest-action-items).
+        assert len(rules) == 14
         rule_ids = {r.rule_id for r in rules}
         assert "exec-unit-test" in rule_ids
+        assert "exec-track-digest-action-items" in rule_ids
         assert "strat-prod-deploy" in rule_ids
         assert "strat-rollback" in rule_ids
 
