@@ -191,6 +191,7 @@
   "/api/ops/autonomy/actions/evaluate",
   "/api/ops/autonomy/actions/pending",
   "/api/ops/autonomy/actions/request",
+  "/api/ops/autonomy/actions/{action_id}/reject",
   "/api/ops/autonomy/actions/{action_id}/resume",
   "/api/ops/autonomy/github-approval",
   "/api/ops/autonomy/health",
