@@ -913,8 +913,9 @@ class TestCrossTierGateIntegration:
         audit_action = audits[0].action
         # action 不应是 skipped
         if isinstance(audit_action, dict):
-            assert audit_action["type"] != "skipped", \
+            assert audit_action["type"] != "skipped", (
                 f"门禁放行时不应 skipped，实际：{audit_action}"
+            )
         # 应有真实执行（result.ok 可能为 False 因为 tarball 是假的，但不是 skipped）
 
     def test_rollback_allowed_when_gate_disabled(
@@ -968,7 +969,7 @@ class TestCrossTierGateIntegration:
         assert audit_action["type"] == "skipped"
         all_reasons = " ".join(audit_action["reasons"])
         # ImpactPredictor 仍拦截，但 CrossTierGate 的 reasons 不应出现
-        assert "桌面端存在 pending rollback marker" not in all_reasons, \
+        assert "桌面端存在 pending rollback marker" not in all_reasons, (
             "门禁关闭时不应出现 CrossTierGate 的 reasons"
-        assert "已存在 pending rollback marker" in all_reasons, \
-            "ImpactPredictor 应仍拦截"
+        )
+        assert "已存在 pending rollback marker" in all_reasons, "ImpactPredictor 应仍拦截"
