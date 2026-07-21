@@ -25,7 +25,12 @@ def _env(name: str) -> str:
 
 def resolve_mimo_credentials() -> Tuple[Optional[str], str]:
     key = _env("XIAOMI_API_KEY") or _env("MIMO_API_KEY") or _env("XIAOMI_MIMO_API_KEY")
-    root = _env("XIAOMI_BASE_URL") or _env("MIMO_BASE_URL") or _env("XIAOMI_MIMO_BASE_URL") or _DEFAULT_ROOT
+    root = (
+        _env("XIAOMI_BASE_URL")
+        or _env("MIMO_BASE_URL")
+        or _env("XIAOMI_MIMO_BASE_URL")
+        or _DEFAULT_ROOT
+    )
     root = root.rstrip("/")
     if root.endswith("/v1"):
         root = root[: -len("/v1")]
@@ -105,7 +110,17 @@ def synthesize_mimo_tts(
         return None, "mimo-tts returned empty audio", {"voice": voice_id}
 
     mime = "audio/wav" if fmt in ("wav", "wave") else f"audio/{fmt}"
-    return raw, "", {"model": payload["model"], "voice": voice_id, "format": fmt, "mime": mime, "provider": "mimo"}
+    return (
+        raw,
+        "",
+        {
+            "model": payload["model"],
+            "voice": voice_id,
+            "format": fmt,
+            "mime": mime,
+            "provider": "mimo",
+        },
+    )
 
 
 async def synthesize_mimo_tts_async(
@@ -172,4 +187,14 @@ async def synthesize_mimo_tts_async(
         return None, "mimo-tts returned empty audio", {"voice": voice_id}
 
     mime = "audio/wav" if fmt in ("wav", "wave") else f"audio/{fmt}"
-    return raw, "", {"model": payload["model"], "voice": voice_id, "format": fmt, "mime": mime, "provider": "mimo"}
+    return (
+        raw,
+        "",
+        {
+            "model": payload["model"],
+            "voice": voice_id,
+            "format": fmt,
+            "mime": mime,
+            "provider": "mimo",
+        },
+    )
