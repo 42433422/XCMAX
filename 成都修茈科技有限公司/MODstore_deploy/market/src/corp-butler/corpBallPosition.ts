@@ -55,7 +55,13 @@ export function loadCorpBallPosition(): { x: number; y: number } {
       if (typeof p.x === 'number' && typeof p.y === 'number') {
         const clamped = clampCorpBallPosition(p.x, p.y)
         if (overlapsMobileBackToTop(clamped.x, clamped.y) || isCorruptDesktopPosition(clamped.x, clamped.y)) {
-          return getCorpDefaultBallPosition()
+          const fresh = getCorpDefaultBallPosition()
+          try {
+            localStorage.setItem(CORP_BALL_STORAGE, JSON.stringify(fresh))
+          } catch {
+            // ignore
+          }
+          return fresh
         }
         return clamped
       }
