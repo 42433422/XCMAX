@@ -221,9 +221,7 @@ class TestSynthesizeEmpty:
 class TestSynthesizeCacheHit:
     def test_cache_hit_returns_payload(self) -> None:
         cache_voice = f"mimo:{tts.DEFAULT_MIMO_VOICE}|edge:{DEFAULT_EDGE_VOICE}"
-        key = _normalize_cache_key(
-            text="hi", voice=cache_voice, lang="zh", rate=None, pitch=None
-        )
+        key = _normalize_cache_key(text="hi", voice=cache_voice, lang="zh", rate=None, pitch=None)
         cached = {
             "audioBase64": "data:audio/mpeg;base64,QUJD",
             "voice": DEFAULT_EDGE_VOICE,
