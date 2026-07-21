@@ -6,7 +6,8 @@ import { cleanTextForTts } from '../utils/ttsTextClean'
 export type TtsState = 'idle' | 'synthesizing' | 'playing'
 
 export interface StreamingTtsConfig {
-  engine: 'edge-online' | 'browser'
+  /** auto/mimo-edge：统一 MiMo→Edge；edge-online：仅 Edge 流；browser 已废弃（映射到 auto） */
+  engine: 'auto' | 'mimo-edge' | 'edge-online' | 'browser'
   edgeVoice: string
   browserVoiceName: string
   rate: number
@@ -14,10 +15,12 @@ export interface StreamingTtsConfig {
   streamThreshold?: number
   /** 预取队列中后续几句的音频 */
   prefetchDepth?: number
-  /** edge 模式下首句用浏览器 TTS 占位，edge 音频就绪后切换 */
+  /** 已废弃：不再使用浏览器 TTS 占位 */
   browserLeadIn?: boolean
 }
 
+/** 统一 TTS：服务端 MiMo → Edge */
+const TTS_UNIFIED_PATH = '/api/workbench/tts'
 const TTS_STREAM_PATH = '/api/workbench/tts/edge/stream'
 const MSE_MIME = 'audio/mpeg'
 
@@ -38,7 +41,7 @@ export class StreamingTtsPlayer {
   private warmInFlight: Promise<void> | null = null
   private streamFirstSentencePending = true
   private leadInCancel: (() => void) | null = null
-  /** edge TTS 429 冷却：此时间戳之前不再请求 edge，改走浏览器 TTS */
+  /** edge TTS 429 冷却：此时间戳之前暂缓 edge 流，仍可走统一 /tts（MiMo） */
   private edgeBlockedUntil = 0
   private lastWarmUpAt = 0
 
@@ -52,8 +55,12 @@ export class StreamingTtsPlayer {
     this.edgeBlockedUntil = Date.now() + backoffMs
   }
 
+  private preferUnified(): boolean {
+    const eng = this.getConfig().engine
+    return eng !== 'edge-online'
+  }
+
   private canUseEdge(): boolean {
-    if (this.getConfig().engine === 'browser') return false
     return Date.now() >= this.edgeBlockedUntil
   }
 
@@ -63,20 +70,27 @@ export class StreamingTtsPlayer {
     }
   }
 
-  /** 进入语音模式时预热 TTS 链路（TLS + 鉴权 + edge-tts 连接）。 */
+  /** 进入语音模式时预热 TTS 链路（统一 /tts：MiMo→Edge）。 */
   warmUp(): void {
-    const cfg = this.getConfig()
-    if (cfg.engine === 'browser') return
     if (this.warmInFlight) return
-    if (!this.canUseEdge()) return
     if (Date.now() - this.lastWarmUpAt < 30_000) return
     this.lastWarmUpAt = Date.now()
-    const payload = JSON.stringify({
-      text: '你好，我在。',
-      voice: cfg.edgeVoice || 'zh-CN-XiaoxiaoNeural',
-      rate: cfg.rate,
-    })
-    this.warmInFlight = requestStreamBlob(TTS_STREAM_PATH, { method: 'POST', body: payload })
+    const cfg = this.getConfig()
+    const payload = JSON.stringify(
+      this.preferUnified()
+        ? {
+            text: '你好，我在。',
+            edge_voice: cfg.edgeVoice || 'zh-CN-XiaoxiaoNeural',
+            rate: cfg.rate,
+          }
+        : {
+            text: '你好，我在。',
+            voice: cfg.edgeVoice || 'zh-CN-XiaoxiaoNeural',
+            rate: cfg.rate,
+          },
+    )
+    const path = this.preferUnified() ? TTS_UNIFIED_PATH : TTS_STREAM_PATH
+    this.warmInFlight = requestStreamBlob(path, { method: 'POST', body: payload })
       .then(() => {})
       .catch((e) => { this.noteEdgeError(e) })
       .finally(() => {
@@ -89,12 +103,7 @@ export class StreamingTtsPlayer {
     const cleaned = cleanTextForTts(text)
     if (!cleaned) return
     const gen = ++this.generation
-    const cfg = this.getConfig()
     this.enqueuedSentences = []
-    if (cfg.engine === 'browser') {
-      await this.speakBrowser(cleaned, gen)
-      return
-    }
     this.queue = splitSentences(cleaned)
     this.streamFirstSentencePending = true
     this.schedulePrefetch(gen, 0)
@@ -150,56 +159,11 @@ export class StreamingTtsPlayer {
     this.edgeBlockedUntil = 0
   }
 
-  private shouldBrowserLeadIn(): boolean {
-    const cfg = this.getConfig()
-    return (
-      cfg.engine === 'edge-online' &&
-      cfg.browserLeadIn !== false &&
-      this.streamFirstSentencePending &&
-      typeof window !== 'undefined' &&
-      'speechSynthesis' in window
-    )
-  }
-
   private cancelBrowserLeadIn() {
     if (this.leadInCancel) {
       this.leadInCancel()
       this.leadInCancel = null
-    } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      try {
-        window.speechSynthesis.cancel()
-      } catch {
-        /* ignore */
-      }
     }
-  }
-
-  private startBrowserLeadIn(sentence: string, gen: number) {
-    if (!this.shouldBrowserLeadIn() || gen !== this.generation) return
-    this.streamFirstSentencePending = false
-    this.cancelBrowserLeadIn()
-    const synth = window.speechSynthesis
-    const cfg = this.getConfig()
-    const u = new SpeechSynthesisUtterance(sentence)
-    const voice = this.pickBrowserVoice()
-    if (voice) u.voice = voice
-    u.lang = 'zh-CN'
-    u.rate = Math.max(0.6, Math.min(1.6, cfg.rate))
-    this.state.value = 'playing'
-    synth.speak(u)
-    this.leadInCancel = () => {
-      try {
-        synth.cancel()
-      } catch {
-        /* ignore */
-      }
-      this.leadInCancel = null
-    }
-  }
-
-  private handoffLeadInToEdge(gen: number) {
-    if (gen !== this.generation) return
-    this.cancelBrowserLeadIn()
   }
 
   private enqueue(sentence: string) {
@@ -236,7 +200,16 @@ export class StreamingTtsPlayer {
     })
   }
 
-  private buildPayload(sentence: string): string {
+  private buildUnifiedPayload(sentence: string): string {
+    const cfg = this.getConfig()
+    return JSON.stringify({
+      text: sentence,
+      edge_voice: cfg.edgeVoice || 'zh-CN-XiaoxiaoNeural',
+      rate: cfg.rate,
+    })
+  }
+
+  private buildEdgePayload(sentence: string): string {
     const cfg = this.getConfig()
     return JSON.stringify({
       text: sentence,
@@ -246,7 +219,6 @@ export class StreamingTtsPlayer {
   }
 
   private schedulePrefetch(gen: number, fromIndex: number) {
-    if (!this.canUseEdge()) return
     const cfg = this.getConfig()
     const depth = Math.max(1, cfg.prefetchDepth ?? 1)
     const signal = this.abortController?.signal
@@ -269,12 +241,6 @@ export class StreamingTtsPlayer {
     while (this.queue.length > 0 && gen === this.generation) {
       const sentence = this.queue.shift()!
       this.schedulePrefetch(gen, 0)
-
-      if (!this.canUseEdge()) {
-        this.state.value = 'playing'
-        await this.speakBrowserSentence(sentence, gen)
-        continue
-      }
 
       this.state.value = 'synthesizing'
       const blobPromise = this.prefetchMap.get(sentence)
@@ -300,24 +266,33 @@ export class StreamingTtsPlayer {
 
       if (!played && gen === this.generation) {
         try {
-          const res = await requestStreamResponse(TTS_STREAM_PATH, {
-            method: 'POST',
-            body: this.buildPayload(sentence),
-            signal,
-          })
-          if (gen !== this.generation) break
-          this.state.value = 'playing'
-          const ok = await this.playStreamResponse(res, gen)
-          if (!ok) {
-            await this.speakBrowserSentence(sentence, gen)
-          } else {
-            this.stopCurrentAudio()
+          if (this.preferUnified()) {
+            const blob = await requestStreamBlob(TTS_UNIFIED_PATH, {
+              method: 'POST',
+              body: this.buildUnifiedPayload(sentence),
+              signal,
+            })
+            if (gen !== this.generation) break
+            if (blob && blob.size > 0) {
+              this.state.value = 'playing'
+              await this.playBlob(blob, gen)
+              played = true
+            }
+          }
+          if (!played && this.canUseEdge()) {
+            const res = await requestStreamResponse(TTS_STREAM_PATH, {
+              method: 'POST',
+              body: this.buildEdgePayload(sentence),
+              signal,
+            })
+            if (gen !== this.generation) break
+            this.state.value = 'playing'
+            played = await this.playStreamResponse(res, gen)
+            if (played) this.stopCurrentAudio()
           }
         } catch (e) {
           this.noteEdgeError(e)
-          if (gen === this.generation) {
-            await this.speakBrowserSentence(sentence, gen)
-          }
+          // 不回退系统 TTS：跳过本句
         }
       }
     }
@@ -332,11 +307,19 @@ export class StreamingTtsPlayer {
     signal: AbortSignal,
     gen: number,
   ): Promise<Blob | null> {
-    if (gen !== this.generation || !this.canUseEdge()) return null
+    if (gen !== this.generation) return null
     try {
+      if (this.preferUnified()) {
+        return await requestStreamBlob(TTS_UNIFIED_PATH, {
+          method: 'POST',
+          body: this.buildUnifiedPayload(sentence),
+          signal,
+        })
+      }
+      if (!this.canUseEdge()) return null
       return await requestStreamBlob(TTS_STREAM_PATH, {
         method: 'POST',
-        body: this.buildPayload(sentence),
+        body: this.buildEdgePayload(sentence),
         signal,
       })
     } catch (e: unknown) {
@@ -520,45 +503,6 @@ export class StreamingTtsPlayer {
     })
   }
 
-  private pickBrowserVoice(): SpeechSynthesisVoice | null {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null
-    const synth = window.speechSynthesis
-    const cfg = this.getConfig()
-    const all = synth.getVoices()
-    if (cfg.browserVoiceName) {
-      const named = all.find((v) => v.name === cfg.browserVoiceName)
-      if (named) return named
-    }
-    return all.find((v) => /^zh/i.test(v.lang)) || all[0] || null
-  }
-
-  private async speakBrowser(text: string, gen: number): Promise<void> {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    const sentences = splitSentences(text)
-    for (const sentence of sentences) {
-      if (gen !== this.generation) break
-      await this.speakBrowserSentence(sentence, gen)
-    }
-    if (gen === this.generation) this.state.value = 'idle'
-  }
-
-  private speakBrowserSentence(sentence: string, gen: number): Promise<void> {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve()
-    if (gen !== this.generation) return Promise.resolve()
-    const synth = window.speechSynthesis
-    const cfg = this.getConfig()
-    return new Promise<void>((resolve) => {
-      const u = new SpeechSynthesisUtterance(sentence)
-      const voice = this.pickBrowserVoice()
-      if (voice) u.voice = voice
-      u.lang = 'zh-CN'
-      u.rate = Math.max(0.6, Math.min(1.6, cfg.rate))
-      u.onend = () => resolve()
-      u.onerror = () => resolve()
-      this.state.value = 'playing'
-      synth.speak(u)
-    })
-  }
 }
 
 export function useStreamingTts(getConfig: () => StreamingTtsConfig) {
@@ -575,17 +519,20 @@ export function useStreamingTts(getConfig: () => StreamingTtsConfig) {
   }
 }
 
-/** 从个性化设置构建 TTS 配置。 */
+/** 从个性化设置构建 TTS 配置。历史 browser 选项映射为 auto（MiMo→Edge）。 */
 export function ttsConfigFromPersonalSettings(ps: {
-  ttsEngine: 'edge-online' | 'browser'
+  ttsEngine: 'edge-online' | 'browser' | 'auto' | 'mimo-edge'
   ttsEdgeVoice: string
   ttsVoiceName: string
   ttsRate: number
 }): StreamingTtsConfig {
+  const raw = ps.ttsEngine
+  const engine: StreamingTtsConfig['engine'] =
+    raw === 'edge-online' ? 'edge-online' : 'auto'
   return {
-    engine: ps.ttsEngine,
+    engine,
     edgeVoice: ps.ttsEdgeVoice || 'zh-CN-XiaoxiaoNeural',
-    browserVoiceName: ps.ttsVoiceName || '',
+    browserVoiceName: '',
     rate: ps.ttsRate,
     streamThreshold: 0,
     prefetchDepth: 1,

@@ -8,7 +8,7 @@
       name="description"
       content="修茈科技解决方案以 XCAGI 统一宿主承载行业 Mod 与 AI 员工，从行业定型、业务写入到 AI 读写验收形成可验证交付。"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260719b" />
+    <link rel="stylesheet" href="./styles.css?v=20260721h" />
   </head>
 <body>
 <header class="site-header">
@@ -18,16 +18,17 @@
       <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
     </a>
     <nav class="nav" aria-label="站点导航">
-      <div class="nav-menu">
-        <a class="active" href="/solutions.html">解决方案</a>
-        <a href="/cases.html">客户案例</a>
-        <a href="/index.html#pricing">购买授权</a>
-        <a href="/developer.html">开放平台</a>
-        <a href="/contact.html">联系我们</a>
-        <a href="/about.html">关于修茈</a>
-        <a href="/visualization">可视化展示</a>
+            <div class="nav-menu">
+        <a data-nav="index" href="/index.html">首页</a>
+        <a data-nav="about" href="/about.html">关于修茈</a>
+        <a data-nav="visualization" href="/visualization">可视化展示</a>
+        <a class="active" data-nav="solutions" href="/solutions.html">方案与案例</a>
+        <a class="nav-optional" data-nav="news" href="/news.html">新闻资讯</a>
+        <a class="nav-optional" data-nav="honors" href="/honors.html">资质与能力</a>
+        <a data-nav="contact" href="/contact.html">联系我们</a>
+        <a data-nav="developer" href="/developer.html">开发者中心</a>
       </div>
-      <div class="nav-actions">
+<div class="nav-actions">
         <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
         <a class="nav-action nav-action--primary" href="/download">产品下载</a>
       </div>
@@ -37,14 +38,14 @@
 </header>
 <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
 <nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link">首页</a>
-  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
-  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
-  <a href="/index.html#pricing" class="mobile-menu-link">购买授权</a>
-  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
-  <a href="/visualization" class="mobile-menu-link">可视化展示</a>
-  <a href="/developer.html" class="mobile-menu-link">开放平台</a>
-  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <a href="/index.html" class="mobile-menu-link" data-nav="index">首页</a>
+  <a href="/about.html" class="mobile-menu-link" data-nav="about">关于修茈</a>
+  <a href="/visualization" class="mobile-menu-link" data-nav="visualization">可视化展示</a>
+  <a href="/solutions.html" class="mobile-menu-link active" data-nav="solutions">方案与案例</a>
+  <a href="/news.html" class="mobile-menu-link" data-nav="news">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link" data-nav="honors">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link" data-nav="contact">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link" data-nav="developer">开发者中心</a>
   <div class="mobile-menu-actions">
     <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
     <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
@@ -136,6 +137,37 @@
           </div>
         </div>
       </section>
+      <section class="section section-soft" id="cases">
+        <div class="container">
+          <div class="section-head reveal">
+            <div>
+              <p class="section-kicker">Cases</p>
+              <h2>客户案例</h2>
+            </div>
+            <p>场景沉淀为可安装行业 Mod；具体项目以合同与验收为准。</p>
+          </div>
+          <div class="grid grid-3">
+            <article class="case-card reveal">
+              <span class="case-label">制造业</span>
+              <h3>生产协同与库存管理系统</h3>
+              <p>围绕生产任务、物料库存和统计报表建立业务协同系统。</p>
+              <a class="card-link" href="/case-manufacture.html">查看详情 →</a>
+            </article>
+            <article class="case-card reveal" data-delay="80">
+              <span class="case-label">园区服务</span>
+              <h3>园区企业综合服务平台</h3>
+              <p>统一企业服务、事项办理、统计分析和驾驶舱入口。</p>
+              <a class="card-link" href="/case-park.html">查看详情 →</a>
+            </article>
+            <article class="case-card reveal" data-delay="160">
+              <span class="case-label">教育信息化</span>
+              <h3>校园移动服务与业务协同</h3>
+              <p>整合通知、审批、服务申请和数据统计能力。</p>
+              <a class="card-link" href="/case-edu.html">查看详情 →</a>
+            </article>
+          </div>
+        </div>
+      </section>
       <section class="section">
         <div class="container cta-band reveal">
           <div>
@@ -166,8 +198,7 @@
           </p>
         </div>
         <div class="footer-links">
-          <a href="/about.html">关于修茈</a><a href="/services.html">产品中心</a
-          ><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a
+          <a href="/about.html">关于修茈</a><a href="/solutions.html">方案与案例</a><a href="/news.html">新闻资讯</a
           ><a href="/honors.html">资质与能力</a><a href="/contact.html">联系我们</a>
         </div>
       </div>
@@ -177,8 +208,8 @@
 
 
 <div id="xc-corp-butler-root"></div>
-<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260719b" data-xc-corp-butler-css="1" />
-<script type="module" src="/corp-butler/corp-butler.js?v=20260719b" data-xc-corp-butler-js="1"></script>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260721q" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260721q" data-xc-corp-butler-js="1"></script>
 
 </body>
 </html>

@@ -233,7 +233,14 @@ export default defineConfig(() => ({
   worker: {
     format: 'es',
   },
+  optimizeDeps: {
+    include: ['vue'],
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   build: {
+    target: 'esnext',
     outDir: path.resolve(hostRoot, '../templates/admin-vue-dist'),
     emptyOutDir: true,
     assetsDir: 'assets',

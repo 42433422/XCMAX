@@ -243,7 +243,7 @@ function loadCorpButler() {
     root.id = 'xc-corp-butler-root'
     document.body.appendChild(root)
   }
-  const ver = '20260616'
+  const ver = '20260721q'
   if (!document.querySelector('link[data-xc-corp-butler-css]')) {
     const css = document.createElement('link')
     css.rel = 'stylesheet'

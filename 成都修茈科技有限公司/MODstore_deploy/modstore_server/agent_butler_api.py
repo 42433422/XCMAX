@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
@@ -518,6 +518,278 @@ BUTLER_TOOLS = [
     },
 ]
 
+# 管理端 is_admin 会话：本人只读 + 运维更新推送（服务端执行，不回前端 click）
+ADMIN_READONLY_TOOL_NAMES = frozenset(
+    {
+        "get_my_account_snapshot",
+        "get_my_wallet",
+        "get_my_orders",
+        "get_my_tickets",
+        "get_ops_update_brief",
+    }
+)
+
+ADMIN_READONLY_TOOLS: List[Dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_account_snapshot",
+            "description": "读取当前登录管理员本人的账户快照（称呼/角色/会员档/套餐），仅本人",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_wallet",
+            "description": "读取当前用户本人钱包余额与最近几笔流水摘要",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "最近流水条数，默认 5，最大 20",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_orders",
+            "description": "读取当前用户本人最近支付订单列表",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "条数，默认 8，最大 20",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_tickets",
+            "description": "读取当前用户本人客服工单（即使管理员也不返回他人工单）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "条数，默认 8，最大 20",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_ops_update_brief",
+            "description": "运维更新推送：最近日更摘要 + release_train 版本快照（只读）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "日更条数，默认 3，最大 5",
+                    }
+                },
+            },
+        },
+    },
+]
+
+
+def _butler_tools_for_user(user: User | None) -> List[Dict[str, Any]]:
+    if user is not None and bool(getattr(user, "is_admin", False)):
+        return list(BUTLER_TOOLS) + list(ADMIN_READONLY_TOOLS)
+    return list(BUTLER_TOOLS)
+
+
+def _clip_tool_text(text: str, *, max_chars: int = 2800) -> str:
+    t = (text or "").strip()
+    if len(t) <= max_chars:
+        return t
+    return t[: max_chars - 20] + "\n…(已截断)"
+
+
+def _execute_admin_readonly_tool(
+    name: str,
+    args: Optional[Dict[str, Any]],
+    *,
+    user: User,
+    db: Session,
+) -> str:
+    """执行管理员会话只读工具；强制本人数据隔离。"""
+    if not bool(getattr(user, "is_admin", False)):
+        return "错误：仅管理员会话可用此工具"
+    tool = (name or "").strip()
+    if tool not in ADMIN_READONLY_TOOL_NAMES:
+        return f"错误：未知只读工具 {tool}"
+    args = args if isinstance(args, dict) else {}
+
+    def _limit(default: int = 8, hard: int = 20) -> int:
+        try:
+            n = int(args.get("limit") or default)
+        except (TypeError, ValueError):
+            n = default
+        return max(1, min(n, hard))
+
+    try:
+        if tool == "get_my_account_snapshot":
+            from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
+
+            ident = resolve_user_identity(user, db=db, source="butler")
+            lines = [
+                "【本人账户快照】",
+                format_visitor_block(ident),
+                f"is_admin={bool(getattr(user, 'is_admin', False))}",
+                f"is_enterprise={bool(getattr(user, 'is_enterprise', False))}",
+            ]
+            return _clip_tool_text("\n".join(lines))
+
+        if tool == "get_my_wallet":
+            from modstore_server.models import Transaction, Wallet
+
+            lim = _limit(5, 20)
+            wallet = db.query(Wallet).filter(Wallet.user_id == user.id).first()
+            balance = float(wallet.balance) if wallet else 0.0
+            updated = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+            rows = (
+                db.query(Transaction)
+                .filter(Transaction.user_id == user.id)
+                .order_by(Transaction.created_at.desc())
+                .limit(lim)
+                .all()
+            )
+            lines = [
+                "【本人钱包】",
+                f"余额={balance}",
+                f"updated_at={updated}",
+                f"最近流水(最多{lim}条)：",
+            ]
+            for r in rows:
+                lines.append(
+                    f"- #{r.id} {r.txn_type or ''} {r.amount} {r.status or ''} "
+                    f"{(r.description or '')[:60]} "
+                    f"{r.created_at.isoformat() if r.created_at else ''}"
+                )
+            if not rows:
+                lines.append("- （暂无流水）")
+            return _clip_tool_text("\n".join(lines))
+
+        if tool == "get_my_orders":
+            from modstore_server import payment_orders
+
+            lim = _limit(8, 20)
+            rows, total = payment_orders.list_orders(
+                user_id=int(user.id), status=None, limit=lim, offset=0
+            )
+            lines = [f"【本人订单】共{total}条，展示最近{min(lim, len(rows))}条："]
+            for o in rows:
+                if not isinstance(o, dict):
+                    continue
+                ono = o.get("out_trade_no") or o.get("order_no") or o.get("id") or ""
+                lines.append(
+                    f"- {ono} status={o.get('status')} amount={o.get('total_amount') or o.get('amount')} "
+                    f"subject={(str(o.get('subject') or o.get('title') or ''))[:40]}"
+                )
+            if not rows:
+                lines.append("- （暂无订单）")
+            return _clip_tool_text("\n".join(lines))
+
+        if tool == "get_my_tickets":
+            from modstore_server.customer_service_orchestrator import ticket_payload
+            from modstore_server.models_cs import CustomerServiceTicket
+
+            lim = _limit(8, 20)
+            # 即使 is_admin 也强制本人
+            rows = (
+                db.query(CustomerServiceTicket)
+                .filter(CustomerServiceTicket.user_id == user.id)
+                .order_by(
+                    CustomerServiceTicket.updated_at.desc(),
+                    CustomerServiceTicket.id.desc(),
+                )
+                .limit(lim)
+                .all()
+            )
+            lines = [f"【本人工单】最近{len(rows)}条："]
+            for t in rows:
+                p = ticket_payload(t)
+                lines.append(
+                    f"- {p.get('ticket_no')} {p.get('title')} status={p.get('status')} "
+                    f"intent={p.get('intent')} decision={p.get('decision_status')}"
+                )
+            if not rows:
+                lines.append("- （暂无工单）")
+            return _clip_tool_text("\n".join(lines))
+
+        if tool == "get_ops_update_brief":
+            lim = _limit(3, 5)
+            digests = (
+                db.query(DailyDigestRecord).order_by(DailyDigestRecord.id.desc()).limit(lim).all()
+            )
+            lines = ["【运维更新推送】"]
+            if digests:
+                lines.append(f"最近日更 {len(digests)} 条：")
+                for row in digests:
+                    d = _daily_digest_record_to_dict(row, include_body=False)
+                    body = str(d.get("body_text") or "")[:180].replace("\n", " ")
+                    lines.append(
+                        f"- day={d.get('day')} subject={d.get('subject') or ''} "
+                        f"delivered={d.get('delivered')} | {body}"
+                    )
+            else:
+                lines.append("- （暂无日更记录）")
+            try:
+                from modstore_server.release_train import snapshot_public
+
+                snap = snapshot_public() or {}
+                lines.append(
+                    "release_train: "
+                    f"current={snap.get('current')} product={snap.get('product_version')} "
+                    f"day_index={snap.get('day_index')} next={snap.get('next_kind_hint')} "
+                    f"marketing={snap.get('marketing_analog')}"
+                )
+            except Exception as exc:  # noqa: BLE001
+                lines.append(f"release_train: 暂不可用 ({type(exc).__name__})")
+            return _clip_tool_text("\n".join(lines))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("admin readonly tool %s failed: %s", tool, exc)
+        return f"错误：执行 {tool} 失败（{type(exc).__name__}）"
+    return f"错误：未处理工具 {tool}"
+
+
+def _partition_butler_tool_calls(
+    tool_calls: List[Dict[str, Any]],
+    *,
+    user: User,
+    db: Session,
+) -> tuple[List[Dict[str, Any]], str]:
+    """拆分页面工具 vs 只读工具；只读在服务端执行并返回摘要文本。"""
+    page_calls: List[Dict[str, Any]] = []
+    briefs: List[str] = []
+    is_admin = bool(getattr(user, "is_admin", False))
+    for tc in tool_calls or []:
+        name = str((tc or {}).get("name") or "").strip()
+        if is_admin and name in ADMIN_READONLY_TOOL_NAMES:
+            args = (tc or {}).get("args")
+            if not isinstance(args, dict):
+                args = {}
+            briefs.append(_execute_admin_readonly_tool(name, args, user=user, db=db))
+        else:
+            page_calls.append(tc)
+    brief = ""
+    if briefs:
+        brief = "\n\n".join(briefs)
+    return page_calls, brief
+
 
 # ─── 请求/响应模型 ─────────────────────────────────────────────────────
 
@@ -539,9 +811,21 @@ class CorpChatDTO(BaseModel):
     page_id: Optional[str] = Field(None, max_length=64)
     page_context: Optional[str] = Field(None, max_length=3500)
     max_tokens: Optional[int] = Field(512, ge=1, le=2000)
+    visitor_id: Optional[str] = Field(None, max_length=80)
+    visitor_label: Optional[str] = Field(None, max_length=64)
 
 
-CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小茈，平时在这边帮忙接待访客。
+class CorpTtsDTO(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+    voice: Optional[str] = Field(None, max_length=64)
+
+
+class CorpTranslateDTO(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+    target: str = Field("en", max_length=8)
+
+
+CORP_BUTLER_SYSTEM_PROMPT = """你是成都修茈科技有限公司官网的「AI 管家」，叫小C，平时在这边帮忙接待访客。
 
 你的性格和说话方式：
 - 像真人前台一样聊天，口语化、自然，别用「尊敬的用户」「您好」「竭诚为您服务」这种客服腔
@@ -629,9 +913,45 @@ def _resolve_butler_credentials(db: Session, user_id: int):
     return provider, model, api_key, key_source, base_url
 
 
-def _build_messages(body: ButlerChatDTO, page_context: str | None) -> List[Dict[str, Any]]:
-    """组装最终 messages，注入 system prompt 和页面上下文。"""
-    system_content = BUTLER_SYSTEM_PROMPT
+def _build_messages(
+    body: ButlerChatDTO,
+    page_context: str | None,
+    *,
+    user: User | None = None,
+    db: Session | None = None,
+) -> List[Dict[str, Any]]:
+    """组装最终 messages：小C SSOT 人设 + 对话对象 + 管理端知识库 + 页面上下文。"""
+    from modstore_server.xiaoc_cs_ssot import (
+        format_visitor_block,
+        knowledge_block_for_query,
+        last_user_text,
+        resolve_user_identity,
+        xiaoc_system_prompt,
+    )
+
+    system_content = xiaoc_system_prompt(mode="admin")
+    # 保留工具职责补充（导航/风险等）
+    if "enhance_current_page" in BUTLER_SYSTEM_PROMPT:
+        system_content += "\n\n【工具能力补充】\n" + "\n".join(
+            line
+            for line in BUTLER_SYSTEM_PROMPT.splitlines()
+            if line.startswith("6.")
+            or line.startswith("可识别")
+            or line.startswith("- /workbench")
+            or line.startswith("操作原则")
+            or line.startswith("- 低风险")
+            or line.startswith("- 中风险")
+            or line.startswith("- 高风险")
+            or line.startswith("回复要简洁")
+        )
+    if user is not None:
+        vb = format_visitor_block(resolve_user_identity(user, db=db, source="butler"))
+        if vb:
+            system_content += f"\n\n{vb}"
+    user_q = last_user_text(body.messages)
+    kb = knowledge_block_for_query(user_q, mode="admin") if user_q else ""
+    if kb:
+        system_content += f"\n\n{kb}"
     if page_context:
         system_content += f"\n\n当前页面上下文：\n{page_context}"
 
@@ -714,8 +1034,43 @@ def _resolve_corp_credentials(db: Session):
     return provider, model, api_key, base_url
 
 
-def _build_corp_messages(body: CorpChatDTO) -> List[Dict[str, Any]]:
-    system_content = CORP_BUTLER_SYSTEM_PROMPT
+def _build_corp_messages(
+    body: CorpChatDTO,
+    *,
+    user: User | None = None,
+    db: Session | None = None,
+) -> List[Dict[str, Any]]:
+    """官网公开咨询：统一小C 人设 + 对话对象 + 管理端 persy 知识库。"""
+    from modstore_server.xiaoc_cs_ssot import (
+        format_visitor_block,
+        identity_from_guest,
+        knowledge_block_for_query,
+        last_user_text,
+        resolve_user_identity,
+        xiaoc_system_prompt,
+    )
+
+    system_content = xiaoc_system_prompt(mode="corp")
+    if user is not None:
+        identity = resolve_user_identity(
+            user,
+            db=db,
+            source="corp",
+            visitor_id=body.visitor_id or "",
+        )
+    else:
+        identity = identity_from_guest(
+            visitor_id=body.visitor_id or "",
+            visitor_label=body.visitor_label or "",
+            source="corp",
+        )
+    vb = format_visitor_block(identity)
+    if vb:
+        system_content += f"\n\n{vb}"
+    user_q = last_user_text(body.messages)
+    kb = knowledge_block_for_query(user_q, mode="corp") if user_q else ""
+    if kb:
+        system_content += f"\n\n{kb}"
     if body.page_context:
         system_content += (
             f"\n\n当前页面（{body.page_id or 'unknown'}）上下文：\n{body.page_context[:3500]}"
@@ -753,16 +1108,65 @@ def _get_or_create_conversation(
 # ─── 路由 ─────────────────────────────────────────────────────────────
 
 
+class CsSsotRetrieveDTO(BaseModel):
+    query: str = Field(..., min_length=1, max_length=4000)
+    top_k: int = 5
+
+
+@router.get("/cs-ssot/policy")
+async def butler_cs_ssot_policy(mode: str = "admin"):
+    """公开可读：小C 分角色权限契约（external / market_cs / admin）。"""
+    from modstore_server.xiaoc_cs_ssot import XIAOC_PERMISSIONS, permission_policy
+
+    key = (mode or "admin").strip().lower()
+    if key in ("corp", "public", "官网"):
+        key = "external"
+    if key not in XIAOC_PERMISSIONS:
+        key = "admin"
+    return {"ok": True, "policy": permission_policy(mode=key), "modes": list(XIAOC_PERMISSIONS)}
+
+
+@router.post("/cs-ssot/retrieve")
+async def butler_cs_ssot_retrieve(
+    body: CsSsotRetrieveDTO,
+    user: User = Depends(_get_current_user),
+):
+    """已登录市场/管理端：按身份检索公开库（管理员另含内部库）。"""
+    from modstore_server.xiaoc_cs_ssot import (
+        PUBLIC_DATASET_ID,
+        retrieve_knowledge_for_mode,
+    )
+
+    mode = "admin" if bool(getattr(user, "is_admin", False)) else "market_cs"
+    chunks = retrieve_knowledge_for_mode(body.query, mode=mode, top_k=body.top_k)
+    return {
+        "ok": True,
+        "dataset_id": PUBLIC_DATASET_ID,
+        "mode": mode,
+        "query": body.query,
+        "chunks": chunks,
+        "ssot": "xiaoc_kb_isolation",
+    }
+
+
 @router.post("/corp-chat")
 async def butler_corp_chat(
     request: Request,
     body: CorpChatDTO,
     db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
 ):
     """官网公开咨询（无登录、无钱包扣费、无工具调用）。"""
     _corp_chat_rate_allow(_public_contact_client_key(request))
     provider, model, api_key, base_url = _resolve_corp_credentials(db)
-    msgs = _build_corp_messages(body)
+    optional_user: User | None = None
+    try:
+        from modstore_server.api.auth_deps import get_optional_user
+
+        optional_user = get_optional_user(authorization)
+    except Exception:  # noqa: BLE001
+        optional_user = None
+    msgs = _build_corp_messages(body, user=optional_user, db=db)
     if not any(m.get("role") == "user" for m in msgs):
         raise HTTPException(400, "messages 须包含至少一条 user 消息")
 
@@ -788,6 +1192,116 @@ async def butler_corp_chat(
         )
 
     return {"success": True, "content": text, "message": text}
+
+
+@router.post("/corp-translate")
+async def butler_corp_translate(
+    request: Request,
+    body: CorpTranslateDTO,
+    db: Session = Depends(get_db),
+):
+    """朗读字幕短译：中文 → 英文（公开、限流、仅返回译文）。"""
+    _corp_chat_rate_allow(_public_contact_client_key(request))
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text 不能为空")
+    target = (body.target or "en").strip().lower()
+    if target != "en":
+        raise HTTPException(400, "仅支持 target=en")
+
+    provider, model, api_key, base_url = _resolve_corp_credentials(db)
+    if not api_key:
+        raise HTTPException(503, "翻译暂不可用")
+
+    msgs = [
+        {
+            "role": "system",
+            "content": (
+                "You are a concise translator. Translate the user's Chinese text into natural English. "
+                "Output ONLY the English translation, no quotes, no explanation."
+            ),
+        },
+        {"role": "user", "content": text[:500]},
+    ]
+    try:
+        raw_response = await chat_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=msgs,
+            max_tokens=180,
+        )
+        if not raw_response.get("ok"):
+            raise RuntimeError(raw_response.get("error") or "translate failed")
+        en = (raw_response.get("content") or "").strip().strip('"').strip("'")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("corp-translate failed: %s", exc)
+        raise HTTPException(503, "翻译暂不可用") from exc
+
+    if not en:
+        raise HTTPException(503, "翻译为空")
+    return {"success": True, "data": {"translation": en, "target": "en"}}
+
+
+@router.post("/corp-tts")
+async def butler_corp_tts(request: Request, body: CorpTtsDTO):
+    """官网公开 TTS：优先 MiMo，失败回退 Edge 神经音；不使用浏览器系统 TTS。"""
+    import base64
+
+    _corp_chat_rate_allow(_public_contact_client_key(request))
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "text 不能为空")
+
+    # 1) MiMo
+    try:
+        from modstore_server.mimo_tts_service import DEFAULT_VOICE as MIMO_VOICE
+        from modstore_server.mimo_tts_service import synthesize_mimo_tts_async
+
+        voice = (body.voice or "").strip() or MIMO_VOICE
+        audio, err, meta = await synthesize_mimo_tts_async(text, voice=voice)
+        if audio and not err:
+            mime = str(meta.get("mime") or "audio/wav")
+            b64 = base64.b64encode(audio).decode("ascii")
+            return {
+                "success": True,
+                "data": {
+                    "audioBase64": f"data:{mime};base64,{b64}",
+                    "provider": "mimo",
+                    "voice": meta.get("voice") or voice,
+                },
+            }
+        if err:
+            logger.info("corp-tts MiMo unavailable, fallback Edge: %s", err)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("corp-tts MiMo failed, fallback Edge: %s", exc)
+
+    # 2) Edge neural
+    try:
+        from modstore_server.edge_tts_service import DEFAULT_VOICE as EDGE_VOICE
+        from modstore_server.edge_tts_service import rate_str_from_float, stream_audio
+
+        edge_voice = EDGE_VOICE
+        chunks: list[bytes] = []
+        async for data in stream_audio(text, edge_voice, rate_str_from_float(1.05)):
+            if data:
+                chunks.append(data)
+        mp3 = b"".join(chunks)
+        if not mp3:
+            raise RuntimeError("edge-tts empty")
+        b64 = base64.b64encode(mp3).decode("ascii")
+        return {
+            "success": True,
+            "data": {
+                "audioBase64": f"data:audio/mpeg;base64,{b64}",
+                "provider": "edge",
+                "voice": edge_voice,
+            },
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("corp-tts Edge failed: %s", exc)
+        raise HTTPException(503, "语音合成暂不可用") from exc
 
 
 # ─── 联系页问卷智能预填 ─────────────────────────────────────────────────
@@ -998,7 +1512,7 @@ async def butler_chat(
     """非流式 Butler 对话。"""
     provider, model, api_key, key_source, base_url = _resolve_butler_credentials(db, user.id)
     is_byok = key_source == "user_override"
-    msgs = _build_messages(body, body.page_context)
+    msgs = _build_messages(body, body.page_context, user=user, db=db)
 
     if not msgs:
         raise HTTPException(400, "messages 不能为空")
@@ -1023,6 +1537,7 @@ async def butler_chat(
         from modstore_server.llm_chat_proxy import _normalize_openai_base
 
         tool_resp = None
+        tools_schema = _butler_tools_for_user(user)
         if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
             try:
                 base = _normalize_openai_base(provider, base_url)
@@ -1030,7 +1545,7 @@ async def butler_chat(
                 req_body: Dict[str, Any] = {
                     "model": model,
                     "messages": msgs,
-                    "tools": BUTLER_TOOLS,
+                    "tools": tools_schema,
                     "tool_choice": "auto",
                 }
                 if body.max_tokens:
@@ -1079,6 +1594,12 @@ async def butler_chat(
             tool_calls = []
             usage = raw_response.get("usage") or {}
 
+        # 管理员只读工具：服务端执行并拼进回复；页面工具仍回前端
+        page_tool_calls, readonly_brief = _partition_butler_tool_calls(tool_calls, user=user, db=db)
+        tool_calls = page_tool_calls
+        if readonly_brief:
+            text = ((text or "").strip() + "\n\n" + readonly_brief).strip()
+
     except Exception as exc:
         await wallet.release(hold)
         save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
@@ -1124,9 +1645,21 @@ async def butler_chat_stream(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    """SSE 流式 Butler 对话（工具调用降级为非流式）。"""
+    """SSE 流式 Butler 对话（管理员工具路径降级为一次非流式完成后再 SSE）。"""
+    # 管理员会话需要 tools：复用非流式 chat，再以 SSE 吐出结果（含只读工具摘要）
+    if bool(getattr(user, "is_admin", False)):
+        result = await butler_chat(request, body, db=db, user=user)
+
+        async def admin_event_stream():
+            text = str(result.get("text") or "")
+            if text:
+                yield f"data: {json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(admin_event_stream(), media_type="text/event-stream")
+
     provider, model, api_key, key_source, base_url = _resolve_butler_credentials(db, user.id)
-    msgs = _build_messages(body, body.page_context)
+    msgs = _build_messages(body, body.page_context, user=user, db=db)
     is_byok = key_source == "user_override"
 
     if not msgs:
