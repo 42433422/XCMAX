@@ -311,8 +311,13 @@ export const knowledgeBaseApi = {
     })
   },
 
-  status(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeBaseStatus> {
-    return api.get<KnowledgeBaseStatus>(datasetPath(datasetId, '/status'))
+  status(
+    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
+    options: { includeDocuments?: boolean } = {},
+  ): Promise<KnowledgeBaseStatus> {
+    const includeDocuments = options.includeDocuments !== false
+    const suffix = includeDocuments ? '/status' : '/status?include_documents=false'
+    return api.get<KnowledgeBaseStatus>(datasetPath(datasetId, suffix))
   },
 
   async diffVersions(
@@ -350,9 +355,9 @@ export const knowledgeBaseApi = {
 
   graph(
     datasetId = PERSY_KNOWLEDGE_DATASET_ID,
-    limit = 120,
+    limit = 80,
   ): Promise<KnowledgeGraphResponse> {
-    const boundedLimit = Math.max(20, Math.min(Number(limit) || 120, 240))
+    const boundedLimit = Math.max(20, Math.min(Number(limit) || 80, 160))
     return api.get<KnowledgeGraphResponse>(datasetPath(datasetId, `/graph?limit=${boundedLimit}`))
   },
 

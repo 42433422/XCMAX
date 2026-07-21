@@ -46,7 +46,15 @@ describe('knowledgeBaseApi', () => {
     await knowledgeBaseApi.graph('team brain', 999)
 
     expect(mocks.api.get).toHaveBeenCalledWith(
-      '/api/knowledge/v1/datasets/team%20brain/graph?limit=240',
+      '/api/knowledge/v1/datasets/team%20brain/graph?limit=160',
+    )
+  })
+
+  it('can skip document rows on status for lighter HUD loads', async () => {
+    await knowledgeBaseApi.status('persy-knowledge', { includeDocuments: false })
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      `/api/knowledge/v1/datasets/${PERSY_KNOWLEDGE_DATASET_ID}/status?include_documents=false`,
     )
   })
 

@@ -230,7 +230,7 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
 
     expect(mocks.omniscient).toHaveBeenCalled()
-    expect(mocks.status).toHaveBeenCalledWith('user_tenant-a')
+    expect(mocks.status).toHaveBeenCalledWith('user_tenant-a', { includeDocuments: false })
     expect(mocks.graph).toHaveBeenCalledWith('user_tenant-a')
     // first empty load + heal retry
     expect(mocks.graph).toHaveBeenCalledTimes(2)
