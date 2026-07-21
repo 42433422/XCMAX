@@ -23,6 +23,7 @@ on:
       - '成都修茈科技有限公司/partials/**'
       - '成都修茈科技有限公司/styles.css'
       - '成都修茈科技有限公司/main.js'
+      - '成都修茈科技有限公司/visualization.js'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
