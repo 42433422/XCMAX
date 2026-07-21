@@ -35,7 +35,9 @@ _STATUS_MAP = {
 
 
 def _env_enabled() -> bool:
-    raw = (os.environ.get("MODSTORE_STRATEGIC_LAYER_INTEGRATION_ENABLED", "1") or "").strip().lower()
+    raw = (
+        (os.environ.get("MODSTORE_STRATEGIC_LAYER_INTEGRATION_ENABLED", "1") or "").strip().lower()
+    )
     return raw not in ("0", "false", "no", "off")
 
 
