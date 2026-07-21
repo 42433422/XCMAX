@@ -10,6 +10,6 @@
     "applicability_check": "当窄CI运行在虚拟环境中，py_compile步骤出现模块找不到或语法验证结果与当前Python版本不一致时适用此修复",
     "patch_strategy": "将cr_narrow_ci.py中_run_py_compile函数的subprocess调用中的硬编码\"python3\"替换为sys.executable，确保使用当前运行的Python解释器执行语法检查",
     "rollback_plan": "将sys.executable改回硬编码的\"python3\"字符串即可回滚",
-    "required_tests": ["test_self_maintenance_loop_runner_policy.py", "test_cr_narrow_ci.py"]
+    "required_tests": ["test_self_maintenance_loop_runner_policy.py", "test_self_evolution_loop.py"]
   }
 }
