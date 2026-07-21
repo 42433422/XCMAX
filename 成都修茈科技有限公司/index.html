@@ -12,7 +12,7 @@
       name="keywords"
       content="XCAGI, AI员工, AI桌面平台, 行业Mod, 考勤系统, 涂料ERP, 中小企业数字化, 成都修茈科技, AI自动化, 私有部署"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260719b" />
+    <link rel="stylesheet" href="./styles.css?v=20260721h" />
     <noscript
       ><style>
         .reveal {
@@ -639,22 +639,28 @@
         font-size: 10px;
         letter-spacing: 0.03em;
       }
+      /* 官网首页：胶囊「AI 管家」按钮（约 120×56），勿收成纯图标圆钮 */
       body[data-page='index'] .butler-ball {
-        min-height: 48px !important;
-        padding: 6px !important;
+        min-width: 120px !important;
+        min-height: 56px !important;
+        height: 56px !important;
+        padding: 8px 14px 8px 9px !important;
+        gap: 10px !important;
       }
       body[data-page='index'] .butler-ball__logo-wrap {
-        width: 34px !important;
-        height: 34px !important;
-        border-radius: 10px !important;
+        width: 38px !important;
+        height: 38px !important;
+        border-radius: 12px !important;
       }
       body[data-page='index'] .butler-ball__logo {
-        width: 30px !important;
-        height: 30px !important;
+        width: 34px !important;
+        height: 34px !important;
       }
-      body[data-page='index'] .butler-ball__label,
-      body[data-page='index'] .butler-ball__hint {
-        display: none !important;
+      body[data-page='index'] .butler-ball__label {
+        display: inline !important;
+        font-size: 14px !important;
+        font-weight: 800 !important;
+        white-space: nowrap !important;
       }
 
       /* ---------- 通用 section ---------- */
@@ -1361,19 +1367,22 @@
 <body data-page="index">
 <header class="site-header">
   <div class="container header-inner">
-    <a class="brand-mark" href="/index.html" aria-label="成都修茈科技有限公司官网首页">
+    <a class="brand-mark" href="/index.html">
       <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
       <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
     </a>
-    <nav class="nav" id="main-nav" aria-label="站点导航">
+    <nav class="nav" aria-label="站点导航">
       <div class="nav-menu">
-        <a href="/solutions.html">解决方案</a>
-        <a href="/cases.html">客户案例</a>
-        <a href="/index.html#pricing">购买授权</a>
-        <a href="/developer.html">开放平台</a>
-        <a href="/contact.html">联系我们</a>
-        <a href="/about.html">关于修茈</a>
-        <a href="/visualization">可视化展示</a>
+        <a class="active" data-nav="index" href="/index.html">首页</a>
+        <a data-nav="about" href="/about.html">关于修茈</a>
+        <a data-nav="visualization" href="/visualization">可视化展示</a>
+        <a data-nav="services" href="/services.html">产品中心</a>
+        <a data-nav="solutions" href="/solutions.html">解决方案</a>
+        <a data-nav="cases" href="/cases.html">客户案例</a>
+        <a class="nav-optional" data-nav="news" href="/news.html">新闻资讯</a>
+        <a class="nav-optional" data-nav="honors" href="/honors.html">资质与能力</a>
+        <a data-nav="contact" href="/contact.html">联系我们</a>
+        <a data-nav="developer" href="/developer.html">开发者门户</a>
       </div>
       <div class="nav-actions">
         <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
@@ -1385,14 +1394,16 @@
 </header>
 <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
 <nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link">首页</a>
-  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
-  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
-  <a href="/index.html#pricing" class="mobile-menu-link">购买授权</a>
-  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
-  <a href="/visualization" class="mobile-menu-link">可视化展示</a>
-  <a href="/developer.html" class="mobile-menu-link">开放平台</a>
-  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <a href="/index.html" class="mobile-menu-link active" data-nav="index">首页</a>
+  <a href="/about.html" class="mobile-menu-link" data-nav="about">关于修茈</a>
+  <a href="/visualization" class="mobile-menu-link" data-nav="visualization">可视化展示</a>
+  <a href="/services.html" class="mobile-menu-link" data-nav="services">产品中心</a>
+  <a href="/solutions.html" class="mobile-menu-link" data-nav="solutions">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link" data-nav="cases">客户案例</a>
+  <a href="/news.html" class="mobile-menu-link" data-nav="news">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link" data-nav="honors">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link" data-nav="contact">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link" data-nav="developer">开发者门户</a>
   <div class="mobile-menu-actions">
     <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
     <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
@@ -2043,8 +2054,8 @@
 
 
 <div id="xc-corp-butler-root"></div>
-<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260719b" data-xc-corp-butler-css="1" />
-<script type="module" src="/corp-butler/corp-butler.js?v=20260719b" data-xc-corp-butler-js="1"></script>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260721m" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260721m" data-xc-corp-butler-js="1"></script>
 
 </body>
 </html>
