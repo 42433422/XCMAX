@@ -28,9 +28,10 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-EmbeddingMode = Literal["local", "remote", "disabled"]
+EmbeddingMode = Literal["local", "remote", "hash", "disabled"]
 
 _DEFAULT_LOCAL_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+_HASH_EMBED_DIM = 64
 
 
 def _resolve_mode() -> EmbeddingMode:
@@ -40,7 +41,24 @@ def _resolve_mode() -> EmbeddingMode:
         return "local"
     if raw in ("remote", "api", "openai"):
         return "remote"
-    return "disabled"
+    if raw in ("hash", "local-hash", "deterministic"):
+        return "hash"
+    if raw in ("disabled", "off", "none"):
+        return "disabled"
+    # Unset: hash fallback for web omniscient; desktop stays disabled unless RAG on.
+    rag = (os.environ.get("XCAGI_RAG_ENABLED", "") or "").strip().lower()
+    if rag in {"0", "false", "no", "off"}:
+        return "disabled"
+    if rag in {"1", "true", "yes", "on", "auto"}:
+        return "hash"
+    try:
+        from app.utils.deployment import is_desktop_mode
+
+        if is_desktop_mode():
+            return "disabled"
+    except Exception:  # noqa: BLE001 - env bootstrap must not fail import
+        pass
+    return "hash"
 
 
 class EmbeddingService(EmbedderPort):
@@ -78,7 +96,7 @@ class EmbeddingService(EmbedderPort):
 
     # ---------------- 公共 API ----------------
     def is_available(self) -> bool:
-        """是否启用真实 embedding。disabled 时返回 False。"""
+        """是否启用 embedding（含本地 hash 降级）。disabled 时返回 False。"""
         return self._mode != "disabled"
 
     @property
@@ -93,6 +111,9 @@ class EmbeddingService(EmbedderPort):
         """
         if self._mode == "disabled":
             return 0
+        if self._mode == "hash":
+            self._dim_cache = _HASH_EMBED_DIM
+            return _HASH_EMBED_DIM
         if self._dim_cache is not None:
             return self._dim_cache
         try:
@@ -121,7 +142,31 @@ class EmbeddingService(EmbedderPort):
             return self._embed_local(texts)
         if self._mode == "remote":
             return self._embed_remote(texts)
+        if self._mode == "hash":
+            return [self._embed_hash(text) for text in texts]
         return []
+
+    def _embed_hash(self, text: str) -> list[float]:
+        """Deterministic bag-of-hashes embedder for local omniscient keyword+vector hybrid."""
+        import hashlib
+        import math
+        import re
+
+        vec = [0.0] * _HASH_EMBED_DIM
+        tokens = re.findall(r"[\w\u4e00-\u9fff]+", str(text or "").lower())
+        if not tokens:
+            tokens = ["_empty_"]
+        for token in tokens:
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            for offset in range(0, min(16, len(digest)), 2):
+                idx = int.from_bytes(digest[offset : offset + 2], "big") % _HASH_EMBED_DIM
+                sign = 1.0 if digest[(offset + 2) % len(digest)] % 2 == 0 else -1.0
+                vec[idx] += sign
+        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+        out = [v / norm for v in vec]
+        if self._dim_cache is None:
+            self._dim_cache = _HASH_EMBED_DIM
+        return out
 
     # EmbedderPort 协议适配：供 ExcelVector/UserMemory 等使用 EmbedderPort 的服务注入
     def embed_texts(self, texts: list[str]) -> list[list[float]]:

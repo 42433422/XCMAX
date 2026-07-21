@@ -22,13 +22,44 @@ export interface KnowledgeBaseStatus {
   documents: KnowledgeBaseDocument[]
   tenant_ids?: string[]
   versions?: string[]
-  index?: Record<string, unknown>
+  index?: Record<string, unknown> & {
+    semantic_embedding_available?: boolean
+    embedding_count?: number
+  }
   rebuild_jobs?: Array<Record<string, unknown>>
   rebuild_job_count?: number
   storage_path?: string
   persistent?: boolean
   message?: string
   error_code?: string
+}
+
+export interface KnowledgeOmniscientOverview {
+  success: boolean
+  omniscient?: boolean
+  rag_enabled?: boolean
+  embedder_available?: boolean
+  semantic_embedding_available?: boolean
+  recommended_dataset_id?: string
+  dataset_count?: number
+  document_count?: number
+  chunk_count?: number
+  datasets?: Record<string, KnowledgeBaseStatus>
+  is_admin?: boolean
+  message?: string
+}
+
+export interface KnowledgeRuntimeHealth {
+  success: boolean
+  rag_enabled?: boolean
+  embedder_available?: boolean
+  semantic_embedding_available?: boolean
+  indexed_sources?: number
+  indexed_chunks?: number
+  dataset_count?: number
+  dataset_document_count?: number
+  dataset_chunk_count?: number
+  recommended_dataset_id?: string
 }
 
 export type KnowledgeGraphNodeType =
@@ -250,8 +281,71 @@ function datasetPath(datasetId: string, suffix: string): string {
 }
 
 export const knowledgeBaseApi = {
+  health(): Promise<KnowledgeRuntimeHealth> {
+    return api.get<KnowledgeRuntimeHealth>('/api/knowledge/v1/health')
+  },
+
+  listDatasets(): Promise<{
+    success: boolean
+    datasets?: Record<string, KnowledgeBaseStatus>
+    dataset_count?: number
+    document_count?: number
+    chunk_count?: number
+  }> {
+    return api.get('/api/knowledge/v1/datasets')
+  },
+
+  omniscient(): Promise<KnowledgeOmniscientOverview> {
+    return api.get<KnowledgeOmniscientOverview>('/api/knowledge/v1/omniscient')
+  },
+
+  async omniscientQuery(payload: {
+    query: string
+    topK?: number
+  }): Promise<KnowledgeBaseQueryResponse & { omniscient?: boolean; dataset_hits?: number }> {
+    await primeCsrfCookie()
+    return api.post('/api/knowledge/v1/omniscient/query', {
+      query: payload.query,
+      top_k: payload.topK || 8,
+      include_citations: true,
+    })
+  },
+
   status(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeBaseStatus> {
     return api.get<KnowledgeBaseStatus>(datasetPath(datasetId, '/status'))
+  },
+
+  async diffVersions(
+    datasetId: string,
+    payload: { leftVersion?: string; rightVersion?: string; tenantId?: string } = {},
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.post(datasetPath(datasetId, '/versions/diff'), {
+      left_version: payload.leftVersion || '',
+      right_version: payload.rightVersion || '',
+      tenant_id: payload.tenantId || '',
+    })
+  },
+
+  async rollbackVersion(
+    datasetId: string,
+    payload: { version: string; tenantId?: string },
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.post(datasetPath(datasetId, '/versions/rollback'), {
+      version: payload.version,
+      tenant_id: payload.tenantId || '',
+    })
+  },
+
+  async rebuildIndex(
+    datasetId: string,
+    payload: { tenantId?: string } = {},
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.post(datasetPath(datasetId, '/index/rebuild'), {
+      tenant_id: payload.tenantId || '',
+    })
   },
 
   graph(

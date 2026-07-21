@@ -6,8 +6,8 @@
           <span></span>
         </span>
         <div>
-          <div class="brain-kicker">Persy Cognitive Map</div>
-          <strong>企业知识网络</strong>
+          <div class="brain-kicker">{{ adminOmniscient ? 'Omniscient Console' : 'Persy Cognitive Map' }}</div>
+          <strong>{{ adminOmniscient ? '全知知识网络' : '企业知识网络' }}</strong>
         </div>
       </div>
 
@@ -27,6 +27,33 @@
       </div>
 
       <div class="toolbar-actions">
+        <label
+          v-if="adminOmniscient && datasetOptions.length"
+          class="dataset-switch"
+          title="知识空间"
+        >
+          <span>空间</span>
+          <select v-model="datasetIdInput" @change="applyDataset">
+            <option
+              v-for="item in datasetOptions"
+              :key="item.id"
+              :value="item.id"
+            >
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
+        <button
+          v-if="adminOmniscient"
+          type="button"
+          class="icon-button"
+          title="重建索引"
+          aria-label="重建索引"
+          :disabled="rebuildingIndex"
+          @click="rebuildActiveIndex"
+        >
+          <i class="fa fa-database" :class="{ spinning: rebuildingIndex }" aria-hidden="true"></i>
+        </button>
         <span class="retrieval-state" :class="{ semantic: semanticAvailable }">
           <span class="retrieval-state__dot" aria-hidden="true"></span>
           {{ retrievalModeText }}
@@ -77,6 +104,30 @@
         </button>
       </div>
     </header>
+
+    <section
+      v-if="adminOmniscient && omniscient"
+      class="omniscient-strip"
+      aria-label="全知总览"
+    >
+      <div>
+        <strong>{{ omniscient.document_count || 0 }}</strong>
+        <span>全库文档</span>
+      </div>
+      <div>
+        <strong>{{ omniscient.chunk_count || 0 }}</strong>
+        <span>切片</span>
+      </div>
+      <div>
+        <strong>{{ omniscient.dataset_count || 0 }}</strong>
+        <span>知识空间</span>
+      </div>
+      <div>
+        <strong>{{ semanticAvailable ? '语义' : '关键词' }}</strong>
+        <span>召回</span>
+      </div>
+      <p v-if="omniscientHint" class="omniscient-strip__hint">{{ omniscientHint }}</p>
+    </section>
 
     <div class="brain-workspace">
       <main class="brain-stage">
@@ -584,6 +635,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useIndustryStore } from '@/stores/industry'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import PersyKnowledgeGraph, {
   type PersyGraphRecall,
 } from '@/components/persy/PersyKnowledgeGraph.vue'
@@ -596,6 +648,7 @@ import {
   type KnowledgeBaseStatus,
   type KnowledgeGraphNode,
   type KnowledgeGraphResponse,
+  type KnowledgeOmniscientOverview,
   type PersyMemoryRecord,
   type PersyMemoryValue,
 } from '@/api/knowledgeBase'
@@ -624,6 +677,33 @@ const knowledgeTextPlaceholder = computed(() =>
 
 const activeDatasetId = ref(PERSY_KNOWLEDGE_DATASET_ID)
 const datasetIdInput = ref(PERSY_KNOWLEDGE_DATASET_ID)
+const adminOmniscient = computed(() => isAdminConsoleSpa())
+const omniscient = ref<KnowledgeOmniscientOverview | null>(null)
+const rebuildingIndex = ref(false)
+const omniscientQueryEnabled = ref(true)
+const datasetOptions = computed(() => {
+  const map = omniscient.value?.datasets || {}
+  const rows = Object.entries(map).map(([id, item]) => ({
+    id,
+    label: `${id} · ${Number(item?.document_count || 0)} 文档`,
+    docs: Number(item?.document_count || 0),
+  }))
+  rows.sort((a, b) => b.docs - a.docs || a.id.localeCompare(b.id))
+  if (!rows.some((row) => row.id === PERSY_KNOWLEDGE_DATASET_ID)) {
+    rows.unshift({ id: PERSY_KNOWLEDGE_DATASET_ID, label: `${PERSY_KNOWLEDGE_DATASET_ID} · 0 文档`, docs: 0 })
+  }
+  return rows
+})
+const omniscientHint = computed(() => {
+  if (!adminOmniscient.value || !omniscient.value) return ''
+  const persyDocs = Number(omniscient.value.datasets?.[PERSY_KNOWLEDGE_DATASET_ID]?.document_count || 0)
+  const total = Number(omniscient.value.document_count || 0)
+  if (total <= 0) return '全库仍空：请导入文档或等待员工/对话入库'
+  if (persyDocs <= 0 && activeDatasetId.value === PERSY_KNOWLEDGE_DATASET_ID) {
+    return `Persy 空间为空，已推荐查看 ${omniscient.value.recommended_dataset_id || '存量空间'}（全库 ${total} 文档）`
+  }
+  return ''
+})
 const status = ref<KnowledgeBaseStatus | null>(null)
 const graph = ref<KnowledgeGraphResponse | null>(null)
 const memories = ref<PersyMemoryRecord[]>([])
@@ -694,7 +774,10 @@ const activeMemoryCount = computed(
   () => memories.value.filter((memory) => memory.status === 'active').length,
 )
 const semanticAvailable = computed(
-  () => status.value?.index?.semantic_embedding_available === true,
+  () =>
+    status.value?.index?.semantic_embedding_available === true ||
+    omniscient.value?.semantic_embedding_available === true ||
+    omniscient.value?.embedder_available === true,
 )
 const retrievalModeText = computed(() =>
   semanticAvailable.value ? '语义召回' : '关键词召回',
@@ -953,8 +1036,46 @@ async function refreshMemories(): Promise<void> {
   }
 }
 
+async function loadOmniscientOverview(): Promise<void> {
+  if (!adminOmniscient.value) {
+    omniscient.value = null
+    return
+  }
+  try {
+    const overview = await knowledgeBaseApi.omniscient()
+    omniscient.value = overview
+    const recommended = normalizeKnowledgeDatasetId(overview.recommended_dataset_id)
+    const persyDocs = Number(overview.datasets?.[PERSY_KNOWLEDGE_DATASET_ID]?.document_count || 0)
+    if (
+      persyDocs <= 0 &&
+      recommended &&
+      recommended !== activeDatasetId.value &&
+      Number(overview.datasets?.[recommended]?.document_count || 0) > 0
+    ) {
+      activeDatasetId.value = recommended
+      datasetIdInput.value = recommended
+    }
+  } catch (error) {
+    console.warn('[PersyKnowledge] omniscient overview failed', error)
+  }
+}
+
+async function rebuildActiveIndex(): Promise<void> {
+  if (!adminOmniscient.value || rebuildingIndex.value) return
+  rebuildingIndex.value = true
+  try {
+    await knowledgeBaseApi.rebuildIndex(activeDatasetId.value)
+    await refreshAll()
+  } catch (error) {
+    console.warn('[PersyKnowledge] rebuild failed', error)
+  } finally {
+    rebuildingIndex.value = false
+  }
+}
+
 async function refreshAll(): Promise<void> {
   pageError.value = ''
+  await loadOmniscientOverview()
   const results = await Promise.allSettled([refreshStatus(), refreshGraph(), refreshMemories()])
   const rejected = results.find((result) => result.status === 'rejected')
   if (rejected?.status === 'rejected') pageError.value = errorText(rejected.reason)
@@ -1089,12 +1210,18 @@ async function queryKnowledge(): Promise<void> {
     let knowledgeFailure: unknown = null
     let memoryFailure: unknown = null
     try {
-      knowledge = await knowledgeBaseApi.query({
-        datasetId: activeDatasetId.value,
-        query,
-        topK: boundedTopK,
-        rerank: rerank.value,
-      })
+      knowledge =
+        adminOmniscient.value && omniscientQueryEnabled.value
+          ? await knowledgeBaseApi.omniscientQuery({
+              query,
+              topK: boundedTopK,
+            })
+          : await knowledgeBaseApi.query({
+              datasetId: activeDatasetId.value,
+              query,
+              topK: boundedTopK,
+              rerank: rerank.value,
+            })
     } catch (error) {
       knowledgeFailure = error
     }
@@ -1365,6 +1492,58 @@ onMounted(() => {
   padding: 8px 16px;
   border-bottom: 1px solid #dce4e0;
   background: rgba(255, 255, 255, 0.94);
+}
+
+.omniscient-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #d5e3db;
+  background: linear-gradient(90deg, #eef6f2, #f7faf8);
+}
+
+.omniscient-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 72px;
+}
+
+.omniscient-strip strong {
+  font-size: 18px;
+  line-height: 1.1;
+  color: #1f3d32;
+}
+
+.omniscient-strip span,
+.omniscient-strip__hint {
+  font-size: 12px;
+  color: #5f7369;
+}
+
+.omniscient-strip__hint {
+  flex: 1 1 220px;
+  margin: 0;
+}
+
+.dataset-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4d6359;
+}
+
+.dataset-switch select {
+  max-width: 220px;
+  height: 30px;
+  border: 1px solid #c5d4cc;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2d27;
+  padding: 0 8px;
 }
 
 .brain-identity,

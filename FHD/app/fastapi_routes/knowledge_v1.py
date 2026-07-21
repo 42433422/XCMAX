@@ -129,6 +129,11 @@ class StatusResponse(BaseModel):
     embedder_available: bool
     indexed_sources: int
     indexed_chunks: int
+    dataset_count: int = 0
+    dataset_document_count: int = 0
+    dataset_chunk_count: int = 0
+    semantic_embedding_available: bool = False
+    recommended_dataset_id: str = _PERSY_DATASET_ID
 
 
 class DatasetDocumentIngestRequest(BaseModel):
@@ -578,18 +583,108 @@ def _run_dataset_rag_agent(
     return JSONResponse(payload, status_code=status_code)
 
 
+def _mirror_ingest_to_persy(
+    *,
+    text: str,
+    source: str,
+    chunk_strategy: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    request: Request | None = None,
+) -> dict[str, Any]:
+    """Dual-write legacy /ingest into governed persy-knowledge dataset."""
+    try:
+        from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+        access = (
+            _dataset_access_context_from_request(request) if request is not None else None
+        )
+        return cast(
+            "dict[str, Any]",
+            get_dataset_rag_app_service().ingest_document(
+                dataset_id=_PERSY_DATASET_ID,
+                source=source or "legacy-ingest",
+                text=text,
+                chunk_strategy=chunk_strategy,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                metadata={"entrypoint": "legacy_ingest_mirror"},
+                access_context=access,
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - mirror must not break legacy contract
+        logger.warning("mirror ingest to persy-knowledge failed: %s", exc)
+        return {"success": False, "message": str(exc)}
+
+
+def _knowledge_runtime_snapshot(request: Request | None = None) -> dict[str, Any]:
+    legacy = _index.status()
+    dataset_count = 0
+    dataset_docs = 0
+    dataset_chunks = 0
+    recommended = _PERSY_DATASET_ID
+    try:
+        from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+        access = (
+            _dataset_access_context_from_request(request) if request is not None else None
+        )
+        overview = get_dataset_rag_app_service().status(access_context=access)
+        datasets = overview.get("datasets") if isinstance(overview, dict) else {}
+        if isinstance(datasets, dict):
+            dataset_count = len(datasets)
+            dataset_docs = int(overview.get("document_count") or 0)
+            dataset_chunks = int(overview.get("chunk_count") or 0)
+            nonempty = [
+                (key, int((val or {}).get("document_count") or 0))
+                for key, val in datasets.items()
+                if isinstance(val, dict)
+            ]
+            nonempty.sort(key=lambda item: item[1], reverse=True)
+            persy_docs = next((n for key, n in nonempty if key == _PERSY_DATASET_ID), 0)
+            if persy_docs <= 0 and nonempty and nonempty[0][1] > 0:
+                recommended = nonempty[0][0]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("dataset overview for health failed: %s", exc)
+    embedder_ok = get_default_embedder() is not None
+    return {
+        "rag_enabled": is_rag_enabled(),
+        "embedder_available": embedder_ok,
+        "semantic_embedding_available": embedder_ok,
+        "indexed_sources": int(legacy.get("sources") or 0) + dataset_docs,
+        "indexed_chunks": int(legacy.get("chunks") or 0) + dataset_chunks,
+        "legacy_indexed_sources": int(legacy.get("sources") or 0),
+        "legacy_indexed_chunks": int(legacy.get("chunks") or 0),
+        "dataset_count": dataset_count,
+        "dataset_document_count": dataset_docs,
+        "dataset_chunk_count": dataset_chunks,
+        "recommended_dataset_id": recommended,
+    }
+
+
 @router.post("/ingest", response_model=IngestResponse)
-def ingest(req: IngestRequest) -> IngestResponse:
+def ingest(req: IngestRequest, request: Request) -> IngestResponse:
     try:
         count = _index.ingest(
             req.text, req.source, req.chunk_strategy, req.chunk_size, req.chunk_overlap
         )
+        mirrored = _mirror_ingest_to_persy(
+            text=req.text,
+            source=req.source,
+            chunk_strategy=req.chunk_strategy,
+            chunk_size=req.chunk_size,
+            chunk_overlap=req.chunk_overlap,
+            request=request,
+        )
+        mirror_note = ""
+        if mirrored.get("success"):
+            mirror_note = f"；已同步 Persy +{int(mirrored.get('chunk_count') or 0)} chunk"
         return IngestResponse(
             success=True,
             chunk_count=count,
             source=req.source,
             strategy=req.chunk_strategy,
-            message=f"已入库 {count} 个 chunk",
+            message=f"已入库 {count} 个 chunk{mirror_note}",
         )
     except (ValueError, TypeError) as e:
         return IngestResponse(
@@ -1060,23 +1155,92 @@ def delete_dataset_document(dataset_id: str, document_id: str, request: Request)
 
 
 @router.get("/status", response_model=StatusResponse)
-def status() -> StatusResponse:
-    s = _index.status()
+def status(request: Request) -> StatusResponse:
+    snap = _knowledge_runtime_snapshot(request)
     return StatusResponse(
-        rag_enabled=is_rag_enabled(),
-        embedder_available=get_default_embedder() is not None,
-        indexed_sources=s["sources"],
-        indexed_chunks=s["chunks"],
+        rag_enabled=bool(snap["rag_enabled"]),
+        embedder_available=bool(snap["embedder_available"]),
+        indexed_sources=int(snap["indexed_sources"]),
+        indexed_chunks=int(snap["indexed_chunks"]),
+        dataset_count=int(snap["dataset_count"]),
+        dataset_document_count=int(snap["dataset_document_count"]),
+        dataset_chunk_count=int(snap["dataset_chunk_count"]),
+        semantic_embedding_available=bool(snap["semantic_embedding_available"]),
+        recommended_dataset_id=str(snap["recommended_dataset_id"]),
     )
 
 
 @router.get("/health")
-def health() -> dict[str, Any]:
-    s = _index.status()
+def health(request: Request) -> dict[str, Any]:
+    snap = _knowledge_runtime_snapshot(request)
+    return {"success": True, **snap}
+
+
+@router.get("/omniscient")
+def omniscient_overview(request: Request) -> dict[str, Any]:
+    """Admin/full-knowledge overview across all governed datasets."""
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+    access = _dataset_access_context_from_request(request)
+    overview = get_dataset_rag_app_service().status(access_context=access)
+    snap = _knowledge_runtime_snapshot(request)
+    datasets = overview.get("datasets") if isinstance(overview, dict) else {}
+    return cast(
+        "dict[str, Any]",
+        _public_dataset_payload(
+            {
+                "success": True,
+                "omniscient": True,
+                "rag_enabled": snap["rag_enabled"],
+                "embedder_available": snap["embedder_available"],
+                "semantic_embedding_available": snap["semantic_embedding_available"],
+                "recommended_dataset_id": snap["recommended_dataset_id"],
+                "dataset_count": snap["dataset_count"],
+                "document_count": snap["dataset_document_count"],
+                "chunk_count": snap["dataset_chunk_count"],
+                "datasets": datasets if isinstance(datasets, dict) else {},
+                "is_admin": bool(getattr(access, "is_admin", False)) if access else False,
+            }
+        ),
+    )
+
+
+@router.post("/omniscient/query")
+def omniscient_query(req: QueryRequest, request: Request) -> dict[str, Any]:
+    """Query across all datasets visible to the caller (admin = full platform)."""
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+    access = _dataset_access_context_from_request(request)
+    service = get_dataset_rag_app_service()
+    overview = service.status(access_context=access)
+    datasets = overview.get("datasets") if isinstance(overview, dict) else {}
+    merged: list[dict[str, Any]] = []
+    if isinstance(datasets, dict):
+        per_ds = max(1, min(int(req.top_k), 20))
+        for dataset_id in datasets:
+            result = service.query(
+                dataset_id=str(dataset_id),
+                query=req.query,
+                top_k=per_ds,
+                access_context=access,
+                rerank=True,
+            )
+            if not result.get("success"):
+                continue
+            for chunk in result.get("chunks") or []:
+                if not isinstance(chunk, dict):
+                    continue
+                item = dict(chunk)
+                item["dataset_id"] = str(dataset_id)
+                merged.append(item)
+    merged.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+    top = merged[: max(1, min(int(req.top_k), 50))]
     return {
         "success": True,
+        "query": req.query,
+        "chunks": top,
+        "citations": [],
         "rag_enabled": is_rag_enabled(),
-        "embedder_available": get_default_embedder() is not None,
-        "indexed_sources": s["sources"],
-        "indexed_chunks": s["chunks"],
+        "omniscient": True,
+        "dataset_hits": len({str(c.get("dataset_id") or "") for c in top if c.get("dataset_id")}),
     }
