@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>可视化展示 | XCAGI AI 业务与软件下载数据</title>
+    <meta
+      name="description"
+      content="查看 XCAGI 公开 AI 业务指标、软件下载量、平台分布与版本交付状态。所有指标均标注统计范围与更新时间。"
+    />
+    <link rel="canonical" href="https://xiu-ci.com/visualization" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="成都修茈科技有限公司" />
+    <meta property="og:title" content="可视化展示 | XCAGI AI 业务与软件下载数据" />
+    <meta
+      property="og:description"
+      content="用公开、可复核的数据，呈现 XCAGI 的 AI 调用、服务响应、软件下载与版本交付进展。"
+    />
+    <meta property="og:url" content="https://xiu-ci.com/visualization" />
+    <meta property="og:image" content="https://xiu-ci.com/assets/xiu-ci-logo.png" />
+    <link rel="stylesheet" href="./styles.css?v=20260719f" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "可视化展示 | XCAGI AI 业务与软件下载数据",
+        "url": "https://xiu-ci.com/visualization",
+        "description": "XCAGI 公开 AI 业务指标、软件下载量、平台分布与版本交付状态。",
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": "成都修茈科技有限公司",
+          "url": "https://xiu-ci.com/"
+        }
+      }
+    </script>
+  </head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html">
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav" aria-label="站点导航">
+      <div class="nav-menu">
+        <a href="/solutions.html">解决方案</a>
+        <a href="/cases.html">客户案例</a>
+        <a href="/index.html#pricing">购买授权</a>
+        <a href="/developer.html">开放平台</a>
+        <a href="/contact.html">联系我们</a>
+        <a href="/about.html">关于修茈</a>
+        <a class="active" href="/visualization">可视化展示</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--primary" href="/download">产品下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link">首页</a>
+  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+  <a href="/index.html#pricing" class="mobile-menu-link">购买授权</a>
+  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
+  <a href="/visualization" class="mobile-menu-link">可视化展示</a>
+  <a href="/developer.html" class="mobile-menu-link">开放平台</a>
+  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
+    <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
+  </div>
+</nav>
+
+<main>
+      <section class="viz-hero">
+        <div class="viz-grid-lines" aria-hidden="true"></div>
+        <div class="container viz-hero-inner">
+          <div class="viz-hero-copy reveal">
+            <span class="viz-eyebrow"><i></i> PUBLIC DATA · LIVE</span>
+            <h1>让业务进展，<span>看得见。</span></h1>
+            <p>
+              将 XCAGI 的 AI 服务运行、软件下载与版本交付放到同一张公开数据面板中。
+              每个数字都标注统计边界，不把演示数据当成经营数据。
+            </p>
+            <div class="viz-hero-actions">
+              <a class="viz-primary-link" href="#ai-business">查看 AI 业务数据</a>
+              <a class="viz-text-link" href="#software-downloads">查看软件下载 <span>↓</span></a>
+            </div>
+            <div class="viz-update-line">
+              <span class="viz-live-dot" aria-hidden="true"></span>
+              <span data-viz-freshness-label>实时连接</span>
+              <time data-viz-text="generated_at">—</time>
+              <button type="button" id="viz-refresh" aria-label="立即刷新实时数据">立即刷新</button>
+            </div>
+          </div>
+
+          <div class="viz-pulse-panel reveal" data-delay="100" aria-label="核心数据概览">
+            <div class="viz-panel-topline">
+              <span>XCAGI DATA PULSE</span>
+              <span class="viz-panel-status" id="viz-data-status" data-state="loading" aria-live="polite"><i></i><span>正在连接</span></span>
+            </div>
+            <div class="viz-pulse-main">
+              <div>
+                <span class="viz-pulse-label">软件完整下载</span>
+                <strong data-viz-number="downloads.total">—</strong>
+                <span class="viz-pulse-unit">次成功响应</span>
+              </div>
+              <div class="viz-pulse-orbit" aria-hidden="true">
+                <span></span><span></span><span></span><b></b>
+              </div>
+            </div>
+            <div class="viz-pulse-strip">
+              <div>
+                <span>AI 对话请求</span>
+                <b data-viz-number="ai.chat_requests">—</b>
+              </div>
+              <div>
+                <span>平台累计 Token</span>
+                <b data-viz-compact-number="ai.platform_tokens">—</b>
+              </div>
+              <div>
+                <span>公开平台</span>
+                <b><span data-viz-number="product.delivery_platforms">—</span> 端</b>
+              </div>
+            </div>
+            <div class="viz-signal" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="viz-section" id="ai-business">
+        <div class="container">
+          <div class="viz-section-head reveal">
+            <div>
+              <p class="viz-kicker">AI BUSINESS / 01</p>
+              <h2>AI 业务数据</h2>
+            </div>
+            <p>
+              公开线上 AI 对话链路的日志窗口与服务监控指标。这里只展示聚合结果，不公开企业账户、对话内容、
+              单用户 Token 账单或内部运维入口。
+            </p>
+          </div>
+
+          <div class="viz-kpi-grid">
+            <article class="viz-kpi-card viz-kpi-card--blue reveal">
+              <div class="viz-kpi-index">01</div>
+              <span class="viz-kpi-label">AI 对话接口请求</span>
+              <div class="viz-kpi-value">
+                <strong data-viz-number="ai.chat_requests">—</strong><small>次</small>
+              </div>
+              <p>生产网关日志保留窗口内的请求总量</p>
+              <div class="viz-mini-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </article>
+            <article class="viz-kpi-card viz-kpi-card--green reveal" data-delay="70">
+              <div class="viz-kpi-index">02</div>
+              <span class="viz-kpi-label">AI 请求成功率</span>
+              <div class="viz-kpi-value">
+                <strong data-viz-number="ai.success_rate" data-decimals="2">—</strong><small>%</small>
+              </div>
+              <p><span data-viz-number="ai.chat_success">—</span> 次请求成功返回 HTTP 200</p>
+              <div class="viz-kpi-track"><i data-viz-width="ai.success_rate" style="width: 0%"></i></div>
+            </article>
+            <article class="viz-kpi-card viz-kpi-card--violet reveal" data-delay="140">
+              <div class="viz-kpi-index">03</div>
+              <span class="viz-kpi-label">平台累计 Token</span>
+              <div class="viz-kpi-value viz-kpi-value--token">
+                <strong data-viz-number="ai.platform_tokens">—</strong><small>Token</small>
+              </div>
+              <p><span data-viz-number="ai.chat_tokens">—</span> 对话 + <span data-viz-number="ai.employee_tokens">—</span> AI 员工<br /><small>其中 <span data-viz-number="ai.estimated_chat_tokens">—</span> Token 标记为估算</small></p>
+              <div class="viz-model-line">
+                <span>对话主力模型</span>
+                <b data-viz-text="ai.top_chat_model">—</b>
+                <small><span data-viz-text="ai.top_chat_provider">—</span> · <span data-viz-number="ai.top_chat_model_share" data-decimals="1">—</span>% 对话 Token</small>
+              </div>
+            </article>
+            <article class="viz-kpi-card viz-kpi-card--orange reveal" data-delay="210">
+              <div class="viz-kpi-index">04</div>
+              <span class="viz-kpi-label">AI 请求观测窗口</span>
+              <div class="viz-kpi-value viz-kpi-value--date">
+                <strong data-viz-text="ai.window_start_short">—</strong><small>— <span data-viz-text="ai.window_end_short">—</span></small>
+              </div>
+              <p>生产网关滚动日志范围，不等同于独立用户数</p>
+              <div class="viz-instance-line"><i></i><span>START</span><b></b><span>NOW</span></div>
+            </article>
+          </div>
+
+          <article class="viz-model-usage reveal">
+            <div class="viz-model-usage-head">
+              <div>
+                <span>MODEL USAGE</span>
+                <h3>全部对话模型调用量</h3>
+                <p>按成功且产生 Token 的历史对话调用统计，调用量与 Token 消耗分别呈现。</p>
+              </div>
+              <div class="viz-model-usage-summary">
+                <span><b data-viz-model-count>—</b> 个模型</span>
+                <span><b data-viz-model-total-calls>—</b> 次调用</span>
+              </div>
+            </div>
+            <div class="viz-model-columns" aria-hidden="true">
+              <span>模型 / 提供方</span><span>调用量</span><span>对话 Token</span><span>Token 占比</span>
+            </div>
+            <div class="viz-model-list" data-viz-model-list aria-live="polite">
+              <p class="viz-chart-empty">正在读取模型调用数据</p>
+            </div>
+            <p class="viz-model-note">仅展示可精确归属模型的对话计费日志；AI 员工旧执行度量未保存模型名，不参与模型调用量分配。</p>
+          </article>
+
+          <div class="viz-flow-card reveal">
+            <div class="viz-flow-copy">
+              <span class="viz-flow-tag">REAL REQUEST FLOW</span>
+              <h3>一次 AI 请求，经过四个可观测节点</h3>
+              <p>从接口接入、模型路由到流式响应与指标归档，公开页只呈现业务健康度。</p>
+            </div>
+            <ol class="viz-flow" aria-label="AI 请求处理流程">
+              <li class="is-active"><span>01</span><b>请求接入</b><small>API Gateway</small></li>
+              <li class="is-active"><span>02</span><b>模型路由</b><small>Provider Route</small></li>
+              <li class="is-active"><span>03</span><b>流式响应</b><small>Streaming</small></li>
+              <li class="is-active"><span>04</span><b>观测归档</b><small>Metrics</small></li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="viz-section viz-section--soft" id="software-downloads">
+        <div class="container">
+          <div class="viz-section-head reveal">
+            <div>
+              <p class="viz-kicker">SOFTWARE DELIVERY / 02</p>
+              <h2>软件下载量</h2>
+            </div>
+            <p>
+              统计当前服务器日志保留窗口内，XCAGI 与客来来安装包返回 HTTP 200 的完整下载；
+              已剔除 HEAD 探测、断点分片、校验请求与自动更新 ZIP。
+            </p>
+          </div>
+
+          <div class="viz-download-layout">
+            <article class="viz-download-total reveal">
+              <div class="viz-download-ring" id="viz-download-ring" style="--win: 0%; --mac: 0%">
+                <div>
+                  <strong data-viz-number="downloads.total">—</strong>
+                  <span>完整下载</span>
+                </div>
+              </div>
+              <div class="viz-download-summary">
+                <span>统计窗口</span>
+                <strong><time data-viz-text="downloads.window_start_short">—</time> — <time data-viz-text="downloads.window_end_short">—</time></strong>
+                <p>服务器访问日志可复核 · 滚动保留窗口</p>
+              </div>
+            </article>
+
+            <article class="viz-platform-card reveal" data-delay="80">
+              <div class="viz-card-heading">
+                <div><span>PLATFORM MIX</span><h3>平台分布</h3></div>
+                <a href="/download">前往下载中心 →</a>
+              </div>
+              <div class="viz-platform-list">
+                <div class="viz-platform-row">
+                  <div><b>Windows</b><span>企业版 x64</span></div>
+                  <div class="viz-platform-bar"><i class="is-win" data-viz-platform-bar="windows" style="width: 0%"></i></div>
+                  <strong data-viz-number="downloads.platforms.windows">—</strong>
+                </div>
+                <div class="viz-platform-row">
+                  <div><b>macOS</b><span>XCAGI + 客来来</span></div>
+                  <div class="viz-platform-bar"><i class="is-mac" data-viz-platform-bar="macos" style="width: 0%"></i></div>
+                  <strong data-viz-number="downloads.platforms.macos">—</strong>
+                </div>
+                <div class="viz-platform-row">
+                  <div><b>Android</b><span>企业版 APK</span></div>
+                  <div class="viz-platform-bar"><i class="is-android" data-viz-platform-bar="android" style="width: 0%"></i></div>
+                  <strong data-viz-number="downloads.platforms.android">—</strong>
+                </div>
+              </div>
+              <div class="viz-product-split">
+                <span>XCAGI <b data-viz-number="downloads.products.xcagi">—</b></span>
+                <span>客来来 <b data-viz-number="downloads.products.kellai">—</b></span>
+              </div>
+            </article>
+          </div>
+
+          <article class="viz-trend-card reveal">
+            <div class="viz-card-heading">
+              <div><span>DAILY COMPLETE DOWNLOADS</span><h3>每日完整下载响应</h3></div>
+              <div class="viz-trend-legend"><i></i>成功返回安装包</div>
+            </div>
+            <div class="viz-trend-chart" id="viz-trend-chart" aria-label="每日完整下载响应柱状图" aria-live="polite">
+              <p class="viz-chart-empty">正在读取实时下载数据…</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="viz-section" id="delivery-status">
+        <div class="container">
+          <div class="viz-section-head reveal">
+            <div>
+              <p class="viz-kicker">PRODUCT DELIVERY / 03</p>
+              <h2>版本交付状态</h2>
+            </div>
+            <p>把当前稳定版、公开平台与历史迭代放在同一组交付指标中，与软件下载数据相互印证。</p>
+          </div>
+          <div class="viz-delivery-grid">
+            <article class="viz-version-card reveal">
+              <span>CURRENT STABLE</span>
+              <strong data-viz-text="product.stable_version">—</strong>
+              <p>企业版公开稳定渠道</p>
+              <a href="/download/releases">查看 <span data-viz-number="product.release_iterations">—</span> 个版本节点 →</a>
+            </article>
+            <article class="viz-delivery-stat reveal" data-delay="70">
+              <span>版本节点</span>
+              <strong data-viz-number="product.release_iterations">—</strong>
+              <p>v1 起点至稳定发布基线</p>
+            </article>
+            <article class="viz-delivery-stat reveal" data-delay="140">
+              <span>公开安装平台</span>
+              <strong data-viz-number="product.delivery_platforms">—</strong>
+              <p>Windows / macOS / Android</p>
+            </article>
+            <article class="viz-delivery-stat reveal" data-delay="210">
+              <span>发布状态</span>
+              <strong data-viz-release-status>—</strong>
+              <p>安装包与校验信息已公开</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="viz-method-section">
+        <div class="container viz-method-card reveal">
+          <div>
+            <p class="viz-kicker">DATA NOTES</p>
+            <h2>每个数字，都有边界。</h2>
+          </div>
+          <div class="viz-method-list">
+            <div><span>01</span><p><b>AI 指标</b>汇总生产网关日志；Token 为对话计费日志与 AI 员工执行度量之和，不重复统计 Duty 节点副本，上游未返回 usage 的少量对话记录会明确标记为估算。</p></div>
+            <div><span>02</span><p><b>模型归属</b>仅统计可精确归属的历史对话计费日志；AI 员工旧执行度量没有保存模型名，不以当前配置倒推历史模型。</p></div>
+            <div><span>03</span><p><b>下载量</b>按成功返回完整安装包的请求统计，不等同于安装、激活或独立用户数。</p></div>
+            <div><span>04</span><p><b>公开边界</b>只展示聚合健康度，不包含客户身份、对话内容、单用户 Token 账单与内部截图。</p></div>
+          </div>
+        </div>
+      </section>
+    </main>
+<footer class="site-footer">
+      <div class="container footer-inner">
+        <div>
+          <a class="brand-mark" href="/index.html">
+            <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+            <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+          </a>
+          <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
+          <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p>
+        </div>
+        <div class="footer-links">
+          <a href="/about.html">关于修茈</a><a href="/visualization">可视化展示</a
+          ><a href="/download">产品下载</a
+          ><a href="/download/releases">更新日志</a><a href="/contact.html">联系我们</a>
+        </div>
+      </div>
+    </footer>
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="./main.js?v=20260719b"></script>
+
+<script src="./visualization.js?v=20260719f" defer></script>
+
+
+<div id="xc-corp-butler-root"></div>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260719b" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260719b" data-xc-corp-butler-js="1"></script>
+
+</body>
+</html>

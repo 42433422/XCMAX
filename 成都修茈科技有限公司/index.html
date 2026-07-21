@@ -1,20 +1,46 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>XCAGI · AI 员工桌面平台 | 成都修茈科技有限公司</title>
-    <meta name="description" content="XCAGI 是 AI 员工桌面平台。空壳宿主 + 行业 Mod，装一个变身考勤系统，装一个变身涂料 ERP。AI 员工在四部门上岗，对话下指令，IM 派工，1-3 天上线。" />
-    <meta name="keywords" content="XCAGI, AI员工, AI桌面平台, 行业Mod, 考勤系统, 涂料ERP, 中小企业数字化, 成都修茈科技, AI自动化, 私有部署" />
-    <link rel="stylesheet" href="./styles.css?v=20260718a" />
-    <noscript><style>.reveal { opacity: 1 !important; transform: none !important; }</style></noscript>
+    <meta
+      name="description"
+      content="XCAGI 是 AI 员工桌面平台。安装行业 Mod，让考勤、客服、销售与生产协同进入同一桌面；对话下达目标，AI 员工协作并交付可验收结果。"
+    />
+    <meta
+      name="keywords"
+      content="XCAGI, AI员工, AI桌面平台, 行业Mod, 考勤系统, 涂料ERP, 中小企业数字化, 成都修茈科技, AI自动化, 私有部署"
+    />
+    <link rel="stylesheet" href="./styles.css?v=20260719b" />
+    <noscript
+      ><style>
+        .reveal {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+      </style></noscript
+    >
     <style>
       /* ============ 首页专用样式（自包含，不依赖 styles.css 版本） ============ */
       /* reveal 动画内联兜底：外部 styles.css 版本错配时也不会整页空白 */
-      .reveal { opacity: 0; transform: translateY(22px); transition: opacity .65s ease, transform .65s ease; }
-      .reveal.visible { opacity: 1; transform: translateY(0); }
+      .reveal {
+        opacity: 0;
+        transform: translateY(22px);
+        transition:
+          opacity 0.65s ease,
+          transform 0.65s ease;
+      }
+      .reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
       @media (prefers-reduced-motion: reduce) {
-        .reveal { opacity: 1; transform: none; transition: none; }
+        .reveal {
+          opacity: 1;
+          transform: none;
+          transition: none;
+        }
       }
       :root {
         --xc-navy-1: #060d1a;
@@ -35,176 +61,609 @@
         --xc-shadow-lg: 0 24px 64px rgba(6, 13, 26, 0.28);
       }
 
-      /* ---------- Hero ---------- */
+      /* ---------- Hero：克制、真实、单一视觉重心 ---------- */
+      body[data-page='index'] .site-header {
+        background: rgba(255, 255, 255, 0.88);
+        border-bottom-color: rgba(15, 35, 62, 0.07);
+      }
+      body[data-page='index'] .header-inner {
+        min-height: 72px;
+      }
+      body[data-page='index'] .nav-menu a {
+        padding-top: 24px;
+        padding-bottom: 24px;
+      }
+      body[data-page='index'] .nav-menu a::after {
+        bottom: 16px;
+      }
       .xc-hero {
         position: relative;
-        background:
-          radial-gradient(1100px 500px at 85% -10%, rgba(56, 189, 248, 0.14), transparent 60%),
-          radial-gradient(900px 480px at -10% 110%, rgba(11, 99, 246, 0.18), transparent 55%),
-          linear-gradient(160deg, var(--xc-navy-1) 0%, var(--xc-navy-2) 52%, var(--xc-navy-1) 100%);
-        color: #fff;
-        padding: 96px 0 88px;
+        isolation: isolate;
         overflow: hidden;
+        color: #fff;
+        background:
+          radial-gradient(780px 500px at 84% 26%, rgba(32, 125, 255, 0.2), transparent 68%),
+          radial-gradient(640px 420px at 12% 86%, rgba(30, 96, 205, 0.16), transparent 72%),
+          linear-gradient(145deg, #06101f 0%, #0a1b33 50%, #071426 100%);
+        padding: clamp(68px, 7.4vw, 92px) 0 clamp(54px, 6.4vw, 76px);
       }
       .xc-hero::before {
-        content: "";
+        content: '';
         position: absolute;
+        z-index: -1;
         inset: 0;
-        background-image:
-          linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-        background-size: 56px 56px;
-        mask-image: radial-gradient(900px 520px at 50% 30%, #000 30%, transparent 75%);
+        opacity: 0.28;
+        background-image: radial-gradient(rgba(255, 255, 255, 0.24) 0.7px, transparent 0.7px);
+        background-size: 28px 28px;
+        mask-image: linear-gradient(to bottom, #000, transparent 78%);
         pointer-events: none;
       }
       .xc-hero-inner {
         position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-        gap: 56px;
+        grid-template-columns: minmax(0, 0.88fr) minmax(520px, 1.12fr);
+        gap: clamp(42px, 5vw, 70px);
         align-items: center;
+      }
+      .xc-hero-copy {
+        max-width: 520px;
       }
       .xc-eyebrow {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 14px;
-        border-radius: 100px;
-        border: 1px solid rgba(56, 189, 248, 0.35);
-        background: rgba(56, 189, 248, 0.08);
-        color: var(--xc-cyan);
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
+        gap: 9px;
+        color: rgba(218, 235, 255, 0.82);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
       }
       .xc-eyebrow::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--xc-cyan);
-        box-shadow: 0 0 8px var(--xc-cyan);
+        content: '';
+        width: 22px;
+        height: 1px;
+        background: #58a6ff;
+        box-shadow: 0 0 12px rgba(88, 166, 255, 0.7);
       }
       .xc-hero h1 {
-        margin: 22px 0 18px;
-        font-size: clamp(34px, 4vw, 52px);
-        line-height: 1.18;
-        letter-spacing: -0.02em;
-        font-weight: 800;
+        margin: 24px 0 22px;
+        font-size: clamp(42px, 4.7vw, 64px);
+        line-height: 1.08;
+        letter-spacing: -0.055em;
+        font-weight: 760;
         word-break: keep-all;
       }
       .xc-hero h1 .accent {
-        background: linear-gradient(120deg, var(--xc-cyan), var(--xc-blue-soft));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        color: #8cc6ff;
+        background: none;
+        -webkit-text-fill-color: currentColor;
       }
       .xc-hero-lead {
         margin: 0;
-        max-width: 520px;
-        color: rgba(255, 255, 255, 0.72);
-        font-size: 16.5px;
-        line-height: 1.75;
+        max-width: 510px;
+        color: rgba(224, 235, 249, 0.72);
+        font-size: clamp(16px, 1.45vw, 18px);
+        line-height: 1.78;
       }
-      .xc-hero-lead strong { color: #fff; font-weight: 600; }
+      .xc-hero-lead strong {
+        color: #f7fbff;
+        font-weight: 600;
+      }
       .xc-hero-actions {
         display: flex;
-        gap: 14px;
+        gap: 12px;
         flex-wrap: wrap;
-        margin-top: 32px;
+        margin-top: 34px;
       }
       .xc-btn {
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 8px;
-        padding: 13px 26px;
-        border-radius: 12px;
-        font-size: 15px;
-        font-weight: 600;
+        min-height: 48px;
+        padding: 0 23px;
+        border-radius: 11px;
+        font-size: 14.5px;
+        font-weight: 650;
         text-decoration: none;
-        transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease,
+          border-color 0.18s ease;
       }
       .xc-btn--primary {
-        background: linear-gradient(135deg, var(--xc-blue) 0%, var(--xc-blue-soft) 100%);
         color: #fff;
-        box-shadow: 0 10px 26px rgba(11, 99, 246, 0.38);
+        background: #176ff2;
+        box-shadow: 0 12px 30px rgba(23, 111, 242, 0.3);
       }
-      .xc-btn--primary:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(11, 99, 246, 0.48); }
+      .xc-btn--primary:hover {
+        transform: translateY(-2px);
+        background: #2d7df3;
+        box-shadow: 0 16px 34px rgba(23, 111, 242, 0.38);
+      }
       .xc-btn--ghost {
-        background: rgba(255, 255, 255, 0.07);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        backdrop-filter: blur(8px);
+        color: rgba(245, 249, 255, 0.9);
+        background: rgba(255, 255, 255, 0.055);
+        border: 1px solid rgba(255, 255, 255, 0.16);
       }
-      .xc-btn--ghost:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }
-      .xc-hero-trust {
-        display: flex;
-        gap: 28px;
-        flex-wrap: wrap;
-        margin-top: 40px;
-        padding-top: 26px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      .xc-btn--ghost:hover {
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.24);
       }
-      .xc-hero-trust span {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        color: rgba(255, 255, 255, 0.55);
-        font-size: 12.5px;
-      }
-      .xc-hero-trust strong {
-        color: #fff;
-        font-size: 21px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
-      }
-      /* Hero 截图（浏览器框包装） */
-      .xc-shot {
-        position: relative;
-        border-radius: 14px;
-        overflow: hidden;
-        background: #0d1526;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        box-shadow: var(--xc-shadow-lg), 0 0 0 1px rgba(56, 189, 248, 0.06);
-        transform: perspective(1400px) rotateY(-4deg) rotateX(1deg);
-        transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      .xc-shot:hover { transform: perspective(1400px) rotateY(0deg) rotateX(0deg); }
-      .xc-shot__bar {
+      .xc-hero-platforms {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 9px 12px;
-        background: rgba(255, 255, 255, 0.05);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        gap: 9px;
+        margin: 14px 0 0;
+        color: rgba(209, 224, 243, 0.48);
+        font-size: 12px;
+        letter-spacing: 0.02em;
       }
-      .xc-shot__dot { width: 10px; height: 10px; border-radius: 50%; }
-      .xc-shot__dot--r { background: #ff5f57; }
-      .xc-shot__dot--y { background: #febc2e; }
-      .xc-shot__dot--g { background: #28c840; }
-      .xc-shot__title {
-        margin-left: 8px;
-        font-size: 11.5px;
-        color: rgba(255, 255, 255, 0.45);
-        letter-spacing: 0.04em;
+      .xc-hero-platforms span {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: rgba(140, 198, 255, 0.7);
       }
-      .xc-shot img { display: block; width: 100%; height: auto; }
-      .xc-shot__caption {
-        position: absolute;
-        left: 14px;
-        bottom: 14px;
-        padding: 6px 12px;
-        border-radius: 8px;
-        background: rgba(6, 13, 26, 0.72);
-        backdrop-filter: blur(8px);
-        color: rgba(255, 255, 255, 0.85);
+      .xc-hero-proof {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 38px;
+        padding-top: 24px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .xc-proof-item {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        color: rgba(220, 232, 247, 0.68);
         font-size: 12.5px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        line-height: 1.45;
+      }
+      .xc-proof-item::before {
+        content: '';
+        flex: 0 0 auto;
+        width: 6px;
+        height: 6px;
+        margin-top: 5px;
+        border-radius: 50%;
+        background: #4adea2;
+        box-shadow: 0 0 0 4px rgba(74, 222, 162, 0.08);
+      }
+
+      /* Hero 产品工作流 */
+      .xc-product-stage {
+        position: relative;
+      }
+      .xc-product-stage::before {
+        content: '';
+        position: absolute;
+        inset: 12% 8% -8% 16%;
+        z-index: -1;
+        border-radius: 50%;
+        background: rgba(25, 116, 246, 0.28);
+        filter: blur(78px);
+      }
+      .xc-product-window {
+        overflow: hidden;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: #f6f8fb;
+        box-shadow:
+          0 38px 110px rgba(0, 5, 15, 0.52),
+          0 0 0 1px rgba(61, 151, 255, 0.06);
+      }
+      .xc-product-chrome {
+        height: 42px;
+        display: grid;
+        grid-template-columns: 82px 1fr 82px;
+        align-items: center;
+        padding: 0 14px;
+        color: rgba(231, 239, 249, 0.55);
+        background: #101c2e;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+      }
+      .xc-window-dots {
+        display: flex;
+        gap: 6px;
+      }
+      .xc-window-dots i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #344157;
+      }
+      .xc-window-dots i:first-child {
+        background: #607089;
+      }
+      .xc-product-chrome > span {
+        text-align: center;
+      }
+      .xc-product-sync {
+        justify-self: end;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: #79dda8;
+        letter-spacing: 0;
+      }
+      .xc-product-sync::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #44d58d;
+        box-shadow: 0 0 0 4px rgba(68, 213, 141, 0.08);
+      }
+      .xc-product-body {
+        display: grid;
+        grid-template-columns: 158px minmax(0, 1fr);
+        min-height: 440px;
+      }
+      .xc-product-sidebar {
+        display: flex;
+        flex-direction: column;
+        padding: 16px 12px 14px;
+        color: #68768a;
+        background: #eef2f7;
+        border-right: 1px solid #dfe5ed;
+      }
+      .xc-product-brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 2px 6px 15px;
+        color: #14243b;
+      }
+      .xc-product-brand b {
+        display: grid;
+        place-items: center;
+        width: 29px;
+        height: 29px;
+        border-radius: 9px;
+        color: #fff;
+        background: #176ff2;
+        font-size: 10px;
+        letter-spacing: -0.02em;
+      }
+      .xc-product-brand strong {
+        display: block;
+        font-size: 12px;
+        line-height: 1.2;
+      }
+      .xc-product-brand small {
+        display: block;
+        margin-top: 2px;
+        color: #8d99aa;
+        font-size: 8.5px;
+      }
+      .xc-product-nav {
+        display: grid;
+        gap: 4px;
+      }
+      .xc-product-nav a {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 32px;
+        padding: 0 9px;
+        border-radius: 8px;
+        color: #68768a;
+        font-size: 10.5px;
+        text-decoration: none;
+      }
+      .xc-product-nav a.is-active {
+        color: #145fcf;
+        background: #dceaff;
+        font-weight: 650;
+      }
+      .xc-ui-icon {
+        position: relative;
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        border: 1.5px solid currentColor;
+        border-radius: 4px;
+        opacity: 0.8;
+      }
+      .xc-ui-icon::after {
+        content: '';
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        bottom: 3px;
+        height: 1.5px;
+        border-radius: 2px;
+        background: currentColor;
+        box-shadow: 0 -3px currentColor;
+      }
+      .xc-product-label {
+        margin: 18px 8px 7px;
+        color: #98a3b2;
+        font-size: 8.5px;
+        font-weight: 650;
+        letter-spacing: 0.1em;
+      }
+      .xc-mod-entry {
+        display: grid;
+        gap: 2px;
+        margin-top: 4px;
+        padding: 10px;
+        border-radius: 10px;
+        color: #23344c;
+        background: #fff;
+        border: 1px solid #dce3ec;
+      }
+      .xc-mod-entry strong {
+        font-size: 10.5px;
+      }
+      .xc-mod-entry span {
+        color: #8895a6;
+        font-size: 8.5px;
+      }
+      .xc-sidebar-state {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 8px 2px;
+        color: #6d7c8f;
+        font-size: 9px;
+      }
+      .xc-sidebar-state::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #41c987;
+      }
+      .xc-product-main {
+        min-width: 0;
+        padding: 18px 20px 16px;
+        color: #17263b;
+        background: #f7f9fc;
+      }
+      .xc-product-main-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .xc-product-main-head h3 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: -0.01em;
+      }
+      .xc-product-main-head span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #5f7188;
+        font-size: 9.5px;
+      }
+      .xc-product-main-head span::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #38c985;
+      }
+      .xc-product-conversation {
+        display: grid;
+        gap: 12px;
+      }
+      .xc-user-prompt {
+        justify-self: end;
+        max-width: 82%;
+        padding: 10px 12px;
+        border-radius: 11px 11px 3px 11px;
+        color: #fff;
+        background: #176ff2;
+        font-size: 10.5px;
+        line-height: 1.55;
+        box-shadow: 0 7px 16px rgba(23, 111, 242, 0.16);
+      }
+      .xc-agent-result {
+        padding: 13px;
+        border-radius: 13px;
+        background: #fff;
+        border: 1px solid #e0e6ee;
+        box-shadow: 0 8px 24px rgba(31, 47, 70, 0.06);
+      }
+      .xc-agent-result-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #edf0f4;
+      }
+      .xc-agent-result-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .xc-agent-avatar {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        color: #176ff2;
+        background: #e8f1ff;
+        font-size: 9px;
+        font-weight: 800;
+      }
+      .xc-agent-result-title strong {
+        display: block;
+        font-size: 10.5px;
+      }
+      .xc-agent-result-title span {
+        display: block;
+        margin-top: 1px;
+        color: #8b98a9;
+        font-size: 8px;
+      }
+      .xc-complete-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 7px;
+        border-radius: 99px;
+        color: #14744c;
+        background: #e8f8f0;
+        font-size: 8.5px;
+        font-weight: 650;
+      }
+      .xc-complete-badge::before {
+        content: '✓';
+        font-weight: 800;
+      }
+      .xc-task-timeline {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        margin: 13px 0;
+      }
+      .xc-task-step {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        gap: 5px;
+        color: #66758a;
+        font-size: 8px;
+        text-align: center;
+      }
+      .xc-task-step:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        z-index: 0;
+        top: 5px;
+        left: 57%;
+        width: 86%;
+        height: 1px;
+        background: #cde0fa;
+      }
+      .xc-task-step i {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        color: #fff;
+        background: #3b87ed;
+        font-style: normal;
+        font-size: 7px;
+        box-shadow: 0 0 0 3px #eaf3ff;
+      }
+      .xc-artifact-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-radius: 10px;
+        background: #f5f8fc;
+        border: 1px solid #e1e8f1;
+      }
+      .xc-artifact-icon {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        color: #14744c;
+        background: #e3f7ed;
+        font-size: 9px;
+        font-weight: 800;
+      }
+      .xc-artifact-meta {
+        min-width: 0;
+        flex: 1;
+      }
+      .xc-artifact-meta strong {
+        display: block;
+        overflow: hidden;
+        color: #27384f;
+        font-size: 9.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .xc-artifact-meta span {
+        color: #8c98a8;
+        font-size: 8px;
+      }
+      .xc-artifact-open {
+        color: #176ff2;
+        font-size: 8.5px;
+        font-weight: 650;
+      }
+      .xc-product-input {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 42px;
+        margin-top: 13px;
+        padding: 0 8px 0 13px;
+        border-radius: 11px;
+        color: #98a4b3;
+        background: #fff;
+        border: 1px solid #dce3ec;
+        font-size: 9.5px;
+      }
+      .xc-product-input button {
+        display: grid;
+        place-items: center;
+        width: 27px;
+        height: 27px;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        background: #176ff2;
+        font-size: 13px;
+      }
+      .xc-product-note {
+        display: flex;
+        justify-content: flex-end;
+        margin: 12px 4px 0;
+        color: rgba(210, 225, 244, 0.5);
+        font-size: 10px;
+        letter-spacing: 0.03em;
+      }
+      body[data-page='index'] .butler-ball {
+        min-height: 48px !important;
+        padding: 6px !important;
+      }
+      body[data-page='index'] .butler-ball__logo-wrap {
+        width: 34px !important;
+        height: 34px !important;
+        border-radius: 10px !important;
+      }
+      body[data-page='index'] .butler-ball__logo {
+        width: 30px !important;
+        height: 30px !important;
+      }
+      body[data-page='index'] .butler-ball__label,
+      body[data-page='index'] .butler-ball__hint {
+        display: none !important;
       }
 
       /* ---------- 通用 section ---------- */
-      .xc-section { padding: 88px 0; }
-      .xc-section--soft { background: var(--xc-bg-soft); }
+      .xc-section {
+        padding: 88px 0;
+      }
+      .xc-section--soft {
+        background: var(--xc-bg-soft);
+      }
       .xc-section--dark {
         background:
           radial-gradient(900px 400px at 90% 0%, rgba(56, 189, 248, 0.1), transparent 55%),
@@ -227,7 +686,9 @@
         letter-spacing: 0.12em;
         text-transform: uppercase;
       }
-      .xc-section--dark .xc-kicker { color: var(--xc-cyan); }
+      .xc-section--dark .xc-kicker {
+        color: var(--xc-cyan);
+      }
       .xc-section-head h2 {
         margin: 0;
         font-size: clamp(26px, 3vw, 36px);
@@ -241,63 +702,87 @@
         font-size: 15.5px;
         line-height: 1.7;
       }
-      .xc-section--dark .xc-section-head > p { color: rgba(255, 255, 255, 0.68); }
-
-      /* ---------- 三步变身 ---------- */
-      .xc-transform {
-        display: grid;
-        grid-template-columns: 1fr 44px 1fr 44px 1fr;
-        gap: 20px;
-        align-items: stretch;
+      .xc-section--dark .xc-section-head > p {
+        color: rgba(255, 255, 255, 0.68);
       }
-      .xc-tstep {
-        display: flex;
-        flex-direction: column;
+
+      /* ---------- 宿主入门 ---------- */
+      .xc-onboarding {
+        display: grid;
+        grid-template-columns: minmax(0, 1.36fr) minmax(300px, 0.64fr);
+        gap: 30px;
+        align-items: start;
+      }
+      .xc-onboarding__visual {
+        overflow: hidden;
         background: var(--xc-panel);
         border: 1px solid var(--xc-line);
         border-radius: var(--xc-radius);
-        overflow: hidden;
-        box-shadow: var(--xc-shadow);
-        transition: transform 0.22s ease, box-shadow 0.22s ease;
+        box-shadow: var(--xc-shadow-lg);
       }
-      .xc-tstep:hover { transform: translateY(-5px); box-shadow: 0 18px 44px rgba(11, 30, 56, 0.14); }
-      .xc-tstep__shot { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: #0d1526; }
-      .xc-tstep__shot img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
-      .xc-tstep__num {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
+      .xc-onboarding__visual img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 5 / 4;
+        object-fit: cover;
+        object-position: center;
+      }
+      .xc-onboarding__caption {
         display: flex;
         align-items: center;
-        justify-content: center;
-        background: rgba(6, 13, 26, 0.78);
-        backdrop-filter: blur(6px);
-        color: var(--xc-cyan);
-        font-weight: 800;
-        font-size: 15px;
-        border: 1px solid rgba(56, 189, 248, 0.3);
+        justify-content: space-between;
+        gap: 16px;
+        margin: 0;
+        padding: 15px 18px;
+        color: var(--xc-ink-soft);
+        font-size: 13px;
+        border-top: 1px solid var(--xc-line);
       }
-      .xc-tstep__body { padding: 22px 22px 24px; }
-      .xc-tstep__body h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
-      .xc-tstep__body p { margin: 0; color: var(--xc-ink-soft); font-size: 14.5px; line-height: 1.65; }
-      .xc-tarrow {
-        align-self: center;
-        justify-self: center;
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .xc-onboarding__caption strong {
+        color: var(--xc-ink);
+      }
+      .xc-onboarding__steps {
+        display: grid;
+        gap: 10px;
+      }
+      .xc-onboarding__step {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+        padding: 16px 17px;
         background: var(--xc-panel);
         border: 1px solid var(--xc-line);
+        border-radius: 14px;
+      }
+      .xc-onboarding__step > b {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
         color: var(--xc-blue);
-        font-size: 18px;
+        background: rgba(11, 99, 246, 0.08);
+        font-size: 13px;
         font-weight: 700;
-        box-shadow: var(--xc-shadow);
+      }
+      .xc-onboarding__step:first-child {
+        border-color: rgba(11, 99, 246, 0.24);
+      }
+      .xc-onboarding__step:first-child > b {
+        color: #fff;
+        background: var(--xc-blue);
+      }
+      .xc-onboarding__step h3 {
+        margin: 1px 0 5px;
+        font-size: 16px;
+        letter-spacing: -0.01em;
+      }
+      .xc-onboarding__step p {
+        margin: 0;
+        color: var(--xc-ink-soft);
+        font-size: 13.5px;
+        line-height: 1.55;
       }
 
       /* ---------- 四入口产品矩阵 ---------- */
@@ -314,10 +799,20 @@
         border-radius: var(--xc-radius);
         overflow: hidden;
         box-shadow: var(--xc-shadow);
-        transition: transform 0.22s ease, box-shadow 0.22s ease;
+        transition:
+          transform 0.22s ease,
+          box-shadow 0.22s ease;
       }
-      .xc-module:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(11, 30, 56, 0.13); }
-      .xc-module__shot { position: relative; overflow: hidden; background: #0d1526; min-height: 180px; }
+      .xc-module:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 16px 40px rgba(11, 30, 56, 0.13);
+      }
+      .xc-module__shot {
+        position: relative;
+        overflow: hidden;
+        background: #0d1526;
+        min-height: 180px;
+      }
       .xc-module__shot img {
         position: absolute;
         inset: 0;
@@ -327,8 +822,12 @@
         object-position: top left;
         transition: transform 0.5s ease;
       }
-      .xc-module:hover .xc-module__shot img { transform: scale(1.04); }
-      .xc-module__body { padding: 22px 24px; }
+      .xc-module:hover .xc-module__shot img {
+        transform: scale(1.04);
+      }
+      .xc-module__body {
+        padding: 22px 24px;
+      }
       .xc-module__tag {
         display: inline-block;
         padding: 4px 10px;
@@ -339,9 +838,21 @@
         font-weight: 700;
         margin-bottom: 10px;
       }
-      .xc-module__body h3 { margin: 0 0 8px; font-size: 18px; }
-      .xc-module__body p { margin: 0 0 12px; color: var(--xc-ink-soft); font-size: 14px; line-height: 1.65; }
-      .xc-module__body ul { margin: 0; padding: 0; list-style: none; }
+      .xc-module__body h3 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+      .xc-module__body p {
+        margin: 0 0 12px;
+        color: var(--xc-ink-soft);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+      .xc-module__body ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
       .xc-module__body li {
         position: relative;
         padding: 4px 0 4px 18px;
@@ -349,7 +860,7 @@
         font-size: 13.5px;
       }
       .xc-module__body li::before {
-        content: "";
+        content: '';
         position: absolute;
         left: 0;
         top: 11px;
@@ -360,7 +871,11 @@
       }
 
       /* ---------- 三阶级 ---------- */
-      .xc-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+      .xc-tiers {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
       .xc-tier {
         position: relative;
         background: var(--xc-panel);
@@ -371,7 +886,7 @@
         overflow: hidden;
       }
       .xc-tier::before {
-        content: "";
+        content: '';
         position: absolute;
         top: 0;
         left: 0;
@@ -390,9 +905,21 @@
         letter-spacing: 0.06em;
         margin-bottom: 14px;
       }
-      .xc-tier h3 { margin: 0 0 10px; font-size: 20px; }
-      .xc-tier > p { margin: 0 0 16px; color: var(--xc-ink-soft); font-size: 14.5px; line-height: 1.7; }
-      .xc-tier ul { margin: 0; padding: 0; list-style: none; }
+      .xc-tier h3 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+      .xc-tier > p {
+        margin: 0 0 16px;
+        color: var(--xc-ink-soft);
+        font-size: 14.5px;
+        line-height: 1.7;
+      }
+      .xc-tier ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
       .xc-tier li {
         padding: 7px 0;
         border-top: 1px dashed var(--xc-line);
@@ -401,7 +928,11 @@
       }
 
       /* ---------- 行业 Mod 市场（dark） ---------- */
-      .xc-mods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+      .xc-mods {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
       .xc-mod {
         display: flex;
         flex-direction: column;
@@ -410,9 +941,16 @@
         border-radius: var(--xc-radius);
         padding: 26px;
         backdrop-filter: blur(10px);
-        transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+        transition:
+          transform 0.22s ease,
+          border-color 0.22s ease,
+          background 0.22s ease;
       }
-      .xc-mod:hover { transform: translateY(-4px); border-color: rgba(56, 189, 248, 0.4); background: rgba(255, 255, 255, 0.07); }
+      .xc-mod:hover {
+        transform: translateY(-4px);
+        border-color: rgba(56, 189, 248, 0.4);
+        background: rgba(255, 255, 255, 0.07);
+      }
       .xc-mod__badge {
         align-self: flex-start;
         padding: 4px 10px;
@@ -421,34 +959,86 @@
         font-weight: 700;
         margin-bottom: 14px;
       }
-      .xc-mod__badge--ok { background: rgba(31, 157, 107, 0.18); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); }
-      .xc-mod__badge--gen { background: rgba(56, 189, 248, 0.14); color: var(--xc-cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
-      .xc-mod h3 { margin: 0 0 4px; font-size: 19px; color: #fff; }
-      .xc-mod__customer { margin: 0 0 12px; color: rgba(255, 255, 255, 0.5); font-size: 13px; }
-      .xc-mod > p { margin: 0 0 18px; color: rgba(255, 255, 255, 0.72); font-size: 14px; line-height: 1.7; flex: 1; }
+      .xc-mod__badge--ok {
+        background: rgba(31, 157, 107, 0.18);
+        color: #4ade80;
+        border: 1px solid rgba(74, 222, 128, 0.3);
+      }
+      .xc-mod__badge--gen {
+        background: rgba(56, 189, 248, 0.14);
+        color: var(--xc-cyan);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+      }
+      .xc-mod h3 {
+        margin: 0 0 4px;
+        font-size: 19px;
+        color: #fff;
+      }
+      .xc-mod__customer {
+        margin: 0 0 12px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 13px;
+      }
+      .xc-mod > p {
+        margin: 0 0 18px;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 14px;
+        line-height: 1.7;
+        flex: 1;
+      }
       .xc-mod__stats {
         display: flex;
         gap: 20px;
         padding-top: 16px;
         border-top: 1px solid rgba(255, 255, 255, 0.1);
       }
-      .xc-mod__stats span { display: flex; flex-direction: column; color: rgba(255, 255, 255, 0.5); font-size: 12px; }
-      .xc-mod__stats strong { color: var(--xc-cyan); font-size: 20px; font-weight: 800; }
+      .xc-mod__stats span {
+        display: flex;
+        flex-direction: column;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 12px;
+      }
+      .xc-mod__stats strong {
+        color: var(--xc-cyan);
+        font-size: 20px;
+        font-weight: 800;
+      }
 
       /* ---------- 真实案例 ---------- */
-      .xc-cases { display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; }
+      .xc-cases {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 26px;
+      }
       .xc-case {
         background: var(--xc-panel);
         border: 1px solid var(--xc-line);
         border-radius: var(--xc-radius);
         overflow: hidden;
         box-shadow: var(--xc-shadow);
-        transition: transform 0.22s ease, box-shadow 0.22s ease;
+        transition:
+          transform 0.22s ease,
+          box-shadow 0.22s ease;
       }
-      .xc-case:hover { transform: translateY(-4px); box-shadow: 0 18px 44px rgba(11, 30, 56, 0.14); }
-      .xc-case__shot { aspect-ratio: 16 / 8; overflow: hidden; background: #0d1526; }
-      .xc-case__shot img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
-      .xc-case__body { padding: 24px 26px 26px; }
+      .xc-case:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 44px rgba(11, 30, 56, 0.14);
+      }
+      .xc-case__shot {
+        aspect-ratio: 16 / 8;
+        overflow: hidden;
+        background: #0d1526;
+      }
+      .xc-case__shot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top;
+        display: block;
+      }
+      .xc-case__body {
+        padding: 24px 26px 26px;
+      }
       .xc-case__badge {
         display: inline-block;
         padding: 4px 10px;
@@ -459,8 +1049,16 @@
         font-weight: 700;
         margin-bottom: 12px;
       }
-      .xc-case__body h3 { margin: 0 0 10px; font-size: 19px; }
-      .xc-case__body > p { margin: 0 0 18px; color: var(--xc-ink-soft); font-size: 14.5px; line-height: 1.7; }
+      .xc-case__body h3 {
+        margin: 0 0 10px;
+        font-size: 19px;
+      }
+      .xc-case__body > p {
+        margin: 0 0 18px;
+        color: var(--xc-ink-soft);
+        font-size: 14.5px;
+        line-height: 1.7;
+      }
       .xc-case__metrics {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -468,7 +1066,9 @@
         padding: 16px 0;
         border-top: 1px solid var(--xc-line);
       }
-      .xc-case__metrics div { text-align: center; }
+      .xc-case__metrics div {
+        text-align: center;
+      }
       .xc-case__metrics strong {
         display: block;
         font-size: 22px;
@@ -476,10 +1076,17 @@
         color: var(--xc-blue);
         letter-spacing: -0.02em;
       }
-      .xc-case__metrics span { font-size: 12px; color: var(--xc-ink-soft); }
+      .xc-case__metrics span {
+        font-size: 12px;
+        color: var(--xc-ink-soft);
+      }
 
       /* ---------- 定价 ---------- */
-      .xc-pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+      .xc-pricing {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+      }
       .xc-price {
         position: relative;
         display: flex;
@@ -489,10 +1096,18 @@
         border-radius: var(--xc-radius);
         padding: 26px 24px;
         box-shadow: var(--xc-shadow);
-        transition: transform 0.22s ease, box-shadow 0.22s ease;
+        transition:
+          transform 0.22s ease,
+          box-shadow 0.22s ease;
       }
-      .xc-price:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(11, 30, 56, 0.13); }
-      .xc-price--hot { border-color: var(--xc-blue); box-shadow: 0 16px 44px rgba(11, 99, 246, 0.16); }
+      .xc-price:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 16px 40px rgba(11, 30, 56, 0.13);
+      }
+      .xc-price--hot {
+        border-color: var(--xc-blue);
+        box-shadow: 0 16px 44px rgba(11, 99, 246, 0.16);
+      }
       .xc-price__tag {
         align-self: flex-start;
         padding: 4px 12px;
@@ -503,12 +1118,35 @@
         font-weight: 700;
         margin-bottom: 16px;
       }
-      .xc-price--hot .xc-price__tag { background: var(--xc-blue); color: #fff; }
-      .xc-price__value { margin: 0 0 6px; }
-      .xc-price__value strong { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--xc-ink); }
-      .xc-price__value span { margin-left: 6px; color: var(--xc-ink-soft); font-size: 13px; }
-      .xc-price__desc { margin: 0 0 18px; color: var(--xc-ink-soft); font-size: 13.5px; }
-      .xc-price ul { margin: 0 0 22px; padding: 0; list-style: none; flex: 1; }
+      .xc-price--hot .xc-price__tag {
+        background: var(--xc-blue);
+        color: #fff;
+      }
+      .xc-price__value {
+        margin: 0 0 6px;
+      }
+      .xc-price__value strong {
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--xc-ink);
+      }
+      .xc-price__value span {
+        margin-left: 6px;
+        color: var(--xc-ink-soft);
+        font-size: 13px;
+      }
+      .xc-price__desc {
+        margin: 0 0 18px;
+        color: var(--xc-ink-soft);
+        font-size: 13.5px;
+      }
+      .xc-price ul {
+        margin: 0 0 22px;
+        padding: 0;
+        list-style: none;
+        flex: 1;
+      }
       .xc-price li {
         position: relative;
         padding: 7px 0 7px 24px;
@@ -517,7 +1155,7 @@
         font-size: 13.5px;
       }
       .xc-price li::before {
-        content: "✓";
+        content: '✓';
         position: absolute;
         left: 2px;
         color: var(--xc-green);
@@ -531,16 +1169,27 @@
         font-size: 14px;
         font-weight: 700;
         text-decoration: none;
-        transition: transform 0.18s ease, box-shadow 0.18s ease;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease;
       }
       .xc-price__btn--solid {
         background: linear-gradient(135deg, var(--xc-blue), var(--xc-blue-soft));
         color: #fff;
         box-shadow: 0 8px 20px rgba(11, 99, 246, 0.3);
       }
-      .xc-price__btn--solid:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(11, 99, 246, 0.4); }
-      .xc-price__btn--line { border: 1.5px solid var(--xc-line); color: var(--xc-ink); }
-      .xc-price__btn--line:hover { border-color: var(--xc-blue); color: var(--xc-blue); }
+      .xc-price__btn--solid:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 26px rgba(11, 99, 246, 0.4);
+      }
+      .xc-price__btn--line {
+        border: 1.5px solid var(--xc-line);
+        color: var(--xc-ink);
+      }
+      .xc-price__btn--line:hover {
+        border-color: var(--xc-blue);
+        color: var(--xc-blue);
+      }
 
       /* ---------- 下载横幅 ---------- */
       .xc-dl {
@@ -557,12 +1206,28 @@
         color: #fff;
         box-shadow: var(--xc-shadow-lg);
       }
-      .xc-dl h2 { margin: 0 0 10px; font-size: clamp(22px, 2.4vw, 30px); letter-spacing: -0.02em; }
-      .xc-dl p { margin: 0; color: rgba(255, 255, 255, 0.7); font-size: 15px; }
-      .xc-dl__actions { display: flex; gap: 14px; flex-wrap: wrap; }
+      .xc-dl h2 {
+        margin: 0 0 10px;
+        font-size: clamp(22px, 2.4vw, 30px);
+        letter-spacing: -0.02em;
+      }
+      .xc-dl p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 15px;
+      }
+      .xc-dl__actions {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
 
       /* ---------- 开发者 ---------- */
-      .xc-dev { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+      .xc-dev {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
       .xc-dev-card {
         background: var(--xc-panel);
         border: 1px solid var(--xc-line);
@@ -570,9 +1235,21 @@
         padding: 26px;
         box-shadow: var(--xc-shadow);
       }
-      .xc-dev-card h3 { margin: 0 0 10px; font-size: 17.5px; }
-      .xc-dev-card p { margin: 0 0 14px; color: var(--xc-ink-soft); font-size: 14px; line-height: 1.7; }
-      .xc-dev-card ul { margin: 0; padding: 0; list-style: none; }
+      .xc-dev-card h3 {
+        margin: 0 0 10px;
+        font-size: 17.5px;
+      }
+      .xc-dev-card p {
+        margin: 0 0 14px;
+        color: var(--xc-ink-soft);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      .xc-dev-card ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
       .xc-dev-card li {
         padding: 6px 0;
         border-top: 1px dashed var(--xc-line);
@@ -582,27 +1259,106 @@
 
       /* ---------- 响应式 ---------- */
       @media (max-width: 1024px) {
-        .xc-hero-inner { grid-template-columns: 1fr; gap: 44px; }
-        .xc-shot { transform: none; }
-        .xc-transform { grid-template-columns: 1fr; }
-        .xc-tarrow { transform: rotate(90deg); }
-        .xc-modules { grid-template-columns: 1fr; }
-        .xc-tiers, .xc-mods, .xc-dev { grid-template-columns: 1fr; }
-        .xc-cases { grid-template-columns: 1fr; }
-        .xc-pricing { grid-template-columns: repeat(2, 1fr); }
+        .xc-hero-inner {
+          grid-template-columns: 1fr;
+          gap: 44px;
+        }
+        .xc-hero-copy {
+          max-width: 660px;
+        }
+        .xc-product-stage {
+          width: min(760px, 100%);
+        }
+        .xc-onboarding {
+          grid-template-columns: 1fr;
+        }
+        .xc-onboarding__steps {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .xc-modules {
+          grid-template-columns: 1fr;
+        }
+        .xc-tiers,
+        .xc-mods,
+        .xc-dev {
+          grid-template-columns: 1fr;
+        }
+        .xc-cases {
+          grid-template-columns: 1fr;
+        }
+        .xc-pricing {
+          grid-template-columns: repeat(2, 1fr);
+        }
       }
       @media (max-width: 640px) {
-        .xc-hero { padding: 64px 0 56px; }
-        .xc-section { padding: 60px 0; }
-        .xc-pricing { grid-template-columns: 1fr; }
-        .xc-module { grid-template-columns: 1fr; }
-        .xc-module__shot { min-height: 150px; }
-        .xc-dl { padding: 32px 26px; }
+        .xc-hero {
+          padding: 52px 0 48px;
+        }
+        .xc-hero h1 {
+          margin-top: 20px;
+          font-size: clamp(38px, 11vw, 48px);
+        }
+        .xc-hero-actions {
+          display: grid;
+        }
+        .xc-hero-proof {
+          grid-template-columns: 1fr;
+          gap: 10px;
+          margin-top: 30px;
+        }
+        .xc-product-body {
+          grid-template-columns: 1fr;
+          min-height: 390px;
+        }
+        .xc-product-sidebar {
+          display: none;
+        }
+        .xc-product-main {
+          padding: 15px 14px 13px;
+        }
+        .xc-product-chrome {
+          grid-template-columns: 64px 1fr 64px;
+          padding: 0 10px;
+        }
+        .xc-product-main-head span {
+          font-size: 8.5px;
+        }
+        .xc-task-timeline {
+          margin: 12px 0;
+        }
+        .xc-product-note {
+          justify-content: flex-start;
+        }
+        .xc-section {
+          padding: 60px 0;
+        }
+        .xc-onboarding__steps {
+          grid-template-columns: 1fr;
+        }
+        .xc-onboarding__visual img {
+          aspect-ratio: 1 / 1;
+        }
+        .xc-onboarding__caption {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .xc-pricing {
+          grid-template-columns: 1fr;
+        }
+        .xc-module {
+          grid-template-columns: 1fr;
+        }
+        .xc-module__shot {
+          min-height: 150px;
+        }
+        .xc-dl {
+          padding: 32px 26px;
+        }
       }
     </style>
   </head>
 <body data-page="index">
-<!-- site chrome SSOT: /partials/header.html -->
 <header class="site-header">
   <div class="container header-inner">
     <a class="brand-mark" href="/index.html" aria-label="成都修茈科技有限公司官网首页">
@@ -611,19 +1367,17 @@
     </a>
     <nav class="nav" id="main-nav" aria-label="站点导航">
       <div class="nav-menu">
-        <a class="active" data-nav="index" href="/index.html">首页</a>
-        <a data-nav="about" href="/about.html">关于修茈</a>
-        <a data-nav="services" href="/services.html">产品中心</a>
-        <a data-nav="solutions" href="/solutions.html">解决方案</a>
-        <a data-nav="cases" href="/cases.html">客户案例</a>
-        <a class="nav-optional" data-nav="news" href="/news.html">新闻资讯</a>
-        <a class="nav-optional" data-nav="honors" href="/honors.html">资质与能力</a>
-        <a data-nav="contact" href="/contact.html">联系我们</a>
-        <a data-nav="developer" href="/developer.html">开发者门户</a>
+        <a href="/solutions.html">解决方案</a>
+        <a href="/cases.html">客户案例</a>
+        <a href="/index.html#pricing">购买授权</a>
+        <a href="/developer.html">开放平台</a>
+        <a href="/contact.html">联系我们</a>
+        <a href="/about.html">关于修茈</a>
+        <a href="/visualization">可视化展示</a>
       </div>
       <div class="nav-actions">
-        <a class="nav-action nav-action--primary" href="/market/">AI 市场</a>
-        <a class="nav-action nav-action--outline" href="/download">软件下载</a>
+        <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--primary" href="/download">产品下载</a>
       </div>
     </nav>
     <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
@@ -631,480 +1385,666 @@
 </header>
 <div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
 <nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link" data-nav="index">首页</a>
-  <a href="/about.html" class="mobile-menu-link" data-nav="about">关于修茈</a>
-  <a href="/services.html" class="mobile-menu-link" data-nav="services">产品中心</a>
-  <a href="/solutions.html" class="mobile-menu-link" data-nav="solutions">解决方案</a>
-  <a href="/cases.html" class="mobile-menu-link" data-nav="cases">客户案例</a>
-  <a href="/news.html" class="mobile-menu-link" data-nav="news">新闻资讯</a>
-  <a href="/honors.html" class="mobile-menu-link" data-nav="honors">资质与能力</a>
-  <a href="/contact.html" class="mobile-menu-link" data-nav="contact">联系我们</a>
-  <a href="/developer.html" class="mobile-menu-link" data-nav="developer">开发者门户</a>
+  <a href="/index.html" class="mobile-menu-link">首页</a>
+  <a href="/solutions.html" class="mobile-menu-link">解决方案</a>
+  <a href="/cases.html" class="mobile-menu-link">客户案例</a>
+  <a href="/index.html#pricing" class="mobile-menu-link">购买授权</a>
+  <a href="/about.html" class="mobile-menu-link">关于修茈</a>
+  <a href="/visualization" class="mobile-menu-link">可视化展示</a>
+  <a href="/developer.html" class="mobile-menu-link">开放平台</a>
+  <a href="/contact.html" class="mobile-menu-link">联系我们</a>
   <div class="mobile-menu-actions">
-    <a href="/market/" class="mobile-menu-link mobile-menu-link--primary">AI 市场</a>
-    <a href="/download" class="mobile-menu-link mobile-menu-link--outline">软件下载</a>
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
+    <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
   </div>
 </nav>
 
 <main>
-  <!-- ============ Hero ============ -->
-  <section class="xc-hero">
-    <div class="container xc-hero-inner">
-      <div class="reveal">
-        <span class="xc-eyebrow">AI 员工桌面平台</span>
-        <h1>装一个 Mod，<br />桌面变成<span class="accent">你们的行业系统</span></h1>
-        <p class="hero-lead">XCAGI 是 AI 员工桌面平台。<strong>空壳宿主 + 行业 Mod</strong>，装一个变身考勤系统，装一个变身涂料 ERP。AI 员工在四部门上岗，对话下指令，IM 派工，<strong>1-3 天上线</strong>。</p>
-        <div class="xc-hero-actions">
-          <a class="xc-btn xc-btn--primary" href="/download">下载试用 · 99 元体验 30 天</a>
-          <a class="xc-btn xc-btn--ghost" href="/contact.html">咨询行业定制</a>
-        </div>
-        <div class="xc-hero-trust">
-          <span><strong>1-3 天</strong>行业包上线交付</span>
-          <span><strong>4 部门</strong>AI 员工在岗</span>
-          <span><strong>3842/3842</strong>考勤槽位零差异</span>
-        </div>
-      </div>
-      <div class="reveal" data-delay="120">
-        <div class="xc-shot">
-          <div class="xc-shot__bar">
-            <span class="xc-shot__dot xc-shot__dot--r"></span>
-            <span class="xc-shot__dot xc-shot__dot--y"></span>
-            <span class="xc-shot__dot xc-shot__dot--g"></span>
-            <span class="xc-shot__title">XCAGI Desktop · 智能对话</span>
-          </div>
-          <img src="/assets/screenshots/hero-chat.png" alt="XCAGI 智能对话真实界面：向小C下达业务指令" width="1440" height="900" />
-          <span class="xc-shot__caption">真实产品界面 · 智能对话</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 三步变身 ============ -->
-  <section class="xc-section" id="transform">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">核心差异</p>
-          <h2>空壳宿主 + 行业 Mod = 变身</h2>
-        </div>
-        <p>不是单点工具，是桌面平台。装一个 Mod，宿主就变身成该行业系统——这是 XCAGI 和市面上所有 AI 工具的根本区别。</p>
-      </div>
-      <div class="xc-transform">
-        <div class="xc-tstep reveal">
-          <div class="xc-tstep__shot">
-            <span class="xc-tstep__num">1</span>
-            <img src="/assets/screenshots/hero-chat.png" alt="空壳宿主：智能对话、信息、群聊、智能生态四个通用入口" loading="lazy" />
-          </div>
-          <div class="xc-tstep__body">
-            <h3>空壳宿主</h3>
-            <p>下载 XCAGI 桌面 app，初始是空壳。只有智能对话、信息、群聊、智能生态四个通用入口。</p>
-          </div>
-        </div>
-        <div class="xc-tarrow reveal" data-delay="80">→</div>
-        <div class="xc-tstep reveal" data-delay="120">
-          <div class="xc-tstep__shot">
-            <span class="xc-tstep__num">2</span>
-            <img src="/assets/screenshots/mod-store.png" alt="Mod 市场：选择行业包一键安装" loading="lazy" />
-          </div>
-          <div class="xc-tstep__body">
-            <h3>装行业 Mod</h3>
-            <p>从 AI 市场装一个行业包。Mod 注入业务对象、单据、模板、AI 员工四件套，宿主开始变身。</p>
-          </div>
-        </div>
-        <div class="xc-tarrow reveal" data-delay="200">→</div>
-        <div class="xc-tstep reveal" data-delay="240">
-          <div class="xc-tstep__shot">
-            <span class="xc-tstep__num">3</span>
-            <img src="/assets/screenshots/transform-attendance.png" alt="变身后：太阳鸟考勤系统真实界面" loading="lazy" />
-          </div>
-          <div class="xc-tstep__body">
-            <h3>变身行业系统</h3>
-            <p>宿主侧栏多出考勤、花名册、排班等行业菜单。桌面 app 变身成太阳鸟考勤系统，1-3 天上线。</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 四入口产品矩阵 ============ -->
-  <section class="xc-section xc-section--soft" id="modules">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">产品矩阵</p>
-          <h2>四个入口，一个桌面</h2>
-        </div>
-        <p>不是单点工具，是 AI 员工协作平台——对话下指令、IM 派工、生态扩展、员工上岗。全部为真实产品界面。</p>
-      </div>
-      <div class="xc-modules">
-        <article class="xc-module reveal">
-          <div class="xc-module__shot"><img src="/assets/screenshots/hero-chat.png" alt="智能对话真实界面" loading="lazy" /></div>
-          <div class="xc-module__body">
-            <span class="xc-module__tag">智能对话</span>
-            <h3>找小C办事</h3>
-            <p>对话下指令，小C 拆解任务、派工给 AI 员工、回报进度。不用学软件操作，像聊天一样办事。</p>
-            <ul>
-              <li>Persona 引擎驱动的小C助理</li>
-              <li>悬浮窗 + 侧栏双入口</li>
-              <li>任务进度实时回报</li>
-            </ul>
-          </div>
-        </article>
-        <article class="xc-module reveal" data-delay="80">
-          <div class="xc-module__shot"><img src="/assets/screenshots/hero-workforce.png" alt="AI 员工工作台真实界面" loading="lazy" /></div>
-          <div class="xc-module__body">
-            <span class="xc-module__tag">AI 员工工作台</span>
-            <h3>四部门上岗</h3>
-            <p>AI 员工在工具、执行、服务、管理四部门上岗。工位节点图可视化派工，谁在干什么一目了然。</p>
-            <ul>
-              <li>企业端四层 L1-L4 岗位</li>
-              <li>管理端六线部门约 54 岗位</li>
-              <li>按 duty_roster 值班表调度</li>
-            </ul>
-          </div>
-        </article>
-        <article class="xc-module reveal" data-delay="160">
-          <div class="xc-module__shot"><img src="/assets/screenshots/ai-group-chat.png" alt="AI 群聊真实界面" loading="lazy" /></div>
-          <div class="xc-module__body">
-            <span class="xc-module__tag">信息与群聊</span>
-            <h3>IM 派工协作</h3>
-            <p>一对一联系 AI 同事、专属客服；多 AI 员工群聊派工。像用企业微信一样和 AI 员工协作。</p>
-            <ul>
-              <li>单聊派单、追问进度</li>
-              <li>多 AI 员工同群协同</li>
-              <li>消息上下文完整保留</li>
-            </ul>
-          </div>
-        </article>
-        <article class="xc-module reveal" data-delay="240">
-          <div class="xc-module__shot"><img src="/assets/screenshots/ai-ecosystem.png" alt="智能生态真实界面" loading="lazy" /></div>
-          <div class="xc-module__body">
-            <span class="xc-module__tag">智能生态</span>
-            <h3>四 Launcher 扩展</h3>
-            <p>智慧分析、AIOPEN、生产员工、员工商店四个 launcher。从生态装入更多 AI 能力，持续扩展。</p>
-            <ul>
-              <li>智慧分析：数据洞察报表</li>
-              <li>AIOPEN：开放能力接入</li>
-              <li>员工商店：按需雇佣 AI 员工</li>
-            </ul>
-          </div>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 三阶级 AI 员工 ============ -->
-  <section class="xc-section" id="workforce">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">AI Workforce</p>
-          <h2>三阶级 AI 员工体系</h2>
-        </div>
-        <p>从对话助理到岗位员工，三级调度逐级下沉——小C 助理可调度超级员工，超级员工可调度平台员工。</p>
-      </div>
-      <div class="xc-tiers">
-        <div class="xc-tier reveal">
-          <span class="xc-tier__badge">TIER 1 · 助理</span>
-          <h3>小C助理</h3>
-          <p>电脑端智能对话入口，用户统一的 AI 助手。处理搜索、问答和跨工具操作，是人机交互的总前台。</p>
-          <ul>
-            <li>悬浮窗 + 侧栏双入口</li>
-            <li>Persona 共享引擎驱动</li>
-            <li>可调度超级员工干活</li>
-          </ul>
-        </div>
-        <div class="xc-tier reveal" data-delay="80">
-          <span class="xc-tier__badge">TIER 2 · 中继</span>
-          <h3>超级员工</h3>
-          <p>Claude / Codex CLI 中继，多设备派工，独立人格。承接复杂任务，拆解后调度平台员工执行。</p>
-          <ul>
-            <li>多设备任务派发</li>
-            <li>独立人格与上下文</li>
-            <li>可调度平台员工</li>
-          </ul>
-        </div>
-        <div class="xc-tier reveal" data-delay="160">
-          <span class="xc-tier__badge">TIER 3 · 岗位</span>
-          <h3>平台员工</h3>
-          <p>管理端六线部门约 54 岗位 + 企业端四层 L1-L4 约 13 岗位，按 duty_roster 值班表上岗干活。</p>
-          <ul>
-            <li>管理端六线部门建制</li>
-            <li>企业端四层岗位编制</li>
-            <li>按值班表自动调度</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 行业 Mod 市场 ============ -->
-  <section class="xc-section xc-section--dark" id="mods">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">行业 Mod 市场</p>
-          <h2>已有行业包，装上即用</h2>
-        </div>
-        <a class="xc-btn xc-btn--ghost" href="/market/">进入 AI 市场</a>
-      </div>
-      <div class="xc-mods">
-        <article class="xc-mod reveal">
-          <span class="xc-mod__badge xc-mod__badge--ok">已交付</span>
-          <h3>考勤行业包</h3>
-          <p class="xc-mod__customer">太阳鸟珠宝包装 · 首家客户</p>
-          <p>花名册导入、考勤模板、LLM 固化循环、异常标红、报表导出。把 30240 格考勤数据逐格对齐，3842/3842 槽位零差异。</p>
-          <div class="xc-mod__stats">
-            <span><strong>30240</strong>格 0 差异</span>
-            <span><strong>1-3</strong>天上线</span>
-          </div>
-        </article>
-        <article class="xc-mod reveal" data-delay="80">
-          <span class="xc-mod__badge xc-mod__badge--ok">已交付</span>
-          <h3>涂料 ERP 包</h3>
-          <p class="xc-mod__customer">奇士美 · 首家涂料客户</p>
-          <p>订单、出货、收货、库存、标签打印五模块联动。配方管理与批次追溯，告别重复抄录，数据一次录入全程复用。</p>
-          <div class="xc-mod__stats">
-            <span><strong>5</strong>模块联动</span>
-            <span><strong>0</strong>重复录入</span>
-          </div>
-        </article>
-        <article class="xc-mod reveal" data-delay="160">
-          <span class="xc-mod__badge xc-mod__badge--gen">通用</span>
-          <h3>通用业务包</h3>
-          <p class="xc-mod__customer">适合所有行业</p>
-          <p>单据识别、Excel 导入、标签打印、库存记录、数据导出。从通用能力起步，跑顺后按需加装行业包。</p>
-          <div class="xc-mod__stats">
-            <span><strong>4</strong>核心能力</span>
-            <span><strong>¥99</strong>即可试用</span>
-          </div>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 真实案例 ============ -->
-  <section class="xc-section" id="cases">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">真实案例</p>
-          <h2>有数据，不是空话</h2>
-        </div>
-        <a class="xc-btn xc-btn--ghost" style="color: var(--xc-ink); border-color: var(--xc-line); background: var(--xc-panel);" href="/cases.html">查看全部案例</a>
-      </div>
-      <div class="xc-cases">
-        <article class="xc-case reveal">
-          <div class="xc-case__shot">
-            <img src="/assets/screenshots/transform-attendance.png" alt="太阳鸟考勤系统变身后真实界面" loading="lazy" />
-          </div>
-          <div class="xc-case__body">
-            <span class="xc-case__badge">已交付</span>
-            <h3>太阳鸟珠宝包装 · 考勤行业包</h3>
-            <p>花名册导入 + 考勤模板 + LLM 固化循环。把 30240 格考勤数据逐格对齐，零人工干预。</p>
-            <div class="xc-case__metrics">
-              <div><strong>3842/3842</strong><span>槽位全匹配</span></div>
-              <div><strong>30240</strong><span>格逐格 0 差异</span></div>
-              <div><strong>1-3 天</strong><span>上线交付</span></div>
+      <!-- ============ Hero ============ -->
+      <section class="xc-hero">
+        <div class="container xc-hero-inner">
+          <div class="xc-hero-copy reveal">
+            <span class="xc-eyebrow">XCAGI · AI 员工桌面平台</span>
+            <h1>让 AI 员工<br /><span class="accent">进入真实业务</span></h1>
+            <p class="xc-hero-lead">
+              安装行业 Mod，让考勤、客服、销售与生产协同进入同一桌面。对话下达目标，AI
+              员工自动拆解、跨岗位协作，最终交付<strong>可查看、可复核、可继续使用</strong>的业务成果。
+            </p>
+            <div class="xc-hero-actions">
+              <a class="xc-btn xc-btn--primary" href="/download"
+                >下载 XCAGI <span aria-hidden="true">→</span></a
+              >
+              <a class="xc-btn xc-btn--ghost" href="#pricing">购买与授权</a>
+            </div>
+            <p class="xc-hero-platforms">
+              Windows 10+ <span></span> macOS 12+ <span></span> Android
+            </p>
+            <div class="xc-hero-proof" aria-label="XCAGI 产品特性">
+              <span class="xc-proof-item">行业 Mod 即装即用</span>
+              <span class="xc-proof-item">任务过程全程留痕</span>
+              <span class="xc-proof-item">结果可人工复核</span>
             </div>
           </div>
-        </article>
-        <article class="xc-case reveal" data-delay="100">
-          <div class="xc-case__shot">
-            <img src="/assets/screenshots/mod-store.png" alt="奇士美涂料 ERP 包在 Mod 市场中" loading="lazy" />
+          <div class="xc-product-stage reveal" data-delay="120">
+            <div class="xc-product-window" aria-label="XCAGI 桌面任务交付工作流示意">
+              <div class="xc-product-chrome">
+                <div class="xc-window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+                <span>XCAGI DESKTOP</span>
+                <small class="xc-product-sync">已同步</small>
+              </div>
+              <div class="xc-product-body">
+                <aside class="xc-product-sidebar">
+                  <div class="xc-product-brand">
+                    <b>XC</b>
+                    <div><strong>小C 助理</strong><small>企业工作空间</small></div>
+                  </div>
+                  <nav class="xc-product-nav" aria-label="产品界面示意导航">
+                    <a class="is-active"><i class="xc-ui-icon"></i>智能对话</a>
+                    <a><i class="xc-ui-icon"></i>协作消息</a>
+                    <a><i class="xc-ui-icon"></i>AI 员工</a>
+                  </nav>
+                  <p class="xc-product-label">已安装 MOD</p>
+                  <div class="xc-mod-entry">
+                    <strong>太阳鸟考勤</strong><span>员工 · 排班 · 考勤报表</span>
+                  </div>
+                  <div class="xc-sidebar-state">企业数据已连接</div>
+                </aside>
+                <section class="xc-product-main">
+                  <header class="xc-product-main-head">
+                    <h3>找小C办事</h3>
+                    <span>4 名 AI 员工协作中</span>
+                  </header>
+                  <div class="xc-product-conversation">
+                    <div class="xc-user-prompt">
+                      整理今天的考勤，标记异常，并把可复核报表发给我。
+                    </div>
+                    <article class="xc-agent-result">
+                      <div class="xc-agent-result-head">
+                        <div class="xc-agent-result-title">
+                          <b class="xc-agent-avatar">小C</b>
+                          <div>
+                            <strong>考勤任务已交付</strong><span>由考勤专员、数据专员协作完成</span>
+                          </div>
+                        </div>
+                        <span class="xc-complete-badge">已完成</span>
+                      </div>
+                      <div class="xc-task-timeline" aria-label="任务处理流程">
+                        <span class="xc-task-step"><i>✓</i>读取记录</span>
+                        <span class="xc-task-step"><i>✓</i>核对排班</span>
+                        <span class="xc-task-step"><i>✓</i>标记异常</span>
+                        <span class="xc-task-step"><i>✓</i>生成报表</span>
+                      </div>
+                      <div class="xc-artifact-card">
+                        <b class="xc-artifact-icon">XLSX</b>
+                        <div class="xc-artifact-meta">
+                          <strong>今日考勤异常报告.xlsx</strong
+                          ><span>已保留原始记录与复核说明</span>
+                        </div>
+                        <span class="xc-artifact-open">查看成果</span>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="xc-product-input">
+                    <span>继续下达业务目标…</span
+                    ><button type="button" tabindex="-1" aria-label="发送示意">↑</button>
+                  </div>
+                </section>
+              </div>
+            </div>
+            <p class="xc-product-note">工作流示意 · 从目标到可验收成果</p>
           </div>
-          <div class="xc-case__body">
-            <span class="xc-case__badge">首家涂料客户</span>
-            <h3>奇士美 · 涂料 ERP 包</h3>
-            <p>订单、出货、收货、库存、标签打印联动。配方管理与批次追溯，减少人工抄录。</p>
-            <div class="xc-case__metrics">
-              <div><strong>5</strong><span>模块联动</span></div>
-              <div><strong>0</strong><span>重复录入</span></div>
-              <div><strong>私有</strong><span>桌面部署</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 宿主入门 ============ -->
+      <section class="xc-section" id="transform">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">宿主入门</p>
+              <h2>3 步完成宿主初始化</h2>
+            </div>
+            <p>
+              先认识干净宿主，再选择行业、补齐菜单。完成后进入统一桌面，按需安装行业能力。
+            </p>
+          </div>
+          <div class="xc-onboarding">
+            <figure class="xc-onboarding__visual reveal">
+              <img
+                src="/assets/screenshots/hero-chat.png?v=20260719b"
+                alt="XCAGI 企业版统一桌面的智能对话界面"
+                loading="lazy"
+              />
+              <figcaption class="xc-onboarding__caption">
+                <strong>真实产品界面</strong><span>完成入门后进入统一桌面继续使用</span>
+              </figcaption>
+            </figure>
+            <div class="xc-onboarding__steps" aria-label="XCAGI 宿主入门三步流程">
+              <article class="xc-onboarding__step reveal">
+                <b>01</b>
+                <div>
+                  <h3>认识 XC</h3>
+                  <p>确认默认干净宿主，以及智能对话、信息、智能生态和员工工作台四个通用入口。</p>
+                </div>
+              </article>
+              <article class="xc-onboarding__step reveal" data-delay="60">
+                <b>02</b>
+                <div>
+                  <h3>行业定型</h3>
+                  <p>选择当前开放的行业方向，系统据此给出后续需要补齐的业务能力。</p>
+                </div>
+              </article>
+              <article class="xc-onboarding__step reveal" data-delay="120">
+                <b>03</b>
+                <div>
+                  <h3>准备菜单</h3>
+                  <p>一键装齐行业所需的侧栏基础菜单，随后即可进入智能对话。</p>
+                </div>
+              </article>
             </div>
           </div>
-        </article>
-      </div>
-    </div>
-  </section>
+        </div>
+      </section>
 
-  <!-- ============ 定价 ============ -->
-  <section class="xc-section xc-section--soft" id="pricing">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">透明定价</p>
-          <h2>明码标价，不玩套路</h2>
+      <!-- ============ 四入口产品矩阵 ============ -->
+      <section class="xc-section xc-section--soft" id="modules">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">产品矩阵</p>
+              <h2>四个入口，一个桌面</h2>
+            </div>
+            <p>
+              不是单点工具，是 AI 员工协作平台——对话下指令、IM
+              派工、生态扩展、员工上岗。全部为真实产品界面。
+            </p>
+          </div>
+          <div class="xc-modules">
+            <article class="xc-module reveal">
+              <div class="xc-module__shot">
+                <img
+                  src="/assets/screenshots/hero-chat.png"
+                  alt="智能对话真实界面"
+                  loading="lazy"
+                />
+              </div>
+              <div class="xc-module__body">
+                <span class="xc-module__tag">智能对话</span>
+                <h3>找小C办事</h3>
+                <p>
+                  对话下指令，小C 拆解任务、派工给 AI
+                  员工、回报进度。不用学软件操作，像聊天一样办事。
+                </p>
+                <ul>
+                  <li>Persona 引擎驱动的小C助理</li>
+                  <li>悬浮窗 + 侧栏双入口</li>
+                  <li>任务进度实时回报</li>
+                </ul>
+              </div>
+            </article>
+            <article class="xc-module reveal" data-delay="80">
+              <div class="xc-module__shot">
+                <img
+                  src="/assets/screenshots/hero-workforce.png"
+                  alt="AI 员工工作台真实界面"
+                  loading="lazy"
+                />
+              </div>
+              <div class="xc-module__body">
+                <span class="xc-module__tag">AI 员工工作台</span>
+                <h3>四部门上岗</h3>
+                <p>
+                  AI
+                  员工在工具、执行、服务、管理四部门上岗。工位节点图可视化派工，谁在干什么一目了然。
+                </p>
+                <ul>
+                  <li>企业端四层 L1-L4 岗位</li>
+                  <li>管理端六线部门约 54 岗位</li>
+                  <li>按 duty_roster 值班表调度</li>
+                </ul>
+              </div>
+            </article>
+            <article class="xc-module reveal" data-delay="160">
+              <div class="xc-module__shot">
+                <img
+                  src="/assets/screenshots/ai-group-chat.png"
+                  alt="AI 群聊真实界面"
+                  loading="lazy"
+                />
+              </div>
+              <div class="xc-module__body">
+                <span class="xc-module__tag">信息与群聊</span>
+                <h3>IM 派工协作</h3>
+                <p>
+                  一对一联系 AI 同事、专属客服；多 AI 员工群聊派工。像用企业微信一样和 AI 员工协作。
+                </p>
+                <ul>
+                  <li>单聊派单、追问进度</li>
+                  <li>多 AI 员工同群协同</li>
+                  <li>消息上下文完整保留</li>
+                </ul>
+              </div>
+            </article>
+            <article class="xc-module reveal" data-delay="240">
+              <div class="xc-module__shot">
+                <img
+                  src="/assets/screenshots/ai-ecosystem.png"
+                  alt="智能生态真实界面"
+                  loading="lazy"
+                />
+              </div>
+              <div class="xc-module__body">
+                <span class="xc-module__tag">智能生态</span>
+                <h3>四 Launcher 扩展</h3>
+                <p>
+                  智慧分析、AIOPEN、生产员工、员工商店四个 launcher。从生态装入更多 AI
+                  能力，持续扩展。
+                </p>
+                <ul>
+                  <li>智慧分析：数据洞察报表</li>
+                  <li>AIOPEN：开放能力接入</li>
+                  <li>员工商店：按需雇佣 AI 员工</li>
+                </ul>
+              </div>
+            </article>
+          </div>
         </div>
-        <p>99 元试用 30 天，满意再选永久授权。所有档位含桌面 app + 私有部署 + 1-3 天上线。</p>
-      </div>
-      <div class="xc-pricing">
-        <article class="xc-price reveal">
-          <span class="xc-price__tag">试用</span>
-          <p class="xc-price__value"><strong>¥99</strong><span>/ 30 天</span></p>
-          <p class="xc-price__desc">通用业务包 + 远程顾问支持</p>
-          <ul>
-            <li>桌面 app 全功能</li>
-            <li>通用 Mod 装机</li>
-            <li>远程协助装机</li>
-            <li>数据自有 · 私有部署</li>
-          </ul>
-          <a class="xc-price__btn xc-price__btn--solid" href="/contact.html">立即试用</a>
-        </article>
-        <article class="xc-price xc-price--hot reveal" data-delay="80">
-          <span class="xc-price__tag">推荐</span>
-          <p class="xc-price__value"><strong>¥1-5万</strong><span>永久授权</span></p>
-          <p class="xc-price__desc">单行业 Mod 定制 + 上线交付</p>
-          <ul>
-            <li>试用全功能</li>
-            <li>1 个行业 Mod 定制</li>
-            <li>四部门 AI 员工配置</li>
-            <li>1-3 天上门交付</li>
-            <li>1 年免费维护</li>
-          </ul>
-          <a class="xc-price__btn xc-price__btn--solid" href="/contact.html">咨询定制</a>
-        </article>
-        <article class="xc-price reveal" data-delay="160">
-          <span class="xc-price__tag">企业</span>
-          <p class="xc-price__value"><strong>¥5-10万</strong><span>永久授权</span></p>
-          <p class="xc-price__desc">多行业 Mod + 深度集成</p>
-          <ul>
-            <li>推荐档全功能</li>
-            <li>多行业 Mod 组合</li>
-            <li>现有系统对接（金蝶/用友/ERP）</li>
-            <li>专属 AI 员工训练</li>
-            <li>2 年免费维护</li>
-          </ul>
-          <a class="xc-price__btn xc-price__btn--line" href="/contact.html">咨询定制</a>
-        </article>
-        <article class="xc-price reveal" data-delay="240">
-          <span class="xc-price__tag">集团</span>
-          <p class="xc-price__value"><strong>¥10-50万</strong><span>永久授权</span></p>
-          <p class="xc-price__desc">集团定制 + 多组织架构</p>
-          <ul>
-            <li>企业档全功能</li>
-            <li>集团多组织架构</li>
-            <li>3 年免费维护</li>
-          </ul>
-          <a class="xc-price__btn xc-price__btn--line" href="/contact.html">商务洽谈</a>
-        </article>
-        <article class="xc-price reveal" data-delay="320">
-          <span class="xc-price__tag">旗舰</span>
-          <p class="xc-price__value"><strong>¥50-100万</strong><span>永久授权</span></p>
-          <p class="xc-price__desc">源码托管 + 二开授权</p>
-          <ul>
-            <li>集团档全功能</li>
-            <li>源码托管 + 二开授权</li>
-            <li>SLA 99.9% 保障</li>
-          </ul>
-          <a class="xc-price__btn xc-price__btn--line" href="/contact.html">商务洽谈</a>
-        </article>
-      </div>
-    </div>
-  </section>
+      </section>
 
-  <!-- ============ 下载横幅 ============ -->
-  <section class="xc-section" style="padding-top: 0;">
-    <div class="container">
-      <div class="xc-dl reveal">
-        <div>
-          <h2>下载 XCAGI 桌面 app</h2>
-          <p>Windows / macOS / Android 三平台。空壳宿主，装 Mod 变身。99 元试用 30 天。</p>
+      <!-- ============ 三阶级 AI 员工 ============ -->
+      <section class="xc-section" id="workforce">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">AI Workforce</p>
+              <h2>三阶级 AI 员工体系</h2>
+            </div>
+            <p>
+              从对话助理到岗位员工，三级调度逐级下沉——小C
+              助理可调度超级员工，超级员工可调度平台员工。
+            </p>
+          </div>
+          <div class="xc-tiers">
+            <div class="xc-tier reveal">
+              <span class="xc-tier__badge">TIER 1 · 助理</span>
+              <h3>小C助理</h3>
+              <p>
+                电脑端智能对话入口，用户统一的 AI
+                助手。处理搜索、问答和跨工具操作，是人机交互的总前台。
+              </p>
+              <ul>
+                <li>悬浮窗 + 侧栏双入口</li>
+                <li>Persona 共享引擎驱动</li>
+                <li>可调度超级员工干活</li>
+              </ul>
+            </div>
+            <div class="xc-tier reveal" data-delay="80">
+              <span class="xc-tier__badge">TIER 2 · 中继</span>
+              <h3>超级员工</h3>
+              <p>
+                Claude / Codex CLI
+                中继，多设备派工，独立人格。承接复杂任务，拆解后调度平台员工执行。
+              </p>
+              <ul>
+                <li>多设备任务派发</li>
+                <li>独立人格与上下文</li>
+                <li>可调度平台员工</li>
+              </ul>
+            </div>
+            <div class="xc-tier reveal" data-delay="160">
+              <span class="xc-tier__badge">TIER 3 · 岗位</span>
+              <h3>平台员工</h3>
+              <p>
+                管理端六线部门约 54 岗位 + 企业端四层 L1-L4 约 13 岗位，按 duty_roster
+                值班表上岗干活。
+              </p>
+              <ul>
+                <li>管理端六线部门建制</li>
+                <li>企业端四层岗位编制</li>
+                <li>按值班表自动调度</li>
+              </ul>
+            </div>
+          </div>
         </div>
-        <div class="xc-dl__actions">
-          <a class="xc-btn xc-btn--primary" href="/download">立即下载</a>
-          <a class="xc-btn xc-btn--ghost" href="/contact.html">咨询定制</a>
-        </div>
-      </div>
-    </div>
-  </section>
+      </section>
 
-  <!-- ============ 开发者 ============ -->
-  <section class="xc-section xc-section--soft" id="developer">
-    <div class="container">
-      <div class="xc-section-head reveal">
-        <div>
-          <p class="xc-kicker">开发者</p>
-          <h2>第三方开发者门户</h2>
+      <!-- ============ 行业 Mod 市场 ============ -->
+      <section class="xc-section xc-section--dark" id="mods">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">行业 Mod 市场</p>
+              <h2>已有行业包，装上即用</h2>
+            </div>
+            <a class="xc-btn xc-btn--ghost" href="/market/">进入 AI 市场</a>
+          </div>
+          <div class="xc-mods">
+            <article class="xc-mod reveal">
+              <span class="xc-mod__badge xc-mod__badge--ok">已交付</span>
+              <h3>考勤行业包</h3>
+              <p class="xc-mod__customer">太阳鸟珠宝包装 · 首家客户</p>
+              <p>
+                花名册导入、考勤模板、LLM 固化循环、异常标红、报表导出。把 30240
+                格考勤数据逐格对齐，3842/3842 槽位零差异。
+              </p>
+              <div class="xc-mod__stats">
+                <span><strong>30240</strong>格 0 差异</span>
+                <span><strong>1-3</strong>天上线</span>
+              </div>
+            </article>
+            <article class="xc-mod reveal" data-delay="80">
+              <span class="xc-mod__badge xc-mod__badge--ok">已交付</span>
+              <h3>涂料 ERP 包</h3>
+              <p class="xc-mod__customer">奇士美 · 首家涂料客户</p>
+              <p>
+                订单、出货、收货、库存、标签打印五模块联动。配方管理与批次追溯，告别重复抄录，数据一次录入全程复用。
+              </p>
+              <div class="xc-mod__stats">
+                <span><strong>5</strong>模块联动</span>
+                <span><strong>0</strong>重复录入</span>
+              </div>
+            </article>
+            <article class="xc-mod reveal" data-delay="160">
+              <span class="xc-mod__badge xc-mod__badge--gen">通用</span>
+              <h3>通用业务包</h3>
+              <p class="xc-mod__customer">适合所有行业</p>
+              <p>
+                单据识别、Excel
+                导入、标签打印、库存记录、数据导出。从通用能力起步，跑顺后按需加装行业包。
+              </p>
+              <div class="xc-mod__stats">
+                <span><strong>4</strong>核心能力</span>
+                <span><strong>¥99</strong>即可试用</span>
+              </div>
+            </article>
+          </div>
         </div>
-        <a class="xc-btn xc-btn--ghost" style="color: var(--xc-ink); border-color: var(--xc-line); background: var(--xc-panel);" href="/developer.html">进入开发者门户</a>
-      </div>
-      <div class="xc-dev">
-        <article class="xc-dev-card reveal">
-          <h3>Mod + AI 双发布</h3>
-          <p>同一个包既能作为功能 Mod 安装，也能上架为 AI 员工。基于 SDK 2.0 的 manifest、hook 与事件通信。</p>
-          <ul>
-            <li>能力声明与宿主版本兼容校验</li>
-            <li>事件 hook 支持优先级与一次性订阅</li>
-          </ul>
-        </article>
-        <article class="xc-dev-card reveal" data-delay="80">
-          <h3>上架、灰度与评价</h3>
-          <p>按比例和标签灰度放量，逐步全量或一键回滚；用户评价与作者回复沉淀口碑。</p>
-          <ul>
-            <li>灰度发布 / 全量 / 回滚</li>
-            <li>评分、评论与作者回复</li>
-          </ul>
-        </article>
-        <article class="xc-dev-card reveal" data-delay="160">
-          <h3>收益结算与行业模板</h3>
-          <p>按成交分成、对账结算与提现；提供 ERP、出货、客服、财务四套行业模板，复制即用。</p>
-          <ul>
-            <li>成交分成与对账结算</li>
-            <li>四套行业模板脚手架</li>
-          </ul>
-        </article>
-      </div>
-    </div>
-  </section>
+      </section>
 
-  <!-- ============ CTA ============ -->
-  <section class="xc-section" style="padding-top: 0;">
-    <div class="container">
-      <div class="xc-dl reveal">
-        <div>
-          <h2>让 AI 员工在你的桌面上岗</h2>
-          <p>99 元试用 30 天，1-3 天上线。装一个行业 Mod，桌面变成你们的系统。填写需求问卷，顾问 1 个工作日内联系你。</p>
+      <!-- ============ 真实案例 ============ -->
+      <section class="xc-section" id="cases">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">真实案例</p>
+              <h2>有数据，不是空话</h2>
+            </div>
+            <a
+              class="xc-btn xc-btn--ghost"
+              style="
+                color: var(--xc-ink);
+                border-color: var(--xc-line);
+                background: var(--xc-panel);
+              "
+              href="/cases.html"
+              >查看全部案例</a
+            >
+          </div>
+          <div class="xc-cases">
+            <article class="xc-case reveal">
+              <div class="xc-case__shot">
+                <img
+                  src="/assets/screenshots/transform-attendance.png"
+                  alt="太阳鸟考勤系统变身后真实界面"
+                  loading="lazy"
+                />
+              </div>
+              <div class="xc-case__body">
+                <span class="xc-case__badge">已交付</span>
+                <h3>太阳鸟珠宝包装 · 考勤行业包</h3>
+                <p>
+                  花名册导入 + 考勤模板 + LLM 固化循环。把 30240 格考勤数据逐格对齐，零人工干预。
+                </p>
+                <div class="xc-case__metrics">
+                  <div><strong>3842/3842</strong><span>槽位全匹配</span></div>
+                  <div><strong>30240</strong><span>格逐格 0 差异</span></div>
+                  <div><strong>1-3 天</strong><span>上线交付</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="xc-case reveal" data-delay="100">
+              <div class="xc-case__shot">
+                <img
+                  src="/assets/screenshots/mod-store.png"
+                  alt="奇士美涂料 ERP 包在 Mod 市场中"
+                  loading="lazy"
+                />
+              </div>
+              <div class="xc-case__body">
+                <span class="xc-case__badge">首家涂料客户</span>
+                <h3>奇士美 · 涂料 ERP 包</h3>
+                <p>订单、出货、收货、库存、标签打印联动。配方管理与批次追溯，减少人工抄录。</p>
+                <div class="xc-case__metrics">
+                  <div><strong>5</strong><span>模块联动</span></div>
+                  <div><strong>0</strong><span>重复录入</span></div>
+                  <div><strong>私有</strong><span>桌面部署</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
         </div>
-        <div class="xc-dl__actions">
-          <a class="xc-btn xc-btn--primary" href="/contact.html">填写需求问卷</a>
-        </div>
-      </div>
-    </div>
-  </section>
-</main>
+      </section>
 
-<!-- site chrome SSOT: /partials/footer.html -->
+      <!-- ============ 定价 ============ -->
+      <section class="xc-section xc-section--soft" id="pricing">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">透明定价</p>
+              <h2>明码标价，不玩套路</h2>
+            </div>
+            <p>99 元试用 30 天，满意再选永久授权。所有档位含桌面 app + 私有部署 + 1-3 天上线。</p>
+          </div>
+          <div class="xc-pricing">
+            <article class="xc-price reveal">
+              <span class="xc-price__tag">试用</span>
+              <p class="xc-price__value"><strong>¥99</strong><span>/ 30 天</span></p>
+              <p class="xc-price__desc">通用业务包 + 远程顾问支持</p>
+              <ul>
+                <li>桌面 app 全功能</li>
+                <li>通用 Mod 装机</li>
+                <li>远程协助装机</li>
+                <li>数据自有 · 私有部署</li>
+              </ul>
+              <a
+                class="xc-price__btn xc-price__btn--solid"
+                href="/contact.html?product=xcagi&amp;plan=trial"
+                >购买试用版</a
+              >
+            </article>
+            <article class="xc-price xc-price--hot reveal" data-delay="80">
+              <span class="xc-price__tag">推荐</span>
+              <p class="xc-price__value"><strong>¥1-5万</strong><span>永久授权</span></p>
+              <p class="xc-price__desc">单行业 Mod 定制 + 上线交付</p>
+              <ul>
+                <li>试用全功能</li>
+                <li>1 个行业 Mod 定制</li>
+                <li>四部门 AI 员工配置</li>
+                <li>1-3 天上门交付</li>
+                <li>1 年免费维护</li>
+              </ul>
+              <a
+                class="xc-price__btn xc-price__btn--solid"
+                href="/contact.html?product=xcagi&amp;plan=industry"
+                >购买永久授权</a
+              >
+            </article>
+            <article class="xc-price reveal" data-delay="160">
+              <span class="xc-price__tag">企业</span>
+              <p class="xc-price__value"><strong>¥5-10万</strong><span>永久授权</span></p>
+              <p class="xc-price__desc">多行业 Mod + 深度集成</p>
+              <ul>
+                <li>推荐档全功能</li>
+                <li>多行业 Mod 组合</li>
+                <li>现有系统对接（金蝶/用友/ERP）</li>
+                <li>专属 AI 员工训练</li>
+                <li>2 年免费维护</li>
+              </ul>
+              <a
+                class="xc-price__btn xc-price__btn--line"
+                href="/contact.html?product=xcagi&amp;plan=enterprise"
+                >获取企业报价</a
+              >
+            </article>
+            <article class="xc-price reveal" data-delay="240">
+              <span class="xc-price__tag">集团</span>
+              <p class="xc-price__value"><strong>¥10-50万</strong><span>永久授权</span></p>
+              <p class="xc-price__desc">集团定制 + 多组织架构</p>
+              <ul>
+                <li>企业档全功能</li>
+                <li>集团多组织架构</li>
+                <li>3 年免费维护</li>
+              </ul>
+              <a
+                class="xc-price__btn xc-price__btn--line"
+                href="/contact.html?product=xcagi&amp;plan=group"
+                >获取集团报价</a
+              >
+            </article>
+            <article class="xc-price reveal" data-delay="320">
+              <span class="xc-price__tag">旗舰</span>
+              <p class="xc-price__value"><strong>¥50-100万</strong><span>永久授权</span></p>
+              <p class="xc-price__desc">源码托管 + 二开授权</p>
+              <ul>
+                <li>集团档全功能</li>
+                <li>源码托管 + 二开授权</li>
+                <li>SLA 99.9% 保障</li>
+              </ul>
+              <a
+                class="xc-price__btn xc-price__btn--line"
+                href="/contact.html?product=xcagi&amp;plan=flagship"
+                >联系商务购买</a
+              >
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 下载横幅 ============ -->
+      <section class="xc-section" style="padding-top: 0">
+        <div class="container">
+          <div class="xc-dl reveal">
+            <div>
+              <h2>产品下载中心</h2>
+              <p>
+                下载 XCAGI 或“客来来”联合测试版。安装包、系统要求与版本校验信息独立呈现，不与 AI
+                市场混在一起。
+              </p>
+            </div>
+            <div class="xc-dl__actions">
+              <a class="xc-btn xc-btn--primary" href="/download">选择产品下载</a>
+              <a class="xc-btn xc-btn--ghost" href="#pricing">查看购买方案</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 开发者 ============ -->
+      <section class="xc-section xc-section--soft" id="developer">
+        <div class="container">
+          <div class="xc-section-head reveal">
+            <div>
+              <p class="xc-kicker">开发者</p>
+              <h2>第三方开发者门户</h2>
+            </div>
+            <a
+              class="xc-btn xc-btn--ghost"
+              style="
+                color: var(--xc-ink);
+                border-color: var(--xc-line);
+                background: var(--xc-panel);
+              "
+              href="/developer.html"
+              >进入开发者门户</a
+            >
+          </div>
+          <div class="xc-dev">
+            <article class="xc-dev-card reveal">
+              <h3>Mod + AI 双发布</h3>
+              <p>
+                同一个包既能作为功能 Mod 安装，也能上架为 AI 员工。基于 SDK 2.0 的 manifest、hook
+                与事件通信。
+              </p>
+              <ul>
+                <li>能力声明与宿主版本兼容校验</li>
+                <li>事件 hook 支持优先级与一次性订阅</li>
+              </ul>
+            </article>
+            <article class="xc-dev-card reveal" data-delay="80">
+              <h3>上架、灰度与评价</h3>
+              <p>按比例和标签灰度放量，逐步全量或一键回滚；用户评价与作者回复沉淀口碑。</p>
+              <ul>
+                <li>灰度发布 / 全量 / 回滚</li>
+                <li>评分、评论与作者回复</li>
+              </ul>
+            </article>
+            <article class="xc-dev-card reveal" data-delay="160">
+              <h3>收益结算与行业模板</h3>
+              <p>按成交分成、对账结算与提现；提供 ERP、出货、客服、财务四套行业模板，复制即用。</p>
+              <ul>
+                <li>成交分成与对账结算</li>
+                <li>四套行业模板脚手架</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ CTA ============ -->
+      <section class="xc-section" style="padding-top: 0">
+        <div class="container">
+          <div class="xc-dl reveal">
+            <div>
+              <h2>让 AI 员工在你的桌面上岗</h2>
+              <p>
+                99 元试用 30 天，1-3 天上线。装一个行业 Mod，桌面变成你们的系统。填写需求问卷，顾问
+                1 个工作日内联系你。
+              </p>
+            </div>
+            <div class="xc-dl__actions">
+              <a class="xc-btn xc-btn--primary" href="/contact.html">填写需求问卷</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
 <footer class="site-footer">
-  <div class="container footer-inner">
-    <div>
-      <a class="brand-mark" href="/index.html">
-        <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
-        <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
-      </a>
-      <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
-      <p class="footer-meta footer-legal">
-        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a>
-      </p>
-    </div>
-    <div class="footer-links">
-      <a href="/about.html">关于修茈</a>
-      <a href="/services.html">产品中心</a>
-      <a href="/solutions.html">解决方案</a>
-      <a href="/cases.html">客户案例</a>
-      <a href="/news.html">新闻资讯</a>
-      <a href="/developer.html">开发者门户</a>
-      <a href="/honors.html">资质与能力</a>
-      <a href="/contact.html">联系我们</a>
-    </div>
-  </div>
-</footer>
+      <div class="container footer-inner">
+        <div>
+          <a class="brand-mark" href="/index.html">
+            <span class="brand-seal"
+              ><img src="/assets/xiu-ci-logo.png?v=20260610d" alt="修茈科技 Logo"
+            /></span>
+            <span class="brand-name"
+              ><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span
+            >
+          </a>
+          <p class="footer-copy">
+            &copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。
+          </p>
+          <p class="footer-meta">邮箱：970882904@qq.com · 面向中小企业的 AI 自动化方案</p>
+          <p class="footer-meta footer-legal">
+            <a href="https://beian.miit.gov.cn/" rel="noopener noreferrer" target="_blank"
+              >蜀ICP备2026014056号-3A</a
+            >
+          </p>
+        </div>
+        <div class="footer-links">
+          <a href="/about.html">关于修茈</a>
+          <a href="/solutions.html">解决方案</a>
+          <a href="/cases.html">客户案例</a>
+          <a href="/developer.html">开发者门户</a>
+          <a href="/contact.html">联系我们</a>
+        </div>
+      </div>
+    </footer>
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
-<script src="./main.js?v=20260721a"></script>
+<script src="./main.js?v=20260719b"></script>
+
 
 <div id="xc-corp-butler-root"></div>
-<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260619" data-xc-corp-butler-css="1" />
-<script type="module" src="/corp-butler/corp-butler.js?v=20260619" data-xc-corp-butler-js="1"></script>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260719b" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260719b" data-xc-corp-butler-js="1"></script>
 
 </body>
 </html>
