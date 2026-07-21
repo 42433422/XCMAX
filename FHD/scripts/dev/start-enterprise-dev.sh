@@ -43,11 +43,15 @@ fi
 API_PORT=5000
 WEB_PORT=5001
 ADMIN_PORT=5011
+# 管理端 SSOT：仅网页后端可登 admin；不得共用 desktop 进程（见 desktop_admin_gate）
+ADMIN_API_PORT="${ADMIN_API_PORT:-42422}"
 API_BASE="http://127.0.0.1:${API_PORT}"
+ADMIN_API_BASE="http://127.0.0.1:${ADMIN_API_PORT}"
 
 echo "========================================"
 echo "  XCAGI 企业/桌面开发（固定端口）"
-echo "  API  ${API_BASE}  ← 须与 VITE_API_BASE 一致"
+echo "  企业 API  ${API_BASE}  ← desktop · 企业 Vite 用"
+echo "  管理 API  ${ADMIN_API_BASE}  ← web · 管理端 Vite 用（禁 desktop）"
 echo "  Web  http://127.0.0.1:${WEB_PORT}/"
 echo "  管理端 http://127.0.0.1:${ADMIN_PORT}/admin/  ← 管理员独立运维台"
 echo "  市场 ${XCAGI_MARKET_BASE_URL}（${MARKET_MODE} · ${MARKET_HINT}）"
@@ -67,10 +71,25 @@ else
 fi
 
 health_ok() {
-  curl -fsS --max-time 2 "${API_BASE}/api/health" >/dev/null 2>&1
+  curl --noproxy '*' -fsS --max-time 2 "$1/api/health?lite=1" >/dev/null 2>&1
 }
 
-echo "[1/2] 启动后端 desktop → :${API_PORT} ..."
+wait_health() {
+  local base="$1"
+  local label="$2"
+  local pid="$3"
+  for _ in $(seq 1 60); do
+    if health_ok "${base}"; then
+      echo "[OK] ${label} 就绪 ${base}/api/health"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "[ERR] ${label} 未在 60s 内就绪（PID ${pid}）" >&2
+  return 1
+}
+
+echo "[1/4] 启动企业后端 desktop → :${API_PORT} ..."
 mkdir -p "${XCAGI_DATA_DIR}/data"
 (
   cd "${XCAGI_DIR}"
@@ -88,36 +107,45 @@ mkdir -p "${XCAGI_DATA_DIR}/data"
   exec "${PY}" run_fastapi.py --desktop --headless --host 127.0.0.1 --port "${API_PORT}" --data-dir "${XCAGI_DATA_DIR}"
 ) &
 BACKEND_PID=$!
+wait_health "${API_BASE}" "企业 desktop API" "${BACKEND_PID}"
 
-for _ in $(seq 1 45); do
-  if health_ok; then
-    echo "[OK] 后端就绪 ${API_BASE}/api/health"
-    break
-  fi
-  sleep 1
-done
-if ! health_ok; then
-  echo "[ERR] 后端未在 45s 内就绪（PID ${BACKEND_PID}）" >&2
-  exit 1
-fi
+echo "[2/4] 启动管理端后端 web → :${ADMIN_API_PORT}（XCAGI_DESKTOP_MODE=0）..."
+mkdir -p "${FHD_ROOT}/.runtime"
+echo "${ADMIN_API_PORT}" > "${FHD_ROOT}/.runtime/api.port"
+(
+  cd "${FHD_ROOT}"
+  export XCAGI_DESKTOP_MODE=0
+  export FASTAPI_PORT="${ADMIN_API_PORT}"
+  export XCAGI_API_PORT="${ADMIN_API_PORT}"
+  export XCAGI_GLOBAL_RATE_LIMIT=0
+  export XCAGI_AUTH_RATE_LIMIT=0
+  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-1}"
+  unset XCAGI_DESKTOP_FORCE_LOCAL_DATABASE || true
+  unset XCAGI_MOD_ISOLATED_DATABASES || true
+  exec "${PY}" run.py
+) &
+ADMIN_BACKEND_PID=$!
+wait_health "${ADMIN_API_BASE}" "管理端 web API" "${ADMIN_BACKEND_PID}"
 
 if [[ ! -f "${FRONTEND_DIR}/package.json" ]]; then
   echo "[ERR] 未找到 ${FRONTEND_DIR}/package.json" >&2
   exit 1
 fi
 
-echo "[2/3] 启动 Vite 企业端 → :${WEB_PORT}（generic 宿主 · 不扫 mods-admin-runtime）..."
-echo "      确认 frontend/.env.development.local 中 VITE_API_BASE=${API_BASE}"
+echo "[3/4] 启动 Vite 企业端 → :${WEB_PORT}（generic 宿主 · 不扫 mods-admin-runtime）..."
+echo "      企业端代理 ${API_BASE}；管理端代理 ${ADMIN_API_BASE}"
 (
   cd "${FRONTEND_DIR}"
+  export VITE_API_BASE="${API_BASE}"
+  export VITE_DEV_PORT="${WEB_PORT}"
   exec npm run dev
 ) &
 
 sleep 2
-echo "[3/3] 启动管理端 admin-console → :${ADMIN_PORT}/admin/ ..."
+echo "[4/4] 启动管理端 admin-console → :${ADMIN_PORT}/admin/ ..."
 (
   cd "${FHD_ROOT}/admin-console"
-  export VITE_API_BASE="${API_BASE}"
+  export VITE_API_BASE="${ADMIN_API_BASE}"
   export VITE_DEV_PORT="${ADMIN_PORT}"
   exec npm run dev
 ) &
@@ -130,7 +158,8 @@ else
   echo "[WARN] :${WEB_PORT} 尚未监听，请查看 npm 输出。"
 fi
 if lsof -iTCP:"${ADMIN_PORT}" -sTCP:LISTEN -Pn >/dev/null 2>&1; then
-  echo "[OK] 管理端 http://127.0.0.1:${ADMIN_PORT}/admin/login"
+  open "http://127.0.0.1:${ADMIN_PORT}/admin/login" 2>/dev/null || true
+  echo "[OK] 管理端 http://127.0.0.1:${ADMIN_PORT}/admin/login （API ${ADMIN_API_BASE}）"
 else
   echo "[WARN] :${ADMIN_PORT} 尚未监听，请 cd FHD/admin-console && npm run dev"
 fi
