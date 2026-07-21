@@ -501,10 +501,11 @@ class TestMain:
         rc = review.main(["--pr-number", "1"])
         assert rc == 1
 
-    def test_medium_llm_failure_fails_closed(
+    def test_medium_llm_failure_fails_open(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """LLM 不可用时 fail-open 不阻断（符合 cicd-e2e-prompt.md 决策矩阵）。"""
         diff = (
             "diff --git a/client.py b/client.py\n"
             "@@ -1,1 +1,1 @@\n"
@@ -518,7 +519,7 @@ class TestMain:
         )
         monkeypatch.setattr(review, "post_line_comment", lambda *a, **k: True)
         rc = review.main(["--pr-number", "1"])
-        assert rc == 2
+        assert rc == 0  # fail-open：LLM 不可用不阻断
 
     def test_pragma_no_cover_does_not_block(
         self,
