@@ -712,6 +712,26 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
     )
 
 
+def _resume_dispatch_context(
+    resume_candidate: Optional[Dict[str, Any]], steps_to_run: set[str]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Choose the Para task id and base branch for a resumed loop.
+
+    Code retries must use a fresh Para task. A score remediation still keeps
+    the prior candidate branch as its base so the production fix survives.
+    Review/QA-only retries keep the original task and branch for evidence.
+    """
+
+    if not resume_candidate:
+        return None, None
+    para_task_id = str(resume_candidate.get("para_task_id") or "").strip() or None
+    code_branch = str(resume_candidate.get("branch") or "").strip() or None
+    if "code" not in steps_to_run:
+        return para_task_id, code_branch
+    if resume_candidate.get("continue_existing_code_task"):
+        return None, code_branch
+    return None, None
+
 def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_RESUME_REVIEW_QA", True):
         return None
@@ -5207,13 +5227,9 @@ def run_self_maintenance_loop(
     _append_ledger(start_record)
 
     steps: List[Dict[str, Any]] = []
-    para_task_id: Optional[str] = (
-        str(resume_candidate.get("para_task_id")) if resume_candidate else None
-    )
-    code_branch: Optional[str] = str(resume_candidate.get("branch")) if resume_candidate else None
-
     plan = []
     steps_to_run = _resume_steps(resume_candidate)
+    para_task_id, code_branch = _resume_dispatch_context(resume_candidate, steps_to_run)
     merge_review_qa_into_code = _merge_review_qa_into_code()
     if merge_review_qa_into_code:
         # 合并模式：plan 只保留 code step（review/qa 由 code step 完成后构造虚拟 step 注入）
