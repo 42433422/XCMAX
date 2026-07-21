@@ -1,7 +1,10 @@
 """官网产品下载页公开行动看板（只读、脱敏）。
 
 把 ``daily_action_items`` 导出为公开 JSON（无源码路径、无内部 ID、无写接口），
-供 ``download.html`` 同源 fetch ``/download-action-board.json``。
+供 ``/download/breakpoints`` 与 ``/download/goals`` 同源 fetch ``/download-action-board.json``。
+
+SSOT：``kind=patch`` → 断点清单；``kind=update`` → 工作目标。
+digest 落库后 / 部署状态回写后调用 ``write_public_action_board`` 刷新快照。
 """
 
 from __future__ import annotations
@@ -52,8 +55,21 @@ def _clean_public_text(text: str) -> str:
     return s or "（条目摘要）"
 
 
+def _public_clock(raw: Any) -> str:
+    """从 created_at/updated_at 抽出公开可读时刻（HH:MM），无则空串。"""
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    # 常见：2026-07-16T08:15:22+00:00 / 2026-07-16 08:15:22
+    m = re.search(r"(\d{2}):(\d{2})", s)
+    if m:
+        return f"{m.group(1)}:{m.group(2)}"
+    return ""
+
+
 def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
     status = str(it.get("status") or "open")
+    updated = str(it.get("updated_at") or it.get("created_at") or "")
     return {
         "title": _clean_public_text(str(it.get("text") or "")),
         "priority": str(it.get("priority") or "P2"),
@@ -64,7 +80,73 @@ def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
         "owner": str(it.get("employee_label") or "AI 员工").strip()[:64] or "AI 员工",
         "kind": str(it.get("kind") or ""),
         "day": str(it.get("day") or ""),
+        "updated_at": updated[:40],
+        "ts": _public_clock(updated),
     }
+
+
+def _clip_title(title: str, max_len: int = 72) -> str:
+    t = (title or "").strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max(0, max_len - 1)] + "…"
+
+
+def build_trajectory(
+    patches: List[Dict[str, Any]],
+    updates: List[Dict[str, Any]],
+    *,
+    limit: int = 24,
+) -> List[Dict[str, Any]]:
+    """从双看板真实条目生成「世界意志」轨迹；无数据时返回空列表（不造假）。"""
+    merged: List[Dict[str, Any]] = []
+    for it in patches:
+        row = dict(it)
+        row["kind"] = row.get("kind") or "patch"
+        merged.append(row)
+    for it in updates:
+        row = dict(it)
+        row["kind"] = row.get("kind") or "update"
+        merged.append(row)
+
+    if not merged:
+        return []
+
+    # 按真实更新时间倒序，避免伪时序
+    merged.sort(key=lambda x: str(x.get("updated_at") or x.get("day") or ""), reverse=True)
+
+    out: List[Dict[str, Any]] = []
+    n = min(len(merged), max(1, limit))
+    for it in merged[:n]:
+        kind = str(it.get("kind") or "patch")
+        href = "/download/breakpoints" if kind == "patch" else "/download/goals"
+        status = str(it.get("status") or "open")
+        status_label = str(it.get("status_label") or _STATUS_PUBLIC.get(status, status))
+        owner = str(it.get("owner") or "AI 员工")
+        line_label = str(it.get("line_label") or "产线")
+        title = _clip_title(str(it.get("title") or ""))
+        text = f"{status_label} · {owner} · {line_label}：{title}"
+        ts = str(it.get("ts") or "") or _public_clock(it.get("updated_at"))
+        if not ts and it.get("day"):
+            ts = str(it.get("day"))[-5:] if len(str(it.get("day"))) >= 5 else str(it.get("day"))
+        out.append(
+            {
+                "ts": ts or "—",
+                "text": text,
+                "line": str(it.get("line") or "P-S"),
+                "line_label": line_label,
+                "status": status,
+                "status_label": status_label,
+                "kind": kind,
+                "href": href,
+                "day": str(it.get("day") or ""),
+                "owner": owner,
+                "priority": str(it.get("priority") or "P2"),
+                "title": str(it.get("title") or ""),
+                "updated_at": str(it.get("updated_at") or "")[:40],
+            }
+        )
+    return out
 
 
 def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
@@ -108,6 +190,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
             "summary": _sum(u_stats),
             "items": updates,
         },
+        "trajectory": build_trajectory(patches, updates),
     }
 
 
@@ -123,13 +206,30 @@ def public_board_targets() -> List[Path]:
         / "download-action-board.json",
         root / "FHD" / "MODstore" / "market" / "public" / "download-action-board.json",
     ]
+    # 生产 nginx live root（常为 /opt/xcmax/current 的 symlink）
+    for raw in ("/root/成都修茈科技有限公司", "/opt/xcmax/current/成都修茈科技有限公司"):
+        try:
+            live = Path(raw)
+            if live.is_dir():
+                targets.append(live.resolve() / "download-action-board.json")
+        except OSError:
+            pass
     extra = (os.environ.get("MODSTORE_PUBLIC_ACTION_BOARD_EXTRA") or "").strip()
     if extra:
         for raw in extra.split(os.pathsep):
             raw = raw.strip()
             if raw:
                 targets.append(Path(raw).expanduser())
-    return targets
+    # 去重保序
+    seen: set[str] = set()
+    uniq: List[Path] = []
+    for t in targets:
+        key = str(t)
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(t)
+    return uniq
 
 
 def write_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>世界意志 · AI 工作轨迹 | 成都修茈科技有限公司</title>
+    <meta
+      name="description"
+      content="世界意志：公开只读展示 XCAGI 无人公司当日真实 AI 工作轨迹、断点清单与工作目标，数据同源 daily_action_items 脱敏快照。"
+    />
+    <meta name="keywords" content="世界意志, AI 工作轨迹, 无人公司, XCAGI, 断点清单, 工作目标" />
+    <link rel="canonical" href="https://xiu-ci.com/world-will" />
+    <link rel="stylesheet" href="./styles.css?v=20260719b" />
+    <style>
+      body[data-page='world-will'] .ww-hero {
+        padding: 72px 0 40px;
+        border-bottom: 1px solid var(--xc-line, #e2e8f2);
+        background:
+          radial-gradient(720px 380px at 88% 0%, rgba(11, 99, 246, 0.1), transparent 70%),
+          #f7f9fc;
+      }
+      body[data-page='world-will'] .ww-hero .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 14px;
+        color: #0b63f6;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      body[data-page='world-will'] .ww-hero .eyebrow i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #1f9d6b;
+        box-shadow: 0 0 0 4px rgba(31, 157, 107, 0.18);
+      }
+      body[data-page='world-will'] .ww-hero h1 {
+        margin: 0 0 14px;
+        font-size: clamp(34px, 4.6vw, 48px);
+        letter-spacing: -0.04em;
+        line-height: 1.12;
+      }
+      body[data-page='world-will'] .ww-hero p {
+        margin: 0;
+        max-width: 640px;
+        color: #51627a;
+        font-size: 15px;
+        line-height: 1.65;
+      }
+      body[data-page='world-will'] .ww-meta {
+        margin-top: 16px;
+        color: #8b94a0;
+        font-size: 12px;
+      }
+      body[data-page='world-will'] .ww-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+      body[data-page='world-will'] .ww-section {
+        padding: 40px 0 64px;
+      }
+      body[data-page='world-will'] .ww-sum {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 28px;
+      }
+      body[data-page='world-will'] .ww-sum-card {
+        padding: 16px 18px;
+        border: 1px solid #e2e6ec;
+        border-radius: 14px;
+        background: #fff;
+      }
+      body[data-page='world-will'] .ww-sum-card strong {
+        display: block;
+        font-size: 24px;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+      }
+      body[data-page='world-will'] .ww-sum-card span {
+        display: block;
+        margin-top: 6px;
+        color: #7b8490;
+        font-size: 11px;
+        font-weight: 650;
+      }
+      body[data-page='world-will'] .ww-sum-card.is-live strong { color: #1f9d6b; }
+      body[data-page='world-will'] .ww-sum-card.is-p0 strong { color: #c0392b; }
+      body[data-page='world-will'] .ww-sum-card.is-todo strong { color: #7257e8; }
+      body[data-page='world-will'] .ww-sum-card.is-blue strong { color: #0b63f6; }
+      body[data-page='world-will'] .ww-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        gap: 22px;
+        align-items: start;
+      }
+      body[data-page='world-will'] .ww-panel {
+        border: 1px solid #e2e6ec;
+        border-radius: 16px;
+        background: #fff;
+        overflow: hidden;
+      }
+      body[data-page='world-will'] .ww-panel-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        border-bottom: 1px solid #eef1f5;
+      }
+      body[data-page='world-will'] .ww-panel-head h2 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+      body[data-page='world-will'] .ww-panel-head a {
+        color: #0b63f6;
+        font-size: 12px;
+        font-weight: 650;
+        text-decoration: none;
+      }
+      body[data-page='world-will'] .ww-feed {
+        display: grid;
+        gap: 0;
+        max-height: 560px;
+        overflow: auto;
+      }
+      body[data-page='world-will'] .ww-item {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #f0f3f7;
+        text-decoration: none;
+        color: inherit;
+      }
+      body[data-page='world-will'] .ww-item:last-child { border-bottom: 0; }
+      body[data-page='world-will'] .ww-item:hover { background: #f8fafc; }
+      body[data-page='world-will'] .ww-item time {
+        color: #8b94a0;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+      body[data-page='world-will'] .ww-item h3 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.45;
+        letter-spacing: -0.01em;
+      }
+      body[data-page='world-will'] .ww-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        color: #8b94a0;
+        font-size: 11px;
+      }
+      body[data-page='world-will'] .ww-badge {
+        display: inline-flex;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #f3f5f8;
+        color: #5f6874;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      body[data-page='world-will'] .ww-badge.is-open { background: #fff4e5; color: #b86a12; }
+      body[data-page='world-will'] .ww-badge.is-done { background: #eaf8f3; color: #118866; }
+      body[data-page='world-will'] .ww-list {
+        display: grid;
+        gap: 0;
+      }
+      body[data-page='world-will'] .ww-row {
+        padding: 14px 18px;
+        border-bottom: 1px solid #f0f3f7;
+      }
+      body[data-page='world-will'] .ww-row:last-child { border-bottom: 0; }
+      body[data-page='world-will'] .ww-row h3 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.45;
+      }
+      body[data-page='world-will'] .ww-empty {
+        padding: 36px 18px;
+        color: #8b94a0;
+        font-size: 13px;
+        text-align: center;
+      }
+      body[data-page='world-will'] .ww-note {
+        margin: 22px 0 0;
+        color: #9aa3ad;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      @media (max-width: 900px) {
+        body[data-page='world-will'] .ww-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        body[data-page='world-will'] .ww-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+<body data-page="world-will">
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html">
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav" aria-label="站点导航">
+      <div class="nav-menu">
+        <a data-nav="index" href="/index.html">首页</a>
+        <a data-nav="about" href="/about.html">关于修茈</a>
+        <a data-nav="visualization" href="/visualization">可视化展示</a>
+        <a data-nav="solutions" href="/solutions.html">方案与案例</a>
+        <a class="nav-optional" data-nav="news" href="/news.html">新闻资讯</a>
+        <a class="nav-optional" data-nav="honors" href="/honors.html">资质与能力</a>
+        <a data-nav="contact" href="/contact.html">联系我们</a>
+        <a data-nav="developer" href="/developer.html">开发者中心</a>
+        <a class="active" data-nav="world-will" href="/world-will">世界意志</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--primary" href="/download">产品下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link" data-nav="index">首页</a>
+  <a href="/about.html" class="mobile-menu-link" data-nav="about">关于修茈</a>
+  <a href="/visualization" class="mobile-menu-link" data-nav="visualization">可视化展示</a>
+  <a href="/solutions.html" class="mobile-menu-link" data-nav="solutions">方案与案例</a>
+  <a href="/news.html" class="mobile-menu-link" data-nav="news">新闻资讯</a>
+  <a href="/honors.html" class="mobile-menu-link" data-nav="honors">资质与能力</a>
+  <a href="/contact.html" class="mobile-menu-link" data-nav="contact">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link" data-nav="developer">开发者中心</a>
+  <a href="/world-will" class="mobile-menu-link active" data-nav="world-will">世界意志</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
+    <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
+  </div>
+</nav>
+
+<main>
+      <section class="ww-hero">
+        <div class="container">
+          <p class="eyebrow"><i aria-hidden="true"></i> World Will · Live</p>
+          <h1>世界意志</h1>
+          <p>
+            无人公司当日真实 AI 工作轨迹。数据来自公开行动看板（断点清单 / 工作目标同源），只读脱敏，不含源码路径与内部标识。
+          </p>
+          <p class="ww-meta" id="ww-meta">加载中…</p>
+          <div class="ww-actions">
+            <a class="btn btn-primary" href="/download/breakpoints">断点清单</a>
+            <a class="btn btn-secondary" href="/download/goals">工作目标</a>
+            <a class="btn btn-secondary" href="/visualization">可视化展示</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="ww-section">
+        <div class="container">
+          <div class="ww-sum" id="ww-sum" aria-live="polite"></div>
+          <div class="ww-grid">
+            <section class="ww-panel" aria-labelledby="ww-traj-title">
+              <div class="ww-panel-head">
+                <h2 id="ww-traj-title">AI 工作轨迹</h2>
+                <span id="ww-traj-count">—</span>
+              </div>
+              <div class="ww-feed" id="ww-traj" aria-live="polite"></div>
+            </section>
+            <div class="ww-side">
+              <section class="ww-panel" aria-labelledby="ww-bp-title" style="margin-bottom: 22px">
+                <div class="ww-panel-head">
+                  <h2 id="ww-bp-title">断点清单</h2>
+                  <a href="/download/breakpoints">详看 →</a>
+                </div>
+                <div class="ww-list" id="ww-breakpoints" aria-live="polite"></div>
+              </section>
+              <section class="ww-panel" aria-labelledby="ww-goals-title">
+                <div class="ww-panel-head">
+                  <h2 id="ww-goals-title">工作目标</h2>
+                  <a href="/download/goals">详看 →</a>
+                </div>
+                <div class="ww-list" id="ww-goals" aria-live="polite"></div>
+              </section>
+            </div>
+          </div>
+          <p class="ww-note">
+            世界意志页只展示 digest / 派发后写出的公开 JSON（<code>/download-action-board.json</code>）。空列表表示当日暂无公开条目，不会用占位叙事冒充运行中。
+          </p>
+        </div>
+      </section>
+    </main>
+<footer class="site-footer">
+      <div class="container footer-inner">
+        <div>
+          <a class="brand-mark" href="/index.html"
+            ><span class="brand-seal"
+              ><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span
+            ><span class="brand-name"
+              ><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span
+            ></a
+          >
+          <p class="footer-copy">
+            &copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。
+          </p>
+          <p class="footer-meta">邮箱：970882904@qq.com · 面向中小企业的 AI 自动化方案</p>
+          <p class="footer-meta footer-legal">
+            <a href="https://beian.miit.gov.cn/" rel="noopener noreferrer" target="_blank"
+              >蜀ICP备2026014056号-3A</a
+            >
+          </p>
+        </div>
+        <div class="footer-links">
+          <a href="/about.html">关于修茈</a><a href="/visualization">可视化展示</a
+          ><a href="/developer.html">开发者中心</a><a href="/world-will">世界意志</a
+          ><a href="/download/breakpoints">断点清单</a><a href="/contact.html">联系我们</a>
+        </div>
+      </div>
+    </footer>
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="./main.js?v=20260719b"></script>
+
+
+<script src="./world-will.js?v=20260719b" defer></script>
+
+
+<div id="xc-corp-butler-root"></div>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260719b" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260719b" data-xc-corp-butler-js="1"></script>
+
+</body>
+</html>

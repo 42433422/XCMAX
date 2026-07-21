@@ -26,6 +26,7 @@ const WRAP_PAGES = [
   { file: 'cases.html', activeNav: 'cases' },
   { file: 'contact.html', activeNav: 'contact' },
   { file: 'developer.html', activeNav: 'developer' },
+  { file: 'world-will.html', activeNav: 'world-will' },
   { file: 'honors.html', activeNav: 'honors' },
   { file: 'case-edu.html', activeNav: 'cases' },
   { file: 'case-manufacture.html', activeNav: 'cases' },
@@ -93,9 +94,11 @@ function wrapPages() {
       bodyAttrs:
         activeNav === 'home'
           ? 'data-page="index"'
-          : activeNav === 'contact'
-            ? 'class="page-contact"'
-            : '',
+          : activeNav === 'world-will'
+            ? 'data-page="world-will"'
+            : activeNav === 'contact'
+              ? 'class="page-contact"'
+              : '',
     })
     fs.writeFileSync(srcPath, html, 'utf8')
   }

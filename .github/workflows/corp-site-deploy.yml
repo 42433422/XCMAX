@@ -32,8 +32,8 @@ on:
       - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
       - '成都修茈科技有限公司/download-action-board.json'
+      - '成都修茈科技有限公司/download-action-board.js'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-action-board.json'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/views/SoftwareDownloadView.vue'
       - '.github/workflows/corp-site-deploy.yml'
 
@@ -149,16 +149,14 @@ jobs:
             xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
             echo "[verify] public action board independent pages:"
-            grep -E -q '/download/breakpoints|断点清单' /tmp/xc-download.html
-            grep -E -q '/download/goals|工作目标' /tmp/xc-download.html
-            xc_curl -o /tmp/xc-bp.html https://xiu-ci.com/download/breakpoints
+            xc_curl -o /tmp/xc-breakpoints.html https://xiu-ci.com/download/breakpoints
             xc_curl -o /tmp/xc-goals.html https://xiu-ci.com/download/goals
-            grep -E -q '断点清单|data-board="breakpoints"' /tmp/xc-bp.html
+            grep -E -q '断点清单|data-board="breakpoints"' /tmp/xc-breakpoints.html
             grep -E -q '工作目标|data-board="goals"' /tmp/xc-goals.html
             xc_curl -o /tmp/xc-action-board.json https://xiu-ci.com/download-action-board.json
             grep -E -q 'public_action_board|breakpoints|goals' /tmp/xc-action-board.json
             xc_curl -o /tmp/xc-action-board.js https://xiu-ci.com/download-action-board.js
-            grep -E -q 'ACTION_BOARD|data-board' /tmp/xc-action-board.js
+            grep -E -q 'ACTION_BOARD|breakpoints|goals' /tmp/xc-action-board.js
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
               head -n 2 "${LIVE_SITE}/partials/header.html"
