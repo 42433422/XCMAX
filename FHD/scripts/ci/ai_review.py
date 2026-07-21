@@ -318,6 +318,151 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
 
 
 # =====================================================================
+# Path-level 规则（LLM-independent，fail-open 时兜底）
+# =====================================================================
+
+_FORBIDDEN_PATH_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    # (rule_name, regex, suggestion)
+    (
+        "forbid-workflows-modification",
+        re.compile(r"(^|/)\.github/workflows/"),
+        "禁止 PR 修改 GitHub Actions workflows（SSOT 由子目录 sync 脚本统一发布）",
+    ),
+    (
+        "forbid-migrations-modification",
+        re.compile(r"(^|/)(db/migrations|alembic/versions)/"),
+        "数据库迁移需 DBA 评审，禁止 PR 直接修改",
+    ),
+    (
+        "forbid-deploy-scripts-modification",
+        re.compile(r"(^|/)scripts/deploy/|(^|/)Dockerfile|(^|/)docker-compose"),
+        "部署脚本/Dockerfile 修改需 DevOps 评审",
+    ),
+    (
+        "forbid-approval-ledger-modification",
+        re.compile(r"(^|/)app/(application|domain)/autonomy/"),
+        "自治 approval ledger 核心代码修改需架构师评审",
+    ),
+    (
+        "forbid-ci-ssot-modification",
+        re.compile(r"(^|/)docs/CI_SSOT\.md|(^|/)\.trae/rules/cicd-e2e-prompt\.md"),
+        "CI/CD SSOT 文档修改需 Owner 评审",
+    ),
+    (
+        "forbid-modifying-pyproject-coverage",
+        re.compile(r"(^|/)pyproject\.toml$"),
+        "pyproject.toml 修改需检查 fail_under 是否被降低",
+    ),
+    (
+        "forbid-modifying-vitest-thresholds",
+        re.compile(r"(^|/)vitest\.config\.js$"),
+        "vitest.config.js 修改需检查 thresholds 是否被降低",
+    ),
+]
+
+_FORBIDDEN_DELETION_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    (
+        "forbid-deleting-test-files",
+        re.compile(r"(^|/)tests/test_.*\.py$|(^|/)tests/.*_test\.py$"),
+        "禁止删除测试文件",
+    ),
+    (
+        "forbid-deleting-route-golden",
+        re.compile(r"(^|/)tests/test_routes/route_golden.*\.json$"),
+        "禁止删除路由 golden 文件",
+    ),
+]
+
+_BINARY_FILE_EXTENSIONS = {".db", ".sqlite", ".sqlite3", ".env", ".pem", ".key", ".p12"}
+
+
+def match_path_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """对 diff hunks 应用 path-level 规则，返回 finding（不依赖 LLM）。"""
+    findings: list[Finding] = []
+    seen: set[tuple[str, str]] = set()
+    for hunk in hunks:
+        for rule_name, pattern, suggestion in _FORBIDDEN_PATH_PATTERNS:
+            if pattern.search(hunk.file_path):
+                key = (hunk.file_path, rule_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                findings.append(
+                    Finding(
+                        file_path=hunk.file_path,
+                        line=hunk.start_line,
+                        rule=rule_name,
+                        severity="high",
+                        snippet=f"file: {hunk.file_path}",
+                        suggestion=suggestion,
+                    )
+                )
+    return findings
+
+
+def match_deletion_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """检测关键文件被删除（test 文件 / route golden）。"""
+    findings: list[Finding] = []
+    # 收集被删除的文件路径：hunk 中只有 - 行、无 + 行
+    deleted_files: set[str] = set()
+    for hunk in hunks:
+        # DiffHunk.lines 元组结构：(line_no, prefix, content)
+        has_add = any(prefix == "+" for _, prefix, _ in hunk.lines)
+        has_del = any(prefix == "-" for _, prefix, _ in hunk.lines)
+        if has_del and not has_add:
+            deleted_files.add(hunk.file_path)
+    for file_path in deleted_files:
+        for rule_name, pattern, suggestion in _FORBIDDEN_DELETION_PATTERNS:
+            if pattern.search(file_path):
+                findings.append(
+                    Finding(
+                        file_path=file_path,
+                        line=0,
+                        rule=rule_name,
+                        severity="high",
+                        snippet=f"deleted file: {file_path}",
+                        suggestion=suggestion,
+                    )
+                )
+    return findings
+
+
+def match_binary_file_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """检测二进制/敏感文件新增。"""
+    findings: list[Finding] = []
+    for hunk in hunks:
+        ext = os.path.splitext(hunk.file_path)[1].lower()
+        if ext in _BINARY_FILE_EXTENSIONS:
+            # 只对新增文件报警（hunk 有 + 行）
+            has_add = any(prefix == "+" for _, prefix, _ in hunk.lines)
+            if has_add:
+                findings.append(
+                    Finding(
+                        file_path=hunk.file_path,
+                        line=hunk.start_line,
+                        rule="forbid-binary-file-addition",
+                        severity="high",
+                        snippet=f"binary/sensitive file: {hunk.file_path}",
+                        suggestion=f"禁止提交 {ext} 文件（可能含密钥/数据库）",
+                    )
+                )
+    return findings
+
+
+def run_fallback_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """LLM 不可用时的兜底规则集（path + deletion + binary file）。
+
+    返回的 finding 一律 severity=high，直接进 blocking_findings，
+    不进 LLM 通道，不受 trusted_authors 影响。
+    """
+    return (
+        match_path_rules(hunks)
+        + match_deletion_rules(hunks)
+        + match_binary_file_rules(hunks)
+    )
+
+
+# =====================================================================
 # LLM 复核（fail-closed）
 # =====================================================================
 
@@ -512,12 +657,39 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[review] BLOCK - {len(blocking_findings)} blocking finding(s)")
         return 1
     if unavailable_findings:
-        # LLM 不可用时 fail-open 不阻断合并（仅评论），符合 cicd-e2e-prompt.md
-        # 决策矩阵约定："LLM 故障 fail-open 不阻断，confirmed-high 才阻断"。
+        # LLM 不可用：先跑 path-level 规则兜底，再决定是否 fail-open。
+        # 决策矩阵原约定 "LLM 故障 fail-open 不阻断"，但完全放行会让所有 PR 在 LLM
+        # 故障期间无门禁可过；兜底规则不依赖 LLM，发现 high 级问题仍阻断合并。
+        # 兜底 finding 一律 severity=high，不进 LLM 通道，不受 trusted_authors 影响。
+        fallback_findings = run_fallback_rules(hunks)
+        if fallback_findings:
+            blocking_findings.extend(fallback_findings)
+            for f in fallback_findings:
+                body = (
+                    f"**[HIGH-FALLBACK] {f.rule}**\n\n"
+                    f"{f.suggestion}\n\n```\n{f.snippet}\n```"
+                )
+                ok = post_line_comment(
+                    pr_number=pr_number,
+                    path=f.file_path,
+                    line=f.line,
+                    body=body,
+                    commit_id=args.commit_id or None,
+                )
+                if not ok:
+                    comment_failures += 1
+                    print(f"::error::[review] comment failed for {f.file_path}:{f.line}")
+            print(
+                f"::error::[review] LLM unavailable + fallback rules blocked: "
+                f"{len(fallback_findings)} finding(s)"
+            )
+            return 1
+        # 兜底规则无 finding：维持原 fail-open 策略（仅评论，不阻断）。
         # 仍尝试评论，若评论失败也不阻断（comment_failures 仅记录，不影响退出码）。
         print(
             "::warning::[review] LLM evidence unavailable - failing open per policy "
-            f"(unavailable={len(unavailable_findings)}, comment_failures={comment_failures})"
+            f"(unavailable={len(unavailable_findings)}, "
+            f"comment_failures={comment_failures}, fallback_rules=passed)"
         )
         return 0
     if comment_failures:

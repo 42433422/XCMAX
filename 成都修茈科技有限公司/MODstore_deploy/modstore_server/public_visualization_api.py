@@ -107,7 +107,11 @@ def _release_manifest_path() -> Path:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, json.JSONDecodeError):
             continue
-        if isinstance(raw, dict) and isinstance(raw.get("release_history"), list) and raw["release_history"]:
+        if (
+            isinstance(raw, dict)
+            and isinstance(raw.get("release_history"), list)
+            and raw["release_history"]
+        ):
             return path
     return candidates[0]
 
@@ -354,7 +358,11 @@ def _prom_instant(expr: str) -> float | None:
         return None
     if not isinstance(payload, dict) or payload.get("status") != "success":
         return None
-    result = ((payload.get("data") or {}).get("result")) if isinstance(payload.get("data"), dict) else None
+    result = (
+        ((payload.get("data") or {}).get("result"))
+        if isinstance(payload.get("data"), dict)
+        else None
+    )
     if not isinstance(result, list) or not result:
         return None
     try:
@@ -450,25 +458,33 @@ def _build_monitor_payload(traffic_source: dict[str, Any]) -> tuple[dict[str, An
     mod_requests = int(traffic_source.get("mod_requests") or 0)
     window_days = int(traffic_source.get("window_days") or 0) or None
     log_err_rate = round(api_5xx / api_requests * 100, 2) if api_requests else None
-    log_rps = round(api_requests / (window_days * 86400), 4) if api_requests and window_days else None
+    log_rps = (
+        round(api_requests / (window_days * 86400), 4) if api_requests and window_days else None
+    )
     log_mod_qps = (
         round(mod_requests / (window_days * 86400), 4) if mod_requests and window_days else None
     )
 
-    api_mode = "live" if any(v is not None for v in (p95, rps, err_rate, active)) else (
-        "logs" if api_requests else "offline"
+    api_mode = (
+        "live"
+        if any(v is not None for v in (p95, rps, err_rate, active))
+        else ("logs" if api_requests else "offline")
     )
     infra_mode = (
         "live"
         if any(v is not None for v in (pod_cpu, pod_mem, disk, restarts))
-        else "k8s"
-        if not prom_live
+        else "k8s" if not prom_live else "offline"
+    )
+    mod_mode = (
+        "live"
+        if any(v is not None for v in (mod_qps, sqlite_ready, neuro_delivery, mod_p95))
+        else ("logs" if mod_requests else "offline")
+    )
+    bus_mode = (
+        "live"
+        if any(v is not None for v in (bus_publish, bus_loss, breaker, ai_p95))
         else "offline"
     )
-    mod_mode = "live" if any(v is not None for v in (mod_qps, sqlite_ready, neuro_delivery, mod_p95)) else (
-        "logs" if mod_requests else "offline"
-    )
-    bus_mode = "live" if any(v is not None for v in (bus_publish, bus_loss, breaker, ai_p95)) else "offline"
 
     monitor = {
         "title": "监控仪表盘 · Grafana / Prometheus / Loki",
@@ -500,9 +516,11 @@ def _build_monitor_payload(traffic_source: dict[str, Any]) -> tuple[dict[str, An
                     ),
                     _panel(
                         "5xx 错误率",
-                        _fmt_num(err_rate, digits=2)
-                        if err_rate is not None
-                        else _fmt_num(log_err_rate, digits=2),
+                        (
+                            _fmt_num(err_rate, digits=2)
+                            if err_rate is not None
+                            else _fmt_num(log_err_rate, digits=2)
+                        ),
                         "%",
                         cls="g",
                     ),
@@ -518,7 +536,11 @@ def _build_monitor_payload(traffic_source: dict[str, Any]) -> tuple[dict[str, An
                     _panel("Pod CPU 使用率", _fmt_num(pod_cpu, digits=1), "%", cls="c"),
                     _panel(
                         "Pod 内存",
-                        _fmt_num(pod_mem / 1024 / 1024 / 1024, digits=2) if pod_mem is not None else None,
+                        (
+                            _fmt_num(pod_mem / 1024 / 1024 / 1024, digits=2)
+                            if pod_mem is not None
+                            else None
+                        ),
                         "GiB",
                         cls="b",
                     ),
@@ -534,9 +556,11 @@ def _build_monitor_payload(traffic_source: dict[str, Any]) -> tuple[dict[str, An
                 "panels": [
                     _panel(
                         "目录 QPS",
-                        _fmt_num(mod_qps, digits=2)
-                        if mod_qps is not None
-                        else _fmt_num(log_mod_qps, digits=4),
+                        (
+                            _fmt_num(mod_qps, digits=2)
+                            if mod_qps is not None
+                            else _fmt_num(log_mod_qps, digits=4)
+                        ),
                         "次/秒",
                         cls="c",
                     ),
@@ -677,11 +701,11 @@ def _read_platform_made_metrics() -> tuple[dict[str, Any], dict[str, Any]]:
         metrics = {
             "platform_made_tokens": made,
             "platform_made_prompt_tokens": int(raw.get("platform_made_prompt_tokens") or 0),
-            "platform_made_completion_tokens": int(
-                raw.get("platform_made_completion_tokens") or 0
-            ),
+            "platform_made_completion_tokens": int(raw.get("platform_made_completion_tokens") or 0),
             "platform_made_sources": sources,
-            "platform_made_collected_at": str(raw.get("collected_at") or raw.get("generated_at") or "")
+            "platform_made_collected_at": str(
+                raw.get("collected_at") or raw.get("generated_at") or ""
+            )
             or None,
             "platform_tokens": made,
         }
@@ -725,7 +749,10 @@ def _read_token_metrics() -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         engine = _token_engine()
         with engine.connect() as connection:
-            chat = connection.execute(text("""
+            chat = (
+                connection.execute(
+                    text(
+                        """
                     SELECT COUNT(*) AS records,
                            COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
                            COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
@@ -736,16 +763,32 @@ def _read_token_metrics() -> tuple[dict[str, Any], dict[str, Any]]:
                            MAX(created_at) AS last_at
                     FROM llm_call_logs
                     WHERE status = 'success' AND total_tokens > 0
-                    """)).mappings().one()
-            employee = connection.execute(text("""
+                    """
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            employee = (
+                connection.execute(
+                    text(
+                        """
                     SELECT COUNT(*) AS records,
                            COALESCE(SUM(llm_tokens), 0) AS total_tokens,
                            MIN(created_at) AS first_at,
                            MAX(created_at) AS last_at
                     FROM employee_execution_metrics
                     WHERE llm_tokens > 0
-                    """)).mappings().one()
-            model_rows = connection.execute(text("""
+                    """
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            model_rows = (
+                connection.execute(
+                    text(
+                        """
                     SELECT model,
                            provider,
                            COUNT(*) AS calls,
@@ -754,7 +797,12 @@ def _read_token_metrics() -> tuple[dict[str, Any], dict[str, Any]]:
                     WHERE status = 'success' AND total_tokens > 0
                     GROUP BY model, provider
                     ORDER BY tokens DESC
-                    """)).mappings().all()
+                    """
+                    )
+                )
+                .mappings()
+                .all()
+            )
     except (SQLAlchemyError, OSError, ValueError):
         return _empty_token_metrics(), {"status": "unavailable", "source_updated_at": None}
 
