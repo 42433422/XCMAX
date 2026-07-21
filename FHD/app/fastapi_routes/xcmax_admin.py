@@ -525,9 +525,7 @@ async def _fetch_remote_xcmax_daily_digests(path: str) -> dict[str, Any] | None:
         async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code >= 400:
-                logger.warning(
-                    "remote xcmax daily-digests HTTP %s path=%s", resp.status_code, bare
-                )
+                logger.warning("remote xcmax daily-digests HTTP %s path=%s", resp.status_code, bare)
                 return None
             data = resp.json()
             return data if isinstance(data, dict) else {"success": True, "data": data}

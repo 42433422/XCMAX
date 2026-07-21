@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -33,12 +33,7 @@ def public_snapshot_path() -> Path:
     configured = (os.environ.get("XIUCI_PLATFORM_MADE_TOKENS_PATH") or "").strip()
     if configured:
         return Path(configured).expanduser().resolve()
-    return (
-        _repo_root()
-        / "成都修茈科技有限公司"
-        / "data"
-        / "platform_made_tokens.json"
-    )
+    return _repo_root() / "成都修茈科技有限公司" / "data" / "platform_made_tokens.json"
 
 
 def _to_int(value: Any) -> int:
@@ -67,7 +62,7 @@ def build_public_snapshot(summary: Mapping[str, Any]) -> dict[str, Any]:
         )
     return {
         "schema": "xiu-ci.platform-made-tokens/v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "collected_at": str(summary.get("collected_at") or ""),
         "platform_made_tokens": _to_int(summary.get("grand_total_tokens")),
         "platform_made_prompt_tokens": _to_int(summary.get("grand_prompt_tokens")),
