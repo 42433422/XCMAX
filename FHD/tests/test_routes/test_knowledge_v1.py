@@ -84,7 +84,10 @@ class TestKnowledgeIndex:
 
 
 class TestIngestEndpoint:
-    @patch("app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": True, "chunk_count": 3})
+    @patch(
+        "app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy",
+        return_value={"success": True, "chunk_count": 3},
+    )
     @patch("app.fastapi_routes.knowledge_v1._index")
     def test_successful_ingest(self, mock_index, _mock_mirror):
         mock_index.ingest.return_value = 3
@@ -93,7 +96,9 @@ class TestIngestEndpoint:
         assert result.success is True
         assert result.chunk_count == 3
 
-    @patch("app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False})
+    @patch(
+        "app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False}
+    )
     @patch("app.fastapi_routes.knowledge_v1._index")
     def test_ingest_error(self, mock_index, _mock_mirror):
         mock_index.ingest.side_effect = ValueError("bad input")
