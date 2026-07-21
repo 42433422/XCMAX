@@ -7,6 +7,10 @@
 #   FHD_ARTIFACT_DIR    默认与 manifest 同目录
 #   FHD_DEPLOY_ROOT     默认 /opt/fhd-full
 #   FHD_DEPLOY_MODE     覆盖 manifest deploy_mode（tarball|image）
+#   FHD_SERVICE_NAME    传给 apply（staging: fhd-staging.service）
+#   FHD_HEALTH_PORT     传给 apply（staging: 5101）
+#   FHD_ENV_FILE        传给 compose apply（staging: /root/fhd-staging.env）
+#   FHD_AUTO_UPDATE_LOCK  默认 /tmp/fhd-auto-update.lock（staging 须用独立锁）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -159,13 +163,18 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   fi
 
   log "发现新镜像 version=$VERSION sha=$GIT_SHA digest=${IMAGE_DIGEST:0:19}...，开始 compose 应用"
-  if FHD_API_IMAGE="$IMAGE" \
-      FHD_API_IMAGE_DIGEST="$IMAGE_DIGEST" \
-      FHD_ARTIFACT_SHA256="$REMOTE_SHA" \
-      FHD_GIT_SHA="$GIT_SHA" \
-      FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
-      FHD_ARTIFACT_DIR="$ARTIFACT_DIR" \
-      bash "$APPLY_COMPOSE"; then
+  APPLY_ENV=(
+    "FHD_API_IMAGE=$IMAGE"
+    "FHD_API_IMAGE_DIGEST=$IMAGE_DIGEST"
+    "FHD_ARTIFACT_SHA256=$REMOTE_SHA"
+    "FHD_GIT_SHA=$GIT_SHA"
+    "FHD_DEPLOY_ROOT=$DEPLOY_ROOT"
+    "FHD_ARTIFACT_DIR=$ARTIFACT_DIR"
+  )
+  [[ -n "${FHD_SERVICE_NAME:-}" ]] && APPLY_ENV+=("FHD_SERVICE_NAME=$FHD_SERVICE_NAME")
+  [[ -n "${FHD_HEALTH_PORT:-}" ]] && APPLY_ENV+=("FHD_HEALTH_PORT=$FHD_HEALTH_PORT")
+  [[ -n "${FHD_ENV_FILE:-}" ]] && APPLY_ENV+=("FHD_ENV_FILE=$FHD_ENV_FILE")
+  if env "${APPLY_ENV[@]}" bash "$APPLY_COMPOSE"; then
     audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$IMAGE_DIGEST}" "executed"
   else
     status=$?
@@ -218,12 +227,16 @@ if [[ "$LOCAL_FILE_SHA" != "$REMOTE_SHA" ]]; then
 fi
 
 log "发现新版本 version=$VERSION sha=$GIT_SHA，开始 tarball 应用"
-if FHD_RELEASE_TARBALL="$TARBALL" \
-    FHD_DEPLOY_ROOT="$DEPLOY_ROOT" \
-    FHD_EXPECTED_SHA256="$REMOTE_SHA" \
-    FHD_GIT_SHA="$GIT_SHA" \
-    FHD_SKIP_PIP="${FHD_SKIP_PIP:-1}" \
-    bash "$APPLY_TARBALL"; then
+APPLY_ENV=(
+  "FHD_RELEASE_TARBALL=$TARBALL"
+  "FHD_DEPLOY_ROOT=$DEPLOY_ROOT"
+  "FHD_EXPECTED_SHA256=$REMOTE_SHA"
+  "FHD_GIT_SHA=$GIT_SHA"
+  "FHD_SKIP_PIP=${FHD_SKIP_PIP:-1}"
+)
+[[ -n "${FHD_SERVICE_NAME:-}" ]] && APPLY_ENV+=("FHD_SERVICE_NAME=$FHD_SERVICE_NAME")
+[[ -n "${FHD_HEALTH_PORT:-}" ]] && APPLY_ENV+=("FHD_HEALTH_PORT=$FHD_HEALTH_PORT")
+if env "${APPLY_ENV[@]}" bash "$APPLY_TARBALL"; then
   audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}" "executed"
 else
   status=$?

@@ -124,13 +124,23 @@ jobs:
           if [ "$TARGET_ENV" = "staging" ]; then
             DEPLOY_ROOT="/opt/fhd-staging"
             MANIFEST="/var/www/update/releases/staging/server/fhd-manifest.json"
-            HEALTH_URL="https://staging.xiu-ci.com/fhd-api/api/health"
+            # Path-based health works without staging.xiu-ci.com DNS/cert SAN.
+            # Host-based URL kept as secondary once DNS A -> CVM is configured.
+            HEALTH_URL="https://xiu-ci.com/fhd-staging-api/api/health"
+            HEALTH_URL_ALT="https://staging.xiu-ci.com/fhd-api/api/health"
             ENV_FILE="/root/fhd-staging.env"
+            SERVICE_NAME="fhd-staging.service"
+            HEALTH_PORT="5101"
+            AUTO_LOCK="/tmp/fhd-staging-auto-update.lock"
           else
             DEPLOY_ROOT="/opt/fhd-full"
             MANIFEST="/var/www/update/releases/stable/server/fhd-manifest.json"
             HEALTH_URL="https://xiu-ci.com/fhd-api/api/health"
+            HEALTH_URL_ALT=""
             ENV_FILE="/root/fhd-full.env"
+            SERVICE_NAME="fhd-full.service"
+            HEALTH_PORT="5100"
+            AUTO_LOCK="/tmp/fhd-auto-update.lock"
           fi
 
           # Neuro Bus 7 开关生产校验（cicd-e2e-prompt.md 关键约束 10）
@@ -167,14 +177,18 @@ jobs:
           set -euo pipefail
           export FHD_DEPLOY_ROOT="${DEPLOY_ROOT}"
           export FHD_MANIFEST_PATH="${MANIFEST}"
+          export FHD_SERVICE_NAME="${SERVICE_NAME}"
+          export FHD_HEALTH_PORT="${HEALTH_PORT}"
+          export FHD_ENV_FILE="${ENV_FILE}"
+          export FHD_AUTO_UPDATE_LOCK="${AUTO_LOCK}"
           if [ "${ACTION}" = "freeze-manifest" ]; then
             touch "${MANIFEST}.frozen"
           elif [ "${ACTION}" = "unfreeze-manifest" ]; then
             rm -f "${MANIFEST}.frozen"
           elif [ "${ACTION}" = "restart-only" ]; then
-            if [ "${TARGET_ENV}" = "production" ] && systemctl cat fhd-full.service >/dev/null 2>&1; then
-              systemctl restart fhd-full.service
-              systemctl is-active --quiet fhd-full.service
+            if systemctl cat "${SERVICE_NAME}" >/dev/null 2>&1; then
+              systemctl restart "${SERVICE_NAME}"
+              systemctl is-active --quiet "${SERVICE_NAME}"
             elif [ -f "${DEPLOY_ROOT}/docker-compose.yml" ]; then
               cd "${DEPLOY_ROOT}" && docker compose restart
             elif [ -f "${DEPLOY_ROOT}/compose.yml" ]; then
@@ -201,10 +215,26 @@ jobs:
             "${USER}@${HOST}" \
             "bash -s" <<< "$REMOTE_CMD"
 
-          echo "Remote action done. Checking ${HEALTH_URL}"
+          echo "Remote action done. Checking ${HEALTH_URL}${HEALTH_URL_ALT:+ (alt ${HEALTH_URL_ALT})}"
           for i in 1 2 3 4 5 6 7 8 9 10; do
             if curl -sf "${HEALTH_URL}" > /tmp/health.json 2>/dev/null; then
-              echo "Health check passed on attempt ${i}"
+              echo "Health check passed on attempt ${i} via ${HEALTH_URL}"
+              cat /tmp/health.json
+              exit 0
+            fi
+            if [ -n "${HEALTH_URL_ALT}" ] && curl -sf "${HEALTH_URL_ALT}" > /tmp/health.json 2>/dev/null; then
+              echo "Health check passed on attempt ${i} via ${HEALTH_URL_ALT}"
+              cat /tmp/health.json
+              exit 0
+            fi
+            # Break-glass fallback: SSH local port (covers DNS/cert lag).
+            if ssh -i "$KEY_FILE" \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=15 \
+              "${USER}@${HOST}" \
+              "curl -sf --noproxy '*' --max-time 5 http://127.0.0.1:${HEALTH_PORT}/api/health" \
+              > /tmp/health.json 2>/dev/null; then
+              echo "Health check passed on attempt ${i} via SSH localhost:${HEALTH_PORT}"
               cat /tmp/health.json
               exit 0
             fi

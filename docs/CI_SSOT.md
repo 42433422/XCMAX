@@ -61,12 +61,28 @@ FHD_RELEASE_CHANNEL=staging bash scripts/deploy/fhd-pack-release.sh
 FHD_RELEASE_CHANNEL=staging bash scripts/deploy/fhd-push-release.sh
 ```
 
-manifest 含 `"channel": "stable"|"staging"`。同一台 CVM（119.27.178.147）可并存两目录；staging cron 示例：
+manifest 含 `"channel": "stable"|"staging"`。同一台 CVM（119.27.178.147）可并存两目录。
+
+**Staging 首次引导（CVM root）**：
+
+```bash
+bash /opt/fhd-full/scripts/deploy/fhd-bootstrap-staging-cvm.sh
+# 或仓库副本: bash FHD/scripts/deploy/fhd-bootstrap-staging-cvm.sh
+```
+
+会创建 `/root/fhd-staging.env`、`/opt/fhd-staging`、`fhd-staging.service:5101`、
+nginx 路径 `https://xiu-ci.com/fhd-staging-api/`，以及 staging manifest。
+`staging.xiu-ci.com` 需另配 DNS A → `119.27.178.147`（可选；workflow 已用 path health）。
+
+staging cron 示例：
 
 ```bash
 FHD_MANIFEST_PATH=/var/www/update/releases/staging/server/fhd-manifest.json \
 FHD_DEPLOY_ROOT=/opt/fhd-staging \
-FHD_API_PORT=5101 \
+FHD_SERVICE_NAME=fhd-staging.service \
+FHD_HEALTH_PORT=5101 \
+FHD_ENV_FILE=/root/fhd-staging.env \
+FHD_AUTO_UPDATE_LOCK=/tmp/fhd-staging-auto-update.lock \
 bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 ```
 
