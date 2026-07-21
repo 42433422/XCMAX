@@ -139,7 +139,9 @@ jobs:
             if [ "${REQUIRED}" = "true" ]; then
               exit 1
             fi
-            echo "[watcher] ${TARGET}: optional target skipped"
+            # staging 未引导：执行 FHD/scripts/deploy/fhd-bootstrap-staging-cvm.sh 后此分支不再触发
+            # 引导步骤见 docs/autonomy/L4_STAGING_BOOTSTRAP.md
+            echo "[watcher] ${TARGET}: optional target skipped (bootstrap with fhd-bootstrap-staging-cvm.sh)"
             exit 0
           fi
           cd "${DEPLOY_ROOT}"

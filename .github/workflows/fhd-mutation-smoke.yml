@@ -1,5 +1,6 @@
 # CI SSOT: generated from FHD/.github/workflows/mutation-smoke.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# CI SSOT: generated from FHD/.github/workflows/fhd-mutation-smoke.yml
 # 变异测试 — PR gate（作用域 app/di + app/contexts，阈值 kill rate ≥ 80%）
 # 2026-07-21：收紧 source_paths 并补测后加回 pull_request gate。
 name: mutation-smoke
@@ -12,7 +13,7 @@ on:
       - "FHD/tests/test_di/**"
       - "FHD/tests/test_contexts/**"
       - "FHD/pyproject.toml"
-      - "FHD/.github/workflows/mutation-smoke.yml"
+      - "FHD/.github/workflows/fhd-mutation-smoke.yml"
   schedule:
     - cron: "0 3 * * 1"  # 每周一 03:00 UTC
   workflow_dispatch:
