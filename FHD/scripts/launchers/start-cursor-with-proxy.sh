@@ -25,8 +25,12 @@ export HTTP_PROXY="$http_proxy"
 export HTTPS_PROXY="$https_proxy"
 export all_proxy="socks5://${PROXY_HOST}:${PROXY_PORT}"
 export ALL_PROXY="$all_proxy"
-export no_proxy="localhost,127.0.0.1,*.local,10.0.0.0/8,192.168.0.0/16"
+# CLI/子进程绕过；Chromium 另需 --proxy-bypass-list（系统代理不会读 NO_PROXY）
+export no_proxy="localhost,127.0.0.1,::1,*.local,0.0.0.0,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 export NO_PROXY="$no_proxy"
+export CURL_NOPROXY="$no_proxy"
+# Chromium：<-loopback> 强制环回直连，避免 Simple Browser 访问 :5011 被 Clash 打成 502
+PROXY_BYPASS_LIST="<-loopback>;localhost;127.0.0.1;::1;*.local"
 
 if [[ ! -d "$CURSOR_APP" ]]; then
   echo "未找到 Cursor：$CURSOR_APP" >&2
@@ -34,10 +38,11 @@ if [[ ! -d "$CURSOR_APP" ]]; then
 fi
 
 CURSOR_BIN="${CURSOR_APP}/Contents/MacOS/Cursor"
-echo "使用代理 ${http_proxy} 启动 Cursor..."
+echo "使用代理 ${http_proxy} 启动 Cursor（bypass ${PROXY_BYPASS_LIST}）..."
+echo "若仍 502：Clash Bypass / macOS 系统代理忽略列表加入 localhost,127.0.0.1,::1"
 exec env \
   http_proxy="$http_proxy" https_proxy="$https_proxy" \
   HTTP_PROXY="$HTTP_PROXY" HTTPS_PROXY="$HTTPS_PROXY" \
   all_proxy="$all_proxy" ALL_PROXY="$ALL_PROXY" \
-  no_proxy="$no_proxy" NO_PROXY="$NO_PROXY" \
-  "$CURSOR_BIN" "$@"
+  no_proxy="$no_proxy" NO_PROXY="$NO_PROXY" CURL_NOPROXY="$CURL_NOPROXY" \
+  "$CURSOR_BIN" --proxy-bypass-list="${PROXY_BYPASS_LIST}" "$@"
