@@ -14,8 +14,11 @@
 #   FHD_RELEASE_OUT_DIR          与 pack 脚本一致
 #   FHD_PUSH_IMAGE_TAR           auto（仅 image 模式）| 1（强制）| 0（跳过）
 #   FHD_PUSH_APPLY_NOW           1 上传后立刻远端应用并验证；strict CI 默认 1
-#   FHD_PUSH_REMOTE_DEPLOY_ROOT  默认 /opt/fhd-full
-#   FHD_PUSH_HEALTH_URL          远端本机健康地址，默认 http://127.0.0.1:5100/api/health?lite=true
+#   FHD_PUSH_REMOTE_DEPLOY_ROOT  默认 stable=/opt/fhd-full；staging=/opt/fhd-staging
+#   FHD_PUSH_HEALTH_URL          远端本机健康地址；默认 stable=:5100 staging=:5101
+#   FHD_PUSH_REMOTE_SERVICE      默认 stable=fhd-full.service；staging=fhd-staging.service
+#   FHD_PUSH_REMOTE_ENV_FILE     默认 stable=/root/fhd-full.env；staging=/root/fhd-staging.env
+#   FHD_PUSH_REMOTE_AUTO_LOCK    默认与 channel 对齐的独立锁文件
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -187,15 +190,36 @@ elif [[ -f "$IMAGE_TAR" ]]; then
 fi
 
 if [[ "$APPLY_NOW" == "1" ]]; then
-  REMOTE_DEPLOY_ROOT="${FHD_PUSH_REMOTE_DEPLOY_ROOT:-/opt/fhd-full}"
+  if [[ "$CHANNEL" == "staging" ]]; then
+    DEFAULT_DEPLOY_ROOT="/opt/fhd-staging"
+    DEFAULT_HEALTH_URL="http://127.0.0.1:5101/api/health?lite=true"
+    DEFAULT_SERVICE_NAME="fhd-staging.service"
+    DEFAULT_ENV_FILE="/root/fhd-staging.env"
+    DEFAULT_AUTO_LOCK="/tmp/fhd-staging-auto-update.lock"
+    DEFAULT_HEALTH_PORT="5101"
+  else
+    DEFAULT_DEPLOY_ROOT="/opt/fhd-full"
+    DEFAULT_HEALTH_URL="http://127.0.0.1:5100/api/health?lite=true"
+    DEFAULT_SERVICE_NAME="fhd-full.service"
+    DEFAULT_ENV_FILE="/root/fhd-full.env"
+    DEFAULT_AUTO_LOCK="/tmp/fhd-auto-update.lock"
+    DEFAULT_HEALTH_PORT="5100"
+  fi
+  REMOTE_DEPLOY_ROOT="${FHD_PUSH_REMOTE_DEPLOY_ROOT:-$DEFAULT_DEPLOY_ROOT}"
   REMOTE_AUTO_UPDATE="${FHD_PUSH_REMOTE_AUTO_UPDATE:-${REMOTE_DEPLOY_ROOT}/scripts/deploy/fhd-auto-update.sh}"
-  REMOTE_HEALTH_URL="${FHD_PUSH_HEALTH_URL:-http://127.0.0.1:5100/api/health?lite=true}"
+  REMOTE_HEALTH_URL="${FHD_PUSH_HEALTH_URL:-$DEFAULT_HEALTH_URL}"
+  REMOTE_SERVICE_NAME="${FHD_PUSH_REMOTE_SERVICE:-$DEFAULT_SERVICE_NAME}"
+  REMOTE_ENV_FILE="${FHD_PUSH_REMOTE_ENV_FILE:-$DEFAULT_ENV_FILE}"
+  REMOTE_AUTO_LOCK="${FHD_PUSH_REMOTE_AUTO_LOCK:-$DEFAULT_AUTO_LOCK}"
+  REMOTE_HEALTH_PORT="${FHD_PUSH_REMOTE_HEALTH_PORT:-$DEFAULT_HEALTH_PORT}"
   REMOTE_MANIFEST="${REMOTE_DIR}/fhd-manifest.json"
   printf -v APPLY_COMMAND \
-    'test -x %q && FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q bash %q' \
-    "$REMOTE_AUTO_UPDATE" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT" "$REMOTE_AUTO_UPDATE"
+    'test -x %q && FHD_MANIFEST_PATH=%q FHD_ARTIFACT_DIR=%q FHD_DEPLOY_ROOT=%q FHD_SERVICE_NAME=%q FHD_ENV_FILE=%q FHD_HEALTH_PORT=%q FHD_AUTO_UPDATE_LOCK=%q bash %q' \
+    "$REMOTE_AUTO_UPDATE" "$REMOTE_MANIFEST" "$REMOTE_DIR" "$REMOTE_DEPLOY_ROOT" \
+    "$REMOTE_SERVICE_NAME" "$REMOTE_ENV_FILE" "$REMOTE_HEALTH_PORT" "$REMOTE_AUTO_LOCK" \
+    "$REMOTE_AUTO_UPDATE"
 
-  deploy_emit apply started "host=$HOST git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"
+  deploy_emit apply started "host=$HOST channel=$CHANNEL git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball} root=$REMOTE_DEPLOY_ROOT"
   if ! "${SSH[@]}" "$REMOTE" "$APPLY_COMMAND"; then
     deploy_emit apply failed "remote_auto_update_failed"
     echo "[err] 远端自动应用失败；发布未通过" >&2
