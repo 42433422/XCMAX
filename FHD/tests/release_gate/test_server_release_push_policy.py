@@ -240,10 +240,13 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
     sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[1].split(
         "- name: SSH rolling restart / apply", 1
     )[0]
-    assert "systemctl restart fhd-full.service" in sync_step
-    assert "for attempt in $(seq 1 30)" in sync_step
-    assert ('curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health') in sync_step
-    assert "did not become HTTP-ready after autonomy config sync" in sync_step
+    sync_step_rendered = sync_step.replace("\\$", "$")
+    assert 'systemctl restart "$service_name"' in sync_step_rendered
+    assert "for attempt in $(seq 1 30)" in sync_step_rendered
+    assert (
+        "curl --noproxy '*' -sf --max-time 5 http://127.0.0.1:$health_port/api/health"
+    ) in sync_step_rendered
+    assert "did not become HTTP-ready after autonomy config sync" in sync_step_rendered
 
 
 def test_autonomy_deploy_has_no_human_environment_approval() -> None:
