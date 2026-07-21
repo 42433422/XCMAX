@@ -121,11 +121,12 @@ async def request_autonomy_action(
         raise HTTPException(status_code=400, detail="action has no GitHub deploy executor")
     action_id = _validated_action_id(body.get("action_id"))
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    source = str(body.get("source") or "").strip() or "ops_autonomy.request"
     decision, pending = request_action(
         action,
         action_id=action_id,
         payload={**payload, "workflow_action": workflow_action},
-        source="ops_autonomy.request",
+        source=source,
         executor_name="github_deploy",
     )
     if pending is None:
@@ -248,6 +249,32 @@ async def resume_autonomy_action(
         item = resume_action(
             action_id,
             approver=str(body.get("approver") or ""),
+            approval_id=str(body.get("approval_id") or ""),
+        )
+    except ApprovalStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": True, "action": item}
+
+
+@router.post("/actions/{action_id}/reject")
+async def reject_autonomy_action(
+    action_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+) -> dict[str, Any]:
+    _auth(authorization, x_autonomy_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json object required")
+    approver = str(body.get("approver") or "").strip()
+    if not approver:
+        raise HTTPException(status_code=400, detail="approver is required")
+    try:
+        item = reject_action(
+            action_id,
+            approver=approver,
+            reason=str(body.get("reason") or ""),
             approval_id=str(body.get("approval_id") or ""),
         )
     except ApprovalStateError as exc:

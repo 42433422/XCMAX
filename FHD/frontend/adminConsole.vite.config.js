@@ -230,10 +230,19 @@ export default defineConfig(() => ({
     proxy: buildDevProxy(API_BASE),
   },
   publicDir: path.join(hostRoot, 'public'),
+  esbuild: {
+    target: 'esnext',
+  },
   worker: {
     format: 'es',
   },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   build: {
+    target: 'esnext',
     outDir: path.resolve(hostRoot, '../templates/admin-vue-dist'),
     emptyOutDir: true,
     assetsDir: 'assets',

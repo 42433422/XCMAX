@@ -15,8 +15,12 @@ from typing import Any, Dict, List
 # 4 层 parent 才能到项目根 /Users/a4243342/Desktop/XCMAX
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"))
+# 共享 approval ledger client（FHD/scripts/ci/_approval_ledger_client.py）
+_FHD_SCRIPTS = Path(__file__).resolve().parent.parent  # FHD/scripts
+sys.path.insert(0, str(_FHD_SCRIPTS / "ci"))
 
 from modstore_server.evolution_ledger import append_event  # noqa: E402
+from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
 
 
 def escalate(
@@ -76,6 +80,17 @@ def escalate(
         "failure_reasons": failure_reasons,
         "final_status": "needs_human",
     })
+
+    # 旁路写后端 approval ledger（fire-and-forget；fail-open 在 client 内处理）
+    post_to_approval_ledger(
+        action="ai_issue_implement",
+        payload={
+            "issue_number": issue_number,
+            "failure_reasons": failure_reasons,
+            "proposal": proposal,
+        },
+        source="ci_escalate",
+    )
 
 
 def main() -> int:
