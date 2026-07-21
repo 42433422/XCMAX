@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from modstore_server import self_maintenance_loop_runner as loop_runner
@@ -264,7 +265,11 @@ def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90(
             "report_excerpt": (
                 f"{loop_runner.STRUCTURED_REVIEW_MARKER}: "
                 '{"max_severity":"none","blocking_findings":[],"risk_class":"low",'
-                '"target_branch_available":true,"tested_commands":[]}'
+                '"target_branch_available":true,"tested_commands":[],'
+                '"dimensions":{'
+                '"security":{"status":"pass","findings":[]},'
+                '"business_logic":{"status":"pass","findings":[]},'
+                '"performance":{"status":"pass","findings":[]}}}'
             ),
         },
         {
@@ -891,7 +896,10 @@ def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
             "report_excerpt": (
                 'SELF_MAINTENANCE_REVIEW_JSON: {"max_severity":"low",'
                 '"blocking_findings":[],"risk_class":"low","target_branch_available":true,'
-                '"tested_commands":[]}'
+                '"tested_commands":[],"dimensions":{'
+                '"security":{"status":"pass","findings":[]},'
+                '"business_logic":{"status":"pass","findings":[]},'
+                '"performance":{"status":"pass","findings":[]}}}'
             ),
         },
         {
@@ -1658,10 +1666,11 @@ def test_existing_kb_schema_retry_item_matches_by_para_task_id():
 
 def test_existing_kb_schema_retry_item_fallback_within_24h():
     """不同 branch/task 但 24h 内 → 返回最近项（避免 LLM 换 branch 重置 retry_count）。"""
+    now = datetime.now(timezone.utc)
     items = [
         {
             "branch": "devfleet/codex/kb-bad-old",
-            "created_at": "2026-07-19T10:00:00+00:00",  # >24h ago
+            "created_at": (now - timedelta(hours=30)).isoformat(),  # >24h ago
             "escalated": False,
             "kind": "kb_schema_retry",
             "para_task_id": "task-kb-old",
@@ -1669,7 +1678,7 @@ def test_existing_kb_schema_retry_item_fallback_within_24h():
         },
         {
             "branch": "devfleet/codex/kb-bad-recent",
-            "created_at": "2026-07-20T10:00:00+00:00",  # <24h ago
+            "created_at": (now - timedelta(hours=2)).isoformat(),  # <24h ago
             "escalated": False,
             "kind": "kb_schema_retry",
             "para_task_id": "task-kb-recent",
@@ -1866,12 +1875,13 @@ def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp
 
 def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(monkeypatch, tmp_path):
     """LLM 创建新 branch，但 24h 内有旧 kb_schema_retry → 增量 retry_count 而非重置。"""
+    recent = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     _seed_loop_memory_for_kb_retry(
         tmp_path,
         [
             {
                 "branch": "devfleet/codex/kb-bad-old",  # 旧 branch
-                "created_at": "2026-07-20T10:00:00+00:00",  # 今天早些时候
+                "created_at": recent,  # 相对「现在」仍在 24h 内
                 "escalated": False,
                 "kind": "kb_schema_retry",
                 "para_task_id": "task-kb-old",
