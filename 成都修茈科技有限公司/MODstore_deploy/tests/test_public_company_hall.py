@@ -45,6 +45,11 @@ def test_build_company_hall_has_six_departments_and_presence_model(monkeypatch):
     assert workers[0]["presence"] in {"working", "alert"}
     assert "presence_model" in hall
     assert isinstance(hall.get("feed"), list)
+    assert hall.get("cadence", {}).get("mode") == "event_driven"
+    assert "next_window" in (hall.get("cadence") or {})
+    assert isinstance((hall.get("board") or {}).get("breakpoints"), list)
+    assert isinstance((hall.get("board") or {}).get("goals"), list)
+    assert "idle" in (hall.get("presence_model") or {})
 
 
 def test_write_public_company_hall(tmp_path, monkeypatch):

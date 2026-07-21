@@ -210,7 +210,11 @@
         lines.push('下次预计窗口：' + esc(cadence.next_window))
       }
       if (STATE.filter !== 'all') {
-        lines[0] = '当前筛选「' + esc(STATE.filter) + '」下暂无条目（未造假填充）'
+        var filterNames = { working: '工作中', alert: '告警', idle: '编制待命' }
+        lines[0] =
+          '当前筛选「' +
+          esc(filterNames[STATE.filter] || STATE.filter) +
+          '」下暂无条目（未造假填充）'
       }
       el.innerHTML = emptyBox(lines)
       return
