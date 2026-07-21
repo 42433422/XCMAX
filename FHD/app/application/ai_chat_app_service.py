@@ -57,9 +57,14 @@ def _import_workflow_components():
 
 
 def _import_ai_conversation_service():
-    from app.services import get_ai_conversation_service
+    from app.services import get_ai_conversation_service as _get
 
-    return get_ai_conversation_service
+    return _get
+
+
+def get_ai_conversation_service():
+    """Lazy re-export so unit tests can patch this module attribute."""
+    return _import_ai_conversation_service()()
 
 
 class AIChatApplicationService(
@@ -77,7 +82,6 @@ class AIChatApplicationService(
     """
 
     def __init__(self):
-        get_ai_conversation_service = _import_ai_conversation_service()
         HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service = (
             _import_workflow_components()
         )
