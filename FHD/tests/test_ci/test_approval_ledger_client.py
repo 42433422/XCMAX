@@ -74,7 +74,7 @@ class TestSuccess:
         ctor.assert_called_once_with(timeout=10.0)
         # 验证 URL
         call_args = mock_client.post.call_args
-        assert call_args.args[0] == "https://xiu-ci.com/api/ops/autonomy/actions/request"
+        assert call_args.args[0] == "https://xiu-ci.com/api/ops/autonomy/actions/ingest"
         # 验证 headers
         headers = call_args.kwargs["headers"]
         assert headers["X-Autonomy-Token"] == "tok-123"
@@ -130,7 +130,7 @@ class TestSuccess:
             client.post_to_approval_ledger(action="restart_service", payload={})
 
         url = mock_client.post.call_args.args[0]
-        assert url == "https://xiu-ci.com/api/ops/autonomy/actions/request"
+        assert url == "https://xiu-ci.com/api/ops/autonomy/actions/ingest"
 
 
 # =====================================================================
