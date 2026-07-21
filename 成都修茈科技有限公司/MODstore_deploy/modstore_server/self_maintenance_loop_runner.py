@@ -5051,9 +5051,7 @@ def _emit_deploy_callback(
                     sys.path.insert(0, str(candidate))
                 from autonomy_callback import deploy_callback  # type: ignore[import-not-found]
 
-                deploy_callback(
-                    phase, payload, source="self_maintenance", action_id=action_id
-                )
+                deploy_callback(phase, payload, source="self_maintenance", action_id=action_id)
                 return
     except Exception:  # noqa: BLE001
         logger.debug("deploy_callback import path failed", exc_info=True)

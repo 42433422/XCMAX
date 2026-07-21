@@ -358,11 +358,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
 
         # _unified_orchestration payload 已由 orchestrator 注入；取其 scope
         orch = payload.get("_unified_orchestration") or {}
-        scope = (
-            orch.get("scope")
-            or payload.get("scope")
-            or "global"
-        )
+        scope = orch.get("scope") or payload.get("scope") or "global"
         scope = str(scope).strip().lower()
 
         event_type = str(ev.event_type or "").strip()
@@ -405,8 +401,12 @@ def dispatch_incident(event_id: int) -> DispatchReport:
                         {
                             "event_id": event_id,
                             "event_type": event_type,
-                            "payload_excerpt": {k: v for k, v in payload.items() if k != "_unified_orchestration"},
-                            "redeploy_result": result.to_dict() if hasattr(result, "to_dict") else asdict(result),
+                            "payload_excerpt": {
+                                k: v for k, v in payload.items() if k != "_unified_orchestration"
+                            },
+                            "redeploy_result": (
+                                result.to_dict() if hasattr(result, "to_dict") else asdict(result)
+                            ),
                         },
                         ensure_ascii=False,
                         indent=2,
@@ -438,7 +438,13 @@ def dispatch_incident(event_id: int) -> DispatchReport:
             body_lines.append("")
             body_lines.append("### Payload Excerpt")
             body_lines.append("```json")
-            body_lines.append(json.dumps({k: v for k, v in payload.items() if k != "_unified_orchestration"}, ensure_ascii=False, indent=2)[:3000])
+            body_lines.append(
+                json.dumps(
+                    {k: v for k, v in payload.items() if k != "_unified_orchestration"},
+                    ensure_ascii=False,
+                    indent=2,
+                )[:3000]
+            )
             body_lines.append("```")
             result = action_escalate_to_human(
                 title=f"[autonomy] website incident: {event_type} (event #{event_id})",
@@ -462,10 +468,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
 
 def _audit_dir_from_env() -> Path:
     """audit dir 解析优先级：env WEBSITE_RUNNER_AUDIT_DIR > /opt/fhd-full/autonomy > /tmp/website_runner_audit"""
-    return Path(
-        os.environ.get("WEBSITE_RUNNER_AUDIT_DIR")
-        or "/opt/fhd-full/autonomy"
-    )
+    return Path(os.environ.get("WEBSITE_RUNNER_AUDIT_DIR") or "/opt/fhd-full/autonomy")
 
 
 def main(argv: list[str] | None = None) -> int:
