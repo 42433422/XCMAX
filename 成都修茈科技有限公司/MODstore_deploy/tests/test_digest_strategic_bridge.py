@@ -43,15 +43,9 @@ def _seed_and_reset(monkeypatch):
     session = get_session_factory()()
     try:
         # 仅清本桥接相关镜像，避免拖垮其它战略层测试数据
+        session.execute(text("DELETE FROM strategic_action_items WHERE action_id LIKE 'act-dai-%'"))
         session.execute(
-            text(
-                "DELETE FROM strategic_action_items WHERE action_id LIKE 'act-dai-%'"
-            )
-        )
-        session.execute(
-            text(
-                "DELETE FROM strategic_decisions WHERE scope = :scope"
-            ),
+            text("DELETE FROM strategic_decisions WHERE scope = :scope"),
             {"scope": TRACK_SCOPE},
         )
         session.commit()
@@ -103,9 +97,7 @@ class TestDigestStrategicBridge:
         session = get_session_factory()()
         try:
             dec = session.execute(
-                select(StrategicDecision).where(
-                    StrategicDecision.decision_id == out["decision_id"]
-                )
+                select(StrategicDecision).where(StrategicDecision.decision_id == out["decision_id"])
             ).scalar_one()
             assert dec.scope == TRACK_SCOPE
             assert dec.scope_ref == "9001"
