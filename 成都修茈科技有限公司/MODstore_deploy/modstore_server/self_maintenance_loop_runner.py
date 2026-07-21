@@ -1686,7 +1686,8 @@ def _run_step_with_inner_retries(
         inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
         retry_kind = "code_fix"
     else:
-        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 1) + 1)
+        # Default 2 extra rounds: protocol follow-rate target ≥90% (was ~46% with 1 retry).
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 2) + 1)
         retry_kind = "marker"
     marker = STRUCTURED_REVIEW_MARKER if step_name == "review" else STRUCTURED_QA_MARKER
 
@@ -1729,9 +1730,10 @@ def _run_step_with_inner_retries(
             if retry_kind == "code_fix":
                 should_retry = True
         elif ok and retry_kind == "marker" and not is_final:
-            # dispatch 成功但 marker 缺失 → 提醒员工按格式重新输出
-            marker_obj = _structured_report_from_step({"report_excerpt": report_excerpt}, marker)
-            if marker_obj is None:
+            # dispatch 成功但 marker/协议不合规 → 打回重跑（攻克遵循率缺口）
+            protocol_ok, protocol_reason = _structured_protocol_ok(step_name, report_excerpt)
+            if not protocol_ok:
+                failure_reason = protocol_reason or "structured_protocol_invalid"
                 should_retry = True
 
         # 写非最终的 step_retry trace（最终 step 由调用方写）
@@ -1766,13 +1768,16 @@ def _run_step_with_inner_retries(
                 + "report completion unless the previously failing command now exits 0."
             )
             code_fix_retry_rounds = attempt
-        else:  # marker
+        else:  # marker / protocol
             last_task_text = (
                 task_text
-                + f"\n\n=== PREVIOUS REPORT MISSING REQUIRED MARKER (inner round {attempt}/{inner_max - 1}) ===\n"
-                + f"Your previous report did not include the required JSON marker {marker}. "
-                + f"Re-emit your report with exactly one JSON object after the marker {marker}. "
-                + "Schema and other requirements unchanged."
+                + f"\n\n=== PREVIOUS REPORT PROTOCOL REJECTED (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"required_marker: {marker}\n"
+                + f"protocol_error: {failure_reason or 'missing_or_invalid_structured_json'}\n"
+                + "Re-emit exactly one JSON object after the marker. "
+                + "For review, dimensions.security / business_logic / performance are mandatory "
+                + "with status pass|fail|n/a and findings lists. "
+                + "Do not summarize — output the full protocol JSON."
             )
             marker_retry_rounds = attempt
 
@@ -2051,6 +2056,12 @@ def _code_task_text(
         "- State one evidence-backed symptom and root cause before changing code.\n"
         "- Make the smallest production change that fixes that root cause and add focused regression tests; "
         "do not submit marker-only, comment-only, formatting-only, or test-only work as the fix.\n"
+        "- DIFF PROTOCOL: When describing patches in the report or KB fix_diff, emit a complete "
+        "unified diff that `git apply` / `git apply --check` can consume "
+        "(must include `diff --git`, `---/+++`, and `@@` hunks). "
+        "Forbidden: summary-only answers, bullet paraphrases of changes, or partial hunks without file headers.\n"
+        "- Prefer committing real file edits in the worktree (git add/commit/push) over pasting diffs; "
+        "if you paste a patch, it must still be git-applyable.\n"
         "- Keep production scope and changed lines minimal enough for a legitimate safety_score_v2 target of at least 90; "
         "never hide, omit, or misclassify risky files or behavior to influence the score.\n"
         "- Leave review and QA to the independent report-only employees; do not self-approve or fabricate their evidence.\n"
@@ -2090,12 +2101,29 @@ def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]
         "If the target branch is missing in the report-only workspace, fetch it from origin/repo_url "
         "and compare `origin/<base>...origin/<target>` or the local equivalent. "
         "If fetch/branch resolution fails, report that exact failure as target_branch_unavailable. "
+        "\n\n=== MANDATORY REVIEW DIMENSIONS (all three required) ===\n"
+        "1) security — injection, secrets, unsafe deserialization, authz bypass, shell=True, etc.\n"
+        "2) business_logic — wrong control flow, broken invariants, missing error handling, "
+        "incorrect state transitions, API contract breakage, silent data loss, feature regressions.\n"
+        "3) performance — obvious slow queries (SELECT * / missing LIMIT on hot paths), N+1 "
+        "(ORM query inside loops), unbounded while/for loops, sync sleep on request path, "
+        "unbounded list/buffer growth.\n"
+        "For each dimension set status to pass|fail|n/a and list concrete findings "
+        "(empty list only when status is pass or n/a). "
+        "Any dimension status=fail MUST also appear in blocking_findings and raise max_severity "
+        "to at least medium (high/critical when warranted).\n"
         "Return concrete findings, risks, and missing evidence. "
-        "At the end, output exactly one JSON object after the marker "
+        "PROTOCOL STRICT: At the end, output exactly one JSON object after the marker "
         f"{STRUCTURED_REVIEW_MARKER}: with schema "
         '{"max_severity":"none|low|medium|high|critical",'
         '"blocking_findings":[],"risk_class":"low|medium|high",'
-        '"target_branch_available":true,"tested_commands":[]}. '
+        '"target_branch_available":true,"tested_commands":[],'
+        '"dimensions":{'
+        '"security":{"status":"pass|fail|n/a","findings":[]},'
+        '"business_logic":{"status":"pass|fail|n/a","findings":[]},'
+        '"performance":{"status":"pass|fail|n/a","findings":[]}'
+        "}}. "
+        "If you omit dimensions or use wrong enums, the loop will REJECT and re-run you. "
         f"Previous loop memory JSON: {_memory_context(memory)}"
     )
 
@@ -2165,11 +2193,77 @@ def _json_after_marker(text: str, marker: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+_REVIEW_DIMENSION_KEYS = ("security", "business_logic", "performance")
+_REVIEW_DIMENSION_STATUSES = frozenset({"pass", "fail", "n/a"})
+_REVIEW_SEVERITIES = frozenset({"none", "low", "medium", "high", "critical"})
+_REVIEW_RISK_CLASSES = frozenset({"low", "medium", "high"})
+
+
+def _validate_structured_review_protocol(obj: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
+    """Strict protocol for review employee output. Incomplete → reject/rerun."""
+    if not isinstance(obj, dict):
+        return False, "missing_structured_review_object"
+    severity = str(obj.get("max_severity") or "").strip().lower()
+    if severity not in _REVIEW_SEVERITIES:
+        return False, "invalid_max_severity"
+    if str(obj.get("risk_class") or "").strip().lower() not in _REVIEW_RISK_CLASSES:
+        return False, "invalid_risk_class"
+    if not isinstance(obj.get("blocking_findings"), list):
+        return False, "blocking_findings_not_list"
+    if not isinstance(obj.get("tested_commands"), list):
+        return False, "tested_commands_not_list"
+    if "target_branch_available" not in obj or not isinstance(
+        obj.get("target_branch_available"), bool
+    ):
+        return False, "target_branch_available_not_bool"
+    dimensions = obj.get("dimensions")
+    if not isinstance(dimensions, dict):
+        return False, "missing_dimensions"
+    for key in _REVIEW_DIMENSION_KEYS:
+        dim = dimensions.get(key)
+        if not isinstance(dim, dict):
+            return False, f"missing_dimension_{key}"
+        status = str(dim.get("status") or "").strip().lower()
+        if status not in _REVIEW_DIMENSION_STATUSES:
+            return False, f"invalid_dimension_status_{key}"
+        if not isinstance(dim.get("findings"), list):
+            return False, f"dimension_findings_not_list_{key}"
+        if status == "fail" and not dim.get("findings"):
+            return False, f"dimension_fail_without_findings_{key}"
+    fail_dims = [
+        key
+        for key in _REVIEW_DIMENSION_KEYS
+        if str((dimensions.get(key) or {}).get("status") or "").lower() == "fail"
+    ]
+    if fail_dims and severity in {"none", "low"}:
+        return False, "dimension_fail_severity_too_low"
+    if fail_dims and not obj.get("blocking_findings"):
+        return False, "dimension_fail_without_blocking_findings"
+    return True, ""
+
+
+def _validate_structured_qa_protocol(obj: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
+    if not isinstance(obj, dict):
+        return False, "missing_structured_qa_object"
+    if str(obj.get("verdict") or "").strip().upper() not in {"PASS", "FAIL"}:
+        return False, "invalid_qa_verdict"
+    if not isinstance(obj.get("blocking_findings"), list):
+        return False, "qa_blocking_findings_not_list"
+    if not isinstance(obj.get("tested_commands"), list):
+        return False, "qa_tested_commands_not_list"
+    if "target_branch_available" not in obj or not isinstance(
+        obj.get("target_branch_available"), bool
+    ):
+        return False, "qa_target_branch_available_not_bool"
+    return True, ""
+
+
 def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
     report = str(step.get("report_excerpt") or "")
     parsed = _json_after_marker(report, marker)
-    if parsed is not None:
-        return parsed
+    candidates: List[Dict[str, Any]] = []
+    if isinstance(parsed, dict):
+        candidates.append(parsed)
     for line in report.splitlines():
         line = line.strip()
         if not (line.startswith("{") and line.endswith("}")):
@@ -2180,10 +2274,58 @@ def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[
             continue
         if isinstance(obj, dict):
             if marker == STRUCTURED_QA_MARKER and "verdict" in obj:
-                return obj
+                candidates.append(obj)
             if marker == STRUCTURED_REVIEW_MARKER and "max_severity" in obj:
+                candidates.append(obj)
+    for obj in candidates:
+        if marker == STRUCTURED_REVIEW_MARKER:
+            ok, _reason = _validate_structured_review_protocol(obj)
+            if ok:
                 return obj
-    return None
+        elif marker == STRUCTURED_QA_MARKER:
+            ok, _reason = _validate_structured_qa_protocol(obj)
+            if ok:
+                return obj
+        else:
+            return obj
+    # Backward-compatible parse for ledger display: return first candidate even if
+    # protocol-incomplete (gate/retry paths call validators explicitly).
+    return candidates[0] if candidates else None
+
+
+def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, str]:
+    if step_name == "review":
+        obj = _json_after_marker(report_excerpt, STRUCTURED_REVIEW_MARKER)
+        if obj is None:
+            # fall back to line scan via step helper without protocol filter
+            loose = None
+            for line in str(report_excerpt or "").splitlines():
+                line = line.strip()
+                if line.startswith("{") and '"max_severity"' in line:
+                    try:
+                        candidate = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(candidate, dict):
+                        loose = candidate
+                        break
+            obj = loose
+        return _validate_structured_review_protocol(obj)
+    if step_name == "qa":
+        obj = _json_after_marker(report_excerpt, STRUCTURED_QA_MARKER)
+        if obj is None:
+            for line in str(report_excerpt or "").splitlines():
+                line = line.strip()
+                if line.startswith("{") and '"verdict"' in line:
+                    try:
+                        candidate = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(candidate, dict):
+                        obj = candidate
+                        break
+        return _validate_structured_qa_protocol(obj)
+    return True, ""
 
 
 def _safe_command_tokens(command: str) -> Optional[List[str]]:
@@ -2283,10 +2425,25 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     qa_steps = [step for step in steps if step.get("step") == "qa"]
     if review_steps:
         review_json = _structured_report_from_step(review_steps[-1], STRUCTURED_REVIEW_MARKER)
-        if not review_json:
-            return {"ok": False, "reason": "missing_structured_review_result"}
+        protocol_ok, protocol_reason = _validate_structured_review_protocol(review_json)
+        if not protocol_ok:
+            return {
+                "ok": False,
+                "reason": protocol_reason or "missing_structured_review_result",
+                "review": review_json,
+            }
         severity = str(review_json.get("max_severity") or "high").lower()
         blocking = review_json.get("blocking_findings")
+        dimensions = (
+            review_json.get("dimensions")
+            if isinstance(review_json.get("dimensions"), dict)
+            else {}
+        )
+        failed_dims = [
+            key
+            for key in _REVIEW_DIMENSION_KEYS
+            if str((dimensions.get(key) or {}).get("status") or "").lower() == "fail"
+        ]
         if severity not in {"none", "low", "medium"}:
             return {
                 "ok": False,
@@ -2298,17 +2455,27 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "ok": False,
                 "reason": "structured_review_blocking_findings",
                 "review": review_json,
+                "failed_dimensions": failed_dims,
+            }
+        if failed_dims:
+            return {
+                "ok": False,
+                "reason": "structured_review_dimension_fail",
+                "review": review_json,
+                "failed_dimensions": failed_dims,
             }
     else:
         review_json = None
 
     if qa_steps:
         qa_json = _structured_report_from_step(qa_steps[-1], STRUCTURED_QA_MARKER)
-        if not qa_json:
+        qa_ok, qa_reason = _validate_structured_qa_protocol(qa_json)
+        if not qa_ok:
             return {
                 "ok": False,
-                "reason": "missing_structured_qa_result",
+                "reason": qa_reason or "missing_structured_qa_result",
                 "review": review_json,
+                "qa": qa_json,
             }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
@@ -5943,6 +6110,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "review_verdict": str(review.get("verdict") or "").strip() if review else "",
             "review_max_severity": str(review.get("max_severity") or "").strip() if review else "",
             "review_findings": review.get("findings") if review else [],
+            "review_blocking_findings": review.get("blocking_findings") if review else [],
+            "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
         }
 

@@ -231,6 +231,28 @@ class TestMatchRules:
         assert findings[0].rule == "pragma-no-cover"
         assert findings[0].severity == "low"
 
+    def test_business_and_performance_rules_detected(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="svc.py",
+                start_line=1,
+                lines=[
+                    (1, "+", "while True:"),
+                    (2, "+", "    time.sleep(1)"),
+                    (3, "+", "    rows = cur.fetchall()"),
+                    (4, "+", "for u in users: db.query(User).get(u.id)"),
+                    (5, "+", "except Exception: pass"),
+                ],
+                raw_header="@@ -1,1 +1,5 @@",
+            )
+        ]
+        rules = {f.rule for f in review.match_high_risk_rules(hunks)}
+        assert "unbounded-while-true" in rules
+        assert "time-sleep-hot-path" in rules
+        assert "fetchall-unbounded" in rules
+        assert "n-plus-one-inline" in rules
+        assert "bare-except-pass" in rules
+
     def test_only_added_lines_checked(self) -> None:
         """删除行（'-'）中的高危代码不应触发 finding。"""
         hunks = [

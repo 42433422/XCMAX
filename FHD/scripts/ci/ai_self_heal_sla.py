@@ -8,8 +8,9 @@
 按 risk:* 标签分流处理：
 - r0：≥ 12h（ai-self-heal）/ ≥ 12h（ai-generated）且二次守卫通过 → auto-merge
 - r1：≥ 48h 且二次守卫通过 → auto-merge
-- r2：≥ 7d stale 评论，≥ 14d 自动关闭
-- r3：≥ 7d stale 评论，≥ 30d 自动关闭（永不 auto-merge）
+- r2：≥ 7d stale 评论，≥ 14d 自动关闭（最终策略：维持人工合并，永不 auto-merge）
+- r3：≥ 7d stale 评论，≥ 30d 自动关闭（最终策略：维持人工合并，永不 auto-merge）
+- 说明：r2/r3 人工合并是正式策略而非临时缺口；若要对子集全自动须另设白名单，不得默认放开
 
 二次守卫（r0/r1 auto-merge 前置）：
 1. CI 全绿
@@ -72,6 +73,10 @@ HOLD_MERGE_LABEL = "hold-merge"
 
 # ai-self-heal / ai-generated 标签（用于区分普通 PR）
 AI_PR_LABELS = ("ai-self-heal", "ai-generated")
+
+# 最终策略：r2/r3 永不进入 auto-merge 分支（仅 stale→close / 人工）
+MANUAL_MERGE_RISK_LEVELS = frozenset({"r2", "r3"})
+AUTO_MERGE_RISK_LEVELS = frozenset({"r0", "r1"})
 
 
 # =====================================================================
@@ -582,7 +587,7 @@ def process_pr(
         return "skipped"
 
     # ===== R0 / R1: auto-merge 候选 =====
-    if risk in {"r0", "r1"}:
+    if risk in AUTO_MERGE_RISK_LEVELS:
         threshold = r0_hours if risk == "r0" else r1_hours
         if age_hours < threshold:
             print(f"  skip: 未达 {threshold}h 阈值 ({age_hours:.1f}h)")
@@ -615,7 +620,10 @@ def process_pr(
                 return "merge_failed"
         return "auto_merged_dry"
 
-    # ===== R2 / R3: stale → close =====
+    # ===== R2 / R3: 人工合并最终策略（永不 auto-merge）=====
+    if risk not in MANUAL_MERGE_RISK_LEVELS:
+        print(f"  skip: unknown risk={risk!r}（非 r0/r1/r2/r3）")
+        return "skipped"
     stale_threshold = r2_stale_days if risk == "r2" else r3_stale_days
     close_threshold = r2_close_days if risk == "r2" else r3_close_days
 
