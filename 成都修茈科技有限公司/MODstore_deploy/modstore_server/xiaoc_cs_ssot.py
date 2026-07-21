@@ -32,7 +32,9 @@ class VisitorIdentity:
     display_name: str = ""
     user_id: Optional[int] = None
     visitor_id: str = ""
-    membership: str = ""
+    membership: str = ""  # 展示档：普通用户 / VIP / VIP+ / svip / SVIP2…
+    account_role: str = ""  # user | enterprise | admin
+    plan_id: str = ""
     email_hint: str = ""
 
     def as_dict(self) -> Dict[str, Any]:
@@ -43,6 +45,8 @@ class VisitorIdentity:
             "user_id": self.user_id,
             "visitor_id": self.visitor_id,
             "membership": self.membership,
+            "account_role": self.account_role,
+            "plan_id": self.plan_id,
             "email_hint": self.email_hint,
         }
 
@@ -95,13 +99,73 @@ def identity_from_guest(
     )
 
 
+def _account_role_of(user: Any) -> str:
+    if bool(getattr(user, "is_admin", False)):
+        return "admin"
+    if bool(getattr(user, "is_enterprise", False)):
+        return "enterprise"
+    return "user"
+
+
+def _membership_label_for_plan(plan_id: str) -> str:
+    """套餐展示名（与 payment_common 会员档对齐；无套餐=普通用户）。"""
+    pid = (plan_id or "").strip()
+    if not pid:
+        return "普通用户"
+    try:
+        from modstore_server.payment_common import _membership_meta
+
+        meta = _membership_meta(pid)
+        label = str(meta.get("label") or "").strip()
+        if label:
+            return label
+    except Exception:  # noqa: BLE001
+        pass
+    # llm_api 旧映射兜底
+    try:
+        from modstore_server.llm_api import _membership_meta as _llm_meta
+
+        label = str((_llm_meta(pid) or {}).get("label") or "").strip()
+        if label:
+            return label
+    except Exception:  # noqa: BLE001
+        pass
+    return pid
+
+
+def active_plan_id_for_user(db: Any, user_id: int) -> str:
+    """读取 user_plans 当前生效套餐（账号 SSOT）。"""
+    if db is None or not user_id:
+        return ""
+    try:
+        from modstore_server.models import UserPlan
+
+        row = (
+            db.query(UserPlan)
+            .filter(UserPlan.user_id == int(user_id), UserPlan.is_active == True)  # noqa: E712
+            .order_by(UserPlan.id.desc())
+            .first()
+        )
+        return str(row.plan_id) if row else ""
+    except Exception:  # noqa: BLE001
+        logger.debug("active_plan_id_for_user failed", exc_info=True)
+        return ""
+
+
 def identity_from_user(
     user: Any,
     *,
     source: str = "butler",
     membership_tier: Optional[str] = None,
     visitor_id: str = "",
+    plan_id: str = "",
+    account_role: Optional[str] = None,
+    db: Any = None,
 ) -> VisitorIdentity:
+    """从 User（+ 可选 DB 套餐）构建对话对象。
+
+    会员档优先读 ``user_plans``；口语「体验版」≈ 无付费套餐（普通用户）。
+    """
     uid = getattr(user, "id", None)
     try:
         user_id = int(uid) if uid is not None else None
@@ -112,16 +176,35 @@ def identity_from_user(
     display = username or (email.split("@")[0] if email else "") or (
         f"用户{user_id}" if user_id else "用户"
     )
-    tier = (membership_tier or "").strip().lower()
+    role = (account_role or _account_role_of(user)).strip() or "user"
+    pid = (plan_id or "").strip()
+    if not pid and db is not None and user_id:
+        pid = active_plan_id_for_user(db, user_id)
+    membership = (membership_tier or "").strip()
+    if not membership:
+        membership = _membership_label_for_plan(pid)
     return VisitorIdentity(
         kind="user",
         source=source or "butler",
         display_name=sanitize_visitor_label(display) or "用户",
         user_id=user_id,
         visitor_id=sanitize_visitor_id(visitor_id),
-        membership=tier,
+        membership=membership,
+        account_role=role,
+        plan_id=pid,
         email_hint=mask_email(email),
     )
+
+
+def resolve_user_identity(
+    user: Any,
+    *,
+    db: Any = None,
+    source: str = "butler",
+    visitor_id: str = "",
+) -> VisitorIdentity:
+    """已登录用户身份 SSOT：档案 + 管理员/企业旗标 + 当前会员套餐。"""
+    return identity_from_user(user, source=source, visitor_id=visitor_id, db=db)
 
 
 def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
@@ -133,8 +216,14 @@ def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
     ]
     if identity.user_id is not None:
         parts.append(f"user_id={identity.user_id}")
+    role = (identity.account_role or "").strip()
+    if role and role != "user":
+        role_label = {"admin": "管理员", "enterprise": "企业账号"}.get(role, role)
+        parts.append(f"角色={role_label}")
     if identity.membership:
         parts.append(f"会员={identity.membership}")
+    if identity.plan_id:
+        parts.append(f"套餐={identity.plan_id}")
     if identity.visitor_id:
         parts.append(f"visitor_id={identity.visitor_id}")
     if identity.email_hint:
@@ -143,7 +232,8 @@ def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
     return (
         "【当前对话对象】"
         + "；".join(parts)
-        + "。可自然称呼对方，勿复读整段 ID/内部字段，勿向访客复述敏感信息。"
+        + "。可自然称呼并按会员/角色调整话术（如权益说明），"
+        "勿复读整段 ID/内部字段，勿向访客复述敏感信息。"
     )
 
 # ─── 权限矩阵（SSOT，代码即契约）────────────────────────────────────
@@ -513,6 +603,8 @@ __all__ = [
     "format_visitor_block",
     "identity_from_guest",
     "identity_from_user",
+    "resolve_user_identity",
+    "active_plan_id_for_user",
     "sanitize_visitor_id",
     "sanitize_visitor_label",
     "mask_email",
