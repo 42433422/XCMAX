@@ -58,17 +58,21 @@
         maximumFractionDigits: decimals,
       })
     }
+    const previous = Number(element.dataset.value)
+    const from = Number.isFinite(previous) ? previous : target
     element.dataset.value = String(target)
-    if (reduceMotion) {
+    // 首次赋值直接落最终值，避免从 0 起动画闪成「查看 0 个版本节点」
+    if (reduceMotion || from === target) {
       render(target)
       return
     }
     const start = performance.now()
     const duration = 900
+    const delta = target - from
     const tick = (now) => {
       const progress = Math.min(1, (now - start) / duration)
       const eased = 1 - Math.pow(1 - progress, 3)
-      render(target * eased)
+      render(from + delta * eased)
       if (progress < 1) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
@@ -233,6 +237,130 @@
     element.classList.toggle('viz-ready', value === 'READY')
   }
 
+  function formatCompactToken(value) {
+    const number = Number(value) || 0
+    if (Math.abs(number) >= 100000000) return `${(number / 100000000).toFixed(2)} 亿`
+    if (Math.abs(number) >= 10000) return `${(number / 10000).toFixed(1)} 万`
+    return number.toLocaleString('zh-CN')
+  }
+
+  function paintMadeSources(data) {
+    const host = document.querySelector('[data-viz-made-sources]')
+    if (!host) return
+    const sources = Array.isArray(data.ai && data.ai.platform_made_sources)
+      ? data.ai.platform_made_sources.filter((item) => item && item.available && Number(item.total_tokens) > 0)
+      : []
+    if (sources.length === 0) {
+      host.replaceChildren()
+      return
+    }
+    host.replaceChildren(
+      ...sources.map((item) => {
+        const row = document.createElement('div')
+        row.className = 'viz-made-source-row'
+        const label = document.createElement('span')
+        label.textContent = String(item.label || item.key || '—')
+        const value = document.createElement('b')
+        value.textContent = formatCompactToken(item.total_tokens)
+        if (item.estimated) {
+          const tip = document.createElement('small')
+          tip.textContent = '估'
+          row.append(label, value, tip)
+        } else {
+          row.append(label, value)
+        }
+        return row
+      }),
+    )
+  }
+
+  function formatMonitorValue(value) {
+    if (value == null || value === '') return '—'
+    if (typeof value === 'number') return value.toLocaleString('zh-CN')
+    return String(value)
+  }
+
+  function paintMonitor(data) {
+    const grid = document.querySelector('[data-viz-monitor-grid]')
+    const issuesHost = document.querySelector('[data-viz-monitor-issues]')
+    const monitor = data.monitor || null
+    if (issuesHost) {
+      const issues = Array.isArray(monitor && monitor.issues) ? monitor.issues : []
+      issuesHost.replaceChildren(
+        ...issues.map((text) => {
+          const li = document.createElement('li')
+          li.textContent = String(text)
+          return li
+        }),
+      )
+    }
+    if (!grid) return
+    const dashboards = Array.isArray(monitor && monitor.dashboards) ? monitor.dashboards : []
+    if (dashboards.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'viz-chart-empty'
+      empty.textContent = '监控聚合数据暂不可用'
+      grid.replaceChildren(empty)
+      return
+    }
+    const statusLabel = {
+      live: 'LIVE',
+      prom: 'PROM',
+      logs: 'LOGS',
+      k8s: 'K8S',
+      offline: '离线',
+      unavailable: '不可用',
+    }
+    grid.replaceChildren(
+      ...dashboards.map((dash) => {
+        const card = document.createElement('article')
+        card.className = 'viz-mon-card reveal visible'
+        card.dataset.monDash = String(dash.id || '')
+
+        const head = document.createElement('div')
+        head.className = 'viz-mon-card-head'
+        const tag = document.createElement('span')
+        tag.className = 'viz-mon-tag'
+        tag.textContent = 'GRAF'
+        const title = document.createElement('h3')
+        title.textContent = String(dash.title || '—')
+        const status = document.createElement('span')
+        const mode = String(dash.status || 'offline')
+        status.className = `viz-mon-status is-${mode}`
+        status.textContent = statusLabel[mode] || mode
+        head.append(tag, title, status)
+
+        const desc = document.createElement('p')
+        desc.className = 'viz-mon-desc'
+        desc.textContent = String(dash.desc || '')
+
+        const panels = document.createElement('div')
+        panels.className = 'viz-mon-panels'
+        const panelList = Array.isArray(dash.panels) ? dash.panels : []
+        panels.append(
+          ...panelList.map((panel) => {
+            const cell = document.createElement('div')
+            cell.className = 'viz-mon-panel'
+            const label = document.createElement('span')
+            label.textContent = String(panel.title || '—')
+            const valueRow = document.createElement('div')
+            const strong = document.createElement('strong')
+            strong.className = `is-${panel.cls || 'c'}`
+            strong.textContent = formatMonitorValue(panel.value)
+            const unit = document.createElement('small')
+            unit.textContent = String(panel.unit || '')
+            valueRow.append(strong, unit)
+            cell.append(label, valueRow)
+            return cell
+          }),
+        )
+
+        card.append(head, desc, panels)
+        return card
+      }),
+    )
+  }
+
   function clearLiveValues() {
     document.querySelectorAll('[data-viz-text], [data-viz-number], [data-viz-compact-number]').forEach((element) => {
       element.textContent = '—'
@@ -241,6 +369,8 @@
     paintModelUsage({ ai: null })
     paintTrend({ downloads: { daily: [] } })
     paintReleaseState({ product: null })
+    paintMadeSources({ ai: null })
+    paintMonitor({ monitor: null })
   }
 
   async function loadData() {
@@ -269,6 +399,8 @@
       paintModelUsage(data)
       paintTrend(data)
       paintReleaseState(data)
+      paintMadeSources(data)
+      paintMonitor(data)
       setStatus(data.data_status === 'live' ? 'live' : 'degraded')
     } catch (error) {
       if (sequence !== requestSequence) return
