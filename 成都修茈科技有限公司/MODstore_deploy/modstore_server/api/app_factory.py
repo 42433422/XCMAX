@@ -335,6 +335,7 @@ def _register_core_routes(app: FastAPI, cfg: AppConfig) -> None:
 
 
 _FULL_OPTIONAL_MODULES = (
+    "modstore_server.public_visualization_api",
     "modstore_server.llm_api",
     "modstore_server.openai_llm_gateway_api",
     "modstore_server.agent_butler_api",
