@@ -252,7 +252,7 @@ sync_site_static() {
     return 0
   fi
   local paths=(
-    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'visualization.js'
+    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'visualization.js' 'world-will.js'
     'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.json' 'download-action-board.js' 'download-company-hall.json'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
@@ -291,9 +291,10 @@ publish_site_static_to_live() {
   local f base
   shopt -s nullglob
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
-           "$git_site"/visualization.js \
+           "$git_site"/visualization.js "$git_site"/world-will.js \
            "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json \
-           "$git_site"/download-action-board.json "$git_site"/download-action-board.js; do
+           "$git_site"/download-action-board.json "$git_site"/download-action-board.js \
+           "$git_site"/download-company-hall.json; do
     [[ -e "$f" ]] || continue
     base="$(basename "$f")"
     chmod u+w "$live_site/$base" 2>/dev/null || true
