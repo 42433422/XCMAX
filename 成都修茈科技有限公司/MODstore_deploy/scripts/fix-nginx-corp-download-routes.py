@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Ensure HTTPS xiu-ci.com.conf serves /download/releases、/visualization、公开看板 JSON。
-
-Production uses the canonical vhost whitelist; without these exact locations,
-new download-center subpages / JSON fall through to the market SPA.
-"""
+"""Ensure HTTPS xiu-ci.com.conf serves download center subpages and public board assets."""
 
 from __future__ import annotations
 
@@ -11,9 +7,10 @@ from pathlib import Path
 
 CONF = Path("/etc/nginx/conf.d/xiu-ci.com.conf")
 MARKER = "## CORP_SITE_DOWNLOAD_ROUTES_BEGIN"
+END_MARKER = "## CORP_SITE_DOWNLOAD_ROUTES_END"
 ANCHOR = "    ## CORP_SITE_END"
 SITE_ROOT = "/root/成都修茈科技有限公司"
-ACTION_BOARD_MARKER = "location = /download-action-board.json"
+
 BLOCK = f"""
     ## CORP_SITE_DOWNLOAD_ROUTES_BEGIN —— 独立下载中心子路由 / 可视化 / 公开看板
     location = /download/releases {{
@@ -27,10 +24,38 @@ BLOCK = f"""
     location = /download-releases.html {{
         return 301 /download/releases;
     }}
+    location = /download/breakpoints {{
+        root {SITE_ROOT};
+        try_files /download-breakpoints.html =404;
+        add_header Cache-Control "no-cache";
+    }}
+    location = /download/breakpoints/ {{
+        return 301 /download/breakpoints;
+    }}
+    location = /download-breakpoints.html {{
+        return 301 /download/breakpoints;
+    }}
+    location = /download/goals {{
+        root {SITE_ROOT};
+        try_files /download-goals.html =404;
+        add_header Cache-Control "no-cache";
+    }}
+    location = /download/goals/ {{
+        return 301 /download/goals;
+    }}
+    location = /download-goals.html {{
+        return 301 /download/goals;
+    }}
     location = /download-action-board.json {{
         root {SITE_ROOT};
         try_files /download-action-board.json =404;
         default_type application/json;
+        add_header Cache-Control "no-cache";
+    }}
+    location = /download-action-board.js {{
+        root {SITE_ROOT};
+        try_files /download-action-board.js =404;
+        default_type application/javascript;
         add_header Cache-Control "no-cache";
     }}
     location = /visualization {{
@@ -47,44 +72,21 @@ BLOCK = f"""
     ## CORP_SITE_DOWNLOAD_ROUTES_END
 """
 
-ACTION_BOARD_SNIPPET = f"""
-    location = /download-action-board.json {{
-        root {SITE_ROOT};
-        try_files /download-action-board.json =404;
-        default_type application/json;
-        add_header Cache-Control "no-cache";
-    }}
-"""
-
 
 def main() -> None:
     if not CONF.is_file():
         print(f"skip: {CONF} missing")
         return
     text = CONF.read_text(encoding="utf-8")
-    if ACTION_BOARD_MARKER in text:
-        print("corp download routes already include action-board json")
-        return
-
-    if MARKER in text or "location = /download/releases" in text:
-        # 旧块已在：在 DOWNLOAD_ROUTES_END 前插入 action-board location
-        end_mark = "## CORP_SITE_DOWNLOAD_ROUTES_END"
-        if end_mark in text:
-            text = text.replace(end_mark, ACTION_BOARD_SNIPPET + "    " + end_mark, 1)
-            CONF.write_text(text, encoding="utf-8")
-            print("inserted download-action-board.json into existing CORP_SITE_DOWNLOAD_ROUTES")
-            return
-        # 无 END 标记时，插在 /download/releases 块后
-        needle = "location = /download-releases.html"
-        idx = text.find(needle)
-        if idx < 0:
-            raise SystemExit("download routes present but cannot find insert point")
-        brace = text.find("}", idx)
-        if brace < 0:
-            raise SystemExit("cannot find closing brace for download-releases.html")
-        insert_at = brace + 1
-        CONF.write_text(text[:insert_at] + "\n" + ACTION_BOARD_SNIPPET + text[insert_at:], encoding="utf-8")
-        print("inserted download-action-board.json after download-releases.html location")
+    if MARKER in text and END_MARKER in text:
+        start = text.find(MARKER)
+        line_start = text.rfind("\n", 0, start) + 1
+        end = text.find(END_MARKER)
+        end_line = text.find("\n", end)
+        end = len(text) if end_line < 0 else end_line + 1
+        text = text[:line_start] + BLOCK.lstrip("\n") + text[end:]
+        CONF.write_text(text, encoding="utf-8")
+        print("replaced CORP_SITE_DOWNLOAD_ROUTES block")
         return
 
     idx = text.find("server_name xiu-ci.com;")
