@@ -498,9 +498,7 @@ def _run_scheduled_digest_vibe_prep(
                     len(pub.get("written") or []),
                 )
             except Exception:
-                logger.exception(
-                    "daily digest: public action board failed record_id=%s", record_id
-                )
+                logger.exception("daily digest: public action board failed record_id=%s", record_id)
         except Exception:
             logger.exception("daily digest: action items store failed record_id=%s", record_id)
     if result.get("ok"):
