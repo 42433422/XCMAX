@@ -1,4 +1,4 @@
-# CI SSOT: generated from FHD/.github/workflows/mutation-smoke.yml
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 # 变异测试 — PR gate（作用域 app/di + app/contexts，阈值 kill rate ≥ 80%）
 # 2026-07-21：收紧 source_paths 并补测后加回 pull_request gate。
 name: mutation-smoke
@@ -10,6 +10,8 @@ on:
       - "FHD/app/contexts/**"
       - "FHD/tests/test_di/**"
       - "FHD/tests/test_contexts/**"
+      - "FHD/tests/test_scripts/test_mutation_kill_report.py"
+      - "FHD/scripts/dev/mutation_kill_report.py"
       - "FHD/pyproject.toml"
       - "FHD/.github/workflows/mutation-smoke.yml"
   schedule:
@@ -45,11 +47,12 @@ jobs:
 
       - name: Run mutmut
         working-directory: FHD
-        run: uv run mutmut run
+        run: uv run mutmut run 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
         working-directory: FHD
-        run: python scripts/dev/mutation_kill_report.py --threshold 80
+        # mutmut 3.x ``results`` 默认跳过 killed；优先解析 run 日志里的 progress 摘要
+        run: python scripts/dev/mutation_kill_report.py --threshold 80 --from-file mutmut-run.log
 
       - name: Upload mutation history
         if: always()

@@ -88,6 +88,6 @@ describe('useCorpAgentEngine', () => {
     await handleInput('随便问问')
     const store = useAgentStore()
     const last = store.messages[store.messages.length - 1]
-    expect(last.content).toContain('AI 管家')
+    expect(last.content).toContain('小C')
   })
 })

@@ -52,3 +52,10 @@ def test_lazy_returns_same_instance():
     b = c._lazy("_session_service", factory)  # noqa: SLF001
     assert a is b
     assert calls["n"] == 1
+
+
+def test_init_all_slots_are_none():
+    """杀死 ``self._foo = None`` → ``""`` / 其它假值 的 __init__ 变异。"""
+    c = ServiceContainer()
+    for name in ServiceContainer.__slots__:
+        assert getattr(c, name) is None, name
