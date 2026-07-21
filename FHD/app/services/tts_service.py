@@ -288,9 +288,7 @@ def synthesize_to_data_uri(
         logger.warning("MiMo TTS failed, falling back to Edge: %s", exc)
 
     # 2) Edge neural
-    req = TtsRequest(
-        text=text_norm, voice=edge_voice, lang=normalized_lang, rate=rate, pitch=pitch
-    )
+    req = TtsRequest(text=text_norm, voice=edge_voice, lang=normalized_lang, rate=rate, pitch=pitch)
     mp3_bytes = _synthesize_edge_mp3(req)
     if not mp3_bytes:
         raise RuntimeError("edge-tts returned empty audio")

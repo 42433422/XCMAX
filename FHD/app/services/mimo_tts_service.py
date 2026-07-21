@@ -22,7 +22,12 @@ def _env(name: str) -> str:
 
 def resolve_mimo_credentials() -> tuple[str | None, str]:
     key = _env("XIAOMI_API_KEY") or _env("MIMO_API_KEY") or _env("XIAOMI_MIMO_API_KEY")
-    root = _env("XIAOMI_BASE_URL") or _env("MIMO_BASE_URL") or _env("XIAOMI_MIMO_BASE_URL") or _DEFAULT_ROOT
+    root = (
+        _env("XIAOMI_BASE_URL")
+        or _env("MIMO_BASE_URL")
+        or _env("XIAOMI_MIMO_BASE_URL")
+        or _DEFAULT_ROOT
+    )
     root = root.rstrip("/")
     if root.endswith("/v1"):
         root = root[: -len("/v1")]
