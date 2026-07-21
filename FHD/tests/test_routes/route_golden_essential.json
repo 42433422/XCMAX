@@ -247,6 +247,7 @@
   "/api/users",
   "/api/users/{user_id}",
   "/api/users/{user_id}/reset-password",
+  "/api/voice/command",
   "/api/voice/health",
   "/api/voice/transcribe",
   "/api/workspace/prefs",
