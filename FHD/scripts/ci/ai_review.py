@@ -81,6 +81,7 @@ def fetch_pr_diff(
     if not repo or not token or not pr_number:
         return ""
     url = f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}"
+    files_url = f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}/files"
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3.diff",
@@ -94,9 +95,49 @@ def fetch_pr_diff(
         close_after = False
     try:
         resp = client.get(url, headers=headers)
-        if resp.status_code != 200:
+        if resp.status_code == 200 and resp.text.strip():
+            return resp.text
+
+        # Large PR diff can trigger non-200 or empty response; fallback to files API.
+        diff_parts: list[str] = []
+        page = 1
+        while True:
+            files_resp = client.get(
+                files_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                },
+                params={"per_page": 100, "page": page},
+            )
+            if files_resp.status_code != 200:
+                return ""
+
+            files = files_resp.json()
+            if not isinstance(files, list):
+                return ""
+            if not files:
+                break
+
+            for file_entry in files:
+                if not isinstance(file_entry, dict):
+                    continue
+                file_path = file_entry.get("filename")
+                patch = file_entry.get("patch")
+                if not file_path or not patch:
+                    continue
+                diff_parts.append(f"diff --git a/{file_path} b/{file_path}\n")
+                diff_parts.append(f"--- a/{file_path}\n")
+                diff_parts.append(f"+++ b/{file_path}\n")
+                diff_parts.append(f"{patch}\n")
+
+            if len(files) < 100:
+                break
+            page += 1
+
+        if not diff_parts:
             return ""
-        return resp.text
+        return "".join(diff_parts)
     except Exception:  # noqa: BLE001 - caller treats empty evidence as blocking
         return ""
     finally:
@@ -455,11 +496,7 @@ def run_fallback_rules(hunks: list[DiffHunk]) -> list[Finding]:
     返回的 finding 一律 severity=high，直接进 blocking_findings，
     不进 LLM 通道，不受 trusted_authors 影响。
     """
-    return (
-        match_path_rules(hunks)
-        + match_deletion_rules(hunks)
-        + match_binary_file_rules(hunks)
-    )
+    return match_path_rules(hunks) + match_deletion_rules(hunks) + match_binary_file_rules(hunks)
 
 
 # =====================================================================
@@ -665,10 +702,7 @@ def main(argv: list[str] | None = None) -> int:
         if fallback_findings:
             blocking_findings.extend(fallback_findings)
             for f in fallback_findings:
-                body = (
-                    f"**[HIGH-FALLBACK] {f.rule}**\n\n"
-                    f"{f.suggestion}\n\n```\n{f.snippet}\n```"
-                )
+                body = f"**[HIGH-FALLBACK] {f.rule}**\n\n{f.suggestion}\n\n```\n{f.snippet}\n```"
                 ok = post_line_comment(
                     pr_number=pr_number,
                     path=f.file_path,
