@@ -67,6 +67,34 @@ def get_ai_conversation_service():
     return _import_ai_conversation_service()()
 
 
+# 单测通过 ``patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")`` 等方式
+# 替换工作流组件；这些符号不能在模块顶层 ``from app.application.workflow import``，
+# 否则会重新引入与 ``app.application.workflow.planner`` 的循环 import（见 commit
+# ed1f6e7e0）。PEP 562 模块级 ``__getattr__`` 在属性未在 ``__dict__`` 时才触发，
+# 既能让 ``mock.patch`` 取到原始值，又不会在 import 期触发循环。
+_LAZY_WORKFLOW_RE_EXPORTS = (
+    "HybridRiskGate",
+    "LLMWorkflowPlanner",
+    "WorkflowEngine",
+    "get_approval_service",
+)
+
+
+def __getattr__(name: str):
+    if name in _LAZY_WORKFLOW_RE_EXPORTS:
+        HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service = (
+            _import_workflow_components()
+        )
+        globals().update(
+            HybridRiskGate=HybridRiskGate,
+            LLMWorkflowPlanner=LLMWorkflowPlanner,
+            WorkflowEngine=WorkflowEngine,
+            get_approval_service=get_approval_service,
+        )
+        return globals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 class AIChatApplicationService(
     AIChatExcelImportMixin,
     AIChatWorkflowResponseMixin,
@@ -82,14 +110,15 @@ class AIChatApplicationService(
     """
 
     def __init__(self):
-        HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service = (
-            _import_workflow_components()
-        )
+        # 通过模块级 ``__getattr__`` 暴露的 lazy 符号查表；这样单测
+        # ``patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")``
+        # 替换的 MagicMock 才会真正生效。首次访问触发 ``_import_workflow_components``
+        # 解析并缓存到 ``globals()``，后续访问直接命中 ``__dict__``。
         self.ai_service = get_ai_conversation_service()
-        self.workflow_planner = LLMWorkflowPlanner()
-        self.risk_gate = HybridRiskGate()
-        self.workflow_engine = WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)
-        self.approval_service = get_approval_service()
+        self.workflow_planner = LLMWorkflowPlanner()  # noqa: F821
+        self.risk_gate = HybridRiskGate()  # noqa: F821
+        self.workflow_engine = WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)  # noqa: F821
+        self.approval_service = get_approval_service()  # noqa: F821
         self._pending_workflows: dict[str, dict[str, Any]] = {}
 
     @staticmethod

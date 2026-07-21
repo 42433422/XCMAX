@@ -175,9 +175,9 @@ def sync_daily_to_strategic(
         if not anchor:
             return {"ok": False, "error": "missing decision_id", "created": 0, "updated": 0}
 
-        from modstore_server.digest_action_items import _dedupe_key, list_action_items
         from modstore_server.db.base import get_session_factory
         from modstore_server.db.strategic import StrategicActionItem
+        from modstore_server.digest_action_items import _dedupe_key, list_action_items
 
         items = list_action_items(record_id=rid, limit=2000)
         if not items:
