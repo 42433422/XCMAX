@@ -3,7 +3,7 @@ import { checkBeforeAction, isEnabled, type Tier, type GateResult } from '../cro
 
 describe('cross-tier-gate', () => {
   describe('checkBeforeAction — fail-open', () => {
-    it('allows when remoteState is null (query failed)', () => {
+    it('allows when remoteState is null (query failed) — fail-open, no new SPOF', () => {
       const result = checkBeforeAction('desktop', 'rollback_version', null)
       expect(result.allow).toBe(true)
       expect(result.reasons).toEqual(['remote_state unavailable, fail-open'])
@@ -147,7 +147,6 @@ describe('cross-tier-gate', () => {
     })
 
     it('allows for unknown tiers', () => {
-      // 类型系统已限制 tier，但运行时仍可能传入未知值
       expect(checkBeforeAction('desktop' as Tier, 'rollback_version', { server_manifest_frozen: true }).allow).toBe(false)
     })
   })
@@ -175,24 +174,14 @@ describe('cross-tier-gate', () => {
       delete process.env[ENV_KEY]
     })
 
-    it('returns false when env not set', () => {
+    it('returns true when env not set (default enabled, opt-out)', () => {
       delete process.env[ENV_KEY]
-      expect(isEnabled()).toBe(false)
+      expect(isEnabled()).toBe(true)
     })
 
-    it('returns false when env is empty string', () => {
+    it('returns true when env is empty string', () => {
       process.env[ENV_KEY] = ''
-      expect(isEnabled()).toBe(false)
-    })
-
-    it('returns false when env is "0"', () => {
-      process.env[ENV_KEY] = '0'
-      expect(isEnabled()).toBe(false)
-    })
-
-    it('returns false when env is "true" (only "1" enables)', () => {
-      process.env[ENV_KEY] = 'true'
-      expect(isEnabled()).toBe(false)
+      expect(isEnabled()).toBe(true)
     })
 
     it('returns true when env is "1"', () => {
@@ -200,13 +189,43 @@ describe('cross-tier-gate', () => {
       expect(isEnabled()).toBe(true)
     })
 
+    it('returns true when env is "true"', () => {
+      process.env[ENV_KEY] = 'true'
+      expect(isEnabled()).toBe(true)
+    })
+
+    it('returns true when env is "yes"', () => {
+      process.env[ENV_KEY] = 'yes'
+      expect(isEnabled()).toBe(true)
+    })
+
+    it('returns true when env is "TRUE" (case-insensitive)', () => {
+      process.env[ENV_KEY] = 'TRUE'
+      expect(isEnabled()).toBe(true)
+    })
+
+    it('returns false when env is "0"', () => {
+      process.env[ENV_KEY] = '0'
+      expect(isEnabled()).toBe(false)
+    })
+
+    it('returns false when env is "false"', () => {
+      process.env[ENV_KEY] = 'false'
+      expect(isEnabled()).toBe(false)
+    })
+
+    it('returns false when env is "no"', () => {
+      process.env[ENV_KEY] = 'no'
+      expect(isEnabled()).toBe(false)
+    })
+
     it('reflects env changes between calls', () => {
       delete process.env[ENV_KEY]
-      expect(isEnabled()).toBe(false)
-      process.env[ENV_KEY] = '1'
       expect(isEnabled()).toBe(true)
-      delete process.env[ENV_KEY]
+      process.env[ENV_KEY] = '0'
       expect(isEnabled()).toBe(false)
+      delete process.env[ENV_KEY]
+      expect(isEnabled()).toBe(true)
     })
   })
 })

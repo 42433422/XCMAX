@@ -5,7 +5,7 @@
 
 设计：
 - 纯函数 check_before_action(tier, action, remote_state) → GateResult
-- 默认禁用（env XCAGI_CROSS_TIER_GATE=1 启用）
+- 默认启用（env XCAGI_CROSS_TIER_GATE=0 关闭，opt-out）
 - 失败模式：跨端查询失败默认 allow=true（不阻断主流程，避免引入新单点故障）
 - 与桌面端 controller.ts / 服务器端 cvm_watcher.py 共用同一语义
 """
@@ -91,7 +91,16 @@ def check_before_action(
 
 
 def is_enabled() -> bool:
-    """检查跨端门禁是否启用（env XCAGI_CROSS_TIER_GATE=1）。"""
+    """检查跨端门禁是否启用（默认启用，opt-out）。
+
+    - env 未设 / 空 / "1" / "true" / "yes" → 启用（True）
+    - env "0" / "false" / "no" → 关闭（False）
+
+    与桌面端 cross-tier-gate.ts:isEnabled() 同语义。
+    """
     import os
 
-    return os.environ.get("XCAGI_CROSS_TIER_GATE", "") == "1"
+    v = os.environ.get("XCAGI_CROSS_TIER_GATE", "").strip().lower()
+    if v in ("", "1", "true", "yes"):
+        return True
+    return False

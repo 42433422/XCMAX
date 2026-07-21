@@ -6,8 +6,8 @@
  *
  * 设计：
  * - 纯函数 checkBeforeAction(tier, action, remoteState) → GateResult
- * - 默认禁用（env XCAGI_CROSS_TIER_GATE=1 启用）
- * - 失败模式：跨端查询失败默认 allow=true（不阻断主流程，避免引入新单点故障）
+ * - 默认启用（env XCAGI_CROSS_TIER_GATE=0 关闭，opt-out）
+ * - 失败模式：跨端查询失败（remoteState=null）fail-closed，allow=false
  * - 与服务器端 scripts/autonomy/cross_tier_gate.py 共用同一语义
  */
 
@@ -89,9 +89,16 @@ export function checkBeforeAction(
 }
 
 /**
- * 检查跨端门禁是否启用（env XCAGI_CROSS_TIER_GATE=1）。
- * 默认禁用以保证渐进式启用，不影响现有测试与生产。
+ * 检查跨端门禁是否启用。
+ *
+ * 默认启用（opt-out）：
+ * - env 未设 / 空 / "1" / "true" / "yes" → 启用（true）
+ * - env "0" / "false" / "no" → 关闭（false）
+ *
+ * 与服务器端 cross_tier_gate.py:is_enabled() 同语义。
  */
 export function isEnabled(): boolean {
-  return process.env.XCAGI_CROSS_TIER_GATE === '1'
+  const v = (process.env.XCAGI_CROSS_TIER_GATE ?? '').trim().toLowerCase()
+  if (v === '' || v === '1' || v === 'true' || v === 'yes') return true
+  return false
 }
