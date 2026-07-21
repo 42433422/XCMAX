@@ -47,9 +47,7 @@ class TestKnowledgeFormat:
     def test_format_knowledge_block(self):
         from modstore_server.xiaoc_cs_ssot import format_knowledge_block
 
-        block = format_knowledge_block(
-            [{"text": "会员可按年付费", "source": "faq.md"}]
-        )
+        block = format_knowledge_block([{"text": "会员可按年付费", "source": "faq.md"}])
         assert "persy-knowledge" in block
         assert "会员可按年付费" in block
         assert "faq.md" in block
