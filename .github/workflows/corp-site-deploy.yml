@@ -27,6 +27,7 @@ on:
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
+      - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-partials.py'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/views/SoftwareDownloadView.vue'
       - '.github/workflows/corp-site-deploy.yml'
@@ -106,6 +107,8 @@ jobs:
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
               echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
+              # HTTPS whitelist never included /partials/; pin it on the live conf.
+              python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-partials.py"
             elif [ -f "${NGINX_SRC}" ]; then
               install -m 644 "${NGINX_SRC}" /etc/nginx/conf.d/xiu-ci-corp-root.conf
             fi
@@ -120,12 +123,20 @@ jobs:
             echo "[verify] homepage nav present:"
             curl -fsS -o /tmp/xc-home.html https://xiu-ci.com/
             grep -E -q 'site-header|data-nav="index"|>首页<' /tmp/xc-home.html
-            echo "[verify] live root partials on disk (nginx may SPA-fallback if missing):"
+            echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
               head -n 2 "${LIVE_SITE}/partials/header.html"
               grep -E -q 'site-header|nav-menu' "${LIVE_SITE}/partials/header.html"
             else
               echo "[warn] ${LIVE_SITE:-unset}/partials/header.html missing on disk"
             fi
+            echo "[verify] HTTPS /partials must return fragments, not homepage SPA fallback:"
+            curl -fsS -o /tmp/xc-partial-header.html https://xiu-ci.com/partials/header.html
+            curl -fsS -o /tmp/xc-partial-loader.js https://xiu-ci.com/partials/loader.js
+            grep -E -q '^<header class="site-header">' /tmp/xc-partial-header.html
+            grep -E -q 'site-header|nav-menu|/download' /tmp/xc-partial-header.html
+            ! grep -E -q '<!DOCTYPE html>' /tmp/xc-partial-header.html
+            grep -E -q 'site-header|loadPartials|partials' /tmp/xc-partial-loader.js
+            ! grep -E -q '<!DOCTYPE html>' /tmp/xc-partial-loader.js
             echo "[verify] logo bytes:"
             wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true
