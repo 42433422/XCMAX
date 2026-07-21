@@ -488,6 +488,19 @@ def _run_scheduled_digest_vibe_prep(
                 report_action_items(day=day, record_id=record_id)
             except Exception:
                 logger.exception("collab report (action items) failed record_id=%s", record_id)
+            try:
+                from modstore_server.public_action_board import write_public_action_board
+
+                pub = write_public_action_board(day=day)
+                logger.info(
+                    "daily digest: public action board day=%s written=%s",
+                    pub.get("day"),
+                    len(pub.get("written") or []),
+                )
+            except Exception:
+                logger.exception(
+                    "daily digest: public action board failed record_id=%s", record_id
+                )
         except Exception:
             logger.exception("daily digest: action items store failed record_id=%s", record_id)
     if result.get("ok"):
