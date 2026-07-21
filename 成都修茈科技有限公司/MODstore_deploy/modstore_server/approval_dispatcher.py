@@ -131,6 +131,12 @@ def deploy_staged_change(
         sync_merged_on_deploy()
     except Exception:
         logger.exception("action_items merge writeback failed staged_id=%s", staged_id)
+    try:
+        from modstore_server.public_action_board import write_public_action_board
+
+        write_public_action_board()
+    except Exception:
+        logger.exception("public action board after deploy failed staged_id=%s", staged_id)
 
     # 自动 merge PR（若启用）
     auto_pr = os.environ.get("MODSTORE_AUTO_PR_ENABLED", "1").strip().lower() in (
