@@ -1,11 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
-import { apiFetch } from '@/utils/apiBase'
+import { voiceApi, type VoiceCommandData } from '@/api/voice'
 import { useChatVoiceInput } from './useChatVoiceInput'
-
-vi.mock('@/utils/apiBase', () => ({
-  apiFetch: vi.fn(),
-}))
 
 describe('useChatVoiceInput', () => {
   it('exposes idle voice button state', () => {
@@ -48,7 +44,7 @@ describe('useChatVoiceInput', () => {
     expect(api.voiceButtonText.value).toContain('按住说话')
   })
 
-  it('submits recorded audio through apiFetch so CSRF headers are attached', async () => {
+  it('submits recorded audio through voiceApi.voiceCommand', async () => {
     vi.useFakeTimers()
     try {
       const messageInput = ref('')
@@ -86,10 +82,18 @@ describe('useChatVoiceInput', () => {
         configurable: true,
         value: MockMediaRecorder,
       })
-      vi.mocked(apiFetch).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify({ success: true, data: { text: '你好' } }),
-      } as Response)
+      const voiceCommandSpy = vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValue({
+        success: true,
+        data: {
+          text: '你好',
+          intent: null,
+          primary_intent: null,
+          confidence: 0,
+          executed: false,
+          result: null,
+          reason: 'auto_execute_disabled',
+        } as VoiceCommandData,
+      })
       document.body.innerHTML = '<textarea id="messageInput"></textarea>'
 
       const api = useChatVoiceInput({ messageInput, isLoading: ref(false) })
@@ -102,10 +106,10 @@ describe('useChatVoiceInput', () => {
       await Promise.resolve()
       await Promise.resolve()
 
-      expect(apiFetch).toHaveBeenCalledWith('/api/voice/transcribe', {
-        method: 'POST',
-        body: expect.any(FormData),
-      })
+      expect(voiceCommandSpy).toHaveBeenCalledWith(
+        expect.any(Blob),
+        expect.objectContaining({ autoExecute: false }),
+      )
       expect(messageInput.value).toBe('你好')
     } finally {
       vi.useRealTimers()
@@ -133,10 +137,18 @@ describe('useChatVoiceInput', () => {
         value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
       })
       Object.defineProperty(window, 'MediaRecorder', { configurable: true, value: MockMediaRecorder })
-      vi.mocked(apiFetch).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify({ success: true, data: { text: '' } }),
-      } as Response)
+      vi.spyOn(voiceApi, 'voiceCommand').mockResolvedValue({
+        success: true,
+        data: {
+          text: '',
+          intent: null,
+          primary_intent: null,
+          confidence: 0,
+          executed: false,
+          result: null,
+          reason: 'asr_empty',
+        } as VoiceCommandData,
+      })
 
       const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
       vi.setSystemTime(1_000)

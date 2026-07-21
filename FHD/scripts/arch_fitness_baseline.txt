@@ -201,3 +201,8 @@
 # 2026-07-20 新增：kellai customer copilot 与 persy memory app service 暂未拆分
 [giant-file] app/services/kellai_customer_copilot.py
 [giant-file] app/application/persy_memory_app_service.py
+# 2026-07-21 PR #241 引入：voice_routes 巨大文件 + 路由直接调 services.intent_service；
+# workflow_definition_app_service 510 行略超 500。后续 PR 应拆分 voice_routes / 包装 application 层。
+[giant-file] app/fastapi_routes/voice_routes.py
+[giant-file] app/application/workflow_definition_app_service.py
+[routes->services] app/fastapi_routes/voice_routes.py:361
