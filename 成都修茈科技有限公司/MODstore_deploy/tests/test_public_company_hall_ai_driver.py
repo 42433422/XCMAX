@@ -2,8 +2,7 @@ from __future__ import annotations
 
 
 def test_public_ai_driver_snapshot_is_live_and_secret_safe(tmp_path, monkeypatch):
-    from modstore_server import llm_runtime_autopilot, llm_runtime_route
-    from modstore_server import services
+    from modstore_server import llm_runtime_autopilot, llm_runtime_route, services
     from modstore_server.public_company_hall import _public_ai_driver_snapshot
 
     monkeypatch.setattr(
