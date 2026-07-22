@@ -22,6 +22,7 @@ Covers:
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import MagicMock
 
 import pytest
@@ -126,7 +127,7 @@ class TestResolveApprovalService:
         fake_module = MagicMock()
         fake_module.get_approval_service = lazy_fn
         monkeypatch.setitem(
-            "sys.modules",
+            sys.modules,
             "app.application.workflow.approval_service",
             fake_module,
         )
@@ -154,7 +155,7 @@ class TestResolvePurchaseService:
         fake_module = MagicMock()
         fake_module.PurchaseService = lazy_cls
         monkeypatch.setitem(
-            "sys.modules",
+            sys.modules,
             "app.services.purchase_service",
             fake_module,
         )

@@ -20,6 +20,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -107,7 +108,7 @@ class TestResolveGenerator:
         fake_module = MagicMock()
         fake_module.generate_monthly_finance_summary = lazy_fn
         monkeypatch.setitem(
-            "sys.modules",
+            sys.modules,
             "app.application.monthly_report_scheduler",
             fake_module,
         )
