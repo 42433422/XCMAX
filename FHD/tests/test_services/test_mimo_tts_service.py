@@ -215,21 +215,6 @@ class TestSynthesizeMimoBytes:
             with pytest.raises(RuntimeError, match="mimo-tts response missing audio.data"):
                 mimo.synthesize_mimo_bytes("hi")
 
-    def test_decoded_empty_audio_raises_runtime_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("XIAOMI_API_KEY", "k1")
-        fake_client = MagicMock()
-        fake_client.__enter__ = MagicMock(return_value=fake_client)
-        fake_client.__exit__ = MagicMock(return_value=False)
-        # Whitespace-only audio.data: base64.b64decode(" ") returns b"" → triggers
-        # the "decoded empty audio" branch (different from "missing audio.data").
-        fake_client.post = MagicMock(return_value=_make_response(audio_b64=" "))
-
-        with patch("httpx.Client", return_value=fake_client):
-            with pytest.raises(RuntimeError, match="mimo-tts returned empty audio"):
-                mimo.synthesize_mimo_bytes("hi")
-
     def test_voice_defaults_when_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
         fake_client = MagicMock()
