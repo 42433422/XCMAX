@@ -339,10 +339,10 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
 
     departments: List[Dict[str, Any]] = []
     by_emp = {e["employee_id"]: e for e in employees}
+    # 部门卡只计主属部门，避免跨线兼职把 55 编制加总成 70+、状态重复计数。
     for dept_id in DEPARTMENT_ORDER:
         block = SIX_LINE_DEPARTMENTS.get(dept_id) or {}
-        ids = members.get(dept_id) or []
-        emps = [by_emp[i] for i in ids if i in by_emp]
+        emps = [e for e in employees if e.get("dept_id") == dept_id]
         dc = {"working": 0, "alert": 0, "idle": 0}
         for e in emps:
             dc[e["presence"]] = int(dc.get(e["presence"]) or 0) + 1
