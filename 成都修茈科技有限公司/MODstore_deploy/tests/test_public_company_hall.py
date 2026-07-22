@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from modstore_server.public_company_hall import (
     DEPARTMENT_ORDER,
+    _sort_feed,
     build_public_company_hall,
     write_public_company_hall,
 )
@@ -63,3 +63,37 @@ def test_write_public_company_hall(tmp_path, monkeypatch):
     assert target.is_file()
     data = json.loads(target.read_text(encoding="utf-8"))
     assert data["schema"] == "xcagi.public_company_hall/v1"
+
+
+def test_company_hall_feed_merges_sources_by_full_timestamp():
+    feed = [
+        {
+            "employee_id": "action-owner",
+            "source": "action_board",
+            "day": "2026-07-21",
+            "ts": "17:09",
+            "occurred_at": "2026-07-21T17:09:27+00:00",
+        },
+        {
+            "employee_id": "newest-metric",
+            "source": "execution_metric",
+            "day": "2026-07-22",
+            "ts": "03:20",
+            "occurred_at": "2026-07-22T03:20:00+00:00",
+        },
+        {
+            "employee_id": "middle-metric",
+            "source": "execution_metric",
+            "day": "2026-07-21",
+            "ts": "22:07",
+            "occurred_at": "2026-07-21T22:07:00+00:00",
+        },
+    ]
+
+    ordered = _sort_feed(feed)
+
+    assert [item["employee_id"] for item in ordered] == [
+        "newest-metric",
+        "middle-metric",
+        "action-owner",
+    ]
