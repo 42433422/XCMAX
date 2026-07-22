@@ -154,15 +154,6 @@
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2h10l-1.2 7.2a2 2 0 01-2 1.6H6.2a2 2 0 01-2-1.6L3 2z"/><path d="M5.5 13a1.5 1.5 0 003 0M3 2h10"/></svg>
               <span>AI 市场</span>
             </router-link>
-            <router-link
-              :to="{ name: 'customer-service' }"
-              class="wb-sidebar-mode-btn"
-              :class="{ 'wb-sidebar-mode-btn--active': route.name === 'customer-service' }"
-              @click="wbSidebar.closeMobile()"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a5 5 0 0110 0v2a5 5 0 01-10 0V7z"/><path d="M1 10v1a2 2 0 004 0V9"/><path d="M11 9v2a2 2 0 004 0v-1"/><path d="M6 13a2 2 0 004 0"/></svg>
-              <span>AI 客服</span>
-            </router-link>
           </div>
           <div class="wb-sidebar-divider" v-if="currentMode !== 'admin'"></div>
           <button v-if="currentMode === 'admin'" type="button" class="wb-sidebar-mode-btn wb-sidebar-back-btn" @click="switchMode('client')">

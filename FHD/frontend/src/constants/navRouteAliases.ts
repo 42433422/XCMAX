@@ -1,5 +1,7 @@
 /** 侧栏 view key → vue-router name（与 MainLayout 一致） */
 
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+
 export const SIDEBAR_ROUTE_ALIASES: Record<string, string> = {
   'approval-hub': 'approval-workspace',
   'mod-approval-hub': 'approval-workspace',
@@ -13,6 +15,10 @@ export const SIDEBAR_ROUTE_ALIASES: Record<string, string> = {
 export function resolveNavRouteName(viewKey: string, modPath?: string): string {
   const key = String(viewKey || '').trim()
   if (!key) return ''
+  // 管理端「自治审批中心」走独立宿主页，避免撞上企业 ERP approval-workspace
+  if (isAdminConsoleSpa() && (key === 'approval-hub' || key === 'mod-approval-hub')) {
+    return 'autonomy-approval-hub'
+  }
   const aliased = SIDEBAR_ROUTE_ALIASES[key]
   if (aliased) return aliased
   if (key.startsWith('mod-') && modPath) {

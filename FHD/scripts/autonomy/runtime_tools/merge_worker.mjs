@@ -29,6 +29,21 @@ const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_W
 const TOKEN_TTL_MS = 5 * 60 * 1000; // Para guest 限 15min/30 次，复用 5 分钟避免耗尽
 export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
 
+// CI 等待策略（写进代码，不做隐式默认）：
+// - 等哪些 check：`gh pr checks --required`（branch protection 上标记为 required 的全部）
+// - 超时：MERGE_WORKER_CI_WAIT_TIMEOUT_MS，默认 30min
+// - 超时后：MERGE_WORKER_CI_TIMEOUT_POLICY=fail|human
+//     fail  → 抛错并标 terminal（不自动合并；merge-worker 记 failed）
+//     human → 抛错文案含 needs-human，走人工（非 transient，不空转重试）
+export const CI_WAIT_MODE = 'required'; // only branch-protection required checks
+export const CI_WAIT_TIMEOUT_MS = Math.max(
+  60_000,
+  Number.parseInt(process.env.MERGE_WORKER_CI_WAIT_TIMEOUT_MS || String(30 * 60 * 1000), 10),
+);
+export const CI_TIMEOUT_POLICY = String(process.env.MERGE_WORKER_CI_TIMEOUT_POLICY || 'fail').trim().toLowerCase() === 'human'
+  ? 'human'
+  : 'fail';
+
 const FORBIDDEN_AUTO_MERGE_PATHS = [
   /^\.github\/workflows\//,
   /(^|\/)\.env(?:\.|$)/,
@@ -155,6 +170,8 @@ export function isTransientMergeFailure(reason) {
   const terminal = [
     'actor mismatch',
     'changed-files-empty',
+    'ci-wait-timeout-fail',
+    'ci-wait-timeout-needs-human',
     'closed without merge',
     'diff-too-large',
     'empty-diff',
@@ -163,6 +180,7 @@ export function isTransientMergeFailure(reason) {
     'is not a bot identity',
     'no-diff-available',
     'reject:',
+    'required checks failed',
   ];
   if (terminal.some((pattern) => text.includes(pattern))) return false;
   return true;
@@ -325,6 +343,7 @@ async function updatePullRequestBranch(workspace, prNumber, repoFull) {
 
 async function waitForRequiredChecks(workspace, prNumber, repoFull) {
   if (!prNumber) throw new Error('cannot wait for required checks without PR number');
+  // Explicit policy: wait ONLY for branch-protection required checks (CI_WAIT_MODE=required).
   const args = [
     'pr', 'checks', prNumber,
     '--required',
@@ -337,10 +356,24 @@ async function waitForRequiredChecks(workspace, prNumber, repoFull) {
     await execFileAsync('gh', args, {
       cwd: workspace || process.env.HOME,
       maxBuffer: 10 * 1024 * 1024,
-      timeout: 30 * 60 * 1000,
+      timeout: CI_WAIT_TIMEOUT_MS,
     });
   } catch (err) {
     const message = String(err?.message || err);
+    const timedOut = /ETIMEDOUT|timed?\s*out|timeout/i.test(message)
+      || /kill|SIGTERM/i.test(message);
+    if (timedOut) {
+      if (CI_TIMEOUT_POLICY === 'human') {
+        throw new Error(
+          `ci-wait-timeout-needs-human: required checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+          + `escalate to human (policy=human). detail=${message.slice(0, 600)}`,
+        );
+      }
+      throw new Error(
+        `ci-wait-timeout-fail: required checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+        + `merge aborted (policy=fail). detail=${message.slice(0, 600)}`,
+      );
+    }
     throw new Error(`required checks failed or unavailable: ${message.slice(0, 1000)}`);
   }
 }
@@ -397,9 +430,13 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
     diffTruncated,
     '```',
     ``,
-    `审查代码质量、安全性、逻辑正确性。`,
+    `必须覆盖三个维度：`,
+    `1) security — 注入/密钥/反序列化/权限绕过`,
+    `2) business_logic — 控制流/不变量/错误处理/API 契约/静默丢数据`,
+    `3) performance — 慢查询、N+1、无界循环、热路径 sleep`,
+    `任一维度有阻断问题则 REJECT。`,
     `如果代码可以合并，输出一行：APPROVE`,
-    `如果有问题需要修改，输出一行：REJECT: <简要原因>`,
+    `如果有问题需要修改，输出一行：REJECT: <dimension>=<简要原因>`,
     `不要修改任何文件，只做审查。`,
   ].join('\n');
   log(`  AI review 开始 (trae-cli plan mode, diff=${diffSource}, ${diff.length} chars)...`);

@@ -189,7 +189,7 @@ class TestDigestLocalOrProxyLocalPaths:
             ),
             patch(
                 "app.application.digest_email_app_service.list_daily_digests_local",
-                new=AsyncMock(return_value={"success": True, "data": []}),
+                new=AsyncMock(return_value={"success": True, "data": [{"id": 1}]}),
             ),
         ):
             result = await admin_routes._digest_local_or_proxy(
@@ -197,6 +197,31 @@ class TestDigestLocalOrProxyLocalPaths:
             )
         assert isinstance(result, dict)
         assert result["success"] is True
+        assert result["data"][0]["id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_empty_local_falls_back_to_remote_xcmax(self):
+        req = MagicMock(spec=Request)
+        remote = {"success": True, "data": [{"id": 24}], "total": 24}
+        with (
+            patch(
+                "app.application.modstore_local_client.prefer_local_modstore",
+                return_value=True,
+            ),
+            patch(
+                "app.application.digest_email_app_service.list_daily_digests_local",
+                new=AsyncMock(return_value={"success": True, "data": [], "total": 0}),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
+                new=AsyncMock(return_value=remote),
+            ) as mock_remote,
+        ):
+            result = await admin_routes._digest_local_or_proxy(
+                req, "GET", "/api/xcmax/admin/daily-digests?limit=30"
+            )
+        assert result == remote
+        mock_remote.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_local_daily_digests_single(self):
@@ -285,6 +310,10 @@ class TestDigestLocalOrProxyLocalPaths:
             patch(
                 "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
                 (RuntimeError,),
+            ),
+            patch(
+                "app.fastapi_routes.xcmax_admin._fetch_remote_xcmax_daily_digests",
+                new=AsyncMock(return_value=None),
             ),
         ):
             result = await admin_routes._digest_local_or_proxy(

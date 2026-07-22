@@ -46,8 +46,10 @@ export_flclash_proxy_env() {
   export HTTPS_PROXY="${proxy_url}"
   export all_proxy="socks5://${FLCLASH_PROXY_HOST}:${FLCLASH_PROXY_PORT}"
   export ALL_PROXY="${all_proxy}"
-  export no_proxy="localhost,127.0.0.1,*.local,10.0.0.0/8,192.168.0.0/16"
+  # 必须含环回，否则 curl/工具链把 localhost 拐进 Clash → 本地 Vite 502
+  export no_proxy="localhost,127.0.0.1,::1,*.local,0.0.0.0,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   export NO_PROXY="${no_proxy}"
+  export CURL_NOPROXY="${no_proxy}"
   export XCMAX_CLI_PROXY="${proxy_url}"
 }
 

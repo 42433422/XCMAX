@@ -33,6 +33,11 @@ try:
 except ImportError:  # pragma: no cover - 测试环境可能未装 httpx
     httpx = None  # type: ignore[assignment]
 
+try:
+    from _approval_ledger_client import post_to_approval_ledger
+except ImportError:  # pragma: no cover - 测试环境路径可能不通
+    post_to_approval_ledger = None  # type: ignore[assignment]
+
 
 # =====================================================================
 # 数据模型
@@ -521,8 +526,13 @@ def create_pr(
     token: str | None = None,
     repo: str | None = None,
     client: Any = None,
+    fixes: list[Fix] | None = None,
 ) -> str:
-    """创建修复 PR，返回 PR URL（失败返回空字符串）。"""
+    """创建修复 PR，返回 PR URL（失败返回空字符串）。
+
+    PR 创建成功后会旁路调用 approval ledger（fire-and-forget，fail-open），
+    把 needs-human 待办写入管理端审批中心。ledger 写入失败绝不阻断 PR 创建。
+    """
     repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
     token = token or os.environ.get("GITHUB_TOKEN", "")
     if not repo or not token:
@@ -568,6 +578,29 @@ def create_pr(
                     json={"labels": labels},
                 )
             except Exception:
+                pass
+        # 3. 旁路写 approval ledger（fire-and-forget，fail-open 在 client 内处理）
+        if post_to_approval_ledger is not None:
+            try:
+                risk_level = "r3" if "needs-human" in (labels or []) else "r0"
+                fixes_summary = (
+                    [{"file": f.file, "line": f.line, "rule": f.rule} for f in (fixes or [])]
+                    if fixes
+                    else []
+                )
+                post_to_approval_ledger(
+                    action="self_maintenance_merge",
+                    payload={
+                        "pr_number": pr_number,
+                        "pr_url": pr_url,
+                        "branch": branch,
+                        "base": base,
+                        "risk_level": risk_level,
+                        "fixes_summary": fixes_summary,
+                    },
+                    source="ci_self_heal",
+                )
+            except Exception:  # pragma: no cover - fail-open
                 pass
         return pr_url
     except Exception:

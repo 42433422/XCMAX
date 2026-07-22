@@ -289,7 +289,7 @@ def cmd_open_issue(args: argparse.Namespace) -> int:
     from modstore_server.gap_to_issue import open_issue_for_proposal
 
     try:
-        issue_url = open_issue_for_proposal(proposal)
+        issue_url = open_issue_for_proposal(proposal, add_implement_label=False)
     except Exception as exc:  # noqa: BLE001
         evt = append_event(
             {
@@ -320,11 +320,63 @@ def cmd_open_issue(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_implement_pack(args: argparse.Namespace) -> int:
-    """连接点 4: 触发 ai-issue-implement → implement_succeeded/failed 事件。
+def _parse_issue_number(issue_url: str) -> Optional[int]:
+    """从 issue URL 解析编号。"""
+    try:
+        return int(issue_url.rstrip("/").split("/")[-1])
+    except (TypeError, ValueError):
+        return None
 
-    dry-run: 不真实调用 ai_issue_implement.py，只写 implement_succeeded 事件。
-    实模式: subprocess 调 FHD/scripts/dev/ai_issue_implement.py --apply。
+
+def _dispatch_implement_workflow(issue_number: int) -> "subprocess.CompletedProcess[str]":
+    """连接点 4 显式触发：gh workflow run（非仅靠 issue 标签间接流转）。"""
+    workflow = os.environ.get(
+        "EVOLUTION_IMPLEMENT_WORKFLOW", "fhd-ai-issue-implement.yml"
+    )
+    cmd = [
+        "gh",
+        "workflow",
+        "run",
+        workflow,
+        "-f",
+        f"issue_number={issue_number}",
+    ]
+    repo = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("GITHUB_REPO", "")
+    if repo:
+        cmd.extend(["--repo", repo])
+    print(f"  dispatching: {' '.join(cmd)}")
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def _run_implement_local(issue_number: int) -> "subprocess.CompletedProcess[str]":
+    """本地 fallback：直接跑 ai_issue_implement.py --apply。"""
+    repo = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("GITHUB_REPO", "")
+    token = os.environ.get("GITHUB_TOKEN", "")
+    llm_api_key = os.environ.get("XCAGI_LLM_API_KEY", "")
+    script = REPO_ROOT / "FHD" / "scripts" / "dev" / "ai_issue_implement.py"
+    cmd = [
+        sys.executable,
+        str(script),
+        "--issue-number",
+        str(issue_number),
+        "--repo",
+        repo,
+        "--token",
+        token,
+        "--llm-api-key",
+        llm_api_key,
+        "--apply",
+    ]
+    print(f"  invoking local: {' '.join(cmd[:6])} ... --apply")
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def cmd_implement_pack(args: argparse.Namespace) -> int:
+    """连接点 4: 在 ledger 内显式触发 ai-issue-implement → implement_* 事件。
+
+    dry-run: 不真实 dispatch，只写 implement_succeeded 事件。
+    实模式默认: ``gh workflow run fhd-ai-issue-implement.yml -f issue_number=N``
+    （EVOLUTION_IMPLEMENT_MODE=local 时改为 subprocess 调 ai_issue_implement.py）。
     """
     trace_id = args.trace_id or _new_trace_id()
     print(f"[trace_id={trace_id}] Step 4: implement-pack (dry_run={args.dry_run})")
@@ -338,6 +390,7 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
                 "pr_url": "https://github.com/example/repo/pull/0#dry-run",
                 "files_written": ["prompt.txt", "skills.json", "manifest.json"],
                 "cost_tokens": 0,
+                "trigger": "ledger_explicit",
                 "dry_run": True,
                 "final_status": "implement_succeeded",
             }
@@ -346,40 +399,22 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
         print("    pr_url=https://github.com/example/repo/pull/0#dry-run (dry-run, not actually created)")
         return 0
 
-    # 实模式：调用 ai_issue_implement.py
-    # 解析 issue_number 从 URL（形如 https://github.com/owner/repo/issues/N）
     issue_url = args.issue_url
-    issue_number = issue_url.rstrip("/").split("/")[-1]
-    try:
-        issue_number_int = int(issue_number)
-    except ValueError:
+    issue_number_int = _parse_issue_number(issue_url)
+    if issue_number_int is None:
         print(f"  ERROR: cannot parse issue_number from {issue_url}", file=sys.stderr)
         return 2
 
-    repo = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("GITHUB_REPO", "")
-    if not repo:
-        print("  ERROR: GITHUB_REPOSITORY/GITHUB_REPO env not set", file=sys.stderr)
-        return 2
+    mode = (os.environ.get("EVOLUTION_IMPLEMENT_MODE") or "workflow").strip().lower()
+    if mode == "local":
+        result = _run_implement_local(issue_number_int)
+        trigger = "ledger_local_subprocess"
+        success_type = "implement_succeeded"
+    else:
+        result = _dispatch_implement_workflow(issue_number_int)
+        trigger = "ledger_gh_workflow_run"
+        success_type = "implement_dispatched"
 
-    token = os.environ.get("GITHUB_TOKEN", "")
-    llm_api_key = os.environ.get("XCAGI_LLM_API_KEY", "")
-
-    script = REPO_ROOT / "FHD" / "scripts" / "dev" / "ai_issue_implement.py"
-    cmd = [
-        sys.executable,
-        str(script),
-        "--issue-number",
-        str(issue_number_int),
-        "--repo",
-        repo,
-        "--token",
-        token,
-        "--llm-api-key",
-        llm_api_key,
-        "--apply",
-    ]
-    print(f"  invoking: {' '.join(cmd[:6])} ... --apply")
-    result = subprocess.run(cmd, capture_output=True, text=True)
     print(result.stdout)
     if result.stderr:
         print(result.stderr, file=sys.stderr)
@@ -387,15 +422,17 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
     if result.returncode == 0:
         evt = append_event(
             {
-                "event_type": "implement_succeeded",
+                "event_type": success_type,
                 "trace_id": trace_id,
                 "issue_url": issue_url,
+                "issue_number": issue_number_int,
                 "returncode": result.returncode,
+                "trigger": trigger,
                 "dry_run": False,
-                "final_status": "implement_succeeded",
+                "final_status": success_type,
             }
         )
-        _print_event_line("implement_succeeded", evt, trace_id=trace_id)
+        _print_event_line(success_type, evt, trace_id=trace_id)
         return 0
 
     evt = append_event(
@@ -403,7 +440,9 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
             "event_type": "implement_failed",
             "trace_id": trace_id,
             "issue_url": issue_url,
+            "issue_number": issue_number_int,
             "returncode": result.returncode,
+            "trigger": trigger,
             "stderr_excerpt": result.stderr[-1000:] if result.stderr else "",
             "dry_run": False,
             "final_status": "needs_human",

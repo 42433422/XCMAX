@@ -47,5 +47,8 @@ def test_ai_self_heal_workflow_run_names_are_not_path_prefixed() -> None:
 
     assert rendered is not None
     _, body = rendered
-    assert 'workflows: ["CI/CD Pipeline", "Smoke Tests", "cvm-autonomy-watcher"' in body
+    # workflows 列表已扩展（Employee Smoke Gate / MODstore tests 等已加入），
+    # 但前缀仍是 "CI/CD Pipeline", "Smoke Tests"——断言这两个前缀 + cvm-autonomy-watcher 存在即可。
+    assert 'workflows: ["CI/CD Pipeline", "Smoke Tests"' in body
+    assert '"cvm-autonomy-watcher"' in body
     assert '"FHD/CI/CD Pipeline"' not in body

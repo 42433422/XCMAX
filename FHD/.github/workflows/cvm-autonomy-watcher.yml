@@ -28,9 +28,33 @@ permissions:
 
 jobs:
   watcher-tick:
-    name: CVM autonomy watcher tick
+    name: CVM autonomy watcher (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Staging first: validate autonomy before prod.
+          - target: staging
+            deploy_root: /opt/fhd-staging
+            manifest: /var/www/update/releases/staging/server/fhd-manifest.json
+            required: "false"
+            probe_mode: fhd
+          - target: prod
+            deploy_root: /opt/fhd-full
+            manifest: /var/www/update/releases/stable/server/fhd-manifest.json
+            required: "true"
+            probe_mode: fhd
+          # 官网（成都修茈科技有限公司）健康探测：
+          # - 不依赖 fhd-full tarball，复用 CVM venv 跑 corp_site_health_probe.py
+          # - 失败时 escalate → approval_ledger → IncidentEvent(scope=website)
+          # - 由 unified_autonomy_orchestrator → website_runner 触发 redeploy
+          - target: website
+            deploy_root: /root/成都修茈科技有限公司
+            manifest: ""
+            required: "false"
+            probe_mode: website
     steps:
       - name: Require CVM SSH secrets
         env:
@@ -49,11 +73,15 @@ jobs:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          # CVM_INCIDENT_PAT 是 GitHub PAT（scope: issues:write），用于在 CVM 上创建 incident issue
-          # 未配置时 watcher 自动跳过 open_incident_issue action（adapter 检测 token=None 返回 ok=False）
           CVM_INCIDENT_PAT: ${{ secrets.CVM_INCIDENT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          DEPLOY_ROOT: ${{ matrix.deploy_root }}
+          MANIFEST: ${{ matrix.manifest }}
+          TARGET: ${{ matrix.target }}
+          REQUIRED: ${{ matrix.required }}
+          PROBE_MODE: ${{ matrix.probe_mode }}
+          CORP_SITE_BASE_URL: ${{ vars.CORP_SITE_BASE_URL || 'https://xiu-ci.com' }}
         run: |
           set -euo pipefail
           HOST="${FHD_PUSH_HOST:-119.27.178.147}"
@@ -62,8 +90,6 @@ jobs:
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
-          DEPLOY_ROOT="/opt/fhd-full"
-          MANIFEST="/var/www/update/releases/stable/server/fhd-manifest.json"
           AUDIT_DIR="${DEPLOY_ROOT}/autonomy"
 
           DRY_FLAG=""
@@ -71,14 +97,73 @@ jobs:
             DRY_FLAG="--dry-run"
           fi
 
-          # 通过 SSH env 把 GITHUB_TOKEN (PAT) + GITHUB_REPOSITORY 传到 CVM
-          # 仅当前 shell 中有效，不写入 CVM 持久化文件（最小暴露面）
-          # 注：使用 SendEnv 接收需 sshd 配置 AcceptEnv；这里改用 env 前缀注入更通用
-          REMOTE_CMD=$(cat <<EOF
+          if [ "$PROBE_MODE" = "website" ]; then
+            PROBE_DEPLOY_ROOT="/opt/fhd-full"
+            PROBE_AUDIT_DIR="${PROBE_DEPLOY_ROOT}/autonomy"
+            REMOTE_CMD=$(cat <<EOF
           set -euo pipefail
-          cd "${DEPLOY_ROOT}"
+          if [ ! -d "${PROBE_DEPLOY_ROOT}" ]; then
+            echo "[watcher] ${TARGET}: probe deploy root missing: ${PROBE_DEPLOY_ROOT}"
+            if [ "${REQUIRED}" = "true" ]; then
+              exit 1
+            fi
+            echo "[watcher] ${TARGET}: optional target skipped"
+            exit 0
+          fi
+          cd "${PROBE_DEPLOY_ROOT}"
+          ENV_FILE=/root/fhd-full.env
+          if [ -f "\$ENV_FILE" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            . "\$ENV_FILE"
+            set +a
+          fi
+          export FHD_API_BASE_URL="\${FHD_API_BASE_URL:-http://127.0.0.1:5100}"
           GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
           GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
+          FHD_API_BASE_URL="\$FHD_API_BASE_URL" \
+          AUTONOMY_WEBHOOK_TOKEN="\${AUTONOMY_WEBHOOK_TOKEN:-}" \
+          MODSTORE_OPS_INGEST_TOKEN="\${MODSTORE_OPS_INGEST_TOKEN:-}" \
+          CORP_SITE_BASE_URL='${CORP_SITE_BASE_URL}' \
+          python3 "${PROBE_DEPLOY_ROOT}/scripts/autonomy/corp_site_health_probe.py" \
+            --base-url '${CORP_SITE_BASE_URL}' \
+            --audit-dir "${PROBE_AUDIT_DIR}" \
+            ${DRY_FLAG}
+          EOF
+          )
+          else
+            REMOTE_CMD=$(cat <<EOF
+          set -euo pipefail
+          if [ ! -d "${DEPLOY_ROOT}" ]; then
+            echo "[watcher] ${TARGET}: deploy root missing: ${DEPLOY_ROOT}"
+            if [ "${REQUIRED}" = "true" ]; then
+              exit 1
+            fi
+            # staging 未引导：执行 FHD/scripts/deploy/fhd-bootstrap-staging-cvm.sh 后此分支不再触发
+            # 引导步骤见 docs/autonomy/L4_STAGING_BOOTSTRAP.md
+            echo "[watcher] ${TARGET}: optional target skipped (bootstrap with fhd-bootstrap-staging-cvm.sh)"
+            exit 0
+          fi
+          cd "${DEPLOY_ROOT}"
+          if [ "${TARGET}" = "staging" ]; then
+            ENV_FILE=/root/fhd-staging.env
+            API_BASE=http://127.0.0.1:5101
+          else
+            ENV_FILE=/root/fhd-full.env
+            API_BASE=http://127.0.0.1:5100
+          fi
+          if [ -f "\$ENV_FILE" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            . "\$ENV_FILE"
+            set +a
+          fi
+          export FHD_API_BASE_URL="\${FHD_API_BASE_URL:-\$API_BASE}"
+          GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
+          GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
+          FHD_API_BASE_URL="\$FHD_API_BASE_URL" \
+          AUTONOMY_WEBHOOK_TOKEN="\${AUTONOMY_WEBHOOK_TOKEN:-}" \
+          MODSTORE_OPS_INGEST_TOKEN="\${MODSTORE_OPS_INGEST_TOKEN:-}" \
           python3 "${DEPLOY_ROOT}/scripts/autonomy/cvm_autonomy_watcher.py" \
             --deploy-root "${DEPLOY_ROOT}" \
             --manifest-path "${MANIFEST}" \
@@ -86,6 +171,7 @@ jobs:
             ${DRY_FLAG}
           EOF
           )
+          fi
 
           ssh -i "$KEY_FILE" \
             -o StrictHostKeyChecking=accept-new \

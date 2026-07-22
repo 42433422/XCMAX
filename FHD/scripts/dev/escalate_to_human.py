@@ -15,8 +15,13 @@ from typing import Any, Dict, List
 # 4 层 parent 才能到项目根 /Users/a4243342/Desktop/XCMAX
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"))
+# 共享 approval ledger client（FHD/scripts/ci/_approval_ledger_client.py）
+_FHD_SCRIPTS = Path(__file__).resolve().parent.parent  # FHD/scripts
+sys.path.insert(0, str(_FHD_SCRIPTS / "ci"))
 
 from modstore_server.evolution_ledger import append_event  # noqa: E402
+from _approval_ledger_client import post_to_approval_ledger  # noqa: E402
+from _im_notify_client import notify_boss_im  # noqa: E402
 
 
 def escalate(
@@ -76,6 +81,46 @@ def escalate(
         "failure_reasons": failure_reasons,
         "final_status": "needs_human",
     })
+
+    # 预生成 action_id（基于 issue_number，稳定可复现），供后续人工审批合并时回写终态
+    action_id = f"escalate:{issue_number}"
+
+    # 旁路写后端 approval ledger（fire-and-forget；fail-open 在 client 内处理）
+    post_to_approval_ledger(
+        action="ai_issue_implement",
+        payload={
+            "issue_number": issue_number,
+            "failure_reasons": failure_reasons,
+            "proposal": proposal,
+        },
+        source="ci_escalate",
+        action_id=action_id,
+    )
+
+    # 回调 /github-approval：decision=approval_requested（请求人工审批）
+    # 铁律 fail-open：任何 callback 失败不得阻断主流程
+    # lazy import 避免与 scripts/autonomy/autonomy_callback.py 模块名冲突
+    try:
+        from autonomy_callback import report_approval_requested
+
+        report_approval_requested(
+            action_id=action_id,
+            workflow_action="escalate_to_human",
+            source="ci_escalate",
+        )
+    except Exception:
+        pass
+
+    # 管理端 IM（fail-open）：让人能及时介入，不阻断 escalate
+    reasons_preview = "; ".join(str(r) for r in failure_reasons[:3])
+    notify_boss_im(
+        f"[needs-human] issue #{issue_number} 自动实现失败转人工。\n"
+        f"原因：{reasons_preview or '（无）'}\n"
+        f"triggered_by={proposal.get('triggered_by') or '—'}",
+        employee_id="ci-autonomy",
+        display_name="CI 自愈",
+        source="ci_escalate",
+    )
 
 
 def main() -> int:

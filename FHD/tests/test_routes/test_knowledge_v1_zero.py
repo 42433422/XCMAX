@@ -155,19 +155,25 @@ class TestKnowledgeIndex:
 class TestIngestEndpoint:
     """Tests for ingest endpoint function."""
 
+    @patch(
+        "app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False}
+    )
     @patch("app.fastapi_routes.knowledge_v1._index")
-    def test_ingest_success(self, mock_index: MagicMock) -> None:
+    def test_ingest_success(self, mock_index: MagicMock, _mock_mirror: MagicMock) -> None:
         mock_index.ingest.return_value = 3
         req = IngestRequest(text="hello world")
-        result = ingest(req)
+        result = ingest(req, MagicMock())
         assert result.success is True
         assert result.chunk_count == 3
 
+    @patch(
+        "app.fastapi_routes.knowledge_v1._mirror_ingest_to_persy", return_value={"success": False}
+    )
     @patch("app.fastapi_routes.knowledge_v1._index")
-    def test_ingest_value_error(self, mock_index: MagicMock) -> None:
+    def test_ingest_value_error(self, mock_index: MagicMock, _mock_mirror: MagicMock) -> None:
         mock_index.ingest.side_effect = ValueError("bad input")
         req = IngestRequest(text="hello world")
-        result = ingest(req)
+        result = ingest(req, MagicMock())
         assert result.success is False
         assert "bad input" in result.message
 
@@ -188,14 +194,25 @@ class TestQueryEndpoint:
 class TestStatusEndpoint:
     """Tests for status endpoint function."""
 
+    @patch("app.application.dataset_rag_app_service.get_dataset_rag_app_service")
     @patch("app.fastapi_routes.knowledge_v1.get_default_embedder", return_value=None)
     @patch("app.fastapi_routes.knowledge_v1.is_rag_enabled", return_value=False)
     @patch("app.fastapi_routes.knowledge_v1._index")
     def test_status(
-        self, mock_index: MagicMock, mock_rag: MagicMock, mock_embedder: MagicMock
+        self,
+        mock_index: MagicMock,
+        mock_rag: MagicMock,
+        mock_embedder: MagicMock,
+        mock_dataset_svc: MagicMock,
     ) -> None:
         mock_index.status.return_value = {"sources": 2, "chunks": 10}
-        result = status()
+        # 让 dataset overview 返回空，避免 indexed_sources 被 dataset_docs 污染
+        mock_dataset_svc.return_value.status.return_value = {
+            "datasets": {},
+            "document_count": 0,
+            "chunk_count": 0,
+        }
+        result = status(MagicMock())
         assert result.rag_enabled is False
         assert result.indexed_sources == 2
         assert result.indexed_chunks == 10
@@ -211,7 +228,7 @@ class TestHealthEndpoint:
         self, mock_index: MagicMock, mock_rag: MagicMock, mock_embedder: MagicMock
     ) -> None:
         mock_index.status.return_value = {"sources": 1, "chunks": 5}
-        result = health()
+        result = health(MagicMock())
         assert result["success"] is True
         assert result["rag_enabled"] is True
         assert result["embedder_available"] is True

@@ -148,6 +148,15 @@ DEFAULT_AUTONOMY_BOUNDARIES: Sequence[AutonomyBoundaryRule] = (
         scope="execution_layer",
         rationale="文档更新可自主但需报告",
     ),
+    AutonomyBoundaryRule(
+        rule_id="exec-track-digest-action-items",
+        category="strategic",
+        action_pattern="track_digest_action_items*",
+        allowed_autonomy=AutonomyAction.REPORT_ONLY,
+        risk_level=RiskLevel.MEDIUM,
+        scope="strategic_layer",
+        rationale="日更行动条目战略层追踪：自动入账、仅报告，不堆人工审批",
+    ),
     # === 需会议决议（high risk, require_council）===
     AutonomyBoundaryRule(
         rule_id="council-roadmap-change",

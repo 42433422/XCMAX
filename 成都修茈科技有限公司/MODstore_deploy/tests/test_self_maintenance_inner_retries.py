@@ -137,7 +137,11 @@ def test_review_step_marker_missing_then_present(monkeypatch, captured_ledger):
                 report=(
                     "review text\nSELF_MAINTENANCE_REVIEW_JSON: "
                     '{"max_severity":"low","blocking_findings":[],'
-                    '"risk_class":"low","target_branch_available":true,"tested_commands":[]}'
+                    '"risk_class":"low","target_branch_available":true,"tested_commands":[],'
+                    '"dimensions":{'
+                    '"security":{"status":"pass","findings":[]},'
+                    '"business_logic":{"status":"pass","findings":[]},'
+                    '"performance":{"status":"pass","findings":[]}}}'
                 ),
             ),
         ],
@@ -156,9 +160,52 @@ def test_review_step_marker_missing_then_present(monkeypatch, captured_ledger):
     assert code_fix_rounds == 0
     assert marker_rounds == 1
     assert len(calls) == 2
-    # 第二次 task_text 应包含 marker 提醒
-    assert "MISSING REQUIRED MARKER" in calls[1]["task_text"]
+    # 第二次 task_text 应包含协议打回提醒
+    assert "PROTOCOL REJECTED" in calls[1]["task_text"]
     assert "SELF_MAINTENANCE_REVIEW_JSON" in calls[1]["task_text"]
+
+
+def test_review_step_incomplete_dimensions_protocol_rerun(monkeypatch, captured_ledger):
+    """有 marker 但缺 dimensions → 协议打回 → 补齐后通过。"""
+    calls = _patch_dispatch(
+        monkeypatch,
+        [
+            _make_result(
+                ok=True,
+                report=(
+                    "SELF_MAINTENANCE_REVIEW_JSON: "
+                    '{"max_severity":"low","blocking_findings":[],'
+                    '"risk_class":"low","target_branch_available":true,"tested_commands":[]}'
+                ),
+            ),
+            _make_result(
+                ok=True,
+                report=(
+                    "SELF_MAINTENANCE_REVIEW_JSON: "
+                    '{"max_severity":"low","blocking_findings":[],'
+                    '"risk_class":"low","target_branch_available":true,"tested_commands":[],'
+                    '"dimensions":{'
+                    '"security":{"status":"pass","findings":[]},'
+                    '"business_logic":{"status":"pass","findings":[]},'
+                    '"performance":{"status":"n/a","findings":[]}}}'
+                ),
+            ),
+        ],
+    )
+
+    _, ok, _, _, _, _, marker_rounds = mod._run_step_with_inner_retries(
+        employee_id="change-request-auditor",
+        step_name="review",
+        task_text="base review",
+        extra={},
+        user_id=1,
+        run_id="run-3b",
+    )
+
+    assert ok is True
+    assert marker_rounds == 1
+    assert len(calls) == 2
+    assert "missing_dimensions" in calls[1]["task_text"]
 
 
 def test_review_step_dispatch_failure_no_inner_retry(monkeypatch, captured_ledger):

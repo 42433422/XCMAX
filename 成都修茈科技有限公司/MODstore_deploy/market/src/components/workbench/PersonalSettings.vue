@@ -94,26 +94,26 @@
             </div>
             <p class="ps-hint">电话式统一：单连接流式听写 + 提前开答 + 播报可打断（对标豆包打电话）；需开启自动朗读且选微软云端。</p>
             <div class="ps-row">
+              <label class="ps-chip" :class="{ 'ps-chip--on': model.ttsEngine !== 'edge-online' }">
+                <input v-model="model.ttsEngine" class="ps-sr-only" type="radio" value="auto" @change="emitChange" />
+                <span class="ps-chip-text">MiMo → Edge</span>
+              </label>
               <label class="ps-chip" :class="{ 'ps-chip--on': model.ttsEngine === 'edge-online' }">
                 <input v-model="model.ttsEngine" class="ps-sr-only" type="radio" value="edge-online" @change="emitChange" />
-                <span class="ps-chip-text">微软云端</span>
-              </label>
-              <label class="ps-chip" :class="{ 'ps-chip--on': model.ttsEngine === 'browser' }">
-                <input v-model="model.ttsEngine" class="ps-sr-only" type="radio" value="browser" @change="emitChange" />
-                <span class="ps-chip-text">浏览器</span>
+                <span class="ps-chip-text">仅 Edge 神经音</span>
               </label>
             </div>
+            <p class="ps-hint">默认优先小米 MiMo 神经音，失败再回退微软 Edge；不再使用浏览器系统 TTS。</p>
             <template v-if="model.ttsEngine === 'edge-online'">
-              <label class="ps-field-label" for="ps-tts-edge-voice">音色</label>
+              <label class="ps-field-label" for="ps-tts-edge-voice">Edge 音色</label>
               <select id="ps-tts-edge-voice" v-model="model.ttsEdgeVoice" class="ps-select" @change="emitChange">
                 <option v-for="ev in edgeVoices" :key="ev.id" :value="ev.id">{{ ev.label }}</option>
               </select>
             </template>
             <template v-else>
-              <label class="ps-field-label" for="ps-tts-voice">音色</label>
-              <select id="ps-tts-voice" v-model="model.ttsVoiceName" class="ps-select" @change="emitChange">
-                <option value="">自动（优先中文）</option>
-                <option v-for="v in voiceList" :key="v.name" :value="v.name">{{ v.label }}</option>
+              <label class="ps-field-label" for="ps-tts-edge-voice-fb">Edge 回退音色</label>
+              <select id="ps-tts-edge-voice-fb" v-model="model.ttsEdgeVoice" class="ps-select" @change="emitChange">
+                <option v-for="ev in edgeVoices" :key="ev.id" :value="ev.id">{{ ev.label }}</option>
               </select>
             </template>
               <label class="ps-field-label ps-field-label--spaced" for="ps-tts-rate">语速 <span class="ps-section-badge">{{ model.ttsRate.toFixed(1) }}×</span></label>
@@ -254,7 +254,8 @@ function syncFromProps() {
   model.fontPx = Number.isFinite(Number(v.fontPx)) ? Number(v.fontPx) : 15
   model.memory = String(v.memory || '').slice(0, 600)
   model.suggestions = Array.isArray(v.suggestions) ? v.suggestions.slice(0, 6) : []
-  model.ttsEngine = v.ttsEngine === 'browser' || v.ttsEngine === 'edge-online' ? v.ttsEngine : def.ttsEngine
+  model.ttsEngine =
+    v.ttsEngine === 'edge-online' ? 'edge-online' : v.ttsEngine === 'auto' || v.ttsEngine === 'browser' ? 'auto' : def.ttsEngine
   model.ttsEdgeVoice =
     typeof v.ttsEdgeVoice === 'string' && v.ttsEdgeVoice.trim()
       ? v.ttsEdgeVoice.trim().slice(0, 120)
@@ -306,7 +307,7 @@ function onSuggestionsBlur() {
 function emitChange() {
   const ttsRate = Math.max(0.6, Math.min(1.6, Number(model.ttsRate) || 1))
   model.ttsRate = ttsRate
-  const ttsEngine = model.ttsEngine === 'browser' ? 'browser' : 'edge-online'
+  const ttsEngine = model.ttsEngine === 'edge-online' ? 'edge-online' : 'auto'
   const allowedEdge = new Set(edgeVoices.map((e) => e.id))
   const ttsEdgeVoice = allowedEdge.has(model.ttsEdgeVoice) ? model.ttsEdgeVoice : defaultPersonalSettings().ttsEdgeVoice
   const voiceSpeechMode =

@@ -39,9 +39,13 @@ from app.services.tts_service import (
 
 @pytest.fixture(autouse=True)
 def _reset_tts_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear cache + warmup latch between tests."""
+    """Clear cache + warmup latch between tests; default skip MiMo so Edge path is exercised."""
     monkeypatch.setattr(tts, "_TTS_CACHE", tts.OrderedDict())
     monkeypatch.setattr(tts, "_WARMUP_STARTED", False)
+    monkeypatch.setattr(
+        "app.services.mimo_tts_service.is_configured",
+        lambda: False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -216,13 +220,13 @@ class TestSynthesizeEmpty:
 
 class TestSynthesizeCacheHit:
     def test_cache_hit_returns_payload(self) -> None:
-        key = _normalize_cache_key(
-            text="hi", voice=DEFAULT_EDGE_VOICE, lang="zh", rate=None, pitch=None
-        )
+        cache_voice = f"mimo:{tts.DEFAULT_MIMO_VOICE}|edge:{DEFAULT_EDGE_VOICE}"
+        key = _normalize_cache_key(text="hi", voice=cache_voice, lang="zh", rate=None, pitch=None)
         cached = {
             "audioBase64": "data:audio/mpeg;base64,QUJD",
             "voice": DEFAULT_EDGE_VOICE,
             "lang": "zh",
+            "provider": "edge",
         }
         _set_cache(key, cached)
         out = synthesize_to_data_uri(text="hi")
@@ -251,6 +255,7 @@ class TestSynthesizeHappyPath:
 
         assert out["voice"] == DEFAULT_EDGE_VOICE
         assert out["lang"] == "zh"
+        assert out["provider"] == "edge"
         b64 = out["audioBase64"].split(",", 1)[1]
         assert base64.b64decode(b64) == b"abcdef"
 

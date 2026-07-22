@@ -60,7 +60,16 @@ a { color: inherit; }
   align-items: center;
   gap: clamp(12px, 2vw, 28px);
 }
-.brand-mark { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; min-width: 0; }
+/* 品牌层压在导航之上，避免菜单溢出时文字叠在一起 */
+.brand-mark {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  min-width: 0;
+}
 .brand-seal {
   width: 104px; height: 56px; border-radius: 14px;
   display: grid; place-items: center;
@@ -74,11 +83,12 @@ a { color: inherit; }
 .brand-name strong { font-size: 17px; line-height: 1.2; white-space: nowrap; letter-spacing: -0.01em; }
 .brand-name span { font-size: 12px; color: var(--text-faint); letter-spacing: .08em; text-transform: uppercase; }
 .nav {
-  display: flex; align-items: center; justify-content: center; gap: clamp(10px, 1.6vw, 20px);
+  /* flex-end：空间不足时向右溢出，避免盖住左侧品牌 */
+  display: flex; align-items: center; justify-content: flex-end; gap: clamp(10px, 1.6vw, 20px);
   min-width: 0;
 }
 .nav-menu {
-  display: flex; align-items: center; justify-content: center; flex-wrap: nowrap;
+  display: flex; align-items: center; justify-content: flex-end; flex-wrap: nowrap;
   gap: 0; min-width: 0;
 }
 .nav-menu a {
@@ -972,8 +982,17 @@ body.page-contact .intake-wizard-actions {
 .reveal { opacity: 0; transform: translateY(22px); transition: opacity .65s ease, transform .65s ease; }
 .reveal.visible { opacity: 1; transform: translateY(0); }
 
-@media (max-width: 1320px) {
-  .nav-menu a.nav-optional { display: none; }
+/*
+ * 断点冲突修复：
+ * 顶栏 .site-header > .container 锁死 max-width:1320px。
+ * 旧规则「视口 ≤1320 才隐藏 optional」→ 视口略宽于 1320 时 optional 显示，
+ * 但栏宽仍是 1320，菜单居中溢出，盖住「成都修茈…」与「首页」。
+ * 可选链改到更宽视口，并同步加宽顶栏容器。
+ */
+.nav-menu a.nav-optional { display: none; }
+@media (min-width: 1680px) {
+  .site-header > .container { max-width: 1500px; }
+  .nav-menu a.nav-optional { display: block; }
 }
 
 @media (max-width: 1180px) {

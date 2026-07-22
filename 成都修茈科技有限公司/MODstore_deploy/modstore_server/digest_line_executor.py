@@ -698,6 +698,18 @@ def execute_digest_line_work_units(
                     )
             except Exception:
                 logger.exception("action_items dispatch writeback failed record_id=%s", record_id)
+            try:
+                from modstore_server.strategic_layer.digest_strategic_bridge import (
+                    sync_record_after_status_writeback,
+                )
+
+                run_payload["strategic_action_bridge"] = sync_record_after_status_writeback(
+                    record_id=int(record_id)
+                )
+            except Exception:
+                logger.exception(
+                    "strategic action bridge after line-execute failed record_id=%s", record_id
+                )
 
         merged = _merge_run_meta(meta_prev, line, run_payload)
         persist_line_execute_on_digest_record(record_id, merged)

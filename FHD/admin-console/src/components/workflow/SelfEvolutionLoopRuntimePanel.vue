@@ -1260,6 +1260,19 @@ const openApprovalItems = computed(() =>
               <span v-if="Array.isArray(item.review_findings) && item.review_findings.length" class="selp-report-pill">
                 findings {{ item.review_findings.length }}
               </span>
+              <span v-if="Array.isArray(item.review_blocking_findings) && item.review_blocking_findings.length" class="selp-report-pill selp-report-pill--bad">
+                review blockers {{ item.review_blocking_findings.length }}
+              </span>
+              <template v-if="item.review_dimensions && typeof item.review_dimensions === 'object'">
+                <span
+                  v-for="dimKey in ['security', 'business_logic', 'performance']"
+                  :key="`${item.run_id || ''}-${dimKey}`"
+                  class="selp-report-pill"
+                  :class="String(item.review_dimensions?.[dimKey]?.status || '').toLowerCase() === 'fail' ? 'selp-report-pill--bad' : 'selp-report-pill--ok'"
+                >
+                  {{ dimKey }} {{ item.review_dimensions?.[dimKey]?.status || 'n/a' }}
+                </span>
+              </template>
             </div>
           </div>
         </li>

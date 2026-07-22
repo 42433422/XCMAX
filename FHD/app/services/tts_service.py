@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import re
 import threading
 from collections import OrderedDict
@@ -9,7 +10,10 @@ from dataclasses import dataclass
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_EDGE_VOICE = "zh-CN-XiaoxiaoNeural"
+DEFAULT_MIMO_VOICE = "冰糖"
 _CACHE_MAX_SIZE = 50
 
 _EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2,3}-[A-Za-z]+Neural$")
@@ -126,6 +130,16 @@ def _coalesce_voice(voice: str | None, speaker_id: str | None, lang: str) -> str
     return DEFAULT_EDGE_VOICE
 
 
+def _coalesce_mimo_voice(voice: str | None, speaker_id: str | None) -> str:
+    """Edge Neural id 不能直接给 MiMo；未显式指定 MiMo 音色时用默认冰糖。"""
+    for candidate in (voice, speaker_id):
+        v = (candidate or "").strip()
+        if not v or _EDGE_VOICE_RE.match(v):
+            continue
+        return v
+    return DEFAULT_MIMO_VOICE
+
+
 def _normalize_cache_key(
     *, text: str, voice: str, lang: str, rate: str | None, pitch: str | None
 ) -> tuple[str, str, str, str, str]:
@@ -198,6 +212,24 @@ async def _synthesize_mp3_bytes(req: TtsRequest) -> bytes:
     return b"".join(chunks)
 
 
+def _synthesize_edge_mp3(req: TtsRequest) -> bytes:
+    try:
+        return asyncio.run(_synthesize_mp3_bytes(req))
+    except RuntimeError as e:
+        # 兼容未来环境：如果已存在事件循环（如改成 async server），用新 loop 执行
+        if "asyncio.run()" not in str(e):
+            raise
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(_synthesize_mp3_bytes(req))
+        finally:
+            try:
+                loop.close()
+            finally:
+                asyncio.set_event_loop(None)
+
+
 def synthesize_to_data_uri(
     *,
     text: str,
@@ -208,54 +240,65 @@ def synthesize_to_data_uri(
     pitch: str | None = None,
 ) -> dict:
     """
-    Synthesize speech via Edge TTS and return a JSON-serializable payload:
+    统一 TTS：优先 MiMo-V2.5，失败回退 Edge 神经音。
+
+    返回:
     {
-      "audioBase64": "data:audio/mpeg;base64,...",
+      "audioBase64": "data:audio/...;base64,...",
       "voice": "...",
-      "lang": "..."
+      "lang": "...",
+      "provider": "mimo" | "edge"
     }
     """
     text_norm = (text or "").strip()
     if not text_norm:
         raise ValueError("text is empty")
 
-    chosen_voice = _coalesce_voice(voice, speaker_id, lang)
+    edge_voice = _coalesce_voice(voice, speaker_id, lang)
+    mimo_voice = _coalesce_mimo_voice(voice, speaker_id)
     normalized_lang = (lang or "zh").strip().lower()
+    # 缓存键含引擎链标记，避免旧 edge-only 缓存挡住 mimo
+    cache_voice = f"mimo:{mimo_voice}|edge:{edge_voice}"
     key = _normalize_cache_key(
-        text=text_norm, voice=chosen_voice, lang=normalized_lang, rate=rate, pitch=pitch
+        text=text_norm, voice=cache_voice, lang=normalized_lang, rate=rate, pitch=pitch
     )
     cache_hit = _get_cache(key)
     if cache_hit:
         return cache_hit
 
-    req = TtsRequest(
-        text=text_norm, voice=chosen_voice, lang=normalized_lang, rate=rate, pitch=pitch
-    )
-
+    # 1) MiMo
     try:
-        mp3_bytes = asyncio.run(_synthesize_mp3_bytes(req))
-    except RuntimeError as e:
-        # 兼容未来环境：如果已存在事件循环（如改成 async server），用新 loop 执行
-        if "asyncio.run()" not in str(e):
-            raise
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            mp3_bytes = loop.run_until_complete(_synthesize_mp3_bytes(req))
-        finally:
-            try:
-                loop.close()
-            finally:
-                asyncio.set_event_loop(None)
+        from app.services.mimo_tts_service import is_configured, synthesize_mimo_bytes
 
+        if is_configured():
+            audio_bytes, meta = synthesize_mimo_bytes(text_norm, voice=mimo_voice)
+            mime = str(meta.get("mime") or "audio/wav")
+            b64 = base64.b64encode(audio_bytes).decode("ascii")
+            payload = {
+                "audioBase64": f"data:{mime};base64,{b64}",
+                "voice": str(meta.get("voice") or mimo_voice),
+                "lang": normalized_lang,
+                "provider": "mimo",
+            }
+            _set_cache(key, payload)
+            return payload
+    except RECOVERABLE_ERRORS as exc:
+        logger.info("MiMo TTS unavailable, falling back to Edge: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("MiMo TTS failed, falling back to Edge: %s", exc)
+
+    # 2) Edge neural
+    req = TtsRequest(text=text_norm, voice=edge_voice, lang=normalized_lang, rate=rate, pitch=pitch)
+    mp3_bytes = _synthesize_edge_mp3(req)
     if not mp3_bytes:
         raise RuntimeError("edge-tts returned empty audio")
 
     b64 = base64.b64encode(mp3_bytes).decode("ascii")
     payload = {
         "audioBase64": f"data:audio/mpeg;base64,{b64}",
-        "voice": chosen_voice,
+        "voice": edge_voice,
         "lang": req.lang,
+        "provider": "edge",
     }
     _set_cache(key, payload)
     return payload

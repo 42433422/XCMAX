@@ -65,6 +65,7 @@ jobs:
 
       - name: Aggregate evolution signals + LLM propose + open issue
         working-directory: 成都修茈科技有限公司/MODstore_deploy
+        id: scan
         run: |
           python -c "
           import os, sys, json
@@ -77,6 +78,8 @@ jobs:
           print(f'Aggregated signals: {signals}')
           if not signals.get('signals_to_propose'):
               print('No signals to propose, exiting.')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+                  fh.write('issue_url=\n')
               sys.exit(0)
 
           append_event({'event_type': 'signal_detected', 'signals': signals, 'final_status': 'signal_detected'})
@@ -84,17 +87,32 @@ jobs:
           proposal = propose_employee_pack(signals)
           if not proposal:
               print('LLM returned no proposal, exiting.')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+                  fh.write('issue_url=\n')
               sys.exit(0)
 
           print(f'Proposal: {proposal}')
           try:
-              issue_url = open_issue_for_proposal(proposal)
+              # 不打 ai-implement：连接点 4 由 ledger implement-pack 显式 gh workflow run
+              issue_url = open_issue_for_proposal(proposal, add_implement_label=False)
               print(f'Opened issue: {issue_url}')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+                  fh.write(f'issue_url={issue_url}\n')
           except Exception as e:
               print(f'Failed to open issue: {e}', file=sys.stderr)
               append_event({'event_type': 'issue_open_failed', 'error': str(e), 'final_status': 'needs_human'})
               sys.exit(1)
           "
+
+      - name: Ledger implement-pack (connection point 4)
+        if: steps.scan.outputs.issue_url != ''
+        working-directory: FHD
+        env:
+          EVOLUTION_IMPLEMENT_MODE: workflow
+          EVOLUTION_IMPLEMENT_WORKFLOW: fhd-ai-issue-implement.yml
+        run: |
+          python scripts/autonomy/evolution_decision_ledger.py implement-pack \
+            --issue-url "${{ steps.scan.outputs.issue_url }}"
 
       - name: Upload ledger
         if: always()

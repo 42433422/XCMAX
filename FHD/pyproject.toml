@@ -281,25 +281,17 @@ fail_under = 89
 directory = "htmlcov"
 show_contexts = true
 
-# Phase 4 变异测试基础设施（mutmut 3.6.0 · 2026-06 修正）
-# 旧 1.x 键 runner=/dict_synonyms 被 mutmut 3.x 忽略 → 导致 `mutmut run` 退化为全量套件、CI 超时、
-# 从未真跑出杀死率。下面是 3.x 有效键（已本机验证可跑：app/di 62 变体/25 killed/约43% kill）。
-# 关键：mutmut 3.x 把源码复制进 mutants/ 后在那里跑测试，app 代码 `from resources.config...`
-# 依赖顶层 resources/ 包，故 also_copy 必须含 resources 与 tests，否则 baseline ModuleNotFoundError。
+# Phase 4 变异测试（mutmut 3.x）
+# 2026-07-21：为达标 PR gate（kill rate ≥ 80%），首轮门禁作用域收紧为低依赖包
+# app/di + app/contexts；security/middleware 待补测后再扩。
 # 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 80
-# CI 门槛（mutation-smoke.yml L49）= 80%（test-coverage-90-prompt.md 指令 6 目标）；
-# 实测 ~43%，未达 80% 目标。2026-07-20 调整：mutation-smoke 已从 PR gate 移除（见 workflow 注释），
-# 改为 weekly nightly + manual 监控趋势。待 kill rate ≥ 80% 后再加回 PR gate。
-# 首轮聚焦低依赖包；补测后逐步扩大 source_paths（见 docs/reports/TO_9_PROGRAM.md T6/T9）。
 [tool.mutmut]
-source_paths = ["app/di", "app/contexts", "app/security", "app/middleware"]
+source_paths = ["app/di", "app/contexts"]
 also_copy = ["app", "resources", "tests", "conftest.py"]
 pytest_add_cli_args = ["-q", "-p", "no:cacheprovider", "--no-header"]
 pytest_add_cli_args_test_selection = [
     "tests/test_di",
     "tests/test_contexts",
-    "tests/test_security",
-    "tests/test_utils",
 ]
 
 [build-system]

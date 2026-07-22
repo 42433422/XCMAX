@@ -44,11 +44,15 @@ const adminModuleAliases = [
   'views/DutyTimeArchitectureView.vue',
   'views/DutyRosterGraphView.vue',
   'views/ServerFunctionsView.vue',
+  'views/ApprovalHubView.vue',
+  'views/EmployeeAutonomyView.vue',
   'components/workflow/DutyRosterGraphPanel.vue',
+  'components/admin/XCmaxAdminAutonomyTab.vue',
   'components/contract/ContractEsignPanel.vue',
   'api/xcmaxAdmin.ts',
   'api/xcmaxOps.ts',
   'api/xcmaxMarketProxy.ts',
+  'api/xcmaxEmployeeAutonomy.ts',
   'api/wechatGroupBridge.ts',
   'api/financeLedger.ts',
   'api/contractLifecycle.ts',
@@ -230,11 +234,16 @@ export default defineConfig(() => ({
     proxy: buildDevProxy(API_BASE),
   },
   publicDir: path.join(hostRoot, 'public'),
+  esbuild: {
+    target: 'esnext',
+  },
   worker: {
     format: 'es',
   },
   optimizeDeps: {
     include: ['vue'],
+    // mermaid@11 parser uses modern destructuring that breaks chrome87 prebundle target
+    exclude: ['mermaid', '@mermaid-js/parser'],
     esbuildOptions: {
       target: 'esnext',
     },

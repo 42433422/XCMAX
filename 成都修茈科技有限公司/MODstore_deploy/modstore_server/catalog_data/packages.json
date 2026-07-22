@@ -1,0 +1,712 @@
+{
+  "packages": [
+    {
+      "id": "taiyangniao-attendance-employee",
+      "name": "太阳鸟考勤员",
+      "version": "1.0.0",
+      "description": "纯 Python 脚本型员工：直接导入 taiyangniao-pro 的考勤转换模块，把钉钉考勤 Excel 转为太阳鸟考勤模板结果。",
+      "artifact": "employee_pack",
+      "industry": "attendance-admin",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "probe_mod_id": "taiyangniao-pro",
+      "sha256": "563bcc01bd0f2d9f6dcd4d57b37f9d23dbeb2616f36162e9efba502c8bbc2c36",
+      "file_size": 8768,
+      "stored_filename": "taiyangniao-attendance-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "asset-worker-employee",
+      "name": "文件处理员工",
+      "version": "1.0.0",
+      "description": "上传合同/文档，AI 审核风险条款并给出修改建议。",
+      "artifact": "employee_pack",
+      "industry": "通用",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "probe_mod_id": "asset-worker-employee",
+      "sha256": "1b97020fd0fb461d766dec37148f235898a2e08846cca11a23bb2728d02f4138",
+      "file_size": 25188,
+      "stored_filename": "asset-worker-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "txt-full-read-employee",
+      "name": "TXT 生成员",
+      "version": "1.0.0",
+      "description": "制作 TXT 全量读取员工包",
+      "artifact": "employee_pack",
+      "industry": "通用",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "ea83af73c315c75e46b2ceb469759e16ddc7e872f483e6e57f6daf6be0162538",
+      "file_size": 12059,
+      "stored_filename": "txt-full-read-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "txt-generate-employee",
+      "name": "TXT 生成员",
+      "version": "1.0.0",
+      "description": "制作 TXT 生成员工包",
+      "artifact": "employee_pack",
+      "industry": "通用",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "63f041670269512448c61d52a280ebebc6cb2fb1b6dd0d1486e70ff03a19d813",
+      "file_size": 12329,
+      "stored_filename": "txt-generate-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "json-report-employee",
+      "name": "JSON 量化报告员",
+      "version": "1.0.0",
+      "description": "上传 document_full.json（Word 全量读取产出或 execute_result），生成带样式的 HTML 量化分析报告。",
+      "artifact": "employee_pack",
+      "industry": "文档/知识",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "c9652ca00e771a705dc30f181e3ddcd4061184efdf537eab26644b8a2db0c1f5",
+      "file_size": 11711,
+      "stored_filename": "json-report-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "excel-full-read-employee",
+      "name": "Excel 读取员",
+      "version": "1.0.0",
+      "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、表头、数据与单元格内容，输出 JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格",
+      "artifact": "employee_pack",
+      "industry": "数据处理",
+      "security_level": "enterprise",
+      "is_public": true,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "enterprise",
+        "verify_url": null
+      },
+      "sha256": "8d8fbaa44c8c223603aef92d4b772d143667b05b0509e150ef872a3838db097b",
+      "file_size": 12962,
+      "stored_filename": "excel-full-read-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "excel-generate-employee",
+      "name": "Excel 生成员",
+      "version": "1.0.0",
+      "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据",
+      "artifact": "employee_pack",
+      "industry": "数据处理",
+      "security_level": "enterprise",
+      "is_public": true,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "enterprise",
+        "verify_url": null
+      },
+      "sha256": "38adaa933d218adb454d494d292c75be107cf3ff5545619d513362ba92a5dc3d",
+      "file_size": 12288,
+      "stored_filename": "excel-generate-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "csv-full-read-employee",
+      "name": "CSV 全量读取员",
+      "version": "1.0.0",
+      "description": "CSV全量读取员工：上传 .csv 文件，使用 direct_python 解析为结构化 data.json，包含 columns、rows、row_count、meta，禁止 LLM 编造行列",
+      "artifact": "employee_pack",
+      "industry": "数据处理",
+      "security_level": "enterprise",
+      "is_public": true,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "enterprise",
+        "verify_url": null
+      },
+      "sha256": "64de2d0220259c4b6c7221beb2a4da0466b14cd76a74112812b9c273f13aab5f",
+      "file_size": 12213,
+      "stored_filename": "csv-full-read-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "csv-generate-employee",
+      "name": "CSV 生成员",
+      "version": "1.0.0",
+      "description": "CSV生成员工：上传 .json（含 columns 与 rows）写出 outputs/output.csv，使用 direct_python，禁止编造表格数据",
+      "artifact": "employee_pack",
+      "industry": "数据处理",
+      "security_level": "enterprise",
+      "is_public": true,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "enterprise",
+        "verify_url": null
+      },
+      "sha256": "61366e83faeb61946d94edc9307c3a1de2c344dd375b079510a46ef782fc0c2c",
+      "file_size": 11913,
+      "stored_filename": "csv-generate-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "pdf-full-read-employee",
+      "name": "PDF 全量读取员",
+      "version": "1.0.0",
+      "description": "制作 PDF 全量读取员工包",
+      "artifact": "employee_pack",
+      "industry": "通用",
+      "material_category": "ai_employee",
+      "workpiece_type": "document_processor",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "2b07d3ff9d32e236328e53447caa78c6c856535644817f55eed489a5004d6521",
+      "file_size": 14370,
+      "stored_filename": "pdf-full-read-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "pdf-generate-employee",
+      "name": "PDF 生成员",
+      "version": "1.0.0",
+      "description": "制作 PDF 生成员工包",
+      "artifact": "employee_pack",
+      "industry": "通用",
+      "material_category": "ai_employee",
+      "workpiece_type": "document_processor",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "d07580f1de256579656641c844bee4956bad2669f7923d804afc41d332473a05",
+      "file_size": 12682,
+      "stored_filename": "pdf-generate-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "word-full-read-employee",
+      "name": "Word 全量读取员",
+      "version": "1.0.0",
+      "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造。",
+      "artifact": "employee_pack",
+      "industry": "文档/知识",
+      "is_public": true,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "2600a71e823bb1dc70d0bf0f231dd3b2440044491eadb20fbf07c53fd18c8d63",
+      "file_size": 17937,
+      "stored_filename": "word-full-read-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "word-generate-employee",
+      "name": "Word 生成员",
+      "version": "1.0.0",
+      "description": "Word生成员工：支持 document_full.json、user_query 纯文本或 .txt；可选 template.docx；输出 generated_document.docx。",
+      "artifact": "employee_pack",
+      "industry": "文档/知识",
+      "is_public": true,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "e0b10e3e665807a83533051f79974275d821e4c978e08721526787fdd2cc65b9",
+      "file_size": 13337,
+      "stored_filename": "word-generate-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "ppt-full-read-employee",
+      "name": "PPT 全量读取员",
+      "version": "1.0.0",
+      "description": "PPT全量读取员工：上传 .pptx，输出 presentation_full.json 中介；解析大纲与每页正文；图片 VLM 识图；按「为这份PPT生成每页的演讲备注」生成演讲备注。direct_python，禁止编造幻灯片正文。",
+      "artifact": "employee_pack",
+      "industry": "数据处理",
+      "material_category": "ai_employee",
+      "workpiece_type": "document_processor",
+      "security_level": "enterprise",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "enterprise",
+        "verify_url": null
+      },
+      "sha256": "96843df439d0bd17ad70ffe8d30f90b91892d0b9ef17f3fd36f906f9b105c8f8",
+      "file_size": 15827,
+      "stored_filename": "ppt-full-read-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "ppt-generate-employee",
+      "name": "PPT 生成员",
+      "version": "1.0.0",
+      "description": "PPT 生成员：LLM 编排 + OOXML 执行。支持从零 compose 多页演示、基于上传 pptx 增强（图片+动画）。输出 output.pptx，禁止纯文字冒充动效作业。",
+      "artifact": "employee_pack",
+      "industry": "数据处理",
+      "material_category": "ai_employee",
+      "workpiece_type": "document_processor",
+      "security_level": "enterprise",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "enterprise",
+        "verify_url": null
+      },
+      "sha256": "c8e2d37b43ab2f446793d310e6e7ba92fc36b1a168a741f78182d0a2c9fe8113",
+      "file_size": 12894,
+      "stored_filename": "ppt-generate-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "xcagi-host-foundation-employee",
+      "name": "宿主基础能力（预装员工）",
+      "version": "1.0.0",
+      "description": "以员工包形式交付的通用宿主底座：安装后自动写入 9 个 bridge Mod（对话、ERP 门面、审批、客服等），不在商店按 Mod 逐项上架。",
+      "artifact": "employee_pack",
+      "industry": "yuangon",
+      "security_level": "personal",
+      "is_public": false,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "probe_mod_id": "yuangon",
+      "sha256": "f7048b351a2870714474a51453b7abdd83b071506153efa73696a04409d29b60",
+      "file_size": 1691,
+      "stored_filename": "xcagi-host-foundation-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "chart-bar-employee",
+      "name": "柱状图可视化员",
+      "version": "1.0.0",
+      "description": "上传 kitten 数据集 JSON/CSV，生成分类对比柱状图（chart_spec.json + chart.html）。",
+      "artifact": "employee_pack",
+      "industry": "数据/可视化",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "481294fe30fc898acb0b4726792a69565a0ec86af540b7e5e57022d25b08a422",
+      "file_size": 12352,
+      "stored_filename": "chart-bar-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "chart-line-employee",
+      "name": "趋势折线可视化员",
+      "version": "1.0.0",
+      "description": "上传 kitten 数据集，生成时间序列折线图与趋势分析 HTML。",
+      "artifact": "employee_pack",
+      "industry": "数据/可视化",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "d862ffa49c3283b3a885dbbe4894217ea748f6c30e7d55de4362fc28b2778483",
+      "file_size": 12405,
+      "stored_filename": "chart-line-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "chart-pie-employee",
+      "name": "占比饼图可视化员",
+      "version": "1.0.0",
+      "description": "上传 kitten 数据集，生成结构占比饼图与分布 HTML。",
+      "artifact": "employee_pack",
+      "industry": "数据/可视化",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "9ae7c4345ad7a6e558028e33950cba394ce7a9008431b87e32267d92e5f76b12",
+      "file_size": 12341,
+      "stored_filename": "chart-pie-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "chart-dashboard-employee",
+      "name": "综合看板可视化员",
+      "version": "1.0.0",
+      "description": "上传 kitten 数据集，生成 KPI + 柱状 + 折线 + 饼图联动看板 HTML。",
+      "artifact": "employee_pack",
+      "industry": "数据/可视化",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "b6314fb2992ab9b837a702ca642536d5c1218d1b7ca9f151376d66a59e08bfe6",
+      "file_size": 12689,
+      "stored_filename": "chart-dashboard-employee-1.0.0.xcemp",
+      "employee_scope": "store",
+      "employee_source": "market_catalog",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "yuangon_area": null,
+      "market_visible": true
+    },
+    {
+      "id": "avatar-generation-employee",
+      "name": "头像生成员",
+      "version": "1.0.0",
+      "description": "覆盖真人、关系、动漫游戏、插画化本人、职业品牌、宠物吉祥物、兴趣符号、抽象氛围、默认极简九类头像，为 AI 员工生成头像提示词并可选调用生图模型。",
+      "artifact": "employee_pack",
+      "industry": "创意/视觉",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "8e8976a0eb0aeeff6343e6e09cbb0ee9a757e2cc47a36306c48a07ea05379386",
+      "file_size": 13550,
+      "stored_filename": "avatar-generation-employee-1.0.0.xcemp"
+    },
+    {
+      "id": "avatar-generation-employee",
+      "name": "头像生成员",
+      "version": "1.0.1",
+      "description": "覆盖真人、关系、动漫游戏、插画化本人、职业品牌、宠物吉祥物、兴趣符号、抽象氛围、默认极简九类头像，为 AI 员工生成头像提示词并可选调用生图模型；内置批量员工头像表、小 C 人形鱼系助理、单员工移动端联系人头像三套预设。",
+      "artifact": "employee_pack",
+      "industry": "创意/视觉",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "f48e7fb6386adf997b7e0a3bcb3bfe4d4d8aaa5a5f3e5109b6f5de418b13eed9",
+      "file_size": 17656,
+      "stored_filename": "avatar-generation-employee-1.0.1.xcemp"
+    },
+    {
+      "id": "trademark-generation-employee",
+      "name": "商标生成员",
+      "version": "1.0.0",
+      "description": "为公司、产品、App、AI 员工和店铺生成原创商标/Logo 方向、视觉规范、生图提示词、矢量交付建议和初步近似风险自检清单；可选调用生图模型生成参考图。",
+      "artifact": "employee_pack",
+      "industry": "创意/品牌",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "personal",
+        "verify_url": null
+      },
+      "sha256": "6c5d610a296a2e18d2f5ca393f241b40fa324a367a7398f3f9b9923fe778692f",
+      "file_size": 18132,
+      "stored_filename": "trademark-generation-employee-1.0.0.xcemp"
+    },
+    {
+      "id": "sunbird-delivery-seed",
+      "version": "1.0.0",
+      "artifact": "customer_delivery_seed",
+      "name": "太阳鸟交付种子数据",
+      "description": "SUNBIRD 通用包迁移交付数据：花名册、太阳鸟 Mod 侧库、2026 年 3 月考勤模板。",
+      "author": "成都修茈科技有限公司",
+      "industry": "考勤",
+      "customer_account": "SUNBIRD",
+      "delivery_id": "customer-taiyangniao",
+      "account_mod_id": "taiyangniao-pro",
+      "stored_filename": "sunbird-delivery-seed-1.0.0.zip",
+      "sha256": "68b412e7204996b9e439cbad544c984d41673bdb3d5b4f5070af7857fb8b8510",
+      "file_size": 245745,
+      "download_path": "/v1/packages/sunbird-delivery-seed/1.0.0/download",
+      "commerce": {
+        "mode": "free",
+        "product_id": null,
+        "sku": null
+      },
+      "license": {
+        "type": "account_entitlement",
+        "verify_url": null
+      },
+      "created_at": "2026-07-04T05:40:52.707874+00:00"
+    },
+    {
+      "id": "fhd-core-maintainer",
+      "name": "FHD 核心应用维护员",
+      "version": "1.0.0",
+      "description": "维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。",
+      "artifact": "employee_pack",
+      "industry": "platform-core",
+      "security_level": "personal",
+      "is_public": false,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "probe_mod_id": "yuangon",
+      "sha256": "627fabf8635734c40ddeb8194be80b5822db06c7ceeda7172780bdbd058afedd",
+      "file_size": 8805,
+      "stored_filename": "fhd-core-maintainer-1.0.0.xcemp"
+    },
+    {
+      "id": "code-validator",
+      "name": "代码校验员工",
+      "version": "1.1.0",
+      "description": "对员工包体进行轻量校验，包括 manifest 合规性、Python 编译检查、包体一致性、独立可执行验证",
+      "artifact": "employee_pack",
+      "industry": "craft-workshop",
+      "security_level": "personal",
+      "is_public": false,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "probe_mod_id": "yuangon",
+      "sha256": "86784ee6c8b2729371a2ebb16bad95b1051ae14c1d8cfc935f06b4ef0ac68a2e",
+      "file_size": 9162,
+      "stored_filename": "code-validator-1.1.0.xcemp"
+    },
+    {
+      "id": "sandbox-tester",
+      "name": "测试员工",
+      "version": "1.1.0",
+      "description": "对员工工作流执行沙箱测试，包括结构校验与 Mock 执行验证",
+      "artifact": "employee_pack",
+      "industry": "craft-workshop",
+      "security_level": "personal",
+      "is_public": false,
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "probe_mod_id": "yuangon",
+      "sha256": "f78421b53e50389d12b7d1bfb24e5698cae2f2a4f9174bbba749eae013d6a732",
+      "file_size": 9038,
+      "stored_filename": "sandbox-tester-1.1.0.xcemp"
+    },
+    {
+      "id": "pilot-low-risk-clerk@1.0.0",
+      "name": "pilot-low-risk-clerk",
+      "version": "1.0.0",
+      "department": "engineering",
+      "files_dir": "files/pilot-low-risk-clerk@1.0.0",
+      "created_at": "2026-07-20T13:59:13.436978+00:00"
+    }
+  ]
+}

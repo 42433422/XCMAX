@@ -154,6 +154,8 @@ export const butler = {
     page_id?: string
     page_context?: string
     max_tokens?: number
+    visitor_id?: string
+    visitor_label?: string
   }) =>
     req('/api/agent/butler/corp-chat', { method: 'POST', body: JSON.stringify(payload) }),
   agentCorpIntakeFill: (payload: {
@@ -174,6 +176,8 @@ export const butler = {
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...authHeaders() },
       body: JSON.stringify(payload),
     }),
+  csSsotRetrieve: (payload: { query: string; top_k?: number }) =>
+    req('/api/agent/butler/cs-ssot/retrieve', { method: 'POST', body: JSON.stringify(payload) }),
   listButlerSkills: () => req('/api/agent/butler/skills'),
   recordButlerAction: (payload: { route: string; action: string; args?: Record<string, unknown>; risk: string; status: 'success' | 'failed' | 'cancelled' }) =>
     req('/api/agent/butler/actions', { method: 'POST', body: JSON.stringify(payload) }),

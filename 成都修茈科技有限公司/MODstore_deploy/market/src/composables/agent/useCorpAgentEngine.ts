@@ -16,6 +16,12 @@ import {
   resolveCorpPageId,
 } from '../../content/siteKnowledge'
 import { api } from '../../api'
+import { getBridge } from '../../corp-butler/contactIntakeBridge'
+import {
+  getCorpVisitorLabel,
+  getOrCreateCorpVisitorId,
+  setCorpVisitorLabel,
+} from '../../corp-butler/corpVisitorId'
 import { intakeFormPlacementHint } from '../../corp-butler/corpViewport'
 
 let _msgId = 0
@@ -33,7 +39,7 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
 
 function fallbackReply(origin: string): string {
   return (
-    `我是修茈科技官网 AI 管家，可以解答产品、案例与预约咨询。\n\n` +
+    `我是小C（修茈科技官网客服），可以解答产品、案例与预约咨询。\n\n` +
     `• 产品能力 → ${origin}${CORP_LINKS.services}\n` +
     `• 预约沟通 → ${origin}${CORP_LINKS.contact}\n` +
     `• 登录 AI 市场 → ${origin}${CORP_LINKS.market}\n\n` +
@@ -159,10 +165,21 @@ async function tryCorpLlmChat(
       .slice(-8)
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
+    const visitorId = getOrCreateCorpVisitorId()
+    try {
+      const intakeName = String(getBridge()?.getState?.()?.name || '').trim()
+      if (intakeName) setCorpVisitorLabel(intakeName)
+    } catch {
+      // ignore
+    }
+    const visitorLabel = getCorpVisitorLabel()
+
     const res = (await api.agentCorpChat({
       messages: [...historyMsgs, { role: 'user', content: userText }],
       page_id: pageId,
       page_context: `${page.title}\n${page.summary}\n\n${pageContext}`.slice(0, 3500),
+      visitor_id: visitorId,
+      visitor_label: visitorLabel || undefined,
     })) as { content?: string; message?: string; success?: boolean }
 
     const text = (res?.content || res?.message || '').trim()
