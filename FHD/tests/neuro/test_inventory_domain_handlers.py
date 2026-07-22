@@ -103,9 +103,7 @@ class TestResolvePurchaseService:
 
         assert _resolve_purchase_service_cls() is sentinel
 
-    def test_lazy_imports_when_module_level_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lazy_imports_when_module_level_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(idh, "PurchaseService", None)
         lazy_cls = MagicMock()
         fake_module = MagicMock()
@@ -288,9 +286,7 @@ class TestHandleAutoInboundRequested:
 
         assert result["success"] is True
         # Verify the fallback total_amount was used in finance event
-        fin_payload = next(
-            p for et, p in published if et == "finance.approval_requested"
-        )
+        fin_payload = next(p for et, p in published if et == "finance.approval_requested")
         assert fin_payload["amount"] == 99.5
 
     @pytest.mark.asyncio
@@ -320,9 +316,7 @@ class TestHandleAutoInboundRequested:
 
 
 class TestInventoryServiceDomainHandlersRegister:
-    def test_register_subscribes_all_handlers(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_register_subscribes_all_handlers(self, monkeypatch: pytest.MonkeyPatch) -> None:
         bus = MagicMock()
         monkeypatch.setattr(idh.neuro_bus, "get_neuro_bus", lambda: bus)
 
