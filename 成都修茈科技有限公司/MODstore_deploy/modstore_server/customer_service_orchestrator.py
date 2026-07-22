@@ -37,6 +37,34 @@ LLM_MODEL_RE = re.compile(r"(?:模型|model)\s*[:：]\s*(\S+)", re.I)
 LLM_SLASH_RE = re.compile(r"\b([a-z0-9_-]{2,32})\s*/\s*([^\s,，。]{1,120})", re.I)
 
 
+def _enrich_cs_context(
+    user: User,
+    context: Optional[Dict[str, Any]] = None,
+    *,
+    db: Optional[Session] = None,
+) -> Dict[str, Any]:
+    """会话 context 写入可信用户身份（不信任前端伪造的 user_id）。"""
+    ctx = dict(context or {})
+    try:
+        from modstore_server.xiaoc_cs_ssot import resolve_user_identity
+
+        ident = resolve_user_identity(user, db=db, source="market_cs")
+        ctx["user_id"] = ident.user_id
+        ctx["display_name"] = ident.display_name
+        ctx["membership"] = ident.membership
+        ctx["account_role"] = ident.account_role
+        if ident.plan_id:
+            ctx["plan_id"] = ident.plan_id
+        if ident.email_hint:
+            ctx["email_hint"] = ident.email_hint
+    except Exception:  # noqa: BLE001
+        ctx["user_id"] = getattr(user, "id", None)
+        name = str(getattr(user, "username", None) or "").strip()
+        if name:
+            ctx["display_name"] = name[:32]
+    return ctx
+
+
 def ensure_session(
     db: Session,
     *,
@@ -44,6 +72,7 @@ def ensure_session(
     session_id: Optional[int] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> CustomerServiceSession:
+    enriched = _enrich_cs_context(user, context, db=db)
     if session_id:
         row = (
             db.query(CustomerServiceSession)
@@ -53,13 +82,22 @@ def ensure_session(
             .first()
         )
         if row:
+            # 补全已有会话的称呼字段（不覆盖渠道等前端上下文）
+            try:
+                prev = json_loads(row.context_json) if row.context_json else {}
+                if not isinstance(prev, dict):
+                    prev = {}
+                merged = {**prev, **{k: v for k, v in enriched.items() if v is not None}}
+                row.context_json = json_dumps(merged)
+            except Exception:  # noqa: BLE001
+                pass
             return row
     row = CustomerServiceSession(
         user_id=user.id,
-        channel=str((context or {}).get("channel") or "web")[:32],
+        channel=str(enriched.get("channel") or "web")[:32],
         status="open",
         title="AI 客服会话",
-        context_json=json_dumps(context or {}),
+        context_json=json_dumps(enriched),
     )
     db.add(row)
     db.flush()
@@ -81,7 +119,7 @@ def handle_customer_message(
     session_id: Optional[int] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    context = context or {}
+    context = _enrich_cs_context(user, context, db=db)
     text = (message or "").strip()
     session = ensure_session(db, user=user, session_id=session_id, context=context)
     session.last_message = text
@@ -139,6 +177,10 @@ def handle_customer_message(
     reply, cards = build_reply(
         ticket=ticket, decision=decision, actions=actions, extracted=extracted
     )
+    if intent == "general":
+        xiaoc_reply = _xiaoc_general_reply(text, user=user, db=db)
+        if xiaoc_reply:
+            reply = xiaoc_reply
     assistant_msg = CustomerServiceMessage(
         session_id=session.id,
         ticket_id=ticket.id,
@@ -538,6 +580,55 @@ def _maybe_dispatch_employee_followup(
         action.error = str(exc)[:1000]
         db.flush()
         return action
+
+
+def _xiaoc_general_reply(
+    user_text: str,
+    *,
+    user: Optional[User] = None,
+    db: Optional[Session] = None,
+) -> str:
+    """general 意图走小C SSOT（管理端知识库摘录 + 模板兜底）。"""
+    address = ""
+    member_hint = ""
+    try:
+        from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query, resolve_user_identity
+
+        if user is not None:
+            ident = resolve_user_identity(user, db=db, source="market_cs")
+            address = ident.display_name
+            if ident.membership and ident.membership != "普通用户":
+                member_hint = f"（{ident.membership}）"
+            elif ident.account_role == "admin":
+                member_hint = "（管理员）"
+        kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
+    except Exception:  # noqa: BLE001
+        try:
+            from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query
+
+            kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
+        except Exception:  # noqa: BLE001
+            return ""
+    hello = (
+        f"{address}{member_hint}，"
+        if address and address not in {"用户", "访客", "匿名访客"}
+        else ""
+    )
+    if not kb:
+        return (
+            f"我是小C。{hello}这个问题我先记在工单里了；"
+            "你也可以直接问产品/报价/怎么上手，或去 /contact.html 留言。"
+        )
+    # 有知识库时给出基于摘录的简短答复（规则引擎阶段不做二次 LLM，避免阻塞）
+    excerpt = kb.splitlines()
+    tips = [ln for ln in excerpt[1:4] if ln.strip()]
+    body = "；".join(t.split(". ", 1)[-1][:120] for t in tips) if tips else ""
+    if body:
+        return (
+            f"我是小C。{hello}根据管理端知识库：{body} "
+            "若还要细聊，可以说具体场景或留个联系方式。"
+        )
+    return ""
 
 
 def build_reply(

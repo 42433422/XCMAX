@@ -115,7 +115,7 @@ describe('useChatOfficeDocking', () => {
 
     expect(mocks.primeCsrfCookie).toHaveBeenCalled()
     expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/knowledge/v1/ingest',
+      '/api/knowledge/v1/datasets/persy-knowledge/documents',
       expect.objectContaining({ method: 'POST' }),
     )
     expect(deps.stageExcelAnalysisContext).toHaveBeenCalledWith(item.excelAnalysis)

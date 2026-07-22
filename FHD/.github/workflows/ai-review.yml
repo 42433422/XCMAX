@@ -5,6 +5,17 @@ name: AI Review
 on:
   pull_request:
     types: [opened, synchronize]
+    paths:
+      # 显式覆盖官网（成都修茈科技有限公司）静态资源 + nginx 配置 + 自动更新脚本
+      - '成都修茈科技有限公司/**'
+      # FHD 全栈（Python/Vue/Electron/MOD SDK）
+      - 'FHD/**'
+      # MODstore 部署 + market 前端
+      - '成都修茈科技有限公司/MODstore_deploy/**'
+      # 共享包
+      - 'packages/**'
+      # 根仓 CI 配置
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       pr_number:

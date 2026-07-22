@@ -104,12 +104,10 @@ test('authenticated sidebar navigation stays inside the market router', async ({
 
   await expect(page.getByRole('button', { name: '新对话' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'AI 市场' })).toHaveAttribute('href', /\/ai-store$/)
-  await expect(page.getByRole('link', { name: 'AI 客服' })).toHaveAttribute('href', /\/customer-service$/)
 
   await page.getByRole('button', { name: 'tester 菜单' }).click()
   await expect(page.getByRole('menuitem', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
   await expect(page.getByRole('menuitem', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
-  await expect(page.getByRole('menuitem', { name: 'AI 客服' })).toHaveCount(0)
 })
 
 test('plan purchase creates a checkout order for authenticated users', async ({ page }) => {

@@ -1,0 +1,15 @@
+{
+  "name": "pilot-low-risk-clerk",
+  "version": "1.0.0",
+  "department": "engineering",
+  "description": "T-C11 真实上架试点：低风险 employee_pack，仅做 trace 验证与 ledger 闭环，不触碰任何 HIGH_RISK_PATTERNS。文件数 3（manifest.json + prompt.txt + skills.json），符合 ≤5 限制。",
+  "prompt_template": "You are a pilot low-risk clerk. Your responsibility is to validate the evolution closed-loop end-to-end trace pipeline. Do not modify any production code. Do not touch HIGH_RISK_PATTERNS. Always emit a trace_id with your outputs.",
+  "skills": ["trace-validation", "ledger-append"],
+  "tools": ["read_file", "append_event"],
+  "acceptance_criteria": [
+    "trace_id consistent across all events",
+    "ledger has pack_listed event with final_status=closed_loop_completed",
+    "no HIGH_RISK_PATTERNS touched",
+    "<= 5 files in pack"
+  ]
+}

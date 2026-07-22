@@ -190,6 +190,19 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_flag_enabled(name: str) -> bool:
+    """Master switches that default OFF when unset (dry-run 等显式危险开关)。"""
+    return _env_bool(name, False)
+
+
+def _auto_dispatch_deploy_enabled() -> bool:
+    """staging 自动部署主开关：未设置时默认开启；显式 0/false/off 关闭。"""
+    raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY")
+    if raw is None or not str(raw).strip():
+        return True
+    return _env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", True)
+
+
 def _env_list(name: str, default: List[str]) -> List[str]:
     raw = os.environ.get(name)
     if raw is None or not str(raw).strip():
@@ -1253,8 +1266,11 @@ def should_run_self_maintenance_loop(
 
     evaluation = evaluate_self_maintenance_need()
     runtime_provenance = evaluation.get("runtime_provenance")
+    # force=True is break-glass: allow ops/GHA to run even when the CVM worktree
+    # is dirty or branch/sha provenance cannot be verified.
     if (
-        _env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True)
+        not force
+        and _env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True)
         and isinstance(runtime_provenance, dict)
         and not runtime_provenance.get("ok")
     ):
@@ -1686,7 +1702,8 @@ def _run_step_with_inner_retries(
         inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
         retry_kind = "code_fix"
     else:
-        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 1) + 1)
+        # Default 2 extra rounds: protocol follow-rate target ≥90% (was ~46% with 1 retry).
+        inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 2) + 1)
         retry_kind = "marker"
     marker = STRUCTURED_REVIEW_MARKER if step_name == "review" else STRUCTURED_QA_MARKER
 
@@ -1729,9 +1746,10 @@ def _run_step_with_inner_retries(
             if retry_kind == "code_fix":
                 should_retry = True
         elif ok and retry_kind == "marker" and not is_final:
-            # dispatch 成功但 marker 缺失 → 提醒员工按格式重新输出
-            marker_obj = _structured_report_from_step({"report_excerpt": report_excerpt}, marker)
-            if marker_obj is None:
+            # dispatch 成功但 marker/协议不合规 → 打回重跑（攻克遵循率缺口）
+            protocol_ok, protocol_reason = _structured_protocol_ok(step_name, report_excerpt)
+            if not protocol_ok:
+                failure_reason = protocol_reason or "structured_protocol_invalid"
                 should_retry = True
 
         # 写非最终的 step_retry trace（最终 step 由调用方写）
@@ -1766,13 +1784,16 @@ def _run_step_with_inner_retries(
                 + "report completion unless the previously failing command now exits 0."
             )
             code_fix_retry_rounds = attempt
-        else:  # marker
+        else:  # marker / protocol
             last_task_text = (
                 task_text
-                + f"\n\n=== PREVIOUS REPORT MISSING REQUIRED MARKER (inner round {attempt}/{inner_max - 1}) ===\n"
-                + f"Your previous report did not include the required JSON marker {marker}. "
-                + f"Re-emit your report with exactly one JSON object after the marker {marker}. "
-                + "Schema and other requirements unchanged."
+                + f"\n\n=== PREVIOUS REPORT PROTOCOL REJECTED (inner round {attempt}/{inner_max - 1}) ===\n"
+                + f"required_marker: {marker}\n"
+                + f"protocol_error: {failure_reason or 'missing_or_invalid_structured_json'}\n"
+                + "Re-emit exactly one JSON object after the marker. "
+                + "For review, dimensions.security / business_logic / performance are mandatory "
+                + "with status pass|fail|n/a and findings lists. "
+                + "Do not summarize — output the full protocol JSON."
             )
             marker_retry_rounds = attempt
 
@@ -2051,6 +2072,12 @@ def _code_task_text(
         "- State one evidence-backed symptom and root cause before changing code.\n"
         "- Make the smallest production change that fixes that root cause and add focused regression tests; "
         "do not submit marker-only, comment-only, formatting-only, or test-only work as the fix.\n"
+        "- DIFF PROTOCOL: When describing patches in the report or KB fix_diff, emit a complete "
+        "unified diff that `git apply` / `git apply --check` can consume "
+        "(must include `diff --git`, `---/+++`, and `@@` hunks). "
+        "Forbidden: summary-only answers, bullet paraphrases of changes, or partial hunks without file headers.\n"
+        "- Prefer committing real file edits in the worktree (git add/commit/push) over pasting diffs; "
+        "if you paste a patch, it must still be git-applyable.\n"
         "- Keep production scope and changed lines minimal enough for a legitimate safety_score_v2 target of at least 90; "
         "never hide, omit, or misclassify risky files or behavior to influence the score.\n"
         "- Leave review and QA to the independent report-only employees; do not self-approve or fabricate their evidence.\n"
@@ -2090,12 +2117,29 @@ def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]
         "If the target branch is missing in the report-only workspace, fetch it from origin/repo_url "
         "and compare `origin/<base>...origin/<target>` or the local equivalent. "
         "If fetch/branch resolution fails, report that exact failure as target_branch_unavailable. "
+        "\n\n=== MANDATORY REVIEW DIMENSIONS (all three required) ===\n"
+        "1) security — injection, secrets, unsafe deserialization, authz bypass, shell=True, etc.\n"
+        "2) business_logic — wrong control flow, broken invariants, missing error handling, "
+        "incorrect state transitions, API contract breakage, silent data loss, feature regressions.\n"
+        "3) performance — obvious slow queries (SELECT * / missing LIMIT on hot paths), N+1 "
+        "(ORM query inside loops), unbounded while/for loops, sync sleep on request path, "
+        "unbounded list/buffer growth.\n"
+        "For each dimension set status to pass|fail|n/a and list concrete findings "
+        "(empty list only when status is pass or n/a). "
+        "Any dimension status=fail MUST also appear in blocking_findings and raise max_severity "
+        "to at least medium (high/critical when warranted).\n"
         "Return concrete findings, risks, and missing evidence. "
-        "At the end, output exactly one JSON object after the marker "
+        "PROTOCOL STRICT: At the end, output exactly one JSON object after the marker "
         f"{STRUCTURED_REVIEW_MARKER}: with schema "
         '{"max_severity":"none|low|medium|high|critical",'
         '"blocking_findings":[],"risk_class":"low|medium|high",'
-        '"target_branch_available":true,"tested_commands":[]}. '
+        '"target_branch_available":true,"tested_commands":[],'
+        '"dimensions":{'
+        '"security":{"status":"pass|fail|n/a","findings":[]},'
+        '"business_logic":{"status":"pass|fail|n/a","findings":[]},'
+        '"performance":{"status":"pass|fail|n/a","findings":[]}'
+        "}}. "
+        "If you omit dimensions or use wrong enums, the loop will REJECT and re-run you. "
         f"Previous loop memory JSON: {_memory_context(memory)}"
     )
 
@@ -2165,11 +2209,77 @@ def _json_after_marker(text: str, marker: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+_REVIEW_DIMENSION_KEYS = ("security", "business_logic", "performance")
+_REVIEW_DIMENSION_STATUSES = frozenset({"pass", "fail", "n/a"})
+_REVIEW_SEVERITIES = frozenset({"none", "low", "medium", "high", "critical"})
+_REVIEW_RISK_CLASSES = frozenset({"low", "medium", "high"})
+
+
+def _validate_structured_review_protocol(obj: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
+    """Strict protocol for review employee output. Incomplete → reject/rerun."""
+    if not isinstance(obj, dict):
+        return False, "missing_structured_review_object"
+    severity = str(obj.get("max_severity") or "").strip().lower()
+    if severity not in _REVIEW_SEVERITIES:
+        return False, "invalid_max_severity"
+    if str(obj.get("risk_class") or "").strip().lower() not in _REVIEW_RISK_CLASSES:
+        return False, "invalid_risk_class"
+    if not isinstance(obj.get("blocking_findings"), list):
+        return False, "blocking_findings_not_list"
+    if not isinstance(obj.get("tested_commands"), list):
+        return False, "tested_commands_not_list"
+    if "target_branch_available" not in obj or not isinstance(
+        obj.get("target_branch_available"), bool
+    ):
+        return False, "target_branch_available_not_bool"
+    dimensions = obj.get("dimensions")
+    if not isinstance(dimensions, dict):
+        return False, "missing_dimensions"
+    for key in _REVIEW_DIMENSION_KEYS:
+        dim = dimensions.get(key)
+        if not isinstance(dim, dict):
+            return False, f"missing_dimension_{key}"
+        status = str(dim.get("status") or "").strip().lower()
+        if status not in _REVIEW_DIMENSION_STATUSES:
+            return False, f"invalid_dimension_status_{key}"
+        if not isinstance(dim.get("findings"), list):
+            return False, f"dimension_findings_not_list_{key}"
+        if status == "fail" and not dim.get("findings"):
+            return False, f"dimension_fail_without_findings_{key}"
+    fail_dims = [
+        key
+        for key in _REVIEW_DIMENSION_KEYS
+        if str((dimensions.get(key) or {}).get("status") or "").lower() == "fail"
+    ]
+    if fail_dims and severity in {"none", "low"}:
+        return False, "dimension_fail_severity_too_low"
+    if fail_dims and not obj.get("blocking_findings"):
+        return False, "dimension_fail_without_blocking_findings"
+    return True, ""
+
+
+def _validate_structured_qa_protocol(obj: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
+    if not isinstance(obj, dict):
+        return False, "missing_structured_qa_result"
+    if str(obj.get("verdict") or "").strip().upper() not in {"PASS", "FAIL"}:
+        return False, "invalid_qa_verdict"
+    if not isinstance(obj.get("blocking_findings"), list):
+        return False, "qa_blocking_findings_not_list"
+    if not isinstance(obj.get("tested_commands"), list):
+        return False, "qa_tested_commands_not_list"
+    if "target_branch_available" not in obj or not isinstance(
+        obj.get("target_branch_available"), bool
+    ):
+        return False, "qa_target_branch_available_not_bool"
+    return True, ""
+
+
 def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
     report = str(step.get("report_excerpt") or "")
     parsed = _json_after_marker(report, marker)
-    if parsed is not None:
-        return parsed
+    candidates: List[Dict[str, Any]] = []
+    if isinstance(parsed, dict):
+        candidates.append(parsed)
     for line in report.splitlines():
         line = line.strip()
         if not (line.startswith("{") and line.endswith("}")):
@@ -2180,10 +2290,58 @@ def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[
             continue
         if isinstance(obj, dict):
             if marker == STRUCTURED_QA_MARKER and "verdict" in obj:
-                return obj
+                candidates.append(obj)
             if marker == STRUCTURED_REVIEW_MARKER and "max_severity" in obj:
+                candidates.append(obj)
+    for obj in candidates:
+        if marker == STRUCTURED_REVIEW_MARKER:
+            ok, _reason = _validate_structured_review_protocol(obj)
+            if ok:
                 return obj
-    return None
+        elif marker == STRUCTURED_QA_MARKER:
+            ok, _reason = _validate_structured_qa_protocol(obj)
+            if ok:
+                return obj
+        else:
+            return obj
+    # Backward-compatible parse for ledger display: return first candidate even if
+    # protocol-incomplete (gate/retry paths call validators explicitly).
+    return candidates[0] if candidates else None
+
+
+def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, str]:
+    if step_name == "review":
+        obj = _json_after_marker(report_excerpt, STRUCTURED_REVIEW_MARKER)
+        if obj is None:
+            # fall back to line scan via step helper without protocol filter
+            loose = None
+            for line in str(report_excerpt or "").splitlines():
+                line = line.strip()
+                if line.startswith("{") and '"max_severity"' in line:
+                    try:
+                        candidate = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(candidate, dict):
+                        loose = candidate
+                        break
+            obj = loose
+        return _validate_structured_review_protocol(obj)
+    if step_name == "qa":
+        obj = _json_after_marker(report_excerpt, STRUCTURED_QA_MARKER)
+        if obj is None:
+            for line in str(report_excerpt or "").splitlines():
+                line = line.strip()
+                if line.startswith("{") and '"verdict"' in line:
+                    try:
+                        candidate = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(candidate, dict):
+                        obj = candidate
+                        break
+        return _validate_structured_qa_protocol(obj)
+    return True, ""
 
 
 def _safe_command_tokens(command: str) -> Optional[List[str]]:
@@ -2283,10 +2441,23 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     qa_steps = [step for step in steps if step.get("step") == "qa"]
     if review_steps:
         review_json = _structured_report_from_step(review_steps[-1], STRUCTURED_REVIEW_MARKER)
-        if not review_json:
-            return {"ok": False, "reason": "missing_structured_review_result"}
+        protocol_ok, protocol_reason = _validate_structured_review_protocol(review_json)
+        if not protocol_ok:
+            return {
+                "ok": False,
+                "reason": protocol_reason or "missing_structured_review_result",
+                "review": review_json,
+            }
         severity = str(review_json.get("max_severity") or "high").lower()
         blocking = review_json.get("blocking_findings")
+        dimensions = (
+            review_json.get("dimensions") if isinstance(review_json.get("dimensions"), dict) else {}
+        )
+        failed_dims = [
+            key
+            for key in _REVIEW_DIMENSION_KEYS
+            if str((dimensions.get(key) or {}).get("status") or "").lower() == "fail"
+        ]
         if severity not in {"none", "low", "medium"}:
             return {
                 "ok": False,
@@ -2298,17 +2469,27 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "ok": False,
                 "reason": "structured_review_blocking_findings",
                 "review": review_json,
+                "failed_dimensions": failed_dims,
+            }
+        if failed_dims:
+            return {
+                "ok": False,
+                "reason": "structured_review_dimension_fail",
+                "review": review_json,
+                "failed_dimensions": failed_dims,
             }
     else:
         review_json = None
 
     if qa_steps:
         qa_json = _structured_report_from_step(qa_steps[-1], STRUCTURED_QA_MARKER)
-        if not qa_json:
+        qa_ok, qa_reason = _validate_structured_qa_protocol(qa_json)
+        if not qa_ok:
             return {
                 "ok": False,
-                "reason": "missing_structured_qa_result",
+                "reason": qa_reason or "missing_structured_qa_result",
                 "review": review_json,
+                "qa": qa_json,
             }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
@@ -4287,14 +4468,20 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                             "reason": "online_after_stale_current_task_clear",
                         }
                 if online and current_task:
+                    # Device is online but busy. Do not rewrite online→False (that made
+                    # force-loops burn the full wait window then look "offline").
                     last_status = {
                         "codex_tool": codex_tool,
                         "device_id": device_id,
                         "name": target.get("name"),
-                        "online": False,
+                        "online": True,
+                        "busy": True,
                         "stale_clear": stale_clear,
                         "status": target.get("status"),
                     }
+                    if _env_bool("MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE", False):
+                        return {**last_status, "reason": "online_busy_allowed"}
+                    # Keep polling until idle or timeout; kickstart once in case agent wedged.
                     if kickstart_result is None:
                         kickstart_result = _kickstart_para_agent()
                         headers = None
@@ -4324,12 +4511,17 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                 headers = None
 
         if time.monotonic() >= deadline:
+            was_online = bool(last_status.get("online")) or bool(last_status.get("busy"))
             return {
                 **last_status,
                 "error": last_error,
                 "kickstart": kickstart_result,
-                "online": False,
-                "reason": "device_online_wait_timeout",
+                "online": was_online,
+                "reason": (
+                    "device_busy_wait_timeout"
+                    if last_status.get("busy")
+                    else "device_online_wait_timeout"
+                ),
                 "timeout_sec": timeout_sec,
             }
         time.sleep(poll_sec)
@@ -4668,6 +4860,240 @@ def _auto_merge_local_repo(
     }
 
 
+def _auto_dispatch_deploy_envs() -> List[str]:
+    """Return ordered deploy envs when auto-dispatch master switch is on.
+
+    默认仅 staging；production 必须显式写在 ENVS 中才会出现。
+    staging always precedes production when both are requested.
+    """
+    if not _auto_dispatch_deploy_enabled():
+        return []
+    raw = str(
+        os.environ.get("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "") or ""
+    ).strip()
+    if not raw:
+        return ["staging"]
+    requested: List[str] = []
+    for part in raw.split(","):
+        env = part.strip().lower()
+        if env in {"staging", "production"} and env not in requested:
+            requested.append(env)
+    return [env for env in ("staging", "production") if env in requested]
+
+
+def _dispatch_fhd_deploy_action(
+    *,
+    environment: str,
+    action: str,
+    action_id: str,
+) -> Dict[str, Any]:
+    """Dispatch ``fhd-deploy.yml`` via ``gh workflow run`` (or dry-run skip)."""
+    gh_command = (
+        "gh workflow run fhd-deploy.yml "
+        f"-f environment={environment} "
+        f"-f action={action} "
+        f"-f action_id={action_id}"
+    )
+    # gh workflow run needs a git repo cwd to resolve the remote; the runtime
+    # copy under XCMAX-runtime/ is not a git repo, so use MODSTORE_GIT_REPO_ROOT.
+    deploy_cwd = os.environ.get("MODSTORE_GIT_REPO_ROOT") or None
+    if _env_flag_enabled("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"):
+        return {
+            "ok": True,
+            "reason": "dry_run_skipped",
+            "environment": environment,
+            "action": action,
+            "gh_command": gh_command,
+            "gh_output": "",
+            "gh_exit_code": 0,
+            "action_id": action_id,
+            "deploy_cwd": deploy_cwd,
+        }
+    try:
+        proc = subprocess.run(
+            [
+                "gh",
+                "workflow",
+                "run",
+                "fhd-deploy.yml",
+                "-f",
+                f"environment={environment}",
+                "-f",
+                f"action={action}",
+                "-f",
+                f"action_id={action_id}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+            cwd=deploy_cwd,
+        )
+        ok = proc.returncode == 0
+        output = f"{proc.stdout or ''}{proc.stderr or ''}".strip()
+        return {
+            "ok": ok,
+            "reason": "dispatched" if ok else "gh_non_zero_exit",
+            "environment": environment,
+            "action": action,
+            "gh_command": gh_command,
+            "gh_output": output,
+            "gh_exit_code": int(proc.returncode),
+            "action_id": action_id,
+            "deploy_cwd": deploy_cwd,
+        }
+    except Exception as exc:  # noqa: BLE001 — surface to ledger
+        return {
+            "ok": False,
+            "reason": f"dispatch_threw:{exc}",
+            "environment": environment,
+            "action": action,
+            "gh_command": gh_command,
+            "gh_output": str(exc),
+            "gh_exit_code": -1,
+            "action_id": action_id,
+        }
+
+
+def _dispatch_deploy_for_merge(
+    *,
+    run_id: str,
+    branch: str,
+    environments: List[str],
+) -> List[Dict[str, Any]]:
+    """Apply-latest per env after low-risk merge; freeze and stop on first failure."""
+    results: List[Dict[str, Any]] = []
+    for environment in environments:
+        action_id = f"loop:{run_id}:deploy:{environment}"
+        result = _dispatch_fhd_deploy_action(
+            environment=environment,
+            action="apply-latest",
+            action_id=action_id,
+        )
+        record = {
+            "event": "deploy_dispatch",
+            "run_id": run_id,
+            "branch": branch,
+            "environment": environment,
+            "action": "apply-latest",
+            "ok": bool(result.get("ok")),
+            "reason": result.get("reason"),
+            "action_id": action_id,
+            "gh_command": result.get("gh_command"),
+            "gh_exit_code": result.get("gh_exit_code"),
+        }
+        try:
+            _append_ledger(record)
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to append deploy_dispatch ledger")
+        try:
+            _append_governance_audit({**record, "kind": "deploy_dispatch"})
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to append deploy_dispatch governance audit")
+        results.append(result)
+        if result.get("ok"):
+            continue
+        freeze_id = f"loop:{run_id}:freeze:{environment}"
+        freeze_result = _dispatch_fhd_deploy_action(
+            environment=environment,
+            action="freeze-manifest",
+            action_id=freeze_id,
+        )
+        freeze_record = {
+            "event": "deploy_freeze",
+            "run_id": run_id,
+            "branch": branch,
+            "environment": environment,
+            "action": "freeze-manifest",
+            "ok": bool(freeze_result.get("ok")),
+            "reason": freeze_result.get("reason"),
+            "action_id": freeze_id,
+            "triggered_by": action_id,
+        }
+        try:
+            _append_ledger(freeze_record)
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to append deploy_freeze ledger")
+        try:
+            _append_governance_audit({**freeze_record, "kind": "deploy_freeze"})
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to append deploy_freeze governance audit")
+        # 显式 callback 通知（非仅流程内嵌）：deploy 失败 + freeze 结果回写 ingest
+        try:
+            _emit_deploy_callback(
+                phase="dispatch_failed",
+                payload={
+                    **record,
+                    "freeze_ok": bool(freeze_result.get("ok")),
+                    "freeze_action_id": freeze_id,
+                },
+                action_id=action_id,
+            )
+            _emit_deploy_callback(
+                phase="freeze_manifest",
+                payload=freeze_record,
+                action_id=freeze_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to emit deploy_callback after freeze")
+        break
+    return results
+
+
+def _emit_deploy_callback(
+    *,
+    phase: str,
+    payload: Dict[str, Any],
+    action_id: Optional[str] = None,
+) -> None:
+    """Fail-open 调用 FHD autonomy deploy_callback（或等价 ingest HTTP）。"""
+    try:
+        autonomy_scripts = Path(__file__).resolve().parents[3] / "FHD" / "scripts" / "autonomy"
+        candidates = [
+            autonomy_scripts,
+            Path(os.environ.get("XCAGI_FHD_RUNTIME_ROOT", "")) / "scripts" / "autonomy",
+            Path(__file__).resolve().parents[2] / "FHD" / "scripts" / "autonomy",
+        ]
+        for candidate in candidates:
+            if candidate and (candidate / "autonomy_callback.py").is_file():
+                if str(candidate) not in sys.path:
+                    sys.path.insert(0, str(candidate))
+                from autonomy_callback import deploy_callback  # type: ignore[import-not-found]
+
+                deploy_callback(phase, payload, source="self_maintenance", action_id=action_id)
+                return
+    except Exception:  # noqa: BLE001
+        logger.debug("deploy_callback import path failed", exc_info=True)
+
+    base_url = (os.environ.get("FHD_API_BASE_URL") or "").strip()
+    token = (
+        os.environ.get("AUTONOMY_WEBHOOK_TOKEN")
+        or os.environ.get("MODSTORE_OPS_INGEST_TOKEN")
+        or ""
+    ).strip()
+    if not base_url or not token:
+        return
+    body: Dict[str, Any] = {
+        "action": f"deploy:{phase}",
+        "payload": {**payload, "callback_event": f"deploy:{phase}"},
+        "source": "self_maintenance",
+    }
+    if action_id:
+        body["action_id"] = action_id
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            client.post(
+                f"{base_url.rstrip('/')}/api/ops/autonomy/actions/ingest",
+                headers={
+                    "X-Autonomy-Token": token,
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+    except Exception:  # noqa: BLE001
+        logger.debug("deploy_callback HTTP fallback failed", exc_info=True)
+
+
 def _decide_post_loop_policy(
     *,
     branch: Optional[str],
@@ -4781,6 +5207,15 @@ def _decide_post_loop_policy(
                 "auto_merge_requested_low_risk" if merge_requested else "auto_merged_low_risk"
             ),
             "active_gates": active_gates,
+            "deploy_results": (
+                _dispatch_deploy_for_merge(
+                    run_id=run_id,
+                    branch=branch or "",
+                    environments=_auto_dispatch_deploy_envs(),
+                )
+                if _auto_dispatch_deploy_envs() and branch
+                else []
+            ),
             "evolution_gate": evolution_gate,
             "gate": gate,
             "governance_gate": governance_gate,
@@ -5773,6 +6208,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "review_verdict": str(review.get("verdict") or "").strip() if review else "",
             "review_max_severity": str(review.get("max_severity") or "").strip() if review else "",
             "review_findings": review.get("findings") if review else [],
+            "review_blocking_findings": review.get("blocking_findings") if review else [],
+            "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
         }
 
@@ -6937,6 +7374,19 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "focused_test_command": _focused_test_command(),
             "threshold": _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
             "cooldown_minutes": _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
+            # L4 closure: deploy step after merge（默认开 staging；prod 须显式 ENVS）
+            "auto_dispatch_deploy": _auto_dispatch_deploy_enabled(),
+            "auto_dispatch_deploy_envs": _auto_dispatch_deploy_envs(),
+            "auto_dispatch_deploy_dry_run": _env_flag_enabled(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"
+            ),
+        },
+        "l4_closure": {
+            "target": "L4",
+            "auto_dispatch_deploy": _auto_dispatch_deploy_enabled(),
+            "auto_dispatch_deploy_envs": _auto_dispatch_deploy_envs(),
+            "half_closed_without_deploy": not _auto_dispatch_deploy_enabled(),
+            "open_items_count": len(open_items[-20:]),
         },
     }
 

@@ -748,6 +748,8 @@
           padding: 22px 0;
         }
       }
+
+
     </style>
   </head>
   <body>
@@ -951,13 +953,16 @@
           </details>
         </div>
       </section>
+
+
     </main>
 
     <footer class="footer">
       <div class="container footer-inner">
         <span>© 2026 成都修茈科技有限公司 · 官方产品下载</span>
         <nav class="footer-links" aria-label="页脚导航">
-          <a href="/index.html">公司官网</a><a href="/market/">AI 市场</a
+          <a href="/index.html">公司官网</a><a href="#breakpoints">断点清单</a
+          ><a href="/download/goals">工作目标</a><a href="/market/">AI 市场</a
           ><a href="/download/releases">更新日志</a><a href="/contact.html">联系支持</a>
         </nav>
       </div>
@@ -1156,6 +1161,7 @@
         if (state.preferredPlatform === 'android') state.tab = 'android'
         setTab(state.tab)
         loadReleaseInfo().then(loadManifest).then(render)
+
       })()
     </script>
 

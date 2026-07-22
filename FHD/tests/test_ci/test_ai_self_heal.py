@@ -19,7 +19,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -347,6 +347,103 @@ class TestCreateRemediationIssue:
             client=client,
         )
         assert url == ""
+
+
+# =====================================================================
+# approval ledger 旁路调用测试
+# =====================================================================
+
+
+class TestApprovalLedger:
+    """create_pr 成功后旁路调用 approval ledger（fire-and-forget，fail-open）。"""
+
+    def test_ledger_called_with_correct_args(self) -> None:
+        """create_pr 成功 → 调用 post_to_approval_ledger，action=self_maintenance_merge，source=ci_self_heal。"""
+        client = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 201
+        resp.json.return_value = {
+            "html_url": "https://github.com/owner/repo/pull/42",
+            "number": 42,
+        }
+        client.post.return_value = resp
+        with patch.object(heal, "post_to_approval_ledger") as mock_ledger:
+            url = heal.create_pr(
+                "autonomy/fix-abc",
+                "patch",
+                token="tok",
+                repo="owner/repo",
+                client=client,
+                fixes=[],
+            )
+        assert url == "https://github.com/owner/repo/pull/42"
+        mock_ledger.assert_called_once_with(
+            action="self_maintenance_merge",
+            payload={
+                "pr_number": 42,
+                "pr_url": "https://github.com/owner/repo/pull/42",
+                "branch": "autonomy/fix-abc",
+                "base": "main",
+                "risk_level": "r3",
+                "fixes_summary": [],
+            },
+            source="ci_self_heal",
+        )
+
+    def test_ledger_not_called_when_pr_creation_fails(self) -> None:
+        """PR 创建失败（422）→ 不调用 ledger。"""
+        client = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 422
+        client.post.return_value = resp
+        with patch.object(heal, "post_to_approval_ledger") as mock_ledger:
+            url = heal.create_pr(
+                "autonomy/x",
+                "patch",
+                token="tok",
+                repo="owner/repo",
+                client=client,
+            )
+        assert url == ""
+        mock_ledger.assert_not_called()
+
+    def test_ledger_failure_does_not_break_pr_creation(self) -> None:
+        """ledger 抛异常 → 不影响 PR 创建，仍返回 pr_url。"""
+        client = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 201
+        resp.json.return_value = {
+            "html_url": "https://github.com/owner/repo/pull/1",
+            "number": 1,
+        }
+        client.post.return_value = resp
+        with patch.object(heal, "post_to_approval_ledger", side_effect=RuntimeError("net down")):
+            url = heal.create_pr(
+                "autonomy/x",
+                "patch",
+                token="tok",
+                repo="owner/repo",
+                client=client,
+            )
+        assert url == "https://github.com/owner/repo/pull/1"
+
+    def test_ledger_risk_level_r0_when_no_needs_human_label(self) -> None:
+        """labels 不含 needs-human → risk_level=r0。"""
+        client = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 201
+        resp.json.return_value = {"html_url": "u", "number": 7}
+        client.post.return_value = resp
+        with patch.object(heal, "post_to_approval_ledger") as mock_ledger:
+            heal.create_pr(
+                "autonomy/x",
+                "patch",
+                token="tok",
+                repo="owner/repo",
+                client=client,
+                labels=["auto-merge"],
+            )
+        assert mock_ledger.call_args.kwargs["payload"]["risk_level"] == "r0"
 
 
 # =====================================================================

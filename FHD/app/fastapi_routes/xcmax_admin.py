@@ -103,6 +103,250 @@ async def autonomy_audit_log(
     }
 
 
+def _admin_approver_from_session(request: Request, body_approver: str = "") -> str:
+    """Prefer body approver; else session username / market username."""
+    explicit = str(body_approver or "").strip()
+    if explicit:
+        return explicit
+    from app.application.session_account_meta import load_session_account_meta
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    sid = _session_id_from_request(request)
+    meta = load_session_account_meta(sid) if sid else {}
+    for key in ("username", "market_username", "display_name"):
+        value = str((meta or {}).get(key) or "").strip()
+        if value:
+            return value
+    return "admin"
+
+
+@router.get("/admin/autonomy/actions/pending", response_model=None)
+async def admin_pending_autonomy_actions(request: Request):
+    """管理端审批中心：用管理员会话拉取待办（勿走 webhook token）。"""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.approval_resume import list_pending_actions
+
+    items = list_pending_actions()
+    return {"ok": True, "count": len(items), "items": items}
+
+
+@router.post("/admin/autonomy/actions/{action_id}/resume", response_model=None)
+async def admin_resume_autonomy_action(action_id: str, request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.approval_resume import ApprovalStateError, resume_action
+
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
+    # 管理端人工通过：默认只落审批态，执行由 CI/部署回调继续（避免无本地 executor 409）
+    defer = body.get("defer_execution")
+    defer_execution = True if defer is None else bool(defer)
+    try:
+        item = resume_action(
+            action_id,
+            approver=approver,
+            approval_id=str(body.get("approval_id") or ""),
+            defer_execution=defer_execution,
+        )
+    except ApprovalStateError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=409)
+    return {"ok": True, "action": item}
+
+
+@router.post("/admin/autonomy/actions/{action_id}/reject", response_model=None)
+async def admin_reject_autonomy_action(action_id: str, request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.approval_resume import ApprovalStateError, reject_action
+
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
+    if not approver:
+        return JSONResponse(
+            {"ok": False, "message": "approver is required"},
+            status_code=400,
+        )
+    try:
+        item = reject_action(
+            action_id,
+            approver=approver,
+            reason=str(body.get("reason") or ""),
+            approval_id=str(body.get("approval_id") or ""),
+        )
+    except ApprovalStateError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=409)
+    return {"ok": True, "action": item}
+
+
+@router.get("/admin/autonomy/health", response_model=None)
+async def admin_autonomy_health(request: Request):
+    """Admin-session health for autonomy approval service (avoids /api/ops vite→modstore proxy)."""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    return {"ok": True, "service": "ops-autonomy-approval", "via": "xcmax-admin"}
+
+
+@router.get("/admin/autonomy/overview", response_model=None)
+async def admin_autonomy_overview(request: Request):
+    """One-shot autonomy dashboard payload for the admin console."""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application import self_maintenance_app_service as sm_svc
+    from app.application.autonomy.admin_overview import (
+        closure_gap_count,
+        extract_loop_run_summary,
+        list_deploy_events,
+        operating_metrics_windows,
+    )
+    from app.application.autonomy.approval_resume import list_pending_actions
+    from app.application.autonomy.audit_log import (
+        list_autonomy_audit,
+        summarize_autonomy_audit,
+    )
+    from app.application.ops_closure_status import build_ops_closure_status
+
+    audit_items = list_autonomy_audit(limit=20)
+    audit_summary = summarize_autonomy_audit(days=30)
+    metrics = operating_metrics_windows()
+    deploy = list_deploy_events(limit=20)
+    pending = list_pending_actions()
+
+    runtime: dict[str, Any] = {}
+    try:
+        runtime = await sm_svc.get_runtime_status_local(limit=40)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("autonomy overview runtime status failed: %s", exc)
+        runtime = {"ok": False, "error": str(exc)}
+
+    closure: dict[str, Any] = {}
+    try:
+        closure = {
+            "success": True,
+            "data": build_ops_closure_status(await _remote_duty_health(request)),
+        }
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("autonomy overview closure status failed: %s", exc)
+        closure = {"success": False, "error": str(exc)}
+
+    return {
+        "ok": True,
+        "health": {"ok": True, "service": "ops-autonomy-approval"},
+        "pending": {"count": len(pending), "items": pending[:20]},
+        "audit": {"items": audit_items, "count": len(audit_items), "summary": audit_summary},
+        "loop": extract_loop_run_summary(runtime if isinstance(runtime, dict) else {}),
+        "runtime": runtime,
+        "closure": {
+            "gap_count": closure_gap_count(closure),
+            "payload": closure,
+        },
+        "deploy_events": deploy,
+        "operating_metrics": metrics,
+    }
+
+
+@router.get("/admin/autonomy/deploy-events", response_model=None)
+async def admin_autonomy_deploy_events(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=200),
+    since_cursor: str | None = None,
+):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import list_deploy_events
+
+    data = list_deploy_events(limit=limit, since_cursor=since_cursor)
+    return {"ok": True, **data}
+
+
+@router.get("/admin/autonomy/operating-metrics", response_model=None)
+async def admin_autonomy_operating_metrics(request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import operating_metrics_windows
+
+    return {"ok": True, **operating_metrics_windows()}
+
+
+@router.get("/admin/autonomy/github-items", response_model=None)
+async def admin_autonomy_github_items(
+    request: Request,
+    limit: int = Query(default=30, ge=1, le=100),
+):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import list_github_human_items
+
+    return {"ok": True, **list_github_human_items(limit=limit)}
+
+
+@router.get("/admin/autonomy/cross-tier-gate", response_model=None)
+async def admin_autonomy_cross_tier_gate(request: Request):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import evaluate_cross_tier_gate_snapshot
+
+    return {"ok": True, **evaluate_cross_tier_gate_snapshot(None)}
+
+
+@router.get("/admin/autonomy/audit-cross-tier", response_model=None)
+async def admin_autonomy_audit_cross_tier(
+    request: Request,
+    tier: str = Query(default="server"),
+    limit: int = Query(default=50, ge=1, le=300),
+):
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.admin_overview import read_cross_tier_audit
+
+    return {"ok": True, **read_cross_tier_audit(tier=tier, limit=limit)}
+
+
+@router.post("/admin/autonomy/self-maintenance/run", response_model=None)
+async def admin_force_self_maintenance_run(request: Request):
+    """Admin break-glass: force one self-maintenance loop via local MODstore."""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application import self_maintenance_app_service as sm_svc
+
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    reason = (
+        str(body.get("reason") or "admin_console_force_run").strip() or "admin_console_force_run"
+    )
+    try:
+        result = await sm_svc.force_run_local(reason=reason)
+        return {"ok": True, "result": result}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("admin force self-maintenance failed: %s", exc)
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=502)
+
+
 def _release_train_snapshot() -> dict[str, Any]:
     """读取 release_train SSOT；优先 modstore 模块，回退 FHD/config JSON。"""
     from pathlib import Path
@@ -225,6 +469,82 @@ async def _market_admin_proxy(
     return payload
 
 
+def _is_daily_digest_list_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    return bare in {
+        "/api/xcmax/admin/daily-digests",
+        "/api/agent/butler/daily-digests",
+    }
+
+
+def _is_daily_digest_detail_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    if bare.endswith("/artifacts"):
+        return False
+    return bare.startswith("/api/xcmax/admin/daily-digests/") or bare.startswith(
+        "/api/agent/butler/daily-digests/"
+    )
+
+
+def _is_daily_digest_artifacts_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    return bare.endswith("/artifacts") and (
+        bare.startswith("/api/xcmax/admin/daily-digests/")
+        or bare.startswith("/api/agent/butler/daily-digests/")
+    )
+
+
+def _digest_record_id_from_path(path: str) -> int:
+    bare = path.split("?", 1)[0]
+    if bare.endswith("/artifacts"):
+        bare = bare[: -len("/artifacts")]
+    return int(bare.rstrip("/").rsplit("/", 1)[-1])
+
+
+async def _fetch_remote_xcmax_daily_digests(path: str) -> dict[str, Any] | None:
+    """直连修茈 ``/api/xcmax/admin/daily-digests``（生产落库副本；不依赖 butler 会话）。"""
+    import httpx
+
+    from app.application.modstore_local_client import internal_auth_headers
+
+    base = (os.environ.get("XCAGI_MARKET_BASE_URL") or "https://xiu-ci.com").strip().rstrip("/")
+    # 避免误打到 SPA /market 前缀
+    if base.endswith("/market"):
+        base = base[: -len("/market")]
+    # 统一改走 xcmax 管理端读接口（butler 路径需管理员 JWT，管理端常拿不到）
+    bare, _, query = path.partition("?")
+    if bare.startswith("/api/agent/butler/daily-digests"):
+        bare = bare.replace("/api/agent/butler/daily-digests", "/api/xcmax/admin/daily-digests", 1)
+    elif not bare.startswith("/api/xcmax/admin/daily-digests"):
+        return None
+    url = f"{base}{bare}"
+    if query:
+        url = f"{url}?{query}"
+    headers = {"Accept": "application/json", **internal_auth_headers()}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code >= 400:
+                logger.warning("remote xcmax daily-digests HTTP %s path=%s", resp.status_code, bare)
+                return None
+            data = resp.json()
+            return data if isinstance(data, dict) else {"success": True, "data": data}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("remote xcmax daily-digests failed path=%s: %s", bare, exc)
+        return None
+
+
+def _digest_payload_nonempty(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    data = payload.get("data")
+    if isinstance(data, list):
+        return len(data) > 0
+    if isinstance(data, dict):
+        return bool(data.get("id") or data.get("body_html") or data.get("subject"))
+    return False
+
+
 async def _digest_local_or_proxy(
     request: Request,
     method: str,
@@ -232,14 +552,15 @@ async def _digest_local_or_proxy(
     *,
     json_body: dict[str, Any] | None = None,
 ):
-    """本地 MODstore :8788 日更读接口：无 FHD 会话时用 admin 服务账号。"""
+    """日更读接口：本地 MODstore → 市场代理 → 直连生产 xcmax 存档（三选一回退）。"""
     from app.application.modstore_local_client import prefer_local_modstore
 
     if prefer_local_modstore() and method.upper() == "GET":
         from app.application import digest_email_app_service as digest_svc
 
+        local_payload: dict[str, Any] | None = None
         try:
-            if path.startswith("/api/agent/butler/daily-digests?"):
+            if _is_daily_digest_list_path(path):
                 q = path.split("?", 1)[1] if "?" in path else ""
                 limit, offset = 20, 0
                 for part in q.split("&"):
@@ -247,14 +568,20 @@ async def _digest_local_or_proxy(
                         limit = int(part.split("=", 1)[1])
                     elif part.startswith("offset="):
                         offset = int(part.split("=", 1)[1])
-                return await digest_svc.list_daily_digests_local(limit=limit, offset=offset)
-            if path.startswith("/api/agent/butler/daily-digests/") and path.endswith("/artifacts"):
-                rid = path.split("/daily-digests/", 1)[1].split("/", 1)[0]
+                local_payload = await digest_svc.list_daily_digests_local(
+                    limit=limit, offset=offset
+                )
+                if _digest_payload_nonempty(local_payload):
+                    return local_payload
+            elif _is_daily_digest_artifacts_path(path):
+                rid = _digest_record_id_from_path(path)
                 return await digest_svc.get_daily_digest_artifacts_local(int(rid))
-            if path.startswith("/api/agent/butler/daily-digests/"):
-                rid = path.rsplit("/", 1)[-1]
-                return await digest_svc.get_daily_digest_local(int(rid))
-            if path.startswith("/api/admin/action-items/stats?"):
+            elif _is_daily_digest_detail_path(path):
+                rid = _digest_record_id_from_path(path)
+                local_payload = await digest_svc.get_daily_digest_local(int(rid))
+                if _digest_payload_nonempty(local_payload):
+                    return local_payload
+            elif path.startswith("/api/admin/action-items/stats?"):
                 q = path.split("?", 1)[1] if "?" in path else ""
                 kind = day = ""
                 for part in q.split("&"):
@@ -263,7 +590,7 @@ async def _digest_local_or_proxy(
                     elif part.startswith("day="):
                         day = part.split("=", 1)[1]
                 return await digest_svc.action_items_stats_local(kind=kind, day=day)
-            if path.startswith("/api/admin/action-items?"):
+            elif path.startswith("/api/admin/action-items?"):
                 q = path.split("?", 1)[1] if "?" in path else ""
                 kind = day = ""
                 for part in q.split("&"):
@@ -272,17 +599,37 @@ async def _digest_local_or_proxy(
                     elif part.startswith("day="):
                         day = part.split("=", 1)[1]
                 return await digest_svc.list_action_items_local(kind=kind, day=day)
+            # 本地空库时回退生产 xcmax 存档，避免管理端「暂无每日摘要」
+            if _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path):
+                remote = await _fetch_remote_xcmax_daily_digests(path)
+                if remote is not None:
+                    return remote
+                if local_payload is not None:
+                    return local_payload
         except RECOVERABLE_ERRORS as exc:
             logger.warning("local digest/action-items read failed path=%s: %s", path, exc)
+            if _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path):
+                remote = await _fetch_remote_xcmax_daily_digests(path)
+                if remote is not None:
+                    return remote
             return JSONResponse({"success": False, "message": str(exc)}, status_code=502)
 
-    return await _market_admin_proxy(
+    proxied = await _market_admin_proxy(
         request,
         method,
         path,
         json_body=json_body,
         require_admin_session=not prefer_local_modstore(),
     )
+    # 市场 JWT 调 butler 常 401/403；生产摘要在 xcmax 管理端读接口
+    if method.upper() == "GET" and (
+        _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path)
+    ):
+        if isinstance(proxied, JSONResponse) or not _digest_payload_nonempty(proxied):
+            remote = await _fetch_remote_xcmax_daily_digests(path)
+            if remote is not None:
+                return remote
+    return proxied
 
 
 async def _self_maintenance_local_or_proxy(
@@ -320,6 +667,12 @@ async def _self_maintenance_local_or_proxy(
             note = str((json_body or {}).get("note") or "")
             return await sm_svc.governance_review_local(
                 note=note,
+                authorization=authorization,
+            )
+        if path == "/api/ops/self-maintenance/run" and method.upper() == "POST":
+            reason = str((json_body or {}).get("reason") or "admin_force_run")
+            return await sm_svc.force_run_local(
+                reason=reason,
                 authorization=authorization,
             )
         return None
@@ -1614,7 +1967,7 @@ async def list_daily_digests(
     return await _digest_local_or_proxy(
         request,
         "GET",
-        f"/api/agent/butler/daily-digests?limit={limit}&offset={offset}",
+        f"/api/xcmax/admin/daily-digests?limit={limit}&offset={offset}",
     )
 
 
@@ -1624,7 +1977,7 @@ async def get_daily_digest(request: Request, record_id: int):
     return await _digest_local_or_proxy(
         request,
         "GET",
-        f"/api/agent/butler/daily-digests/{record_id}",
+        f"/api/xcmax/admin/daily-digests/{record_id}",
     )
 
 
@@ -1634,7 +1987,7 @@ async def get_daily_digest_artifacts(request: Request, record_id: int):
     return await _digest_local_or_proxy(
         request,
         "GET",
-        f"/api/agent/butler/daily-digests/{record_id}/artifacts",
+        f"/api/xcmax/admin/daily-digests/{record_id}/artifacts",
     )
 
 
@@ -2677,7 +3030,7 @@ def _collect_mimo_usage() -> dict[str, Any]:
 
 
 def _build_token_usage_summary() -> dict[str, Any]:
-    """聚合 5 个来源的 token 用量。"""
+    """聚合 5 个来源的 token 用量（平台制作 Token）。"""
     local = _collect_local_ledger()
     cursor = _collect_cursor_usage()
     codex = _collect_codex_usage()
@@ -2691,7 +3044,7 @@ def _build_token_usage_summary() -> dict[str, Any]:
     grand_prompt = sum(_to_int(s.get("prompt_tokens")) for s in sources.values())
     grand_completion = sum(_to_int(s.get("completion_tokens")) for s in sources.values())
     grand_cost = round(sum(s.get("estimated_cost_usd", 0.0) for s in sources.values()), 2)
-    return {
+    summary = {
         "success": True,
         "grand_total_tokens": grand_total,
         "grand_prompt_tokens": grand_prompt,
@@ -2700,11 +3053,19 @@ def _build_token_usage_summary() -> dict[str, Any]:
         "sources": sources,
         "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    try:
+        from app.infrastructure.billing.platform_made_tokens import write_public_snapshot
+
+        snapshot_path = write_public_snapshot(summary)
+        summary["public_snapshot_path"] = str(snapshot_path)
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        logger.warning("platform_made_tokens snapshot write failed: %s", exc)
+    return summary
 
 
 @router.get("/admin/token-usage", response_model=None)
 async def admin_token_usage(request: Request):
-    """Token 用量聚合：本地账本 + Cursor + Codex + Trae。"""
+    """平台制作 Token：本地账本 + Cursor + Codex + Trae + mimo。"""
     from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
 
     if not _session_id_from_request(request):

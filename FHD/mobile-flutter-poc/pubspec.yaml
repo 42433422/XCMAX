@@ -13,6 +13,9 @@ dependencies:
   google_mlkit_barcode_scanning: ^0.14.2
   image_picker: ^1.2.2
   speech_to_text: ^7.4.0
+  package_info_plus: ^8.3.0
+  path_provider: ^2.1.5
+  shared_preferences: ^2.5.1
   url_launcher: ^6.3.2
   web_socket_channel: ^3.0.2
   webview_flutter: ^4.14.0

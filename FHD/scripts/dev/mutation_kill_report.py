@@ -2,18 +2,18 @@
 # -*- coding: utf-8 -*-
 """变异测试杀死率报告生成器。
 
-解析 ``mutmut results`` 输出，计算加权杀死率，记录到
+解析 mutmut 输出，计算加权杀死率，记录到
 ``metrics/mutation-history.jsonl``（追加模式，每行一个 JSON 对象）。
 
 设计取舍
 --------
-* 版本无关：直接调用 ``mutmut results`` 子进程并解析其 stdout，兼容
-  mutmut 2.x（纯文本，如 ``Killed (10)``）与 3.x（带 emoji，如
-  ``Killed 🎉 (10)``）两种输出格式。
-* 仅用标准库：``argparse`` / ``json`` / ``subprocess`` / ``sys`` /
-  ``pathlib`` / ``datetime``，便于在 CI 与本地零依赖运行。
+* 版本无关：兼容
+  - mutmut 2.x：``Killed (10)`` / ``Survived (2)``
+  - mutmut 3.x progress：``🎉 67 🫥 0  ⏰ 0  🤔 0  🙁 23``
+  - mutmut 3.x ``results``：``    key: survived``（默认跳过 killed，需 ``--all``）
+* 仅用标准库。
 * 加权杀死率 = ``killed / (killed + survived + timeout)``；
-  ``no_tests`` 不计入分母（mutmut 3.x 会出现该状态，表示该变体无对应测试）。
+  ``no_tests`` / ``skipped`` 不计入分母。
 
 退出码
 ------
@@ -23,9 +23,10 @@
 
 用法::
 
-    python scripts/dev/mutation_kill_report.py                  # 默认阈值 70%
-    python scripts/dev/mutation_kill_report.py --threshold 80   # 自定义阈值
-    python scripts/dev/mutation_kill_report.py --dry-run        # 不写 history
+    python scripts/dev/mutation_kill_report.py
+    python scripts/dev/mutation_kill_report.py --threshold 80
+    python scripts/dev/mutation_kill_report.py --from-file mutmut-run.log
+    python scripts/dev/mutation_kill_report.py --dry-run
 """
 
 from __future__ import annotations
@@ -43,57 +44,83 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 FHD_ROOT = REPO_ROOT / "FHD"
 HISTORY_FILE = FHD_ROOT / "metrics" / "mutation-history.jsonl"
 
-# 匹配 "Killed 🎉 (10)" / "Survived 🙁 (2)" / "Timeout ⏰ (1)" / "No tests (0)"
-# 也兼容 mutmut 2.x 纯文本 "Killed (10)"。
-# 关键字大小写不敏感，emoji 可选，括号内为整数。
+# mutmut 2.x / 3.x 摘要行：Killed 🎉 (10)
 _STATUS_RE = re.compile(
     r"^\s*(?P<status>killed|survived|timeout|no[ _-]tests)\b[^\(]*\((?P<count>\d+)\)",
     re.IGNORECASE,
 )
 
+# mutmut 3.x progress：🎉 67 🫥 0  ⏰ 0  🤔 0  🙁 23  🔇 0  🧙 0
+_PROGRESS_RE = re.compile(
+    r"🎉\s*(?P<killed>\d+).*?"
+    r"🫥\s*(?P<no_tests>\d+).*?"
+    r"⏰\s*(?P<timeout>\d+).*?"
+    r"🤔\s*(?P<suspicious>\d+).*?"
+    r"🙁\s*(?P<survived>\d+)",
+    re.DOTALL,
+)
+
+# mutmut 3.x results：    app.foo.bar__mutmut_1: survived
+_RESULT_LINE_RE = re.compile(
+    r"^\s*\S+:\s*(?P<status>killed|survived|timeout|suspicious|skipped|no_tests|caught_by_type_check)\s*$",
+    re.IGNORECASE,
+)
+
 
 def run_mutmut_results() -> str:
-    """运行 ``mutmut results``，返回 stdout。
-
-    在 ``FHD_ROOT`` 下执行，便于 mutmut 找到 ``pyproject.toml`` 与缓存目录。
-    超时 300s（``mutmut results`` 通常秒级返回，超时视为异常）。
-    """
-    result = subprocess.run(
+    """运行 ``mutmut results --all true``，返回 stdout（含 killed）。"""
+    candidates = [
+        ["mutmut", "results", "--all", "true"],
+        ["uv", "run", "mutmut", "results", "--all", "true"],
+        [sys.executable, "-m", "mutmut", "results", "--all", "true"],
+        # 旧调用兜底（仅 survivors）
         ["mutmut", "results"],
-        cwd=FHD_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    # mutmut results 在无缓存时也可能以非零退出，但仍输出有用信息；
-    # 这里统一返回 stdout + stderr 供 parse_results 容错。
-    return result.stdout + ("\n" + result.stderr if result.stderr else "")
+        ["uv", "run", "mutmut", "results"],
+        [sys.executable, "-m", "mutmut", "results"],
+    ]
+    for cmd in candidates:
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=FHD_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+        except FileNotFoundError:
+            continue
+        output = result.stdout + ("\n" + result.stderr if result.stderr else "")
+        if output.strip() or result.returncode == 0:
+            return output
+
+    raise FileNotFoundError
 
 
 def parse_results(output: str) -> dict:
-    """解析 ``mutmut results`` 输出，返回计数 dict。
-
-    覆盖以下格式（2.x / 3.x 通用）::
-
-        Killed 🎉 (10)
-        Survived 🙁 (2)
-        Timeout ⏰ (1)
-        No tests (0)
-        Suspicious (1)        # 归入 survived（行为不确定，保守计为未杀死）
-        Skipped (3)           # 不计入分母
-        Error (1)             # 归入 timeout（运行异常，等同未杀死）
-
-    返回 dict 含 ``killed`` / ``survived`` / ``timeout`` / ``no_tests`` 四个键。
-    """
+    """解析 mutmut 输出，返回计数 dict。"""
     counts = {"killed": 0, "survived": 0, "timeout": 0, "no_tests": 0}
 
+    # 1) 优先取最后一条 progress 摘要（mutmut run 日志）
+    progress_hits = list(_PROGRESS_RE.finditer(output))
+    if progress_hits:
+        m = progress_hits[-1]
+        counts["killed"] = int(m.group("killed"))
+        counts["survived"] = int(m.group("survived"))
+        counts["timeout"] = int(m.group("timeout"))
+        counts["no_tests"] = int(m.group("no_tests"))
+        # suspicious 保守并入 survived
+        counts["survived"] += int(m.group("suspicious"))
+        return counts
+
+    # 2) mutmut 2.x / 旧摘要行
+    legacy_found = False
     for line in output.splitlines():
         m = _STATUS_RE.match(line)
         if not m:
             continue
+        legacy_found = True
         status = m.group("status").lower().replace("-", "_").replace(" ", "_")
         count = int(m.group("count"))
-
         if status == "killed":
             counts["killed"] += count
         elif status == "survived":
@@ -103,8 +130,6 @@ def parse_results(output: str) -> dict:
         elif status == "no_tests":
             counts["no_tests"] += count
 
-    # 兼容 mutmut 2.x/3.x 的 "Suspicious" / "Error" 等次要状态：
-    # 行为不确定或运行异常的变体，保守归入"未杀死"侧。
     for alias, target in (("suspicious", "survived"), ("error", "timeout")):
         for line in output.splitlines():
             m = re.match(
@@ -113,16 +138,32 @@ def parse_results(output: str) -> dict:
                 re.IGNORECASE,
             )
             if m:
+                legacy_found = True
                 counts[target] += int(m.group("count"))
+
+    if legacy_found and (counts["killed"] or counts["survived"] or counts["timeout"]):
+        return counts
+
+    # 3) mutmut 3.x results 逐条状态
+    for line in output.splitlines():
+        m = _RESULT_LINE_RE.match(line)
+        if not m:
+            continue
+        status = m.group("status").lower()
+        if status == "killed":
+            counts["killed"] += 1
+        elif status in {"survived", "suspicious"}:
+            counts["survived"] += 1
+        elif status in {"timeout", "caught_by_type_check"}:
+            counts["timeout"] += 1
+        elif status in {"no_tests", "skipped"}:
+            counts["no_tests"] += 1
 
     return counts
 
 
 def compute_kill_rate(counts: dict) -> float:
-    """计算加权杀死率：``killed / (killed + survived + timeout)``。
-
-    分母为 0 时返回 0.0（无变体或仅有 no_tests 状态）。
-    """
+    """计算加权杀死率：``killed / (killed + survived + timeout)``。"""
     denom = counts["killed"] + counts["survived"] + counts["timeout"]
     if denom == 0:
         return 0.0
@@ -131,13 +172,19 @@ def compute_kill_rate(counts: dict) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="变异测试杀死率报告生成器（解析 mutmut results 输出）",
+        description="变异测试杀死率报告生成器（解析 mutmut 输出）",
     )
     parser.add_argument(
         "--threshold",
         type=int,
         default=70,
         help="杀死率阈值（百分比），低于则退出码 1（默认 70）",
+    )
+    parser.add_argument(
+        "--from-file",
+        type=Path,
+        default=None,
+        help="从文件解析（如 mutmut run 的 tee 日志）；默认调用 mutmut results --all",
     )
     parser.add_argument(
         "--dry-run",
@@ -147,7 +194,10 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        output = run_mutmut_results()
+        if args.from_file is not None:
+            output = args.from_file.read_text(encoding="utf-8", errors="replace")
+        else:
+            output = run_mutmut_results()
     except FileNotFoundError:
         print(
             "[ERROR] mutmut not installed. Run: pip install mutmut",
@@ -156,6 +206,9 @@ def main() -> int:
         return 2
     except subprocess.TimeoutExpired:
         print("[ERROR] mutmut results timed out", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"[ERROR] cannot read --from-file: {exc}", file=sys.stderr)
         return 2
 
     counts = parse_results(output)

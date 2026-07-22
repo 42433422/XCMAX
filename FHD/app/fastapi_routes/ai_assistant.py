@@ -474,6 +474,76 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
         return JSONResponse(traced, status_code=500)
 
 
+@router.post("/api/tts/translate")
+def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
+    """朗读字幕短译：中文 → 英文。"""
+    import asyncio
+
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        return JSONResponse(
+            {"success": False, "message": "text 不能为空", "data": {}},
+            status_code=400,
+        )
+    target = str(payload.get("target") or "en").strip().lower()
+    if target != "en":
+        return JSONResponse(
+            {"success": False, "message": "仅支持 target=en", "data": {}},
+            status_code=400,
+        )
+
+    try:
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(provider="xiaomi")
+
+        async def _run() -> str:
+            resp = await adapter.chat_completion(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a concise translator. Translate the user's Chinese text into natural English. "
+                            "Output ONLY the English translation, no quotes, no explanation."
+                        ),
+                    },
+                    {"role": "user", "content": text[:500]},
+                ],
+                temperature=0.2,
+                max_tokens=180,
+            )
+            choice0 = (resp.get("choices") or [None])[0] or {}
+            message = choice0.get("message") or {}
+            return str(message.get("content") or "").strip().strip('"').strip("'")
+
+        try:
+            en = asyncio.run(_run())
+        except RuntimeError as loop_err:
+            if "asyncio.run()" not in str(loop_err):
+                raise
+            loop = asyncio.new_event_loop()
+            try:
+                en = loop.run_until_complete(_run())
+            finally:
+                loop.close()
+
+        if not en:
+            raise RuntimeError("empty translation")
+        traced = _trace_ai_assistant_route(
+            {"success": True, "message": "ok", "data": {"translation": en, "target": "en"}},
+            route="/api/tts/translate",
+            action="tts_translate",
+            body=payload,
+        )
+        return JSONResponse(traced)
+    except (RECOVERABLE_ERRORS, ValueError) as e:
+        logger.warning("TTS translate unavailable: %s", e)
+        return JSONResponse(
+            {"success": False, "message": "翻译暂不可用", "data": {}},
+            status_code=503,
+        )
+
+
 @router.post("/api/tts")
 def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
     text = str(payload.get("text") or "").strip()
@@ -515,6 +585,7 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
                     "voice": tts_payload.get("voice"),
                     "speakerId": speaker_id,
                     "lang": tts_payload.get("lang") or lang,
+                    "provider": tts_payload.get("provider") or "edge",
                 },
             },
             route="/api/tts",
@@ -523,15 +594,15 @@ def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
         )
         return JSONResponse(traced)
     except RECOVERABLE_ERRORS as e:
-        logger.warning("Edge TTS 不可用，回退浏览器语音: %s", e)
+        logger.warning("TTS 不可用（MiMo/Edge）: %s", e)
         traced = _trace_ai_assistant_route(
             {
                 "success": False,
-                "message": "TTS 服务未启用，将使用浏览器语音",
+                "message": "TTS 服务暂不可用（已尝试 MiMo 与 Edge 神经音）",
                 "data": {},
             },
             route="/api/tts",
             action="tts_synthesize",
             body=payload,
         )
-        return JSONResponse(traced, status_code=200)
+        return JSONResponse(traced, status_code=503)

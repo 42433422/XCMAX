@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   graph: vi.fn(),
   memories: vi.fn(),
+  omniscient: vi.fn(),
   query: vi.fn(),
   queryMemories: vi.fn(),
   confirmMemory: vi.fn(),
@@ -23,6 +24,10 @@ vi.mock('@/api/knowledgeBase', () => ({
   PERSY_KNOWLEDGE_DATASET_ID: 'persy-knowledge',
   normalizeKnowledgeDatasetId: (value?: string) => value?.trim() || 'persy-knowledge',
   knowledgeBaseApi: mocks,
+}))
+
+vi.mock('@/utils/adminConsoleUrl', () => ({
+  isAdminConsoleSpa: vi.fn(() => false),
 }))
 
 vi.mock('@/components/persy/PersyKnowledgeGraph.vue', () => ({
@@ -58,8 +63,18 @@ const pendingMemory = {
 }
 
 describe('PersyKnowledgeView', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(false)
+    mocks.omniscient.mockResolvedValue({
+      success: true,
+      document_count: 0,
+      chunk_count: 0,
+      dataset_count: 1,
+      recommended_dataset_id: 'persy-knowledge',
+      datasets: { 'persy-knowledge': { document_count: 0, chunk_count: 0 } },
+    })
     mocks.status.mockResolvedValue({
       success: true,
       dataset_id: 'persy-knowledge',
@@ -159,5 +174,67 @@ describe('PersyKnowledgeView', () => {
     expect(evidence).toHaveLength(2)
     expect(evidence[0].text()).toContain('M1')
     expect(wrapper.text()).toContain('下午联系，并遵循续约制度。')
+  })
+
+  it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
+    mocks.omniscient.mockResolvedValue({
+      success: true,
+      document_count: 496,
+      chunk_count: 496,
+      dataset_count: 2,
+      recommended_dataset_id: 'user_tenant-a',
+      datasets: {
+        'persy-knowledge': { document_count: 0, chunk_count: 0 },
+        'user_tenant-a': { document_count: 496, chunk_count: 496 },
+      },
+    })
+    mocks.status
+      .mockResolvedValueOnce({
+        success: true,
+        dataset_id: 'user_tenant-a',
+        document_count: 0,
+        chunk_count: 0,
+        documents: [],
+        index: { semantic_embedding_available: true },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        dataset_id: 'user_tenant-a',
+        document_count: 496,
+        chunk_count: 496,
+        documents: [],
+        index: { semantic_embedding_available: true },
+      })
+    mocks.graph
+      .mockResolvedValueOnce({
+        success: true,
+        dataset_id: 'user_tenant-a',
+        nodes: [{ id: 'persy:user_tenant-a', label: 'Persy', type: 'core' }],
+        edges: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        dataset_id: 'user_tenant-a',
+        nodes: [
+          { id: 'persy:user_tenant-a', label: 'Persy', type: 'core' },
+          { id: 'document:doc-1', label: '续约制度', type: 'source' },
+        ],
+        edges: [],
+        stats: { edge_count: 1 },
+      })
+    mocks.memories.mockResolvedValue({ success: true, memories: [] })
+
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    expect(mocks.omniscient).toHaveBeenCalled()
+    expect(mocks.status).toHaveBeenCalledWith('user_tenant-a', { includeDocuments: false })
+    expect(mocks.graph).toHaveBeenCalledWith('user_tenant-a')
+    // first empty load + heal retry
+    expect(mocks.graph).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('496')
+    expect(wrapper.text()).toMatch(/内容/)
   })
 })

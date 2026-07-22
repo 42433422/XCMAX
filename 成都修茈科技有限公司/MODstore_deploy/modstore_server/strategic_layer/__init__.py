@@ -40,6 +40,14 @@ from modstore_server.strategic_layer.decision_ledger import (
     StrategicDecisionLedger,
     StrategicDecisionRecord,
 )
+from modstore_server.strategic_layer.digest_strategic_bridge import (
+    TRACK_ACTION,
+    TRACK_SCOPE,
+    ensure_digest_track_decision,
+    mirror_daily_status,
+    sync_daily_to_strategic,
+    sync_record_after_status_writeback,
+)
 from modstore_server.strategic_layer.strategic_report_service import (
     StrategicReportService,
     WeeklyReportPeriod,
@@ -64,11 +72,17 @@ __all__ = [
     "DecisionType",
     "DecidedBy",
     "RiskLevel",
+    "TRACK_ACTION",
+    "TRACK_SCOPE",
     "StrategicDecisionLedger",
     "StrategicDecisionRecord",
     "StrategicReportService",
     "WeeklyReportPeriod",
+    "ensure_digest_track_decision",
+    "mirror_daily_status",
     "monthly_report_key",
     "seed_default_boundaries",
+    "sync_daily_to_strategic",
+    "sync_record_after_status_writeback",
     "weekly_report_key",
 ]

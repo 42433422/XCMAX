@@ -12,7 +12,7 @@ describe('personalSettings', () => {
     expect(v.fontPx).toBe(15)
     expect(v.memory).toBe('')
     expect(v.suggestions.length).toBeGreaterThan(0)
-    expect(v.ttsEngine).toBe('edge-online')
+    expect(v.ttsEngine).toBe('auto')
     expect(v.ttsEdgeVoice).toBe('zh-CN-XiaoxiaoNeural')
     expect(v.ttsVoiceName).toBe('')
     expect(v.ttsRate).toBe(1)

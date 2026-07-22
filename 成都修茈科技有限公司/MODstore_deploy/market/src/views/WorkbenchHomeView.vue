@@ -4314,6 +4314,14 @@ function buildSystemPrompt(
   } else {
     parts.push('你是一个简洁直接的中文 AI 助手。优先给出可执行答案；如果信息不足，先给合理假设，再列出需要确认的问题。')
   }
+  if (String(activeBot.value?.id || '') === 'customer-service') {
+    const who = String(displayName.value || '').trim().slice(0, 32)
+    if (who) {
+      parts.push(
+        `【当前对话对象】称呼=${who}。可自然称呼对方，勿复读整段内部字段，勿向访客复述敏感信息。`,
+      )
+    }
+  }
   parts.push(buildHumanChatStylePrompt('text'))
   const contractRules = outputContractSystemRules(outputContract)
   if (contractRules) parts.push(contractRules)
@@ -4421,6 +4429,31 @@ async function retrieveKnowledgeForDirect(
   let knowledgePack = ''
   let citations: DirectKbResult['citations'] = []
   if (!userText.trim()) return { knowledgePack, citations }
+  // AI 客服 Bot：优先管理端 persy 知识库（小C SSOT）
+  if (String(activeBot.value?.id || '') === 'customer-service') {
+    try {
+      const res: any = await withRequestTimeout(
+        api.csSsotRetrieve({ query: userText, top_k: 6 }),
+        DIRECT_KB_RETRIEVE_MS,
+      )
+      const chunks = Array.isArray(res?.chunks) ? res.chunks : []
+      if (chunks.length > 0) {
+        const lines = chunks.slice(0, 6).map((c: any, i: number) => {
+          const text = String(c?.text || c?.content || c?.snippet || '').trim()
+          const source = String(c?.source || c?.document_id || c?.filename || 'persy').trim()
+          return `[${i + 1}] (${source}) ${text.slice(0, 500)}`
+        })
+        knowledgePack = `【管理端知识库·persy-knowledge】\n${lines.join('\n')}`
+        citations = chunks.slice(0, 6).map((c: any, i: number) => ({
+          title: `${i + 1}. ${String(c?.source || c?.filename || '管理端知识库')}`,
+          snippet: String(c?.text || c?.content || '').trim().slice(0, 200),
+        }))
+        return { knowledgePack, citations }
+      }
+    } catch {
+      /* fall through to market knowledge */
+    }
+  }
   try {
     const pickedEmp = String(directChatEmployeeId.value || '').trim()
     const botEmp = String(activeBot.value?.id || '').trim()

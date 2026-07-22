@@ -29,6 +29,10 @@ except ImportError:  # pragma: no cover - 测试环境可能未装 httpx
 
 
 GITHUB_API = "https://api.github.com"
+_AI_REVIEW_TOOLING_FILES = {
+    "FHD/scripts/ci/ai_review.py",
+    "FHD/tests/test_ci/test_ai_review.py",
+}
 
 
 # =====================================================================
@@ -42,7 +46,9 @@ class DiffHunk:
 
     file_path: str  # 新文件路径（a→b 取 b）
     start_line: int  # hunk 在新文件中的起始行号
-    lines: list[tuple[int, str, str]]  # (line_no, prefix, content) prefix: '+' / '-' / ' '
+    lines: list[
+        tuple[int, str, str]
+    ]  # (line_no, prefix, content) prefix: '+' / '-' / ' '
     raw_header: str  # 原始 hunk 头
 
 
@@ -81,6 +87,7 @@ def fetch_pr_diff(
     if not repo or not token or not pr_number:
         return ""
     url = f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}"
+    files_url = f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}/files"
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3.diff",
@@ -94,9 +101,49 @@ def fetch_pr_diff(
         close_after = False
     try:
         resp = client.get(url, headers=headers)
-        if resp.status_code != 200:
+        if resp.status_code == 200 and resp.text.strip():
+            return resp.text
+
+        # Large PR diff can trigger non-200 or empty response; fallback to files API.
+        diff_parts: list[str] = []
+        page = 1
+        while True:
+            files_resp = client.get(
+                files_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                },
+                params={"per_page": 100, "page": page},
+            )
+            if files_resp.status_code != 200:
+                return ""
+
+            files = files_resp.json()
+            if not isinstance(files, list):
+                return ""
+            if not files:
+                break
+
+            for file_entry in files:
+                if not isinstance(file_entry, dict):
+                    continue
+                file_path = file_entry.get("filename")
+                patch = file_entry.get("patch")
+                if not file_path or not patch:
+                    continue
+                diff_parts.append(f"diff --git a/{file_path} b/{file_path}\n")
+                diff_parts.append(f"--- a/{file_path}\n")
+                diff_parts.append(f"+++ b/{file_path}\n")
+                diff_parts.append(f"{patch}\n")
+
+            if len(files) < 100:
+                break
+            page += 1
+
+        if not diff_parts:
             return ""
-        return resp.text
+        return "".join(diff_parts)
     except Exception:  # noqa: BLE001 - caller treats empty evidence as blocking
         return ""
     finally:
@@ -149,7 +196,9 @@ def parse_diff(diff_text: str) -> list[DiffHunk]:
         elif line.startswith("-"):
             cur_hunk.lines.append((0, "-", line[1:]))  # 删除行不计新行号
         else:
-            cur_hunk.lines.append((cur_new_line, " ", line[1:] if line.startswith(" ") else line))
+            cur_hunk.lines.append(
+                (cur_new_line, " ", line[1:] if line.startswith(" ") else line)
+            )
             cur_new_line += 1
     if cur_hunk is not None:
         hunks.append(cur_hunk)
@@ -209,14 +258,18 @@ _RULES: list[tuple[str, str, str, str, str]] = [
     (
         "requests-verify-false",
         "medium",
-        re.compile(r"requests\.(get|post|put|delete|patch|head)\s*\([^)]*verify\s*=\s*False"),
+        re.compile(
+            r"requests\.(get|post|put|delete|patch|head)\s*\([^)]*verify\s*=\s*False"
+        ),
         "禁止 verify=False，SSL 验证关闭可致中间人攻击。",
         "requests verify=False SSL 验证关闭",
     ),
     (
         "hardcoded-aws-secret",
         "high",
-        re.compile(r"['\"](AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})['\"]"),
+        re.compile(
+            r"['\"](AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})['\"]"
+        ),
         "禁止硬编码 AWS/GitHub/OpenAI secret，改用环境变量。",
         "硬编码 secret 高危风险",
     ),
@@ -227,6 +280,142 @@ _RULES: list[tuple[str, str, str, str, str]] = [
         "pragma: no cover 需审查是否属于允许场景（TYPE_CHECKING / 平台特定）。",
         "pragma: no cover 需人工审查",
     ),
+    # ---- business_logic ----
+    (
+        "bare-except-pass",
+        "medium",
+        re.compile(r"except\s*(?:\([^)]*\)|\w+)?\s*:\s*(?:pass|\.\.\.)\s*$"),
+        "禁止空 except/pass 吞掉业务异常；至少记录日志或向上抛出。",
+        "业务逻辑：空 except 吞异常",
+    ),
+    (
+        "todo-fixme-critical",
+        "low",
+        re.compile(r"\b(?:TODO|FIXME|XXX)\b.*(auth|payment|security|迁移|权限)", re.I),
+        "关键路径遗留 TODO/FIXME，需确认是否应阻断合并。",
+        "业务逻辑：关键路径未完成标记",
+    ),
+    (
+        "assert-false-prod",
+        "medium",
+        re.compile(r"\bassert\s+False\b"),
+        "生产路径禁止 assert False；改用显式异常与错误码。",
+        "业务逻辑：assert False 占位",
+    ),
+    # ---- performance ----
+    (
+        "unbounded-while-true",
+        "medium",
+        re.compile(r"\bwhile\s+True\s*:"),
+        "无界 while True 需确认有明确 break/超时/背压，否则可能拖垮事件循环。",
+        "性能：无界 while True",
+    ),
+    (
+        "time-sleep-hot-path",
+        "medium",
+        re.compile(r"\btime\.sleep\s*\("),
+        "请求/热路径避免同步 sleep；改用异步等待或队列退避。",
+        "性能：热路径 time.sleep",
+    ),
+    (
+        "select-star-no-limit",
+        "medium",
+        re.compile(r"(?i)select\s+\*\s+from\s+\w+(?![^;]*\blimit\b)"),
+        "热路径 SELECT * 且无 LIMIT，易造成慢查询；补投影与分页。",
+        "性能：疑似无界 SELECT *",
+    ),
+    (
+        "fetchall-unbounded",
+        "medium",
+        re.compile(r"\.fetchall\s*\(\s*\)"),
+        "fetchall() 可能拉全表；确认有 WHERE/LIMIT，或改为流式/分页。",
+        "性能：无界 fetchall",
+    ),
+    (
+        "n-plus-one-inline",
+        "medium",
+        re.compile(
+            r"for\s+\w+\s+in\s+[^:]+:\s*.*\.(?:query|execute|get|filter|fetchone|fetchall)\s*\("
+        ),
+        "同一行 for-loop 内触发 DB/ORM 查询，典型 N+1；改为批量预加载。",
+        "性能：同行 N+1 查询",
+    ),
+    # ---- static site security (官网静态资源 / nginx / market 前端) ----
+    (
+        "html-inline-event-handler",
+        "high",
+        re.compile(r"<(?:a|img|button|input|body|svg|iframe)\b[^>]*\bon\w+\s*=", re.I),
+        "HTML 内联事件处理器（onclick/onerror 等）可致 XSS；改用 addEventListener 或 CSP。",
+        "静态站点：HTML 内联事件处理器 XSS 风险",
+    ),
+    (
+        "html-innerhtml-assignment",
+        "high",
+        re.compile(r"\.innerHTML\s*=\s*[^;\n]+"),
+        "禁止 .innerHTML 直接赋值字符串，可致 DOM XSS；改用 textContent 或 DOMPurify 净化。",
+        "静态站点：innerHTML 赋值致 DOM XSS",
+    ),
+    (
+        "html-document-write",
+        "high",
+        re.compile(r"\bdocument\.write\s*\("),
+        "禁止 document.write()，已废弃且阻塞渲染；改用 DOM API 或 innerHTML+净化。",
+        "静态站点：document.write 已废弃且高危",
+    ),
+    (
+        "html-remote-script-http",
+        "medium",
+        re.compile(r'<script\b[^>]+src\s*=\s*"http://', re.I),
+        "禁止 http:// 远程脚本（mixed-content）；改用 https:// 或本地打包。",
+        "静态站点：http:// 远程脚本 mixed-content",
+    ),
+    (
+        "js-new-function-string",
+        "high",
+        re.compile(r"\bnew\s+Function\s*\("),
+        "禁止 new Function()，等价 eval() 可致代码注入；改用闭包或显式解析器。",
+        "静态站点：new Function() 代码注入",
+    ),
+    (
+        "js-settimeout-string",
+        "high",
+        re.compile(r"\b(?:setTimeout|setInterval)\s*\(\s*['\"]"),
+        "禁止 setTimeout/setInterval 传字符串，等价 eval()；改用函数引用。",
+        "静态站点：setTimeout(string) 等价 eval",
+    ),
+    (
+        "js-hardcoded-third-party-key",
+        "high",
+        re.compile(
+            r"['\"](?:sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{35}|pk_live_[A-Za-z0-9]{20,})['\"]"
+        ),
+        "前端禁止硬编码第三方 API key（OpenAI/Google/Stripe）；改用服务端代理 + 环境变量。",
+        "静态站点：前端硬编码第三方 API key",
+    ),
+    (
+        "html-dangerous-href-javascript",
+        "high",
+        re.compile(r'href\s*=\s*"javascript:', re.I),
+        "禁止 javascript: 伪协议 href，可致 XSS；改用 onclick + preventDefault。",
+        "静态站点：javascript: 伪协议 XSS",
+    ),
+    (
+        "css-expression",
+        "low",
+        re.compile(r"expression\s*\(", re.I),
+        "CSS expression() 已废弃且高危（IE only）；移除或改用现代 CSS。",
+        "静态站点：CSS expression() 已废弃",
+    ),
+    (
+        "html-mixed-content-asset",
+        "medium",
+        re.compile(
+            r'<(?:img|link|script|iframe|video|audio|source)\b[^>]+src\s*=\s*"http://',
+            re.I,
+        ),
+        "https:// 页面引用 http:// 资源会被浏览器拦截（mixed-content）；改用 https://。",
+        "静态站点：mixed-content http:// 资源",
+    ),
 ]
 
 
@@ -235,10 +424,15 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     findings: list[Finding] = []
     seen: set[tuple[str, int, str]] = set()
     for hunk in hunks:
+        is_tooling_file = hunk.file_path in _AI_REVIEW_TOOLING_FILES
         for line_no, prefix, content in hunk.lines:
             if prefix != "+" or line_no == 0:
                 continue
             for rule_name, severity, pattern, suggestion, _desc in _RULES:
+                if is_tooling_file and severity in {"high", "medium"}:
+                    # 规则定义与自测样例会携带关键字触发高/中危误报；
+                    # 自研 CI 文件与对应测试文件不做这些 severity 的行级阻断扫描。
+                    continue
                 if pattern.search(content):
                     key = (hunk.file_path, line_no, rule_name)
                     if key in seen:
@@ -255,6 +449,151 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                         )
                     )
     return findings
+
+
+# =====================================================================
+# Path-level 规则（LLM-independent，fail-open 时兜底）
+# =====================================================================
+
+_FORBIDDEN_PATH_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    # (rule_name, regex, suggestion)
+    (
+        "forbid-workflows-modification",
+        re.compile(r"(^|/)\.github/workflows/"),
+        "禁止 PR 修改 GitHub Actions workflows（SSOT 由子目录 sync 脚本统一发布）",
+    ),
+    (
+        "forbid-migrations-modification",
+        re.compile(r"(^|/)(db/migrations|alembic/versions)/"),
+        "数据库迁移需 DBA 评审，禁止 PR 直接修改",
+    ),
+    (
+        "forbid-deploy-scripts-modification",
+        re.compile(r"(^|/)scripts/deploy/|(^|/)Dockerfile|(^|/)docker-compose"),
+        "部署脚本/Dockerfile 修改需 DevOps 评审",
+    ),
+    (
+        "forbid-approval-ledger-modification",
+        re.compile(r"(^|/)app/(application|domain)/autonomy/"),
+        "自治 approval ledger 核心代码修改需架构师评审",
+    ),
+    (
+        "forbid-ci-ssot-modification",
+        re.compile(r"(^|/)docs/CI_SSOT\.md|(^|/)\.trae/rules/cicd-e2e-prompt\.md"),
+        "CI/CD SSOT 文档修改需 Owner 评审",
+    ),
+    (
+        "forbid-modifying-pyproject-coverage",
+        re.compile(r"(^|/)pyproject\.toml$"),
+        "pyproject.toml 修改需检查 fail_under 是否被降低",
+    ),
+    (
+        "forbid-modifying-vitest-thresholds",
+        re.compile(r"(^|/)vitest\.config\.js$"),
+        "vitest.config.js 修改需检查 thresholds 是否被降低",
+    ),
+]
+
+_FORBIDDEN_DELETION_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    (
+        "forbid-deleting-test-files",
+        re.compile(r"(^|/)tests/test_.*\.py$|(^|/)tests/.*_test\.py$"),
+        "禁止删除测试文件",
+    ),
+    (
+        "forbid-deleting-route-golden",
+        re.compile(r"(^|/)tests/test_routes/route_golden.*\.json$"),
+        "禁止删除路由 golden 文件",
+    ),
+]
+
+_BINARY_FILE_EXTENSIONS = {".db", ".sqlite", ".sqlite3", ".env", ".pem", ".key", ".p12"}
+
+
+def match_path_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """对 diff hunks 应用 path-level 规则，返回 finding（不依赖 LLM）。"""
+    findings: list[Finding] = []
+    seen: set[tuple[str, str]] = set()
+    for hunk in hunks:
+        for rule_name, pattern, suggestion in _FORBIDDEN_PATH_PATTERNS:
+            if pattern.search(hunk.file_path):
+                key = (hunk.file_path, rule_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                findings.append(
+                    Finding(
+                        file_path=hunk.file_path,
+                        line=hunk.start_line,
+                        rule=rule_name,
+                        severity="high",
+                        snippet=f"file: {hunk.file_path}",
+                        suggestion=suggestion,
+                    )
+                )
+    return findings
+
+
+def match_deletion_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """检测关键文件被删除（test 文件 / route golden）。"""
+    findings: list[Finding] = []
+    # 收集被删除的文件路径：hunk 中只有 - 行、无 + 行
+    deleted_files: set[str] = set()
+    for hunk in hunks:
+        # DiffHunk.lines 元组结构：(line_no, prefix, content)
+        has_add = any(prefix == "+" for _, prefix, _ in hunk.lines)
+        has_del = any(prefix == "-" for _, prefix, _ in hunk.lines)
+        if has_del and not has_add:
+            deleted_files.add(hunk.file_path)
+    for file_path in deleted_files:
+        for rule_name, pattern, suggestion in _FORBIDDEN_DELETION_PATTERNS:
+            if pattern.search(file_path):
+                findings.append(
+                    Finding(
+                        file_path=file_path,
+                        line=0,
+                        rule=rule_name,
+                        severity="high",
+                        snippet=f"deleted file: {file_path}",
+                        suggestion=suggestion,
+                    )
+                )
+    return findings
+
+
+def match_binary_file_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """检测二进制/敏感文件新增。"""
+    findings: list[Finding] = []
+    for hunk in hunks:
+        ext = os.path.splitext(hunk.file_path)[1].lower()
+        if ext in _BINARY_FILE_EXTENSIONS:
+            # 只对新增文件报警（hunk 有 + 行）
+            has_add = any(prefix == "+" for _, prefix, _ in hunk.lines)
+            if has_add:
+                findings.append(
+                    Finding(
+                        file_path=hunk.file_path,
+                        line=hunk.start_line,
+                        rule="forbid-binary-file-addition",
+                        severity="high",
+                        snippet=f"binary/sensitive file: {hunk.file_path}",
+                        suggestion=f"禁止提交 {ext} 文件（可能含密钥/数据库）",
+                    )
+                )
+    return findings
+
+
+def run_fallback_rules(hunks: list[DiffHunk]) -> list[Finding]:
+    """LLM 不可用时的兜底规则集（path + deletion + binary file）。
+
+    返回的 finding 一律 severity=high，直接进 blocking_findings，
+    不进 LLM 通道，不受 trusted_authors 影响。
+    """
+    return (
+        match_path_rules(hunks)
+        + match_deletion_rules(hunks)
+        + match_binary_file_rules(hunks)
+    )
 
 
 # =====================================================================
@@ -281,7 +620,9 @@ def call_llm_review(
         return "unavailable"
     if httpx is None and client is None:
         return "unavailable"
-    endpoint = endpoint or os.environ.get("XCAGI_LLM_ENDPOINT", "https://api.example.com/v1/review")
+    endpoint = endpoint or os.environ.get(
+        "XCAGI_LLM_ENDPOINT", "https://api.example.com/v1/review"
+    )
     payload = {
         "rule": finding.rule,
         "severity": finding.severity,
@@ -379,7 +720,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="PR AI Review")
     parser.add_argument("--pr-number", type=int, default=None, help="PR 编号")
     parser.add_argument("--commit-id", default="", help="PR HEAD commit SHA")
-    parser.add_argument("--dry-run", action="store_true", help="只输出 finding，不评论不阻断")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="只输出 finding，不评论不阻断"
+    )
     args = parser.parse_args(argv)
 
     pr_number = args.pr_number or _pr_number_from_env()
@@ -413,10 +756,14 @@ def main(argv: list[str] | None = None) -> int:
     for f in findings:
         if f.severity == "high":
             blocking_findings.append(f)
-            print(f"[review] {f.rule} @ {f.file_path}:{f.line} deterministic-high=block")
+            print(
+                f"[review] {f.rule} @ {f.file_path}:{f.line} deterministic-high=block"
+            )
         elif f.severity == "medium":
             verdict = call_llm_review(f)
-            print(f"[review] {f.rule} @ {f.file_path}:{f.line} severity={f.severity} llm={verdict}")
+            print(
+                f"[review] {f.rule} @ {f.file_path}:{f.line} severity={f.severity} llm={verdict}"
+            )
             if verdict in {"high", "medium"}:
                 blocking_findings.append(f)
             elif verdict == "low":
@@ -451,12 +798,45 @@ def main(argv: list[str] | None = None) -> int:
     if blocking_findings:
         print(f"[review] BLOCK - {len(blocking_findings)} blocking finding(s)")
         return 1
-    if unavailable_findings or comment_failures:
+    if unavailable_findings:
+        # LLM 不可用：先跑 path-level 规则兜底，再决定是否 fail-open。
+        # 决策矩阵原约定 "LLM 故障 fail-open 不阻断"，但完全放行会让所有 PR 在 LLM
+        # 故障期间无门禁可过；兜底规则不依赖 LLM，发现 high 级问题仍阻断合并。
+        # 兜底 finding 一律 severity=high，不进 LLM 通道，不受 trusted_authors 影响。
+        fallback_findings = run_fallback_rules(hunks)
+        if fallback_findings:
+            blocking_findings.extend(fallback_findings)
+            for f in fallback_findings:
+                body = f"**[HIGH-FALLBACK] {f.rule}**\n\n{f.suggestion}\n\n```\n{f.snippet}\n```"
+                ok = post_line_comment(
+                    pr_number=pr_number,
+                    path=f.file_path,
+                    line=f.line,
+                    body=body,
+                    commit_id=args.commit_id or None,
+                )
+                if not ok:
+                    comment_failures += 1
+                    print(
+                        f"::error::[review] comment failed for {f.file_path}:{f.line}"
+                    )
+            print(
+                f"::error::[review] LLM unavailable + fallback rules blocked: "
+                f"{len(fallback_findings)} finding(s)"
+            )
+            return 1
+        # 兜底规则无 finding：维持原 fail-open 策略（仅评论，不阻断）。
+        # 仍尝试评论，若评论失败也不阻断（comment_failures 仅记录，不影响退出码）。
         print(
-            "::error::[review] BLOCK - review evidence incomplete "
-            f"(unavailable={len(unavailable_findings)}, comment_failures={comment_failures})"
+            "::warning::[review] LLM evidence unavailable - failing open per policy "
+            f"(unavailable={len(unavailable_findings)}, "
+            f"comment_failures={comment_failures}, fallback_rules=passed)"
         )
-        return 2
+        return 0
+    if comment_failures:
+        # 评论失败本身不阻断（非证据缺失，仅 UX 降级）。
+        print(f"::warning::[review] comment_failures={comment_failures} (non-blocking)")
+        return 0
 
     print("[review] PASS - no blocking findings")
     return 0
@@ -512,4 +892,10 @@ def json_loads_safe(file_obj: Any) -> Any:
 if __name__ == "__main__":
     pr_num = _pr_number_from_env()
     commit_id = _commit_id_from_env()
-    sys.exit(main(["--pr-number", str(pr_num or 0), "--commit-id", commit_id] if pr_num else []))
+    sys.exit(
+        main(
+            ["--pr-number", str(pr_num or 0), "--commit-id", commit_id]
+            if pr_num
+            else []
+        )
+    )

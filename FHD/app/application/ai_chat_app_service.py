@@ -27,19 +27,11 @@ from typing import Any
 
 import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
 
-from app.application.workflow import (
-    HybridRiskGate,
-    LLMWorkflowPlanner,
-    WorkflowEngine,
-    get_approval_service,
-)
 from app.di.registry import get_service_registry
-from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
-
 
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
 from app.application.ai_chat.excel_import_policy import (
@@ -51,6 +43,56 @@ from app.application.ai_chat.excel_import_policy import (
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+
+def _import_workflow_components():
+    from app.application.workflow import (
+        HybridRiskGate,
+        LLMWorkflowPlanner,
+        WorkflowEngine,
+        get_approval_service,
+    )
+
+    return HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service
+
+
+def _import_ai_conversation_service():
+    from app.services import get_ai_conversation_service as _get
+
+    return _get
+
+
+def get_ai_conversation_service():
+    """Lazy re-export so unit tests can patch this module attribute."""
+    return _import_ai_conversation_service()()
+
+
+# 单测通过 ``patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")`` 等方式
+# 替换工作流组件；这些符号不能在模块顶层 ``from app.application.workflow import``，
+# 否则会重新引入与 ``app.application.workflow.planner`` 的循环 import（见 commit
+# ed1f6e7e0）。PEP 562 模块级 ``__getattr__`` 在属性未在 ``__dict__`` 时才触发，
+# 既能让 ``mock.patch`` 取到原始值，又不会在 import 期触发循环。
+_LAZY_WORKFLOW_RE_EXPORTS = (
+    "HybridRiskGate",
+    "LLMWorkflowPlanner",
+    "WorkflowEngine",
+    "get_approval_service",
+)
+
+
+def __getattr__(name: str):
+    if name in _LAZY_WORKFLOW_RE_EXPORTS:
+        HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service = (
+            _import_workflow_components()
+        )
+        globals().update(
+            HybridRiskGate=HybridRiskGate,
+            LLMWorkflowPlanner=LLMWorkflowPlanner,
+            WorkflowEngine=WorkflowEngine,
+            get_approval_service=get_approval_service,
+        )
+        return globals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class AIChatApplicationService(
@@ -68,11 +110,19 @@ class AIChatApplicationService(
     """
 
     def __init__(self):
+        # PEP 562 模块级 ``__getattr__`` 仅在 ``module.attr`` 访问时触发，不在
+        # 普通名字查找时触发；通过 ``_self`` 显式走属性访问，既能让
+        # ``mock.patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")``
+        # 替换的 MagicMock 生效，也能在无 mock 时触发 lazy 解析并缓存到
+        # ``__dict__``，避免 ``NameError``。
+        import sys as _sys
+
+        _self = _sys.modules[__name__]
         self.ai_service = get_ai_conversation_service()
-        self.workflow_planner = LLMWorkflowPlanner()
-        self.risk_gate = HybridRiskGate()
-        self.workflow_engine = WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)
-        self.approval_service = get_approval_service()
+        self.workflow_planner = _self.LLMWorkflowPlanner()
+        self.risk_gate = _self.HybridRiskGate()
+        self.workflow_engine = _self.WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)
+        self.approval_service = _self.get_approval_service()
         self._pending_workflows: dict[str, dict[str, Any]] = {}
 
     @staticmethod
