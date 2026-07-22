@@ -54,6 +54,8 @@ if ! grep -q 'MODSTORE_LLM_ENV_BLOCK_v1' "$ENV_CANON"; then
   {
     echo ""
     echo "# MODSTORE_LLM_ENV_BLOCK_v1 — 平台 LLM：到各厂商控制台创建密钥后取消注释并填值，然后: systemctl restart modstore"
+    echo "# MINIMAX_TOKEN_PLAN_API_KEY="
+    echo "# MINIMAX_CODING_PLAN_API_KEY="
     echo "# MINIMAX_API_KEY="
     echo "# MINIMAX_BASE_URL=https://api.minimaxi.com"
     echo "# OPENAI_API_KEY="

@@ -91,7 +91,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         "openrouter": "openai/gpt-3.5-turbo",
         "dashscope": "qwen-plus",
         "moonshot": "moonshot-v1-8k",
-        "minimax": "MiniMax-Text-01",
+        "minimax": "MiniMax-M2.7",
         "doubao": "ep-20250515143000-l6zqx",  # 示例endpoint
         "wenxin": "ernie-speed-128k",
         "hunyuan": "hunyuan-lite",
@@ -127,7 +127,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         "openrouter": ["OPENROUTER_API_KEY"],
         "dashscope": ["DASHSCOPE_API_KEY"],
         "moonshot": ["MOONSHOT_API_KEY"],
-        "minimax": ["MINIMAX_API_KEY"],
+        "minimax": [
+            "MINIMAX_TOKEN_PLAN_API_KEY",
+            "MINIMAX_CODING_PLAN_API_KEY",
+            "MINIMAX_API_KEY",
+        ],
         "doubao": ["DOUBAO_API_KEY", "ARK_API_KEY"],
         "wenxin": ["WENXIN_API_KEY", "QIANFAN_API_KEY", "BAIDU_QIANFAN_API_KEY"],
         "hunyuan": ["HUNYUAN_API_KEY", "TENCENT_HUNYUAN_API_KEY"],
@@ -181,6 +185,8 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         for env_name in env_names:
             key = os.environ.get(env_name, "").strip()
             if key:
+                if provider == "minimax" and key.lower().startswith("minimaxsk-cp-"):
+                    key = key[len("minimax") :]
                 logger.debug("从环境变量 %s 读取到API Key", env_name)
                 return key
 

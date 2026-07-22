@@ -70,7 +70,8 @@ async def catalog_model_ids(session: Session, user_id: int, provider: str) -> Se
     if provider not in KNOWN_PROVIDERS:
         return set()
     block = await get_models_for_provider(session, user_id, provider, force_refresh=False)
-    return {str(x).strip() for x in (block.get("models") or []) if str(x).strip()}
+    models = block.get("runtime_models") or block.get("models") or []
+    return {str(x).strip() for x in models if str(x).strip()}
 
 
 def _get_priced_row(session: Session, provider: str, model: str) -> Optional[AiModelPrice]:
@@ -79,7 +80,7 @@ def _get_priced_row(session: Session, provider: str, model: str) -> Optional[AiM
         .filter(
             AiModelPrice.provider == provider,
             AiModelPrice.model == model,
-            AiModelPrice.enabled == True,
+            AiModelPrice.enabled.is_(True),
         )
         .first()
     )

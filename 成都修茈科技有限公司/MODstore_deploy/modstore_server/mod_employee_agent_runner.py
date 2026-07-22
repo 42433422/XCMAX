@@ -54,10 +54,35 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _bounded_env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    try:
+        value = int(str(os.environ.get(name) or default).strip())
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def _default_max_rounds() -> int:
+    return _bounded_env_int("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10)
+
+
+def _llm_timeout_seconds() -> float:
+    return float(
+        _bounded_env_int(
+            "MODSTORE_EMPLOYEE_AGENT_LLM_TIMEOUT_SECONDS",
+            45,
+            minimum=10,
+            maximum=120,
+        )
+    )
+
 
 # ── Protocol constants ────────────────────────────────────────────────────────
 
@@ -100,6 +125,57 @@ TOOL_PROTOCOL_HEADER = """你是一个能执行真实工作的 AI 员工。
 RESEARCH_TOOLS_APPEND = """
   internet_search          params: query(str), max_results(int, 可选默认 8)             — 联网检索摘要（受服务器每日配额限制）
   github_repo_snapshot     params: owner(str), repo(str)                               — GitHub 公开仓库元数据与 README 摘录
+"""
+
+LLM_OPS_TOOLS_APPEND = """
+
+【LLM 运维工程师专属工具】
+  list_platform_llm_models params: provider(str, 可选), refresh(bool, 默认 false)          — 查询平台统一模型与动态能力目录
+  list_llm_cli_status      params: live_probe(bool, 默认 false)                            — 检查 Codex/Cursor/Claude/Trae CLI 安装与真实可用性
+  list_available_ai_routes params: refresh(bool), live_cli_probe(bool), live_quota_probe(bool)    — 合并平台模型、额度与 CLI 兜底路由
+  get_platform_llm_quota params: live_probe(bool, 默认 false)                             — 查询真实额度、24h 用量与可信度分级
+  get_platform_llm_route   params: {}                                                   — 查询当前平台 AI 员工运行时路由
+  get_llm_route_autopilot  params: {}                                                   — 查询后台主动巡检最近一次决策
+  run_llm_route_autopilot  params: reason(str, 可选)                                    — 立即执行额度+健康巡检，必要时自动切换并验证/回滚
+  switch_platform_llm_route params: provider(str), model(str), reason(str)              — 探活后立即切换下一次平台 AI 员工调用
+  rollback_platform_llm_route params: reason(str, 可选)                            — 探活后回滚到上一个运行时路由
+
+切换约束：只能选择平台模型目录中存在、已配置平台密钥且探活成功的模型；
+禁止传入 force 绕过目录或健康检查。所有切换都写入审计历史。
+模型选型：先检查 models_detailed[].capabilities，按 input_modalities、
+output_modalities 和 operations 匹配任务。capability_source=provider_metadata 最可靠；
+hybrid/model_id_inference 包含规则推断，对 TTS、视频等非对话能力不得当成员工主聊天路由切换。
+CLI 兜底只在平台 API 调用失败时启用，按 Codex、Claude、Cursor、Trae 顺序尝试；
+它们在隔离临时目录中以只读/无 YOLO 方式运行，不传递平台 API key。
+后台自动驾驶仅在生产显式开启时每 5 分钟检查当前路由；普通 429 只记录不切换，
+连续 3 次真实错误且路由已驻留 15 分钟才允许切换，精确额度耗尽可立即切换。
+所有切换使用 revision 比较交换，管理员并发操作优先；精确额度优先，其次真实调用探测，再其次本地用量账本。
+额度未知必须标为 unknown/usage_only，不得推断为充足。
+"""
+
+_READ_ONLY_AGENT_TOOLS = frozenset(
+    {
+        "read_workspace_file",
+        "list_workspace_dir",
+        "scan_project_tree",
+        "identify_file_types",
+        "analyze_project_summary",
+        "call_llm",
+        "list_platform_llm_models",
+        "list_llm_cli_status",
+        "list_available_ai_routes",
+        "get_platform_llm_quota",
+        "get_platform_llm_route",
+        "get_llm_route_autopilot",
+    }
+)
+
+_READ_ONLY_PROTOCOL_APPEND = """
+
+【只读运行模式】
+本次运行不允许任何写入、命令执行、网络请求或对外消息。
+只能使用工作区读取/列表/扫描/摘要工具完成真实巡检；不得尝试 write_workspace_file、
+run_sandboxed_python、http_get、http_post、internet_search 或 github_repo_snapshot。
 """
 
 # ── Tool implementations ──────────────────────────────────────────────────────
@@ -297,7 +373,7 @@ async def tool_run_sandboxed_python(code: str, *, timeout: float = 10.0) -> Dict
         return {"ok": False, "error": "代码包含不允许的操作（网络/文件/exec/eval）"}
     try:
         proc = subprocess.run(
-            ["python", "-c", code],
+            [sys.executable, "-c", code],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -312,7 +388,7 @@ async def tool_run_sandboxed_python(code: str, *, timeout: float = 10.0) -> Dict
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"执行超时（{timeout:.0f}s）"}
     except FileNotFoundError:
-        return {"ok": False, "error": "python 不在 PATH 中"}
+        return {"ok": False, "error": "Python 运行时不可用"}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -515,6 +591,10 @@ class EmployeeAgentRunner:
         protocol = TOOL_PROTOCOL_HEADER.format(max_rounds=self.max_rounds)
         if self.ctx.get("research_tools_enabled"):
             protocol = protocol.rstrip() + RESEARCH_TOOLS_APPEND
+        if str(self.ctx.get("employee_id") or "").strip() == "llm-ops-engineer":
+            protocol = protocol.rstrip() + LLM_OPS_TOOLS_APPEND
+        if self.ctx.get("read_only"):
+            protocol = protocol.rstrip() + _READ_ONLY_PROTOCOL_APPEND
         messages: List[Dict[str, str]] = []
 
         if system_prompt:
@@ -623,6 +703,134 @@ class EmployeeAgentRunner:
 
     async def _dispatch_tool(self, name: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
+            if self.ctx.get("read_only") and name not in _READ_ONLY_AGENT_TOOLS:
+                return {
+                    "ok": False,
+                    "blocked": True,
+                    "error": f"只读运行模式禁止工具：{name or '?'}",
+                }
+            employee_id = str(self.ctx.get("employee_id") or "").strip()
+            llm_ops_tools = {
+                "list_platform_llm_models",
+                "list_llm_cli_status",
+                "list_available_ai_routes",
+                "get_platform_llm_quota",
+                "get_platform_llm_route",
+                "get_llm_route_autopilot",
+                "run_llm_route_autopilot",
+                "switch_platform_llm_route",
+                "rollback_platform_llm_route",
+            }
+            if name in llm_ops_tools and employee_id != "llm-ops-engineer":
+                return {
+                    "ok": False,
+                    "error": f"员工 {employee_id or '?'} 无权使用 {name}",
+                }
+
+            if name == "list_platform_llm_models":
+                from modstore_server.llm_runtime_route import platform_model_catalog
+
+                return await platform_model_catalog(
+                    str(input_data.get("provider") or "") or None,
+                    refresh=bool(input_data.get("refresh", False))
+                    and not bool(self.ctx.get("read_only")),
+                )
+
+            if name == "list_llm_cli_status":
+                from modstore_server.llm_cli_fallback import cli_status_catalog
+
+                return await cli_status_catalog(
+                    live_probe=bool(input_data.get("live_probe", False))
+                    and not bool(self.ctx.get("read_only"))
+                )
+
+            if name == "list_available_ai_routes":
+                from modstore_server.llm_cli_fallback import cli_status_catalog
+                from modstore_server.llm_quota_monitor import platform_quota_snapshot
+                from modstore_server.llm_runtime_route import platform_model_catalog
+
+                platform, cli = await asyncio.gather(
+                    platform_model_catalog(
+                        refresh=bool(input_data.get("refresh", False))
+                        and not bool(self.ctx.get("read_only"))
+                    ),
+                    cli_status_catalog(
+                        live_probe=bool(input_data.get("live_cli_probe", False))
+                        and not bool(self.ctx.get("read_only"))
+                    ),
+                )
+                quota = await platform_quota_snapshot(
+                    live_probe=bool(input_data.get("live_quota_probe", False))
+                    and not bool(self.ctx.get("read_only")),
+                    catalog=platform,
+                )
+                return {
+                    "ok": bool(platform.get("ok") and cli.get("ok") and quota.get("ok")),
+                    "platform": platform,
+                    "quota": quota,
+                    "cli_fallback": cli,
+                    "policy": "platform_api_first_then_local_cli",
+                }
+
+            if name == "get_platform_llm_route":
+                from modstore_server.llm_runtime_route import (
+                    read_runtime_route_state,
+                    rollback_target,
+                )
+                from modstore_server.services.llm import resolve_platform_bench_llm
+
+                provider, model = resolve_platform_bench_llm()
+                return {
+                    "ok": True,
+                    "scope": "platform_ai_employees",
+                    "state": read_runtime_route_state(),
+                    "effective": {"provider": provider, "model": model},
+                    "rollback": rollback_target(),
+                }
+
+            if name == "get_platform_llm_quota":
+                from modstore_server.llm_quota_monitor import platform_quota_snapshot
+
+                return await platform_quota_snapshot(
+                    live_probe=bool(input_data.get("live_probe", False))
+                    and not bool(self.ctx.get("read_only"))
+                )
+
+            if name == "get_llm_route_autopilot":
+                from modstore_server.llm_runtime_autopilot import autopilot_status
+
+                return autopilot_status()
+
+            if name == "run_llm_route_autopilot":
+                from modstore_server.llm_runtime_autopilot import (
+                    reconcile_llm_route_autopilot,
+                )
+
+                return await reconcile_llm_route_autopilot(
+                    triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),
+                    force=False,
+                )
+
+            if name == "switch_platform_llm_route":
+                from modstore_server.llm_runtime_route import switch_runtime_route
+
+                return await switch_runtime_route(
+                    str(input_data.get("provider") or ""),
+                    str(input_data.get("model") or ""),
+                    actor="employee:llm-ops-engineer",
+                    reason=str(input_data.get("reason") or "active model switch"),
+                    refresh_catalog=bool(input_data.get("refresh", False)),
+                    force=False,
+                )
+
+            if name == "rollback_platform_llm_route":
+                from modstore_server.llm_runtime_route import rollback_runtime_route
+
+                return await rollback_runtime_route(
+                    actor="employee:llm-ops-engineer",
+                    reason=str(input_data.get("reason") or "employee requested rollback"),
+                    force=False,
+                )
             wr = self.workspace_root
             if name == "read_workspace_file":
                 path = str(input_data.get("path") or "")
@@ -714,16 +922,46 @@ class EmployeeAgentRunner:
     ) -> Dict[str, Any]:
         fn = self.ctx.get("call_llm")
         if not callable(fn):
-            return {"ok": False, "content": "", "error": "ctx.call_llm 未注入"}
+            primary = {"ok": False, "content": "", "error": "ctx.call_llm 未注入"}
+            return await self._maybe_cli_fallback(messages, primary)
         try:
-            return await asyncio.wait_for(
+            primary = await asyncio.wait_for(
                 fn(messages, max_tokens=max_tokens, temperature=temperature),
-                timeout=120.0,
+                timeout=_llm_timeout_seconds(),
             )
+            if primary.get("ok"):
+                return primary
+            return await self._maybe_cli_fallback(messages, primary)
         except asyncio.TimeoutError:
-            return {"ok": False, "content": "", "error": "LLM 调用超时（120s）"}
+            timeout_s = int(_llm_timeout_seconds())
+            primary = {
+                "ok": False,
+                "content": "",
+                "error": f"LLM 调用超时（{timeout_s}s）",
+            }
+            return await self._maybe_cli_fallback(messages, primary)
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "content": "", "error": str(exc)[:300]}
+            primary = {"ok": False, "content": "", "error": str(exc)[:300]}
+            return await self._maybe_cli_fallback(messages, primary)
+
+    async def _maybe_cli_fallback(
+        self,
+        messages: List[Dict[str, str]],
+        primary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        employee_id = str(self.ctx.get("employee_id") or "").strip()
+        if employee_id != "llm-ops-engineer" or not bool(
+            self.ctx.get("cli_fallback_enabled", False)
+        ):
+            return primary
+        from modstore_server.llm_cli_fallback import chat_via_cli_fallback
+
+        fallback = await chat_via_cli_fallback(
+            messages,
+            timeout=min(180.0, max(30.0, _llm_timeout_seconds())),
+        )
+        fallback["primary_error"] = str(primary.get("error") or "upstream_failed")[:300]
+        return fallback
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -732,6 +970,10 @@ class EmployeeAgentRunner:
 def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
     """Lenient JSON parser: strip fences and try multiple extract strategies."""
     t = (text or "").strip()
+    # Reasoning models may wrap hidden analysis before the protocol object.
+    # Strip complete think blocks so braces or examples inside them cannot
+    # swallow the actual ReAct tool call.
+    t = re.sub(r"<think\b[^>]*>.*?</think>", "", t, flags=re.I | re.S).strip()
     # Strip markdown fences
     if t.startswith("```"):
         t = re.sub(r"^```(?:json)?\s*", "", t, flags=re.I)
@@ -742,15 +984,24 @@ def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
         return data if isinstance(data, dict) else None
     except (json.JSONDecodeError, ValueError):
         pass
-    # Try to extract first { ... } block
-    i = t.find("{")
-    j = t.rfind("}")
-    if 0 <= i < j:
+    # Scan every object start instead of combining the first ``{`` with the
+    # last ``}``.  Prefer ReAct protocol objects (tool/answer), then the last
+    # structured result object.
+    decoder = json.JSONDecoder()
+    candidates: List[tuple[int, int, Dict[str, Any]]] = []
+    for index, char in enumerate(t):
+        if char != "{":
+            continue
         try:
-            data = json.loads(t[i : j + 1])
-            return data if isinstance(data, dict) else None
+            data, _end = decoder.raw_decode(t[index:])
         except (json.JSONDecodeError, ValueError):
-            pass
+            continue
+        if not isinstance(data, dict):
+            continue
+        score = 4 if "tool" in data else 4 if "answer" in data else 2 if "status" in data else 1
+        candidates.append((score, index, data))
+    if candidates:
+        return max(candidates, key=lambda item: (item[0], item[1]))[2]
     return None
 
 
