@@ -475,6 +475,7 @@ if [[ "$REPO_CHANGED" != true ]]; then
   sync_market_public_assets
   sync_corp_pages_to_dist_fallback
   sync_corp_butler_assets
+  publish_site_static_to_live
   ensure_market_dist || true
   validate_market_dist_identity || true
   log "XCMAX 无新提交，已检查 public→dist / corp-butler / market/dist"
@@ -519,6 +520,9 @@ fi
 sync_market_public_assets
 sync_corp_pages_to_dist_fallback
 sync_corp_butler_assets
+# corp-butler is built into the Git worktree; publish it after the build so
+# nginx's immutable live root never keeps a stale bundle.
+publish_site_static_to_live
 ensure_market_dist || true
 validate_market_dist_identity || true
 
