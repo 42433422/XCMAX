@@ -251,9 +251,11 @@ sync_site_static() {
     log "官网静态无变更"
     return 0
   fi
+  # 注意：download-action-board.json / download-company-hall.json 由运行时 DB 投影写出，
+  # 不要从 git 快照覆盖 live，否则官网会冻在旧业务日。
   local paths=(
     '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'visualization.js' 'world-will.js'
-    'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.json' 'download-action-board.js' 'download-company-hall.json'
+    'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.js'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
   for p in "${paths[@]}"; do
@@ -293,8 +295,7 @@ publish_site_static_to_live() {
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
            "$git_site"/visualization.js "$git_site"/world-will.js \
            "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json \
-           "$git_site"/download-action-board.json "$git_site"/download-action-board.js \
-           "$git_site"/download-company-hall.json; do
+           "$git_site"/download-action-board.js; do
     [[ -e "$f" ]] || continue
     base="$(basename "$f")"
     chmod u+w "$live_site/$base" 2>/dev/null || true
