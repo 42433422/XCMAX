@@ -1,7 +1,7 @@
 {
   "id": "hex-quality-assessor",
   "name": "六维质检员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "对制作车间产物执行六维质量评估与放行建议",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "hex-quality-assessor",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "六维质检员工",
       "description": "对制作车间产物执行六维质量评估与放行建议",
@@ -79,10 +79,23 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo"
-      ]
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "hex_quality_assessor",
+        "action": "assess_quality",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["assessment"], "properties": {"assessment": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "overall_score", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "assessment": {
+            "scores": {"purpose": 90, "input": 90, "action": 90, "evidence": 90, "safety": 95, "operability": 90},
+            "evidence": ["purpose contract", "input schema", "action handler", "receipt schema", "risk gate", "runtime test"]
+          }
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_prohibited_semantics_fixture": true}
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

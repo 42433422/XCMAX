@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
@@ -70,4 +71,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findByOrderKindAndFulfilledTrueAndStatus(String orderKind, String status);
 
     List<Order> findByStatusAndCreatedAtBefore(String status, java.time.LocalDateTime before);
+
+    @Query("SELECT o FROM Order o WHERE o.status = 'paid' AND o.paidAt >= :since "
+            + "ORDER BY o.paidAt DESC, o.id DESC")
+    List<Order> findPaidValueEvidenceSince(
+            @Param("since") LocalDateTime since,
+            Pageable pageable
+    );
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status = 'paid' AND o.paidAt >= :since")
+    long countPaidValueEvidenceSince(@Param("since") LocalDateTime since);
 }

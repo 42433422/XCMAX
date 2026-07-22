@@ -158,6 +158,39 @@ public class OrderService {
         return orderRepository.countVisibleByUserAndOptionalStatus(user, status);
     }
 
+    @Transactional(readOnly = true)
+    public List<Order> findPaidValueEvidenceSince(
+            LocalDateTime since,
+            int limit,
+            int offset
+    ) {
+        int pageSize = Math.max(1, Math.min(limit, 1000));
+        int page = Math.max(offset, 0) / pageSize;
+        return orderRepository.findPaidValueEvidenceSince(
+                since,
+                PageRequest.of(page, pageSize)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public long countPaidValueEvidenceSince(LocalDateTime since) {
+        return orderRepository.countPaidValueEvidenceSince(since);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getCustomerValueFulfillmentEvidence(Order order) {
+        if (order == null || !order.isFulfilled()) {
+            return Map.of("verified", false, "reason", "order_not_fulfilled");
+        }
+        if (!"item".equalsIgnoreCase(order.getOrderKind()) || order.getItemId() == null) {
+            return Map.of("verified", false, "reason", "non_catalog_order");
+        }
+        return entitlementService.catalogFulfillmentEvidence(
+                order.getOutTradeNo(),
+                order.getItemId()
+        );
+    }
+
     /** 将非「待支付/已支付/退款中」的订单从列表中隐藏（不删数据）。 */
     @Transactional
     public int dismissNonActiveOrdersForUser(User user) {

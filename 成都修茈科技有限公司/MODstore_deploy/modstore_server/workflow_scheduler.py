@@ -8,6 +8,7 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -93,11 +94,20 @@ def _run_tracked_scheduler_job(job_id: str, fn: Callable[[], Any]) -> Any:
         return fn()
 
 
+def _require_customer_value_source_ready(result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("source_ready") is not True:
+        owner = str(result.get("source_owner") or "unavailable")
+        raise RuntimeError(f"customer_value_source_unready:{owner}")
+    return result
+
+
 def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> None:
     if not emitted or not _env_bool("MODSTORE_SELF_MAINTENANCE_EVENT_TRIGGER_ENABLED", True):
         return
     try:
-        from modstore_server.self_maintenance_loop_runner import run_self_maintenance_loop
+        from modstore_server.self_maintenance_loop_runner import (
+            run_self_maintenance_loop,
+        )
 
         result = run_self_maintenance_loop(
             triggered_by="incident_event",
@@ -146,7 +156,9 @@ def start_scheduler() -> None:
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     try:
-        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
+        from modstore_server.backup_event_subscriber import (
+            register_backup_event_subscribers,
+        )
 
         register_backup_event_subscribers()
     except Exception:
@@ -177,6 +189,91 @@ def start_scheduler() -> None:
         max_instances=1,
     )
     _scheduler_heartbeat_job()
+
+    def _dead_letter_reconcile_job() -> None:
+        try:
+            from modstore_server.dead_letter_reconciler import reconcile_dead_letters
+
+            result = _run_tracked_scheduler_job(
+                "dead_letter_reconciler",
+                lambda: reconcile_dead_letters(limit=200),
+            )
+            if result.get("checked") or result.get("unresolved_count"):
+                logger.info(
+                    "dead-letter reconciliation checked=%s replay=%s quarantined=%s "
+                    "deferred=%s unresolved=%s storage_ok=%s",
+                    result.get("checked"),
+                    result.get("replay_scheduled"),
+                    result.get("quarantined"),
+                    result.get("deferred"),
+                    result.get("unresolved_count"),
+                    bool((result.get("storage") or {}).get("ok")),
+                )
+        except Exception:
+            logger.exception("dead-letter reconciliation failed")
+
+    _scheduler.add_job(
+        _dead_letter_reconcile_job,
+        IntervalTrigger(minutes=max(1, _env_int("MODSTORE_DLQ_RECONCILE_MINUTES", 5))),
+        id="dead_letter_reconciler",
+        replace_existing=True,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
+        coalesce=True,
+        max_instances=1,
+    )
+    _dead_letter_reconcile_job()
+
+    def _customer_value_reconcile_job() -> None:
+        if not _env_bool("MODSTORE_CUSTOMER_VALUE_RECONCILE_ENABLED", True):
+            return
+        try:
+            from modstore_server.customer_value_reconciler import (
+                reconcile_paid_customer_value,
+            )
+
+            result = _run_tracked_scheduler_job(
+                "customer_value_reconciler",
+                lambda: reconcile_paid_customer_value(
+                    window_days=max(
+                        1,
+                        min(
+                            _env_int("MODSTORE_CUSTOMER_VALUE_WINDOW_DAYS", 90),
+                            3650,
+                        ),
+                    )
+                ),
+            )
+            _require_customer_value_source_ready(result)
+            if result.get("created") or not result.get("source_ready"):
+                logger.info(
+                    "customer-value reconciliation source=%s ready=%s checked=%s "
+                    "created=%s existing=%s skipped=%s",
+                    result.get("source_owner"),
+                    result.get("source_ready"),
+                    result.get("checked"),
+                    result.get("created"),
+                    result.get("existing"),
+                    result.get("skipped"),
+                )
+        except Exception:
+            logger.exception("customer-value reconciliation failed")
+            raise
+
+    _scheduler.add_job(
+        _customer_value_reconcile_job,
+        IntervalTrigger(
+            minutes=max(
+                1,
+                _env_int("MODSTORE_CUSTOMER_VALUE_RECONCILE_MINUTES", 15),
+            )
+        ),
+        id="customer_value_reconciler",
+        replace_existing=True,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
+        coalesce=True,
+        max_instances=1,
+    )
+    _customer_value_reconcile_job()
 
     def _close_stale_orders() -> None:
         try:
@@ -319,7 +416,9 @@ def start_scheduler() -> None:
 
     def _autonomy_metrics_snapshot() -> None:
         try:
-            from modstore_server.autonomy_metrics_job import run_autonomy_metrics_snapshot
+            from modstore_server.autonomy_metrics_job import (
+                run_autonomy_metrics_snapshot,
+            )
 
             result = _run_tracked_scheduler_job(
                 "autonomy_metrics_snapshot",
@@ -359,6 +458,39 @@ def start_scheduler() -> None:
         )
     except Exception:
         logger.exception("register autonomy metrics snapshot cron failed")
+
+    def _autonomy_posthoc_audit() -> None:
+        try:
+            from modstore_server.autonomy_posthoc_auditor import (
+                run_autonomy_posthoc_audit,
+            )
+
+            result = _run_tracked_scheduler_job(
+                "autonomy_posthoc_audit",
+                run_autonomy_posthoc_audit,
+            )
+            logger.info(
+                "autonomy posthoc audit: candidates=%s audited=%s incomplete=%s",
+                result.get("candidate_count"),
+                result.get("audited_count"),
+                result.get("incomplete_count"),
+            )
+        except Exception:
+            logger.exception("autonomy posthoc audit job failed")
+
+    try:
+        _scheduler.add_job(
+            _autonomy_posthoc_audit,
+            IntervalTrigger(minutes=10),
+            id="autonomy_posthoc_audit",
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=45),  # noqa: UP017
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except Exception:
+        logger.exception("register autonomy posthoc audit job failed")
 
     def _daily_digest_email() -> None:
         try:
@@ -433,14 +565,18 @@ def start_scheduler() -> None:
 
     def _daily_vibe_line_execute_job() -> None:
         try:
-            from modstore_server.daily_vibe_line_execute_job import run_daily_vibe_line_execute_job
+            from modstore_server.daily_vibe_line_execute_job import (
+                run_daily_vibe_line_execute_job,
+            )
 
             _run_daily_pipeline_stage("daily_vibe_line_execute", run_daily_vibe_line_execute_job)
         except Exception:
             logger.exception("daily vibe line execute job failed")
 
     try:
-        from modstore_server.daily_vibe_line_execute_job import cron_trigger_for_vibe_line_execute
+        from modstore_server.daily_vibe_line_execute_job import (
+            cron_trigger_for_vibe_line_execute,
+        )
 
         if _env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
             _scheduler.add_job(
@@ -459,7 +595,9 @@ def start_scheduler() -> None:
 
     def _daily_orchestrator_job() -> None:
         try:
-            from modstore_server.daily_orchestrator_job import run_daily_orchestrator_job
+            from modstore_server.daily_orchestrator_job import (
+                run_daily_orchestrator_job,
+            )
 
             run_daily_orchestrator_job()
         except Exception:
@@ -511,6 +649,40 @@ def start_scheduler() -> None:
         )
     except Exception:
         logger.exception("register self-maintenance loop cron failed")
+
+    def _self_maintenance_heartbeat_job() -> None:
+        try:
+
+            def _run() -> None:
+                from modstore_server.self_maintenance_loop_runner import (
+                    record_self_maintenance_heartbeat,
+                )
+
+                receipt = record_self_maintenance_heartbeat()
+                logger.info(
+                    "self-maintenance heartbeat: status=%s reason=%s",
+                    receipt.get("status"),
+                    (receipt.get("gate") or {}).get("reason"),
+                )
+
+            _run_tracked_scheduler_job("self_maintenance_heartbeat", _run)
+        except Exception:
+            logger.exception("self-maintenance heartbeat failed")
+
+    _scheduler.add_job(
+        _self_maintenance_heartbeat_job,
+        IntervalTrigger(
+            minutes=max(
+                15,
+                _env_int("MODSTORE_SELF_MAINTENANCE_HEARTBEAT_MINUTES", 120),
+            )
+        ),
+        id="self_maintenance_heartbeat",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+        coalesce=True,
+        max_instances=1,
+    )
 
     def _daily_release_train_orchestrator_job() -> None:
         try:
@@ -839,7 +1011,9 @@ def start_scheduler() -> None:
         try:
 
             def _run() -> None:
-                from modstore_server.employee_autonomy_service import run_employee_evolution_scan
+                from modstore_server.employee_autonomy_service import (
+                    run_employee_evolution_scan,
+                )
 
                 try:
                     lookback = int(
@@ -921,7 +1095,9 @@ def start_scheduler() -> None:
         try:
 
             def _run() -> None:
-                from modstore_server.boss_daily_im_report import send_boss_daily_im_report
+                from modstore_server.boss_daily_im_report import (
+                    send_boss_daily_im_report,
+                )
 
                 out = send_boss_daily_im_report()
                 logger.info(
@@ -957,6 +1133,120 @@ def start_scheduler() -> None:
         _register_employee_cron_jobs()
     except Exception:
         logger.exception("register employee cron jobs failed")
+
+    try:
+        from modstore_server.duty_workforce_burnin import (
+            burn_in_execution_enabled,
+            burn_in_scheduler_enabled,
+            run_burn_in,
+        )
+
+        if burn_in_scheduler_enabled():
+
+            def _duty_workforce_burn_in_job() -> None:
+                try:
+                    out = _run_tracked_scheduler_job(
+                        "duty_workforce_burnin",
+                        lambda: run_burn_in(dry_run=not burn_in_execution_enabled()),
+                    )
+                    logger.info(
+                        "duty workforce burn-in dry_run=%s selected=%s accepted=%s blocked=%s",
+                        out.get("dry_run"),
+                        out.get("selected_count"),
+                        out.get("accepted_receipt_count", 0),
+                        out.get("execution_blocked", False),
+                    )
+                except Exception:
+                    logger.exception("duty workforce burn-in failed")
+
+            _scheduler.add_job(
+                _duty_workforce_burn_in_job,
+                IntervalTrigger(
+                    minutes=max(
+                        15,
+                        min(
+                            _env_int("MODSTORE_EMPLOYEE_BURN_IN_INTERVAL_MINUTES", 60),
+                            24 * 60,
+                        ),
+                    )
+                ),
+                id="duty_workforce_burnin",
+                replace_existing=True,
+                misfire_grace_time=_business_misfire_grace_time(),
+                coalesce=True,
+                max_instances=1,
+            )
+    except Exception:
+        logger.exception("register duty workforce burn-in failed")
+
+    def _duty_workforce_learning_job() -> None:
+        try:
+            from modstore_server.duty_workforce_learning import (
+                run_duty_workforce_learning,
+            )
+
+            out = _run_tracked_scheduler_job(
+                "duty_workforce_learning",
+                run_duty_workforce_learning,
+            )
+            logger.info(
+                "duty workforce learning rows=%s unresolved=%s resolved=%s written=%s",
+                out.get("audit_row_count", 0),
+                out.get("unresolved_employee_count", 0),
+                out.get("resolved_pair_count", 0),
+                out.get("knowledge_written_count", 0),
+            )
+        except Exception:
+            logger.exception("duty workforce learning failed")
+
+    try:
+        _scheduler.add_job(
+            _duty_workforce_learning_job,
+            IntervalTrigger(minutes=15),
+            id="duty_workforce_learning",
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=75),  # noqa: UP017
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except Exception:
+        logger.exception("register duty workforce learning failed")
+
+    def _self_evolution_metrics_job() -> None:
+        try:
+            from modstore_server.self_evolution_metrics_job import (
+                run_self_evolution_metrics_snapshot,
+            )
+
+            out = _run_tracked_scheduler_job(
+                "self_evolution_metrics",
+                run_self_evolution_metrics_snapshot,
+            )
+            logger.info(
+                "self evolution metrics week=%s skipped=%s coverage=%s tests=%s debt=%s",
+                out.get("week"),
+                out.get("skipped", False),
+                out.get("backend_coverage"),
+                out.get("pytest_passed"),
+                out.get("type_debt"),
+            )
+        except Exception:
+            logger.exception("self evolution metrics job failed")
+
+    try:
+        _scheduler.add_job(
+            _self_evolution_metrics_job,
+            CronTrigger(day_of_week="sun", hour=0, minute=35, timezone="UTC"),
+            id="self_evolution_metrics",
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=105),  # noqa: UP017
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except Exception:
+        logger.exception("register self evolution metrics job failed")
 
     def _auto_fix_loop_job() -> None:
         try:
@@ -1020,7 +1310,9 @@ def start_scheduler() -> None:
 
     def _predictive_maintenance_job() -> None:
         try:
-            from modstore_server.predictive_maintenance import run_predictive_maintenance_once
+            from modstore_server.predictive_maintenance import (
+                run_predictive_maintenance_once,
+            )
 
             out = run_predictive_maintenance_once()
             logger.info(
@@ -1068,7 +1360,9 @@ def start_scheduler() -> None:
 
     def _auto_merge_audit_sampling_job() -> None:
         try:
-            from modstore_server.auto_merge_audit_sampler import run_auto_merge_audit_sampling_once
+            from modstore_server.auto_merge_audit_sampler import (
+                run_auto_merge_audit_sampling_once,
+            )
 
             out = run_auto_merge_audit_sampling_once()
             logger.info(
@@ -1147,8 +1441,43 @@ def _extract_employee_schedule(manifest: dict) -> Optional[dict]:
     return sched if isinstance(sched, dict) else None
 
 
+def _employee_project_root() -> str:
+    """Resolve the root used by yuangon workspace-policy globs.
+
+    Desktop source checkouts add one company directory above
+    ``MODstore_deploy`` while packaged autonomy runtimes do not.  Passing the
+    monorepo parent makes perception scan the entire checkout and none of the
+    employee scopes match.
+    """
+
+    configured = str(os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or "").strip()
+    if configured:
+        target = Path(configured).expanduser().resolve()
+        if target.is_dir():
+            return str(target)
+        logger.error("employee duty project root missing: %s", target)
+        return ""
+    try:
+        from modstore_server.integrations.ops_action_handlers import repo_root
+
+        root = Path(repo_root()).resolve()
+    except Exception:
+        return ""
+    if (root / "MODstore_deploy").is_dir():
+        return str(root)
+    company_root = root / "成都修茈科技有限公司"
+    if (company_root / "MODstore_deploy").is_dir():
+        return str(company_root)
+    return str(root)
+
+
 def _register_employee_cron_jobs() -> None:
-    """扫描所有员工包 manifest 的 ``schedule`` 字段，注册全员日常轮值。"""
+    """Register employee shifts from manifest or the 55-role work-contract SSOT.
+
+    A manifest proves that an employee pack exists; it does not assign work.
+    Explicit manifest schedules remain authoritative, while the central duty
+    contract supplies schedules for the rest of the roster.
+    """
     if _scheduler is None:
         return
     if not _employee_auto_cron_enabled():
@@ -1162,10 +1491,20 @@ def _register_employee_cron_jobs() -> None:
         employee_runtime = importlib.import_module("modstore_server.employee_runtime")
         _load_all_employee_profiles = task_router._load_all_employee_profiles
         load_employee_pack = employee_runtime.load_employee_pack
+        from modstore_server.duty_workforce_contracts import (
+            contract_schedule,
+            workforce_contract_map,
+        )
         from modstore_server.models import get_session_factory
     except Exception:
         logger.exception("employee cron: import failed")
         return
+
+    try:
+        work_contracts = workforce_contract_map()
+    except Exception:
+        logger.exception("employee cron: duty work contracts unavailable")
+        work_contracts = {}
 
     profiles = _load_all_employee_profiles()
     if not profiles:
@@ -1187,7 +1526,8 @@ def _register_employee_cron_jobs() -> None:
             skipped += 1
             continue
 
-        sched = _extract_employee_schedule(manifest)
+        contract = work_contracts.get(emp_id) or {}
+        sched = _extract_employee_schedule(manifest) or contract_schedule(contract)
         if not sched:
             skipped += 1
             continue
@@ -1218,14 +1558,60 @@ def _register_employee_cron_jobs() -> None:
         job_id = _employee_cron_job_id(emp_id)
         eid_local = emp_id
         brief_local = task_brief
+        contract_local = dict(contract)
+        schedule_source_local = str(sched.get("source") or "manifest")
 
-        def _runner(eid: str = eid_local, brief: str = brief_local) -> None:
+        def _runner(
+            eid: str = eid_local,
+            brief: str = brief_local,
+            work_contract: dict = contract_local,
+            schedule_source: str = schedule_source_local,
+        ) -> None:
             try:
                 import importlib
 
                 employee_executor = importlib.import_module("modstore_server.employee_executor")
+                from modstore_server.services.llm import resolve_platform_bench_llm
+
+                project_root = _employee_project_root()
+                bench_provider, bench_model = resolve_platform_bench_llm()
                 employee_executor.execute_employee_task(
-                    eid, brief, {"trigger": "schedule"}, user_id=0
+                    eid,
+                    brief,
+                    {
+                        "trigger": "schedule",
+                        "schedule_source": schedule_source,
+                        "work_contract": {
+                            "schema": "xcagi.duty_employee_work_contracts/v1",
+                            "mode": str(work_contract.get("mode") or "execute"),
+                            "risk_level": str(work_contract.get("risk_level") or "medium"),
+                            "acceptance": list(work_contract.get("acceptance") or []),
+                        },
+                        # The reviewed work-contract SSOT is the explicit
+                        # runtime approval for low/medium duty execution.  It
+                        # must not authorize high-risk work, which continues
+                        # through the existing approval/veto path below.
+                        "allow_medium_risk": str(work_contract.get("risk_level") or "medium")
+                        .strip()
+                        .lower()
+                        in {"low", "medium"},
+                        # Founder/veto stays available through the pending
+                        # question queue, but a 7x24 worker must never occupy a
+                        # scheduler thread while waiting for a human reply.
+                        "non_blocking_human_questions": True,
+                        # Scheduled duty never grants the high-risk bypass.  A
+                        # release/payment/destructive action still needs the
+                        # existing approval/veto path even if a contract exists.
+                        "allow_high_risk_real_run": False,
+                        **({"project_root": project_root} if project_root else {}),
+                    },
+                    user_id=0,
+                    # Duty work is a platform expense and must follow the
+                    # configured platform route, even when an old employee
+                    # manifest still names a previous provider/model.
+                    bench_llm_override=(
+                        (bench_provider, bench_model) if bench_provider and bench_model else None
+                    ),
                 )
             except Exception:
                 logger.exception("employee cron job failed: %s", eid)
@@ -1249,17 +1635,27 @@ def list_employee_cron_jobs() -> list:
     """返回当前已注册的员工 cron 任务清单（前端缺岗看板用）。"""
     if _scheduler is None:
         return []
+    try:
+        from modstore_server.duty_workforce_contracts import workforce_contract_map
+
+        work_contracts = workforce_contract_map()
+    except Exception:
+        work_contracts = {}
     out = []
     for job in _scheduler.get_jobs():
         jid = job.id or ""
         if not jid.startswith(_EMPLOYEE_CRON_JOB_PREFIX):
             continue
+        contract = work_contracts.get(jid[len(_EMPLOYEE_CRON_JOB_PREFIX) :]) or {}
         out.append(
             {
                 "job_id": jid,
                 "employee_id": jid[len(_EMPLOYEE_CRON_JOB_PREFIX) :],
                 "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
                 "trigger": str(job.trigger),
+                "contract_mode": str(contract.get("mode") or ""),
+                "risk_level": str(contract.get("risk_level") or ""),
+                "mission": str(contract.get("mission") or ""),
             }
         )
     return out
@@ -1342,7 +1738,10 @@ def _register_cron_trigger(
             replace_existing=True,
         )
         logger.info(
-            "registered cron trigger id=%s workflow=%s expr=%s", trigger_id, wf_id, cron_expr
+            "registered cron trigger id=%s workflow=%s expr=%s",
+            trigger_id,
+            wf_id,
+            cron_expr,
         )
     except Exception as e:
         logger.warning("invalid cron for trigger id=%s: %s", trigger_id, e)

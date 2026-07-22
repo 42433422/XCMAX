@@ -1,7 +1,7 @@
 {
   "id": "java-payment-bridge-officer",
   "name": "Java 支付桥接员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "java-payment-bridge-officer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "Java 支付桥接员",
       "description": "P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。",
@@ -99,9 +99,21 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "java_payment_bridge_officer",
+        "action": "audit_contract_receipt",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["contract_receipt"], "properties": {"contract_receipt": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "contract_receipt": {"signature_fields": ["merchant_id", "order_id", "amount", "nonce", "signature"], "idempotency_test_passed": true, "real_charge_attempted": false}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_high_risk_fixture": true, "allow_prohibited_semantics_fixture": true}
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

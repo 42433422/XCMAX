@@ -1,7 +1,7 @@
 {
   "id": "mods-and-eskill-curator",
   "name": "Mods/ESkill 策展员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "mods-and-eskill-curator",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "Mods/ESkill 策展员",
       "description": "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",
@@ -97,15 +97,23 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "module": "mods_and_eskill_curator",
-        "action": "convert",
-        "default_output_relpath": "outputs/employee_output.xlsx",
-        "default_template_relpath": "",
-        "default_use_personnel_roster": true
+        "action": "audit_asset_registry",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["asset_registry"], "properties": {"asset_registry": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "registry_consistent", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "asset_registry": {
+            "mods": [{"id": "mod-burn-in", "version": "1.0.0"}],
+            "eskills": [{"id": "eskill-burn-in", "version": "1.0.0"}],
+            "employee_packs": [{"id": "employee-burn-in", "version": "1.0.0"}],
+            "references": [{"from": "employee-burn-in", "to": "eskill-burn-in"}]
+          }
+        }
       }
     },
     "metadata": {

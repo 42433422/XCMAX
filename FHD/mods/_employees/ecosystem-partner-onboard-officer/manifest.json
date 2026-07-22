@@ -1,7 +1,7 @@
 {
   "id": "ecosystem-partner-onboard-officer",
   "name": "生态伙伴接入员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "ecosystem-partner-onboard-officer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "生态伙伴接入员",
       "description": "O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。",
@@ -98,9 +98,37 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "ecosystem_partner_onboard_officer",
+        "action": "audit_partner_readiness",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["partner_profile"],
+          "properties": {
+            "partner_profile": {"type": "object"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "issues", "ready_for_onboarding", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "partner_profile": {
+            "partner_id": "partner-burn-in",
+            "partner_name": "Burn-in Partner",
+            "tenant_id": "tenant-partner-burn-in",
+            "tenant_isolated": true,
+            "sso_mode": "oidc",
+            "permissions": ["catalog.read", "delivery.receipt.write"],
+            "first_goal": "完成联合 catalog 只读核对"
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

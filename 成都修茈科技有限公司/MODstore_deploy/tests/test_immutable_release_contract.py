@@ -44,6 +44,20 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "/usr/lib/jvm/java-17-*" in script
     assert 'PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"' in script
     assert "ExecStart=${PAYMENT_JAVA_BIN} -jar" in script
+    assert "verify_payment_identity" in script
+    assert "/actuator/info" in script
+    assert "MODSTORE_RELEASE_ARTIFACT_SHA256" in script
+    assert "verify_customer_value_reconciler" in script
+    assert "customer value reconciler did not prove" in script
+    payment_restart = script.index(
+        "systemctl restart modstore-payment.service",
+        script.index('ln -s "$FINAL_ROOT"'),
+    )
+    python_restart = script.index(
+        "systemctl restart modstore.service modstore-scheduler.service",
+        script.index('ln -s "$FINAL_ROOT"'),
+    )
+    assert payment_restart < python_restart
     assert script.index(
         "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
     ) < script.index("mvn -B -q -DskipTests package")
@@ -59,6 +73,15 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "成都修茈科技有限公司/MODstore_deploy/java_payment_service"
     )
     assert any(step.get("run") == "mvn -B test package" for step in source_java_job["steps"])
+
+    payment_config = yaml.safe_load(
+        (ROOT / "java_payment_service/src/main/resources/application.yml").read_text()
+    )
+    assert payment_config["management"]["info"]["env"]["enabled"] is True
+    assert payment_config["info"]["xcmax"]["git-sha"] == "${MODSTORE_GIT_SHA:}"
+    assert payment_config["info"]["xcmax"]["artifact-sha256"] == (
+        "${MODSTORE_RELEASE_ARTIFACT_SHA256:}"
+    )
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:

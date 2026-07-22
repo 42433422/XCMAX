@@ -121,6 +121,98 @@ def test_verification_passes_for_existing_declared_file(tmp_path):
     assert out["files_declared"] == ["src/app.py"]
 
 
+def test_verification_parses_json_after_reasoning_wrapper():
+    from modstore_server.employee_verification import run_verification
+
+    out = run_verification(
+        employee_id="task-router-officer",
+        task="perform a read-only inspection",
+        reasoning={
+            "reasoning": (
+                "<think>inspect the evidence first</think>\n"
+                '{"status":"success","summary":"Read-only inspection completed with real evidence.",'
+                '"evidence":["workspace tree observed"]}'
+            )
+        },
+        result={"outputs": [{"handler": "agent", "summary": "observed workspace"}]},
+        config={},
+    )
+
+    assert out["passed"] is True
+
+
+def test_verification_uses_agent_final_json_when_cognition_is_unstructured():
+    from modstore_server.employee_verification import run_verification
+
+    out = run_verification(
+        employee_id="task-router-officer",
+        task="perform a read-only inspection",
+        reasoning={"reasoning": "I will inspect the workspace safely."},
+        result={
+            "outputs": [
+                {
+                    "handler": "agent",
+                    "summary": (
+                        "<think>tool call succeeded</think>\n"
+                        '{"status":"success","summary":"Observed the routing files without mutation.",'
+                        '"evidence":["scan_project_tree"]}'
+                    ),
+                }
+            ]
+        },
+        config={},
+    )
+
+    assert out["passed"] is True
+
+
+def test_verification_does_not_treat_testable_acceptance_as_executed_tests():
+    from modstore_server.employee_verification import run_verification
+
+    out = run_verification(
+        employee_id="intent-analyst",
+        task="把需求解析为目标和验收标准；验收要求可测试。",
+        reasoning={
+            "reasoning": json.dumps(
+                {
+                    "status": "success",
+                    "summary": "已根据真实输入整理目标、约束和可验证验收标准。",
+                    "evidence": ["需求输入"],
+                },
+                ensure_ascii=False,
+            )
+        },
+        result={"outputs": [{"handler": "agent", "summary": "真实只读分析完成"}]},
+        config={},
+    )
+
+    checks = {check["name"]: check for check in out["checks"]}
+    assert checks["tests_reported"]["ok"] is True
+    assert checks["tests_reported"]["skipped"] is True
+    assert out["passed"] is True
+
+
+def test_verification_still_requires_counts_for_explicit_test_execution():
+    from modstore_server.employee_verification import run_verification
+
+    out = run_verification(
+        employee_id="test-qa-runner",
+        task="运行测试用例并报告结果",
+        reasoning={
+            "reasoning": json.dumps(
+                {"status": "success", "summary": "测试执行完成但未给出计数。"},
+                ensure_ascii=False,
+            )
+        },
+        result={"outputs": [{"handler": "agent", "summary": "测试执行完成"}]},
+        config={},
+    )
+
+    checks = {check["name"]: check for check in out["checks"]}
+    assert checks["tests_reported"]["ok"] is False
+    assert out["passed"] is False
+
+
 def test_human_report_mentions_verification_handoff_and_classification():
     from modstore_server.employee_human_report import build_human_report
 

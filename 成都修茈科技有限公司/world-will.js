@@ -52,7 +52,13 @@
         var date = new Date(raw)
         if (!isNaN(date.getTime())) {
           var value = timeParts(date)
-          var dayLabel = value.year + '-' + value.month + '-' + value.day
+          var now = timeParts(new Date())
+          var eventDay = Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day))
+          var today = Date.UTC(Number(now.year), Number(now.month) - 1, Number(now.day))
+          var ageDays = Math.round((today - eventDay) / 86400000)
+          var dayLabel = value.month + '-' + value.day
+          if (ageDays === 0) dayLabel = '今天'
+          if (ageDays === 1) dayLabel = '昨天'
           return {
             day: dayLabel,
             clock: value.hour + ':' + value.minute,
@@ -76,11 +82,135 @@
     }
     var fallbackDay = String((item && item.day) || '')
     return {
-      day: fallbackDay || '日期未知',
+      day: fallbackDay ? fallbackDay.slice(5) : '日期未知',
       clock: String((item && item.ts) || '—'),
       datetime: '',
       title: (fallbackDay ? fallbackDay + ' ' : '') + String((item && item.ts) || '—'),
     }
+  }
+
+  function autonomyFreshness(iso) {
+    if (!iso) return '更新时间未知'
+    var stamp = new Date(iso).getTime()
+    if (isNaN(stamp)) return '快照 ' + fmtGen(iso)
+    var ageMinutes = Math.max(0, Math.round((Date.now() - stamp) / 60000))
+    if (ageMinutes <= 15) return '15 分钟内同步'
+    if (ageMinutes < 1440) return ageMinutes + ' 分钟前同步'
+    return Math.floor(ageMinutes / 1440) + ' 天前同步（请以管理端为准）'
+  }
+
+  function element(tag, className, text) {
+    var node = document.createElement(tag)
+    if (className) node.className = className
+    if (text != null) node.textContent = String(text)
+    return node
+  }
+
+  function clearElement(node) {
+    while (node && node.firstChild) node.removeChild(node.firstChild)
+  }
+
+  function renderAutonomyUnavailable(message) {
+    var meta = document.getElementById('autonomy-meta')
+    var overall = document.getElementById('autonomy-overall')
+    var grid = document.getElementById('autonomy-grid')
+    var proof = document.getElementById('autonomy-proof')
+    if (meta) meta.textContent = message || '自治证据快照暂不可用'
+    if (overall) {
+      clearElement(overall)
+      overall.appendChild(element('strong', '', '—'))
+      overall.appendChild(element('span', '', '不以演示数据代替'))
+    }
+    if (grid) {
+      clearElement(grid)
+      grid.appendChild(
+        element('p', 'autonomy-empty', '等待管理端发布脱敏后的真实进度。')
+      )
+    }
+    clearElement(proof)
+  }
+
+  function renderAutonomy(data) {
+    var meta = document.getElementById('autonomy-meta')
+    var overall = document.getElementById('autonomy-overall')
+    var grid = document.getElementById('autonomy-grid')
+    var proof = document.getElementById('autonomy-proof')
+    var dimensions = Array.isArray(data.dimensions) ? data.dimensions : []
+    if (!dimensions.length) {
+      renderAutonomyUnavailable('快照缺少七项证据，不展示推测值。')
+      return
+    }
+    if (meta) {
+      meta.textContent =
+        autonomyFreshness(data.generated_at) +
+        ' · 与创始人管理端使用同一评分结果 · 内部审批和故障细节不公开'
+    }
+    if (overall) {
+      clearElement(overall)
+      overall.appendChild(element('strong', '', (data.overall_progress || 0) + '%'))
+      overall.appendChild(
+        element(
+          'span',
+          '',
+          '距离目标还差 ' +
+            (data.overall_remaining == null ? '—' : data.overall_remaining) +
+            '%'
+        )
+      )
+    }
+    if (grid) {
+      clearElement(grid)
+      dimensions.forEach(function (item) {
+        var progress = Math.max(0, Math.min(100, Number(item.progress) || 0))
+        var status = String(item.status || 'early')
+        if (['ready', 'approaching', 'building', 'early'].indexOf(status) < 0) status = 'early'
+        var card = element('article', 'autonomy-card autonomy-card--' + status)
+        var header = element('header')
+        header.appendChild(element('span', '', item.label || ''))
+        header.appendChild(element('strong', '', progress + '%'))
+        card.appendChild(header)
+        var track = element('div', 'autonomy-track')
+        var fill = element('i')
+        fill.style.width = progress + '%'
+        track.appendChild(fill)
+        card.appendChild(track)
+        card.appendChild(
+          element('p', '', '下一门槛：' + (item.next_gap || '继续积累运行证据'))
+        )
+        grid.appendChild(card)
+      })
+    }
+    if (proof) {
+      var labels = {
+        runtime_fresh: '运行证据新鲜',
+        active_gates_ok: '自治门禁通过',
+        governance_ok: '治理健康',
+        employee_workforce_ready: 'AI 员工真实在岗',
+        deploy_verified: '生产部署已验证',
+        paid_value_verified: '真实付费已验证',
+        paid_delivery_verified: '付费与不可变交付已关联',
+        customer_acceptance_verified: '客户明确验收已验证',
+      }
+      clearElement(proof)
+      Object.keys(labels).forEach(function (key) {
+        var ok = Boolean((data.proof || {})[key])
+        proof.appendChild(
+          element('span', ok ? 'is-ok' : '', (ok ? '✓ ' : '待证明 · ') + labels[key])
+        )
+      })
+    }
+  }
+
+  function loadAutonomy() {
+    return fetch('/download-founder-autonomy.json', { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('autonomy ' + res.status)
+        return res.json()
+      })
+      .then(renderAutonomy)
+      .catch(function () {
+        renderAutonomyUnavailable('管理端尚未发布自治证据快照（未造假填充）。')
+      })
   }
 
   function initial(name) {
@@ -647,4 +777,6 @@
 
   loadHall()
   window.setInterval(loadHall, 60000)
+  loadAutonomy()
+  window.setInterval(loadAutonomy, 60000)
 })()

@@ -88,7 +88,13 @@ for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi
     rsync -a "$DEPLOY_ROOT/$item" "$BACKUP/"
   fi
 done
-for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256; do
+ADMIN_BACKUP_PRESENT=0
+if [[ -d "$DEPLOY_ROOT/templates/admin-vue-dist" ]]; then
+  mkdir -p "$BACKUP/templates"
+  rsync -a "$DEPLOY_ROOT/templates/admin-vue-dist" "$BACKUP/templates/"
+  ADMIN_BACKUP_PRESENT=1
+fi
+for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-console-sha256; do
   [[ -f "$DEPLOY_ROOT/$stamp" ]] && cp "$DEPLOY_ROOT/$stamp" "$BACKUP/$stamp"
 done
 log "已备份至 $BACKUP"
@@ -101,7 +107,13 @@ rollback_from_backup() {
       rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/"
     fi
   done
-  for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256; do
+  if [[ "$ADMIN_BACKUP_PRESENT" == "1" ]]; then
+    mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist"
+    rsync -a --delete "$BACKUP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
+  else
+    rm -rf -- "$DEPLOY_ROOT/templates/admin-vue-dist"
+  fi
+  for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-console-sha256; do
     if [[ -f "$BACKUP/$stamp" ]]; then
       cp "$BACKUP/$stamp" "$DEPLOY_ROOT/$stamp"
     else
@@ -113,14 +125,44 @@ rollback_from_backup() {
 }
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fhd-apply.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT
+MUTATION_STARTED=0
+ROLLBACK_DONE=0
+cleanup_apply() {
+  local status=$?
+  trap - EXIT
+  if [[ "$status" != "0" && "$MUTATION_STARTED" == "1" && "$ROLLBACK_DONE" == "0" ]]; then
+    ROLLBACK_DONE=1
+    set +e
+    rollback_from_backup
+    set -e
+  fi
+  rm -rf -- "$TMP"
+  exit "$status"
+}
+trap cleanup_apply EXIT
 tar -xzf "$TARBALL" -C "$TMP"
 
+ADMIN_VERIFY="$TMP/scripts/deploy/lib/verify_admin_console.py"
+EXPECTED_ADMIN_CONSOLE_SHA256="$(
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("admin_console_sha256", ""))' "$TMP/.build-identity.json"
+)"
+[[ "$EXPECTED_ADMIN_CONSOLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  log "ERROR: release is missing the immutable admin console identity"
+  exit 1
+}
+python3 "$ADMIN_VERIFY" \
+  --root "$TMP/templates/admin-vue-dist" \
+  --expected-git-sha "$EXPECTED_GIT_SHA" \
+  --expected-sha256 "$EXPECTED_ADMIN_CONSOLE_SHA256"
+
+MUTATION_STARTED=1
 for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
 done
+mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist"
+rsync -a --delete "$TMP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
 if [[ -d "$TMP/scripts/deploy" ]]; then
   mkdir -p "$DEPLOY_ROOT/scripts"
   rsync -a --delete "$TMP/scripts/deploy/" "$DEPLOY_ROOT/scripts/deploy/"
@@ -160,6 +202,7 @@ deploy_emit restart started "service=$SERVICE"
 autonomy_evaluate_action "restart_service" "restart:release:${TARBALL_SHA256:0:16}"
 echo "$TARBALL_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
 echo "$EXPECTED_GIT_SHA" > "$DEPLOY_ROOT/.deploy-git-sha"
+echo "$EXPECTED_ADMIN_CONSOLE_SHA256" > "$DEPLOY_ROOT/.deploy-admin-console-sha256"
 systemctl restart "$SERVICE"
 sleep "${FHD_HEALTH_INITIAL_SLEEP:-15}"
 
@@ -172,15 +215,24 @@ for _ in $(seq 1 "$HEALTH_RETRIES"); do
       "http://127.0.0.1:${HEALTH_PORT}${HEALTH_PATH}?lite=true" \
       "$EXPECTED_GIT_SHA" \
       "" \
-      "$TARBALL_SHA256"; then
+      "$TARBALL_SHA256" \
+      "$EXPECTED_ADMIN_CONSOLE_SHA256"; then
     API_CODE=200
     break
   fi
   sleep "$HEALTH_INTERVAL"
 done
 
+if [[ "$API_CODE" == "200" ]] && ! python3 "$DEPLOY_ROOT/scripts/deploy/lib/verify_admin_console.py" \
+    --base-url "http://127.0.0.1:${HEALTH_PORT}/admin/" \
+    --expected-git-sha "$EXPECTED_GIT_SHA" \
+    --expected-sha256 "$EXPECTED_ADMIN_CONSOLE_SHA256"; then
+  API_CODE=admin_identity_mismatch
+fi
+
 if [[ "$API_CODE" != "200" ]]; then
   log "ERROR: /api/health 未就绪 (code=$API_CODE)，尝试回滚"
+  ROLLBACK_DONE=1
   rollback_from_backup
   deploy_emit apply failed "health_check rollback"
   exit 1
@@ -188,5 +240,6 @@ fi
 
 cp "$TARBALL" "${DEPLOY_ROOT}/.deploy-last.tar.gz" 2>/dev/null || true
 
+MUTATION_STARTED=0
 log "发布成功 health=200 sha256=${TARBALL_SHA256:0:16}..."
 deploy_emit apply ok "port=$HEALTH_PORT"

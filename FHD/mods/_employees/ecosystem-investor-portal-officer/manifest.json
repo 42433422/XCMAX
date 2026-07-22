@@ -1,7 +1,7 @@
 {
   "id": "ecosystem-investor-portal-officer",
   "name": "投资方只读门户员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "ecosystem-investor-portal-officer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "投资方只读门户员",
       "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
@@ -99,9 +99,14 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "agent"
+      ],
+      "agent": {
+        "workspace": {
+          "requires_project_root": true,
+          "read_only": true
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

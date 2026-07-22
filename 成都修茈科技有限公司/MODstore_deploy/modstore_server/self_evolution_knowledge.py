@@ -13,7 +13,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 DEFAULT_FIX_LIMIT = 5
 DEFAULT_PATTERN_LIMIT = 8
@@ -194,6 +194,39 @@ def _load_kb_docs(kind: str) -> List[Dict[str, Any]]:
     return docs
 
 
+def knowledge_inventory() -> Dict[str, Any]:
+    """Return counts of schema-valid reusable knowledge documents.
+
+    The founder score consumes these counts as evidence.  Invalid or unreadable
+    JSON is reported separately and never counted as reusable knowledge.
+    """
+
+    counts: Dict[str, int] = {}
+    invalid_count = 0
+    for kind, count_key in (("fixes", "fix_count"), ("patterns", "pattern_count")):
+        valid_count = 0
+        directory = kb_root() / kind
+        if directory.exists():
+            for path in sorted(directory.glob("*.json")):
+                try:
+                    with path.open("r", encoding="utf-8") as fh:
+                        payload = json.load(fh)
+                    if not isinstance(payload, dict):
+                        raise _validation_error(f"{kind} document must be an object")
+                    validate_kb_payload(kind, payload)
+                except (OSError, json.JSONDecodeError, ValueError):
+                    invalid_count += 1
+                    continue
+                valid_count += 1
+        counts[count_key] = valid_count
+    total = counts.get("fix_count", 0) + counts.get("pattern_count", 0)
+    return {
+        **counts,
+        "invalid_count": invalid_count,
+        "total": total,
+    }
+
+
 def _tokens(text: str) -> List[str]:
     return re.findall(r"[a-z0-9_./:-]+|[\u4e00-\u9fff]{2,}", text.lower())
 
@@ -267,7 +300,6 @@ def _rank_docs(
     ranked: List[Tuple[float, Dict[str, Any]]] = []
     for doc in docs:
         score = _lexical_score(query, doc, fields)
-        doc_text = json.dumps(doc, ensure_ascii=False, sort_keys=True, default=_json_default)
         if rag_text and any(str(doc.get(field) or "")[:80] in rag_text for field in fields):
             score += 0.75
         if score > 0:
@@ -534,6 +566,26 @@ def collect_proactive_signals(*, root: Optional[Path] = None, limit: int = 10) -
             }
         )
 
+    workforce_gaps: List[Dict[str, Any]] = []
+    try:
+        from modstore_server.duty_workforce_learning import load_open_workforce_gaps
+
+        workforce_gaps = load_open_workforce_gaps(limit=limit)
+    except Exception:
+        workforce_gaps = []
+    if workforce_gaps:
+        candidates.insert(
+            0,
+            {
+                "kind": "workforce_capability_gap",
+                "description": (
+                    "Implement or repair reviewed employee capabilities that failed strict burn-in, "
+                    "then require a later accepted receipt before closing each gap."
+                ),
+                "gaps": workforce_gaps,
+            },
+        )
+
     return {
         "candidates": candidates,
         "coverage_modules": coverage_modules,
@@ -541,6 +593,8 @@ def collect_proactive_signals(*, root: Optional[Path] = None, limit: int = 10) -
         "root": str(root),
         "raw_sql_script": raw_sql_script,
         "type_debt_script": type_debt_script,
+        "workforce_gap_count": len(workforce_gaps),
+        "workforce_gaps": workforce_gaps,
     }
 
 
@@ -644,11 +698,19 @@ def evaluate_evolution_regression(history: Sequence[Dict[str, Any]]) -> Dict[str
 
 
 def evolution_metrics_gate() -> Dict[str, Any]:
-    history = load_evolution_metrics()
+    raw_history = load_evolution_metrics()
+    history = [
+        item
+        for item in raw_history
+        if isinstance(item.get("metadata"), dict)
+        and item["metadata"].get("evidence_verified") is True
+    ]
     result = evaluate_evolution_regression(history)
     return {
         **result,
         "history_count": len(history),
+        "raw_history_count": len(raw_history),
+        "verified_history_count": len(history),
         "metrics_path": str(kb_root() / "metrics" / "evolution_metrics.jsonl"),
     }
 
@@ -694,6 +756,7 @@ def build_self_evolution_context(
         }
     context = {
         "fix_knowledge_hits": fix_hits,
+        "inventory": knowledge_inventory(),
         "kb_root": str(kb_root()),
         "kb_search": {
             "engine": "redisvl_primary_with_fhd_rag_lexical_fallback",
@@ -946,6 +1009,7 @@ __all__ = [
     "evaluate_evolution_regression",
     "infer_pattern_from_diff",
     "kb_root",
+    "knowledge_inventory",
     "record_code_pattern",
     "record_evolution_metrics",
     "record_fix_knowledge",

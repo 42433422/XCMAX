@@ -1,7 +1,7 @@
 {
   "id": "site-content-editor",
   "name": "静态站内容编辑员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "site-content-editor",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "静态站内容编辑员",
       "description": "维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。",
@@ -79,15 +79,23 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "module": "site_content_editor",
-        "action": "convert",
-        "default_output_relpath": "outputs/employee_output.xlsx",
-        "default_template_relpath": "",
-        "default_use_personnel_roster": true
+        "action": "audit_content_change",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["content_change"], "properties": {"content_change": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "files", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "content_change": {
+            "files": ["成都修茈科技有限公司/templates/world-will.html", "成都修茈科技有限公司/download-founder-autonomy.json"],
+            "links": [{"url": "/world-will", "status": 200}],
+            "locales": ["zh-CN"],
+            "validations": ["HTML parse", "JSON parse", "no internal identifiers"]
+          }
+        }
       }
     },
     "metadata": {

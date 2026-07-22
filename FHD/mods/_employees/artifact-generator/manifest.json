@@ -1,7 +1,7 @@
 {
   "id": "artifact-generator",
   "name": "产物生成员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "artifact-generator",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "产物生成员工",
       "description": "根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式",
@@ -79,10 +79,25 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo"
-      ]
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "artifact_generator",
+        "action": "audit_blueprint",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["blueprint"], "properties": {"blueprint": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "build_plan", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "blueprint": {
+            "id": "artifact-burn-in",
+            "artifact": "employee_pack",
+            "files": ["manifest.json", "backend/employees/worker.py"],
+            "capabilities": ["deterministic-audit"],
+            "acceptance": ["manifest 可解析", "员工入口存在"]
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

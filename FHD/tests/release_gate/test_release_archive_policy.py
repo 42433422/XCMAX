@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+import io
+import subprocess
+import tarfile
+from pathlib import Path
+
+import pytest
+
+FHD_ROOT = Path(__file__).resolve().parents[2]
+VERIFIER = FHD_ROOT / "scripts/deploy/lib/verify_release_archive.py"
+
+
+def _write_archive(path: Path, names: list[str]) -> None:
+    with tarfile.open(path, mode="w:gz") as archive:
+        for name in names:
+            payload = name.encode()
+            member = tarfile.TarInfo(name)
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+
+
+def _verify(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["python3", str(VERIFIER), "--archive", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_release_archive_accepts_clean_members(tmp_path: Path) -> None:
+    archive = tmp_path / "clean.tar.gz"
+    _write_archive(archive, ["./app/main.py", "./templates/admin-vue-dist/index.html"])
+
+    result = _verify(archive)
+
+    assert result.returncode == 0, result.stderr
+    assert '"status": "verified"' in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("names", "message"),
+    [
+        (["./app/main.py", "./app/main.py"], "duplicate member"),
+        (["./app/._main.py"], "AppleDouble metadata"),
+        (["./.env.production"], "environment files"),
+        (["./app/__pycache__/main.pyc"], "forbidden path component"),
+        (["../outside.txt"], "unsafe member path"),
+    ],
+)
+def test_release_archive_rejects_unsafe_members(
+    tmp_path: Path,
+    names: list[str],
+    message: str,
+) -> None:
+    archive = tmp_path / "unsafe.tar.gz"
+    _write_archive(archive, names)
+
+    result = _verify(archive)
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+def test_pack_release_invokes_archive_verifier() -> None:
+    script = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+
+    assert "export COPYFILE_DISABLE=1" in script
+    assert 'python3 "$ARCHIVE_VERIFY" --archive "$TARBALL"' in script
+    assert '"$SCRIPT_DIR/lib/verify_release_archive.py"' in script

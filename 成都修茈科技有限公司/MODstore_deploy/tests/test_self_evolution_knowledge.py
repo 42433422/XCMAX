@@ -7,6 +7,7 @@ from modstore_server.self_evolution_knowledge import (
     collect_proactive_signals,
     evaluate_evolution_regression,
     infer_pattern_from_diff,
+    knowledge_inventory,
     record_code_pattern,
     record_evolution_metrics,
     record_fix_knowledge,
@@ -63,6 +64,33 @@ def test_fix_knowledge_schema_rejects_missing_executable_template(monkeypatch, t
         raise AssertionError("invalid fix KB payload should fail schema validation")
 
 
+def test_knowledge_inventory_counts_only_schema_valid_docs(monkeypatch, tmp_path):
+    root = tmp_path / "kb"
+    monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(root))
+    record_fix_knowledge(
+        symptom="strict burn-in rejected",
+        root_cause="reviewed contract did not satisfy acceptance",
+        fix_diff="manifest old -> reviewed manifest new",
+    )
+    record_code_pattern(
+        pattern="strict_receipt_before_proof",
+        before="failed receipt",
+        after="accepted receipt",
+        summary="Count a capability only after strict acceptance succeeds.",
+    )
+    invalid = root / "patterns" / "invalid.json"
+    invalid.write_text('{"kind":"code_pattern"}\n', encoding="utf-8")
+
+    inventory = knowledge_inventory()
+
+    assert inventory == {
+        "fix_count": 1,
+        "invalid_count": 1,
+        "pattern_count": 1,
+        "total": 2,
+    }
+
+
 @pytest.mark.xfail(strict=False, reason="self_evolution_knowledge pre-existing failures in CI")
 def test_code_pattern_records_and_retrieves_approved_pattern(monkeypatch, tmp_path):
     monkeypatch.setenv("XCMAX_SELF_EVOLUTION_KB_ROOT", str(tmp_path / "kb"))
@@ -103,6 +131,34 @@ def test_collect_proactive_signals_reads_coverage_and_dev_scripts(tmp_path):
     kinds = {candidate["kind"] for candidate in signals["candidates"]}
     assert {"performance", "coverage", "tech_debt"} <= kinds
     assert signals["coverage_modules"][0]["file"] == "app/a.py"
+
+
+def test_collect_proactive_signals_prioritizes_open_workforce_gaps(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "modstore_server.duty_workforce_learning.load_open_workforce_gaps",
+        lambda **_kwargs: [
+            {
+                "gap_key": "a" * 64,
+                "employee_id": "host-checker",
+                "evidence_ref": "duty-burnin:run-01:host-checker",
+                "reasons": ["programmatic_verification_failed"],
+                "status": "rejected",
+                "remediation": {
+                    "task_id": "workforce-gap-aaaaaaaaaaaaaaaa",
+                    "target_files": ["FHD/mods/_employees/host-checker/manifest.json"],
+                    "closure_event": "later_strict_burnin_receipt_accepted",
+                    "auto_close": False,
+                },
+            }
+        ],
+    )
+
+    signals = collect_proactive_signals(root=tmp_path / "repo")
+
+    assert signals["workforce_gap_count"] == 1
+    assert signals["candidates"][0]["kind"] == "workforce_capability_gap"
+    assert signals["candidates"][0]["gaps"][0]["employee_id"] == "host-checker"
+    assert signals["candidates"][0]["gaps"][0]["remediation"]["auto_close"] is False
 
 
 def test_evolution_metrics_pause_after_two_consecutive_target_misses():

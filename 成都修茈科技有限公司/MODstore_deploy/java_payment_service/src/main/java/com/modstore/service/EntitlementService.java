@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -139,6 +140,55 @@ public class EntitlementService {
     @Transactional(readOnly = true)
     public Optional<UserPlan> getActivePlan(User user) {
         return userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user);
+    }
+
+    /**
+     * Return minimal, non-customer-identifying proof that a paid catalog order
+     * granted the exact immutable artifact advertised by MODstore.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> catalogFulfillmentEvidence(String sourceOrderId, Long catalogId) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("verified", false);
+        if (sourceOrderId == null || sourceOrderId.isBlank() || catalogId == null || catalogId <= 0) {
+            result.put("reason", "invalid_order_reference");
+            return result;
+        }
+        Optional<Entitlement> entitlementRow = entitlementRepository.findBySourceOrderId(sourceOrderId);
+        if (entitlementRow.isEmpty()) {
+            result.put("reason", "entitlement_missing");
+            return result;
+        }
+        Entitlement entitlement = entitlementRow.get();
+        if (!entitlement.isActive() || !catalogId.equals(entitlement.getCatalogId())) {
+            result.put("reason", "entitlement_inactive_or_mismatched");
+            return result;
+        }
+        Optional<CatalogItem> itemRow = catalogItemRepository.findById(catalogId);
+        if (itemRow.isEmpty()) {
+            result.put("reason", "catalog_item_missing");
+            return result;
+        }
+        CatalogItem item = itemRow.get();
+        String pkgId = item.getPkgId() == null ? "" : item.getPkgId().trim();
+        String version = item.getVersion() == null ? "" : item.getVersion().trim();
+        String sha256 = item.getSha256() == null ? "" : item.getSha256().trim().toLowerCase();
+        if (pkgId.isEmpty() || version.isEmpty() || !sha256.matches("[0-9a-f]{64}")) {
+            result.put("reason", "catalog_artifact_identity_incomplete");
+            return result;
+        }
+        if (entitlement.getGrantedAt() == null) {
+            result.put("reason", "entitlement_granted_at_missing");
+            return result;
+        }
+        result.put("verified", true);
+        result.put("reason", "verified");
+        result.put("artifact_id", "catalog:" + pkgId + "@" + version);
+        result.put("artifact_sha256", sha256);
+        result.put("artifact_kind", item.getArtifact() == null ? "" : item.getArtifact());
+        result.put("fulfilled_at", entitlement.getGrantedAt());
+        result.put("entitlement_type", entitlement.getEntitlementType());
+        return result;
     }
 
     @Transactional(readOnly = true)

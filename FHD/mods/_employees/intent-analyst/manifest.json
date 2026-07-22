@@ -1,7 +1,7 @@
 {
   "id": "intent-analyst",
   "name": "需求分析员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "intent-analyst",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "需求分析员工",
       "description": "解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限",
@@ -77,9 +77,33 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "intent_analyst",
+        "action": "audit_request_spec",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["request_spec"],
+          "properties": {"request_spec": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "goal", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "request_spec": {
+            "goal": "核对创始人自治状态证据",
+            "non_goals": ["不修改生产状态"],
+            "constraints": ["仅使用提供的结构化字段"],
+            "risks": ["把缺失证据误判为完成"],
+            "acceptance": ["目标、非目标、约束、风险和验收均明确"]
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

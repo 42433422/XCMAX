@@ -44,14 +44,15 @@ ENV_FILE="${FHD_ENV_FILE:-/root/fhd-full.env}"
 LOG="${FHD_DEPLOY_LOG:-/var/log/fhd-auto-update.log}"
 EXPECTED_GIT_SHA="${FHD_GIT_SHA:-}"
 EXPECTED_ARTIFACT_SHA256="${FHD_ARTIFACT_SHA256:-}"
+EXPECTED_ADMIN_CONSOLE_SHA256="${FHD_ADMIN_CONSOLE_SHA256:-}"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"
 }
 
 if [[ "${FHD_REQUIRE_EXACT_IDENTITY:-1}" == "1" \
-    && ( -z "$EXPECTED_GIT_SHA" || -z "$EXPECTED_ARTIFACT_SHA256" ) ]]; then
-  log "ERROR: FHD_GIT_SHA and FHD_ARTIFACT_SHA256 are required for exact-SHA deployment"
+    && ( -z "$EXPECTED_GIT_SHA" || -z "$EXPECTED_ARTIFACT_SHA256" || -z "$EXPECTED_ADMIN_CONSOLE_SHA256" ) ]]; then
+  log "ERROR: Git, artifact and admin console identities are required"
   exit 78
 fi
 
@@ -123,6 +124,7 @@ fi
 PREV_DIGEST=""
 PREV_GIT_SHA=""
 PREV_ARTIFACT_SHA256=""
+PREV_ADMIN_CONSOLE_SHA256=""
 if [[ -f "$DEPLOY_ROOT/.deploy-image-digest" ]]; then
   PREV_DIGEST="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-image-digest")"
 fi
@@ -130,6 +132,8 @@ fi
   && PREV_GIT_SHA="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-git-sha")"
 [[ -f "$DEPLOY_ROOT/.deploy-sha256" ]] \
   && PREV_ARTIFACT_SHA256="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-sha256")"
+[[ -f "$DEPLOY_ROOT/.deploy-admin-console-sha256" ]] \
+  && PREV_ADMIN_CONSOLE_SHA256="$(tr -d '[:space:]' < "$DEPLOY_ROOT/.deploy-admin-console-sha256")"
 
 deploy_emit apply started "image=${IMAGE} digest=${DIGEST:0:19}..."
 log "开始 compose 发布 image=$IMAGE digest=${DIGEST:0:19}..."
@@ -137,6 +141,7 @@ log "开始 compose 发布 image=$IMAGE digest=${DIGEST:0:19}..."
 export FHD_API_IMAGE="$IMAGE"
 export FHD_API_IMAGE_DIGEST="$DIGEST"
 export FHD_ARTIFACT_SHA256="$EXPECTED_ARTIFACT_SHA256"
+export FHD_ADMIN_CONSOLE_SHA256="$EXPECTED_ADMIN_CONSOLE_SHA256"
 export FHD_GIT_SHA="$EXPECTED_GIT_SHA"
 export FHD_API_IMAGE_REF="${IMAGE}@${DIGEST}"
 export FHD_DEPLOY_ROOT="$DEPLOY_ROOT"
@@ -150,7 +155,7 @@ fi
 
 rollback_compose() {
   local digest="$1"
-  if [[ -z "$digest" || -z "$PREV_GIT_SHA" || -z "$PREV_ARTIFACT_SHA256" ]]; then
+  if [[ -z "$digest" || -z "$PREV_GIT_SHA" || -z "$PREV_ARTIFACT_SHA256" || -z "$PREV_ADMIN_CONSOLE_SHA256" ]]; then
     log "WARN: 上一版本身份不完整，跳过 compose 回滚"
     return 1
   fi
@@ -159,6 +164,7 @@ rollback_compose() {
   export FHD_API_IMAGE_DIGEST="$digest"
   export FHD_GIT_SHA="$PREV_GIT_SHA"
   export FHD_ARTIFACT_SHA256="$PREV_ARTIFACT_SHA256"
+  export FHD_ADMIN_CONSOLE_SHA256="$PREV_ADMIN_CONSOLE_SHA256"
   export FHD_API_IMAGE_REF="${FHD_API_IMAGE}@${digest}"
   docker compose "${COMPOSE_OPTS[@]}" pull fhd-api || true
   docker compose "${COMPOSE_OPTS[@]}" up -d --pull never fhd-api || return 1
@@ -167,7 +173,8 @@ rollback_compose() {
         "http://127.0.0.1:${HEALTH_PORT}${FHD_HEALTH_PATH:-/api/health}?lite=true" \
         "$PREV_GIT_SHA" \
         "$digest" \
-        "$PREV_ARTIFACT_SHA256"; then
+        "$PREV_ARTIFACT_SHA256" \
+        "$PREV_ADMIN_CONSOLE_SHA256"; then
       return 0
     fi
     sleep 2
@@ -230,12 +237,20 @@ for _ in $(seq 1 "$HEALTH_RETRIES"); do
       "http://127.0.0.1:${HEALTH_PORT}${HEALTH_PATH}?lite=true" \
       "$EXPECTED_GIT_SHA" \
       "$DIGEST" \
-      "$EXPECTED_ARTIFACT_SHA256"; then
+      "$EXPECTED_ARTIFACT_SHA256" \
+      "$EXPECTED_ADMIN_CONSOLE_SHA256"; then
     API_CODE=200
     break
   fi
   sleep "$HEALTH_INTERVAL"
 done
+
+if [[ "$API_CODE" == "200" ]] && ! python3 "$SCRIPT_DIR/lib/verify_admin_console.py" \
+    --base-url "http://127.0.0.1:${HEALTH_PORT}/admin/" \
+    --expected-git-sha "$EXPECTED_GIT_SHA" \
+    --expected-sha256 "$EXPECTED_ADMIN_CONSOLE_SHA256"; then
+  API_CODE=admin_identity_mismatch
+fi
 
 if [[ "$API_CODE" != "200" ]]; then
   log "ERROR: /api/health 未就绪 (code=$API_CODE)，尝试 compose 回滚"
@@ -247,6 +262,7 @@ fi
 echo "$DIGEST" > "$DEPLOY_ROOT/.deploy-image-digest"
 echo "$EXPECTED_GIT_SHA" > "$DEPLOY_ROOT/.deploy-git-sha"
 echo "$EXPECTED_ARTIFACT_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
+echo "$EXPECTED_ADMIN_CONSOLE_SHA256" > "$DEPLOY_ROOT/.deploy-admin-console-sha256"
 
 log "compose 发布成功 health=200 digest=${DIGEST:0:19}..."
 deploy_emit apply ok "port=$HEALTH_PORT mode=compose"

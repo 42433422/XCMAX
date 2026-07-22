@@ -77,6 +77,24 @@ def test_workflow_scheduler_non_daily_job_uses_runtime_ledger(db_ready):
     assert entry["last_status"] == "success"
 
 
+def test_customer_value_scheduler_requires_authoritative_source():
+    from modstore_server.workflow_scheduler import _require_customer_value_source_ready
+
+    ready = {"source_ready": True, "source_owner": "java_postgresql_internal_api"}
+    assert _require_customer_value_source_ready(ready) is ready
+
+    with pytest.raises(
+        RuntimeError,
+        match="customer_value_source_unready:java_postgresql_internal_api",
+    ):
+        _require_customer_value_source_ready(
+            {
+                "source_ready": False,
+                "source_owner": "java_postgresql_internal_api",
+            }
+        )
+
+
 def test_stale_when_last_success_too_old(db_ready):
     from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
 

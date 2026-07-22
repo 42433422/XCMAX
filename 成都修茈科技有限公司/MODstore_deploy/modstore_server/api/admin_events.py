@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -55,18 +56,25 @@ def admin_replay_outbox(
 def admin_list_dlq(
     *,
     limit: int = 50,
+    include_resolved: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
     assert_user_is_admin(user)
-    rows = (
-        db.query(OutboxDeadLetter)
-        .order_by(OutboxDeadLetter.id.desc())
-        .limit(max(1, min(limit, 200)))
-        .all()
+    query = db.query(OutboxDeadLetter)
+    if not include_resolved:
+        query = query.filter(OutboxDeadLetter.resolved_at.is_(None))
+    rows = query.order_by(OutboxDeadLetter.id.desc()).limit(max(1, min(limit, 200))).all()
+    unresolved_count = int(
+        db.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_(None)).count()
+    )
+    resolved_count = int(
+        db.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_not(None)).count()
     )
     return {
         "ok": True,
+        "unresolved_count": unresolved_count,
+        "resolved_count": resolved_count,
         "data": [
             {
                 "id": r.id,
@@ -75,6 +83,11 @@ def admin_list_dlq(
                 "attempts": r.attempts,
                 "last_error": r.last_error[:500] if r.last_error else "",
                 "moved_at": r.moved_at.isoformat() if r.moved_at else "",
+                "resolution_status": str(r.resolution_status or ""),
+                "resolution_action": str(r.resolution_action or ""),
+                "resolution_note": str(r.resolution_note or "")[:500],
+                "resolved_at": r.resolved_at.isoformat() if r.resolved_at else "",
+                "replay_outbox_id": r.replay_outbox_id,
             }
             for r in rows
         ],
@@ -91,6 +104,34 @@ def admin_discard_dlq(
     row = db.query(OutboxDeadLetter).filter(OutboxDeadLetter.id == row_id).first()
     if not row:
         raise HTTPException(404, "DLQ 行不存在")
-    db.delete(row)
+    # Keep the original row as immutable incident evidence.  "Discard" means
+    # resolve without replay, not erase the audit record.
+    row.resolution_status = "discarded"
+    row.resolution_action = "admin_no_replay"
+    row.resolution_note = "explicit administrator discard; audit row retained"
+    row.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.last_reconciled_at = row.resolved_at
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "retained": True, "resolution_status": "discarded"}
+
+
+@router.post("/dlq/reconcile")
+def admin_reconcile_dlq(
+    *,
+    limit: int = 200,
+    user: User = Depends(_get_current_user),
+):
+    """Run the same audited reconciliation used by the 7x24 scheduler."""
+
+    assert_user_is_admin(user)
+    from modstore_server.dead_letter_reconciler import reconcile_dead_letters
+
+    return reconcile_dead_letters(limit=max(1, min(limit, 1000)))
+
+
+@router.get("/dlq/health")
+def admin_dlq_health(user: User = Depends(_get_current_user)):
+    assert_user_is_admin(user)
+    from modstore_server.dead_letter_reconciler import dead_letter_health
+
+    return dead_letter_health()

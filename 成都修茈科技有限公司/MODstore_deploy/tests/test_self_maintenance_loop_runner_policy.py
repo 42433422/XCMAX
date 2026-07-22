@@ -53,6 +53,36 @@ def _stats(line_changes=12, binary_files=None):
     }
 
 
+def test_self_maintenance_heartbeat_records_only_gate_liveness(monkeypatch):
+    appended = []
+    monkeypatch.setattr(
+        loop_runner,
+        "should_run_self_maintenance_loop",
+        lambda **kwargs: {
+            "should_run": False,
+            "reason": "cooldown",
+            "runtime_provenance": {"ok": True, "detail": "not projected"},
+            "evolution_metrics_gate": {"pause": False},
+        },
+    )
+    monkeypatch.setattr(loop_runner, "_append_ledger", appended.append)
+
+    receipt = loop_runner.record_self_maintenance_heartbeat(triggered_by="test")
+
+    assert receipt["phase"] == "heartbeat"
+    assert receipt["status"] == "heartbeat_idle"
+    assert receipt["gate"] == {
+        "should_run": False,
+        "reason": "cooldown",
+        "runtime_provenance_ok": True,
+        "evolution_metrics_paused": False,
+    }
+    assert receipt["read_only"] is True
+    assert receipt["side_effects"] == []
+    assert appended == [receipt]
+    assert "detail" not in receipt["gate"]
+
+
 def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
@@ -478,8 +508,10 @@ def test_dynamic_low_risk_policy_allows_self_evolution_knowledge_files(monkeypat
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_RISK_SCORE", "100")
     files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_learning.py",
         "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_knowledge.py",
         "FHD/XCAGI/kb/fixes/2026-06-18-modstore-narrow-ci-pycache-prefix.md",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_duty_workforce_learning.py",
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_knowledge.py",
     ]
 

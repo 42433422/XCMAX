@@ -16,6 +16,7 @@ RuntimeTruthSnapshot(diff) → AuditEntry(comment thread)。
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -46,9 +47,7 @@ class DiffHunk:
 
     file_path: str  # 新文件路径（a→b 取 b）
     start_line: int  # hunk 在新文件中的起始行号
-    lines: list[
-        tuple[int, str, str]
-    ]  # (line_no, prefix, content) prefix: '+' / '-' / ' '
+    lines: list[tuple[int, str, str]]  # (line_no, prefix, content) prefix: '+' / '-' / ' '
     raw_header: str  # 原始 hunk 头
 
 
@@ -196,9 +195,7 @@ def parse_diff(diff_text: str) -> list[DiffHunk]:
         elif line.startswith("-"):
             cur_hunk.lines.append((0, "-", line[1:]))  # 删除行不计新行号
         else:
-            cur_hunk.lines.append(
-                (cur_new_line, " ", line[1:] if line.startswith(" ") else line)
-            )
+            cur_hunk.lines.append((cur_new_line, " ", line[1:] if line.startswith(" ") else line))
             cur_new_line += 1
     if cur_hunk is not None:
         hunks.append(cur_hunk)
@@ -258,18 +255,14 @@ _RULES: list[tuple[str, str, str, str, str]] = [
     (
         "requests-verify-false",
         "medium",
-        re.compile(
-            r"requests\.(get|post|put|delete|patch|head)\s*\([^)]*verify\s*=\s*False"
-        ),
+        re.compile(r"requests\.(get|post|put|delete|patch|head)\s*\([^)]*verify\s*=\s*False"),
         "禁止 verify=False，SSL 验证关闭可致中间人攻击。",
         "requests verify=False SSL 验证关闭",
     ),
     (
         "hardcoded-aws-secret",
         "high",
-        re.compile(
-            r"['\"](AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})['\"]"
-        ),
+        re.compile(r"['\"](AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})['\"]"),
         "禁止硬编码 AWS/GitHub/OpenAI secret，改用环境变量。",
         "硬编码 secret 高危风险",
     ),
@@ -589,16 +582,82 @@ def run_fallback_rules(hunks: list[DiffHunk]) -> list[Finding]:
     返回的 finding 一律 severity=high，直接进 blocking_findings，
     不进 LLM 通道，不受 trusted_authors 影响。
     """
-    return (
-        match_path_rules(hunks)
-        + match_deletion_rules(hunks)
-        + match_binary_file_rules(hunks)
-    )
+    return match_path_rules(hunks) + match_deletion_rules(hunks) + match_binary_file_rules(hunks)
 
 
 # =====================================================================
 # LLM 复核（fail-closed）
 # =====================================================================
+
+
+_LLM_VERDICTS = {"high", "medium", "low", "false-positive"}
+
+
+def _response_verdict(data: Any) -> str:
+    if not isinstance(data, dict):
+        return "unavailable"
+    direct = data.get("verdict")
+    if direct in _LLM_VERDICTS:
+        return str(direct)
+
+    content: Any = None
+    blocks = data.get("content")
+    if isinstance(blocks, list):
+        text_blocks = [
+            str(block.get("text") or "")
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        content = "\n".join(part for part in text_blocks if part)
+    choices = data.get("choices")
+    if content is None and isinstance(choices, list) and choices:
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        message = first.get("message") if isinstance(first.get("message"), dict) else {}
+        content = message.get("content")
+    if not isinstance(content, str):
+        return "unavailable"
+
+    stripped = content.strip().removeprefix("```json").removeprefix("```")
+    stripped = stripped.removesuffix("```").strip()
+    try:
+        parsed = json.loads(stripped)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        match = re.search(
+            r'["\']verdict["\']\s*:\s*["\'](high|medium|low|false-positive)["\']',
+            stripped,
+            re.I,
+        )
+        return match.group(1).lower() if match else "unavailable"
+    verdict = parsed.get("verdict") if isinstance(parsed, dict) else None
+    return str(verdict) if verdict in _LLM_VERDICTS else "unavailable"
+
+
+def _review_prompt(finding: Finding) -> str:
+    evidence = {
+        "rule": finding.rule,
+        "scanner_severity": finding.severity,
+        "snippet": finding.snippet,
+        "file": finding.file_path,
+        "line": finding.line,
+        "suggestion": finding.suggestion,
+    }
+    return (
+        "Independently classify this code-review finding. Return only JSON with one key: "
+        '{"verdict":"high|medium|low|false-positive"}. '
+        "Do not include prose or markdown. Evidence: "
+        + json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def _minimax_anthropic_endpoint(base_url: str) -> str:
+    root = base_url.rstrip("/")
+    for suffix in ("/v1", "/v2", "/v3", "/v4"):
+        if root.endswith(suffix):
+            root = root[: -len(suffix)].rstrip("/")
+            break
+    if not root.endswith("/anthropic"):
+        root = f"{root}/anthropic"
+    return f"{root}/v1/messages"
 
 
 def call_llm_review(
@@ -620,17 +679,59 @@ def call_llm_review(
         return "unavailable"
     if httpx is None and client is None:
         return "unavailable"
-    endpoint = endpoint or os.environ.get(
-        "XCAGI_LLM_ENDPOINT", "https://api.example.com/v1/review"
-    )
-    payload = {
-        "rule": finding.rule,
-        "severity": finding.severity,
-        "snippet": finding.snippet,
-        "file": finding.file_path,
-        "line": finding.line,
-    }
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    explicit_endpoint = str(endpoint or os.environ.get("XCAGI_LLM_ENDPOINT") or "").strip()
+    base_url = str(os.environ.get("XCAGI_LLM_BASE_URL") or "").strip()
+    model = str(os.environ.get("XCAGI_LLM_MODEL") or "").strip()
+    if model.lower().startswith("minimax/"):
+        model = model.split("/", 1)[1]
+    prompt = _review_prompt(finding)
+
+    normalized_key = str(api_key).strip()
+    if normalized_key.lower().startswith("minimaxsk-cp-"):
+        normalized_key = normalized_key[len("minimax") :]
+    token_plan = normalized_key.lower().startswith("sk-cp-")
+
+    if not explicit_endpoint and base_url and model and token_plan:
+        request_url = _minimax_anthropic_endpoint(base_url)
+        headers = {
+            "x-api-key": normalized_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "max_tokens": 512,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    elif not explicit_endpoint and base_url and model:
+        openai_root = base_url.rstrip("/")
+        if not openai_root.endswith("/v1"):
+            openai_root = f"{openai_root}/v1"
+        request_url = f"{openai_root}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {normalized_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "max_tokens": 512,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    else:
+        request_url = explicit_endpoint or "https://api.example.com/v1/review"
+        headers = {
+            "Authorization": f"Bearer {normalized_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "rule": finding.rule,
+            "severity": finding.severity,
+            "snippet": finding.snippet,
+            "file": finding.file_path,
+            "line": finding.line,
+        }
     try:
         if client is None:
             client = httpx.Client(timeout=timeout)
@@ -638,7 +739,7 @@ def call_llm_review(
         else:
             close_after = False
         try:
-            resp = client.post(endpoint, json=payload, headers=headers)
+            resp = client.post(request_url, json=payload, headers=headers)
             if resp.status_code != 200:
                 return "unavailable"
             data = resp.json()
@@ -647,10 +748,7 @@ def call_llm_review(
                 client.close()
     except Exception:
         return "unavailable"
-    verdict = data.get("verdict") if isinstance(data, dict) else None
-    if verdict in {"high", "medium", "low", "false-positive"}:
-        return verdict
-    return "unavailable"
+    return _response_verdict(data)
 
 
 # =====================================================================
@@ -720,9 +818,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="PR AI Review")
     parser.add_argument("--pr-number", type=int, default=None, help="PR 编号")
     parser.add_argument("--commit-id", default="", help="PR HEAD commit SHA")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="只输出 finding，不评论不阻断"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="只输出 finding，不评论不阻断")
     args = parser.parse_args(argv)
 
     pr_number = args.pr_number or _pr_number_from_env()
@@ -756,14 +852,10 @@ def main(argv: list[str] | None = None) -> int:
     for f in findings:
         if f.severity == "high":
             blocking_findings.append(f)
-            print(
-                f"[review] {f.rule} @ {f.file_path}:{f.line} deterministic-high=block"
-            )
+            print(f"[review] {f.rule} @ {f.file_path}:{f.line} deterministic-high=block")
         elif f.severity == "medium":
             verdict = call_llm_review(f)
-            print(
-                f"[review] {f.rule} @ {f.file_path}:{f.line} severity={f.severity} llm={verdict}"
-            )
+            print(f"[review] {f.rule} @ {f.file_path}:{f.line} severity={f.severity} llm={verdict}")
             if verdict in {"high", "medium"}:
                 blocking_findings.append(f)
             elif verdict == "low":
@@ -817,9 +909,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if not ok:
                     comment_failures += 1
-                    print(
-                        f"::error::[review] comment failed for {f.file_path}:{f.line}"
-                    )
+                    print(f"::error::[review] comment failed for {f.file_path}:{f.line}")
             print(
                 f"::error::[review] LLM unavailable + fallback rules blocked: "
                 f"{len(fallback_findings)} finding(s)"
@@ -892,10 +982,4 @@ def json_loads_safe(file_obj: Any) -> Any:
 if __name__ == "__main__":
     pr_num = _pr_number_from_env()
     commit_id = _commit_id_from_env()
-    sys.exit(
-        main(
-            ["--pr-number", str(pr_num or 0), "--commit-id", commit_id]
-            if pr_num
-            else []
-        )
-    )
+    sys.exit(main(["--pr-number", str(pr_num or 0), "--commit-id", commit_id] if pr_num else []))

@@ -86,6 +86,7 @@ payment:
 modstore:
   admin-recharge-token: ${MODSTORE_ADMIN_RECHARGE_TOKEN:}
   internal-api-key: ${MODSTORE_INTERNAL_API_KEY:${XCAGI_MARKET_INTERNAL_API_KEY:}}
+  deploy-tier: ${MODSTORE_DEPLOY_TIER:local}
 
 webhook:
   url: ${MODSTORE_WEBHOOK_URL:}
@@ -102,6 +103,15 @@ management:
   endpoint:
     health:
       show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  xcmax:
+    git-sha: ${MODSTORE_GIT_SHA:}
+    release-id: ${MODSTORE_GIT_SHA:}
+    artifact-sha256: ${MODSTORE_RELEASE_ARTIFACT_SHA256:}
 
 springdoc:
   api-docs:

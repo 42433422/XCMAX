@@ -118,7 +118,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 0
 fi
 
-IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL <<<"$(
+IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -131,6 +131,7 @@ values = [
     str(doc.get("image", "")),
     str(doc.get("image_digest", "")),
     str(doc.get("channel", "")),
+    str(doc.get("admin_console_sha256", "")),
 ]
 if any("|" in value or "\n" in value for value in values):
     raise SystemExit("manifest contains an invalid field delimiter")
@@ -141,6 +142,10 @@ PY
 DEPLOY_MODE="${FHD_DEPLOY_MODE:-$DEPLOY_MODE}"
 DEPLOY_MODE="${DEPLOY_MODE:-tarball}"
 CHANNEL="${CHANNEL:-stable}"
+[[ "$ADMIN_CONSOLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  log "ERROR: manifest 缺少管理端不可变资产身份"
+  exit 1
+}
 
 if [[ "$DEPLOY_MODE" == "image" ]]; then
   if [[ -z "$IMAGE" || -z "$IMAGE_DIGEST" ]]; then
@@ -167,6 +172,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
     "FHD_API_IMAGE=$IMAGE"
     "FHD_API_IMAGE_DIGEST=$IMAGE_DIGEST"
     "FHD_ARTIFACT_SHA256=$REMOTE_SHA"
+    "FHD_ADMIN_CONSOLE_SHA256=$ADMIN_CONSOLE_SHA256"
     "FHD_GIT_SHA=$GIT_SHA"
     "FHD_DEPLOY_ROOT=$DEPLOY_ROOT"
     "FHD_ARTIFACT_DIR=$ARTIFACT_DIR"
@@ -232,6 +238,7 @@ APPLY_ENV=(
   "FHD_DEPLOY_ROOT=$DEPLOY_ROOT"
   "FHD_EXPECTED_SHA256=$REMOTE_SHA"
   "FHD_GIT_SHA=$GIT_SHA"
+  "FHD_ADMIN_CONSOLE_SHA256=$ADMIN_CONSOLE_SHA256"
   "FHD_SKIP_PIP=${FHD_SKIP_PIP:-1}"
 )
 [[ -n "${FHD_SERVICE_NAME:-}" ]] && APPLY_ENV+=("FHD_SERVICE_NAME=$FHD_SERVICE_NAME")

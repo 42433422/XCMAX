@@ -1,7 +1,7 @@
 {
   "id": "marketing-site-builder",
   "name": "营销站点构建员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "marketing-site-builder",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "营销站点构建员",
       "description": "维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。",
@@ -81,9 +81,35 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "marketing_site_builder",
+        "action": "audit_build_receipt",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["build_receipt"],
+          "properties": {"build_receipt": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "pages", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "build_receipt": {
+            "build_status": "passed",
+            "pages": ["index.html", "world-will.html"],
+            "assets_missing": [],
+            "responsive_checks": [
+              {"viewport": "desktop", "status": "passed"},
+              {"viewport": "mobile", "status": "passed"}
+            ]
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

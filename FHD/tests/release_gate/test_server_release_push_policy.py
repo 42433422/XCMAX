@@ -33,6 +33,7 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
                 "version": "1.0.0.0",
                 "git_sha": "test-sha",
                 "deploy_mode": "tarball",
+                "admin_console_sha256": "a" * 64,
             }
         ),
         encoding="utf-8",
@@ -83,10 +84,12 @@ def test_strict_push_applies_and_verifies_exact_sha() -> None:
     assert "FHD_PUSH_APPLY_NOW:-" in script
     assert "FHD_CVM_PUSH_STRICT:-false" in script
     assert "FHD_MANIFEST_PATH=%q" in script
+    assert "fhd-release-bootstrap" in script
     assert "verify_release_identity_payload" in script
     assert '"$SHA256"' in script
     assert '"${DEPLOY_MODE:-tarball}" == "image"' in script
     assert '"$EXPECTED_RUNTIME_IMAGE_DIGEST"' in script
+    assert '"$ADMIN_CONSOLE_SHA256"' in script
     assert "remote_identity_mismatch" in script
 
 
@@ -108,6 +111,7 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
                 "deploy_mode": "tarball",
                 "image": "ghcr.io/example/fhd-api",
                 "image_digest": "sha256:" + "c" * 64,
+                "admin_console_sha256": "d" * 64,
             }
         ),
         encoding="utf-8",
@@ -129,7 +133,15 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
         encoding="utf-8",
     )
     ssh.chmod(0o755)
-    health_payload = json.dumps({"build": {"git_sha": "b" * 40, "artifact_sha256": artifact_sha}})
+    health_payload = json.dumps(
+        {
+            "build": {
+                "git_sha": "b" * 40,
+                "artifact_sha256": artifact_sha,
+                "admin_console_sha256": "d" * 64,
+            }
+        }
+    )
 
     result = subprocess.run(
         ["bash", str(FHD_ROOT / "scripts/deploy/fhd-push-release.sh")],
@@ -240,13 +252,10 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
     sync_step = workflow.split("- name: Sync autonomy runtime configuration", 1)[1].split(
         "- name: SSH rolling restart / apply", 1
     )[0]
-    sync_step_rendered = sync_step.replace("\\$", "$")
-    assert 'systemctl restart "$service_name"' in sync_step_rendered
-    assert "for attempt in $(seq 1 30)" in sync_step_rendered
-    assert (
-        "curl --noproxy '*' -sf --max-time 5 http://127.0.0.1:$health_port/api/health"
-    ) in sync_step_rendered
-    assert "did not become HTTP-ready after autonomy config sync" in sync_step_rendered
+    assert "systemctl restart fhd-full.service" in sync_step
+    assert "for attempt in $(seq 1 30)" in sync_step
+    assert ('curl --noproxy "*" -sf --max-time 5 http://127.0.0.1:5100/api/health') in sync_step
+    assert "did not become HTTP-ready after autonomy config sync" in sync_step
 
 
 def test_autonomy_deploy_has_no_human_environment_approval() -> None:
@@ -255,9 +264,7 @@ def test_autonomy_deploy_has_no_human_environment_approval() -> None:
     assert "needs: cvm-rolling" in deploy
     assert "needs['cvm-rolling'].result != 'success'" in deploy
     assert 'decision="execution_failed"' in deploy
-    assert ("Autonomy action was already terminal" in deploy) or (
-        "Autonomy action already terminal or absent" in deploy
-    )
+    assert "Autonomy action was already terminal" in deploy
     assert "\n    environment:\n" not in deploy
     assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
     assert "Resume approved autonomy action" not in deploy

@@ -72,7 +72,14 @@ def build_identity() -> dict[str, str]:
         or _stamp(".deploy-sha256")
         or ""
     ).strip()
+    admin_console_sha256 = str(
+        os.environ.get("XCAGI_ADMIN_CONSOLE_SHA256")
+        or os.environ.get("FHD_ADMIN_CONSOLE_SHA256")
+        or packaged.get("admin_console_sha256")
+        or ""
+    ).strip()
     return {
+        "admin_console_sha256": admin_console_sha256,
         "artifact_sha256": artifact_sha256,
         "built_at": str(packaged.get("built_at") or ""),
         "git_sha": git_sha,

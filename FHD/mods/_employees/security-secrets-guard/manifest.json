@@ -1,7 +1,7 @@
 {
   "id": "security-secrets-guard",
   "name": "安全密钥守卫",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "admin",
   "description": "保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "security-secrets-guard",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "安全密钥守卫",
       "description": "保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。",
@@ -77,12 +77,20 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo",
-        "shell_exec"
+        "direct_python"
       ],
-      "shell_exec": {
-        "command_id": "pip-audit-run"
+      "direct_python": {
+        "module": "security_secrets_guard",
+        "action": "audit_redacted_findings",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["finding_summary"], "properties": {"finding_summary": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "finding_summary": {"redacted": true, "prohibited_hits": 0, "high_severity_count": 0, "rule_ids": ["no-sensitive-values"]}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_high_risk_fixture": true, "allow_prohibited_semantics_fixture": true}
       }
     },
     "metadata": {

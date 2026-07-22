@@ -1,7 +1,7 @@
 {
   "id": "host-checker",
   "name": "运维员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "探测宿主环境连通性，验证 LLM 密钥状态、API 版本兼容性与服务可达性",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "host-checker",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "运维员工",
       "description": "探测宿主环境连通性，验证 LLM 密钥状态、API 版本兼容性与服务可达性",
@@ -80,9 +80,32 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "host_checker",
+        "action": "audit_host_snapshot",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["host_snapshot"],
+          "properties": {"host_snapshot": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "host_snapshot": {
+            "pack_id": "host-checker",
+            "loaded": true,
+            "routes": [{"path": "/employees/host-checker", "status": "ready"}],
+            "dependencies": [{"name": "xcagi", "status": "available"}]
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",
