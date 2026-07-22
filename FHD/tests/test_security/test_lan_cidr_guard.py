@@ -47,6 +47,14 @@ def test_token_authenticated_autonomy_callback_is_fixed_lan_bypass() -> None:
     assert lan_guard_path_is_bypassed("/fhd-api/api/ops/autonomy/actions/pending", cfg)
 
 
+def test_founder_cockpit_public_shell_and_admin_api_are_fixed_lan_bypass() -> None:
+    cfg = _cfg()
+    assert lan_guard_path_is_bypassed("/admin/founder-autonomy", cfg)
+    assert lan_guard_path_is_bypassed("/admin/assets/js/index-hash.js", cfg)
+    assert lan_guard_path_is_bypassed("/admin/vite.svg", cfg)
+    assert lan_guard_path_is_bypassed("/api/xcmax/ops/founder-autonomy", cfg)
+
+
 @pytest.mark.asyncio
 async def test_cidr_guard_allows_im_websocket_handshake_path() -> None:
     app = AsyncMock()
