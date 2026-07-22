@@ -84,7 +84,7 @@
       </div>
       <slot></slot>
     </div>
-    <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" />
+    <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" :male-avatar="adminConsoleSpa" />
     <VirtualCursor />
     <OnboardingTutorial />
     <TutorialOverlay v-if="!onboardingTutorialStore.active" />

@@ -73,7 +73,7 @@ describe('FloatingChatAssistant', () => {
   it('toggle button has correct aria-label', () => {
     const wrapper = mountAssistant()
     expect(wrapper.find('.floating-chat-toggle').attributes('aria-label')).toBe(
-      '打开小C助理悬浮窗'
+      '小C助理'
     )
   })
 
@@ -114,8 +114,8 @@ describe('FloatingChatAssistant', () => {
   it('renders panel header with title', async () => {
     const wrapper = mountAssistant()
     await wrapper.find('.floating-chat-toggle').trigger('click')
-    expect(wrapper.find('.floating-chat-title').text()).toBe('智能对话')
-    expect(wrapper.find('.floating-chat-subtitle').text()).toBe('悬浮助手')
+    expect(wrapper.find('.floating-chat-title').text()).toBe('小C助理')
+    expect(wrapper.find('.floating-chat-subtitle').exists()).toBe(false)
   })
 
   it('renders textarea input with placeholder', async () => {
