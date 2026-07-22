@@ -126,19 +126,20 @@ jobs:
               install -m 644 "${NGINX_SRC}" /etc/nginx/conf.d/xiu-ci-corp-root.conf
             fi
             nginx -t
-            systemctl reload nginx
+            if ! systemctl reload nginx; then
+              echo "[warn] systemd reload unavailable; sending HUP to verified nginx master"
+              NGINX_PID="$(cat /run/nginx.pid)"
+              kill -HUP "${NGINX_PID}"
+            fi
+            systemctl is-active --quiet nginx
             echo "[ok] nginx reloaded"
             # Refresh public world-will projections from production DB (not git snapshots).
-            if [ -f /etc/xcmax/modstore.env ]; then
-              set -a
-              # shellcheck disable=SC1091
-              . /etc/xcmax/modstore.env
-              set +a
-            fi
             MOD_ROOT="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"
             if [ -x "${MOD_ROOT}/.venv/bin/python" ]; then
               echo "[info] regenerating public action board + company hall"
               ( cd "${MOD_ROOT}" && PYTHONPATH=. ./.venv/bin/python - <<'PY'
+            from dotenv import load_dotenv
+            load_dotenv("/etc/xcmax/modstore.env", override=True)
             from modstore_server.public_action_board import write_public_action_board
             r = write_public_action_board()
             print("public_board", {k: r.get(k) for k in ("ok", "day", "written")} if isinstance(r, dict) else r)
