@@ -170,6 +170,13 @@
         font-weight: 700;
         padding-top: 2px;
       }
+      body[data-page='world-will'] .hall-timeline-item time span { display: block; }
+      body[data-page='world-will'] .hall-timeline-day {
+        color: #64748b;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      body[data-page='world-will'] .hall-timeline-clock { line-height: 1.35; }
       body[data-page='world-will'] .hall-timeline-dot {
         width: 10px;
         height: 10px;
@@ -237,6 +244,13 @@
         margin: 0;
         font-size: 16px;
         letter-spacing: -0.02em;
+      }
+      body[data-page='world-will'] .ww-panel-head h2 small {
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0;
+        margin-left: 6px;
       }
       body[data-page='world-will'] .ww-panel-head a {
         color: #0b63f6;
@@ -487,7 +501,7 @@
           <div class="hall-layout">
             <section class="ww-panel" aria-labelledby="hall-feed-title">
               <div class="ww-panel-head">
-                <h2 id="hall-feed-title">公司动态</h2>
+                <h2 id="hall-feed-title">公司动态 <small>北京时间 · 新到旧</small></h2>
                 <a href="/download/breakpoints">查看断点 →</a>
               </div>
               <div class="ww-feed" id="hall-feed" aria-live="polite"></div>
@@ -555,7 +569,7 @@
 <script src="./main.js?v=20260719b"></script>
 
 
-<script src="./world-will.js?v=20260722e" defer></script>
+<script src="./world-will.js?v=20260722f" defer></script>
 
 
 <div id="xc-corp-butler-root"></div>

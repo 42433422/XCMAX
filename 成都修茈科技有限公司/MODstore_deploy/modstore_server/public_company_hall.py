@@ -83,6 +83,43 @@ def _iso(dt: Any) -> Optional[str]:
     return s[:40] if s else None
 
 
+def _feed_occurred_at(*, raw: Any, day: Any = None, clock: Any = None) -> Optional[str]:
+    """Return one sortable event timestamp for every public feed source.
+
+    ``daily_action_items`` exposes ``updated_at`` while execution metrics expose
+    ``created_at``. Keeping the full timestamp avoids grouping both sources
+    separately and then showing only their ambiguous HH:MM fragments.
+    """
+    stamp = _iso(raw)
+    if stamp:
+        return stamp
+    day_s = str(day or "").strip()
+    clock_s = str(clock or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day_s) and re.fullmatch(r"\d{2}:\d{2}", clock_s):
+        return f"{day_s}T{clock_s}:00+00:00"
+    return None
+
+
+def _feed_sort_key(item: Dict[str, Any]) -> float:
+    stamp = _feed_occurred_at(
+        raw=item.get("occurred_at"), day=item.get("day"), clock=item.get("ts")
+    )
+    if not stamp:
+        return float("-inf")
+    try:
+        dt = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return float("-inf")
+
+
+def _sort_feed(feed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Merge all feed sources into one true newest-first timeline."""
+    return sorted(feed, key=_feed_sort_key, reverse=True)
+
+
 def _dept_members() -> Dict[str, List[str]]:
     from modstore_server.duty_roster import SIX_LINE_DEPARTMENTS
 
@@ -423,10 +460,16 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                     eid = e["employee_id"]
                     break
         emp = by_emp.get(eid) or {}
+        occurred_at = _feed_occurred_at(
+            raw=t.get("updated_at"),
+            day=t.get("day") or board.get("day"),
+            clock=t.get("ts"),
+        )
         feed.append(
             {
                 "ts": t.get("ts") or "—",
                 "day": t.get("day") or board.get("day"),
+                "occurred_at": occurred_at,
                 "employee_id": eid,
                 "employee_name": emp.get("name") or owner or "AI 员工",
                 "dept_id": emp.get("dept_id") or _LINE_TO_DEPT.get(str(t.get("line") or ""), ""),
@@ -453,10 +496,12 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             continue
         emp = by_emp.get(eid) or {}
         mood = "alert" if str(met.get("last_status")) != "success" else "idle"
+        occurred_at = _feed_occurred_at(raw=met.get("last_at"))
         feed.append(
             {
-                "ts": (str(met.get("last_at") or "")[11:16] if met.get("last_at") else "—"),
-                "day": board.get("day"),
+                "ts": (occurred_at[11:16] if occurred_at else "—"),
+                "day": (occurred_at[:10] if occurred_at else board.get("day")),
+                "occurred_at": occurred_at,
                 "employee_id": eid,
                 "employee_name": emp.get("name") or eid,
                 "dept_id": emp.get("dept_id") or "",
@@ -471,7 +516,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             }
         )
 
-    feed = feed[:40]
+    feed = _sort_feed(feed)[:40]
 
     busiest = None
     if departments:
