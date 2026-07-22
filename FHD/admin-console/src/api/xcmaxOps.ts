@@ -13,6 +13,9 @@ export const xcmaxOpsApi = {
   closureStatus() {
     return api.get('/api/xcmax/ops/closure-status')
   },
+  founderAutonomyStatus() {
+    return api.get('/api/xcmax/ops/founder-autonomy')
+  },
   staffingOnboard(body: Record<string, unknown>) {
     return api.post('/api/xcmax/ops/staffing/onboard', body)
   },
