@@ -1226,6 +1226,13 @@ def _action_agent_runner(
         "http_post": _noop_http_post,
         "workspace_root": workspace_root,
         "employee_id": employee_id,
+        "cli_fallback_enabled": (
+            employee_id == "llm-ops-engineer"
+            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1")
+            .strip()
+            .lower()
+            not in ("0", "false", "off", "disabled")
+        ),
         "read_only": read_only,
         "research_tools_enabled": os.environ.get("MODSTORE_AGENT_RESEARCH_TOOLS_ENABLED", "")
         .strip()

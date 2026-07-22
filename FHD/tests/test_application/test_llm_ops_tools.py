@@ -337,10 +337,10 @@ class TestListConfiguredProviders:
         assert "qwen" in provider_names
 
     def test_returns_supported_count(self):
-        """返回 supported_count 字段（应为 11）。"""
+        """返回 supported_count 字段（应为 12）。"""
         fn = TOOL_REGISTRY["list_configured_providers"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
-        assert result["supported_count"] == 11
+        assert result["supported_count"] == 12
 
 
 # ---------------------------------------------------------------------------
@@ -476,16 +476,16 @@ class TestQueryProviderUsage:
 
 
 # ---------------------------------------------------------------------------
-# _PROVIDER_PROFILES — 11 家 provider 配置完整性
+# _PROVIDER_PROFILES — 12 家 provider 配置完整性
 # ---------------------------------------------------------------------------
 
 
 class TestProviderProfiles:
-    """验证 _PROVIDER_PROFILES 覆盖 11 家主流 provider 且配置完整。"""
+    """验证 _PROVIDER_PROFILES 覆盖 12 家主流 provider 且配置完整。"""
 
-    def test_has_11_providers(self):
-        """共 11 家 provider profile。"""
-        assert len(_PROVIDER_PROFILES) == 11
+    def test_has_12_providers(self):
+        """共 12 家 provider profile。"""
+        assert len(_PROVIDER_PROFILES) == 12
 
     def test_all_required_fields_present(self):
         """每个 profile 有必需字段。"""
@@ -502,7 +502,7 @@ class TestProviderProfiles:
             assert not missing, f"provider {p.get('name')} 缺字段: {missing}"
 
     def test_covers_mainstream_providers(self):
-        """覆盖主流 11 家 provider。"""
+        """覆盖主流 12 家 provider。"""
         names = {p["name"] for p in _PROVIDER_PROFILES}
         expected = {
             "b.ai",
@@ -516,6 +516,7 @@ class TestProviderProfiles:
             "volcengine",
             "ollama",
             "mimo",
+            "minimax",
         }
         assert names == expected, f"缺少: {expected - names}"
 
@@ -528,10 +529,22 @@ class TestProviderProfiles:
     def test_mimo_uses_token_plan_endpoint(self):
         """mimo 用 Token Plan 中国集群 endpoint（tp-xxxxx key）。"""
         mimo = next(p for p in _PROVIDER_PROFILES if p["name"] == "mimo")
-        assert mimo["env_keys"] == ["MIMO_API_KEY"]
+        assert mimo["env_keys"] == [
+            "MIMO_API_KEY",
+            "XIAOMI_API_KEY",
+            "XIAOMI_MIMO_API_KEY",
+        ]
         assert "token-plan-cn.xiaomimimo.com" in mimo["base_url_default"]
         assert mimo["default_model"] == "mimo-v2.5-pro"
         assert mimo["ping_model"] == "mimo-v2.5-pro"
+
+    def test_minimax_has_exact_token_plan_quota_endpoint(self):
+        minimax = next(p for p in _PROVIDER_PROFILES if p["name"] == "minimax")
+        assert minimax["env_keys"][0] == "MINIMAX_TOKEN_PLAN_API_KEY"
+        assert minimax["default_model"] == "MiniMax-M2.7"
+        assert minimax["billing_endpoints"] == [
+            "https://www.minimaxi.com/v1/token_plan/remains"
+        ]
 
     def test_bai_and_openai_share_openai_key(self):
         """b.ai 和 openai 都用 OPENAI_API_KEY（通过 base_url 区分）。"""

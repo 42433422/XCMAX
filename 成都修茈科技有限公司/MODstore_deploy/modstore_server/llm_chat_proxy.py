@@ -9,6 +9,9 @@ import httpx
 
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
+    is_minimax_token_plan_key,
+    minimax_anthropic_base_url,
+    normalize_minimax_api_key,
     openai_compat_default_root,
 )
 from modstore_server.multimodal_llm import messages_use_openai_multipart_content
@@ -24,6 +27,9 @@ _MODEL_ALIASES: dict[tuple[str, str], str] = {
     ("xiaomi", "mimo-v2-pro"): "mimo-v2.5-pro",
     ("xiaomi", "mimo-v2-omni"): "mimo-v2.5",
     ("xiaomi", "mimo-v2-tts"): "mimo-v2.5-tts",
+    # MiniMax legacy ABAB ids are no longer the platform default; keep stale
+    # account/env selections working by routing them to the current agent model.
+    ("minimax", "abab6.5s-chat"): "MiniMax-M2.7",
 }
 
 # 禁止使用进程级单例 AsyncClient：会在 ``asyncio.run()`` / 线程池等多事件循环场景下
@@ -239,8 +245,25 @@ async def chat_anthropic(
     *,
     max_tokens: int = 1024,
 ) -> Dict[str, Any]:
+    return await chat_anthropic_compatible(
+        "https://api.anthropic.com",
+        api_key,
+        model,
+        messages,
+        max_tokens=max_tokens,
+    )
+
+
+async def chat_anthropic_compatible(
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: List[Dict[str, str]],
+    *,
+    max_tokens: int = 1024,
+) -> Dict[str, Any]:
     system, msgs = _oai_to_anthropic(messages)
-    url = "https://api.anthropic.com/v1/messages"
+    url = f"{base_url.rstrip('/')}/v1/messages"
     body: Dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
@@ -336,12 +359,25 @@ async def chat_dispatch(
 
     async def _primary() -> Dict[str, Any]:
         if messages_use_openai_multipart_content(messages):
+            if provider == "minimax" and is_minimax_token_plan_key(api_key):
+                return {
+                    "ok": False,
+                    "error": "MiniMax Token Plan 的 Anthropic 兼容入口当前只接收纯文本消息。",
+                }
             if provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
                 return {
                     "ok": False,
                     "error": "图文多模态输入仅支持 OpenAI 兼容接口（chat/completions）；"
                     "请切换供应商或使用纯文本消息。",
                 }
+        if provider == "minimax" and is_minimax_token_plan_key(api_key):
+            return await chat_anthropic_compatible(
+                minimax_anthropic_base_url(base_url),
+                normalize_minimax_api_key(api_key),
+                model,
+                messages,
+                max_tokens=max_tokens or 1024,
+            )
         if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
             b = _normalize_openai_base(provider, base_url)
             return await chat_openai_compatible(
@@ -418,7 +454,15 @@ async def chat_dispatch(
     fb_key = str(fallback_api_key or api_key)
     fb_base = fallback_base_url or base_url
     try:
-        if fb_provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+        if fb_provider == "minimax" and is_minimax_token_plan_key(fb_key):
+            fb_result = await chat_anthropic_compatible(
+                minimax_anthropic_base_url(fallback_base_url),
+                normalize_minimax_api_key(fb_key),
+                fb_model,
+                messages,
+                max_tokens=max_tokens or 1024,
+            )
+        elif fb_provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
             fb_b = _normalize_openai_base(fb_provider, fb_base)
             fb_result = await chat_openai_compatible(
                 fb_b,
@@ -459,12 +503,33 @@ async def chat_dispatch_stream(
     model = normalize_model(provider, model)
     if (
         messages_use_openai_multipart_content(messages)
-        and provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+        and (
+            provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+            or (provider == "minimax" and is_minimax_token_plan_key(api_key))
+        )
     ):
         yield {
             "type": "error",
             "error": "图文多模态输入仅支持 OpenAI 兼容接口；请切换供应商或使用纯文本。",
         }
+        return
+    if provider == "minimax" and is_minimax_token_plan_key(api_key):
+        result = await chat_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+        )
+        if not result.get("ok"):
+            yield {"type": "error", "error": result.get("error") or "upstream error"}
+            return
+        content = str(result.get("content") or "")
+        if content:
+            yield {"type": "delta", "delta": content}
+        if result.get("usage"):
+            yield {"type": "usage", "usage": result.get("usage") or {}}
         return
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         b = _normalize_openai_base(provider, base_url)
@@ -540,6 +605,11 @@ async def image_dispatch(
     size: str = "1024x1024",
     n: int = 1,
 ) -> Dict[str, Any]:
+    if provider == "minimax" and is_minimax_token_plan_key(api_key):
+        return {
+            "ok": False,
+            "error": "MiniMax Token Plan 密钥不提供 OpenAI-compatible images API",
+        }
     if provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         return {
             "ok": False,

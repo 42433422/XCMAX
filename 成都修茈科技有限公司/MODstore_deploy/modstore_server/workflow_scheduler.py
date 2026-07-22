@@ -791,6 +791,50 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    def _llm_route_autopilot_job() -> None:
+        try:
+
+            def _run() -> None:
+                from modstore_server.llm_runtime_autopilot import (
+                    run_llm_route_autopilot,
+                )
+
+                out = run_llm_route_autopilot(triggered_by="scheduler")
+                logger.info(
+                    "llm route autopilot: ok=%s action=%s reason=%s target=%s",
+                    out.get("ok"),
+                    out.get("action"),
+                    out.get("reason"),
+                    out.get("target"),
+                )
+
+            _run_tracked_scheduler_job("llm_route_autopilot", _run)
+        except Exception:
+            logger.exception("llm route autopilot failed")
+
+    try:
+        from modstore_server.llm_runtime_autopilot import autopilot_enabled
+
+        if autopilot_enabled():
+            autopilot_minutes = max(
+                1,
+                _env_int("MODSTORE_LLM_AUTOPILOT_INTERVAL_MINUTES", 5),
+            )
+            _scheduler.add_job(
+                _llm_route_autopilot_job,
+                IntervalTrigger(minutes=autopilot_minutes),
+                id="llm_route_autopilot",
+                replace_existing=True,
+                next_run_time=datetime.now(timezone.utc) + timedelta(seconds=5),
+                misfire_grace_time=_cleanup_misfire_grace_time(),
+                coalesce=True,
+                max_instances=1,
+            )
+        else:
+            logger.info("llm route autopilot disabled")
+    except Exception:
+        logger.exception("register llm route autopilot failed")
+
     def _employee_evolution_scan_loop() -> None:
         try:
 

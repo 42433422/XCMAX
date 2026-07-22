@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Upsert KEY=value in a dotenv-style file (one line per key). Replaces first matching KEY= or # KEY= line, else appends."""
+"""Upsert KEY=value in a dotenv-style file.
+
+Pass ``-`` as the value to read it from standard input.  This keeps secrets out
+of the command line and process list.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +14,14 @@ from pathlib import Path
 
 def main() -> int:
     if len(sys.argv) != 4:
-        print("usage: upsert_env_var.py <env_file> <VAR_NAME> <VAR_VALUE>", file=sys.stderr)
+        print(
+            "usage: upsert_env_var.py <env_file> <VAR_NAME> <VAR_VALUE|->",
+            file=sys.stderr,
+        )
         return 2
     path, name, value = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+    if value == "-":
+        value = sys.stdin.readline().rstrip("\r\n")
     if not name or "=" in name:
         print("bad VAR_NAME", file=sys.stderr)
         return 2

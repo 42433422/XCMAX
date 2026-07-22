@@ -97,6 +97,40 @@ def openai_compat_default_root(provider: str) -> str:
     return OPENAI_COMPAT_DEFAULT_ROOT.get(provider, "https://api.openai.com")
 
 
+def is_minimax_token_plan_key(api_key: Optional[str]) -> bool:
+    """识别 MiniMax Token/Coding Plan 密钥（与按量付费密钥协议不同）。"""
+
+    normalized = normalize_minimax_api_key(api_key).lower()
+    return "sk-cp-" in normalized
+
+
+def normalize_minimax_api_key(api_key: Optional[str]) -> str:
+    """容错处理聊天中常见的 ``minimax`` 标签与密钥粘连。"""
+
+    value = (api_key or "").strip()
+    if value.lower().startswith("minimaxsk-cp-"):
+        return value[len("minimax") :]
+    return value
+
+
+def minimax_anthropic_base_url(base_url: Optional[str] = None) -> str:
+    """返回 MiniMax Anthropic 兼容根地址（不含末尾 ``/v1``）。"""
+
+    raw = (
+        _env("MINIMAX_ANTHROPIC_BASE_URL")
+        or (base_url or "").strip()
+        or platform_base_url("minimax")
+        or openai_compat_default_root("minimax")
+    ).rstrip("/")
+    for suffix in ("/v1", "/v2", "/v3", "/v4"):
+        if raw.endswith(suffix):
+            raw = raw[: -len(suffix)].rstrip("/")
+            break
+    if raw.endswith("/anthropic"):
+        return raw
+    return f"{raw}/anthropic"
+
+
 def _env(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
@@ -136,8 +170,12 @@ def platform_api_key(provider: str) -> Optional[str]:
         k = _env("XIAOMI_API_KEY") or _env("MIMO_API_KEY") or _env("XIAOMI_MIMO_API_KEY")
         return k or None
     if provider == "minimax":
-        k = _env("MINIMAX_API_KEY")
-        return k or None
+        k = (
+            _env("MINIMAX_TOKEN_PLAN_API_KEY")
+            or _env("MINIMAX_CODING_PLAN_API_KEY")
+            or _env("MINIMAX_API_KEY")
+        )
+        return normalize_minimax_api_key(k) or None
     if provider == "doubao":
         k = _env("DOUBAO_API_KEY") or _env("ARK_API_KEY")
         return k or None
@@ -244,6 +282,8 @@ def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Opti
         try:
             k = decrypt_secret(row.api_key_encrypted).strip()
             if k:
+                if provider == "minimax":
+                    k = normalize_minimax_api_key(k)
                 return k, "user_override"
         except ValueError:
             pass

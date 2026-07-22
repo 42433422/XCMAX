@@ -925,7 +925,7 @@ async def _check_write_gate(
 
 
 # ---------------------------------------------------------------------------
-# LLM 运维工具（llm-ops-engineer 专属）— 支持 10 家主流 provider
+# LLM 运维工具（llm-ops-engineer 专属）— 统一 provider 配置
 # ---------------------------------------------------------------------------
 
 # Provider 配置 SSOT —— 所有工具从此派生
@@ -1038,11 +1038,27 @@ _PROVIDER_PROFILES: list[dict[str, Any]] = [
         "no_auth": True,
     },
     {
+        "name": "minimax",
+        "env_keys": [
+            "MINIMAX_TOKEN_PLAN_API_KEY",
+            "MINIMAX_CODING_PLAN_API_KEY",
+            "MINIMAX_API_KEY",
+        ],
+        "base_url_env": "MINIMAX_BASE_URL",
+        "base_url_default": "https://api.minimaxi.com",
+        "model_env": "MINIMAX_MODEL",
+        "default_model": "MiniMax-M2.7",
+        "ping_model": "MiniMax-M2.7",
+        "billing_endpoints": [
+            "https://www.minimaxi.com/v1/token_plan/remains",
+        ],
+    },
+    {
         # 小米 MiMo (Token Plan, OpenAI 兼容)
         # Key 格式 tp-xxxxx (Token Plan) 与 sk-xxxxx (按量付费) 独立
         # 中国集群 endpoint: token-plan-cn.xiaomimimo.com/v1
         "name": "mimo",
-        "env_keys": ["MIMO_API_KEY"],
+        "env_keys": ["MIMO_API_KEY", "XIAOMI_API_KEY", "XIAOMI_MIMO_API_KEY"],
         "base_url_env": "MIMO_BASE_URL",
         "base_url_default": "https://token-plan-cn.xiaomimimo.com/v1",
         "model_env": "MIMO_MODEL",
@@ -1336,7 +1352,7 @@ async def tool_query_provider_usage(params: dict[str, Any], ctx: dict[str, Any])
                 headers["Authorization"] = f"Bearer {key}"
             checked += 1
             for ep in endpoints:
-                url = f"{base_url.rstrip('/')}{ep}"
+                url = ep if str(ep).startswith(("https://", "http://")) else f"{base_url.rstrip('/')}{ep}"
                 try:
                     resp = await client.get(url, headers=headers)
                     body: Any
