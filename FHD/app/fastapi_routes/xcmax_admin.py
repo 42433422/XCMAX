@@ -2291,7 +2291,6 @@ async def ops_founder_autonomy(request: Request):
     if gate is not None:
         return gate
 
-    from app.application import self_maintenance_app_service as sm_svc
     from app.application.autonomy.approval_resume import list_pending_actions
     from app.application.founder_autonomy_status import build_founder_autonomy_snapshot
     from app.application.ops_closure_status import build_ops_closure_status
@@ -2305,14 +2304,6 @@ async def ops_founder_autonomy(request: Request):
             return {}
         return payload if isinstance(payload, dict) else {}
 
-    async def _safe_runtime() -> dict[str, Any]:
-        try:
-            payload = await sm_svc.get_runtime_status_local(limit=100)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("founder autonomy runtime unavailable: %s", exc)
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
     (
         runtime,
         remote_health,
@@ -2323,7 +2314,7 @@ async def ops_founder_autonomy(request: Request):
         dead_letters,
         strategic_decisions,
     ) = await asyncio.gather(
-        _safe_runtime(),
+        _safe_proxy("/api/ops/self-maintenance/status?limit=100"),
         _safe_proxy("/api/admin/duty-graph/health"),
         _safe_proxy("/api/admin/employee-autonomy/dashboard"),
         _safe_proxy("/api/admin/employee-autonomy/execution-coverage?window_hours=24"),

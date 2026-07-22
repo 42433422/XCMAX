@@ -1240,13 +1240,12 @@ class TestOpsFounderAutonomy:
                 admin_routes,
                 "_market_admin_proxy",
                 new_callable=AsyncMock,
-                return_value={"ok": True},
+                side_effect=lambda _request, _method, path: (
+                    {"ok": True, "runtime": "live"}
+                    if path.startswith("/api/ops/self-maintenance/status")
+                    else {"ok": True}
+                ),
             ) as proxy,
-            patch(
-                "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new_callable=AsyncMock,
-                return_value={"ok": True},
-            ),
             patch(
                 "app.application.autonomy.approval_resume.list_pending_actions",
                 return_value=[],
@@ -1268,8 +1267,11 @@ class TestOpsFounderAutonomy:
 
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "data": snapshot}
-        assert proxy.await_count == 7
-        assert build_snapshot.call_args.kwargs["runtime"] == {"ok": True}
+        assert proxy.await_count == 8
+        assert build_snapshot.call_args.kwargs["runtime"] == {
+            "ok": True,
+            "runtime": "live",
+        }
         assert build_snapshot.call_args.kwargs["surfaces"]["founder_cockpit"] is True
         assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is False
 
