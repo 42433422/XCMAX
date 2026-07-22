@@ -24,6 +24,7 @@ on:
       - '成都修茈科技有限公司/styles.css'
       - '成都修茈科技有限公司/main.js'
       - '成都修茈科技有限公司/visualization.js'
+      - '成都修茈科技有限公司/world-will.js'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
@@ -33,7 +34,9 @@ on:
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
       - '成都修茈科技有限公司/download-action-board.json'
       - '成都修茈科技有限公司/download-action-board.js'
+      - '成都修茈科技有限公司/download-company-hall.json'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-action-board.json'
+      - '成都修茈科技有限公司/MODstore_deploy/market/public/download-company-hall.json'
       - '成都修茈科技有限公司/MODstore_deploy/market/src/views/SoftwareDownloadView.vue'
       - '.github/workflows/corp-site-deploy.yml'
 
@@ -92,8 +95,11 @@ jobs:
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
               mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
               chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
+              # Runtime DB projections (action-board / company-hall JSON) must not be
+              # overwritten by git snapshots — refresh them after publish instead.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" "${GIT_SITE}/visualization.js" \
-                       "${GIT_SITE}/download-release.json" "${GIT_SITE}/download-action-board.json" "${GIT_SITE}/download-action-board.js"; do
+                       "${GIT_SITE}/world-will.js" \
+                       "${GIT_SITE}/download-release.json" "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
@@ -122,6 +128,23 @@ jobs:
             nginx -t
             systemctl reload nginx
             echo "[ok] nginx reloaded"
+            # Refresh public world-will projections from production DB (not git snapshots).
+            if [ -f /etc/xcmax/modstore.env ]; then
+              set -a
+              # shellcheck disable=SC1091
+              . /etc/xcmax/modstore.env
+              set +a
+            fi
+            MOD_ROOT="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"
+            if [ -x "${MOD_ROOT}/.venv/bin/python" ]; then
+              echo "[info] regenerating public action board + company hall"
+              ( cd "${MOD_ROOT}" && PYTHONPATH=. ./.venv/bin/python - <<'PY'
+from modstore_server.public_action_board import write_public_action_board
+r = write_public_action_board()
+print("public_board", {k: r.get(k) for k in ("ok", "day", "written")} if isinstance(r, dict) else r)
+PY
+              ) || echo "[warn] public board regenerate failed (non-fatal)"
+            fi
             # Loopback HTTPS over h2 is flaky on this host (curl exit 16); prefer http1.1 + retry.
             xc_curl() {
               local attempt=1
@@ -157,6 +180,13 @@ jobs:
             grep -E -q 'public_action_board|breakpoints|goals' /tmp/xc-action-board.json
             xc_curl -o /tmp/xc-action-board.js https://xiu-ci.com/download-action-board.js
             grep -E -q 'ACTION_BOARD|breakpoints|goals' /tmp/xc-action-board.js
+            echo "[verify] world-will company hall:"
+            xc_curl -o /tmp/xc-world-will.html https://xiu-ci.com/world-will
+            xc_curl -o /tmp/xc-world-will.js https://xiu-ci.com/world-will.js
+            xc_curl -o /tmp/xc-company-hall.json https://xiu-ci.com/download-company-hall.json
+            grep -E -q '公司大厅|hall-depts|download-company-hall' /tmp/xc-world-will.html
+            grep -E -q 'filteredFeed|hall-timeline|download-company-hall' /tmp/xc-world-will.js
+            grep -E -q 'public_company_hall|presence_model|departments' /tmp/xc-company-hall.json
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
               head -n 2 "${LIVE_SITE}/partials/header.html"

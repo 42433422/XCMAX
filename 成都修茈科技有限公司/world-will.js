@@ -27,6 +27,62 @@
     }
   }
 
+  var PUBLIC_TIME_ZONE = 'Asia/Shanghai'
+
+  function timeParts(date) {
+    var parts = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: PUBLIC_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(date)
+    return parts.reduce(function (out, part) {
+      if (part.type !== 'literal') out[part.type] = part.value
+      return out
+    }, {})
+  }
+
+  function fmtFeedStamp(item) {
+    var raw = item && (item.occurred_at || item.updated_at)
+    if (raw) {
+      try {
+        var date = new Date(raw)
+        if (!isNaN(date.getTime())) {
+          var value = timeParts(date)
+          var dayLabel = value.year + '-' + value.month + '-' + value.day
+          return {
+            day: dayLabel,
+            clock: value.hour + ':' + value.minute,
+            datetime: String(raw),
+            title:
+              value.year +
+              '-' +
+              value.month +
+              '-' +
+              value.day +
+              ' ' +
+              value.hour +
+              ':' +
+              value.minute +
+              '（北京时间）',
+          }
+        }
+      } catch (e) {
+        // Fall through to legacy day + HH:MM fields.
+      }
+    }
+    var fallbackDay = String((item && item.day) || '')
+    return {
+      day: fallbackDay || '日期未知',
+      clock: String((item && item.ts) || '—'),
+      datetime: '',
+      title: (fallbackDay ? fallbackDay + ' ' : '') + String((item && item.ts) || '—'),
+    }
+  }
+
   function initial(name) {
     var s = String(name || '?').trim()
     return s ? s.charAt(0) : '?'
@@ -166,7 +222,11 @@
     var list = feed || []
     if (STATE.filter === 'alert') {
       return list.filter(function (f) {
-        return f.presence === 'alert' || f.status === 'open' || /P0|失败|告警/.test(String(f.status_label || f.text || ''))
+        return (
+          f.presence === 'alert' ||
+          f.status === 'open' ||
+          /P0|失败|告警/.test(String(f.status_label || f.text || ''))
+        )
       })
     }
     if (STATE.filter === 'working') {
@@ -201,7 +261,7 @@
             ' — ' +
             esc(last.employee_name || '') +
             ' · ' +
-            esc(last.text)
+            esc(last.text),
         )
       } else {
         lines.push('最近一次快照：' + esc(fmtGen(data.generated_at)))
@@ -224,6 +284,7 @@
       '<ol class="hall-timeline">' +
       feed
         .map(function (f) {
+          var stamp = fmtFeedStamp(f)
           return (
             '<li class="hall-timeline-item hall-timeline-item--' +
             esc(f.presence || 'idle') +
@@ -231,9 +292,15 @@
             '<a href="' +
             esc(f.href || '/download/breakpoints') +
             '">' +
-            '<time>' +
-            esc(f.ts || '—') +
-            '</time>' +
+            '<time' +
+            (stamp.datetime ? ' datetime="' + esc(stamp.datetime) + '"' : '') +
+            ' title="' +
+            esc(stamp.title) +
+            '"><span class="hall-timeline-day">' +
+            esc(stamp.day) +
+            '</span><span class="hall-timeline-clock">' +
+            esc(stamp.clock) +
+            '</span></time>' +
             '<span class="hall-timeline-dot" style="background:' +
             esc(f.dept_color || '#94a3b8') +
             '"></span>' +
@@ -470,6 +537,8 @@
             feed: traj.map(function (t) {
               return {
                 ts: t.ts,
+                day: t.day || board.day,
+                occurred_at: t.updated_at,
                 employee_name: t.owner,
                 dept_label: t.line_label,
                 dept_color: '#facc15',
@@ -481,7 +550,12 @@
               }
             }),
             last_activity: traj[0]
-              ? { ts: traj[0].ts, day: board.day, employee_name: traj[0].owner, text: traj[0].title || traj[0].text }
+              ? {
+                  ts: traj[0].ts,
+                  day: board.day,
+                  employee_name: traj[0].owner,
+                  text: traj[0].title || traj[0].text,
+                }
               : null,
             board: {
               breakpoints_total: ((board.breakpoints || {}).summary || {}).total || 0,
