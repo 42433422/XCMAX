@@ -128,6 +128,7 @@ sync_corp_pages_to_dist_fallback() {
 sync_corp_butler_assets() {
   local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
   local logo_src="${MODSTORE_ROOT}/market/public/brand-xc-logo.jpg"
+  local force_rebuild=false
   mkdir -p "$corp_dir"
   if [[ -f "$logo_src" ]]; then
     cp -af "$logo_src" "${corp_dir}/brand-xc-logo.jpg"
@@ -141,9 +142,33 @@ sync_corp_butler_assets() {
   if [[ -f "${MODSTORE_ROOT}/market/public/download-action-board.json" ]]; then
     cp -af "${MODSTORE_ROOT}/market/public/download-action-board.json" "${corp_dir}/download-action-board.json"
   fi
-  if [[ -f "${corp_dir}/corp-butler.js" && -f "${corp_dir}/corp-butler.css" ]]; then
+
+  # 官网悬浮助手通过 /corp-butler/ 静态目录提供，不能只靠 market/dist。
+  # 每次都同步头像，避免旧产物继续引用已不存在或过期的头像文件。
+  local avatar_asset
+  for avatar_asset in ai-butler-female-avatar-v1.png ai-butler-male-avatar-v1.jpg; do
+    if [[ -f "${MODSTORE_ROOT}/market/public/${avatar_asset}" ]]; then
+      cp -af "${MODSTORE_ROOT}/market/public/${avatar_asset}" "${corp_dir}/${avatar_asset}"
+      log "corp-butler ${avatar_asset} 已同步"
+    else
+      log "WARN: 缺少 market/public/${avatar_asset}，官网悬浮助手头像可能 404"
+    fi
+  done
+
+  if [[ "${XCMAX_FORCE_SITE_PUBLISH:-0}" == "1" ]]; then
+    force_rebuild=true
+  elif [[ "${REPO_CHANGED:-false}" == true ]] && \
+    paths_changed_since "$XCMAX_ROOT" "$OLD_XCMAX_SHA" "$NEW_XCMAX_SHA" \
+      "^${MODSTORE_PREFIX}/market/(src/corp-butler/|src/components/floating-agent/|public/(brand-xc-logo|ai-butler-(female|male)-avatar-v1))"; then
+    force_rebuild=true
+  fi
+
+  if [[ "$force_rebuild" != true && -f "${corp_dir}/corp-butler.js" && -f "${corp_dir}/corp-butler.css" ]]; then
     log "corp-butler 产物已存在（js+css）"
     return 0
+  fi
+  if [[ "$force_rebuild" == true ]]; then
+    log "corp-butler 源码或官网发布已更新，强制重建静态产物"
   fi
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
