@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from modstore_server.customer_value_evidence import (
@@ -13,6 +13,8 @@ from modstore_server.customer_value_evidence import (
     load_authoritative_payment_orders,
     payment_amount_cents,
 )
+
+UTC = timezone.utc  # noqa: UP017 - MODstore CI and production still support Python 3.10
 
 
 def _digest(value: Any) -> str:

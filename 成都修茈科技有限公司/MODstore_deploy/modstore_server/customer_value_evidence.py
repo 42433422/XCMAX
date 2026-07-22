@@ -14,7 +14,7 @@ import json
 import os
 import re
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Callable
 
@@ -23,6 +23,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server import payment_orders
 from modstore_server.models import CustomerValueReceipt, get_session_factory
+
+UTC = timezone.utc  # noqa: UP017 - MODstore CI and production still support Python 3.10
 
 EVIDENCE_SCHEMA = "customer_value_evidence.v1"
 RECEIPT_KINDS = frozenset({"goal", "delivery", "acceptance", "refund"})
@@ -214,8 +216,9 @@ def _load_java_payment_orders(window_days: int) -> list[dict[str, Any]]:
 
     orders: list[dict[str, Any]] = []
     offset = 0
+    max_pages = (_JAVA_MAX_ORDERS // _JAVA_PAGE_SIZE) + 1
     with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
-        while True:
+        for _page_number in range(max_pages):
             response = client.get(
                 f"{base_url}/api/internal/payment/value-evidence",
                 params={
@@ -243,6 +246,8 @@ def _load_java_payment_orders(window_days: int) -> list[dict[str, Any]]:
             if not page or len(orders) > _JAVA_MAX_ORDERS:
                 raise RuntimeError("java_payment_evidence_pagination_incomplete")
             offset += _JAVA_PAGE_SIZE
+        else:
+            raise RuntimeError("java_payment_evidence_pagination_incomplete")
     return orders
 
 

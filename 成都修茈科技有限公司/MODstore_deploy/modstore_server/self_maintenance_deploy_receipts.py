@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -476,7 +477,7 @@ class GhActionsDeploymentGateway:
                         action_id,
                         str(row.get("url") or ""),
                     )
-            time.sleep(self.poll_seconds)
+            threading.Event().wait(self.poll_seconds)
         raise DeploymentReceiptError("workflow_run_capture_timeout")
 
     def wait_for_success(self, receipt: DispatchReceipt) -> WorkflowCompletion:
@@ -505,7 +506,7 @@ class GhActionsDeploymentGateway:
             )
             if completed.status.lower() == "completed":
                 return completed.require_success(receipt)
-            time.sleep(self.poll_seconds)
+            threading.Event().wait(self.poll_seconds)
         raise DeploymentReceiptError("workflow_completion_timeout")
 
     @staticmethod

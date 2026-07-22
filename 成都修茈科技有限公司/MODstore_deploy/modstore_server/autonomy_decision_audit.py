@@ -12,7 +12,6 @@ import hashlib
 import json
 import re
 import threading
-import time
 import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -172,7 +171,7 @@ def _append_row(
                 locked = "locked" in error_text or "busy" in error_text
                 if not locked or attempt >= 4:
                     raise
-        time.sleep(0.02 * (2**attempt))
+        threading.Event().wait(0.02 * (2**attempt))
     raise RuntimeError("unreachable autonomy audit append retry state")
 
 
@@ -283,7 +282,7 @@ def _append_only_guard_status(session: Any) -> dict[str, Any]:
                 "SELECT name FROM sqlite_master "
                 "WHERE type='trigger' AND tbl_name='autonomy_decision_audit'"
             )
-        ).fetchall()
+        ).fetchmany(32)
         found = {str(row[0]) for row in rows}
         return {
             "dialect": dialect,
@@ -297,7 +296,7 @@ def _append_only_guard_status(session: Any) -> dict[str, Any]:
                 "WHERE tgrelid = 'autonomy_decision_audit'::regclass "
                 "AND NOT tgisinternal"
             )
-        ).fetchall()
+        ).fetchmany(32)
         found = {str(row[0]) for row in rows}
         expected_pg = {"autonomy_decision_audit_no_mutation"}
         return {
