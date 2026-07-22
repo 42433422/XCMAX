@@ -52,13 +52,7 @@
         var date = new Date(raw)
         if (!isNaN(date.getTime())) {
           var value = timeParts(date)
-          var now = timeParts(new Date())
-          var eventDay = Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day))
-          var today = Date.UTC(Number(now.year), Number(now.month) - 1, Number(now.day))
-          var ageDays = Math.round((today - eventDay) / 86400000)
-          var dayLabel = value.month + '-' + value.day
-          if (ageDays === 0) dayLabel = '今天'
-          if (ageDays === 1) dayLabel = '昨天'
+          var dayLabel = value.year + '-' + value.month + '-' + value.day
           return {
             day: dayLabel,
             clock: value.hour + ':' + value.minute,
