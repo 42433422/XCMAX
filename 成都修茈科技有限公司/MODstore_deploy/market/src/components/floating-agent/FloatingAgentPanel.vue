@@ -30,8 +30,7 @@
           decoding="async"
         />
         <div class="panel-head__titles">
-          <span class="panel-head__title">{{ corpMode ? '小C' : 'AI 管家' }}</span>
-          <span class="panel-head__sub">{{ corpMode ? '官网咨询助手' : '当前页面助手' }}</span>
+          <span class="panel-head__title">小C助理</span>
         </div>
       </div>
       <div class="panel-head__actions" @pointerdown.stop>
@@ -523,11 +522,6 @@ function autoResize() {
   letter-spacing: 0.02em;
 }
 
-.panel-head__sub {
-  font-size: 0.68rem;
-  color: rgba(255, 255, 255, 0.36);
-}
-
 .panel-head__actions {
   display: flex;
   align-items: center;
@@ -704,11 +698,6 @@ function autoResize() {
   font-size: 14px;
   font-weight: 800;
   color: #172033;
-}
-
-.butler-panel--light .panel-head__sub {
-  font-size: 11px;
-  color: rgba(71, 85, 105, 0.72);
 }
 
 .butler-panel--light .panel-icon-btn {
