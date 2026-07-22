@@ -61,12 +61,8 @@ async def test_openrouter_requests_all_output_modalities_and_keeps_metadata(
 
     assert error is None
     records_by_id = {row["id"]: row for row in records}
-    assert records_by_id["vendor/audio-model"]["architecture"]["output_modalities"] == [
-        "audio"
-    ]
-    assert records_by_id["vendor/video-model"]["architecture"]["output_modalities"] == [
-        "video"
-    ]
+    assert records_by_id["vendor/audio-model"]["architecture"]["output_modalities"] == ["audio"]
+    assert records_by_id["vendor/video-model"]["architecture"]["output_modalities"] == ["video"]
     assert client.calls[0][1]["params"] == {"output_modalities": "all"}
     assert client.calls[1][0].endswith("/videos/models")
 
@@ -121,9 +117,7 @@ def test_together_top_level_array_response_is_supported():
         [{"id": "vendor/chat", "type": "chat", "display_name": "Vendor Chat"}]
     )
 
-    assert items == [
-        {"id": "vendor/chat", "type": "chat", "display_name": "Vendor Chat"}
-    ]
+    assert items == [{"id": "vendor/chat", "type": "chat", "display_name": "Vendor Chat"}]
 
 
 @pytest.mark.asyncio
@@ -145,17 +139,13 @@ async def test_siliconflow_type_filters_become_declared_capabilities(monkeypatch
 
     assert error is None
     assert {row["type"] for row in records} == {"text", "image", "audio", "video"}
-    detailed = llm_catalog._models_detailed(
-        "siliconflow", [row["id"] for row in records], records
-    )
+    detailed = llm_catalog._models_detailed("siliconflow", [row["id"] for row in records], records)
     by_category = {row["category"]: row for row in detailed}
     assert by_category["image"]["capability_source"] == "provider_metadata"
     assert by_category["video"]["runtime_selectable"] is False
 
 
 def test_runtime_model_list_excludes_media_models():
-    detailed = llm_catalog._models_detailed(
-        "openai", ["gpt-4o", "gpt-4o-mini-tts", "sora-2"]
-    )
+    detailed = llm_catalog._models_detailed("openai", ["gpt-4o", "gpt-4o-mini-tts", "sora-2"])
 
     assert llm_catalog._runtime_model_ids(detailed) == ["gpt-4o"]

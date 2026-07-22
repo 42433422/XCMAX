@@ -70,9 +70,7 @@ def _bounded_env_int(name: str, default: int, *, minimum: int, maximum: int) -> 
 
 
 def _default_max_rounds() -> int:
-    return _bounded_env_int(
-        "MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10
-    )
+    return _bounded_env_int("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10)
 
 
 def _llm_timeout_seconds() -> float:
@@ -767,9 +765,7 @@ class EmployeeAgentRunner:
                     catalog=platform,
                 )
                 return {
-                    "ok": bool(
-                        platform.get("ok") and cli.get("ok") and quota.get("ok")
-                    ),
+                    "ok": bool(platform.get("ok") and cli.get("ok") and quota.get("ok")),
                     "platform": platform,
                     "quota": quota,
                     "cli_fallback": cli,
@@ -811,9 +807,7 @@ class EmployeeAgentRunner:
                 )
 
                 return await reconcile_llm_route_autopilot(
-                    triggered_by=str(
-                        input_data.get("reason") or "employee:llm-ops-engineer"
-                    ),
+                    triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),
                     force=False,
                 )
 
@@ -834,9 +828,7 @@ class EmployeeAgentRunner:
 
                 return await rollback_runtime_route(
                     actor="employee:llm-ops-engineer",
-                    reason=str(
-                        input_data.get("reason") or "employee requested rollback"
-                    ),
+                    reason=str(input_data.get("reason") or "employee requested rollback"),
                     force=False,
                 )
             wr = self.workspace_root
@@ -1006,15 +998,7 @@ def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
             continue
         if not isinstance(data, dict):
             continue
-        score = (
-            4
-            if "tool" in data
-            else 4
-            if "answer" in data
-            else 2
-            if "status" in data
-            else 1
-        )
+        score = 4 if "tool" in data else 4 if "answer" in data else 2 if "status" in data else 1
         candidates.append((score, index, data))
     if candidates:
         return max(candidates, key=lambda item: (item[0], item[1]))[2]

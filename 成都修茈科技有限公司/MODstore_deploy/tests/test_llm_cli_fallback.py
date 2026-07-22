@@ -34,9 +34,7 @@ def test_invoke_codex_reads_last_message_in_isolated_read_only_mode(monkeypatch)
     profile = llm_cli_fallback.profile_by_id("codex")
     assert profile is not None
     commands = []
-    monkeypatch.setattr(
-        llm_cli_fallback, "find_cli_path", lambda _profile: "/bin/codex"
-    )
+    monkeypatch.setattr(llm_cli_fallback, "find_cli_path", lambda _profile: "/bin/codex")
 
     def fake_run(command, *, cwd, timeout):
         commands.append((command, cwd, timeout))
@@ -77,9 +75,7 @@ def test_cursor_command_uses_isolated_plan_workspace():
 def test_cli_json_output_parsing():
     assert llm_cli_fallback._parse_cli_output('{"result":"CLI_OK"}') == "CLI_OK"
     assert (
-        llm_cli_fallback._parse_cli_output(
-            '{"type":"progress"}\n{"message":{"content":"done"}}'
-        )
+        llm_cli_fallback._parse_cli_output('{"type":"progress"}\n{"message":{"content":"done"}}')
         == "done"
     )
 
@@ -87,9 +83,7 @@ def test_cli_json_output_parsing():
 @pytest.mark.asyncio
 async def test_cli_fallback_tries_configured_order_until_success(monkeypatch):
     monkeypatch.setenv("MODSTORE_LLM_CLI_FALLBACK_ORDER", "claude,codex")
-    monkeypatch.setattr(
-        llm_cli_fallback, "find_cli_path", lambda profile: f"/bin/{profile.cli_id}"
-    )
+    monkeypatch.setattr(llm_cli_fallback, "find_cli_path", lambda profile: f"/bin/{profile.cli_id}")
 
     def fake_invoke(profile, messages, *, timeout):
         if profile.cli_id == "claude":
@@ -98,9 +92,7 @@ async def test_cli_fallback_tries_configured_order_until_success(monkeypatch):
 
     monkeypatch.setattr(llm_cli_fallback, "invoke_cli", fake_invoke)
 
-    result = await llm_cli_fallback.chat_via_cli_fallback(
-        [{"role": "user", "content": "hello"}]
-    )
+    result = await llm_cli_fallback.chat_via_cli_fallback([{"role": "user", "content": "hello"}])
 
     assert result["ok"] is True
     assert result["provider"] == "codex_cli"

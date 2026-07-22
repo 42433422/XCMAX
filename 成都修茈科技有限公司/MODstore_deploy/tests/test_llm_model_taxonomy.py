@@ -137,17 +137,9 @@ def test_mimo_audio_variants_are_not_chat_runtime_models() -> None:
 
     assert by_id["mimo-v2.5-asr"]["capabilities"]["operations"] == ["speech_to_text"]
     assert by_id["mimo-v2.5-asr"]["runtime_selectable"] is False
-    assert (
-        "voice_cloning"
-        in by_id["mimo-v2.5-tts-voiceclone"]["capabilities"]["operations"]
-    )
-    assert (
-        "audio" in by_id["mimo-v2.5-tts-voiceclone"]["capabilities"]["input_modalities"]
-    )
-    assert (
-        "voice_design"
-        in by_id["mimo-v2.5-tts-voicedesign"]["capabilities"]["operations"]
-    )
+    assert "voice_cloning" in by_id["mimo-v2.5-tts-voiceclone"]["capabilities"]["operations"]
+    assert "audio" in by_id["mimo-v2.5-tts-voiceclone"]["capabilities"]["input_modalities"]
+    assert "voice_design" in by_id["mimo-v2.5-tts-voicedesign"]["capabilities"]["operations"]
 
 
 def test_provider_metadata_is_sanitized_and_returned_with_limits() -> None:

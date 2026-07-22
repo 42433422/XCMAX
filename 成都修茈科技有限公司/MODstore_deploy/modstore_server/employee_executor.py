@@ -1251,9 +1251,7 @@ def _action_agent_runner(
         "employee_id": employee_id,
         "cli_fallback_enabled": (
             employee_id == "llm-ops-engineer"
-            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1")
-            .strip()
-            .lower()
+            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1").strip().lower()
             not in ("0", "false", "off", "disabled")
         ),
         "read_only": read_only,

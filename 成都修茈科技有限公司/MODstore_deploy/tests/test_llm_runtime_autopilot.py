@@ -100,9 +100,7 @@ async def test_autopilot_switches_from_exhausted_route(monkeypatch):
 
     monkeypatch.setenv("MODSTORE_LLM_AUTOPILOT_ENABLED", "1")
     monkeypatch.setattr(llm_runtime_autopilot, "_write_audit", events.append)
-    monkeypatch.setattr(
-        llm_runtime_route, "platform_model_catalog", lambda **kwargs: None
-    )
+    monkeypatch.setattr(llm_runtime_route, "platform_model_catalog", lambda **kwargs: None)
 
     async def catalog(**_kwargs):
         return _catalog()
@@ -437,9 +435,9 @@ async def test_autopilot_redacts_sensitive_errors_from_result_and_ledger(
 
     async def quota(**_kwargs):
         result = _quota(current_state="error")
-        result["providers"][0]["probe"]["error"] = (
-            f"upstream rejected Authorization: Bearer {fake_secret}"
-        )
+        result["providers"][0]["probe"][
+            "error"
+        ] = f"upstream rejected Authorization: Bearer {fake_secret}"
         return result
 
     async def failed_probe(_provider, _model):

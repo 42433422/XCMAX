@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple
 
-Category = Literal[
-    "llm", "vlm", "image", "video", "audio", "embedding", "rerank", "other"
-]
+Category = Literal["llm", "vlm", "image", "video", "audio", "embedding", "rerank", "other"]
 
 CATEGORY_ORDER: Tuple[Category, ...] = (
     "llm",
@@ -365,10 +363,7 @@ def _infer_profile(provider: str, model_id: str) -> Tuple[Set[str], Set[str], Se
         outputs.add("video")
         operations.add("video_generation")
     elif category == "audio":
-        if any(
-            x in low
-            for x in ("whisper", "speech-to-text", "transcri", "stt", "-asr", "asr-")
-        ):
+        if any(x in low for x in ("whisper", "speech-to-text", "transcri", "stt", "-asr", "asr-")):
             inputs.add("audio")
             outputs.add("text")
             operations.add("speech_to_text")
@@ -463,8 +458,7 @@ def _declared_profile(
         evidence.append("capabilities")
 
     supported_parameters = {
-        str(item).strip().lower()
-        for item in _string_list(metadata.get("supported_parameters"))
+        str(item).strip().lower() for item in _string_list(metadata.get("supported_parameters"))
     }
     if supported_parameters & {"tools", "tool_choice", "function_call", "functions"}:
         operations.add("tool_calling")
@@ -641,14 +635,11 @@ def _public_provider_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
     provider_type = str(metadata.get("type") or metadata.get("sub_type") or "").strip()
     if provider_type:
         out["provider_type"] = provider_type
-    display_name = str(
-        metadata.get("display_name") or metadata.get("displayName") or ""
-    ).strip()
+    display_name = str(metadata.get("display_name") or metadata.get("displayName") or "").strip()
     if display_name:
         out["display_name"] = display_name[:256]
     generation_methods = _string_list(
-        metadata.get("supportedGenerationMethods")
-        or metadata.get("supported_generation_methods")
+        metadata.get("supportedGenerationMethods") or metadata.get("supported_generation_methods")
     )
     if generation_methods:
         out["supported_generation_methods"] = sorted(set(generation_methods))

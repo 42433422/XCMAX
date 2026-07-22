@@ -501,12 +501,9 @@ async def chat_dispatch_stream(
     max_tokens: Optional[int] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     model = normalize_model(provider, model)
-    if (
-        messages_use_openai_multipart_content(messages)
-        and (
-            provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-            or (provider == "minimax" and is_minimax_token_plan_key(api_key))
-        )
+    if messages_use_openai_multipart_content(messages) and (
+        provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+        or (provider == "minimax" and is_minimax_token_plan_key(api_key))
     ):
         yield {
             "type": "error",

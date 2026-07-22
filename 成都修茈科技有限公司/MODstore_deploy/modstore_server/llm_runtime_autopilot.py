@@ -115,11 +115,7 @@ def _consecutive_route_errors(provider: str, model: str) -> int:
     count = 0
     for row in reversed(_read_audit_events()):
         current = row.get("current") if isinstance(row.get("current"), dict) else {}
-        health = (
-            row.get("current_health")
-            if isinstance(row.get("current_health"), dict)
-            else {}
-        )
+        health = row.get("current_health") if isinstance(row.get("current_health"), dict) else {}
         if (
             str(current.get("provider") or "") != provider
             or str(current.get("model") or "") != model
@@ -242,9 +238,7 @@ async def reconcile_llm_route_autopilot(
 
     persisted_current = current_runtime_route()
     expected_revision = (
-        str(persisted_current.get("revision") or "")
-        if isinstance(persisted_current, dict)
-        else ""
+        str(persisted_current.get("revision") or "") if isinstance(persisted_current, dict) else ""
     )
     try:
         catalog = await platform_model_catalog(refresh=False)
@@ -280,9 +274,7 @@ async def reconcile_llm_route_autopilot(
 
     current_quota = quota_map.get(str(current_provider or "")) or {}
     quota_state = str(current_quota.get("state") or "")
-    current_probe = (
-        current_quota.get("probe") if isinstance(current_quota, dict) else None
-    )
+    current_probe = current_quota.get("probe") if isinstance(current_quota, dict) else None
     if quota_state in {"exhausted", "warning"}:
         current_probe = {
             "ok": False,
@@ -323,10 +315,7 @@ async def reconcile_llm_route_autopilot(
 
     if current_state == "error":
         consecutive_failures = (
-            _consecutive_route_errors(
-                str(current_provider or ""), str(current_model or "")
-            )
-            + 1
+            _consecutive_route_errors(str(current_provider or ""), str(current_model or "")) + 1
         )
         event["current_health"]["consecutive_failures"] = consecutive_failures
         if consecutive_failures < _failure_threshold() and not force:
@@ -432,10 +421,7 @@ async def reconcile_llm_route_autopilot(
     )
     event["switch"] = switched
     if not switched.get("ok"):
-        if (
-            switched.get("conflict")
-            or switched.get("error") == "route_revision_conflict"
-        ):
+        if switched.get("conflict") or switched.get("error") == "route_revision_conflict":
             event.update(
                 {
                     "action": "concurrent_change_detected",
@@ -458,9 +444,7 @@ async def reconcile_llm_route_autopilot(
         switched_current = (
             switched.get("current") if isinstance(switched.get("current"), dict) else {}
         )
-        switched_event = (
-            switched.get("event") if isinstance(switched.get("event"), dict) else {}
-        )
+        switched_event = switched.get("event") if isinstance(switched.get("event"), dict) else {}
         switched_revision = str(
             switched_current.get("revision") or switched_event.get("revision") or ""
         )
@@ -504,9 +488,7 @@ def run_llm_route_autopilot(
     triggered_by: str = "scheduler",
     force: bool = False,
 ) -> dict[str, Any]:
-    return asyncio.run(
-        reconcile_llm_route_autopilot(triggered_by=triggered_by, force=force)
-    )
+    return asyncio.run(reconcile_llm_route_autopilot(triggered_by=triggered_by, force=force))
 
 
 __all__ = [

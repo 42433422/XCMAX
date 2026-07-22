@@ -144,9 +144,7 @@ async def _fetch_openai_compatible_records(
                         video_item.setdefault("type", "video")
                     items.extend(video_items)
             except Exception as exc:  # noqa: BLE001
-                logger.debug(
-                    "openrouter video catalog fetch failed: %s", type(exc).__name__
-                )
+                logger.debug("openrouter video catalog fetch failed: %s", type(exc).__name__)
 
         # SiliconFlow 支持按 type 动态筛选，筛选结果比模型名更可靠。
         if provider == "siliconflow":
@@ -174,10 +172,7 @@ async def _fetch_openai_compatible_records(
                     return []
 
             typed_groups = await asyncio.gather(
-                *[
-                    _typed_items(model_type)
-                    for model_type in ("text", "image", "audio", "video")
-                ]
+                *[_typed_items(model_type) for model_type in ("text", "image", "audio", "video")]
             )
             for typed_items in typed_groups:
                 items.extend(typed_items)
@@ -297,9 +292,7 @@ async def _fetch_minimax_token_plan_records(
 async def _fetch_anthropic(
     api_key: str, *, httpx_timeout: float = 30.0
 ) -> Tuple[List[str], Optional[str]]:
-    records, error = await _fetch_anthropic_records(
-        api_key, httpx_timeout=httpx_timeout
-    )
+    records, error = await _fetch_anthropic_records(api_key, httpx_timeout=httpx_timeout)
     return sorted({str(item.get("id") or "") for item in records}), error
 
 
@@ -449,8 +442,7 @@ async def get_models_for_provider(
                 or _models_detailed(provider, ent["models"]),
                 "runtime_models": ent.get("runtime_models")
                 or _runtime_model_ids(
-                    ent.get("models_detailed")
-                    or _models_detailed(provider, ent["models"])
+                    ent.get("models_detailed") or _models_detailed(provider, ent["models"])
                 ),
                 "source": ent.get("source", "cache"),
                 "fetched_at": ent.get("fetched_at_wall"),
@@ -472,16 +464,9 @@ async def get_models_for_provider(
     elif provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         raw_base = resolve_base_url(session, user_id, provider)
         b = (raw_base or openai_compat_default_root(provider)).rstrip("/")
-        if not (
-            b.endswith("/v1")
-            or b.endswith("/v2")
-            or b.endswith("/v3")
-            or b.endswith("/v4")
-        ):
+        if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
             b = b + "/v1"
-        remote_records, err = await _fetch_openai_compatible_records(
-            b, api_key, provider=provider
-        )
+        remote_records, err = await _fetch_openai_compatible_records(b, api_key, provider=provider)
     elif provider == "anthropic":
         remote_records, err = await _fetch_anthropic_records(api_key)
     elif provider == "google":
@@ -543,26 +528,17 @@ async def get_models_for_provider(
 _PROBE_HTTPX_TIMEOUT = 10.0
 
 
-async def _probe_one_provider_list(
-    provider: str, api_key: str
-) -> Tuple[str, List[str]]:
+async def _probe_one_provider_list(provider: str, api_key: str) -> Tuple[str, List[str]]:
     """BYOK 裸钥探测用：不合并本地 fallback，以远程拉到的非空模型 id 为准。"""
     if provider == "minimax" and is_minimax_token_plan_key(api_key):
         records, _ = await _fetch_minimax_token_plan_records(
             api_key,
             httpx_timeout=_PROBE_HTTPX_TIMEOUT,
         )
-        return provider, sorted(
-            {str(item.get("id") or "") for item in records if item.get("id")}
-        )
+        return provider, sorted({str(item.get("id") or "") for item in records if item.get("id")})
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         b = openai_compat_default_root(provider).rstrip("/")
-        if not (
-            b.endswith("/v1")
-            or b.endswith("/v2")
-            or b.endswith("/v3")
-            or b.endswith("/v4")
-        ):
+        if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
             b = b + "/v1"
         remote, _ = await _fetch_openai_compatible(
             b,

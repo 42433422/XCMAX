@@ -138,16 +138,12 @@ async def test_switch_requires_catalog_and_health(route_file, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failed_health_check_does_not_change_route(route_file, monkeypatch):
-    monkeypatch.setattr(
-        llm_key_resolver, "platform_api_key", lambda _provider: "configured"
-    )
+    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: "configured")
 
     async def fake_catalog(provider=None, *, refresh=False):
         return {
             "ok": True,
-            "providers": [
-                {"provider": provider, "models": ["model-a"], "source": "remote"}
-            ],
+            "providers": [{"provider": provider, "models": ["model-a"], "source": "remote"}],
         }
 
     async def failed_probe(provider, model):
@@ -167,12 +163,8 @@ async def test_failed_health_check_does_not_change_route(route_file, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_non_chat_capability_cannot_become_employee_runtime(
-    route_file, monkeypatch
-):
-    monkeypatch.setattr(
-        llm_key_resolver, "platform_api_key", lambda _provider: "configured"
-    )
+async def test_non_chat_capability_cannot_become_employee_runtime(route_file, monkeypatch):
+    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: "configured")
     probe_calls = []
 
     async def fake_catalog(provider=None, *, refresh=False):
@@ -221,12 +213,8 @@ async def test_non_chat_capability_cannot_become_employee_runtime(
 
 @pytest.mark.asyncio
 async def test_rollback_restores_previous_route(route_file, monkeypatch):
-    llm_runtime_route.commit_runtime_route(
-        "deepseek", "model-a", actor="test", reason="a"
-    )
-    llm_runtime_route.commit_runtime_route(
-        "openai", "model-b", actor="test", reason="b"
-    )
+    llm_runtime_route.commit_runtime_route("deepseek", "model-a", actor="test", reason="a")
+    llm_runtime_route.commit_runtime_route("openai", "model-b", actor="test", reason="b")
 
     async def healthy(provider, model):
         return {"ok": True, "status": 200}

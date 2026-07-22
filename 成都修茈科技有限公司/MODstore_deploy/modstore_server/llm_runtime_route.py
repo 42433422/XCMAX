@@ -68,9 +68,7 @@ def _process_file_lock(*, exclusive: bool):
         try:
             import fcntl
 
-            fcntl.flock(
-                lock_file.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-            )
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
         except (ImportError, OSError):
             pass
         try:
@@ -157,12 +155,8 @@ def commit_runtime_route(
 
     with _LOCK, _process_file_lock(exclusive=True):
         state = _read_state_unlocked()
-        previous = (
-            state.get("current") if isinstance(state.get("current"), dict) else None
-        )
-        actual_revision = (
-            str(previous.get("revision") or "") if isinstance(previous, dict) else ""
-        )
+        previous = state.get("current") if isinstance(state.get("current"), dict) else None
+        actual_revision = str(previous.get("revision") or "") if isinstance(previous, dict) else ""
         if expected_revision is not None and actual_revision != expected_revision:
             return {
                 "ok": False,
@@ -253,9 +247,7 @@ async def platform_model_catalog(
         return {
             "provider": provider_id,
             "configured": True,
-            "models": [
-                str(x).strip() for x in (block.get("models") or []) if str(x).strip()
-            ],
+            "models": [str(x).strip() for x in (block.get("models") or []) if str(x).strip()],
             "models_detailed": detailed,
             "runtime_models": runtime_models,
             "source": block.get("source"),
@@ -270,9 +262,7 @@ async def platform_model_catalog(
         "providers": blocks,
         "configured_count": sum(1 for row in blocks if row.get("configured")),
         "model_count": sum(len(row.get("models") or []) for row in blocks),
-        "runtime_model_count": sum(
-            len(row.get("runtime_models") or []) for row in blocks
-        ),
+        "runtime_model_count": sum(len(row.get("runtime_models") or []) for row in blocks),
         "source": "/api/llm/catalog",
         "capability_discovery": "provider_metadata_then_versioned_inference",
     }
