@@ -76,7 +76,7 @@
     }
     var fallbackDay = String((item && item.day) || '')
     return {
-      day: fallbackDay ? fallbackDay.slice(5) : '日期未知',
+      day: fallbackDay || '日期未知',
       clock: String((item && item.ts) || '—'),
       datetime: '',
       title: (fallbackDay ? fallbackDay + ' ' : '') + String((item && item.ts) || '—'),
