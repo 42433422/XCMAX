@@ -127,7 +127,10 @@ sync_corp_pages_to_dist_fallback() {
 # 官网 widget：nginx alias /corp-butler/ → 成都修茈科技有限公司/corp-butler/
 sync_corp_butler_assets() {
   local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
-  local logo_src="${MODSTORE_ROOT}/market/public/brand-xc-logo.jpg"
+  # Build from the Git worktree. MODSTORE_ROOT may point at the immutable live
+  # release, which is published only after this function completes.
+  local repo_market_root="${XCMAX_ROOT}/${MODSTORE_PREFIX}/market"
+  local logo_src="${repo_market_root}/public/brand-xc-logo.jpg"
   local force_rebuild=false
   mkdir -p "$corp_dir"
   if [[ -f "$logo_src" ]]; then
@@ -147,8 +150,8 @@ sync_corp_butler_assets() {
   # 每次都同步头像，避免旧产物继续引用已不存在或过期的头像文件。
   local avatar_asset
   for avatar_asset in ai-butler-female-avatar-v1.png ai-butler-male-avatar-v1.jpg; do
-    if [[ -f "${MODSTORE_ROOT}/market/public/${avatar_asset}" ]]; then
-      cp -af "${MODSTORE_ROOT}/market/public/${avatar_asset}" "${corp_dir}/${avatar_asset}"
+    if [[ -f "${repo_market_root}/public/${avatar_asset}" ]]; then
+      cp -af "${repo_market_root}/public/${avatar_asset}" "${corp_dir}/${avatar_asset}"
       log "corp-butler ${avatar_asset} 已同步"
     else
       log "WARN: 缺少 market/public/${avatar_asset}，官网悬浮助手头像可能 404"
@@ -173,14 +176,23 @@ sync_corp_butler_assets() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
   [[ -s "${NVM_DIR}/nvm.sh" ]] && . "${NVM_DIR}/nvm.sh"
-  if command -v npm >/dev/null 2>&1 && [[ -d "${MODSTORE_ROOT}/market/node_modules" ]]; then
-    if (cd "${MODSTORE_ROOT}/market" && npm run build:corp-butler >>"$LOG" 2>&1); then
+  if command -v npm >/dev/null 2>&1; then
+    if [[ ! -d "${repo_market_root}/node_modules" ]]; then
+      if ! (cd "${repo_market_root}" && npm ci >>"$LOG" 2>&1); then
+        log "ERROR: corp-butler 依赖安装失败，终止发布以避免保留旧悬浮助手"
+        return 1
+      fi
+    fi
+    if (cd "${repo_market_root}" && npm run build:corp-butler >>"$LOG" 2>&1) && \
+       [[ -s "${corp_dir}/corp-butler.js" && -s "${corp_dir}/corp-butler.css" ]]; then
       log "corp-butler 构建完成"
     else
-      log "WARN: corp-butler 构建失败，官网 AI 管家可能 404"
+      log "ERROR: corp-butler 构建失败或产物缺失，终止发布以避免保留旧悬浮助手"
+      return 1
     fi
   else
-    log "WARN: 缺少 node_modules，跳过 corp-butler 构建（需本机 build 后 scp）"
+    log "ERROR: 缺少 npm，终止发布以避免保留旧悬浮助手"
+    return 1
   fi
 }
 
