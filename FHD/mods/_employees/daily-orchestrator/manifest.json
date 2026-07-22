@@ -1,9 +1,9 @@
 {
   "id": "daily-orchestrator",
   "name": "每日编排员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
-  "description": "每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。",
+  "description": "每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -22,10 +22,10 @@
   "employee_config_v2": {
     "identity": {
       "id": "daily-orchestrator",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "每日编排员",
-      "description": "每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。",
+      "description": "每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。",
       "owner": "admin",
       "area": "platform-core",
       "domain": "每日编排员工包：宿主负责分支、提交、OpsStagedChange 入队和审批链；员工包负责在注入 agent_runner 时执行任务。"
@@ -81,12 +81,42 @@
     },
     "actions": {
       "handlers": [
-        "agent"
+        "direct_python"
       ],
-      "agent": {
-        "workspace": {
-          "read_only": false,
-          "requires_project_root": true
+      "direct_python": {
+        "module": "daily_orchestrator",
+        "action": "prioritize_work_items",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["work_items"],
+          "properties": {
+            "work_items": {"type": "array", "minItems": 1}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "queue", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "work_items": [
+            {
+              "id": "goal-health-audit",
+              "priority": "p1",
+              "risk_level": "low",
+              "blocked_by": [],
+              "acceptance": ["输出健康证据"]
+            },
+            {
+              "id": "goal-release-context",
+              "priority": "p2",
+              "risk_level": "medium",
+              "blocked_by": ["goal-health-audit"],
+              "acceptance": ["只生成发布上下文"]
+            }
+          ]
         }
       }
     },

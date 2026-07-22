@@ -1,7 +1,7 @@
 {
   "id": "dbops-engineer",
   "name": "数据库运维工程师",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "dbops-engineer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "数据库运维工程师",
       "description": "负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。",
@@ -99,14 +99,25 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo",
-        "agent"
+        "direct_python"
       ],
-      "agent": {
-        "workspace": {
-          "read_only": false,
-          "requires_project_root": true
+      "direct_python": {
+        "module": "dbops_engineer",
+        "action": "audit_database_snapshot",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["database_snapshot"], "properties": {"database_snapshot": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "database_snapshot": {"connection_ok": true, "migration_drift": false, "backup_age_hours": 2, "slow_query_count": 0, "read_only": true}
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false,
+          "allow_high_risk_fixture": true,
+          "allow_prohibited_semantics_fixture": true
         }
       }
     },

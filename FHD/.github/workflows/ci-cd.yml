@@ -294,13 +294,29 @@ jobs:
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, pack-verify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download immutable server release
+        uses: actions/download-artifact@v4
+        with:
+          name: fhd-server-release
+          path: dist/deploy
+
+      - name: Restore CI-built admin console into scan context
+        run: |
+          set -euo pipefail
+          artifact="$(find dist/deploy -maxdepth 1 -name 'fhd-full-*.tar.gz' -print -quit)"
+          test -n "$artifact"
+          tar -xzf "$artifact" ./templates/admin-vue-dist
+          python3 scripts/deploy/lib/verify_admin_console.py \
+            --root templates/admin-vue-dist \
+            --expected-git-sha "${{ github.sha }}"
+
       - name: Build image for scanning
-        run: docker build --target production -f Dockerfile -t xcagi-ci-scan:local .
+        run: docker build --target production -f docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.35.0
@@ -313,7 +329,7 @@ jobs:
 
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
-    needs: [backend-test]
+    needs: [backend-test, frontend-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -322,6 +338,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js for immutable admin console
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install admin console build dependencies
+        working-directory: frontend
+        run: npm ci
 
       - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
@@ -341,7 +368,7 @@ jobs:
 
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
-    needs: [backend-test, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
     # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
     # hand-rolled short sha — see docker/metadata-action#479).
@@ -370,6 +397,16 @@ jobs:
         with:
           name: fhd-server-release
           path: dist/deploy
+
+      - name: Restore CI-built admin console into image context
+        run: |
+          set -euo pipefail
+          artifact="$(find dist/deploy -maxdepth 1 -name 'fhd-full-*.tar.gz' -print -quit)"
+          test -n "$artifact"
+          tar -xzf "$artifact" ./templates/admin-vue-dist
+          python3 scripts/deploy/lib/verify_admin_console.py \
+            --root templates/admin-vue-dist \
+            --expected-git-sha "${{ github.sha }}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

@@ -67,6 +67,7 @@ def _manifest(*, approved: bool) -> dict:
         "deploy_mode": "tarball",
         "git_sha": "abc123",
         "sha256": "0" * 64,
+        "admin_console_sha256": "1" * 64,
         "version": "test",
     }
     if approved:

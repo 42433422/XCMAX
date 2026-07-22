@@ -1,7 +1,7 @@
 {
   "id": "miniapp-builder",
   "name": "小程序员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "miniapp-builder",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "小程序员工",
       "description": "为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑",
@@ -79,10 +79,27 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo"
-      ]
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "miniapp_builder",
+        "action": "audit_miniapp_spec",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["miniapp_spec"], "properties": {"miniapp_spec": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "normalized_steps", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "miniapp_spec": {
+            "id": "miniapp-burn-in",
+            "inputs": ["manifest"],
+            "outputs": ["audit_receipt"],
+            "steps": [
+              {"id": "inspect", "operation": "inspect_manifest", "depends_on": []},
+              {"id": "verify", "operation": "verify_receipt", "depends_on": ["inspect"]}
+            ]
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

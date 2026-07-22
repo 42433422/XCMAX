@@ -1,7 +1,7 @@
 {
   "id": "user-customer-service-officer",
   "name": "用户客服员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。",
   "artifact": "employee_pack",
@@ -26,7 +26,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "user-customer-service-officer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "用户客服员工",
       "description": "面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。",
@@ -88,10 +88,20 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo"
-      ]
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "user_customer_service_officer",
+        "action": "audit_ticket_grounding",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["ticket"], "properties": {"ticket": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "ready_for_response_draft", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "ticket": {"id": "ticket-burn-in", "issue": "如何查看自治进度？", "severity": "normal", "knowledge_sources": ["xcmax://founder-autonomy"]}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_prohibited_semantics_fixture": true}
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

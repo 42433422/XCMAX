@@ -390,6 +390,68 @@ class TestCallLlmReview:
         result = review.call_llm_review(finding, api_key="k", client=client)
         assert result == "unavailable"
 
+    def test_minimax_token_plan_uses_anthropic_protocol(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("XCAGI_LLM_ENDPOINT", "")
+        monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://api.minimaxi.com/v1")
+        monkeypatch.setenv("XCAGI_LLM_MODEL", "minimax/MiniMax-M2.7")
+        finding = review.Finding(
+            file_path="worker.py",
+            line=9,
+            rule="time-sleep-hot-path",
+            severity="medium",
+            snippet="time.sleep(delay)",
+            suggestion="use bounded waiting",
+        )
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {
+            "content": [{"type": "text", "text": '{"verdict":"false-positive"}'}]
+        }
+        client.post.return_value = response
+
+        result = review.call_llm_review(
+            finding,
+            api_key="minimaxsk-cp-test",
+            client=client,
+        )
+
+        assert result == "false-positive"
+        request_url = client.post.call_args.args[0]
+        request = client.post.call_args.kwargs
+        assert request_url == "https://api.minimaxi.com/anthropic/v1/messages"
+        assert request["headers"]["x-api-key"] == "sk-cp-test"
+        assert request["json"]["model"] == "MiniMax-M2.7"
+
+    def test_openai_compatible_route_parses_chat_verdict(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("XCAGI_LLM_ENDPOINT", "")
+        monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://api.example.test")
+        monkeypatch.setenv("XCAGI_LLM_MODEL", "review-model")
+        finding = review.Finding(
+            file_path="worker.py",
+            line=9,
+            rule="fetchall-unbounded",
+            severity="medium",
+            snippet="rows = cursor.fetchall()",
+            suggestion="use a bound",
+        )
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"choices": [{"message": {"content": '{"verdict":"low"}'}}]}
+        client.post.return_value = response
+
+        result = review.call_llm_review(finding, api_key="payg-test", client=client)
+
+        assert result == "low"
+        assert client.post.call_args.args[0] == ("https://api.example.test/v1/chat/completions")
+
 
 # =====================================================================
 # post_line_comment 测试

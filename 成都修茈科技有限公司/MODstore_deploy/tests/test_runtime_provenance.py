@@ -132,6 +132,38 @@ def test_cleanroom_runtime_verifies_manifest_file_hashes(monkeypatch, tmp_path: 
     assert "runtime_file_hash_mismatch:runner.py" in tampered["reasons"]
 
 
+def test_local_runtime_installer_manifest_covers_autonomy_controllers() -> None:
+    script = (
+        Path(__file__).resolve().parents[1] / "scripts" / "install-local-autonomy-runtime.sh"
+    ).read_text(encoding="utf-8")
+
+    for relative in (
+        "MODstore_deploy/alembic/env.py",
+        "MODstore_deploy/modstore_server/admin_employee_autonomy_api.py",
+        "MODstore_deploy/modstore_server/api/app_factory.py",
+        "MODstore_deploy/modstore_server/autonomy_posthoc_auditor.py",
+        "MODstore_deploy/modstore_server/customer_value_reconciler.py",
+        "MODstore_deploy/modstore_server/db/alembic_bootstrap.py",
+        "MODstore_deploy/modstore_server/dead_letter_reconciler.py",
+        "MODstore_deploy/modstore_server/duty_workforce_burnin.py",
+        "MODstore_deploy/modstore_server/duty_workforce_contracts.py",
+        "MODstore_deploy/modstore_server/duty_workforce_learning.py",
+        "MODstore_deploy/modstore_server/employee_executor.py",
+        "MODstore_deploy/modstore_server/employee_specialized_tools.py",
+        "MODstore_deploy/modstore_server/employee_verification.py",
+        "MODstore_deploy/modstore_server/mod_employee_agent_runner.py",
+        "MODstore_deploy/modstore_server/self_evolution_knowledge.py",
+        "MODstore_deploy/modstore_server/self_evolution_metrics_job.py",
+        "MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+        "MODstore_deploy/modstore_server/workflow_scheduler.py",
+        "FHD/app/application/employee_runtime/risk_gate.py",
+        "FHD/config/duty_employee_work_contracts.json",
+        "FHD/mods/_employees/seo-sitemap-curator/manifest.json",
+    ):
+        assert f'"{relative}"' in script
+    assert '("*/manifest.json", "*/backend/employees/*.py")' in script
+
+
 def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.jsonl"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
@@ -143,9 +175,7 @@ def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> N
     assert record["ledger_schema_version"] == 2
 
 
-def test_force_bypasses_dirty_worktree_for_break_glass(monkeypatch) -> None:
-    # force=True is break-glass: ops/GHA must be able to run the loop even when
-    # the CVM worktree is dirty (e.g. mid-deploy). See commit 0043fef8a.
+def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
     monkeypatch.setattr(
         loop_runner,
         "evaluate_self_maintenance_need",
@@ -160,29 +190,9 @@ def test_force_bypasses_dirty_worktree_for_break_glass(monkeypatch) -> None:
 
     result = loop_runner.should_run_self_maintenance_loop(force=True)
 
-    assert result["should_run"] is True
-    assert result["reason"] == "force"
-
-
-def test_no_force_blocks_untrusted_runtime_provenance(monkeypatch) -> None:
-    # Safety guard: without force, dirty worktree must block the loop.
-    monkeypatch.setattr(
-        loop_runner,
-        "evaluate_self_maintenance_need",
-        lambda: {
-            "runtime_provenance": {
-                "ok": False,
-                "reasons": ["dirty_worktree"],
-            },
-            "signal_count": 99,
-        },
-    )
-
-    result = loop_runner.should_run_self_maintenance_loop(force=False)
-
     assert result["should_run"] is False
     assert result["reason"] == "runtime_provenance_blocked"
-    assert result["force_requested"] is False
+    assert result["force_requested"] is True
 
 
 def test_loop_lease_is_exclusive(monkeypatch, tmp_path: Path) -> None:

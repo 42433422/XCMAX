@@ -1,0 +1,74 @@
+{
+  "schema_version": "xcagi.duty_employee_work_contracts/v1",
+  "timezone": "Asia/Shanghai",
+  "defaults": {
+    "receipt": "employee_execution_metric",
+    "retry_limit": 2,
+    "failure_route": "employee_evolution_scan",
+    "veto_channel": "approval-hub"
+  },
+  "contracts": [
+    {"employee_id":"site-content-editor","mission":"维护官网页面内容、素材引用与内容数据，输出可验证变更摘要","mode":"event","risk_level":"medium","trigger":{"events":["doc_change","change_request.created"]},"acceptance":["HTML/JSON 校验通过","变更路径在岗位白名单内"]},
+    {"employee_id":"seo-sitemap-curator","mission":"巡检 sitemap、robots、页面索引与内部链接完整性","mode":"execute","risk_level":"low","trigger":{"cron":"12 2 * * *"},"acceptance":["输出断链与索引差异清单","不改业务后端"]},
+    {"employee_id":"flask-entry-keeper","mission":"检查官网 Flask 入口、健康路由与静态资源映射","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"24 2 * * 2,5"},"acceptance":["入口与健康检查可达","异常生成变更建议"]},
+    {"employee_id":"marketing-site-builder","mission":"构建营销站并验证桌面与移动端产物完整性","mode":"execute","risk_level":"low","trigger":{"cron":"36 2 * * *"},"acceptance":["构建成功","关键页面与资源存在"]},
+
+    {"employee_id":"nginx-config-engineer","mission":"审计 Nginx 配置、证书期限与路由漂移","mode":"event","risk_level":"high","trigger":{"events":["security.alert","change_request.created"]},"acceptance":["nginx -t 通过","生产变更必须审批"]},
+    {"employee_id":"push-update-context-officer","mission":"整理发布上下文、更新说明和回滚条件","mode":"event","risk_level":"medium","trigger":{"events":["git.push","ops.change_request.approved"]},"acceptance":["版本、变更与回滚信息齐全"]},
+    {"employee_id":"deploy-release-officer","mission":"执行受控发布派发并关联部署后验证回执","mode":"event","risk_level":"high","trigger":{"events":["ops.change_request.approved","ci.passed"]},"acceptance":["非 dry-run 派发成功","部署后健康验证写回同一 run"]},
+    {"employee_id":"security-secrets-guard","mission":"巡检密钥泄漏、危险权限和自治禁止项","mode":"observe_and_propose","risk_level":"high","trigger":{"cron":"48 2 * * *"},"acceptance":["不读取或输出秘密值","命中禁止项立即阻断"]},
+    {"employee_id":"log-monitor-incident","mission":"聚合错误日志并创建去重故障信号","mode":"event","risk_level":"medium","trigger":{"events":["log.anomaly","on_error"]},"acceptance":["故障指纹去重","关联责任员工与原始证据"]},
+    {"employee_id":"retention-officer","mission":"审计文件保留策略、容量与可回收空间","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"0 3 * * *"},"acceptance":["先 dry-run 清单","删除动作受恢复与审批约束"]},
+    {"employee_id":"dbops-engineer","mission":"巡检数据库连接、迁移漂移、备份与慢查询","mode":"observe_and_propose","risk_level":"high","trigger":{"cron":"15 3 * * *"},"acceptance":["只读巡检","迁移和写操作必须审批"]},
+    {"employee_id":"llm-ops-engineer","mission":"巡检模型可用性、配额、延迟、成本与降级链","mode":"execute","risk_level":"low","trigger":{"cron":"30 3 * * *"},"acceptance":["输出 provider/model 健康矩阵","不泄露 API 密钥"]},
+    {"employee_id":"legacy-archive-curator","mission":"识别遗留入口、重复资产与可归档候选","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"45 3 * * 1"},"acceptance":["给出引用证据","归档前保留恢复路径"]},
+
+    {"employee_id":"modstore-backend-api","mission":"维护 MODstore API 契约、路由和数据库交互","mode":"event","risk_level":"medium","trigger":{"events":["on_error","change_request.created"]},"acceptance":["契约测试通过","不绕过迁移与权限门禁"]},
+    {"employee_id":"employee-pack-curator","mission":"巡检员工包生命周期、注册、导入导出和版本一致性","mode":"execute","risk_level":"low","trigger":{"cron":"0 14 * * 1"},"acceptance":["员工包与 catalog 一致","异常进入修复建议"]},
+    {"employee_id":"payment-billing-reconciler","mission":"只读核对订单、支付、退款、分润与价值账本","mode":"execute","risk_level":"low","trigger":{"cron":"15 14 * * *"},"acceptance":["差额为零或生成差异清单","不发起资金操作"]},
+    {"employee_id":"java-payment-bridge-officer","mission":"验证 Java 支付桥接契约、签名字段与回调幂等","mode":"observe_and_propose","risk_level":"high","trigger":{"cron":"30 14 * * *"},"acceptance":["契约用例通过","不触发真实扣款"]},
+
+    {"employee_id":"market-frontend-dev","mission":"维护 MODstore 市场前端并验证关键购买与安装路径","mode":"event","risk_level":"medium","trigger":{"events":["on_error","change_request.created"]},"acceptance":["前端构建通过","关键交互测试通过"]},
+    {"employee_id":"workbench-ux-stylist","mission":"检查工作台信息层级、可达性与响应式布局","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"45 14 * * 3"},"acceptance":["桌面与移动端无阻断","输出可复现视觉证据"]},
+
+    {"employee_id":"top-architect","mission":"审查系统边界、依赖方向和战略技术债优先级","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"0 15 * * 1,4"},"acceptance":["结论引用真实模块与运行证据","形成可执行架构决策"]},
+    {"employee_id":"fhd-core-maintainer","mission":"维护 FHD 核心运行时与跨端契约","mode":"event","risk_level":"medium","trigger":{"events":["on_error","change_request.created"]},"acceptance":["目标测试通过","保持兼容边界"]},
+    {"employee_id":"vibe-coding-maintainer","mission":"根据已确认缺口实施最小代码修复并产出 diff","mode":"event","risk_level":"medium","trigger":{"events":["on_error","change_request.created"]},"acceptance":["仅改允许路径","提交独立评审与 QA"]},
+    {"employee_id":"mods-and-eskill-curator","mission":"维护 Mods、ESkill 与员工能力注册的一致性","mode":"event","risk_level":"medium","trigger":{"events":["yuangon.def.changed","employee.task.done:artifact-generator"]},"acceptance":["注册表与实际资产一致","重复能力被标记"]},
+    {"employee_id":"change-request-auditor","mission":"独立审查变更范围、风险、证据和回滚条件","mode":"event","risk_level":"medium","trigger":{"events":["change_request.created"]},"acceptance":["与实现员工隔离","明确 approve/hold/reject"]},
+    {"employee_id":"github-pr-gatekeeper","mission":"检查 PR 分支、检查项、评审与合并资格","mode":"event","risk_level":"high","trigger":{"events":["git.pr_opened","ci.passed"]},"acceptance":["必需检查全部通过","禁止自审自批"]},
+    {"employee_id":"daily-orchestrator","mission":"每日聚合目标、故障、质量与客户价值缺口并派工","mode":"event","risk_level":"medium","trigger":{"events":["schedule.tick"]},"acceptance":["任务绑定目标与验收条件","高风险动作进入审批"]},
+    {"employee_id":"intake-dispatcher","mission":"接收需求并去重、定级、补齐上下文后派发","mode":"event","risk_level":"low","trigger":{"events":["ops.intake.user_request","ops.intake.email","ops.intake.customer_ticket"]},"acceptance":["每项需求有唯一归属","缺信息时明确标记"]},
+    {"employee_id":"task-router-officer","mission":"按能力、风险和负载把任务路由给正确员工","mode":"event","risk_level":"low","trigger":{"events":["ops.intake.task.queued","employee.task.assigned"]},"acceptance":["路由命中职责边界","保留路由理由"]},
+    {"employee_id":"user-customer-service-officer","mission":"处理客户问题并将产品缺口转成可追踪任务","mode":"event","risk_level":"low","trigger":{"events":["ops.intake.customer_ticket","customer.complaint"]},"acceptance":["响应关联真实资料","不可解决项进入交接"]},
+    {"employee_id":"enterprise-adoption-officer","mission":"跟踪企业客户启用、活跃、阻塞与价值达成","mode":"execute","risk_level":"low","trigger":{"cron":"15 15 * * 1,3,5"},"acceptance":["输出采用漏斗与阻塞清单","不伪造活跃数据"]},
+    {"employee_id":"delivery-receipt-officer","mission":"收集交付验收、目标完成与客户价值回执","mode":"event","risk_level":"low","trigger":{"events":["change_request.verify_complete","employee.task.done"]},"acceptance":["回执关联 goal、产物与客户","缺验收不计完成"]},
+    {"employee_id":"mobile-android-release-officer","mission":"验证 Android 构建、签名、安装与发布候选","mode":"event","risk_level":"high","trigger":{"events":["ci.passed","ops.change_request.approved"]},"acceptance":["真机安装与核心流程通过","上架动作必须审批"]},
+    {"employee_id":"mobile-ios-release-officer","mission":"验证 iOS 构建、签名、安装与发布候选","mode":"event","risk_level":"high","trigger":{"events":["ci.passed","ops.change_request.approved"]},"acceptance":["真机安装与核心流程通过","上架动作必须审批"]},
+
+    {"employee_id":"test-qa-runner","mission":"独立执行目标测试、回归与验收并写回证据","mode":"event","risk_level":"low","trigger":{"events":["change_request.ci_complete","employee.task.done:vibe-coding-maintainer"]},"acceptance":["测试命令和结果可复现","失败不得放行"]},
+    {"employee_id":"doc-knowledge-curator","mission":"把已验证事实、修复模式和决策沉淀到知识库","mode":"execute","risk_level":"low","trigger":{"cron":"30 15 * * *"},"acceptance":["只收录有来源事实","知识条目可追溯"]},
+    {"employee_id":"employee-interview-assistant","mission":"巡检员工职责、清单和元数据缺口","mode":"execute","risk_level":"low","trigger":{"cron":"30 17 * * 1-5"},"acceptance":["缺口定位到员工与字段","不把回显当执行"]},
+    {"employee_id":"employee-pack-quality-interviewer","mission":"评估员工包是否具备真实输入、动作与验收闭环","mode":"execute","risk_level":"low","trigger":{"cron":"45 15 * * 2,5"},"acceptance":["识别空壳与伪 handler","给出补齐建议"]},
+
+    {"employee_id":"intent-analyst","mission":"把原始需求解析为目标、约束、风险和验收标准","mode":"event","risk_level":"low","trigger":{"events":["ops.intake.candidate_pack"]},"acceptance":["目标与非目标明确","验收可测试"]},
+    {"employee_id":"employee-planner","mission":"为能力需求选择或规划员工与依赖关系","mode":"event","risk_level":"low","trigger":{"events":["employee.task.done:intent-analyst"]},"acceptance":["职责无重叠","依赖可解析"]},
+    {"employee_id":"artifact-generator","mission":"按已确认规格生成员工包或 Mod 产物","mode":"event","risk_level":"medium","trigger":{"events":["employee.task.done:employee-planner"]},"acceptance":["产物结构完整","不含秘密与临时文件"]},
+    {"employee_id":"quality-validator","mission":"验证员工包 manifest、Python、资产和一致性","mode":"execute","risk_level":"low","trigger":{"cron":"30 11 * * *"},"acceptance":["静态校验全部通过","失败产出明确路径"]},
+    {"employee_id":"miniapp-builder","mission":"根据规格生成受限小应用并运行基础验证","mode":"event","risk_level":"medium","trigger":{"events":["employee.task.done:artifact-generator"]},"acceptance":["构建和启动通过","权限边界明确"]},
+    {"employee_id":"script-binder","mission":"将批准脚本绑定到员工动作与输入输出契约","mode":"event","risk_level":"medium","trigger":{"events":["employee.task.done:miniapp-builder"]},"acceptance":["handler 与实现一致","脚本在沙箱验证"]},
+    {"employee_id":"workflow-automator","mission":"把依赖步骤编排为可重试、可观察工作流","mode":"event","risk_level":"medium","trigger":{"events":["employee.task.done:script-binder"]},"acceptance":["失败与补偿路径明确","每步有回执"]},
+    {"employee_id":"pack-registrar","mission":"登记通过验证的员工包并保持 catalog 一致","mode":"event","risk_level":"medium","trigger":{"events":["employee.task.done:hex-quality-assessor"]},"acceptance":["版本唯一","catalog 可查"]},
+    {"employee_id":"sandbox-tester","mission":"在隔离环境执行员工包冒烟与边界测试","mode":"event","risk_level":"low","trigger":{"events":["employee.task.done:artifact-generator"]},"acceptance":["无越权访问","冒烟结果可复现"]},
+    {"employee_id":"code-validator","mission":"检查生成代码的语法、依赖、危险调用与基础质量","mode":"event","risk_level":"low","trigger":{"events":["employee.task.done:artifact-generator"]},"acceptance":["语法与静态规则通过","危险调用被阻断"]},
+    {"employee_id":"self-checker","mission":"让产物按自身验收标准执行自检并报告缺口","mode":"event","risk_level":"low","trigger":{"events":["employee.task.done:code-validator"]},"acceptance":["每条验收标准有结果","不隐藏失败"]},
+    {"employee_id":"host-checker","mission":"验证员工包在宿主环境的加载、路由与依赖","mode":"event","risk_level":"low","trigger":{"events":["employee.task.done:sandbox-tester"]},"acceptance":["宿主加载成功","路由契约通过"]},
+    {"employee_id":"hex-quality-assessor","mission":"从六维质量模型评估员工包可交付性","mode":"event","risk_level":"low","trigger":{"events":["employee.task.done:host-checker"]},"acceptance":["六维评分有证据","不合格不得上架"]},
+
+    {"employee_id":"ecosystem-partner-onboard-officer","mission":"核对伙伴接入资料、权限和首个联合目标","mode":"event","risk_level":"medium","trigger":{"events":["employee.task.assigned"]},"acceptance":["资料与权限齐全","目标和负责人明确"]},
+    {"employee_id":"ecosystem-joint-catalog-officer","mission":"维护联合 catalog 的产品、版本与上下架一致性","mode":"execute","risk_level":"low","trigger":{"cron":"0 16 * * 2,5"},"acceptance":["双方 catalog 无漂移","异常生成差异清单"]},
+    {"employee_id":"ecosystem-delivery-reporter","mission":"汇总伙伴交付、验收和 SLA 状态","mode":"execute","risk_level":"low","trigger":{"cron":"15 16 * * 1-5"},"acceptance":["状态关联真实交付回执","延期明确责任与下一步"]},
+    {"employee_id":"ecosystem-investor-portal-officer","mission":"生成脱敏的投资方运营与自治进展摘要","mode":"execute","risk_level":"low","trigger":{"cron":"30 16 * * 1"},"acceptance":["只用可公开数据","不泄露客户与财务明细"]},
+    {"employee_id":"ecosystem-revenue-share-reconciler","mission":"只读核对伙伴分润规则、结算与差异","mode":"execute","risk_level":"low","trigger":{"cron":"45 16 * * 1-5"},"acceptance":["分润差异可追溯","不发起资金操作"]}
+  ]
+}

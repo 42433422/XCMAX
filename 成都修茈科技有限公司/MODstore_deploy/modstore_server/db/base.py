@@ -76,7 +76,7 @@ def get_engine(db_path: Optional[Path] = None) -> Engine:
         if url.startswith("sqlite:///"):
             p = Path(url.replace("sqlite:///", "", 1))
             p.parent.mkdir(parents=True, exist_ok=True)
-            _engine = create_engine(url, echo=False)
+            _engine = create_engine(url, echo=False, connect_args={"timeout": 30})
         else:
             _engine = create_engine(
                 url,
@@ -129,10 +129,33 @@ def _add_column_if_missing(engine: Engine, table: str, column: str, ddl_type: st
 
 def init_db(db_path: Optional[Path] = None) -> None:
     engine = get_engine(db_path)
-    Base.metadata.create_all(engine)
+    _create_schema(engine)
     _ensure_columns(engine)
     _ensure_daily_action_items_table(engine)
     init_default_plan_templates()
+
+
+def _create_schema(engine: Engine) -> None:
+    """Serialize SQLite DDL across the API and scheduler processes.
+
+    Both launch at the same time and share one SQLite file. ``create_all`` is
+    check-first but the check/create pair is not atomic; an exclusive database
+    transaction prevents both processes from creating a newly added table at
+    once. PostgreSQL keeps its normal transactional DDL path.
+    """
+
+    if engine.dialect.name != "sqlite":
+        Base.metadata.create_all(engine)
+        return
+    with engine.connect() as connection:
+        connection.exec_driver_sql("BEGIN EXCLUSIVE")
+        try:
+            Base.metadata.create_all(connection)
+        except Exception:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
 
 
 def _ensure_columns(engine: Engine) -> None:
@@ -155,6 +178,12 @@ def _ensure_columns(engine: Engine) -> None:
         ("daily_digest_records", "release_kind", "TEXT DEFAULT ''"),
         ("transactions", "idempotency_key", "TEXT DEFAULT ''"),
         ("employee_execution_metrics", "failure_kind", "TEXT DEFAULT ''"),
+        ("event_outbox_dlq", "resolution_status", "VARCHAR(32) DEFAULT ''"),
+        ("event_outbox_dlq", "resolution_action", "VARCHAR(32) DEFAULT ''"),
+        ("event_outbox_dlq", "resolution_note", "TEXT DEFAULT ''"),
+        ("event_outbox_dlq", "resolved_at", "DATETIME"),
+        ("event_outbox_dlq", "last_reconciled_at", "DATETIME"),
+        ("event_outbox_dlq", "replay_outbox_id", "INTEGER"),
         ("ai_model_prices", "official_input_price_per_1k", "FLOAT"),
         ("ai_model_prices", "official_output_price_per_1k", "FLOAT"),
         ("ai_model_prices", "official_min_charge", "FLOAT"),

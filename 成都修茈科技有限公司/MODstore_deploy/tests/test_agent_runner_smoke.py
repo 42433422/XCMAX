@@ -8,11 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import tempfile
 from typing import Any, Dict, List
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -159,6 +155,24 @@ def test_agent_runner_llm_failure_returned_as_error(tmp_path):
     ctx = _make_ctx([], str(tmp_path))  # empty queue → immediate failure
     result = asyncio.run(EmployeeAgentRunner(ctx).run("任何任务"))
     assert result["ok"] is False
+
+
+def test_agent_runner_runtime_limits_are_bounded(monkeypatch, tmp_path):
+    from modstore_server.mod_employee_agent_runner import (
+        EmployeeAgentRunner,
+        _llm_timeout_seconds,
+    )
+
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", "2")
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_AGENT_LLM_TIMEOUT_SECONDS", "30")
+    runner = EmployeeAgentRunner(_make_ctx([], str(tmp_path)))
+    assert runner.max_rounds == 2
+    assert _llm_timeout_seconds() == 30.0
+
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", "999")
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_AGENT_LLM_TIMEOUT_SECONDS", "1")
+    assert EmployeeAgentRunner(_make_ctx([], str(tmp_path))).max_rounds == 10
+    assert _llm_timeout_seconds() == 10.0
 
 
 def test_agent_runner_unknown_tool_returns_error_observation(tmp_path):

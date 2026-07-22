@@ -1,7 +1,7 @@
 {
   "id": "script-binder",
   "name": "配置绑定员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "script-binder",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "配置绑定员工",
       "description": "将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构",
@@ -80,9 +80,46 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "script_binder",
+        "action": "audit_binding_plan",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["manifest", "workflow"],
+          "properties": {
+            "manifest": {"type": "object"},
+            "workflow": {"type": "object"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "binding_plan", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "manifest": {
+            "id": "binding-burn-in",
+            "employee": {
+              "capabilities": [
+                {"label": "skill-script-binding"}
+              ]
+            }
+          },
+          "workflow": {
+            "employee_pack_id": "binding-burn-in",
+            "skills": [
+              {
+                "id": "skill-script-binding",
+                "script_path": "scripts/bind_manifest.py"
+              }
+            ]
+          }
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

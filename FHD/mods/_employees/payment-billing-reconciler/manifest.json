@@ -1,7 +1,7 @@
 {
   "id": "payment-billing-reconciler",
   "name": "支付账单对账员",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "admin",
   "description": "维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "payment-billing-reconciler",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "支付账单对账员",
       "description": "维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。",
@@ -79,15 +79,23 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "module": "payment_billing_reconciler",
-        "action": "convert",
-        "default_output_relpath": "outputs/employee_output.xlsx",
-        "default_template_relpath": "",
-        "default_use_personnel_roster": true
+        "action": "reconcile_fixture_ledger",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["ledger"], "properties": {"ledger": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "totals", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "ledger": {
+            "orders": [{"id": "order-1", "amount_cents": 10000}],
+            "payments": [{"id": "payment-1", "amount_cents": 12000}],
+            "refunds": [{"id": "refund-1", "amount_cents": 2000}]
+          }
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_prohibited_semantics_fixture": true}
       }
     },
     "metadata": {

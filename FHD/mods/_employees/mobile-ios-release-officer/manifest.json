@@ -119,9 +119,21 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "mobile_ios_release_officer",
+        "action": "audit_release_candidate",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["release_candidate"], "properties": {"release_candidate": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "release_candidate": {"archive_passed": true, "codesign_verified": true, "device_install_passed": true, "core_flow_passed": true, "app_store_upload_requested": false}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_high_risk_fixture": true, "allow_prohibited_semantics_fixture": true}
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

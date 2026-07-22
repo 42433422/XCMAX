@@ -40,10 +40,47 @@ print(m.group(1) if m else "1.0.0.0")
 PY
 )"
 
-GIT_SHA="local"
-if command -v git >/dev/null 2>&1 && git -C "$FHD_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+GIT_SHA="${FHD_RELEASE_GIT_SHA:-local}"
+if [[ "$GIT_SHA" == "local" ]] && command -v git >/dev/null 2>&1 && git -C "$FHD_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   GIT_SHA="$(git -C "$FHD_ROOT" rev-parse HEAD 2>/dev/null || echo local)"
 fi
+[[ "$GIT_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "[err] FHD release requires an exact 40-character Git SHA" >&2
+  exit 1
+}
+
+ADMIN_DIST="$FHD_ROOT/templates/admin-vue-dist"
+ADMIN_VERIFY="$SCRIPT_DIR/lib/verify_admin_console.py"
+ARCHIVE_VERIFY="$SCRIPT_DIR/lib/verify_release_archive.py"
+if [[ "${FHD_SKIP_ADMIN_BUILD:-0}" != "1" ]]; then
+  command -v npm >/dev/null 2>&1 || {
+    echo "[err] npm is required to build the admin console" >&2
+    exit 1
+  }
+  [[ -d "$FHD_ROOT/frontend/node_modules" ]] || {
+    echo "[err] frontend dependencies are missing; run npm ci in FHD/frontend" >&2
+    exit 1
+  }
+  deploy_emit admin_build started "git_sha=$GIT_SHA"
+  (
+    cd "$FHD_ROOT/admin-console"
+    VITE_XCAGI_GIT_SHA="$GIT_SHA" npm run build
+  )
+  deploy_emit admin_build ok
+fi
+[[ -f "$ADMIN_VERIFY" ]] || {
+  echo "[err] admin release verifier is missing: $ADMIN_VERIFY" >&2
+  exit 1
+}
+[[ -f "$ARCHIVE_VERIFY" ]] || {
+  echo "[err] release archive verifier is missing: $ARCHIVE_VERIFY" >&2
+  exit 1
+}
+ADMIN_CONSOLE_SHA256="$(python3 "$ADMIN_VERIFY" --root "$ADMIN_DIST" --stamp-git-sha "$GIT_SHA" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha256"])')"
+[[ "$ADMIN_CONSOLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "[err] admin release SHA256 is invalid" >&2
+  exit 1
+}
 
 GIT_SHORT="${GIT_SHA:0:12}"
 ARTIFACT="fhd-full-${VERSION}-${GIT_SHORT}.tar.gz"
@@ -84,6 +121,9 @@ for item in app XCAGI alembic alembic.ini config mods xcagi_common resources req
   fi
 done
 
+mkdir -p "$STAGING/templates/admin-vue-dist"
+rsync -a --delete "$ADMIN_DIST/" "$STAGING/templates/admin-vue-dist/"
+
 # 服务器端拉取式部署脚本（随制品一并下发，避免生产机 git pull）
 mkdir -p "$STAGING/scripts/deploy/lib" "$STAGING/docker"
 cp "$SCRIPT_DIR/fhd-auto-update.sh" \
@@ -94,17 +134,20 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$STAGING/scripts/deploy/"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \
+  "$SCRIPT_DIR/lib/verify_admin_console.py" \
+  "$SCRIPT_DIR/lib/verify_release_archive.py" \
   "$SCRIPT_DIR/lib/verify_release_identity.sh" \
   "$STAGING/scripts/deploy/lib/"
 cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
 
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-python3 - <<'PY' "$STAGING/.build-identity.json" "$VERSION" "$GIT_SHA" "$BUILT_AT" "$CHANNEL"
+python3 - <<'PY' "$STAGING/.build-identity.json" "$VERSION" "$GIT_SHA" "$BUILT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
 import json, sys
-path, version, git_sha, built_at, channel = sys.argv[1:6]
+path, version, git_sha, built_at, channel, admin_console_sha256 = sys.argv[1:7]
 with open(path, "w", encoding="utf-8") as fh:
     json.dump(
         {
+            "admin_console_sha256": admin_console_sha256,
             "artifact_sha256": "",
             "built_at": built_at,
             "channel": channel,
@@ -121,6 +164,7 @@ with open(path, "w", encoding="utf-8") as fh:
 PY
 
 COPYFILE_DISABLE=1 tar -C "$STAGING" -czf "$TARBALL" .
+python3 "$ARCHIVE_VERIFY" --archive "$TARBALL"
 SHA256="$(python3 - <<'PY' "$TARBALL"
 import hashlib, sys
 h = hashlib.sha256()
@@ -133,10 +177,11 @@ PY
 
 MANIFEST="$OUT_DIR/fhd-manifest.json"
 
-python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$CHANNEL"
+python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
 import json, sys
-path, version, git_sha, artifact, sha256, built_at, channel = sys.argv[1:8]
+path, version, git_sha, artifact, sha256, built_at, channel, admin_console_sha256 = sys.argv[1:9]
 doc = {
+    "admin_console_sha256": admin_console_sha256,
     "product": "fhd-full",
     "channel": channel,
     "version": version,

@@ -6,6 +6,7 @@ verify_release_identity_payload() {
   local expected_git_sha="$2"
   local expected_image_digest="${3:-}"
   local expected_artifact_sha256="${4:-}"
+  local expected_admin_console_sha256="${5:-}"
 
   if [[ -z "$expected_git_sha" ]]; then
     echo "[identity] expected git SHA is required" >&2
@@ -13,7 +14,8 @@ verify_release_identity_payload() {
   fi
   HEALTH_PAYLOAD="$payload" EXPECTED_GIT_SHA="$expected_git_sha" \
     EXPECTED_IMAGE_DIGEST="$expected_image_digest" \
-    EXPECTED_ARTIFACT_SHA256="$expected_artifact_sha256" python3 - <<'PY'
+    EXPECTED_ARTIFACT_SHA256="$expected_artifact_sha256" \
+    EXPECTED_ADMIN_CONSOLE_SHA256="$expected_admin_console_sha256" python3 - <<'PY'
 import json
 import os
 import sys
@@ -28,9 +30,11 @@ build = payload.get("build") if isinstance(payload.get("build"), dict) else payl
 actual_sha = str(build.get("git_sha") or "")
 actual_digest = str(build.get("image_digest") or "")
 actual_artifact = str(build.get("artifact_sha256") or "")
+actual_admin = str(build.get("admin_console_sha256") or "")
 expected_sha = os.environ["EXPECTED_GIT_SHA"]
 expected_digest = os.environ.get("EXPECTED_IMAGE_DIGEST", "")
 expected_artifact = os.environ.get("EXPECTED_ARTIFACT_SHA256", "")
+expected_admin = os.environ.get("EXPECTED_ADMIN_CONSOLE_SHA256", "")
 if actual_sha != expected_sha:
     print(
         f"[identity] git SHA mismatch expected={expected_sha} actual={actual_sha or '<missing>'}",
@@ -49,7 +53,13 @@ if expected_artifact and actual_artifact != expected_artifact:
         file=sys.stderr,
     )
     raise SystemExit(1)
-print(json.dumps({"artifact_sha256": actual_artifact, "git_sha": actual_sha, "image_digest": actual_digest}, sort_keys=True))
+if expected_admin and actual_admin != expected_admin:
+    print(
+        f"[identity] admin console SHA256 mismatch expected={expected_admin} actual={actual_admin or '<missing>'}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+print(json.dumps({"admin_console_sha256": actual_admin, "artifact_sha256": actual_artifact, "git_sha": actual_sha, "image_digest": actual_digest}, sort_keys=True))
 PY
 }
 
@@ -58,9 +68,10 @@ verify_release_health_identity() {
   local expected_git_sha="$2"
   local expected_image_digest="${3:-}"
   local expected_artifact_sha256="${4:-}"
+  local expected_admin_console_sha256="${5:-}"
   local payload
 
   payload="$(curl --noproxy '*' -fsS --max-time 8 "$health_url")" || return 1
   verify_release_identity_payload \
-    "$payload" "$expected_git_sha" "$expected_image_digest" "$expected_artifact_sha256"
+    "$payload" "$expected_git_sha" "$expected_image_digest" "$expected_artifact_sha256" "$expected_admin_console_sha256"
 }

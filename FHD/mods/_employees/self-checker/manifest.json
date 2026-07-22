@@ -1,7 +1,7 @@
 {
   "id": "self-checker",
   "name": "自检员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "执行员工包独立可执行自检，验证 .xcemp 包在隔离环境下可正常加载与运行",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "self-checker",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "自检员工",
       "description": "执行员工包独立可执行自检，验证 .xcemp 包在隔离环境下可正常加载与运行",
@@ -80,9 +80,17 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "agent"
+      ],
+      "agent": {
+        "capabilities": [
+          "xcemp_validate"
+        ],
+        "workspace": {
+          "requires_project_root": true,
+          "read_only": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

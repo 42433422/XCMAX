@@ -45,14 +45,24 @@ def _col_exists(table: str, column: str) -> bool:
     return result is not None
 
 
+def _table_exists(table: str) -> bool:
+    """Return whether the legacy table exists in the current deployment.
+
+    The preceding ``20260505_new_tables`` revision intentionally creates its
+    tables only on PostgreSQL.  Fresh SQLite recovery databases therefore do
+    not contain every legacy table and must skip the corresponding column
+    backfills instead of aborting the entire migration chain.
+    """
+
+    return bool(sa.inspect(op.get_bind()).has_table(table))
+
+
 def _add_col(table: str, column: str, col_type: sa.Column) -> None:
-    if not _col_exists(table, column):
+    if _table_exists(table) and not _col_exists(table, column):
         op.add_column(table, col_type)
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-
     for col_name, col_def in [
         ("embedding_provider", sa.Column("embedding_provider", sa.String(64), server_default="")),
         ("embedding_source", sa.Column("embedding_source", sa.String(64), server_default="")),
@@ -127,9 +137,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    is_pg = bind.dialect.name != "sqlite"
-
     for col in ["embedding_provider", "embedding_source"]:
         if _col_exists("knowledge_collections", col):
             op.drop_column("knowledge_collections", col)
