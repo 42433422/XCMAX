@@ -12,8 +12,8 @@
       'butler-ball--speaking': !!props.isSpeaking,
     }"
     :style="ballStyle"
-    :aria-label="consentGiven ? (isOpen ? '关闭 AI 管家' : '打开 AI 管家') : '启用 AI 数字管家'"
-    :title="consentGiven ? (props.corpMode ? '拖动可移动；点击打开/关闭' : 'AI 管家') : '启用 AI 管家'"
+    aria-label="小C助理"
+    title="小C助理"
     @click.stop="handleClick"
     @pointerdown="onPointerDown"
   >
@@ -22,12 +22,12 @@
         class="butler-ball__logo"
         :src="brandLogoUrl"
         alt=""
-        width="34"
-        height="34"
+        :width="props.corpMode ? 46 : 38"
+        :height="props.corpMode ? 46 : 38"
         decoding="async"
       />
     </span>
-    <span class="butler-ball__label">AI 管家</span>
+    <span class="butler-ball__label">小C助理</span>
     <span
       v-if="fileOverflowCount > 0 && !isOpen"
       class="butler-ball__badge butler-ball__badge--files"
@@ -58,18 +58,32 @@ const trayStore = useButlerWorkbenchTrayStore()
 const { isOpen, consentGiven, unreadCount, position } = storeToRefs(agentStore)
 const { overflowCount: fileOverflowCount } = storeToRefs(trayStore)
 
-const props = defineProps<{ isSpeaking?: boolean; forceLight?: boolean; corpMode?: boolean }>()
+const props = defineProps<{
+  isSpeaking?: boolean
+  forceLight?: boolean
+  corpMode?: boolean
+  /** 管理端使用男版；官网与客户端统一使用女版小 C。 */
+  maleAvatar?: boolean
+}>()
 
-/** 与 FHD「智能对话」悬浮钮同款品牌标 */
+const avatarFileName = computed(() =>
+  props.maleAvatar ? 'ai-butler-male-avatar-v1.jpg' : 'ai-butler-female-avatar-v1.png',
+)
+
+/** 官网与客户端使用女版小 C；管理端明确使用男版。 */
 const brandLogoUrl = computed(() =>
-  props.forceLight ? '/corp-butler/brand-xc-logo.jpg' : `${import.meta.env.BASE_URL}brand-xc-logo.jpg`,
+  props.corpMode
+    ? '/corp-butler/ai-butler-female-avatar-v1.png'
+    : `${import.meta.env.BASE_URL}${avatarFileName.value}`,
 )
 
 const ballRef = ref<HTMLButtonElement | null>(null)
 
 const DRAG_THRESHOLD_PX = 6
 const BALL_WIDTH_ESTIMATE = 132
+const CORP_BALL_WIDTH_ESTIMATE = 146
 const BALL_HEIGHT_ESTIMATE = 56
+const CORP_BALL_HEIGHT_ESTIMATE = 64
 let isDragging = false
 let dragStartX = 0
 let dragStartY = 0
@@ -108,8 +122,10 @@ function onPointerMove(e: PointerEvent) {
   isDraggingUi.value = true
   const nx = e.clientX - dragStartX
   const ny = e.clientY - dragStartY
-  const maxX = window.innerWidth - BALL_WIDTH_ESTIMATE - 8
-  const maxY = window.innerHeight - BALL_HEIGHT_ESTIMATE - 8
+  const ballWidth = props.corpMode ? CORP_BALL_WIDTH_ESTIMATE : BALL_WIDTH_ESTIMATE
+  const ballHeight = props.corpMode ? CORP_BALL_HEIGHT_ESTIMATE : BALL_HEIGHT_ESTIMATE
+  const maxX = window.innerWidth - ballWidth - 8
+  const maxY = window.innerHeight - ballHeight - 8
   const x = Math.max(8, Math.min(maxX, nx))
   const y = Math.max(8, Math.min(maxY, ny))
   if (props.corpMode) {
@@ -250,7 +266,7 @@ onBeforeUnmount(() => {
 .butler-ball__logo-wrap {
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: 50%;
   display: inline-grid;
   place-items: center;
   overflow: hidden;
@@ -261,9 +277,11 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball__logo {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 37%;
+  transform: scale(1.08);
   display: block;
 }
 
@@ -379,14 +397,41 @@ onBeforeUnmount(() => {
   touch-action: none;
   /* 面板打开时仍须高于 .butler-panel(20002)，否则拖不动 */
   z-index: 20005;
-  min-width: 120px;
-  min-height: 56px;
-  height: 56px;
-  padding: 8px 14px 8px 9px;
+  min-width: 146px;
+  min-height: 64px;
+  height: 64px;
+  gap: 9px;
+  padding: 7px 16px 7px 8px;
+  border-color: rgba(119, 112, 255, 0.52);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(242, 246, 255, 0.98)),
+    linear-gradient(135deg, #796fff, #44b9ff);
+  box-shadow:
+    0 14px 30px rgba(28, 78, 148, 0.18),
+    0 0 0 4px rgba(130, 115, 255, 0.1);
 }
 
 .butler-ball.butler-ball--corp-anchor .butler-ball__label {
   display: inline;
+  color: #20274a;
+  letter-spacing: 0.025em;
+}
+
+.butler-ball.butler-ball--corp-anchor .butler-ball__logo-wrap {
+  width: 48px;
+  height: 48px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 2px rgba(119, 112, 255, 0.58),
+    0 5px 12px rgba(83, 102, 209, 0.25);
+}
+
+.butler-ball.butler-ball--corp-anchor:hover {
+  border-color: rgba(104, 98, 245, 0.8);
+  background: linear-gradient(135deg, #fff, #edf5ff);
+  box-shadow:
+    0 18px 36px rgba(28, 78, 148, 0.24),
+    0 0 0 5px rgba(130, 115, 255, 0.13);
 }
 
 .butler-ball.butler-ball--corp-anchor.butler-ball--open {

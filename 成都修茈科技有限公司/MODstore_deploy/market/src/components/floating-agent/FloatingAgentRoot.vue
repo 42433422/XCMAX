@@ -15,7 +15,7 @@
     />
 
     <!-- 悬浮球 -->
-    <FloatingAgentBall :is-speaking="isSpeaking" />
+    <FloatingAgentBall :is-speaking="isSpeaking" :male-avatar="props.maleAvatar" />
 
     <!-- 对话面板 -->
     <Transition name="panel-pop">
@@ -52,6 +52,8 @@ import AgentSuggestionToast from './AgentSuggestionToast.vue'
 import FloatingAgentBall from './FloatingAgentBall.vue'
 import FloatingAgentPanel from './FloatingAgentPanel.vue'
 import ButlerProgressOverlay from './ButlerProgressOverlay.vue'
+
+const props = defineProps<{ maleAvatar?: boolean }>()
 
 const agentStore = useAgentStore()
 const { isOpen, showPermissionDialog, orchestrationSession } = storeToRefs(agentStore)

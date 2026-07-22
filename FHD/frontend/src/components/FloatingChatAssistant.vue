@@ -8,14 +8,18 @@
   >
     <button
       class="floating-chat-toggle"
+      :class="{ 'floating-chat-toggle--admin': props.maleAvatar }"
       type="button"
       :aria-expanded="isOpen ? 'true' : 'false'"
       aria-controls="floating-chat-panel"
-      aria-label="打开小C助理悬浮窗"
+      aria-label="小C助理"
       title="小C助理"
       @pointerdown="onDragStart"
       @click="toggleOpen"
     >
+      <span class="floating-chat-toggle-avatar" aria-hidden="true">
+        <img :src="avatarUrl" alt="" width="42" height="42" decoding="async" />
+      </span>
       <span class="floating-chat-toggle-label">小C助理</span>
     </button>
 
@@ -29,10 +33,9 @@
     >
       <div class="floating-chat-header" @pointerdown="onDragStart">
         <div class="floating-chat-title-wrap">
-          <div id="floating-chat-title" class="floating-chat-title">智能对话</div>
-          <div class="floating-chat-subtitle">悬浮助手</div>
+          <div id="floating-chat-title" class="floating-chat-title">小C助理</div>
         </div>
-        <button class="floating-chat-close" type="button" aria-label="关闭智能对话悬浮窗" @click="isOpen = false">
+        <button class="floating-chat-close" type="button" aria-label="关闭" @click="isOpen = false">
           ×
         </button>
       </div>
@@ -79,8 +82,17 @@ const props = defineProps({
   visible: {
     type: Boolean,
     default: true
+  },
+  /** 管理端（含其登录入口）使用男版；桌面端和客户端使用女版。 */
+  maleAvatar: {
+    type: Boolean,
+    default: false
   }
 })
+
+const avatarUrl = computed(() =>
+  props.maleAvatar ? '/ai-butler-male-avatar-v1.jpg' : '/ai-butler-female-avatar-v1.png',
+)
 
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
@@ -309,10 +321,10 @@ onBeforeUnmount(() => {
 .floating-chat-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0;
-  min-height: 40px;
+  gap: 9px;
+  min-height: 56px;
   max-width: calc(100vw - 32px);
-  padding: 8px 14px;
+  padding: 7px 15px 7px 8px;
   border: 1px solid rgba(74, 144, 217, 0.36);
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.94));
@@ -327,6 +339,36 @@ onBeforeUnmount(() => {
     border-color 180ms ease,
     background 180ms ease;
   touch-action: none;
+}
+
+.floating-chat-toggle-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 50%;
+  background: #e9edff;
+  box-shadow:
+    0 0 0 2px rgba(95, 112, 237, 0.54),
+    0 5px 12px rgba(60, 95, 185, 0.22);
+}
+
+.floating-chat-toggle-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 37%;
+  transform: scale(1.08);
+}
+
+.floating-chat-toggle--admin .floating-chat-toggle-avatar {
+  box-shadow:
+    0 0 0 2px rgba(45, 122, 220, 0.58),
+    0 5px 12px rgba(22, 77, 143, 0.25);
 }
 
 .floating-chat-root:not(.dragging) .floating-chat-toggle {
@@ -409,12 +451,6 @@ onBeforeUnmount(() => {
   line-height: 1.2;
   font-weight: 800;
   color: #172033;
-}
-
-.floating-chat-subtitle {
-  margin-top: 2px;
-  font-size: 11px;
-  color: rgba(71, 85, 105, 0.72);
 }
 
 .floating-chat-close {
