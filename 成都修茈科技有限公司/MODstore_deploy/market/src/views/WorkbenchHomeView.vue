@@ -121,7 +121,7 @@
         v-if="butlerFileOverflowCount > 0"
         type="button"
         class="wb-home-file-strip__butler-link"
-        :title="`在 AI 管家中查看 ${butlerFileOverflowCount} 个收纳文件`"
+        :title="`在小C助理中查看 ${butlerFileOverflowCount} 个收纳文件`"
         @click="openButlerFileTray"
       >
         收纳 {{ butlerFileOverflowCount }} 个
