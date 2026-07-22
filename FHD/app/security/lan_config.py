@@ -159,6 +159,14 @@ DEFAULT_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
 )
 
 FIXED_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
+    # The founder cockpit is a static admin shell plus a read-only API that
+    # performs its own fail-closed market-admin session check.  It must remain
+    # reachable through the public TLS reverse proxy without granting LAN
+    # access to any other FHD business route.
+    "/admin/founder-autonomy",
+    "/admin/assets",
+    "/admin/vite.svg",
+    "/api/xcmax/ops/founder-autonomy",
     "/api/im",
     # GitHub Actions has no LAN identity. This ops surface performs its own
     # fail-closed Bearer-token check on every non-health endpoint.
