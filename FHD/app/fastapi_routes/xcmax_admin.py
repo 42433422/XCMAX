@@ -2313,6 +2313,7 @@ async def ops_founder_autonomy(request: Request):
         autonomy_audit,
         dead_letters,
         strategic_decisions,
+        action_board,
     ) = await asyncio.gather(
         _safe_proxy("/api/ops/self-maintenance/status?limit=100"),
         _safe_proxy("/api/admin/duty-graph/health"),
@@ -2322,6 +2323,17 @@ async def ops_founder_autonomy(request: Request):
         _safe_proxy("/api/admin/autonomy/evidence?window_days=30&limit=100"),
         _safe_proxy("/api/admin/events/dlq/health"),
         _safe_proxy("/api/xcmax/strategic/decisions?limit=100"),
+        _safe_proxy("/api/public/action-board"),
+    )
+
+    action_board_goal_section = action_board.get("goals")
+    action_board_goal_summary = (
+        action_board_goal_section.get("summary")
+        if isinstance(action_board_goal_section, dict)
+        else None
+    )
+    action_board_goals = (
+        action_board_goal_summary if isinstance(action_board_goal_summary, dict) else {}
     )
 
     try:
@@ -2341,6 +2353,7 @@ async def ops_founder_autonomy(request: Request):
         closure=closure,
         approvals={"local_pending": len(pending_actions)},
         knowledge=knowledge,
+        goals=action_board_goals,
         customer_value=customer_value,
         autonomy_audit=autonomy_audit,
         employee_autonomy=employee_autonomy,
@@ -2352,7 +2365,7 @@ async def ops_founder_autonomy(request: Request):
             "approval_center": True,
             "knowledge_base": True,
             "ai_employees": True,
-            "goals": False,
+            "goals": bool(action_board_goals),
             "loops": True,
         },
     )
