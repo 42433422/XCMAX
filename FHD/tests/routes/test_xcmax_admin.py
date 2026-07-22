@@ -1243,6 +1243,19 @@ class TestOpsFounderAutonomy:
                 side_effect=lambda _request, _method, path: (
                     {"ok": True, "runtime": "live"}
                     if path.startswith("/api/ops/self-maintenance/status")
+                    else {
+                        "ok": True,
+                        "data": {
+                            "goals": {
+                                "summary": {
+                                    "total": 4,
+                                    "done": 3,
+                                    "completion_rate": 75.0,
+                                }
+                            }
+                        },
+                    }
+                    if path == "/api/public/action-board"
                     else {"ok": True}
                 ),
             ) as proxy,
@@ -1267,13 +1280,18 @@ class TestOpsFounderAutonomy:
 
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "data": snapshot}
-        assert proxy.await_count == 8
+        assert proxy.await_count == 9
         assert build_snapshot.call_args.kwargs["runtime"] == {
             "ok": True,
             "runtime": "live",
         }
         assert build_snapshot.call_args.kwargs["surfaces"]["founder_cockpit"] is True
-        assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is False
+        assert build_snapshot.call_args.kwargs["goals"] == {
+            "total": 4,
+            "done": 3,
+            "completion_rate": 75.0,
+        }
+        assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is True
 
 
 class TestOpsStaffingOnboard:
