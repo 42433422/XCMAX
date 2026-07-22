@@ -8,7 +8,7 @@ SNIP_DST="/etc/nginx/snippets"
 CONF="/etc/nginx/conf.d/xiu-ci.com.conf"
 
 mkdir -p "$SNIP_DST"
-for f in market-static.inc.conf corp-main-styles.inc.conf xcagi-cos-alias.inc.conf marketing-site-static.inc.conf; do
+for f in market-static.inc.conf corp-main-styles.inc.conf xcagi-cos-alias.inc.conf marketing-site-static.inc.conf founder-autonomy-admin.inc.conf; do
   cp -a "$SNIP_SRC/$f" "$SNIP_DST/$f"
   echo "synced $f"
 done
@@ -57,6 +57,12 @@ includes = """
 """
 if "snippets/market-static.inc.conf" not in t:
     t = t.replace(marker, marker + includes)
+
+founder_include = """
+    include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;
+"""
+if "snippets/founder-autonomy-admin.inc.conf" not in t:
+    t = t.replace(marker, marker + founder_include)
 
 conf.write_text(t, encoding="utf-8")
 print("merged includes into xiu-ci.com.conf")
