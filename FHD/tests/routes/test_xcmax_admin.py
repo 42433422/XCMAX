@@ -1213,6 +1213,67 @@ class TestOpsClosureStatus:
         assert resp.status_code == 200
 
 
+class TestOpsFounderAutonomy:
+    def test_unauthenticated_returns_401(self, client: TestClient) -> None:
+        with patch(
+            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+            return_value=None,
+        ):
+            resp = client.get("/api/xcmax/ops/founder-autonomy")
+        assert resp.status_code == 401
+
+    def test_authenticated_aggregates_live_evidence(self, client: TestClient) -> None:
+        snapshot = {
+            "schema_version": "founder_autonomy_status.v1",
+            "dimensions": [],
+        }
+        with (
+            patch(
+                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+                return_value="sess1",
+            ),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value={"account_kind": "admin", "market_is_admin": True},
+            ),
+            patch.object(
+                admin_routes,
+                "_market_admin_proxy",
+                new_callable=AsyncMock,
+                return_value={"ok": True},
+            ) as proxy,
+            patch(
+                "app.application.self_maintenance_app_service.get_runtime_status_local",
+                new_callable=AsyncMock,
+                return_value={"ok": True},
+            ),
+            patch(
+                "app.application.autonomy.approval_resume.list_pending_actions",
+                return_value=[],
+            ),
+            patch(
+                "app.fastapi_routes.knowledge_v1._knowledge_runtime_snapshot",
+                return_value={"indexed_sources": 3, "indexed_chunks": 8},
+            ),
+            patch(
+                "app.application.ops_closure_status.build_ops_closure_status",
+                return_value={"staffing": {"planned_count": 55}},
+            ),
+            patch(
+                "app.application.founder_autonomy_status.build_founder_autonomy_snapshot",
+                return_value=snapshot,
+            ) as build_snapshot,
+        ):
+            resp = client.get("/api/xcmax/ops/founder-autonomy")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True, "data": snapshot}
+        assert proxy.await_count == 7
+        assert build_snapshot.call_args.kwargs["runtime"] == {"ok": True}
+        assert build_snapshot.call_args.kwargs["surfaces"]["founder_cockpit"] is True
+        assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is False
+
+
 class TestOpsStaffingOnboard:
     def test_onboard_with_employee_ids(self, client: TestClient) -> None:
         with patch.object(

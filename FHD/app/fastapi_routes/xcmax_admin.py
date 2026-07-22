@@ -2278,6 +2278,96 @@ async def ops_closure_status(request: Request):
     return {"success": True, "data": data}
 
 
+@router.get("/ops/founder-autonomy", response_model=None)
+async def ops_founder_autonomy(request: Request):
+    """Aggregate the seven founder-autonomy dimensions from live evidence.
+
+    Each upstream is fail-soft: an unavailable evidence domain lowers the
+    corresponding score instead of making the management page unavailable or
+    silently converting source capability into runtime proof.
+    """
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+
+    from app.application import self_maintenance_app_service as sm_svc
+    from app.application.autonomy.approval_resume import list_pending_actions
+    from app.application.founder_autonomy_status import build_founder_autonomy_snapshot
+    from app.application.ops_closure_status import build_ops_closure_status
+    from app.fastapi_routes.knowledge_v1 import _knowledge_runtime_snapshot
+
+    async def _safe_proxy(path: str) -> dict[str, Any]:
+        try:
+            payload = await _market_admin_proxy(request, "GET", path)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("founder autonomy evidence unavailable path=%s: %s", path, exc)
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    async def _safe_runtime() -> dict[str, Any]:
+        try:
+            payload = await sm_svc.get_runtime_status_local(limit=100)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("founder autonomy runtime unavailable: %s", exc)
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    (
+        runtime,
+        remote_health,
+        employee_autonomy,
+        employee_capability,
+        customer_value,
+        autonomy_audit,
+        dead_letters,
+        strategic_decisions,
+    ) = await asyncio.gather(
+        _safe_runtime(),
+        _safe_proxy("/api/admin/duty-graph/health"),
+        _safe_proxy("/api/admin/employee-autonomy/dashboard"),
+        _safe_proxy("/api/admin/employee-autonomy/execution-coverage?window_hours=24"),
+        _safe_proxy("/api/admin/customer-value/evidence?window_days=90"),
+        _safe_proxy("/api/admin/autonomy/evidence?window_days=30&limit=100"),
+        _safe_proxy("/api/admin/events/dlq/health"),
+        _safe_proxy("/api/xcmax/strategic/decisions?limit=100"),
+    )
+
+    try:
+        knowledge = _knowledge_runtime_snapshot()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("founder autonomy knowledge evidence unavailable: %s", exc)
+        knowledge = {}
+    try:
+        pending_actions = list_pending_actions()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("founder autonomy approvals unavailable: %s", exc)
+        pending_actions = []
+
+    closure = build_ops_closure_status(remote_health)
+    snapshot = build_founder_autonomy_snapshot(
+        runtime=runtime,
+        closure=closure,
+        approvals={"local_pending": len(pending_actions)},
+        knowledge=knowledge,
+        customer_value=customer_value,
+        autonomy_audit=autonomy_audit,
+        employee_autonomy=employee_autonomy,
+        employee_capability=employee_capability,
+        dead_letters=dead_letters,
+        strategic_decisions=strategic_decisions,
+        surfaces={
+            "founder_cockpit": True,
+            "approval_center": True,
+            "knowledge_base": True,
+            "ai_employees": True,
+            "goals": False,
+            "loops": True,
+        },
+    )
+    return {"success": True, "data": snapshot}
+
+
 @router.post("/ops/staffing/onboard", response_model=None)
 async def ops_staffing_onboard(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
     """将编制缺岗员工登记到 MODstore Catalog（代理 yuangon-onboard/run）。"""
