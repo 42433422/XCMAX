@@ -1244,13 +1244,16 @@ class TestOpsFounderAutonomy:
                     {"ok": True, "runtime": "live"}
                     if path.startswith("/api/ops/self-maintenance/status")
                     else {
-                        "goals": {
-                            "summary": {
-                                "total": 4,
-                                "done": 3,
-                                "completion_rate": 75.0,
+                        "ok": True,
+                        "data": {
+                            "goals": {
+                                "summary": {
+                                    "total": 4,
+                                    "done": 3,
+                                    "completion_rate": 75.0,
+                                }
                             }
-                        }
+                        },
                     }
                     if path == "/api/public/action-board"
                     else {"ok": True}

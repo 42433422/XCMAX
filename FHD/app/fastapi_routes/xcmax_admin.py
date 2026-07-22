@@ -2326,7 +2326,10 @@ async def ops_founder_autonomy(request: Request):
         _safe_proxy("/api/public/action-board"),
     )
 
-    action_board_goal_section = action_board.get("goals")
+    action_board_data = (
+        action_board.get("data") if isinstance(action_board.get("data"), dict) else action_board
+    )
+    action_board_goal_section = action_board_data.get("goals")
     action_board_goal_summary = (
         action_board_goal_section.get("summary")
         if isinstance(action_board_goal_section, dict)
