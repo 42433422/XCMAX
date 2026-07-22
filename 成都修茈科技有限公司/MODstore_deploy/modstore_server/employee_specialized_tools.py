@@ -101,16 +101,14 @@ async def probe_mod_host(
                 if kind == "llm_status" and isinstance(data, dict):
                     row["api_key_configured"] = data.get("api_key_configured")
                     row["provider"] = str(data.get("provider") or "")[:80]
-                    row["quota_status"] = str(
-                        data.get("quota_status") or data.get("status") or ""
-                    )[:80]
+                    row["quota_status"] = str(data.get("quota_status") or data.get("status") or "")[
+                        :80
+                    ]
                 elif kind == "version" and isinstance(data, dict):
                     row["server_version"] = str(
                         data.get("version") or data.get("server_version") or ""
                     )[:80]
-                    row["min_mod_sdk_version"] = str(
-                        data.get("min_mod_sdk_version") or ""
-                    )[:80]
+                    row["min_mod_sdk_version"] = str(data.get("min_mod_sdk_version") or "")[:80]
             except Exception as exc:  # noqa: BLE001 - each endpoint retains evidence
                 row.update(
                     {

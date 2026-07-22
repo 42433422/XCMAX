@@ -159,10 +159,7 @@ def _junit_counts(path: Path) -> Dict[str, int]:
             key: str(sum(int(suite.attrib.get(key) or 0) for suite in suites))
             for key in ("tests", "failures", "errors", "skipped")
         }
-    counts = {
-        key: int(attrs.get(key) or 0)
-        for key in ("tests", "failures", "errors", "skipped")
-    }
+    counts = {key: int(attrs.get(key) or 0) for key in ("tests", "failures", "errors", "skipped")}
     counts["passed"] = max(
         0,
         counts["tests"] - counts["failures"] - counts["errors"] - counts["skipped"],

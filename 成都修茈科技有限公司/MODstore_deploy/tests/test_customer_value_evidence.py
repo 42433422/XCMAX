@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -19,8 +19,7 @@ from modstore_server.customer_value_evidence import (
 from modstore_server.customer_value_evidence_api import router
 from modstore_server.customer_value_reconciler import reconcile_paid_customer_value
 
-
-NOW = datetime(2026, 7, 22, 6, 0, tzinfo=UTC)
+NOW = datetime(2026, 7, 22, 6, 0, tzinfo=timezone.utc)
 
 
 def _init_db(tmp_path, monkeypatch):
@@ -134,14 +133,22 @@ def test_customer_value_ledger_is_append_only_and_links_paid_delivery(tmp_path, 
     assert evidence["outcome_verified"] is True
 
     with sf() as session:
-        row = session.query(models.CustomerValueReceipt).filter_by(receipt_id=goal["receipt_id"]).one()
+        row = (
+            session.query(models.CustomerValueReceipt)
+            .filter_by(receipt_id=goal["receipt_id"])
+            .one()
+        )
         row.customer_ref = "mutated"
         with pytest.raises(DatabaseError):
             session.commit()
         session.rollback()
 
     with sf() as session:
-        row = session.query(models.CustomerValueReceipt).filter_by(receipt_id=goal["receipt_id"]).one()
+        row = (
+            session.query(models.CustomerValueReceipt)
+            .filter_by(receipt_id=goal["receipt_id"])
+            .one()
+        )
         session.delete(row)
         with pytest.raises(DatabaseError):
             session.commit()
@@ -341,10 +348,7 @@ def test_java_payment_loader_validates_source_and_paginates(monkeypatch) -> None
 
     assert len(orders) == 1001
     assert [call["params"]["offset"] for call in calls] == [0, 1000]
-    assert all(
-        call["headers"]["X-Internal-Api-Key"] == "unit-test-internal-key"
-        for call in calls
-    )
+    assert all(call["headers"]["X-Internal-Api-Key"] == "unit-test-internal-key" for call in calls)
 
 
 def test_fulfilled_payment_reconciliation_creates_idempotent_value_loop(

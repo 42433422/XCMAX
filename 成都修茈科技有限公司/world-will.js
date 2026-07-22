@@ -99,15 +99,35 @@
     return Math.floor(ageMinutes / 1440) + ' 天前同步（请以管理端为准）'
   }
 
+  function element(tag, className, text) {
+    var node = document.createElement(tag)
+    if (className) node.className = className
+    if (text != null) node.textContent = String(text)
+    return node
+  }
+
+  function clearElement(node) {
+    while (node && node.firstChild) node.removeChild(node.firstChild)
+  }
+
   function renderAutonomyUnavailable(message) {
     var meta = document.getElementById('autonomy-meta')
     var overall = document.getElementById('autonomy-overall')
     var grid = document.getElementById('autonomy-grid')
     var proof = document.getElementById('autonomy-proof')
     if (meta) meta.textContent = message || '自治证据快照暂不可用'
-    if (overall) overall.innerHTML = '<strong>—</strong><span>不以演示数据代替</span>'
-    if (grid) grid.innerHTML = '<p class="autonomy-empty">等待管理端发布脱敏后的真实进度。</p>'
-    if (proof) proof.innerHTML = ''
+    if (overall) {
+      clearElement(overall)
+      overall.appendChild(element('strong', '', '—'))
+      overall.appendChild(element('span', '', '不以演示数据代替'))
+    }
+    if (grid) {
+      clearElement(grid)
+      grid.appendChild(
+        element('p', 'autonomy-empty', '等待管理端发布脱敏后的真实进度。')
+      )
+    }
+    clearElement(proof)
   }
 
   function renderAutonomy(data) {
@@ -126,32 +146,39 @@
         ' · 与创始人管理端使用同一评分结果 · 内部审批和故障细节不公开'
     }
     if (overall) {
-      overall.innerHTML =
-        '<strong>' +
-        esc(data.overall_progress || 0) +
-        '%</strong><span>距离目标还差 ' +
-        esc(data.overall_remaining == null ? '—' : data.overall_remaining) +
-        '%</span>'
+      clearElement(overall)
+      overall.appendChild(element('strong', '', (data.overall_progress || 0) + '%'))
+      overall.appendChild(
+        element(
+          'span',
+          '',
+          '距离目标还差 ' +
+            (data.overall_remaining == null ? '—' : data.overall_remaining) +
+            '%'
+        )
+      )
     }
     if (grid) {
-      grid.innerHTML = dimensions
-        .map(function (item) {
-          var progress = Math.max(0, Math.min(100, Number(item.progress) || 0))
-          return (
-            '<article class="autonomy-card autonomy-card--' +
-            esc(item.status || 'early') +
-            '"><header><span>' +
-            esc(item.label || '') +
-            '</span><strong>' +
-            esc(progress) +
-            '%</strong></header><div class="autonomy-track"><i style="width:' +
-            esc(progress) +
-            '%"></i></div><p>下一门槛：' +
-            esc(item.next_gap || '继续积累运行证据') +
-            '</p></article>'
-          )
-        })
-        .join('')
+      clearElement(grid)
+      dimensions.forEach(function (item) {
+        var progress = Math.max(0, Math.min(100, Number(item.progress) || 0))
+        var status = String(item.status || 'early')
+        if (['ready', 'approaching', 'building', 'early'].indexOf(status) < 0) status = 'early'
+        var card = element('article', 'autonomy-card autonomy-card--' + status)
+        var header = element('header')
+        header.appendChild(element('span', '', item.label || ''))
+        header.appendChild(element('strong', '', progress + '%'))
+        card.appendChild(header)
+        var track = element('div', 'autonomy-track')
+        var fill = element('i')
+        fill.style.width = progress + '%'
+        track.appendChild(fill)
+        card.appendChild(track)
+        card.appendChild(
+          element('p', '', '下一门槛：' + (item.next_gap || '继续积累运行证据'))
+        )
+        grid.appendChild(card)
+      })
     }
     if (proof) {
       var labels = {
@@ -164,19 +191,13 @@
         paid_delivery_verified: '付费与不可变交付已关联',
         customer_acceptance_verified: '客户明确验收已验证',
       }
-      proof.innerHTML = Object.keys(labels)
-        .map(function (key) {
-          var ok = Boolean((data.proof || {})[key])
-          return (
-            '<span class="' +
-            (ok ? 'is-ok' : '') +
-            '">' +
-            (ok ? '✓ ' : '待证明 · ') +
-            esc(labels[key]) +
-            '</span>'
-          )
-        })
-        .join('')
+      clearElement(proof)
+      Object.keys(labels).forEach(function (key) {
+        var ok = Boolean((data.proof || {})[key])
+        proof.appendChild(
+          element('span', ok ? 'is-ok' : '', (ok ? '✓ ' : '待证明 · ') + labels[key])
+        )
+      })
     }
   }
 

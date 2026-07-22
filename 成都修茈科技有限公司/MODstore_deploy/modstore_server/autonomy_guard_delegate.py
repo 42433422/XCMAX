@@ -123,10 +123,7 @@ def evaluate_risk(
     try:
         decision = domain_evaluate_risk(action, context, action_id=action_id, source=source)
     except Exception as exc:
-        if (
-            exc.__class__.__name__ == "ProhibitedActionError"
-            and getattr(exc, "action_id", None)
-        ):
+        if exc.__class__.__name__ == "ProhibitedActionError" and getattr(exc, "action_id", None):
             try:
                 from modstore_server.autonomy_decision_audit import (
                     append_prohibited_exception,

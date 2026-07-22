@@ -15,7 +15,7 @@ import os
 import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Callable
 
 import httpx
@@ -40,8 +40,22 @@ PROVIDER_VERIFICATIONS = frozenset(
 PAYMENT_PROVIDERS = frozenset({"alipay", "wechat", "wechatpay", "bank"})
 PRODUCTION_ENVIRONMENTS = frozenset({"production", "prod"})
 
-_TEST_MARKERS = ("pilot", "pytest", "smoke", "sandbox", "\u8bd5\u70b9", "\u6c99\u7bb1", "\u6d4b\u8bd5")
-_INTERNAL_MARKERS = ("internal", "auto-renew", "auto_renew", "\u5185\u90e8", "\u81ea\u52a8\u7eed\u8d39")
+_TEST_MARKERS = (
+    "pilot",
+    "pytest",
+    "smoke",
+    "sandbox",
+    "\u8bd5\u70b9",
+    "\u6c99\u7bb1",
+    "\u6d4b\u8bd5",
+)
+_INTERNAL_MARKERS = (
+    "internal",
+    "auto-renew",
+    "auto_renew",
+    "\u5185\u90e8",
+    "\u81ea\u52a8\u7eed\u8d39",
+)
 _SENSITIVE_KEY = re.compile(r"secret|token|password|authorization|api[_-]?key", re.I)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _JAVA_PAGE_SIZE = 1000
@@ -143,9 +157,7 @@ def classify_payment_order(
         return False, "missing_provider_proof"
 
     environment = _text(
-        order.get("payment_environment")
-        or order.get("environment")
-        or order.get("deploy_tier"),
+        order.get("payment_environment") or order.get("environment") or order.get("deploy_tier"),
         32,
     ).lower()
     if environment not in PRODUCTION_ENVIRONMENTS:
@@ -162,8 +174,10 @@ def _sanitize_evidence(value: Any, *, depth: int = 0) -> Any:
         result: dict[str, Any] = {}
         for raw_key, child in list(value.items())[:50]:
             key = _text(raw_key, 96)
-            result[key] = "<redacted>" if _SENSITIVE_KEY.search(key) else _sanitize_evidence(
-                child, depth=depth + 1
+            result[key] = (
+                "<redacted>"
+                if _SENSITIVE_KEY.search(key)
+                else _sanitize_evidence(child, depth=depth + 1)
             )
         return result
     if isinstance(value, list):
@@ -287,9 +301,7 @@ def append_customer_value_receipt(
 
     data = dict(payload or {})
     receipt_kind = _text(data.get("receipt_kind"), 32).lower()
-    verification_status = _text(
-        data.get("verification_status") or "pending_evidence", 32
-    ).lower()
+    verification_status = _text(data.get("verification_status") or "pending_evidence", 32).lower()
     if receipt_kind not in RECEIPT_KINDS:
         raise ValueError(f"unsupported receipt_kind: {receipt_kind or '<empty>'}")
     if verification_status not in VERIFICATION_STATUSES:
@@ -396,9 +408,7 @@ def build_customer_value_evidence(
         source_available = payment_source.get("source_available") is True
         source_authoritative = payment_source.get("source_authoritative") is True
         raw_orders = [
-            dict(item)
-            for item in payment_source.get("orders") or []
-            if isinstance(item, dict)
+            dict(item) for item in payment_source.get("orders") or [] if isinstance(item, dict)
         ]
     else:
         source_owner = "injected"
@@ -457,9 +467,7 @@ def build_customer_value_evidence(
         except (TypeError, ValueError, json.JSONDecodeError):
             evidence = {}
         artifact_sha256 = (
-            _text(evidence.get("artifact_sha256"), 64).lower()
-            if isinstance(evidence, dict)
-            else ""
+            _text(evidence.get("artifact_sha256"), 64).lower() if isinstance(evidence, dict) else ""
         )
         if row.artifact_id and _SHA256.fullmatch(artifact_sha256):
             delivered_receipts.append(row)
@@ -471,9 +479,7 @@ def build_customer_value_evidence(
     paid_acceptance_orders = {
         row.order_no
         for row in delivered_receipts
-        if row.receipt_kind == "acceptance"
-        and row.order_no
-        and row.order_no in eligible_orders
+        if row.receipt_kind == "acceptance" and row.order_no and row.order_no in eligible_orders
     }
 
     excluded_keys = (

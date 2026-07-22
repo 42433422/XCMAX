@@ -437,9 +437,7 @@ def _select_recent_milestone_rows(
 
     selected_run_ids = {
         run_id
-        for run_id, _ in sorted(latest_by_run.items(), key=lambda item: item[1])[
-            -bounded_runs:
-        ]
+        for run_id, _ in sorted(latest_by_run.items(), key=lambda item: item[1])[-bounded_runs:]
     }
     selected = [
         row
@@ -6162,11 +6160,7 @@ def record_self_maintenance_heartbeat(
         "created_at": _iso(_utc_now()),
         "phase": "heartbeat",
         "run_id": f"heartbeat-{uuid.uuid4().hex[:16]}",
-        "status": (
-            "heartbeat_ready"
-            if evaluation.get("should_run") is True
-            else "heartbeat_idle"
-        ),
+        "status": ("heartbeat_ready" if evaluation.get("should_run") is True else "heartbeat_idle"),
         "triggered_by": str(triggered_by or "scheduler_heartbeat")[:80],
         "gate": {
             "should_run": evaluation.get("should_run") is True,
@@ -6810,9 +6804,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             else []
         )
         inventory = (
-            kb_context.get("inventory")
-            if isinstance(kb_context.get("inventory"), dict)
-            else {}
+            kb_context.get("inventory") if isinstance(kb_context.get("inventory"), dict) else {}
         )
         kb_summary = {
             "fix_count": int(inventory.get("fix_count") or 0),

@@ -67,9 +67,7 @@ def test_single_failure_is_gap_candidate_not_reusable_knowledge(monkeypatch, tmp
         "FHD/mods/_employees/host-checker/manifest.json",
         "FHD/mods/_employees/host-checker/backend/employees/host_checker.py",
     ]
-    assert open_gap["remediation"]["closure_event"] == (
-        "later_strict_burnin_receipt_accepted"
-    )
+    assert open_gap["remediation"]["closure_event"] == ("later_strict_burnin_receipt_accepted")
     assert open_gap["remediation"]["auto_close"] is False
     assert knowledge_inventory()["total"] == 0
 
@@ -168,9 +166,7 @@ def test_malformed_summary_and_missing_hash_rows_do_not_create_proof(monkeypatch
         encoding="utf-8",
     )
 
-    result = run_duty_workforce_learning(
-        audit_path=audit, gap_path=tmp_path / "gaps.jsonl"
-    )
+    result = run_duty_workforce_learning(audit_path=audit, gap_path=tmp_path / "gaps.jsonl")
 
     assert result["audit_row_count"] == 0
     assert result["resolved_pair_count"] == 0

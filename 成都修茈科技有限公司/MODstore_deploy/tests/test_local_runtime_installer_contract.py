@@ -16,7 +16,7 @@ def test_local_runtime_installer_is_exact_clean_audited_and_recoverable() -> Non
     assert "rollback()" in script
     assert "rsync -a --delete" in script
     assert 'SOURCE_ALEMBIC="$STAGE/成都修茈科技有限公司/MODstore_deploy/alembic"' in script
-    assert 'RUNTIME_FILE_RELATIVES=(' in script
+    assert "RUNTIME_FILE_RELATIVES=(" in script
     assert '"FHD/config/duty_employee_work_contracts.json"' in script
     assert 'SOURCE_EMPLOYEES="$STAGE/FHD/mods/_employees"' in script
     assert '"$BACKUP/employees/"' in script
@@ -24,10 +24,10 @@ def test_local_runtime_installer_is_exact_clean_audited_and_recoverable() -> Non
     assert '("*/manifest.json", "*/backend/employees/*.py")' in script
     assert '"MODstore_deploy/modstore_server/customer_value_reconciler.py"' in script
     assert '"MODstore_deploy/modstore_server/dead_letter_reconciler.py"' in script
-    assert 'MODSTORE_LAUNCHCTL_BIN' in script
-    assert 'MODSTORE_CURL_BIN' in script
-    assert 'MODSTORE_INSTALL_HEALTH_ATTEMPTS' in script
-    assert 'MODSTORE_INSTALL_HEALTH_SLEEP_SECONDS' in script
+    assert "MODSTORE_LAUNCHCTL_BIN" in script
+    assert "MODSTORE_CURL_BIN" in script
+    assert "MODSTORE_INSTALL_HEALTH_ATTEMPTS" in script
+    assert "MODSTORE_INSTALL_HEALTH_SLEEP_SECONDS" in script
     assert 'if [[ "$READY" != 1 ]]; then' in script
     assert "  rollback\n  exit 5" in script
     assert "reset --hard" not in script

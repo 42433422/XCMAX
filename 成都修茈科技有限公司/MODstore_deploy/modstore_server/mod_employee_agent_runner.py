@@ -70,9 +70,7 @@ def _bounded_env_int(name: str, default: int, *, minimum: int, maximum: int) -> 
 
 
 def _default_max_rounds() -> int:
-    return _bounded_env_int(
-        "MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10
-    )
+    return _bounded_env_int("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10)
 
 
 def _llm_timeout_seconds() -> float:
@@ -262,9 +260,7 @@ async def tool_read_workspace_file(
                     return {"ok": False, "error": f"路径越界：{path!r}"}
                 if os.path.isfile(full):
                     try:
-                        content = Path(full).read_text(
-                            encoding="utf-8", errors="replace"
-                        )
+                        content = Path(full).read_text(encoding="utf-8", errors="replace")
                         truncated = len(content) > 8000
                         return {
                             "ok": True,
@@ -311,11 +307,7 @@ async def tool_write_workspace_file(
 
     sg = [str(x).strip() for x in (ctx.get("scope_globs") or []) if str(x).strip()]
     fg = [str(x).strip() for x in (ctx.get("forbidden_globs") or []) if str(x).strip()]
-    ag = [
-        str(x).strip()
-        for x in (ctx.get("approval_required_globs") or [])
-        if str(x).strip()
-    ]
+    ag = [str(x).strip() for x in (ctx.get("approval_required_globs") or []) if str(x).strip()]
     if sg or fg:
         from modstore_server.employee_scope_policy import (
             relative_path_under_repo,
@@ -395,9 +387,7 @@ async def tool_write_workspace_file(
         return {"ok": False, "error": str(exc)[:300]}
 
 
-async def tool_list_workspace_dir(
-    workspace_root: str, path: str = "."
-) -> Dict[str, Any]:
+async def tool_list_workspace_dir(workspace_root: str, path: str = ".") -> Dict[str, Any]:
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
         return {"ok": False, "error": f"路径越界：{path!r}"}
@@ -423,9 +413,7 @@ async def tool_list_workspace_dir(
         return {"ok": False, "error": str(exc)[:300]}
 
 
-async def tool_run_sandboxed_python(
-    code: str, *, timeout: float = 10.0
-) -> Dict[str, Any]:
+async def tool_run_sandboxed_python(code: str, *, timeout: float = 10.0) -> Dict[str, Any]:
     """Run pure-stdlib Python in a subprocess with a hard time limit."""
     # Block dangerous patterns before even launching a process.
     danger = re.compile(
@@ -440,11 +428,7 @@ async def tool_run_sandboxed_python(
             capture_output=True,
             text=True,
             timeout=timeout,
-            env={
-                k: v
-                for k, v in os.environ.items()
-                if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")
-            },
+            env={k: v for k, v in os.environ.items() if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")},
         )
         return {
             "ok": proc.returncode == 0,
@@ -518,9 +502,7 @@ async def tool_scan_project_tree(
     }
 
 
-async def tool_identify_file_types(
-    workspace_root: str, path: str = "."
-) -> Dict[str, Any]:
+async def tool_identify_file_types(workspace_root: str, path: str = ".") -> Dict[str, Any]:
     """Count file extensions under *path* within *workspace_root* (non-recursive limit 2000)."""
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
@@ -554,9 +536,7 @@ async def tool_identify_file_types(
     }
 
 
-async def tool_analyze_project_summary(
-    workspace_root: str, path: str = "."
-) -> Dict[str, Any]:
+async def tool_analyze_project_summary(workspace_root: str, path: str = ".") -> Dict[str, Any]:
     """Return a structured project summary using vibe-coding's analyze_project if available,
     otherwise fall back to a lightweight manual scan."""
     resolved = _guard_path(workspace_root, path)
@@ -603,9 +583,7 @@ async def tool_analyze_project_summary(
         rp = os.path.join(resolved, rf)
         if os.path.isfile(rp):
             try:
-                readme_snippet = Path(rp).read_text(encoding="utf-8", errors="replace")[
-                    :800
-                ]
+                readme_snippet = Path(rp).read_text(encoding="utf-8", errors="replace")[:800]
             except OSError:
                 pass
             break
@@ -672,11 +650,9 @@ class EmployeeAgentRunner:
             }
         """
         read_only = bool(self.ctx.get("read_only"))
-        protocol = (
-            READ_ONLY_TOOL_PROTOCOL_HEADER
-            if read_only
-            else TOOL_PROTOCOL_HEADER
-        ).format(max_rounds=self.max_rounds)
+        protocol = (READ_ONLY_TOOL_PROTOCOL_HEADER if read_only else TOOL_PROTOCOL_HEADER).format(
+            max_rounds=self.max_rounds
+        )
         if self.ctx.get("research_tools_enabled") and not read_only:
             protocol = protocol.rstrip() + RESEARCH_TOOLS_APPEND
         if str(self.ctx.get("employee_id") or "").strip() == "llm-ops-engineer":
@@ -762,9 +738,7 @@ class EmployeeAgentRunner:
             )
 
             result = await self._dispatch_tool(tool_name, tool_input)
-            tool_calls_log.append(
-                {"tool": tool_name, "input": tool_input, "result": result}
-            )
+            tool_calls_log.append({"tool": tool_name, "input": tool_input, "result": result})
 
             messages.append(
                 {
@@ -800,9 +774,7 @@ class EmployeeAgentRunner:
 
     # ── private: tool dispatch ────────────────────────────────────────────────
 
-    async def _dispatch_tool(
-        self, name: str, input_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _dispatch_tool(self, name: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             if self.ctx.get("read_only") and name not in _READ_ONLY_AGENT_TOOLS:
                 return {
@@ -863,9 +835,7 @@ class EmployeeAgentRunner:
                     else {}
                 )
                 relative_path = str(
-                    input_data.get("xcemp_path")
-                    or employee_input.get("xcemp_path")
-                    or ""
+                    input_data.get("xcemp_path") or employee_input.get("xcemp_path") or ""
                 ).strip()
                 return await validate_xcemp_package(
                     self.workspace_root,
@@ -927,9 +897,7 @@ class EmployeeAgentRunner:
                     catalog=platform,
                 )
                 return {
-                    "ok": bool(
-                        platform.get("ok") and cli.get("ok") and quota.get("ok")
-                    ),
+                    "ok": bool(platform.get("ok") and cli.get("ok") and quota.get("ok")),
                     "platform": platform,
                     "quota": quota,
                     "cli_fallback": cli,
@@ -971,9 +939,7 @@ class EmployeeAgentRunner:
                 )
 
                 return await reconcile_llm_route_autopilot(
-                    triggered_by=str(
-                        input_data.get("reason") or "employee:llm-ops-engineer"
-                    ),
+                    triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),
                     force=False,
                 )
 
@@ -994,9 +960,7 @@ class EmployeeAgentRunner:
 
                 return await rollback_runtime_route(
                     actor="employee:llm-ops-engineer",
-                    reason=str(
-                        input_data.get("reason") or "employee requested rollback"
-                    ),
+                    reason=str(input_data.get("reason") or "employee requested rollback"),
                     force=False,
                 )
             wr = self.workspace_root
@@ -1166,15 +1130,7 @@ def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
             continue
         if not isinstance(data, dict):
             continue
-        score = (
-            4
-            if "tool" in data
-            else 4
-            if "answer" in data
-            else 2
-            if "status" in data
-            else 1
-        )
+        score = 4 if "tool" in data else 4 if "answer" in data else 2 if "status" in data else 1
         candidates.append((score, index, data))
     if candidates:
         return max(candidates, key=lambda item: (item[0], item[1]))[2]
@@ -1186,6 +1142,4 @@ def build_agent_runner(
 ) -> EmployeeAgentRunner:
     """Convenience factory; used by generated blueprints.py."""
     workspace_root = str(ctx.get("workspace_root") or ".")
-    return EmployeeAgentRunner(
-        ctx, max_rounds=max_rounds, workspace_root=workspace_root
-    )
+    return EmployeeAgentRunner(ctx, max_rounds=max_rounds, workspace_root=workspace_root)

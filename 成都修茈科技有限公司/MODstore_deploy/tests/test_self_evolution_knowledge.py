@@ -145,9 +145,7 @@ def test_collect_proactive_signals_prioritizes_open_workforce_gaps(monkeypatch, 
                 "status": "rejected",
                 "remediation": {
                     "task_id": "workforce-gap-aaaaaaaaaaaaaaaa",
-                    "target_files": [
-                        "FHD/mods/_employees/host-checker/manifest.json"
-                    ],
+                    "target_files": ["FHD/mods/_employees/host-checker/manifest.json"],
                     "closure_event": "later_strict_burnin_receipt_accepted",
                     "auto_close": False,
                 },

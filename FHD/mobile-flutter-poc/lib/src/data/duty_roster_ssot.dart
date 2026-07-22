@@ -159,7 +159,7 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     id: 'change-request-auditor',
     label: '变更评审员',
     summary:
-        '对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。',
+        '以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。',
   ),
   DutyRosterEmployee(
     id: 'github-pr-gatekeeper',
@@ -170,8 +170,7 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
   DutyRosterEmployee(
     id: 'daily-orchestrator',
     label: '每日编排员',
-    summary:
-        '每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。',
+    summary: '每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。',
   ),
   DutyRosterEmployee(
     id: 'intake-dispatcher',

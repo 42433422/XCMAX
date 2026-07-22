@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from modstore_server import self_maintenance_loop_runner
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DispatchReceipt,
@@ -9,8 +10,6 @@ from modstore_server.self_maintenance_deploy_receipts import (
     correlated_verified_deploys,
     run_staged_deployment_chain,
 )
-from modstore_server import self_maintenance_loop_runner
-
 
 MERGE_SHA = "a" * 40
 ARTIFACT_SHA = "b" * 64
@@ -36,9 +35,7 @@ class FakeGateway:
     health_artifact: str = ARTIFACT_SHA
     dispatches: list[str] = field(default_factory=list)
 
-    def dispatch(
-        self, *, environment: str, merge_sha: str, action_id: str
-    ) -> DispatchReceipt:
+    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt:
         self.dispatches.append(environment)
         return DispatchReceipt(
             workflow_run_id=f"workflow-{environment}",
@@ -119,9 +116,7 @@ def test_verified_receipt_has_exact_same_run_sha_environment_and_workflow() -> N
     assert result["staging_verified"] is True
     dispatch, verified = events
     keys = ("run_id", "merge_sha", "environment", "workflow_run_id", "action_id")
-    assert {key: dispatch[key] for key in keys} == {
-        key: verified[key] for key in keys
-    }
+    assert {key: dispatch[key] for key in keys} == {key: verified[key] for key in keys}
     assert verified["artifact_sha256"] == ARTIFACT_SHA
     assert correlated_verified_deploys(events) == [verified]
 

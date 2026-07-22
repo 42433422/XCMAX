@@ -134,9 +134,7 @@ def test_cleanroom_runtime_verifies_manifest_file_hashes(monkeypatch, tmp_path: 
 
 def test_local_runtime_installer_manifest_covers_autonomy_controllers() -> None:
     script = (
-        Path(__file__).resolve().parents[1]
-        / "scripts"
-        / "install-local-autonomy-runtime.sh"
+        Path(__file__).resolve().parents[1] / "scripts" / "install-local-autonomy-runtime.sh"
     ).read_text(encoding="utf-8")
 
     for relative in (

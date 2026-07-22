@@ -1283,17 +1283,13 @@ def _action_agent_runner(
         "employee_id": employee_id,
         "cli_fallback_enabled": (
             employee_id == "llm-ops-engineer"
-            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1")
-            .strip()
-            .lower()
+            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1").strip().lower()
             not in ("0", "false", "off", "disabled")
         ),
         "read_only": read_only,
         "employee_input": dict(cog_input),
         "employee_capabilities": [
-            str(item).strip()
-            for item in agent_cfg.get("capabilities") or []
-            if str(item).strip()
+            str(item).strip() for item in agent_cfg.get("capabilities") or [] if str(item).strip()
         ],
         "research_tools_enabled": (
             not read_only
@@ -1620,6 +1616,7 @@ def _filter_handlers_vibe_coding_maintainer(
             para_delegate_ready_for_dispatch,
         )
     except Exception:
+
         def para_delegate_enabled() -> bool:
             return False
 
@@ -2128,9 +2125,7 @@ def _evaluate_employee_risk_gate(
         }
 
 
-def _deterministic_direct_input_ready(
-    actions_cfg: Dict[str, Any], payload: Dict[str, Any]
-) -> bool:
+def _deterministic_direct_input_ready(actions_cfg: Dict[str, Any], payload: Dict[str, Any]) -> bool:
     """Return true only for a reviewed read-only employee-module contract."""
 
     direct = (
@@ -2185,12 +2180,12 @@ def execute_employee_task(
                     # catalog archive.  Failure to resolve the reviewed source
                     # is fatal; silently falling back would manufacture proof
                     # for an obsolete generic shell.
+                    from modstore_server.duty_workforce_burnin import (
+                        assess_burn_in_eligibility,
+                    )
                     from modstore_server.duty_workforce_contracts import (
                         load_reviewed_duty_manifest,
                         workforce_contract_map,
-                    )
-                    from modstore_server.duty_workforce_burnin import (
-                        assess_burn_in_eligibility,
                     )
 
                     manifest = load_reviewed_duty_manifest(employee_id)
@@ -2474,8 +2469,7 @@ def execute_employee_task(
                             str(_handoff_intended)[:128],
                         )
                     elif (
-                        _ask_human is True
-                        or (isinstance(_ask_human, str) and _ask_human.strip())
+                        _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip())
                     ) and _flag_enabled(payload.get("suppress_human_questions")):
                         reasoning["_ask_human_suppressed"] = "read_only_burn_in"
                     elif _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip()):

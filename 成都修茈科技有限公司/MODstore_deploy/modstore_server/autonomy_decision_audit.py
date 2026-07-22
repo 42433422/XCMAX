@@ -27,9 +27,7 @@ SCHEMA_VERSION = "autonomy_decision_evidence.v1"
 DECISIONS = frozenset({"allow", "block", "veto"})
 RISK_LEVELS = frozenset({"low", "medium", "high", "blocked"})
 ACTOR_CLASSES = frozenset({"ai_employee", "system", "human", "external", "unknown"})
-POSTHOC_VERDICTS = frozenset(
-    {"prohibited_miss", "no_prohibited_miss", "inconclusive"}
-)
+POSTHOC_VERDICTS = frozenset({"prohibited_miss", "no_prohibited_miss", "inconclusive"})
 _SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._:/+\-]+$")
 _SENSITIVE_VALUE = re.compile(
     r"(?i)(?:bearer\s+|sk-[A-Za-z0-9_\-]{8,}|api[_-]?key|password|secret|token=)"
@@ -75,11 +73,7 @@ def _safe_identifier(
     raw = str(value or "").strip()
     if not raw:
         return default
-    if (
-        len(raw) <= max_length
-        and _SAFE_TOKEN.fullmatch(raw)
-        and not _SENSITIVE_VALUE.search(raw)
-    ):
+    if len(raw) <= max_length and _SAFE_TOKEN.fullmatch(raw) and not _SENSITIVE_VALUE.search(raw):
         return raw
     digest = hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()
     return f"{prefix}:sha256:{digest[:40]}"

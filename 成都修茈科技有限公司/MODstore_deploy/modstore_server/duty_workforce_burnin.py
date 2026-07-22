@@ -146,15 +146,9 @@ def burn_in_scheduler_enabled() -> bool:
 def burn_in_limits() -> Dict[str, int]:
     return {
         "max_candidates": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", 2, 1, 8),
-        "max_concurrency": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_MAX_CONCURRENCY", 1, 1, 2
-        ),
-        "timeout_seconds": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_TIMEOUT_SECONDS", 240, 30, 300
-        ),
-        "cooldown_hours": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_COOLDOWN_HOURS", 6, 1, 168
-        ),
+        "max_concurrency": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_MAX_CONCURRENCY", 1, 1, 2),
+        "timeout_seconds": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_TIMEOUT_SECONDS", 240, 30, 300),
+        "cooldown_hours": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_COOLDOWN_HOURS", 6, 1, 168),
     }
 
 
@@ -273,38 +267,24 @@ def assess_burn_in_eligibility(
     if "direct_python" in capability_handlers and "agent" not in capability_handlers:
         actions = _actions_config(manifest)
         direct = (
-            actions.get("direct_python")
-            if isinstance(actions.get("direct_python"), dict)
-            else {}
+            actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
         )
         input_schema = (
-            direct.get("input_schema")
-            if isinstance(direct.get("input_schema"), dict)
-            else {}
+            direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
         )
         output_schema = (
-            direct.get("output_schema")
-            if isinstance(direct.get("output_schema"), dict)
-            else {}
+            direct.get("output_schema") if isinstance(direct.get("output_schema"), dict) else {}
         )
         fixture = (
-            direct.get("burn_in_fixture")
-            if isinstance(direct.get("burn_in_fixture"), dict)
-            else {}
+            direct.get("burn_in_fixture") if isinstance(direct.get("burn_in_fixture"), dict) else {}
         )
         required_input = [
-            str(item).strip()
-            for item in input_schema.get("required") or []
-            if str(item).strip()
+            str(item).strip() for item in input_schema.get("required") or [] if str(item).strip()
         ]
         required_output = {
-            str(item).strip()
-            for item in output_schema.get("required") or []
-            if str(item).strip()
+            str(item).strip() for item in output_schema.get("required") or [] if str(item).strip()
         }
-        fixture_complete = bool(required_input) and all(
-            key in fixture for key in required_input
-        )
+        fixture_complete = bool(required_input) and all(key in fixture for key in required_input)
         required_receipt_fields = {
             "ok",
             "status",
@@ -314,10 +294,8 @@ def assess_burn_in_eligibility(
             "side_effects",
         }
         if not (
-            str(direct.get("implementation") or "").strip().lower()
-            == "employee_module"
-            and str(direct.get("execution_mode") or "").strip().lower()
-            == "deterministic"
+            str(direct.get("implementation") or "").strip().lower() == "employee_module"
+            and str(direct.get("execution_mode") or "").strip().lower() == "deterministic"
             and direct.get("read_only") is True
             and fixture_complete
             and required_receipt_fields.issubset(required_output)
@@ -329,9 +307,7 @@ def assess_burn_in_eligibility(
                 "capability_handlers": capability_handlers,
             }
         policy = (
-            direct.get("burn_in_policy")
-            if isinstance(direct.get("burn_in_policy"), dict)
-            else {}
+            direct.get("burn_in_policy") if isinstance(direct.get("burn_in_policy"), dict) else {}
         )
         reviewed_fixture_only = all(
             (
@@ -341,14 +317,12 @@ def assess_burn_in_eligibility(
             )
         )
         semantics_override = (
-            reviewed_fixture_only
-            and policy.get("allow_prohibited_semantics_fixture") is True
+            reviewed_fixture_only and policy.get("allow_prohibited_semantics_fixture") is True
         )
         if prohibited_reason and not semantics_override:
             return {"eligible": False, "reason": prohibited_reason}
         if risk == "high" and (
-            not reviewed_fixture_only
-            or policy.get("allow_high_risk_fixture") is not True
+            not reviewed_fixture_only or policy.get("allow_high_risk_fixture") is not True
         ):
             return {"eligible": False, "reason": "risk_not_low:high"}
         if risk == "high":
@@ -366,9 +340,7 @@ def assess_burn_in_eligibility(
             "handlers": handlers,
             "capability_handlers": capability_handlers,
             "burn_in_fixture": fixture,
-            "prohibited_semantics_fixture_override": bool(
-                prohibited_reason and semantics_override
-            ),
+            "prohibited_semantics_fixture_override": bool(prohibited_reason and semantics_override),
             "high_risk_fixture_only": risk == "high",
         }
     if prohibited_reason:
@@ -421,7 +393,9 @@ def _load_manifest(employee_id: str) -> Dict[str, Any]:
 
 
 def _candidate_task(employee_id: str, contract: Dict[str, Any], marker: str) -> str:
-    acceptance = [str(item).strip() for item in contract.get("acceptance") or [] if str(item).strip()]
+    acceptance = [
+        str(item).strip() for item in contract.get("acceptance") or [] if str(item).strip()
+    ]
     return (
         f"{marker} 执行一次岗位只读巡检回执。"
         f"岗位：{employee_id}。任务：{str(contract.get('mission') or '').strip()}。"
@@ -521,9 +495,7 @@ def build_burn_in_plan(
                 "prohibited_semantics_fixture_override": bool(
                     eligibility.get("prohibited_semantics_fixture_override")
                 ),
-                "high_risk_fixture_only": bool(
-                    eligibility.get("high_risk_fixture_only")
-                ),
+                "high_risk_fixture_only": bool(eligibility.get("high_risk_fixture_only")),
             }
         )
 
@@ -531,8 +503,7 @@ def build_burn_in_plan(
     deferred = candidates[max_candidates:]
     if deferred:
         skipped.extend(
-            {"employee_id": item["employee_id"], "reason": "per_run_limit"}
-            for item in deferred
+            {"employee_id": item["employee_id"], "reason": "per_run_limit"} for item in deferred
         )
     reason_counts = Counter(item["reason"].split(":", 1)[0] for item in skipped)
     return {
@@ -567,8 +538,7 @@ def build_burn_in_plan(
             ),
             "medium_or_high_risk_side_effects": False,
             "prohibited_semantics_fixture_override": any(
-                item.get("prohibited_semantics_fixture_override")
-                for item in selected
+                item.get("prohibited_semantics_fixture_override") for item in selected
             ),
             "payment_release_delete_roles": False,
             "generic_shells_count_as_receipts": False,

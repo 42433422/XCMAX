@@ -4,6 +4,7 @@ import json
 from contextlib import nullcontext
 from pathlib import Path
 
+from modstore_server import employee_runtime, models, task_router, workflow_scheduler
 from modstore_server.duty_workforce_contracts import (
     contract_schedule,
     load_reviewed_duty_manifest,
@@ -12,7 +13,6 @@ from modstore_server.duty_workforce_contracts import (
     workforce_contract_map,
     workforce_event_bindings,
 )
-from modstore_server import employee_runtime, models, task_router, workflow_scheduler
 
 
 def test_work_contracts_cover_the_roster_exactly() -> None:

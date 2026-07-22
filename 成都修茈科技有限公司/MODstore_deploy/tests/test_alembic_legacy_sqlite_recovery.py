@@ -31,6 +31,7 @@ def test_missing_legacy_table_is_skipped(monkeypatch) -> None:
 
     with engine.begin() as connection:
         monkeypatch.setattr(module.op, "get_bind", lambda: connection, raising=False)
+
         def unexpected_add_column(*_args, **_kwargs) -> None:
             raise AssertionError("missing legacy table must not be altered")
 
@@ -61,5 +62,8 @@ def test_existing_legacy_table_receives_missing_column(monkeypatch) -> None:
             sa.Column("embedding_provider", sa.String(64)),
         )
 
-        columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(knowledge_collections)"))}
+        columns = {
+            row[1]
+            for row in connection.execute(sa.text("PRAGMA table_info(knowledge_collections)"))
+        }
         assert "embedding_provider" in columns

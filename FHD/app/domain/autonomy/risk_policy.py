@@ -230,9 +230,7 @@ class RiskPolicyCatalog:
         handler_list = [str(item or "").strip() for item in (handlers or [])]
         request = payload or {}
         work_contract = (
-            request.get("work_contract")
-            if isinstance(request.get("work_contract"), dict)
-            else {}
+            request.get("work_contract") if isinstance(request.get("work_contract"), dict) else {}
         )
         truthy = {"1", "true", "yes", "on"}
         required_read_only_flags = (

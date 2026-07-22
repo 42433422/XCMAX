@@ -141,7 +141,9 @@ def contract_schedule(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     mission = str(contract.get("mission") or "").strip()
     mode = str(contract.get("mode") or "execute").strip()
     risk = str(contract.get("risk_level") or "medium").strip()
-    acceptance = [str(item).strip() for item in contract.get("acceptance") or [] if str(item).strip()]
+    acceptance = [
+        str(item).strip() for item in contract.get("acceptance") or [] if str(item).strip()
+    ]
     task_brief = (
         f"岗位任务：{mission}\n"
         f"执行模式：{mode}；风险级别：{risk}。\n"

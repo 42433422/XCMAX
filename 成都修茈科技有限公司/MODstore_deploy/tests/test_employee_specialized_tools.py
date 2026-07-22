@@ -10,7 +10,6 @@ import pytest
 from modstore_server import employee_specialized_tools as specialized
 from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner
 
-
 ROLE_ROOT = Path(__file__).resolve().parents[3] / "FHD" / "mods" / "_employees"
 AGENT_ROLES = {
     "ecosystem-investor-portal-officer",
@@ -49,9 +48,9 @@ def test_reviewed_roles_declare_their_bounded_real_capability() -> None:
     self_checker = json.loads(
         (ROLE_ROOT / "self-checker" / "manifest.json").read_text(encoding="utf-8")
     )
-    assert self_checker["employee_config_v2"]["actions"]["agent"][
-        "capabilities"
-    ] == ["xcemp_validate"]
+    assert self_checker["employee_config_v2"]["actions"]["agent"]["capabilities"] == [
+        "xcemp_validate"
+    ]
 
 
 def test_host_probe_rejects_unapproved_host_before_network() -> None:
@@ -168,9 +167,7 @@ def test_xcemp_validation_runs_real_validate_in_isolated_cwd(tmp_path) -> None:
 
 
 def test_xcemp_validation_rejects_workspace_escape(tmp_path) -> None:
-    result = asyncio.run(
-        specialized.validate_xcemp_package(str(tmp_path), "../outside.xcemp")
-    )
+    result = asyncio.run(specialized.validate_xcemp_package(str(tmp_path), "../outside.xcemp"))
     assert result["ok"] is False
     assert result["stage"] == "archive_inspection"
     assert "相对路径" in result["error"]

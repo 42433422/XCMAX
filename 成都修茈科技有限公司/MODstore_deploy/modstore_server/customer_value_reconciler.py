@@ -22,9 +22,7 @@ def _digest(value: Any) -> str:
 def _receipt_payloads(order: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     order_no = str(order.get("out_trade_no") or order.get("order_no") or "").strip()
     identity = _digest(order_no)
-    provider_identity = _digest(
-        order.get("provider_trade_no") or order.get("trade_no") or order_no
-    )
+    provider_identity = _digest(order.get("provider_trade_no") or order.get("trade_no") or order_no)
     artifact_id = str(order.get("fulfillment_artifact_id") or "").strip()
     artifact_sha256 = str(order.get("fulfillment_artifact_sha256") or "").strip().lower()
     goal_id = f"purchase-fulfillment:{identity}"
@@ -78,8 +76,7 @@ def reconcile_paid_customer_value(
         source = load_authoritative_payment_orders(window_days)
         source_owner = str(source.get("source_owner") or "unavailable")
         source_ready = bool(
-            source.get("source_available") is True
-            and source.get("source_authoritative") is True
+            source.get("source_available") is True and source.get("source_authoritative") is True
         )
         rows = [dict(row) for row in source.get("orders") or [] if isinstance(row, dict)]
     else:

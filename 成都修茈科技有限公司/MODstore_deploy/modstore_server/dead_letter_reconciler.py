@@ -203,9 +203,7 @@ def reconcile_dead_letters(*, limit: int = 200, now: datetime | None = None) -> 
 
         session.commit()
         stats["unresolved_count"] = int(
-            session.query(OutboxDeadLetter)
-            .filter(OutboxDeadLetter.resolved_at.is_(None))
-            .count()
+            session.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_(None)).count()
         )
     return stats
 
@@ -214,9 +212,7 @@ def dead_letter_health() -> dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
         unresolved = int(
-            session.query(OutboxDeadLetter)
-            .filter(OutboxDeadLetter.resolved_at.is_(None))
-            .count()
+            session.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_(None)).count()
         )
         resolved = int(
             session.query(OutboxDeadLetter)

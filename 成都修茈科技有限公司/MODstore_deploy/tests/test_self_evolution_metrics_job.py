@@ -178,9 +178,7 @@ def test_fresh_coverage_from_fixed_qa_suite_takes_precedence(monkeypatch, tmp_pa
     assert result["backend_coverage"] == 42.5
 
 
-def test_fixed_qa_environment_excludes_runtime_secrets_and_release_identity(
-    monkeypatch, tmp_path
-):
+def test_fixed_qa_environment_excludes_runtime_secrets_and_release_identity(monkeypatch, tmp_path):
     monkeypatch.setenv("MINIMAX_API_KEY", "sensitive-value")
     monkeypatch.setenv("MODSTORE_RELEASE_MANIFEST", "/runtime/manifest.json")
     monkeypatch.setenv("MODSTORE_DB_PATH", "/runtime/live.db")

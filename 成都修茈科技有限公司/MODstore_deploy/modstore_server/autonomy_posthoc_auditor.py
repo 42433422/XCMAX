@@ -25,9 +25,7 @@ _METRICS_ACTION = "autonomy_metrics_snapshot"
 _METRICS_SOURCE = "autonomy_metrics.cron"
 _METRICS_JOB = "autonomy_metrics_snapshot"
 _DETECTOR = "autonomy-posthoc-auditor.v1"
-_VALID_SNAPSHOT_STATUSES = frozenset(
-    {"collecting", "passed", "needs_tuning", "needs_review"}
-)
+_VALID_SNAPSHOT_STATUSES = frozenset({"collecting", "passed", "needs_tuning", "needs_review"})
 
 
 def _utc(value: datetime | None = None) -> datetime:
@@ -50,9 +48,7 @@ def _metrics_path(explicit: str | Path | None = None) -> Path:
     return Path(operating_metrics._metrics_jsonl_path())  # noqa: SLF001
 
 
-def _verify_metrics_artifact(
-    *, action_id: str, metrics_path: Path
-) -> dict[str, Any]:
+def _verify_metrics_artifact(*, action_id: str, metrics_path: Path) -> dict[str, Any]:
     prefix = "autonomy-metrics:"
     snapshot_date = action_id[len(prefix) :] if action_id.startswith(prefix) else ""
     if not snapshot_date:
@@ -147,9 +143,7 @@ def run_autonomy_posthoc_audit(
     for row in decisions:
         action_id = str(row.action_id or "")
         occurred = _utc(row.occurred_at)
-        if action_id and (
-            action_id not in first_allow or occurred < first_allow[action_id]
-        ):
+        if action_id and (action_id not in first_allow or occurred < first_allow[action_id]):
             first_allow[action_id] = occurred
 
     artifact_path = _metrics_path(metrics_path)
@@ -176,9 +170,7 @@ def run_autonomy_posthoc_audit(
             None,
         )
         if receipt is None:
-            incomplete.append(
-                {"action_id": action_id, "reason": "later_scheduler_receipt_missing"}
-            )
+            incomplete.append({"action_id": action_id, "reason": "later_scheduler_receipt_missing"})
             continue
 
         artifact_sha = str(artifact["artifact_sha256"])

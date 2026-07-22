@@ -85,9 +85,7 @@ def _try_parse_json_object(raw: Any) -> Dict[str, Any]:
         score = sum(
             (
                 2 if str(value.get("status") or "").strip() else 0,
-                2
-                if str(value.get("summary") or value.get("report") or "").strip()
-                else 0,
+                2 if str(value.get("summary") or value.get("report") or "").strip() else 0,
                 1 if value.get("evidence") is not None else 0,
             )
         )

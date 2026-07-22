@@ -9,7 +9,6 @@ from modstore_server.employee_executor import (
     _deterministic_direct_input_ready,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EMPLOYEE_ROOT = REPO_ROOT / "FHD" / "mods" / "_employees"
 ADDITIONAL_DIRECT_WORKERS = {
@@ -52,9 +51,7 @@ def _load_worker(employee_id: str, module_name: str):
 
 
 def _manifest(employee_id: str) -> dict:
-    return json.loads(
-        (EMPLOYEE_ROOT / employee_id / "manifest.json").read_text(encoding="utf-8")
-    )
+    return json.loads((EMPLOYEE_ROOT / employee_id / "manifest.json").read_text(encoding="utf-8"))
 
 
 def test_interview_contract_produces_structured_read_only_gap_report() -> None:

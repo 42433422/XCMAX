@@ -18,7 +18,6 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Protocol, Seque
 
 import httpx
 
-
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 _ARTIFACT_RE = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -66,9 +65,9 @@ class BuildIdentity:
             root = build
         return cls(
             git_sha=_sha(root.get("git_sha")),
-            artifact_sha256=str(
-                root.get("artifact_sha256") or root.get("sha256") or ""
-            ).strip().lower(),
+            artifact_sha256=str(root.get("artifact_sha256") or root.get("sha256") or "")
+            .strip()
+            .lower(),
             image_digest=str(root.get("image_digest") or "").strip().lower(),
         )
 
@@ -76,8 +75,7 @@ class BuildIdentity:
         if not _COMMIT_RE.fullmatch(self.git_sha):
             raise DeploymentReceiptError(f"{source}_missing_git_sha")
         if not (
-            _ARTIFACT_RE.fullmatch(self.artifact_sha256)
-            or _IMAGE_RE.fullmatch(self.image_digest)
+            _ARTIFACT_RE.fullmatch(self.artifact_sha256) or _IMAGE_RE.fullmatch(self.image_digest)
         ):
             raise DeploymentReceiptError(f"{source}_missing_artifact_digest")
         return self
@@ -91,9 +89,7 @@ class DispatchReceipt:
     action_id: str
     url: str = ""
 
-    def require_correlation(
-        self, *, merge_sha: str, environment: str
-    ) -> "DispatchReceipt":
+    def require_correlation(self, *, merge_sha: str, environment: str) -> "DispatchReceipt":
         if not str(self.workflow_run_id or "").strip():
             raise DeploymentReceiptError("dispatch_missing_workflow_run_id")
         if _sha(self.head_sha) != merge_sha:
@@ -124,9 +120,7 @@ class WorkflowCompletion:
 
 
 class DeploymentReceiptGateway(Protocol):
-    def dispatch(
-        self, *, environment: str, merge_sha: str, action_id: str
-    ) -> DispatchReceipt: ...
+    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt: ...
 
     def wait_for_success(self, receipt: DispatchReceipt) -> WorkflowCompletion: ...
 
@@ -380,9 +374,7 @@ class GhActionsDeploymentGateway:
             raise DeploymentReceiptError("github_deploy_config_missing")
 
     @classmethod
-    def from_environment(
-        cls, *, repo_root: Path, ref: str
-    ) -> "GhActionsDeploymentGateway":
+    def from_environment(cls, *, repo_root: Path, ref: str) -> "GhActionsDeploymentGateway":
         return cls(
             repo_root=repo_root,
             repository=str(
@@ -392,8 +384,7 @@ class GhActionsDeploymentGateway:
             ),
             ref=ref,
             workflow=str(
-                os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_WORKFLOW")
-                or "fhd-deploy.yml"
+                os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_WORKFLOW") or "fhd-deploy.yml"
             ),
         )
 
@@ -422,9 +413,18 @@ class GhActionsDeploymentGateway:
     def _runs(self) -> List[Dict[str, Any]]:
         payload = self._json(
             [
-                "gh", "run", "list", "--repo", self.repository,
-                "--workflow", self.workflow, "--event", "workflow_dispatch",
-                "--limit", "50", "--json",
+                "gh",
+                "run",
+                "list",
+                "--repo",
+                self.repository,
+                "--workflow",
+                self.workflow,
+                "--event",
+                "workflow_dispatch",
+                "--limit",
+                "50",
+                "--json",
                 "databaseId,headSha,status,conclusion,displayTitle,url",
             ]
         )
@@ -432,22 +432,29 @@ class GhActionsDeploymentGateway:
             raise DeploymentReceiptError("github_run_list_invalid")
         return [dict(row) for row in payload if isinstance(row, Mapping)]
 
-    def dispatch(
-        self, *, environment: str, merge_sha: str, action_id: str
-    ) -> DispatchReceipt:
+    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt:
         environment = _environment(environment)
         merge_sha = _merge_sha(merge_sha)
-        ref_data = self._json(
-            ["gh", "api", f"repos/{self.repository}/commits/{self.ref}"]
-        )
+        ref_data = self._json(["gh", "api", f"repos/{self.repository}/commits/{self.ref}"])
         if not isinstance(ref_data, Mapping) or _sha(ref_data.get("sha")) != merge_sha:
             raise DeploymentReceiptError("deploy_ref_not_at_merge_sha")
         baseline = {str(row.get("databaseId") or "") for row in self._runs()}
         self._run(
             [
-                "gh", "workflow", "run", self.workflow, "--repo", self.repository,
-                "--ref", self.ref, "-f", f"environment={environment}",
-                "-f", "action=apply-latest", "-f", f"action_id={action_id}",
+                "gh",
+                "workflow",
+                "run",
+                self.workflow,
+                "--repo",
+                self.repository,
+                "--ref",
+                self.ref,
+                "-f",
+                f"environment={environment}",
+                "-f",
+                "action=apply-latest",
+                "-f",
+                f"action_id={action_id}",
             ]
         )
         deadline = time.monotonic() + self.capture_timeout_seconds
@@ -456,26 +463,34 @@ class GhActionsDeploymentGateway:
                 workflow_id = str(row.get("databaseId") or "")
                 title = str(row.get("displayTitle") or "")
                 if (
-                    workflow_id and workflow_id not in baseline
+                    workflow_id
+                    and workflow_id not in baseline
                     and _sha(row.get("headSha")) == merge_sha
-                    and action_id in title and environment in title.lower()
+                    and action_id in title
+                    and environment in title.lower()
                 ):
                     return DispatchReceipt(
-                        workflow_id, merge_sha, environment, action_id,
+                        workflow_id,
+                        merge_sha,
+                        environment,
+                        action_id,
                         str(row.get("url") or ""),
                     )
             time.sleep(self.poll_seconds)
         raise DeploymentReceiptError("workflow_run_capture_timeout")
 
-    def wait_for_success(
-        self, receipt: DispatchReceipt
-    ) -> WorkflowCompletion:
+    def wait_for_success(self, receipt: DispatchReceipt) -> WorkflowCompletion:
         deadline = time.monotonic() + self.workflow_timeout_seconds
         while time.monotonic() < deadline:
             payload = self._json(
                 [
-                    "gh", "run", "view", receipt.workflow_run_id,
-                    "--repo", self.repository, "--json",
+                    "gh",
+                    "run",
+                    "view",
+                    receipt.workflow_run_id,
+                    "--repo",
+                    self.repository,
+                    "--json",
                     "databaseId,headSha,status,conclusion,url",
                 ]
             )
@@ -496,9 +511,7 @@ class GhActionsDeploymentGateway:
     @staticmethod
     def _fetch(url: str) -> BuildIdentity:
         try:
-            with httpx.Client(
-                timeout=10.0, follow_redirects=True, trust_env=False
-            ) as client:
+            with httpx.Client(timeout=10.0, follow_redirects=True, trust_env=False) as client:
                 response = client.get(url)
                 response.raise_for_status()
                 payload = response.json()

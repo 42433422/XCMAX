@@ -281,9 +281,7 @@ def test_acceptance_rejects_empty_or_mutating_agent_receipts() -> None:
     assert "no_successful_read_only_observation" in rejected["reasons"]
 
     llm_ops = _accepted_execution()
-    llm_ops["result"]["outputs"][0]["tool_call_kinds"] = [
-        "list_available_ai_routes"
-    ]
+    llm_ops["result"]["outputs"][0]["tool_call_kinds"] = ["list_available_ai_routes"]
     assert burnin.validate_burn_in_execution_result(llm_ops)["passed"] is True
 
     explored = _accepted_execution()
