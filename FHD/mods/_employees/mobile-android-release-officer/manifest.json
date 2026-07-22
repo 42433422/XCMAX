@@ -1,7 +1,7 @@
 {
   "id": "mobile-android-release-officer",
   "name": "Android 发版员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "mobile-android-release-officer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "Android 发版员",
       "description": "Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。",
@@ -99,9 +99,21 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "mobile_android_release_officer",
+        "action": "audit_release_candidate",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["release_candidate"], "properties": {"release_candidate": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "release_candidate": {"build_passed": true, "signature_verified": true, "device_install_passed": true, "core_flow_passed": true, "store_upload_requested": false}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_high_risk_fixture": true, "allow_prohibited_semantics_fixture": true}
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

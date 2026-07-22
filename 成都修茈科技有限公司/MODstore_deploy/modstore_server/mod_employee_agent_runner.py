@@ -56,7 +56,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,9 @@ def _bounded_env_int(name: str, default: int, *, minimum: int, maximum: int) -> 
 
 
 def _default_max_rounds() -> int:
-    return _bounded_env_int("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10)
+    return _bounded_env_int(
+        "MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", 4, minimum=1, maximum=10
+    )
 
 
 def _llm_timeout_seconds() -> float:
@@ -122,6 +124,38 @@ TOOL_PROTOCOL_HEADER = """你是一个能执行真实工作的 AI 员工。
 6. 项目分析任务必须先调用 analyze_project_summary，再按需读取具体文件，不得无依据生成技术描述。
 """
 
+READ_ONLY_TOOL_PROTOCOL_HEADER = """你是一个执行真实只读巡检的 AI 员工。
+每轮必须输出以下两种格式之一的合法 JSON（不加 markdown 围栏，不加解释文字）：
+
+调用工具（任务未完成时）：
+{{
+  "thought": "当前分析与下一步计划（至少 20 字）",
+  "tool": "工具名",
+  "input": {{ "path": "." }}
+}}
+
+给出最终答案（任务完成时）：
+{{
+  "thought": "总结真实观察路径",
+  "answer": "包含 status、summary、evidence 的 JSON 对象字符串"
+}}
+
+本次只提供以下只读工作区工具：
+  analyze_project_summary  params: path(str, default=".")
+  scan_project_tree        params: path(str, default="."), max_files(int, 200)
+  identify_file_types      params: path(str, default=".")
+  read_workspace_file      params: path(str)
+  list_workspace_dir       params: path(str, default=".")
+
+约束：
+1. 每轮只调用一个已展示工具，结果会以 {{"tool_result": {{...}}}} 回传。
+2. 最多 {max_rounds} 轮工具调用后必须输出 answer。
+3. 禁止捏造工具结果；至少一次只读工具成功后才可报告 success。
+4. 若工具返回 ok=false，换用另一个已展示的只读工具；不得猜测或调用未展示工具。
+5. 文件路径必须是相对工作区的相对路径，禁止绝对路径和 ".." 越界。
+6. 本次没有写入、命令、网络、消息、交接或变更工具，任何此类动作都不可用。
+"""
+
 RESEARCH_TOOLS_APPEND = """
   internet_search          params: query(str), max_results(int, 可选默认 8)             — 联网检索摘要（受服务器每日配额限制）
   github_repo_snapshot     params: owner(str), repo(str)                               — GitHub 公开仓库元数据与 README 摘录
@@ -153,6 +187,29 @@ CLI 兜底只在平台 API 调用失败时启用，按 Codex、Claude、Cursor�
 额度未知必须标为 unknown/usage_only，不得推断为充足。
 """
 
+LLM_OPS_READ_ONLY_TOOLS_APPEND = """
+
+【LLM 运维工程师只读工具】
+  list_platform_llm_models params: provider(str, 可选), refresh(false)
+  list_llm_cli_status      params: live_probe(false)
+  list_available_ai_routes params: refresh(false), live_cli_probe(false), live_quota_probe(false)
+  get_platform_llm_quota   params: live_probe(false)
+  get_platform_llm_route   params: {}
+  get_llm_route_autopilot  params: {}
+"""
+
+HOST_CHECKER_TOOLS_APPEND = """
+
+【宿主检查员工专属工具】
+  probe_mod_host params: base_url(str, 可选), timeout_seconds(number, 可选) — 对白名单宿主执行只读 GET，检查 /api/mods/、/api/mods/llm-status、/api/version；不会返回密钥值
+"""
+
+SELF_CHECKER_TOOLS_APPEND = """
+
+【员工包自检员工专属工具】
+  validate_xcemp_package params: xcemp_path(str), timeout_seconds(number, 可选) — 校验工作区内 .xcemp 归档并在独立 cwd、最小环境变量的子进程中运行 validate
+"""
+
 _READ_ONLY_AGENT_TOOLS = frozenset(
     {
         "read_workspace_file",
@@ -169,14 +226,6 @@ _READ_ONLY_AGENT_TOOLS = frozenset(
         "get_llm_route_autopilot",
     }
 )
-
-_READ_ONLY_PROTOCOL_APPEND = """
-
-【只读运行模式】
-本次运行不允许任何写入、命令执行、网络请求或对外消息。
-只能使用工作区读取/列表/扫描/摘要工具完成真实巡检；不得尝试 write_workspace_file、
-run_sandboxed_python、http_get、http_post、internet_search 或 github_repo_snapshot。
-"""
 
 # ── Tool implementations ──────────────────────────────────────────────────────
 
@@ -199,7 +248,9 @@ async def tool_read_workspace_file(
     rr = ctx.get("ops_readonly_repo_root")
     if rr:
         try:
-            from modstore_server.integrations.ops_action_handlers import ops_path_allowed
+            from modstore_server.integrations.ops_action_handlers import (
+                ops_path_allowed,
+            )
 
             root = Path(str(rr)).resolve()
             norm = path.replace("\\", "/").lstrip("./")
@@ -211,7 +262,9 @@ async def tool_read_workspace_file(
                     return {"ok": False, "error": f"路径越界：{path!r}"}
                 if os.path.isfile(full):
                     try:
-                        content = Path(full).read_text(encoding="utf-8", errors="replace")
+                        content = Path(full).read_text(
+                            encoding="utf-8", errors="replace"
+                        )
                         truncated = len(content) > 8000
                         return {
                             "ok": True,
@@ -258,7 +311,11 @@ async def tool_write_workspace_file(
 
     sg = [str(x).strip() for x in (ctx.get("scope_globs") or []) if str(x).strip()]
     fg = [str(x).strip() for x in (ctx.get("forbidden_globs") or []) if str(x).strip()]
-    ag = [str(x).strip() for x in (ctx.get("approval_required_globs") or []) if str(x).strip()]
+    ag = [
+        str(x).strip()
+        for x in (ctx.get("approval_required_globs") or [])
+        if str(x).strip()
+    ]
     if sg or fg:
         from modstore_server.employee_scope_policy import (
             relative_path_under_repo,
@@ -274,7 +331,9 @@ async def tool_write_workspace_file(
         ok_sc, msg_sc = validate_agent_repo_write(rel_repo, sg, fg)
         if not ok_sc:
             try:
-                from modstore_server.employee_autonomy_service import create_employee_suggestion
+                from modstore_server.employee_autonomy_service import (
+                    create_employee_suggestion,
+                )
 
                 create_employee_suggestion(
                     source_employee_id=str(ctx.get("employee_id") or "unknown"),
@@ -336,7 +395,9 @@ async def tool_write_workspace_file(
         return {"ok": False, "error": str(exc)[:300]}
 
 
-async def tool_list_workspace_dir(workspace_root: str, path: str = ".") -> Dict[str, Any]:
+async def tool_list_workspace_dir(
+    workspace_root: str, path: str = "."
+) -> Dict[str, Any]:
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
         return {"ok": False, "error": f"路径越界：{path!r}"}
@@ -362,7 +423,9 @@ async def tool_list_workspace_dir(workspace_root: str, path: str = ".") -> Dict[
         return {"ok": False, "error": str(exc)[:300]}
 
 
-async def tool_run_sandboxed_python(code: str, *, timeout: float = 10.0) -> Dict[str, Any]:
+async def tool_run_sandboxed_python(
+    code: str, *, timeout: float = 10.0
+) -> Dict[str, Any]:
     """Run pure-stdlib Python in a subprocess with a hard time limit."""
     # Block dangerous patterns before even launching a process.
     danger = re.compile(
@@ -377,7 +440,11 @@ async def tool_run_sandboxed_python(code: str, *, timeout: float = 10.0) -> Dict
             capture_output=True,
             text=True,
             timeout=timeout,
-            env={k: v for k, v in os.environ.items() if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")},
+            env={
+                k: v
+                for k, v in os.environ.items()
+                if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")
+            },
         )
         return {
             "ok": proc.returncode == 0,
@@ -451,14 +518,24 @@ async def tool_scan_project_tree(
     }
 
 
-async def tool_identify_file_types(workspace_root: str, path: str = ".") -> Dict[str, Any]:
+async def tool_identify_file_types(
+    workspace_root: str, path: str = "."
+) -> Dict[str, Any]:
     """Count file extensions under *path* within *workspace_root* (non-recursive limit 2000)."""
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
         return {"ok": False, "error": f"路径越界：{path!r}"}
     if not os.path.isdir(resolved):
         return {"ok": False, "error": f"目录不存在：{path!r}"}
-    skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+    skip_dirs = {
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+    }
     ext_count: Dict[str, int] = {}
     total = 0
     for cur, dirs, files in os.walk(resolved):
@@ -477,7 +554,9 @@ async def tool_identify_file_types(workspace_root: str, path: str = ".") -> Dict
     }
 
 
-async def tool_analyze_project_summary(workspace_root: str, path: str = ".") -> Dict[str, Any]:
+async def tool_analyze_project_summary(
+    workspace_root: str, path: str = "."
+) -> Dict[str, Any]:
     """Return a structured project summary using vibe-coding's analyze_project if available,
     otherwise fall back to a lightweight manual scan."""
     resolved = _guard_path(workspace_root, path)
@@ -524,7 +603,9 @@ async def tool_analyze_project_summary(workspace_root: str, path: str = ".") -> 
         rp = os.path.join(resolved, rf)
         if os.path.isfile(rp):
             try:
-                readme_snippet = Path(rp).read_text(encoding="utf-8", errors="replace")[:800]
+                readme_snippet = Path(rp).read_text(encoding="utf-8", errors="replace")[
+                    :800
+                ]
             except OSError:
                 pass
             break
@@ -560,11 +641,13 @@ class EmployeeAgentRunner:
         self,
         ctx: Dict[str, Any],
         *,
-        max_rounds: int = 10,
+        max_rounds: Optional[int] = None,
         workspace_root: Optional[str] = None,
     ) -> None:
         self.ctx = ctx
-        self.max_rounds = max_rounds
+        self.max_rounds = (
+            _default_max_rounds() if max_rounds is None else max(1, min(10, max_rounds))
+        )
         self.workspace_root = workspace_root or str(ctx.get("workspace_root") or ".")
 
     # ── public ────────────────────────────────────────────────────────────────
@@ -588,13 +671,27 @@ class EmployeeAgentRunner:
               "error": str | None,
             }
         """
-        protocol = TOOL_PROTOCOL_HEADER.format(max_rounds=self.max_rounds)
-        if self.ctx.get("research_tools_enabled"):
+        read_only = bool(self.ctx.get("read_only"))
+        protocol = (
+            READ_ONLY_TOOL_PROTOCOL_HEADER
+            if read_only
+            else TOOL_PROTOCOL_HEADER
+        ).format(max_rounds=self.max_rounds)
+        if self.ctx.get("research_tools_enabled") and not read_only:
             protocol = protocol.rstrip() + RESEARCH_TOOLS_APPEND
         if str(self.ctx.get("employee_id") or "").strip() == "llm-ops-engineer":
-            protocol = protocol.rstrip() + LLM_OPS_TOOLS_APPEND
-        if self.ctx.get("read_only"):
-            protocol = protocol.rstrip() + _READ_ONLY_PROTOCOL_APPEND
+            protocol = protocol.rstrip() + (
+                LLM_OPS_READ_ONLY_TOOLS_APPEND if read_only else LLM_OPS_TOOLS_APPEND
+            )
+        capabilities = {
+            str(item).strip()
+            for item in self.ctx.get("employee_capabilities") or []
+            if str(item).strip()
+        }
+        if not read_only and "host_probe" in capabilities:
+            protocol = protocol.rstrip() + HOST_CHECKER_TOOLS_APPEND
+        if not read_only and "xcemp_validate" in capabilities:
+            protocol = protocol.rstrip() + SELF_CHECKER_TOOLS_APPEND
         messages: List[Dict[str, str]] = []
 
         if system_prompt:
@@ -665,7 +762,9 @@ class EmployeeAgentRunner:
             )
 
             result = await self._dispatch_tool(tool_name, tool_input)
-            tool_calls_log.append({"tool": tool_name, "input": tool_input, "result": result})
+            tool_calls_log.append(
+                {"tool": tool_name, "input": tool_input, "result": result}
+            )
 
             messages.append(
                 {
@@ -701,7 +800,9 @@ class EmployeeAgentRunner:
 
     # ── private: tool dispatch ────────────────────────────────────────────────
 
-    async def _dispatch_tool(self, name: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _dispatch_tool(
+        self, name: str, input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         try:
             if self.ctx.get("read_only") and name not in _READ_ONLY_AGENT_TOOLS:
                 return {
@@ -710,6 +811,67 @@ class EmployeeAgentRunner:
                     "error": f"只读运行模式禁止工具：{name or '?'}",
                 }
             employee_id = str(self.ctx.get("employee_id") or "").strip()
+            capabilities = {
+                str(item).strip()
+                for item in self.ctx.get("employee_capabilities") or []
+                if str(item).strip()
+            }
+            if name == "probe_mod_host":
+                if "host_probe" not in capabilities or employee_id != "host-checker":
+                    return {
+                        "ok": False,
+                        "error": f"员工 {employee_id or '?'} 无权使用 {name}",
+                    }
+                from modstore_server.employee_specialized_tools import (
+                    configured_host_probe_allowlist,
+                    probe_mod_host,
+                )
+
+                employee_input = (
+                    self.ctx.get("employee_input")
+                    if isinstance(self.ctx.get("employee_input"), dict)
+                    else {}
+                )
+                base_url = str(
+                    input_data.get("base_url")
+                    or employee_input.get("base_url")
+                    or employee_input.get("fhd_base")
+                    or os.environ.get("FHD_BASE_URL")
+                    or ""
+                ).strip()
+                if not base_url:
+                    return {"ok": False, "error": "缺少 base_url 且未配置 FHD_BASE_URL"}
+                return await probe_mod_host(
+                    base_url,
+                    allowed_hosts=configured_host_probe_allowlist(),
+                    timeout_seconds=float(input_data.get("timeout_seconds") or 10.0),
+                )
+
+            if name == "validate_xcemp_package":
+                if "xcemp_validate" not in capabilities or employee_id != "self-checker":
+                    return {
+                        "ok": False,
+                        "error": f"员工 {employee_id or '?'} 无权使用 {name}",
+                    }
+                from modstore_server.employee_specialized_tools import (
+                    validate_xcemp_package,
+                )
+
+                employee_input = (
+                    self.ctx.get("employee_input")
+                    if isinstance(self.ctx.get("employee_input"), dict)
+                    else {}
+                )
+                relative_path = str(
+                    input_data.get("xcemp_path")
+                    or employee_input.get("xcemp_path")
+                    or ""
+                ).strip()
+                return await validate_xcemp_package(
+                    self.workspace_root,
+                    relative_path,
+                    timeout_seconds=float(input_data.get("timeout_seconds") or 20.0),
+                )
             llm_ops_tools = {
                 "list_platform_llm_models",
                 "list_llm_cli_status",
@@ -765,7 +927,9 @@ class EmployeeAgentRunner:
                     catalog=platform,
                 )
                 return {
-                    "ok": bool(platform.get("ok") and cli.get("ok") and quota.get("ok")),
+                    "ok": bool(
+                        platform.get("ok") and cli.get("ok") and quota.get("ok")
+                    ),
                     "platform": platform,
                     "quota": quota,
                     "cli_fallback": cli,
@@ -807,7 +971,9 @@ class EmployeeAgentRunner:
                 )
 
                 return await reconcile_llm_route_autopilot(
-                    triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),
+                    triggered_by=str(
+                        input_data.get("reason") or "employee:llm-ops-engineer"
+                    ),
                     force=False,
                 )
 
@@ -828,7 +994,9 @@ class EmployeeAgentRunner:
 
                 return await rollback_runtime_route(
                     actor="employee:llm-ops-engineer",
-                    reason=str(input_data.get("reason") or "employee requested rollback"),
+                    reason=str(
+                        input_data.get("reason") or "employee requested rollback"
+                    ),
                     force=False,
                 )
             wr = self.workspace_root
@@ -998,14 +1166,26 @@ def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
             continue
         if not isinstance(data, dict):
             continue
-        score = 4 if "tool" in data else 4 if "answer" in data else 2 if "status" in data else 1
+        score = (
+            4
+            if "tool" in data
+            else 4
+            if "answer" in data
+            else 2
+            if "status" in data
+            else 1
+        )
         candidates.append((score, index, data))
     if candidates:
         return max(candidates, key=lambda item: (item[0], item[1]))[2]
     return None
 
 
-def build_agent_runner(ctx: Dict[str, Any], *, max_rounds: int = 10) -> EmployeeAgentRunner:
+def build_agent_runner(
+    ctx: Dict[str, Any], *, max_rounds: Optional[int] = None
+) -> EmployeeAgentRunner:
     """Convenience factory; used by generated blueprints.py."""
     workspace_root = str(ctx.get("workspace_root") or ".")
-    return EmployeeAgentRunner(ctx, max_rounds=max_rounds, workspace_root=workspace_root)
+    return EmployeeAgentRunner(
+        ctx, max_rounds=max_rounds, workspace_root=workspace_root
+    )

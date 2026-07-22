@@ -80,14 +80,13 @@
     },
     "actions": {
       "handlers": [
-        "direct_python"
+        "agent"
       ],
-      "direct_python": {
-        "module": "flask_entry_keeper",
-        "action": "convert",
-        "default_output_relpath": "outputs/employee_output.xlsx",
-        "default_template_relpath": "",
-        "default_use_personnel_roster": true
+      "agent": {
+        "workspace": {
+          "requires_project_root": true,
+          "read_only": true
+        }
       }
     },
     "metadata": {

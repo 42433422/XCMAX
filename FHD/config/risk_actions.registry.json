@@ -102,6 +102,12 @@
       "rollback_path": "employee_compensating_action",
       "entrypoints": ["app/application/employee_runtime/agent.py"]
     },
+    "employee_read_only_observe": {
+      "risk": "LOW",
+      "allow_auto_execute": true,
+      "rollback_path": "not_applicable",
+      "entrypoints": ["app/application/employee_runtime/agent.py"]
+    },
     "code_write": {
       "risk": "HIGH",
       "allow_auto_execute": true,

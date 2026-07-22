@@ -1,7 +1,7 @@
 {
   "id": "push-update-context-officer",
   "name": "推送更新员工",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "admin",
   "description": "在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。",
   "artifact": "employee_pack",
@@ -26,7 +26,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "push-update-context-officer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "推送更新员工",
       "description": "在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。",
@@ -88,16 +88,19 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo",
-        "shell_exec"
-      ],
-      "shell_exec": {
-        "command_id": "git-repo-context",
-        "args": {
-          "root": "."
-        }
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "push_update_context_officer",
+        "action": "audit_update_context",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["update_context"], "properties": {"update_context": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "ready_for_release_gate", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "update_context": {"version": "1.1.0", "branch": "codex/autonomy", "commit_sha": "abcdef123456", "git_clean": true, "changes": ["direct contract"], "rollback": "restore catalog backup", "target_tier": "staging"}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_prohibited_semantics_fixture": true}
       }
     },
     "metadata": {

@@ -177,6 +177,12 @@ def _metric_task_preview(task: object) -> str:
     return t[: _METRIC_TASK_MAX_LEN - 1] + "…"
 
 
+def _flag_enabled(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _resolve_metric_user_id(session: Any, user_id: object) -> int:
     """定时任务 / 员工大会常传 ``user_id=0``；指标表 ``user_id`` 须指向真实 ``users.id``。"""
     try:
@@ -839,21 +845,36 @@ async def _cognition_real(
             logger.warning("cognition.knowledge retrieve 失败: %s", e)
             rag_meta = {"enabled": True, "items": [], "error": str(e)}
 
-    if use_platform_dispatch:
-        from modstore_server.services.llm import chat_dispatch_via_platform_only
+    from modstore_server.mod_employee_agent_runner import _llm_timeout_seconds
 
-        result = await chat_dispatch_via_platform_only(
-            provider, model_name, messages, max_tokens=max_tokens
-        )
-    else:
-        result = await chat_dispatch_via_session(
-            session,
-            user_id,
-            provider,
-            model_name,
-            messages,
-            max_tokens=max_tokens,
-        )
+    llm_timeout_s = _llm_timeout_seconds()
+    try:
+        if use_platform_dispatch:
+            from modstore_server.services.llm import chat_dispatch_via_platform_only
+
+            result = await asyncio.wait_for(
+                chat_dispatch_via_platform_only(
+                    provider, model_name, messages, max_tokens=max_tokens
+                ),
+                timeout=llm_timeout_s,
+            )
+        else:
+            result = await asyncio.wait_for(
+                chat_dispatch_via_session(
+                    session,
+                    user_id,
+                    provider,
+                    model_name,
+                    messages,
+                    max_tokens=max_tokens,
+                ),
+                timeout=llm_timeout_s,
+            )
+    except asyncio.TimeoutError:
+        result = {
+            "ok": False,
+            "error": f"employee cognition LLM timeout ({int(llm_timeout_s)}s)",
+        }
     if not result.get("ok"):
         err = str(result.get("error") or "llm call failed")
         if "missing api key" in err.lower():
@@ -1086,6 +1107,19 @@ def _merge_original_input_into_reasoning(
         "delegate",
         "multi_step",
         "fallback_cursor",
+        # Duty burn-in is deliberately narrower than an ordinary employee
+        # execution.  These flags must survive cognition so the action layer
+        # can enforce read-only/no-notification semantics.
+        "burn_in_read_only",
+        "suppress_employee_im",
+        "suppress_handoff",
+        "suppress_change_requests",
+        "im_reply_managed",
+        # Inputs for capability-scoped employee tools.  They are still checked
+        # again by the agent runner (workspace boundary / host allowlist).
+        "base_url",
+        "fhd_base",
+        "xcemp_path",
     ):
         if key in original_input and key not in merged_input:
             merged_input[key] = original_input[key]
@@ -1117,11 +1151,13 @@ def _action_agent_runner(
 
     agent_cfg = actions_cfg.get("agent") if isinstance(actions_cfg.get("agent"), dict) else {}
     ws_cfg = agent_cfg.get("workspace") if isinstance(agent_cfg.get("workspace"), dict) else {}
-    read_only = bool(ws_cfg.get("read_only", True))
+    # Try to get project_root from input payload first, then from the cognition result.
+    cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    # A burn-in may make a normally write-capable employee prove only its
+    # observation path.  Callers may tighten a manifest, never loosen it.
+    read_only = bool(ws_cfg.get("read_only", True)) or bool(cog_input.get("burn_in_read_only"))
     requires_root = bool(ws_cfg.get("requires_project_root", False))
 
-    # Try to get project_root from input payload first, then from the cognition result.
-    cog_input = reasoning.get("input") or {}
     project_root_raw = (
         cog_input.get("project_root")
         or cog_input.get("workspace_root")
@@ -1146,10 +1182,7 @@ def _action_agent_runner(
 
     if project_root_raw:
         try:
-            from modstore_server.integrations.vibe_adapter import (
-                VibePathError,
-                ensure_within_workspace,
-            )
+            from modstore_server.integrations.vibe_adapter import ensure_within_workspace
 
             resolved = str(
                 ensure_within_workspace(str(project_root_raw), user_id=int(user_id or 0))
@@ -1176,7 +1209,6 @@ def _action_agent_runner(
 
     async def _agent_call_llm(messages: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
         mt = int(kwargs.get("max_tokens") or 2048)
-        temp = float(kwargs.get("temperature") or 0.2)
         # Re-use the same provider/model stored in reasoning if available.
         provider = str(reasoning.get("provider") or "auto")
         model = str(reasoning.get("model") or "auto")
@@ -1251,14 +1283,23 @@ def _action_agent_runner(
         "employee_id": employee_id,
         "cli_fallback_enabled": (
             employee_id == "llm-ops-engineer"
-            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1").strip().lower()
+            and os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1")
+            .strip()
+            .lower()
             not in ("0", "false", "off", "disabled")
         ),
         "read_only": read_only,
-        "research_tools_enabled": os.environ.get("MODSTORE_AGENT_RESEARCH_TOOLS_ENABLED", "")
-        .strip()
-        .lower()
-        in ("1", "true", "yes"),
+        "employee_input": dict(cog_input),
+        "employee_capabilities": [
+            str(item).strip()
+            for item in agent_cfg.get("capabilities") or []
+            if str(item).strip()
+        ],
+        "research_tools_enabled": (
+            not read_only
+            and os.environ.get("MODSTORE_AGENT_RESEARCH_TOOLS_ENABLED", "").strip().lower()
+            in ("1", "true", "yes")
+        ),
     }
     try:
         from modstore_server.employee_scope_policy import workspace_policy_from_manifest
@@ -1311,6 +1352,7 @@ def _action_agent_runner(
     for tc in tool_calls:
         if not isinstance(tc, dict):
             continue
+        tool_name = str(tc.get("tool") or "").strip()
         tr = tc.get("result") if isinstance(tc.get("result"), dict) else {}
         cid_raw = tr.get("change_request_id")
         try:
@@ -1330,7 +1372,10 @@ def _action_agent_runner(
             if _cid > 0:
                 cr_ids.add(_cid)
         p = str(tr.get("path") or "").strip()
-        if p:
+        # Read/list/analyze tools also return a path.  They are observations,
+        # not changed files; feeding them to the path guard caused legitimate
+        # read-only burn-ins to be marked as out-of-scope writes.
+        if p and (tool_name == "write_workspace_file" or cid > 0 or bool(cids_raw)):
             item = {"path": p}
             if cid > 0:
                 item["change_request_id"] = cid
@@ -1342,6 +1387,32 @@ def _action_agent_runner(
         "summary": result.get("summary") or "",
         "rounds": result.get("rounds", 0),
         "tool_calls_count": len(result.get("tool_calls") or []),
+        # Keep an auditable, non-sensitive tool summary.  Burn-in acceptance
+        # requires at least one successful read-only observation and rejects
+        # attempted mutation/network calls; raw tool inputs/results stay out.
+        "tool_call_kinds": [
+            str(tc.get("tool") or "")
+            for tc in tool_calls
+            if isinstance(tc, dict) and str(tc.get("tool") or "").strip()
+        ][:50],
+        "tool_call_success_count": sum(
+            1
+            for tc in tool_calls
+            if isinstance(tc, dict)
+            and isinstance(tc.get("result"), dict)
+            and tc["result"].get("ok") is not False
+            and not str(tc["result"].get("error") or "").strip()
+        ),
+        "tool_call_failure_count": sum(
+            1
+            for tc in tool_calls
+            if isinstance(tc, dict)
+            and isinstance(tc.get("result"), dict)
+            and (
+                tc["result"].get("ok") is False
+                or bool(str(tc["result"].get("error") or "").strip())
+            )
+        ),
         "change_request_ids": sorted(cr_ids),
         "files_changed": files_changed[:200],
         "workspace_root": workspace_root,
@@ -1420,10 +1491,28 @@ def _action_direct_python(
     )
     try:
         sf = get_session_factory()
-        with sf() as session:
-            pack = load_employee_pack_resolved(session, employee_id)
-        manifest = pack.get("manifest") or {}
-        root = _employee_pack_extract_root(employee_id, manifest)
+        direct_input = (
+            reasoning.get("input")
+            if isinstance(reasoning, dict) and isinstance(reasoning.get("input"), dict)
+            else {}
+        )
+        reviewed_burn_in = _flag_enabled(direct_input.get("burn_in")) and _flag_enabled(
+            direct_input.get("burn_in_read_only")
+        )
+        if reviewed_burn_in:
+            # The executor already validated the reviewed duty manifest. Run
+            # the module beside that exact manifest instead of silently
+            # falling back to a possibly stale catalog ZIP.
+            from modstore_server.duty_workforce_contracts import (
+                resolve_reviewed_duty_employee_root,
+            )
+
+            root = resolve_reviewed_duty_employee_root(employee_id)
+        else:
+            with sf() as session:
+                pack = load_employee_pack_resolved(session, employee_id)
+            manifest = pack.get("manifest") or {}
+            root = _employee_pack_extract_root(employee_id, manifest)
         module_name = (
             str(direct_cfg.get("module") or "taiyangniao_attendance").strip()
             or "taiyangniao_attendance"
@@ -1456,7 +1545,7 @@ def _action_direct_python(
                 "error": "module has no callable run(payload, ctx)",
             }
 
-        payload = dict((reasoning or {}).get("input") or {})
+        payload = dict(direct_input)
         if isinstance(reasoning, dict):
             for key in ("file_path", "workspace_root", "original_filename", "action"):
                 if key in reasoning and key not in payload:
@@ -1531,8 +1620,11 @@ def _filter_handlers_vibe_coding_maintainer(
             para_delegate_ready_for_dispatch,
         )
     except Exception:
-        para_delegate_enabled = lambda: False  # type: ignore[assignment]
-        para_delegate_ready_for_dispatch = lambda: False  # type: ignore[assignment]
+        def para_delegate_enabled() -> bool:
+            return False
+
+        def para_delegate_ready_for_dispatch() -> bool:
+            return False
 
     if para_delegate_enabled() and para_delegate_ready_for_dispatch():
         return ["para_delegate"]
@@ -1596,7 +1688,20 @@ def _actions_real(
         actions_cfg["direct_python"] = direct_cfg
         actions_cfg["handlers"] = ["direct_python"]
     handlers = actions_cfg.get("handlers") or ["echo"]
-    if employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"):
+    requested_handler = str(
+        (reasoning.get("input") or {}).get("handler")
+        if isinstance(reasoning.get("input"), dict)
+        else ""
+    ).strip()
+    deterministic_council_review = bool(
+        employee_id == "change-request-auditor"
+        and requested_handler == "direct_python"
+        and "direct_python" in handlers
+    )
+    if (
+        employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner")
+        and not deterministic_council_review
+    ):
         try:
             from modstore_server.para_delegate_handler import (
                 para_delegate_enabled,
@@ -2023,6 +2128,29 @@ def _evaluate_employee_risk_gate(
         }
 
 
+def _deterministic_direct_input_ready(
+    actions_cfg: Dict[str, Any], payload: Dict[str, Any]
+) -> bool:
+    """Return true only for a reviewed read-only employee-module contract."""
+
+    direct = (
+        actions_cfg.get("direct_python")
+        if isinstance(actions_cfg.get("direct_python"), dict)
+        else {}
+    )
+    if (
+        str(direct.get("implementation") or "").strip().lower() != "employee_module"
+        or str(direct.get("execution_mode") or "").strip().lower() != "deterministic"
+        or direct.get("read_only") is not True
+    ):
+        return False
+    schema = direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
+    required = schema.get("required") if isinstance(schema.get("required"), list) else []
+    if not required:
+        return False
+    return all(str(key).strip() and str(key) in payload for key in required)
+
+
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -2032,7 +2160,7 @@ def execute_employee_task(
     bench_llm_override: Optional[Tuple[str, str]] = None,
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
-    payload = input_data or {}
+    payload = dict(input_data or {})
     detail_log = _executor_detail_log_enabled()
     recovery_meta: Dict[str, Any] = {}
     logger.info(
@@ -2050,6 +2178,43 @@ def execute_employee_task(
             try:
                 pack = load_employee_pack_resolved(session, employee_id)
                 manifest = pack.get("manifest") or {}
+                if _flag_enabled(payload.get("burn_in")) and _flag_enabled(
+                    payload.get("burn_in_read_only")
+                ):
+                    # Burn-in proves the reviewed duty SSOT, not a stale
+                    # catalog archive.  Failure to resolve the reviewed source
+                    # is fatal; silently falling back would manufacture proof
+                    # for an obsolete generic shell.
+                    from modstore_server.duty_workforce_contracts import (
+                        load_reviewed_duty_manifest,
+                        workforce_contract_map,
+                    )
+                    from modstore_server.duty_workforce_burnin import (
+                        assess_burn_in_eligibility,
+                    )
+
+                    manifest = load_reviewed_duty_manifest(employee_id)
+                    reviewed_contract = workforce_contract_map().get(employee_id) or {}
+                    eligibility = assess_burn_in_eligibility(
+                        employee_id,
+                        reviewed_contract,
+                        manifest,
+                    )
+                    if eligibility.get("eligible") is not True:
+                        raise RuntimeError(
+                            "duty burn-in eligibility rejected: "
+                            + str(eligibility.get("reason") or "unknown")
+                        )
+                    # Never trust a caller-supplied contract risk label.  The
+                    # risk SSOT receives the reviewed on-disk contract.
+                    payload["work_contract"] = {
+                        "schema": "xcagi.duty_employee_work_contracts/v1",
+                        "employee_id": employee_id,
+                        "mission": str(reviewed_contract.get("mission") or ""),
+                        "mode": str(reviewed_contract.get("mode") or ""),
+                        "risk_level": str(reviewed_contract.get("risk_level") or ""),
+                        "acceptance": list(reviewed_contract.get("acceptance") or []),
+                    }
                 config = parse_employee_config_v2(manifest)
                 try:
                     from modstore_server.employee_runtime_policy import apply_policy_to_config
@@ -2161,7 +2326,17 @@ def execute_employee_task(
                     isinstance(payload, dict)
                     and str(payload.get("file_path") or payload.get("path") or "").strip()
                 )
-                direct_only = handler_list == ["direct_python"] and file_path_fast
+                direct_only = handler_list == ["direct_python"] and bool(
+                    file_path_fast
+                    or _deterministic_direct_input_ready(
+                        actions_inner if isinstance(actions_inner, dict) else {},
+                        payload if isinstance(payload, dict) else {},
+                    )
+                    or (
+                        employee_id == "change-request-auditor"
+                        and str(payload.get("handler") or "").strip() == "direct_python"
+                    )
+                )
                 if direct_only:
                     memory: Dict[str, Any] = {}
                     reasoning = {
@@ -2298,6 +2473,11 @@ def execute_employee_task(
                             employee_id,
                             str(_handoff_intended)[:128],
                         )
+                    elif (
+                        _ask_human is True
+                        or (isinstance(_ask_human, str) and _ask_human.strip())
+                    ) and _flag_enabled(payload.get("suppress_human_questions")):
+                        reasoning["_ask_human_suppressed"] = "read_only_burn_in"
                     elif _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip()):
                         _question_text = (
                             _ask_human
@@ -2323,6 +2503,9 @@ def execute_employee_task(
                                         _parsed_llm if isinstance(_parsed_llm, dict) else {}
                                     ),
                                 },
+                                wait_for_answer=not bool(
+                                    payload.get("non_blocking_human_questions")
+                                ),
                             )
                             reasoning["_human_answer"] = _resp
                             reasoning["_phase_d_triggered"] = True
@@ -2343,7 +2526,7 @@ def execute_employee_task(
                                 f"🤔 我有个问题想问你：{_im_q}\n\n"
                                 "（已通过任务中心发起，等你在那里回复）"
                             )
-                    if _im_body:
+                    if _im_body and not _flag_enabled(payload.get("suppress_employee_im")):
                         _emp_im_notify_boss(employee_id, manifest, _im_body, "cognition")
                 except Exception:
                     logger.debug("cognition im hook skipped", exc_info=True)
@@ -2394,6 +2577,12 @@ def execute_employee_task(
                     _handoff_target = (
                         _resolve_target_employee_id(_handoff_to_raw) if _handoff_to_raw else ""
                     )
+                    if _handoff_target and _flag_enabled(payload.get("suppress_handoff")):
+                        reasoning["_handoff_suppressed"] = {
+                            "target": _handoff_target,
+                            "reason": "read_only_burn_in",
+                        }
+                        _handoff_target = ""
                     if _handoff_target:
                         # 上下文摘要：LLM 解析摘要 + 感知输入类型
                         _ctx_parts = []
@@ -2424,7 +2613,7 @@ def execute_employee_task(
                     )
                 # handoff hook：员工像真人一样通知老板"我把这事转给 @xxx 了"
                 try:
-                    if _handoff_target:
+                    if _handoff_target and not _flag_enabled(payload.get("suppress_employee_im")):
                         _ho_msg = f"🔁 已转交给 {_handoff_target}"
                         if _handoff_reason:
                             _ho_msg = f"{_ho_msg}：{_handoff_reason[:200]}"
@@ -2476,7 +2665,9 @@ def execute_employee_task(
                     _v_summary = str(
                         _verif_dict.get("summary") or _verif_dict.get("message") or ""
                     ).strip()
-                    if _v_status or _v_summary:
+                    if (_v_status or _v_summary) and not _flag_enabled(
+                        payload.get("suppress_employee_im")
+                    ):
                         _icon = (
                             "✅"
                             if _v_status.lower() in ("ok", "passed", "pass", "success", "true")
@@ -2513,12 +2704,50 @@ def execute_employee_task(
                 duration_ms = round((time.perf_counter() - t0) * 1000, 3)
                 llm_tokens = 0 if direct_only else _extract_token_count(reasoning)
                 handler_ok = _handlers_execution_ok(result if isinstance(result, dict) else {})
-                exec_status = "success" if handler_ok else "handler_failed"
-                metric_error = (
-                    ""
+                burn_in_acceptance: Dict[str, Any] = {}
+                if _flag_enabled(payload.get("burn_in")):
+                    try:
+                        burn_in_deadline = float(payload.get("burn_in_deadline_epoch") or 0)
+                    except (TypeError, ValueError):
+                        burn_in_deadline = 0.0
+                    if burn_in_deadline > 0 and time.time() > burn_in_deadline:
+                        burn_in_acceptance = {
+                            "passed": False,
+                            "reasons": ["orchestration_deadline_exceeded"],
+                        }
+                    else:
+                        try:
+                            from modstore_server.duty_workforce_burnin import (
+                                validate_burn_in_execution_result,
+                            )
+
+                            burn_in_acceptance = validate_burn_in_execution_result(
+                                {"result": result if isinstance(result, dict) else {}}
+                            )
+                        except Exception as exc:  # fail closed: no unverifiable receipt
+                            burn_in_acceptance = {
+                                "passed": False,
+                                "reasons": [f"acceptance_gate_error:{type(exc).__name__}"],
+                            }
+                    if isinstance(result, dict):
+                        result["burn_in_acceptance"] = burn_in_acceptance
+                    if burn_in_acceptance.get("passed") is not True:
+                        handler_ok = False
+                exec_status = (
+                    "success"
                     if handler_ok
-                    else _handler_failure_detail(result if isinstance(result, dict) else {})
+                    else ("burnin_rejected" if burn_in_acceptance else "handler_failed")
                 )
+                if handler_ok:
+                    metric_error = ""
+                elif burn_in_acceptance:
+                    metric_error = "burn-in acceptance: " + ";".join(
+                        str(item) for item in burn_in_acceptance.get("reasons") or []
+                    )
+                else:
+                    metric_error = _handler_failure_detail(
+                        result if isinstance(result, dict) else {}
+                    )
                 metric_failure_kind = ""
                 # path_guard 越权 → 标记 blocked_by_path_guard 并附违规路径到 metric
                 _pg = result.get("path_guard") if isinstance(result, dict) else None
@@ -2624,12 +2853,20 @@ def execute_employee_task(
                         )
                     except Exception:
                         logger.debug("emit_execution_recovery_event failed", exc_info=True)
-                cr_bridge = _auto_wrap_execution_result_to_change_requests(
-                    employee_id,
-                    user_id,
-                    payload if isinstance(payload, dict) else {},
-                    result if isinstance(result, dict) else {},
-                )
+                if _flag_enabled(payload.get("suppress_change_requests")):
+                    cr_bridge = {
+                        "ok": True,
+                        "suppressed": True,
+                        "reason": "read_only_burn_in",
+                        "change_request_ids": [],
+                    }
+                else:
+                    cr_bridge = _auto_wrap_execution_result_to_change_requests(
+                        employee_id,
+                        user_id,
+                        payload if isinstance(payload, dict) else {},
+                        result if isinstance(result, dict) else {},
+                    )
                 if isinstance(result, dict):
                     result["change_request_bridge"] = cr_bridge
                     cids = (
@@ -2647,12 +2884,15 @@ def execute_employee_task(
                             if _cid > 0:
                                 normalized_cids.append(_cid)
                         result["change_request_ids"] = normalized_cids
-                try:
-                    from modstore_server.notification_service import notify_employee_execution_done
+                if not _flag_enabled(payload.get("suppress_lifecycle_events")):
+                    try:
+                        from modstore_server.notification_service import (
+                            notify_employee_execution_done,
+                        )
 
-                    notify_employee_execution_done(user_id, employee_id, task, "success")
-                except Exception:
-                    pass
+                        notify_employee_execution_done(user_id, employee_id, task, "success")
+                    except Exception:
+                        pass
                 try:
                     from modstore_server.models_project_context import (
                         record_execution_outcome,
@@ -2780,13 +3020,16 @@ def execute_employee_task(
                         duration_ms,
                         err_text[:400],
                     )
-                try:
-                    from modstore_server.notification_service import notify_employee_execution_done
+                if not _flag_enabled(payload.get("suppress_lifecycle_events")):
+                    try:
+                        from modstore_server.notification_service import (
+                            notify_employee_execution_done,
+                        )
 
-                    if user_id:
-                        notify_employee_execution_done(user_id, employee_id, task, "failed")
-                except Exception:
-                    pass
+                        if user_id:
+                            notify_employee_execution_done(user_id, employee_id, task, "failed")
+                    except Exception:
+                        pass
                 try:
                     from modstore_server.models_project_context import (
                         record_execution_outcome,

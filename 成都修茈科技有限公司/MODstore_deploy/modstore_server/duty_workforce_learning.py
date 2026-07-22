@@ -1,0 +1,561 @@
+"""Turn strict duty-workforce burn-in evidence into reusable knowledge.
+
+One failed attempt is only a capability-gap candidate.  A reusable pattern is
+written only after the same employee later produces a strict accepted receipt.
+The learner reads an append-only audit ledger and persists only allow-listed,
+non-secret fields (employee IDs, run IDs, hashes, statuses and reason codes).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import threading
+from collections import deque
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, Optional
+
+from modstore_server.self_evolution_knowledge import (
+    kb_root,
+    record_code_pattern,
+)
+
+_RUN_LOCK = threading.Lock()
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+_EMPLOYEE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,100}$")
+_RUN_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_FAILURE_STATUSES = frozenset({"failed", "rejected", "timeout"})
+_ALLOWED_REASON_CODES = frozenset(
+    {
+        "change_request_bridge_not_suppressed",
+        "change_request_created",
+        "direct_python_evidence_missing",
+        "direct_python_not_read_only",
+        "direct_python_output_not_ok",
+        "direct_python_side_effects_present",
+        "direct_python_status_not_success",
+        "direct_python_summary_missing",
+        "execution_not_object",
+        "executor_handler_failed",
+        "invalid_handler_output",
+        "no_capability_output",
+        "no_successful_read_only_observation",
+        "no_successful_tool_call",
+        "non_read_only_tool_attempted",
+        "programmatic_verification_failed",
+        "tool_call_failure",
+    }
+)
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _audit_path() -> Path:
+    from modstore_server.duty_workforce_burnin import burn_in_audit_path
+
+    return burn_in_audit_path()
+
+
+def workforce_gap_path() -> Path:
+    raw = str(os.environ.get("MODSTORE_DUTY_WORKFORCE_GAP_PATH") or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return kb_root() / "gaps" / "duty_workforce_burnin_gaps.jsonl"
+
+
+def _canonical_sha256(payload: Any) -> str:
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _valid_hash(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if _HASH_RE.fullmatch(text) else ""
+
+
+def _reason_codes(row: Dict[str, Any]) -> list[str]:
+    acceptance = row.get("acceptance") if isinstance(row.get("acceptance"), dict) else {}
+    values = acceptance.get("reasons") if isinstance(acceptance.get("reasons"), list) else []
+    reasons = []
+    for item in values:
+        code = str(item).strip()
+        if code in _ALLOWED_REASON_CODES or code in {
+            "handler_failed:agent",
+            "handler_failed:direct_python",
+        }:
+            reasons.append(code)
+    if reasons:
+        return list(dict.fromkeys(reasons))[:20]
+    status = str(row.get("status") or "").strip().lower()
+    return [f"burnin_{status}"] if status in _FAILURE_STATUSES else []
+
+
+def _normalized_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(row, dict) or row.get("record_type") == "run_summary":
+        return None
+    employee_id = str(row.get("employee_id") or "").strip()
+    run_id = str(row.get("run_id") or "").strip()
+    status = str(row.get("status") or "").strip().lower()
+    manifest_sha = _valid_hash(row.get("manifest_sha256"))
+    contract_sha = _valid_hash(row.get("contract_sha256"))
+    if (
+        not _EMPLOYEE_ID_RE.fullmatch(employee_id)
+        or not _RUN_ID_RE.fullmatch(run_id)
+        or not manifest_sha
+        or not contract_sha
+    ):
+        return None
+    accepted = row.get("receipt_accepted") is True and status == "accepted"
+    failed = row.get("receipt_accepted") is False and status in _FAILURE_STATUSES
+    if not accepted and not failed:
+        return None
+    return {
+        "accepted": accepted,
+        "contract_sha256": contract_sha,
+        "employee_id": employee_id,
+        "evidence_ref": f"duty-burnin:{run_id}:{employee_id}",
+        "manifest_sha256": manifest_sha,
+        "reasons": _reason_codes(row),
+        "recorded_at": _safe_recorded_at(row.get("recorded_at")),
+        "run_id": run_id,
+        "status": status,
+    }
+
+
+def _safe_recorded_at(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _load_audit_rows(path: Path, *, max_rows: int = 20000) -> list[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: deque[Dict[str, Any]] = deque(maxlen=max(1, max_rows))
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                row = _normalized_row(payload) if isinstance(payload, dict) else None
+                if row is not None:
+                    rows.append(row)
+    except OSError:
+        return []
+    return list(rows)
+
+
+def _resolved_pairs(
+    rows: Iterable[Dict[str, Any]],
+) -> tuple[list[Dict[str, Any]], Dict[str, list[Dict[str, Any]]]]:
+    pending: Dict[str, list[Dict[str, Any]]] = {}
+    pairs: list[Dict[str, Any]] = []
+    for row in rows:
+        employee_id = str(row["employee_id"])
+        if not row.get("accepted"):
+            pending.setdefault(employee_id, []).append(row)
+            continue
+        failures = pending.pop(employee_id, [])
+        if failures:
+            pairs.append({"accepted": row, "failures": failures[-10:]})
+    return pairs, pending
+
+
+def _existing_learning_keys() -> set[str]:
+    directory = kb_root() / "patterns"
+    if not directory.exists():
+        return set()
+    keys: set[str] = set()
+    for path in directory.glob("*.json"):
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            continue
+        metadata = payload.get("metadata") if isinstance(payload, dict) else None
+        key = str((metadata or {}).get("workforce_learning_key") or "").strip()
+        if key:
+            keys.add(key)
+    return keys
+
+
+def _existing_gap_keys(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    keys: set[str] = set()
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                key = str(payload.get("gap_key") or "") if isinstance(payload, dict) else ""
+                if key:
+                    keys.add(key)
+    except OSError:
+        return set()
+    return keys
+
+
+def _gap_evidence(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "contract_sha256": row["contract_sha256"],
+        "employee_id": row["employee_id"],
+        "evidence_ref": row["evidence_ref"],
+        "manifest_sha256": row["manifest_sha256"],
+        "reasons": row["reasons"],
+        "status": row["status"],
+    }
+
+
+def _gap_key(row: Dict[str, Any]) -> str:
+    return _canonical_sha256(_gap_evidence(row))
+
+
+def _append_gap_candidates(
+    unresolved: Dict[str, list[Dict[str, Any]]], path: Path
+) -> tuple[int, int]:
+    existing = _existing_gap_keys(path)
+    written = 0
+    skipped = 0
+    for employee_id in sorted(unresolved):
+        row = unresolved[employee_id][-1]
+        evidence = _gap_evidence(row)
+        gap_key = _gap_key(row)
+        if gap_key in existing:
+            skipped += 1
+            continue
+        payload = {
+            "schema": "xcagi.duty_workforce.capability_gap/v1",
+            "record_type": "candidate",
+            "observed_at": _iso_now(),
+            "source_recorded_at": row["recorded_at"],
+            "gap_key": gap_key,
+            **evidence,
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        existing.add(gap_key)
+        written += 1
+    return written, skipped
+
+
+def _remediation_plan(gap_key: str, employee_id: str) -> Dict[str, Any]:
+    """Build one deterministic, path-safe implementation plan for an existing employee."""
+
+    module_name = employee_id.replace("-", "_")
+    employee_root = f"FHD/mods/_employees/{employee_id}"
+    return {
+        "schema": "xcagi.duty_workforce.remediation_plan/v1",
+        "task_id": f"workforce-gap-{gap_key[:16]}",
+        "kind": "repair_existing_employee_capability",
+        "employee_id": employee_id,
+        "target_files": [
+            f"{employee_root}/manifest.json",
+            f"{employee_root}/backend/employees/{module_name}.py",
+        ],
+        "focused_tests": [
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_employee_direct_contracts.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_duty_workforce_learning.py",
+        ],
+        "acceptance_requirements": [
+            "deterministic_direct_fixture_approved",
+            "read_only_true",
+            "side_effects_empty",
+            "later_strict_burnin_receipt_accepted",
+        ],
+        "requires_runtime_provenance": True,
+        "auto_close": False,
+        "closure_event": "later_strict_burnin_receipt_accepted",
+    }
+
+
+def _gap_ledger_state(
+    path: Path,
+) -> tuple[Dict[str, Dict[str, Any]], set[str], set[str]]:
+    candidates: Dict[str, Dict[str, Any]] = {}
+    resolved: set[str] = set()
+    planned: set[str] = set()
+    if not path.exists():
+        return candidates, resolved, planned
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                gap_key = str(payload.get("gap_key") or "").strip()
+                if not gap_key:
+                    continue
+                record_type = str(payload.get("record_type") or "candidate").strip()
+                if record_type == "resolved":
+                    resolved.add(gap_key)
+                elif record_type == "remediation_plan":
+                    planned.add(gap_key)
+                elif record_type == "candidate":
+                    candidates[gap_key] = payload
+    except OSError:
+        return {}, set(), set()
+    return candidates, resolved, planned
+
+
+def load_open_workforce_gaps(
+    *, path: Optional[Path] = None, limit: int = 100
+) -> list[Dict[str, Any]]:
+    """Return current unresolved, redacted capability gaps from the event ledger."""
+
+    source = Path(path) if path is not None else workforce_gap_path()
+    candidates, resolved, planned = _gap_ledger_state(source)
+    rows: list[Dict[str, Any]] = []
+    for gap_key, payload in candidates.items():
+        if gap_key in resolved:
+            continue
+        employee_id = str(payload.get("employee_id") or "").strip()
+        if not _EMPLOYEE_ID_RE.fullmatch(employee_id):
+            continue
+        reasons = [
+            str(item)
+            for item in payload.get("reasons") or []
+            if str(item) in _ALLOWED_REASON_CODES
+            or str(item) in {"handler_failed:agent", "handler_failed:direct_python"}
+        ]
+        row = {
+            "gap_key": gap_key,
+            "employee_id": employee_id,
+            "evidence_ref": str(payload.get("evidence_ref") or ""),
+            "reasons": reasons,
+            "status": str(payload.get("status") or "rejected"),
+            "observed_at": str(payload.get("observed_at") or ""),
+            "source_recorded_at": str(payload.get("source_recorded_at") or ""),
+        }
+        if gap_key in planned:
+            row["remediation"] = _remediation_plan(gap_key, employee_id)
+        rows.append(row)
+    rows.sort(key=lambda item: (item["observed_at"], item["employee_id"]))
+    return rows[-max(1, min(int(limit), 500)) :]
+
+
+def _append_gap_resolutions(
+    pairs: Iterable[Dict[str, Any]], path: Path
+) -> tuple[int, int]:
+    candidates, resolved, _planned = _gap_ledger_state(path)
+    written = 0
+    skipped = 0
+    for pair in pairs:
+        accepted = pair["accepted"]
+        for failure in pair["failures"]:
+            gap_key = _gap_key(failure)
+            if gap_key not in candidates or gap_key in resolved:
+                skipped += 1
+                continue
+            payload = {
+                "schema": "xcagi.duty_workforce.capability_gap_resolution/v1",
+                "record_type": "resolved",
+                "resolved_at": _iso_now(),
+                "gap_key": gap_key,
+                "employee_id": accepted["employee_id"],
+                "accepted_evidence_ref": accepted["evidence_ref"],
+                "accepted_run_id": accepted["run_id"],
+                "resolution": "later_strict_burnin_receipt_accepted",
+            }
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+            resolved.add(gap_key)
+            written += 1
+    return written, skipped
+
+
+def _append_gap_remediation_plans(path: Path) -> tuple[int, int]:
+    candidates, resolved, planned = _gap_ledger_state(path)
+    written = 0
+    skipped = 0
+    for gap_key, candidate in sorted(candidates.items()):
+        if gap_key in resolved or gap_key in planned:
+            skipped += 1
+            continue
+        employee_id = str(candidate.get("employee_id") or "").strip()
+        if not _EMPLOYEE_ID_RE.fullmatch(employee_id):
+            skipped += 1
+            continue
+        plan = _remediation_plan(gap_key, employee_id)
+        payload = {
+            "schema": "xcagi.duty_workforce.remediation_plan_event/v1",
+            "record_type": "remediation_plan",
+            "planned_at": _iso_now(),
+            "gap_key": gap_key,
+            "employee_id": employee_id,
+            "plan_sha256": _canonical_sha256(plan),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        planned.add(gap_key)
+        written += 1
+    return written, skipped
+
+
+def _record_pair(pair: Dict[str, Any], *, existing: set[str]) -> Optional[Dict[str, Any]]:
+    accepted = pair["accepted"]
+    failures = list(pair["failures"])
+    evidence = {
+        "accepted": {
+            key: accepted[key]
+            for key in (
+                "contract_sha256",
+                "employee_id",
+                "evidence_ref",
+                "manifest_sha256",
+                "recorded_at",
+                "run_id",
+            )
+        },
+        "failures": [
+            {
+                key: row[key]
+                for key in (
+                    "contract_sha256",
+                    "evidence_ref",
+                    "manifest_sha256",
+                    "reasons",
+                    "recorded_at",
+                    "run_id",
+                    "status",
+                )
+            }
+            for row in failures
+        ],
+    }
+    learning_key = _canonical_sha256(evidence)
+    if learning_key in existing:
+        return None
+
+    latest_failure = failures[-1]
+    unchanged_contract = all(
+        row["manifest_sha256"] == accepted["manifest_sha256"]
+        and row["contract_sha256"] == accepted["contract_sha256"]
+        for row in failures
+    )
+    if unchanged_contract:
+        pattern = "workforce_burnin_cooldown_retry_verified"
+        summary = (
+            "An unchanged reviewed employee contract failed strict burn-in and later passed; "
+            "retain the failure evidence and retry only after the safety cooldown before editing capability code."
+        )
+    else:
+        pattern = "workforce_burnin_contract_revision_verified"
+        summary = (
+            "A revised reviewed employee manifest or contract later passed the same strict burn-in; "
+            "reuse the earlier acceptance reasons as regression checks for equivalent revisions."
+        )
+    recorded = record_code_pattern(
+        pattern=pattern,
+        before=json.dumps(evidence["failures"], ensure_ascii=False, sort_keys=True),
+        after=json.dumps(evidence["accepted"], ensure_ascii=False, sort_keys=True),
+        summary=summary,
+        metadata={
+            "accepted_evidence_ref": accepted["evidence_ref"],
+            "accepted_run_id": accepted["run_id"],
+            "employee_id": accepted["employee_id"],
+            "failure_evidence_refs": [row["evidence_ref"] for row in failures],
+            "failure_reason_codes": sorted(
+                {reason for row in failures for reason in row["reasons"]}
+            ),
+            "latest_failure_run_id": latest_failure["run_id"],
+            "source": "duty_workforce_burnin.audit/v1",
+            "verified_by_later_accepted_receipt": True,
+            "workforce_learning_key": learning_key,
+        },
+    )
+    existing.add(learning_key)
+    return recorded
+
+
+def run_duty_workforce_learning(
+    *, audit_path: Optional[Path] = None, gap_path: Optional[Path] = None
+) -> Dict[str, Any]:
+    """Learn from resolved burn-in attempts and persist unresolved gaps."""
+
+    if not _RUN_LOCK.acquire(blocking=False):
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "already_running",
+            "schema": "xcagi.duty_workforce.learning/v1",
+        }
+    try:
+        source = Path(audit_path) if audit_path is not None else _audit_path()
+        gaps = Path(gap_path) if gap_path is not None else workforce_gap_path()
+        rows = _load_audit_rows(source)
+        if not source.exists():
+            return {
+                "ok": True,
+                "skipped": True,
+                "reason": "audit_missing",
+                "schema": "xcagi.duty_workforce.learning/v1",
+                "audit_path": str(source),
+            }
+        pairs, unresolved = _resolved_pairs(rows)
+        gap_written, gap_skipped = _append_gap_candidates(unresolved, gaps)
+        resolution_written, resolution_skipped = _append_gap_resolutions(pairs, gaps)
+        plan_written, plan_skipped = _append_gap_remediation_plans(gaps)
+        existing = _existing_learning_keys()
+        knowledge_paths: list[str] = []
+        skipped_existing = 0
+        pattern_counts: Dict[str, int] = {}
+        for pair in pairs:
+            recorded = _record_pair(pair, existing=existing)
+            if recorded is None:
+                skipped_existing += 1
+                continue
+            knowledge_paths.append(str(recorded.get("_path") or ""))
+            pattern = str(recorded.get("pattern") or "")
+            pattern_counts[pattern] = pattern_counts.get(pattern, 0) + 1
+        return {
+            "ok": True,
+            "schema": "xcagi.duty_workforce.learning/v1",
+            "audit_path": str(source),
+            "audit_row_count": len(rows),
+            "gap_path": str(gaps),
+            "unresolved_employee_count": len(unresolved),
+            "gap_candidate_written_count": gap_written,
+            "gap_candidate_skipped_count": gap_skipped,
+            "gap_resolution_written_count": resolution_written,
+            "gap_resolution_skipped_count": resolution_skipped,
+            "remediation_plan_written_count": plan_written,
+            "remediation_plan_skipped_count": plan_skipped,
+            "open_gap_count": len(load_open_workforce_gaps(path=gaps)),
+            "resolved_pair_count": len(pairs),
+            "knowledge_written_count": len(knowledge_paths),
+            "knowledge_skipped_existing_count": skipped_existing,
+            "knowledge_paths": knowledge_paths,
+            "pattern_counts": dict(sorted(pattern_counts.items())),
+        }
+    finally:
+        _RUN_LOCK.release()
+
+
+__all__ = [
+    "load_open_workforce_gaps",
+    "run_duty_workforce_learning",
+    "workforce_gap_path",
+]

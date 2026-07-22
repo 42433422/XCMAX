@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import json
+from contextlib import nullcontext
+from pathlib import Path
+
+from modstore_server.duty_workforce_contracts import (
+    contract_schedule,
+    load_reviewed_duty_manifest,
+    load_workforce_contracts,
+    resolve_reviewed_duty_employee_root,
+    workforce_contract_map,
+    workforce_event_bindings,
+)
+from modstore_server import employee_runtime, models, task_router, workflow_scheduler
+
+
+def test_work_contracts_cover_the_roster_exactly() -> None:
+    payload = load_workforce_contracts()
+    contracts = workforce_contract_map()
+    root = Path(__file__).resolve().parents[3]
+    roster = json.loads((root / "FHD" / "config" / "duty_roster.json").read_text())
+    roster_ids = {employee_id for area in roster["areas"].values() for employee_id in area["ids"]}
+
+    assert payload["schema_version"] == "xcagi.duty_employee_work_contracts/v1"
+    assert set(contracts) == roster_ids
+    assert len(contracts) == 55
+    assert sum(bool(row["trigger"].get("cron")) for row in contracts.values()) == 22
+    assert len(workforce_event_bindings()) == 52
+
+
+def test_contract_schedule_is_safe_and_requires_real_receipt() -> None:
+    schedule = contract_schedule(
+        {
+            "mission": "巡检真实运行",
+            "mode": "observe_and_propose",
+            "risk_level": "high",
+            "trigger": {"cron": "0 3 * * *"},
+            "acceptance": ["输出真实证据"],
+        }
+    )
+
+    assert schedule is not None
+    assert schedule["source"] == "duty_work_contract"
+    assert schedule["cron"] == "0 3 * * *"
+    assert "不得用回显或虚构数据冒充完成" in schedule["task_brief"]
+    assert contract_schedule({"trigger": {"events": ["x"]}}) is None
+
+
+def test_reviewed_duty_manifest_loader_does_not_use_stale_catalog_shell() -> None:
+    manifest = load_reviewed_duty_manifest("seo-sitemap-curator")
+
+    assert manifest["id"] == "seo-sitemap-curator"
+    assert manifest["employee_config_v2"]["actions"]["handlers"] == ["agent"]
+
+
+def test_reviewed_duty_employee_root_keeps_manifest_and_module_together() -> None:
+    root = resolve_reviewed_duty_employee_root("security-secrets-guard")
+
+    assert json.loads((root / "manifest.json").read_text(encoding="utf-8"))["id"] == (
+        "security-secrets-guard"
+    )
+    assert (root / "backend/employees/security_secrets_guard.py").is_file()
+
+
+def test_employee_project_root_matches_yuangon_scope_base(monkeypatch, tmp_path) -> None:
+    company_root = tmp_path / "成都修茈科技有限公司"
+    (company_root / "MODstore_deploy").mkdir(parents=True)
+    monkeypatch.setattr(
+        "modstore_server.integrations.ops_action_handlers.repo_root",
+        lambda: tmp_path,
+    )
+
+    assert workflow_scheduler._employee_project_root() == str(company_root)
+
+    isolated = tmp_path / "tenant-worktree" / "成都修茈科技有限公司"
+    isolated.mkdir(parents=True)
+    monkeypatch.setenv("MODSTORE_DUTY_PROJECT_ROOT", str(isolated))
+    assert workflow_scheduler._employee_project_root() == str(isolated)
+
+
+def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
+    root = Path(__file__).resolve().parents[3]
+    contracts = workforce_contract_map()
+    profiles = [{"id": employee_id} for employee_id in contracts]
+    jobs = []
+
+    class FakeScheduler:
+        def add_job(self, fn, trigger, **kwargs):
+            jobs.append({"fn": fn, "trigger": trigger, **kwargs})
+
+    monkeypatch.setattr(workflow_scheduler, "_scheduler", FakeScheduler())
+    monkeypatch.setattr(task_router, "_load_all_employee_profiles", lambda: profiles)
+    monkeypatch.setattr(
+        employee_runtime,
+        "load_employee_pack",
+        lambda session, employee_id: {
+            "manifest": json.loads(
+                (root / "FHD" / "mods" / "_employees" / employee_id / "manifest.json").read_text()
+            )
+        },
+    )
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext(object()))
+
+    workflow_scheduler._register_employee_cron_jobs()
+
+    employee_jobs = [job for job in jobs if str(job.get("id") or "").startswith("emp_cron_")]
+    assert len(employee_jobs) == 22
+    assert {job["id"] for job in employee_jobs} >= {
+        "emp_cron_seo-sitemap-curator",
+        "emp_cron_payment-billing-reconciler",
+        "emp_cron_employee-interview-assistant",
+    }
+    assert "emp_cron_deploy-release-officer" not in {job["id"] for job in employee_jobs}
+
+    captured = {}
+
+    def fake_execute(employee_id, task, input_data, user_id=0, *, bench_llm_override=None):
+        captured.update(
+            employee_id=employee_id,
+            task=task,
+            input_data=input_data,
+            user_id=user_id,
+            bench_llm_override=bench_llm_override,
+        )
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        "modstore_server.employee_executor.execute_employee_task",
+        fake_execute,
+    )
+    monkeypatch.setattr(
+        "modstore_server.services.llm.resolve_platform_bench_llm",
+        lambda: ("minimax", "MiniMax-M2.7"),
+    )
+    payment_job = next(
+        job for job in employee_jobs if job["id"] == "emp_cron_payment-billing-reconciler"
+    )
+    payment_job["fn"]()
+    assert captured["employee_id"] == "payment-billing-reconciler"
+    assert captured["input_data"]["allow_medium_risk"] is True
+    assert captured["input_data"]["allow_high_risk_real_run"] is False
+    assert captured["input_data"]["non_blocking_human_questions"] is True
+    assert captured["bench_llm_override"] == ("minimax", "MiniMax-M2.7")

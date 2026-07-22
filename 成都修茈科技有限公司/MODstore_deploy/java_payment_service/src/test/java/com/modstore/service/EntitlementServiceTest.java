@@ -103,6 +103,58 @@ class EntitlementServiceTest {
     }
 
     @Nested
+    class CatalogFulfillmentEvidence {
+        @Test
+        void verifiesExactActiveEntitlementAndImmutableArtifact() {
+            Entitlement entitlement = new Entitlement();
+            entitlement.setCatalogId(42L);
+            entitlement.setActive(true);
+            entitlement.setEntitlementType("mod");
+            entitlement.setGrantedAt(java.time.LocalDateTime.of(2026, 7, 22, 20, 5));
+            CatalogItem item = new CatalogItem();
+            item.setId(42L);
+            item.setPkgId("customer-value-pack");
+            item.setVersion("1.2.3");
+            item.setSha256("a".repeat(64));
+            item.setArtifact("mod");
+            when(entitlementRepository.findBySourceOrderId("OT-VALUE"))
+                    .thenReturn(Optional.of(entitlement));
+            when(catalogItemRepository.findById(42L)).thenReturn(Optional.of(item));
+
+            var result = entitlementService.catalogFulfillmentEvidence("OT-VALUE", 42L);
+
+            assertThat(result.get("verified")).isEqualTo(true);
+            assertThat(result.get("artifact_id"))
+                    .isEqualTo("catalog:customer-value-pack@1.2.3");
+            assertThat(result.get("artifact_sha256")).isEqualTo("a".repeat(64));
+            assertThat(result.get("fulfilled_at"))
+                    .isEqualTo(java.time.LocalDateTime.of(2026, 7, 22, 20, 5));
+        }
+
+        @Test
+        void rejectsCatalogRowsWithoutImmutableArtifactHash() {
+            Entitlement entitlement = new Entitlement();
+            entitlement.setCatalogId(42L);
+            entitlement.setActive(true);
+            entitlement.setGrantedAt(java.time.LocalDateTime.now());
+            CatalogItem item = new CatalogItem();
+            item.setId(42L);
+            item.setPkgId("unhashed-pack");
+            item.setVersion("1.0.0");
+            item.setSha256("");
+            when(entitlementRepository.findBySourceOrderId("OT-UNHASHED"))
+                    .thenReturn(Optional.of(entitlement));
+            when(catalogItemRepository.findById(42L)).thenReturn(Optional.of(item));
+
+            var result = entitlementService.catalogFulfillmentEvidence("OT-UNHASHED", 42L);
+
+            assertThat(result.get("verified")).isEqualTo(false);
+            assertThat(result.get("reason"))
+                    .isEqualTo("catalog_artifact_identity_incomplete");
+        }
+    }
+
+    @Nested
     class ActivatePlan {
         @Test
         void deactivatesPreviousPlanAndActivatesNew() {

@@ -52,7 +52,13 @@
         var date = new Date(raw)
         if (!isNaN(date.getTime())) {
           var value = timeParts(date)
-          var dayLabel = value.year + '-' + value.month + '-' + value.day
+          var now = timeParts(new Date())
+          var eventDay = Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day))
+          var today = Date.UTC(Number(now.year), Number(now.month) - 1, Number(now.day))
+          var ageDays = Math.round((today - eventDay) / 86400000)
+          var dayLabel = value.month + '-' + value.day
+          if (ageDays === 0) dayLabel = '今天'
+          if (ageDays === 1) dayLabel = '昨天'
           return {
             day: dayLabel,
             clock: value.hour + ':' + value.minute,
@@ -76,11 +82,114 @@
     }
     var fallbackDay = String((item && item.day) || '')
     return {
-      day: fallbackDay || '日期未知',
+      day: fallbackDay ? fallbackDay.slice(5) : '日期未知',
       clock: String((item && item.ts) || '—'),
       datetime: '',
       title: (fallbackDay ? fallbackDay + ' ' : '') + String((item && item.ts) || '—'),
     }
+  }
+
+  function autonomyFreshness(iso) {
+    if (!iso) return '更新时间未知'
+    var stamp = new Date(iso).getTime()
+    if (isNaN(stamp)) return '快照 ' + fmtGen(iso)
+    var ageMinutes = Math.max(0, Math.round((Date.now() - stamp) / 60000))
+    if (ageMinutes <= 15) return '15 分钟内同步'
+    if (ageMinutes < 1440) return ageMinutes + ' 分钟前同步'
+    return Math.floor(ageMinutes / 1440) + ' 天前同步（请以管理端为准）'
+  }
+
+  function renderAutonomyUnavailable(message) {
+    var meta = document.getElementById('autonomy-meta')
+    var overall = document.getElementById('autonomy-overall')
+    var grid = document.getElementById('autonomy-grid')
+    var proof = document.getElementById('autonomy-proof')
+    if (meta) meta.textContent = message || '自治证据快照暂不可用'
+    if (overall) overall.innerHTML = '<strong>—</strong><span>不以演示数据代替</span>'
+    if (grid) grid.innerHTML = '<p class="autonomy-empty">等待管理端发布脱敏后的真实进度。</p>'
+    if (proof) proof.innerHTML = ''
+  }
+
+  function renderAutonomy(data) {
+    var meta = document.getElementById('autonomy-meta')
+    var overall = document.getElementById('autonomy-overall')
+    var grid = document.getElementById('autonomy-grid')
+    var proof = document.getElementById('autonomy-proof')
+    var dimensions = Array.isArray(data.dimensions) ? data.dimensions : []
+    if (!dimensions.length) {
+      renderAutonomyUnavailable('快照缺少七项证据，不展示推测值。')
+      return
+    }
+    if (meta) {
+      meta.textContent =
+        autonomyFreshness(data.generated_at) +
+        ' · 与创始人管理端使用同一评分结果 · 内部审批和故障细节不公开'
+    }
+    if (overall) {
+      overall.innerHTML =
+        '<strong>' +
+        esc(data.overall_progress || 0) +
+        '%</strong><span>距离目标还差 ' +
+        esc(data.overall_remaining == null ? '—' : data.overall_remaining) +
+        '%</span>'
+    }
+    if (grid) {
+      grid.innerHTML = dimensions
+        .map(function (item) {
+          var progress = Math.max(0, Math.min(100, Number(item.progress) || 0))
+          return (
+            '<article class="autonomy-card autonomy-card--' +
+            esc(item.status || 'early') +
+            '"><header><span>' +
+            esc(item.label || '') +
+            '</span><strong>' +
+            esc(progress) +
+            '%</strong></header><div class="autonomy-track"><i style="width:' +
+            esc(progress) +
+            '%"></i></div><p>下一门槛：' +
+            esc(item.next_gap || '继续积累运行证据') +
+            '</p></article>'
+          )
+        })
+        .join('')
+    }
+    if (proof) {
+      var labels = {
+        runtime_fresh: '运行证据新鲜',
+        active_gates_ok: '自治门禁通过',
+        governance_ok: '治理健康',
+        employee_workforce_ready: 'AI 员工真实在岗',
+        deploy_verified: '生产部署已验证',
+        paid_value_verified: '真实付费已验证',
+        paid_delivery_verified: '付费与不可变交付已关联',
+        customer_acceptance_verified: '客户明确验收已验证',
+      }
+      proof.innerHTML = Object.keys(labels)
+        .map(function (key) {
+          var ok = Boolean((data.proof || {})[key])
+          return (
+            '<span class="' +
+            (ok ? 'is-ok' : '') +
+            '">' +
+            (ok ? '✓ ' : '待证明 · ') +
+            esc(labels[key]) +
+            '</span>'
+          )
+        })
+        .join('')
+    }
+  }
+
+  function loadAutonomy() {
+    return fetch('/download-founder-autonomy.json', { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('autonomy ' + res.status)
+        return res.json()
+      })
+      .then(renderAutonomy)
+      .catch(function () {
+        renderAutonomyUnavailable('管理端尚未发布自治证据快照（未造假填充）。')
+      })
   }
 
   function initial(name) {
@@ -647,4 +756,6 @@
 
   loadHall()
   window.setInterval(loadHall, 60000)
+  loadAutonomy()
+  window.setInterval(loadAutonomy, 60000)
 })()

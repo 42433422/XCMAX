@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import types
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _prepend_package_path(module_name: str, package_path: Path, *, create: bool) -> None:
@@ -117,7 +120,36 @@ def evaluate_risk(
     ensure_fhd_on_path()
     from app.domain.autonomy.autonomy_guard import evaluate_risk as domain_evaluate_risk
 
-    return domain_evaluate_risk(action, context, action_id=action_id, source=source)
+    try:
+        decision = domain_evaluate_risk(action, context, action_id=action_id, source=source)
+    except Exception as exc:
+        if (
+            exc.__class__.__name__ == "ProhibitedActionError"
+            and getattr(exc, "action_id", None)
+        ):
+            try:
+                from modstore_server.autonomy_decision_audit import (
+                    append_prohibited_exception,
+                )
+
+                append_prohibited_exception(
+                    action=getattr(exc, "action", "unknown"),
+                    action_id=getattr(exc, "action_id", action_id),
+                    context=context,
+                    source=source,
+                )
+            except Exception:
+                # Preserve the hard policy exception; an audit outage must not
+                # accidentally turn a prohibited action into an allowed one.
+                logger.exception("failed to mirror prohibited autonomy decision")
+        raise
+
+    from modstore_server.autonomy_decision_audit import append_domain_risk_decision
+
+    # Successful decisions fail closed when their immutable audit append fails:
+    # an autonomous action must never execute without a durable decision trail.
+    append_domain_risk_decision(decision, context=context, source=source)
+    return decision
 
 
 def request_action(

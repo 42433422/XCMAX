@@ -97,11 +97,16 @@ def _alert_dead_letters() -> None:
 
         sf = get_session_factory()
         with sf() as session:
-            count = session.query(OutboxDeadLetter).count()
+            count = (
+                session.query(OutboxDeadLetter)
+                .filter(OutboxDeadLetter.resolved_at.is_(None))
+                .count()
+            )
         if count > 0:
             logger.error(
                 "DEAD_LETTER_ALERT: %d unprocessed dead-letter events in OutboxDeadLetter table. "
-                "Investigate and replay or purge via admin API.",
+                "Automatic reconciliation will replay only allow-listed idempotent events; "
+                "high-impact rows remain quarantined with audit evidence.",
                 count,
             )
     except Exception:

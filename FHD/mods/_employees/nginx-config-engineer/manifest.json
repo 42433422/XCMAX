@@ -1,7 +1,7 @@
 {
   "id": "nginx-config-engineer",
   "name": "Nginx 配置工程师",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "nginx-config-engineer",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "Nginx 配置工程师",
       "description": "维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。",
@@ -80,12 +80,20 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo",
-        "shell_exec"
+        "direct_python"
       ],
-      "shell_exec": {
-        "command_id": "nginx-syntax-check"
+      "direct_python": {
+        "module": "nginx_config_engineer",
+        "action": "audit_config_check_receipt",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["config_check_receipt"], "properties": {"config_check_receipt": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "config_check_receipt": {"syntax_ok": true, "certificate_days_remaining": 90, "route_drift": false, "production_change_requested": false}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_high_risk_fixture": true, "allow_prohibited_semantics_fixture": true}
       }
     },
     "metadata": {

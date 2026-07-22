@@ -1,7 +1,7 @@
 {
   "id": "employee-interview-assistant",
   "name": "员工信息访谈员",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "author": "admin",
   "description": "面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "employee-interview-assistant",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "员工信息访谈员",
       "description": "面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
@@ -81,20 +81,55 @@
     },
     "actions": {
       "handlers": [
-        "echo"
+        "direct_python"
       ],
       "direct_python": {
         "module": "employee_interview_assistant",
-        "action": "convert",
-        "default_output_relpath": "outputs/employee_output.xlsx",
-        "default_template_relpath": "",
-        "default_use_personnel_roster": true
+        "action": "draft_interview",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": [
+            "target_employee_id",
+            "role_context"
+          ],
+          "properties": {
+            "target_employee_id": {"type": "string", "minLength": 1},
+            "role_context": {"type": "object"},
+            "responses": {"type": "object"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": [
+            "ok",
+            "status",
+            "summary",
+            "missing_fields",
+            "questions",
+            "evidence",
+            "read_only",
+            "side_effects"
+          ]
+        },
+        "burn_in_fixture": {
+          "target_employee_id": "burn-in-role",
+          "role_context": {
+            "mission": "只读核对岗位输入输出契约",
+            "capabilities": ["structured-intake"],
+            "dependencies": ["employee-pack-curator"],
+            "risk_level": "low",
+            "handlers": ["direct_python"]
+          }
+        }
       }
     },
     "schedule": {
       "enabled": true,
       "cron": "30 9 * * 1-5",
-      "task_brief": "每周一至周五 09:30 UTC 扫描员工 manifest 与 yuangon 资料，补全元数据缺口；echo handler 用于激活真运转验证。"
+      "task_brief": "每周一至周五 09:30 UTC 基于显式 role_context 生成只读访谈缺口与问题清单，不持久化敏感个人数据。"
     },
     "metadata": {
       "framework_version": "2.0.0",

@@ -1,7 +1,7 @@
 {
   "id": "github-pr-gatekeeper",
   "name": "GitHub PR 守门员",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "github-pr-gatekeeper",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "GitHub PR 守门员",
       "description": "通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。",
@@ -98,16 +98,19 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo",
-        "agent"
-      ],
-      "agent": {
-        "workspace": {
-          "read_only": false,
-          "requires_project_root": true
-        }
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "github_pr_gatekeeper",
+        "action": "evaluate_pr_snapshot",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["pr_snapshot"], "properties": {"pr_snapshot": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "eligible_for_merge", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "pr_snapshot": {"number": 241, "draft": false, "mergeable": true, "checks": [{"name": "tests", "status": "success"}], "reviews": [{"reviewer": "independent", "state": "approved"}]}
+        },
+        "burn_in_policy": {"reviewed": true, "scope": "fixture_only", "external_effects": false, "allow_high_risk_fixture": true}
       }
     },
     "metadata": {

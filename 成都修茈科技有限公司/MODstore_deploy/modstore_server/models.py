@@ -20,8 +20,10 @@ from modstore_server.db.base import (  # noqa: F401
     init_db,
     init_default_plan_templates,
 )
+from modstore_server.db.autonomy_decisions import *  # noqa: F403,F401
 from modstore_server.db.billing import *  # noqa: F403,F401
 from modstore_server.db.catalog import *  # noqa: F403,F401
+from modstore_server.db.customer_value import *  # noqa: F403,F401
 from modstore_server.db.dev_platform import *  # noqa: F403,F401
 from modstore_server.db.employee_ops import *  # noqa: F403,F401
 from modstore_server.db.eskill import *  # noqa: F403,F401

@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,13 +30,18 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
-def _try_parse_llm_output(reasoning: Dict[str, Any]) -> Dict[str, Any]:
-    """从 reasoning["reasoning"] 字符串里解析 LLM 输出 JSON。"""
-    if not isinstance(reasoning, dict):
-        return {}
-    raw = reasoning.get("reasoning") or ""
+def _try_parse_json_object(raw: Any) -> Dict[str, Any]:
+    """Parse a final JSON object while tolerating model reasoning wrappers.
+
+    Reasoning models such as MiniMax may prefix their actual answer with a
+    ``<think>...</think>`` block.  We prefer the last object that carries the
+    verification contract instead of interpreting arbitrary JSON mentioned in
+    the reasoning trace as the result.
+    """
+
     if not isinstance(raw, str) or not raw.strip():
         return {}
+    raw = re.sub(r"<think\b[^>]*>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE)
     # 1. 直接 json.loads
     try:
         v = json.loads(raw)
@@ -65,6 +69,61 @@ def _try_parse_llm_output(reasoning: Dict[str, Any]) -> Dict[str, Any]:
                 return v
         except (ValueError, TypeError):
             pass
+    # 4. 模型可能在正文前后附加自然语言；逐个 raw_decode，优先选择
+    # 带 status + summary/report 的最后一个对象。
+    decoder = json.JSONDecoder()
+    candidates: List[tuple[int, int, Dict[str, Any]]] = []
+    for index, char in enumerate(raw):
+        if char != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(raw[index:])
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(value, dict):
+            continue
+        score = sum(
+            (
+                2 if str(value.get("status") or "").strip() else 0,
+                2
+                if str(value.get("summary") or value.get("report") or "").strip()
+                else 0,
+                1 if value.get("evidence") is not None else 0,
+            )
+        )
+        candidates.append((score, index, value))
+    if candidates:
+        return max(candidates, key=lambda item: (item[0], item[1]))[2]
+    return {}
+
+
+def _try_parse_llm_output(reasoning: Dict[str, Any]) -> Dict[str, Any]:
+    """从 reasoning["reasoning"] 字符串里解析 LLM 输出 JSON。"""
+
+    if not isinstance(reasoning, dict):
+        return {}
+    return _try_parse_json_object(reasoning.get("reasoning") or "")
+
+
+def _try_parse_handler_output(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Parse the tool-using agent's final answer as verification evidence."""
+
+    outputs = result.get("outputs") if isinstance(result, dict) else []
+    if not isinstance(outputs, list):
+        return {}
+    # The agent handler is authoritative for tool-driven work and normally
+    # runs before generic fallbacks. Iterate in reverse so the final handler
+    # wins when multiple outputs carry structured contracts.
+    for output in reversed(outputs):
+        if not isinstance(output, dict):
+            continue
+        for key in ("output", "answer", "summary", "response"):
+            raw = output.get(key)
+            if isinstance(raw, dict):
+                return raw
+            parsed = _try_parse_json_object(raw)
+            if parsed:
+                return parsed
     return {}
 
 
@@ -154,9 +213,30 @@ def _check_files_changed_exist(
 def _check_tests_reported(llm_out: Dict[str, Any], task: str) -> Dict[str, Any]:
     """如果 task 涉及测试，检查 LLM 是否报告了测试结果。"""
     task_lower = str(task or "").lower()
-    involves_tests = any(
-        kw in task_lower for kw in ("测试", "test", "qa", "tdd", "coverage", "单测", "回归")
+    # "验收可测试" describes the quality of an acceptance criterion; it does
+    # not claim that this execution ran a test suite.  Require an explicit test
+    # execution noun/verb so planning and intent-analysis receipts are not
+    # rejected by a substring match.
+    chinese_test_execution = any(
+        phrase in task_lower
+        for phrase in (
+            "执行测试",
+            "运行测试",
+            "跑测试",
+            "测试用例",
+            "单元测试",
+            "集成测试",
+            "回归测试",
+            "测试通过",
+            "测试失败",
+            "测试结果",
+            "单测",
+        )
     )
+    english_test_execution = bool(
+        re.search(r"\b(?:test|tests|testing|qa|tdd|coverage)\b", task_lower)
+    )
+    involves_tests = chinese_test_execution or english_test_execution
     if not involves_tests:
         return {
             "name": "tests_reported",
@@ -247,7 +327,13 @@ def _check_handler_outputs_nonempty(result: Dict[str, Any]) -> Dict[str, Any]:
     for o in outputs:
         if not isinstance(o, dict):
             continue
-        out_str = str(o.get("output") or "").strip()
+        # Handler families expose their real result under different keys:
+        # llm_md/echo -> output, agent -> summary, some direct handlers ->
+        # answer/response.  Treating agent summaries as empty made every
+        # read-only agent burn-in unverifiable even after a real tool call.
+        out_str = str(
+            o.get("output") or o.get("answer") or o.get("summary") or o.get("response") or ""
+        ).strip()
         if out_str:
             nonempty += 1
         else:
@@ -279,6 +365,11 @@ def run_verification(
     返回 checks 列表 + ok_count/total_count/passed/summary。
     """
     llm_out = _try_parse_llm_output(reasoning if isinstance(reasoning, dict) else {})
+    handler_out = _try_parse_handler_output(result if isinstance(result, dict) else {})
+    if handler_out:
+        # Keep explicit cognition fields, but fill its missing contract from
+        # the actual tool-using handler's final answer.
+        llm_out = {**handler_out, **llm_out}
     files = _extract_changed_files(llm_out, result if isinstance(result, dict) else {})
 
     checks: List[Dict[str, Any]] = [

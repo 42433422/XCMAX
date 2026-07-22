@@ -12,7 +12,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from modstore_server.models import Base
+from modstore_server.db.alembic_bootstrap import bootstrap_empty_sqlite  # noqa: E402
+from modstore_server.models import Base  # noqa: E402
 
 target_metadata = Base.metadata
 
@@ -53,6 +54,7 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        bootstrap_empty_sqlite(connection, target_metadata)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

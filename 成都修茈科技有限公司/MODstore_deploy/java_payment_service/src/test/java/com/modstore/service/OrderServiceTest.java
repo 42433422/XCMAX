@@ -72,6 +72,24 @@ class OrderServiceTest {
         return order;
     }
 
+    @Test
+    void customerValueFulfillmentEvidenceDelegatesOnlyForFulfilledCatalogOrders() {
+        Order order = buildPaidOrder("OT-VALUE", "item", new BigDecimal("9.90"));
+        order.setItemId(42L);
+        order.setFulfilled(true);
+        when(entitlementService.catalogFulfillmentEvidence("OT-VALUE", 42L))
+                .thenReturn(Map.of("verified", true, "artifact_id", "catalog:pack@1.0.0"));
+
+        Map<String, Object> result = orderService.getCustomerValueFulfillmentEvidence(order);
+
+        assertThat(result.get("verified")).isEqualTo(true);
+        verify(entitlementService).catalogFulfillmentEvidence("OT-VALUE", 42L);
+
+        order.setFulfilled(false);
+        assertThat(orderService.getCustomerValueFulfillmentEvidence(order).get("reason"))
+                .isEqualTo("order_not_fulfilled");
+    }
+
     @Nested
     class CreateOrder {
         @Test

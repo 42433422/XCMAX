@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +56,51 @@ REDLINE_DOMAINS = {
 }
 
 
+def _redline_audit_context(cr_id: int) -> Dict[str, str]:
+    """Read only the typed fields needed by the alignment ledger."""
+
+    from modstore_server.models import EmployeeChangeRequest, get_session_factory
+
+    sf = get_session_factory()
+    with sf() as session:
+        row = session.get(EmployeeChangeRequest, int(cr_id))
+        if row is None:
+            return {"domain": "unknown", "run_id": ""}
+        try:
+            blob = json.loads(row.diff_blob or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            blob = {}
+        details = blob.get("details") if isinstance(blob.get("details"), dict) else {}
+        return {
+            "domain": str(blob.get("domain") or "unknown"),
+            "run_id": str(details.get("run_id") or ""),
+        }
+
+
+def _append_redline_transition(
+    cr_id: int,
+    *,
+    decision: str,
+    actor_class: str,
+    event_suffix: str,
+) -> None:
+    from modstore_server.autonomy_decision_audit import append_autonomy_decision
+
+    context = _redline_audit_context(cr_id)
+    domain = context["domain"]
+    append_autonomy_decision(
+        action_id=f"redline:{int(cr_id)}",
+        action=f"redline_{domain}",
+        decision=decision,
+        policy=f"redline_approval.{domain}",
+        risk_level="high",
+        actor_class=actor_class,
+        run_id=context["run_id"],
+        source="redline_approval_gate",
+        event_id=f"redline:{int(cr_id)}:{event_suffix}",
+    )
+
+
 def create_redline_request(
     domain: str,
     source_employee_id: str,
@@ -86,6 +130,7 @@ def create_redline_request(
 
             cr = EmployeeChangeRequest(
                 source_employee_id=source_employee_id,
+                change_kind=f"redline_{domain}",
                 status="pending",
                 risk_level="high",
                 diff_blob=json.dumps(
@@ -105,6 +150,20 @@ def create_redline_request(
             session.add(cr)
             session.flush()
             cr_id = int(cr.id)
+            from modstore_server.autonomy_decision_audit import append_autonomy_decision
+
+            append_autonomy_decision(
+                action_id=f"redline:{cr_id}",
+                action=f"redline_{domain}",
+                decision="veto",
+                policy=f"redline_approval.{domain}",
+                risk_level="high",
+                actor_class="ai_employee",
+                run_id=change_details.get("run_id") if isinstance(change_details, dict) else "",
+                source="redline_approval_gate",
+                event_id=f"redline:{cr_id}:requested",
+                session=session,
+            )
             session.commit()
 
         from modstore_server.incident_bus import publish
@@ -145,6 +204,14 @@ def approve_redline_request(
 
         result = apply_employee_change_request(cr_id, admin_user_id)
 
+        if result.get("ok"):
+            _append_redline_transition(
+                cr_id,
+                decision="allow",
+                actor_class="human" if admin_user_id else "system",
+                event_suffix="approved",
+            )
+
         from modstore_server.incident_bus import publish
 
         publish(
@@ -175,6 +242,14 @@ def reject_redline_request(
             rejected_reason=reason,
             rejected_by_user_id=admin_user_id,
         )
+
+        if result.get("ok"):
+            _append_redline_transition(
+                cr_id,
+                decision="veto",
+                actor_class="human" if admin_user_id else "system",
+                event_suffix="rejected",
+            )
 
         from modstore_server.incident_bus import publish
 

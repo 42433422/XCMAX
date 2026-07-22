@@ -1,7 +1,7 @@
 {
   "id": "pack-registrar",
   "name": "打包登记员工",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "admin",
   "description": "将员工包登记到 Catalog 目录，执行五维审核，生成 .xcemp 发布包",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "pack-registrar",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "打包登记员工",
       "description": "将员工包登记到 Catalog 目录，执行五维审核，生成 .xcemp 发布包",
@@ -79,10 +79,20 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "llm_md",
-        "echo"
-      ]
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "pack_registrar",
+        "action": "audit_registration",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["candidate", "checks"], "properties": {"candidate": {"type": "object"}, "checks": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "issues", "ready_for_registration", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "candidate": {"id": "pack-burn-in", "version": "1.0.0", "artifact": "employee_pack"},
+          "checks": {"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "runtime_issues": [], "quality_score": 90}
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

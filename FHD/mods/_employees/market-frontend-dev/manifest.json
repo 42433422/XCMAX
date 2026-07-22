@@ -1,7 +1,7 @@
 {
   "id": "market-frontend-dev",
   "name": "市场前端开发员",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "admin",
   "description": "维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。",
   "artifact": "employee_pack",
@@ -26,7 +26,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "market-frontend-dev",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "artifact": "employee_pack",
       "name": "市场前端开发员",
       "description": "维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。",
@@ -89,15 +89,23 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "direct_python"
-      ],
+      "handlers": ["direct_python"],
       "direct_python": {
         "module": "market_frontend_dev",
-        "action": "convert",
-        "default_output_relpath": "outputs/employee_output.xlsx",
-        "default_template_relpath": "",
-        "default_use_personnel_roster": true
+        "action": "audit_frontend_change",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {"type": "object", "required": ["frontend_change"], "properties": {"frontend_change": {"type": "object"}}},
+        "output_schema": {"type": "object", "required": ["ok", "status", "summary", "files", "issues", "evidence", "read_only", "side_effects"]},
+        "burn_in_fixture": {
+          "frontend_change": {
+            "framework": "vue3",
+            "files": ["market/src/views/AutonomyStatus.vue"],
+            "api_contracts": ["GET /api/admin/founder-autonomy"],
+            "tests": ["AutonomyStatus renders proof flags"]
+          }
+        }
       }
     },
     "metadata": {

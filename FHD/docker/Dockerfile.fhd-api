@@ -50,6 +50,7 @@ COPY --chown=appuser:appuser XCAGI /app/XCAGI
 COPY --chown=appuser:appuser alembic /app/alembic
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 COPY --chown=appuser:appuser resources /app/resources
+COPY --chown=appuser:appuser templates/admin-vue-dist /app/templates/admin-vue-dist
 
 COPY --chown=appuser:appuser gunicorn_config.py /app/gunicorn_config.py
 COPY --chown=appuser:appuser docker/docker-entrypoint-fhd-api.sh /entrypoint.sh

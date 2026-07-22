@@ -79,3 +79,12 @@ class OutboxDeadLetter(Base):
     last_error = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     moved_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    # Resolution is append-only operational evidence.  Rows are retained even
+    # when replay is unsafe (payment/refund etc.) so fault debt can be closed
+    # without deleting the audit trail.
+    resolution_status = Column(String(32), default="", index=True)
+    resolution_action = Column(String(32), default="")
+    resolution_note = Column(Text, default="")
+    resolved_at = Column(DateTime, nullable=True, index=True)
+    last_reconciled_at = Column(DateTime, nullable=True)
+    replay_outbox_id = Column(Integer, nullable=True)

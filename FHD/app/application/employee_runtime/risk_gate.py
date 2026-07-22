@@ -23,7 +23,11 @@ def gate_action_or_block(
         manifest or {}, handlers, payload
     )
     action_name = (
-        "code_write" if payload.get("tool") in {"patch_file", "write_file"} else "employee_execute"
+        "code_write"
+        if payload.get("tool") in {"patch_file", "write_file"}
+        else "employee_read_only_observe"
+        if payload.get("burn_in") is True and payload.get("burn_in_read_only") is True
+        else "employee_execute"
     )
     decision = evaluate_risk(
         {

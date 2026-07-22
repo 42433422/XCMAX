@@ -268,8 +268,16 @@ fi
 
 write_service_units() {
   local release_env="${ENV_DIR}/modstore-release.env"
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\n' \
-    "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" > "${release_env}.tmp"
+  local release_root=""
+  local release_manifest=""
+  local release_artifact_sha=""
+  release_root="$(readlink -f "$CURRENT_LINK")"
+  release_manifest="${release_root}/.xcmax-release.json"
+  if [[ -f "$release_manifest" ]]; then
+    release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
+  fi
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\n' \
+    "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" > "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 
@@ -381,6 +389,44 @@ assert payload.get("artifact_sha256") == expected_artifact
 PY
 }
 
+verify_payment_identity() {
+  local expected_sha="$1"
+  local expected_artifact="$2"
+  local payload
+  payload="$(curl --noproxy '*' -fsS --max-time 10 http://127.0.0.1:8080/actuator/info)" || return 1
+  PAYMENT_INFO_PAYLOAD="$payload" EXPECTED_SHA="$expected_sha" EXPECTED_ARTIFACT="$expected_artifact" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["PAYMENT_INFO_PAYLOAD"])
+identity = payload.get("xcmax") if isinstance(payload.get("xcmax"), dict) else {}
+assert identity.get("git-sha") == os.environ["EXPECTED_SHA"]
+assert identity.get("release-id") == os.environ["EXPECTED_SHA"]
+assert identity.get("artifact-sha256") == os.environ["EXPECTED_ARTIFACT"]
+PY
+}
+
+verify_customer_value_reconciler() {
+  local payload
+  payload="$(curl --noproxy '*' -fsS --max-time 10 "${SCHEDULER_HEALTH_URL%/api/health}/api/scheduler/runtime?stale_after_seconds=900")" || return 1
+  SCHEDULER_RUNTIME_PAYLOAD="$payload" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["SCHEDULER_RUNTIME_PAYLOAD"])
+assert payload.get("ok") is True
+jobs = {
+    str(item.get("job_id")): item
+    for item in payload.get("jobs") or []
+    if isinstance(item, dict)
+}
+job = jobs.get("customer_value_reconciler") or {}
+assert job.get("state") == "healthy"
+assert job.get("last_status") == "success"
+assert int(job.get("consecutive_failures") or 0) == 0
+PY
+}
+
 PREVIOUS_SHA=""
 PREVIOUS_ARTIFACT_SHA=""
 if [[ -f "$PREVIOUS_ROOT/.xcmax-release.json" ]]; then
@@ -403,8 +449,8 @@ rollback() {
     TARGET_SHA="$PREVIOUS_SHA" write_service_units
   fi
   systemctl daemon-reload
-  systemctl restart modstore.service modstore-scheduler.service || true
   systemctl restart modstore-payment.service 2>/dev/null || true
+  systemctl restart modstore.service modstore-scheduler.service || true
   if [[ "$PREVIOUS_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]]; then
     for _ in $(seq 1 30); do
       verify_health_identity "$HEALTH_URL" "$PREVIOUS_SHA" "$PREVIOUS_ARTIFACT_SHA" && return 0
@@ -424,15 +470,30 @@ write_service_units
 systemctl daemon-reload
 systemctl enable modstore.service modstore-scheduler.service >/dev/null
 
-if ! systemctl restart modstore.service modstore-scheduler.service; then
-  rollback
-  fail "MODstore services failed to restart"
-fi
 if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
   if ! systemctl restart modstore-payment.service; then
     rollback
     fail "payment service failed to restart"
   fi
+  PAYMENT_READY=0
+  for _ in $(seq 1 60); do
+    if systemctl is-active --quiet modstore-payment.service \
+        && curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8080/actuator/health >/dev/null \
+        && verify_payment_identity "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
+      PAYMENT_READY=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$PAYMENT_READY" != 1 ]]; then
+    rollback
+    fail "payment exact-SHA identity verification failed"
+  fi
+fi
+
+if ! systemctl restart modstore.service modstore-scheduler.service; then
+  rollback
+  fail "MODstore services failed to restart"
 fi
 
 READY=0
@@ -450,18 +511,22 @@ if [[ "$READY" != 1 ]]; then
   fail "exact-SHA local health verification failed"
 fi
 
+RECONCILER_READY=0
+for _ in $(seq 1 30); do
+  if verify_customer_value_reconciler; then
+    RECONCILER_READY=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$RECONCILER_READY" != 1 ]]; then
+  rollback
+  fail "customer value reconciler did not prove a successful authoritative run"
+fi
+
 if [[ -n "$PUBLIC_HEALTH_URL" ]] \
     && ! verify_health_identity "$PUBLIC_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
   rollback
   fail "exact-SHA public health verification failed"
 fi
-if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
-  for _ in $(seq 1 60); do
-    curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8080/actuator/health >/dev/null && break
-    sleep 2
-  done
-  curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8080/actuator/health >/dev/null \
-    || { rollback; fail "payment health verification failed"; }
-fi
-
 log "release promoted and verified git_sha=$TARGET_SHA root=$FINAL_ROOT"

@@ -6,9 +6,11 @@ import json
 import os
 import re
 import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
+from sqlalchemy import func
 
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.employee_autonomy_service import (
@@ -25,6 +27,7 @@ from modstore_server.employee_autonomy_service import (
 from modstore_server.models import (
     EmployeeCollabMessage,
     EmployeeCollabThread,
+    EmployeeExecutionMetric,
     EmployeeSuggestion,
     User,
     get_session_factory,
@@ -90,6 +93,100 @@ def get_autonomy_dashboard(
 ) -> Dict[str, Any]:
     _ = _admin_user
     return aggregate_admin_suggestion_dashboard(limit_recent=limit_recent)
+
+
+@router.get("/execution-coverage")
+def get_execution_coverage(
+    window_hours: int = Query(24, ge=1, le=24 * 30),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Return roster employees with a fresh successful execution receipt."""
+
+    _ = _admin_user
+    from modstore_server.duty_roster import all_planned_employee_ids
+
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=window_hours)
+    planned = set(all_planned_employee_ids())
+    sf = get_session_factory()
+    with sf() as session:
+        rows = (
+            session.query(
+                EmployeeExecutionMetric.employee_id,
+                func.max(EmployeeExecutionMetric.created_at),
+            )
+            .filter(
+                EmployeeExecutionMetric.status.in_(["success", "completed"]),
+                EmployeeExecutionMetric.created_at >= cutoff,
+            )
+            .group_by(EmployeeExecutionMetric.employee_id)
+            .all()
+        )
+    receipts = [
+        {"employee_id": str(employee_id), "latest_success_at": created_at.isoformat()}
+        for employee_id, created_at in rows
+        if str(employee_id or "") in planned and created_at is not None
+    ]
+    receipts.sort(key=lambda item: item["employee_id"])
+    from modstore_server.services.llm import resolve_platform_bench_llm
+
+    bench_provider, bench_model = resolve_platform_bench_llm()
+    return {
+        "ok": True,
+        "window_hours": window_hours,
+        "cutoff": cutoff.isoformat(),
+        "planned_count": len(planned),
+        "proven_count": len(receipts),
+        "employee_ids": [item["employee_id"] for item in receipts],
+        "receipts": receipts,
+        # Observable routing truth without exposing credential material.
+        "platform_llm": {
+            "configured": bool(bench_provider and bench_model),
+            "provider": bench_provider,
+            "model": bench_model,
+        },
+    }
+
+
+@router.get("/burn-in/plan")
+def get_duty_workforce_burn_in_plan(
+    window_hours: int = Query(24, ge=1, le=24 * 30),
+    limit: int = Query(2, ge=1, le=8),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Dry-run the fail-closed receipt coverage plan; never invokes employees."""
+
+    _ = _admin_user
+    from modstore_server.duty_workforce_burnin import build_burn_in_plan
+
+    return build_burn_in_plan(window_hours=window_hours, limit=limit)
+
+
+@router.post("/burn-in/run")
+def run_duty_workforce_burn_in(
+    body: Dict[str, Any] = Body(default_factory=dict),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Run a bounded burn-in wave.
+
+    The request defaults to dry-run.  Even ``dry_run=false`` remains blocked
+    until the effective runtime explicitly enables
+    ``MODSTORE_EMPLOYEE_BURN_IN_ENABLED=1``.
+    """
+
+    _ = _admin_user
+    from modstore_server.duty_workforce_burnin import run_burn_in
+
+    dry_run = body.get("dry_run", True) is not False
+    try:
+        window_hours = max(1, min(int(body.get("window_hours") or 24), 24 * 30))
+        limit = max(1, min(int(body.get("limit") or 2), 8))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "window_hours/limit 必须是整数") from None
+    return run_burn_in(
+        dry_run=dry_run,
+        window_hours=window_hours,
+        limit=limit,
+    )
 
 
 @router.get("/suggestions")

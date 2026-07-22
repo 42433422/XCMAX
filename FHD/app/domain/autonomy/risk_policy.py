@@ -228,8 +228,35 @@ class RiskPolicyCatalog:
             if isinstance(ev2, dict):
                 declared = str(ev2.get("risk_level") or "").strip().lower()
         handler_list = [str(item or "").strip() for item in (handlers or [])]
+        request = payload or {}
+        work_contract = (
+            request.get("work_contract")
+            if isinstance(request.get("work_contract"), dict)
+            else {}
+        )
+        truthy = {"1", "true", "yes", "on"}
+        required_read_only_flags = (
+            "burn_in",
+            "burn_in_read_only",
+            "suppress_employee_im",
+            "suppress_handoff",
+            "suppress_change_requests",
+            "suppress_lifecycle_events",
+        )
+        read_only_burn_in = (
+            str(work_contract.get("risk_level") or "").strip().lower()
+            in {"low", "read_only", "readonly"}
+            and all(
+                value is True or str(value or "").strip().lower() in truthy
+                for value in (request.get(name) for name in required_read_only_flags)
+            )
+            and set(handler_list).issubset({"agent", "llm_md", "echo", "specialized"})
+            and "agent" in handler_list
+        )
         inferred = (
-            RiskLevel.HIGH
+            RiskLevel.LOW
+            if read_only_burn_in
+            else RiskLevel.HIGH
             if any(item in _HIGH_RISK_HANDLERS for item in handler_list)
             else RiskLevel.MEDIUM
             if any(item in _MEDIUM_RISK_HANDLERS for item in handler_list)
@@ -249,7 +276,9 @@ class RiskPolicyCatalog:
             else inferred
         )
         reason = (
-            f"manifest declared risk_level={declared_level.value}"
+            "strict read-only burn-in contract"
+            if read_only_burn_in and level == RiskLevel.LOW
+            else f"manifest declared risk_level={declared_level.value}"
             if declared_valid and level == declared_level
             else f"handlers inferred risk_level={inferred.value}"
         )

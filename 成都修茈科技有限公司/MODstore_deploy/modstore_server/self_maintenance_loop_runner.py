@@ -59,12 +59,18 @@ DEFAULT_CLEAN_BASELINE_NAME = "self_maintenance_clean_baseline.json"
 DEFAULT_PARA_AUTH_CACHE_NAME = "para_guest_auth_cache.json"
 DEFAULT_MERGE_WORKSPACE_ROOT = "self_maintenance_merge_workspaces"
 DEFAULT_LOOP_LEASE_NAME = "self_maintenance_loop.lock"
+DEFAULT_EVIDENCE_WINDOW_DAYS = 30
+DEFAULT_EVIDENCE_RUN_LIMIT = 24
+DEFAULT_EVIDENCE_ROW_LIMIT = 240
+DEFAULT_EVIDENCE_SCAN_LIMIT = 5000
 DEFAULT_STATUS_FILE = (
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
 )
 DEFAULT_AUTO_MERGE_GLOBS = [DEFAULT_STATUS_FILE]
 DEFAULT_AUTO_MERGE_SCOPE_GLOBS = [
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_*.py",
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_learning.py",
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_metrics_job.py",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_knowledge.py",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_kb_redisvl.py",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_model_router.py",
@@ -90,6 +96,8 @@ DEFAULT_AUTO_MERGE_SCOPE_GLOBS = [
     "FHD/XCAGI/kb/patterns/*.md",
     "FHD/XCAGI/kb/metrics/*.jsonl",
     "成都修茈科技有限公司/MODstore_deploy/tests/test_self_*.py",
+    "成都修茈科技有限公司/MODstore_deploy/tests/test_duty_workforce_learning.py",
+    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_metrics_job.py",
     "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_knowledge*.py",
     "成都修茈科技有限公司/MODstore_deploy/tests/test_auto_approve_policy*.py",
     "成都修茈科技有限公司/MODstore_deploy/tests/test_ops_staged_auto_approve*.py",
@@ -350,6 +358,96 @@ def _read_ledger(limit: int = 100) -> List[Dict[str, Any]]:
         logger.exception("failed to read self-maintenance ledger")
         return []
     return rows[-limit:]
+
+
+def _ledger_row_timestamp(row: Dict[str, Any]) -> Optional[datetime]:
+    """Return a normalized timestamp for one append-only ledger row.
+
+    Step records use ``timestamp`` while start/terminal records use one of the
+    ``*_at`` fields.  Keeping that compatibility here prevents an otherwise
+    valid step from becoming timeless when it is projected into runtime
+    evidence.
+    """
+
+    for key in (
+        "timestamp",
+        "created_at",
+        "completed_at",
+        "updated_at",
+        "started_at",
+        "verified_at",
+        "deployed_at",
+        "at",
+    ):
+        raw = str(row.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
+def _select_recent_milestone_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    now: Optional[datetime] = None,
+    window_days: int = DEFAULT_EVIDENCE_WINDOW_DAYS,
+    run_limit: int = DEFAULT_EVIDENCE_RUN_LIMIT,
+    row_limit: int = DEFAULT_EVIDENCE_ROW_LIMIT,
+) -> List[Dict[str, Any]]:
+    """Select coherent, time-bounded work evidence immune to heartbeat churn.
+
+    The live feed remains intentionally small, but proof of a recent completed
+    work cycle must not disappear merely because the scheduler emitted many
+    idle heartbeats or policy skips.  Rows without a parseable timestamp are
+    excluded, and evidence expires after ``window_days`` so an old success can
+    never prove current autonomy forever.
+    """
+
+    current = (now or _utc_now()).astimezone(timezone.utc)
+    bounded_days = max(1, min(int(window_days or DEFAULT_EVIDENCE_WINDOW_DAYS), 90))
+    bounded_runs = max(1, min(int(run_limit or DEFAULT_EVIDENCE_RUN_LIMIT), 64))
+    bounded_rows = max(1, min(int(row_limit or DEFAULT_EVIDENCE_ROW_LIMIT), 512))
+    cutoff = current - timedelta(days=bounded_days)
+    future_tolerance = current + timedelta(minutes=5)
+    excluded_phases = {"heartbeat", "skip", "kb_salvage"}
+
+    eligible: List[Tuple[Dict[str, Any], datetime]] = []
+    latest_by_run: Dict[str, datetime] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        phase = str(row.get("phase") or "").strip().lower()
+        if phase in excluded_phases:
+            continue
+        if not phase and not row.get("event") and not row.get("event_type"):
+            continue
+        observed_at = _ledger_row_timestamp(row)
+        if observed_at is None or observed_at < cutoff or observed_at > future_tolerance:
+            continue
+        eligible.append((row, observed_at))
+        run_id = str(row.get("run_id") or "").strip()
+        if run_id and observed_at > latest_by_run.get(run_id, cutoff):
+            latest_by_run[run_id] = observed_at
+
+    selected_run_ids = {
+        run_id
+        for run_id, _ in sorted(latest_by_run.items(), key=lambda item: item[1])[
+            -bounded_runs:
+        ]
+    }
+    selected = [
+        row
+        for row, _ in eligible
+        if not str(row.get("run_id") or "").strip()
+        or str(row.get("run_id") or "").strip() in selected_run_ids
+    ]
+    return selected[-bounded_rows:]
 
 
 def loop_lease_path() -> Path:
@@ -1266,11 +1364,8 @@ def should_run_self_maintenance_loop(
 
     evaluation = evaluate_self_maintenance_need()
     runtime_provenance = evaluation.get("runtime_provenance")
-    # force=True is break-glass: allow ops/GHA to run even when the CVM worktree
-    # is dirty or branch/sha provenance cannot be verified.
     if (
-        not force
-        and _env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True)
+        _env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True)
         and isinstance(runtime_provenance, dict)
         and not runtime_provenance.get("ok")
     ):
@@ -5094,6 +5189,85 @@ def _emit_deploy_callback(
         logger.debug("deploy_callback HTTP fallback failed", exc_info=True)
 
 
+def _append_deploy_receipt_event(record: Dict[str, Any]) -> None:
+    """Write the same deployment receipt to loop and governance ledgers."""
+
+    _append_ledger(record)
+    _append_governance_audit(
+        {
+            **record,
+            "kind": str(record.get("event") or "deployment_receipt"),
+        }
+    )
+
+
+def _run_deploy_receipts_after_merge(
+    *,
+    run_id: str,
+    merge_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Run staging receipts only after a concrete pushed merge.
+
+    This path is inert by default. It uses a new switch so a legacy dispatch
+    flag cannot silently activate it. Production requires its own explicit
+    switch and remains gated on a verified staging receipt.
+    """
+
+    if not _env_bool("MODSTORE_SELF_MAINTENANCE_DEPLOY_RECEIPTS_ENABLED", False):
+        return {"enabled": False, "reason": "deploy_receipts_disabled"}
+    if bool(merge_result.get("merge_requested")):
+        return {"enabled": True, "ok": False, "reason": "merge_not_completed"}
+    merge_sha = str(merge_result.get("merge_commit_sha") or "").strip()
+    if not merge_sha:
+        return {"enabled": True, "ok": False, "reason": "merge_sha_missing"}
+
+    repo_root_text = str(os.environ.get("MODSTORE_GIT_REPO_ROOT") or "").strip()
+    deploy_ref = str(
+        os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_REF")
+        or os.environ.get("MODSTORE_PARA_BRANCH")
+        or ""
+    ).strip()
+    try:
+        from modstore_server.self_maintenance_deploy_receipts import (
+            GhActionsDeploymentGateway,
+            run_staged_deployment_chain,
+        )
+
+        gateway = GhActionsDeploymentGateway.from_environment(
+            repo_root=Path(repo_root_text).expanduser(),
+            ref=deploy_ref,
+        )
+        result = run_staged_deployment_chain(
+            gateway=gateway,
+            record_event=_append_deploy_receipt_event,
+            run_id=run_id,
+            merge_sha=merge_sha,
+            allow_production=_env_bool(
+                "MODSTORE_SELF_MAINTENANCE_PRODUCTION_DEPLOY_ENABLED",
+                False,
+            ),
+        )
+        return {"enabled": True, **result}
+    except Exception as exc:  # noqa: BLE001 - setup must fail closed
+        failure = {
+            "event": "deploy_verification_failed",
+            "phase": "deployment",
+            "run_id": run_id,
+            "merge_sha": merge_sha,
+            "environment": "staging",
+            "status": "failed",
+            "ok": False,
+            "reason": "deploy_receipt_setup_failed",
+            "error_type": type(exc).__name__,
+        }
+        _append_deploy_receipt_event(failure)
+        return {
+            "enabled": True,
+            "ok": False,
+            "reason": "deploy_receipt_setup_failed",
+        }
+
+
 def _decide_post_loop_policy(
     *,
     branch: Optional[str],
@@ -5202,20 +5376,20 @@ def _decide_post_loop_policy(
     )
     if merge_result.get("ok"):
         merge_requested = bool(merge_result.get("merge_requested"))
+        deployment_receipt = (
+            {"enabled": False, "reason": "merge_not_completed"}
+            if merge_requested
+            else _run_deploy_receipts_after_merge(
+                run_id=run_id,
+                merge_result=merge_result,
+            )
+        )
         return {
             "action": (
                 "auto_merge_requested_low_risk" if merge_requested else "auto_merged_low_risk"
             ),
             "active_gates": active_gates,
-            "deploy_results": (
-                _dispatch_deploy_for_merge(
-                    run_id=run_id,
-                    branch=branch or "",
-                    environments=_auto_dispatch_deploy_envs(),
-                )
-                if _auto_dispatch_deploy_envs() and branch
-                else []
-            ),
+            "deployment_receipt": deployment_receipt,
             "evolution_gate": evolution_gate,
             "gate": gate,
             "governance_gate": governance_gate,
@@ -5960,6 +6134,53 @@ def cron_trigger_for_self_maintenance() -> CronTrigger:
     return CronTrigger(hour=hour, minute=minute, timezone=timezone_name)
 
 
+def record_self_maintenance_heartbeat(
+    *, triggered_by: str = "scheduler_heartbeat"
+) -> Dict[str, Any]:
+    """Append a side-effect-free liveness receipt for the outer loop.
+
+    The full maintenance loop is intentionally daily and may be held by
+    cooldown or governance.  A separate heartbeat proves the scheduler is
+    still evaluating that gate without pretending code work was performed.
+    """
+
+    evaluation = should_run_self_maintenance_loop(
+        force=False,
+        triggered_by=triggered_by,
+    )
+    provenance = (
+        evaluation.get("runtime_provenance")
+        if isinstance(evaluation.get("runtime_provenance"), dict)
+        else {}
+    )
+    metrics_gate = (
+        evaluation.get("evolution_metrics_gate")
+        if isinstance(evaluation.get("evolution_metrics_gate"), dict)
+        else {}
+    )
+    record = {
+        "created_at": _iso(_utc_now()),
+        "phase": "heartbeat",
+        "run_id": f"heartbeat-{uuid.uuid4().hex[:16]}",
+        "status": (
+            "heartbeat_ready"
+            if evaluation.get("should_run") is True
+            else "heartbeat_idle"
+        ),
+        "triggered_by": str(triggered_by or "scheduler_heartbeat")[:80],
+        "gate": {
+            "should_run": evaluation.get("should_run") is True,
+            "reason": str(evaluation.get("reason") or "")[:160],
+            "runtime_provenance_ok": provenance.get("ok") is True,
+            "evolution_metrics_paused": metrics_gate.get("pause") is True,
+        },
+        "read_only": True,
+        "side_effects": [],
+    }
+    _append_ledger(record)
+    return record
+
+
 def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
     """Return the runtime-consumed self-maintenance loop state.
 
@@ -5969,7 +6190,47 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
     """
 
     bounded_limit = max(1, min(int(limit or 80), 300))
-    rows = _read_ledger(limit=bounded_limit)
+    evidence_scan_limit = max(
+        bounded_limit,
+        max(
+            100,
+            min(
+                _env_int(
+                    "MODSTORE_SELF_MAINTENANCE_EVIDENCE_SCAN_LIMIT",
+                    DEFAULT_EVIDENCE_SCAN_LIMIT,
+                ),
+                20_000,
+            ),
+        ),
+    )
+    ledger_rows = _read_ledger(limit=evidence_scan_limit)
+    rows = ledger_rows[-bounded_limit:]
+    evidence_window_days = max(
+        1,
+        min(
+            _env_int(
+                "MODSTORE_SELF_MAINTENANCE_EVIDENCE_WINDOW_DAYS",
+                DEFAULT_EVIDENCE_WINDOW_DAYS,
+            ),
+            90,
+        ),
+    )
+    evidence_run_limit = max(
+        1,
+        min(
+            _env_int(
+                "MODSTORE_SELF_MAINTENANCE_EVIDENCE_RUN_LIMIT",
+                DEFAULT_EVIDENCE_RUN_LIMIT,
+            ),
+            64,
+        ),
+    )
+    milestone_source_rows = _select_recent_milestone_rows(
+        ledger_rows,
+        window_days=evidence_window_days,
+        run_limit=evidence_run_limit,
+        row_limit=DEFAULT_EVIDENCE_ROW_LIMIT,
+    )
     memory = _load_loop_memory()
     started: Dict[str, Dict[str, Any]] = {}
     terminal: Dict[str, Dict[str, Any]] = {}
@@ -6114,9 +6375,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         run_id = str(row.get("run_id") or "").strip()
         if run_id and run_id not in cur["run_ids"]:
             cur["run_ids"].append(run_id)
-        at = str(
-            row.get("created_at") or row.get("completed_at") or row.get("started_at") or ""
-        ).strip()
+        observed_at = _ledger_row_timestamp(row)
+        at = observed_at.isoformat() if observed_at is not None else ""
         if at and (not cur["latest_at"] or at > str(cur["latest_at"])):
             cur["latest_at"] = at
 
@@ -6195,9 +6455,11 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "status": str(
                 row.get("status") or row.get("action") or row.get("reason") or ""
             ).strip(),
-            "created_at": str(
-                row.get("created_at") or row.get("completed_at") or row.get("started_at") or ""
-            ).strip(),
+            "created_at": (
+                observed_at.isoformat()
+                if (observed_at := _ledger_row_timestamp(row)) is not None
+                else ""
+            ),
             "para_task_id": str(row.get("para_task_id") or "").strip(),
             "branch": str(row.get("branch") or row.get("target_branch") or "").strip(),
             "qa_verdict": str(qa.get("verdict") or "").strip() if qa else "",
@@ -6212,6 +6474,28 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
         }
+
+    def _milestone_item(row: Dict[str, Any]) -> Dict[str, Any]:
+        item = _timeline_item(row)
+        for key in (
+            "action",
+            "deployment_state",
+            "dry_run",
+            "environment",
+            "event",
+            "event_type",
+            "final_status",
+            "identity_verified",
+            "merge_sha",
+            "ok",
+            "triggered_by",
+            "workflow_run_id",
+        ):
+            if key in row:
+                item[key] = row.get(key)
+        return item
+
+    milestone_rows = [_milestone_item(row) for row in milestone_source_rows]
 
     timelines_by_run: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
@@ -6525,7 +6809,16 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             if isinstance(kb_context.get("pattern_hits"), list)
             else []
         )
+        inventory = (
+            kb_context.get("inventory")
+            if isinstance(kb_context.get("inventory"), dict)
+            else {}
+        )
         kb_summary = {
+            "fix_count": int(inventory.get("fix_count") or 0),
+            "pattern_count": int(inventory.get("pattern_count") or 0),
+            "total": int(inventory.get("total") or 0),
+            "invalid_count": int(inventory.get("invalid_count") or 0),
             "kb_root": kb_context.get("kb_root"),
             "engine": kb_search.get("engine"),
             "fix_hit_count": kb_search.get("fix_hit_count", len(fix_hits)),
@@ -6582,9 +6875,13 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         logger.exception("failed to build self-evolution KB runtime summary")
         kb_summary = {
             "error": str(exc)[:500],
+            "fix_count": 0,
             "fix_hit_count": 0,
+            "invalid_count": 0,
+            "pattern_count": 0,
             "pattern_hit_count": 0,
             "redisvl_status": {"ready": False, "error": str(exc)[:300]},
+            "total": 0,
         }
     metrics_gate = {}
     try:
@@ -6605,6 +6902,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         "pause": bool(metrics_gate.get("pause")),
         "reason": metrics_gate.get("reason"),
         "history_count": metrics_gate.get("history_count"),
+        "raw_history_count": metrics_gate.get("raw_history_count"),
+        "verified_history_count": metrics_gate.get("verified_history_count"),
         "metrics_path": metrics_gate.get("metrics_path"),
         "windows": metric_windows[-2:],
     }
@@ -6902,11 +7201,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
 
     ui_bridge = _ui_bridge_summary()
     generated_at = datetime.now(timezone.utc).isoformat()
-    latest_event_at = (
-        rows[-1].get("created_at") or rows[-1].get("updated_at") or rows[-1].get("at")
-        if rows
-        else None
-    )
+    latest_timestamp = _ledger_row_timestamp(rows[-1]) if rows else None
+    latest_event_at = latest_timestamp.isoformat() if latest_timestamp is not None else None
     runtime_source = {
         "name": "self_maintenance_loop_runner",
         "runtime": "MODstore",
@@ -7326,6 +7622,15 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "latest_skip": latest_skip,
             "open_run_ids": open_run_ids,
             "recent_rows": rows[-20:],
+            "milestone_rows": milestone_rows,
+            "milestone_window": {
+                "window_days": evidence_window_days,
+                "scan_limit": evidence_scan_limit,
+                "run_limit": evidence_run_limit,
+                "row_limit": DEFAULT_EVIDENCE_ROW_LIMIT,
+                "selected_rows": len(milestone_rows),
+                "policy": "recent_meaningful_runs_excluding_heartbeat_skip_and_kb_salvage",
+            },
             "steps_by_open_run": {run_id: steps_by_run.get(run_id, []) for run_id in open_run_ids},
         },
         "participants": sorted(
@@ -7395,6 +7700,7 @@ __all__ = [
     "cron_trigger_for_self_maintenance",
     "evaluate_self_maintenance_need",
     "get_self_maintenance_runtime_status",
+    "record_self_maintenance_heartbeat",
     "ledger_path",
     "loop_memory_path",
     "reconcile_stale_self_maintenance_runs",

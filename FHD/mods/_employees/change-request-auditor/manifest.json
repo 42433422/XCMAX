@@ -1,9 +1,9 @@
 {
   "id": "change-request-auditor",
   "name": "变更评审员",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "author": "admin",
-  "description": "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。",
+  "description": "以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -20,19 +20,27 @@
       {
         "label": "skill-risk-gate",
         "description": ""
+      },
+      {
+        "label": "strategic-council-review",
+        "description": "生成可校验的 Persy + Para + Retort 战略委员会回执"
+      },
+      {
+        "label": "intent-alignment",
+        "description": "用 Retort 引擎验证变更与战略意图的一致性"
       }
     ]
   },
   "employee_config_v2": {
     "identity": {
       "id": "change-request-auditor",
-      "version": "1.0.0",
+      "version": "1.1.2",
       "artifact": "employee_pack",
       "name": "变更评审员",
-      "description": "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。",
+      "description": "以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。",
       "owner": "admin",
       "area": "platform-core",
-      "domain": "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。"
+      "domain": "战略变更审查、意图对齐、Goal/Loop 关联和 veto 门禁"
     },
     "perception": {
       "type": "text"
@@ -42,14 +50,17 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是变更评审员。你的职责是：对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。。\n工作时先判断用户目标和可用上下文，只使用输入中给出的事实与工具结果；信息不足时先说明缺口并给出可继续推进的最小问题。\n输出应直接服务任务：先给结论或执行结果，再给必要依据、步骤和下一步建议。不得编造来源、数据、执行结果或不存在的系统能力。",
+        "system_prompt": "你是变更评审员。Persy 提供事实，Para 提供 Goal/Loop 执行关联，Retort 负责反问变更是否真的符合战略意图。任何 veto、缺证据或意图不一致都必须阻止部署；不得编造回执或外部执行结果。",
         "role": {
           "name": "变更评审员",
-          "persona": "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。",
+          "persona": "以三席战略委员会证据失败关闭地审查能力变更。",
           "tone": "professional",
           "expertise": [
             "skill-static-audit",
-            "skill-risk-gate"
+          "skill-risk-gate"
+          ,
+          "strategic-council-review",
+          "intent-alignment"
           ]
         },
         "behavior_rules": [
@@ -75,6 +86,14 @@
         {
           "name": "skill-risk-gate",
           "brief": "skill-risk-gate：服务于本岗位职责的结构化输出与校验。"
+        },
+        {
+          "name": "strategic-council-review",
+          "brief": "校验 Persy 事实、Para Goal/Loop、Retort 对齐和 veto 后生成内容寻址回执。"
+        },
+        {
+          "name": "intent-alignment",
+          "brief": "调用 Retort 引擎，以变更路径和新增内容反证战略意图是否匹配。"
         }
       ]
     },
@@ -91,20 +110,18 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo",
-        "agent"
+        "direct_python"
       ],
-      "agent": {
-        "workspace": {
-          "read_only": false,
-          "requires_project_root": true
-        }
+      "direct_python": {
+        "module": "change_request_auditor",
+        "action": "review"
       }
     },
     "metadata": {
       "framework_version": "2.0.0",
-      "created_by": "employee_ai_scaffold"
+      "created_by": "employee_ai_scaffold",
+      "evolution_source": "founder-autonomy-strategic-council-v2",
+      "fail_closed": true
     },
     "workspace_policy": {
       "scope_globs": [
@@ -129,7 +146,7 @@
       "id": "change-request-auditor",
       "label": "变更评审员",
       "panel_title": "变更评审员",
-      "panel_summary": "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。",
+      "panel_summary": "以 Persy、Para、Retort 和 veto 的可校验证据审查能力变更。",
       "api_base_path": "employees/change-request-auditor"
     }
   ],

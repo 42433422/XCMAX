@@ -32,7 +32,9 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert script.index('migrate_env_file "$ENV_FILE"') < script.index(
         "import fastapi, uvicorn, modstore_server.app"
     )
-    assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    assert (
+        'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    )
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
@@ -44,21 +46,51 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "/usr/lib/jvm/java-17-*" in script
     assert 'PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"' in script
     assert "ExecStart=${PAYMENT_JAVA_BIN} -jar" in script
+    assert "verify_payment_identity" in script
+    assert "/actuator/info" in script
+    assert "MODSTORE_RELEASE_ARTIFACT_SHA256" in script
+    assert "verify_customer_value_reconciler" in script
+    assert "customer value reconciler did not prove" in script
+    payment_restart = script.index(
+        "systemctl restart modstore-payment.service",
+        script.index('ln -s "$FINAL_ROOT"'),
+    )
+    python_restart = script.index(
+        "systemctl restart modstore.service modstore-scheduler.service",
+        script.index('ln -s "$FINAL_ROOT"'),
+    )
+    assert payment_restart < python_restart
     assert script.index(
         "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
     ) < script.index("mvn -B -q -DskipTests package")
 
-    source_ci = yaml.safe_load((ROOT / ".github/workflows/ci-backend-python.yml").read_text())
+    source_ci = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-backend-python.yml").read_text()
+    )
     published_ci = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/modstore-ci-backend-python.yml").read_text()
     )
     source_java_job = source_ci["jobs"]["java-payment-test"]
     published_java_job = published_ci["jobs"]["java-payment-test"]
-    assert source_java_job["defaults"]["run"]["working-directory"] == "java_payment_service"
+    assert (
+        source_java_job["defaults"]["run"]["working-directory"]
+        == "java_payment_service"
+    )
     assert published_java_job["defaults"]["run"]["working-directory"] == (
         "成都修茈科技有限公司/MODstore_deploy/java_payment_service"
     )
-    assert any(step.get("run") == "mvn -B test package" for step in source_java_job["steps"])
+    assert any(
+        step.get("run") == "mvn -B test package" for step in source_java_job["steps"]
+    )
+
+    payment_config = yaml.safe_load(
+        (ROOT / "java_payment_service/src/main/resources/application.yml").read_text()
+    )
+    assert payment_config["management"]["info"]["env"]["enabled"] is True
+    assert payment_config["info"]["xcmax"]["git-sha"] == "${MODSTORE_GIT_SHA:}"
+    assert payment_config["info"]["xcmax"]["artifact-sha256"] == (
+        "${MODSTORE_RELEASE_ARTIFACT_SHA256:}"
+    )
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
@@ -78,9 +110,13 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
         assert "reset --hard" not in rendered
 
 
-def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
+def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> (
+    None
+):
     updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
-    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(
+        encoding="utf-8"
+    )
 
     canonical_vhost = "/etc/nginx/conf.d/xiu-ci.com.conf"
     assert canonical_vhost in updater
