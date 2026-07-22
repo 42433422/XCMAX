@@ -60,7 +60,7 @@
       </section>
 
       <section class="quick-links" aria-label="创始人控制面入口">
-        <router-link :to="{ name: 'approval-hub' }">
+        <router-link :to="{ name: 'autonomy-approval-hub' }">
           <i class="fa fa-check-square-o" aria-hidden="true"></i>
           <span><strong>审批中心</strong><small>少量例外与 veto</small></span>
         </router-link>
@@ -286,8 +286,9 @@ function formatDate(value: unknown): string {
 }
 
 function attentionRoute(item: Record<string, any>) {
+  const requestedName = String(item.route || 'founder-autonomy')
   return {
-    name: String(item.route || 'founder-autonomy'),
+    name: requestedName === 'approval-hub' ? 'autonomy-approval-hub' : requestedName,
     query: item.query && typeof item.query === 'object' ? item.query : undefined,
   }
 }
