@@ -2,7 +2,7 @@
 
 ## 一句话职责
 
-负责全员工 LLM 资源管理：API key 健康检查与轮换建议、token 用量计量与成本追踪、模型选型与路由策略、provider 故障切换建议、便宜/免费 LLM 调研。维护 `app/infrastructure/llm/` 与 `mod_employee_llm.py`，只读 `.env` 不直接改 key（key 轮换经 admin 审批，与 `security-secrets-guard` 协作）。
+负责全员工 LLM 资源管理：API key 健康检查、真实额度与 token/成本追踪、模型选型，以及后台周期巡检、主动切换和回滚平台 AI 员工运行时模型。密钥仍只读且始终脱敏；路由切换必须通过额度、目录和真实探活校验，切换后复验并写入审计历史。
 
 ## 来源
 
@@ -17,16 +17,23 @@
 | `app/application/employee_runtime/agent_runner.py` | 员工 agent 运行时，影响 token 计量 |
 | `app/legacy/llm_config*` | 旧版 LLM 配置兼容层 |
 | `MODstore_deploy/modstore_server/llm_key_resolver.py` | 后端 key 解析与轮换 |
+| `MODstore_deploy/modstore_server/llm_catalog.py` | 供应商模型与原生能力元数据动态目录 |
+| `MODstore_deploy/modstore_server/llm_model_taxonomy.py` | 跨供应商模态、操作能力与推断来源归一化 |
+| `MODstore_deploy/modstore_server/llm_runtime_route.py` | 平台 AI 员工运行时切换、探活、审计和回滚 |
 | `MODstore_deploy/modstore_server/llm_billing.py` | 后端 LLM 计费账本 |
 | `MODstore_deploy/docs/runbooks/llm-ops-*.md` | LLM 运维 Runbook |
 
-## 五大职责
+## 九大职责
 
 1. **API key 健康检查**：定期 ping 各 provider，检测失效/限额/欠费，生成 key 健康报告。
 2. **Token 用量计量**：统计各员工/各模型/各时段的 token 消耗，识别烧钱大户与异常突增。
 3. **模型成本对比**：维护主流 LLM 价格表（DeepSeek/通义/智谱/硅基流动/OpenAI/Claude/Ollama 本地），按任务类型推荐性价比方案。
-4. **Provider 故障切换建议**：当主 provider 不可用时，按预设优先级推荐备选（如 DeepSeek → 通义 → Ollama 本地）。
+4. **Provider 故障主动切换**：当主 provider 不可用时，在目录校验和探活成功后直接切换运行时路由。
 5. **模型路由策略**：按员工任务复杂度建议模型分配（简单任务用便宜模型，复杂推理用强模型，离线场景用 Ollama）。
+6. **路由审计与回滚**：记录切换人、原因、前后路由和探活结果，支持一键回滚。
+7. **模型能力发现**：动态读取供应商模态、任务类型和上下文限制；上游未提供时再用版本化规则推断，并显式标注来源。
+8. **CLI 兜底**：检查 Codex、Cursor、Claude、Trae 的安装、版本与真实回答；平台 API 失败时在隔离临时目录中以只读方式顺序兜底。
+9. **额度与自动驾驶闭环**：优先读取供应商精确剩余额度；无公开接口时标记 usage_only/unknown 并用真实调用探测。后台每 5 分钟巡检，额度耗尽或探活失败时自动切换，切换后复验，失败自动回滚。
 
 ## KPI
 
@@ -51,7 +58,7 @@
   - `daily-orchestrator` 遇 LLM 调用类错误 → `escalate` 到本岗诊断 provider 状态。
 - 下游：
   - 提交的 key 轮换建议必须由 admin 审批后由 `security-secrets-guard` 落地写 `.env`。
-  - 模型路由策略变更由 `modstore-backend-api` 在 `llm_key_resolver.py` 中落地。
+  - 常规模型路由变更通过运行时路由存储立即生效，不再修改 `.env` 或 `llm_key_resolver.py`。
   - 成本数据由 `dbops-engineer` 协助落库到 `llm_billing` 表。
 
 ## 入职动作（onboard 完成前必做）

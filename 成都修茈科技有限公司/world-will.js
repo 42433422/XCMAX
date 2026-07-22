@@ -290,7 +290,7 @@
             esc(f.presence || 'idle') +
             '">' +
             '<a href="' +
-            esc(f.href || '/download/breakpoints') +
+            esc(f.href || '/world-will') +
             '">' +
             '<time' +
             (stamp.datetime ? ' datetime="' + esc(stamp.datetime) + '"' : '') +
@@ -323,7 +323,6 @@
 
   function renderBoardLists(data) {
     var board = data.board || {}
-    var bpEl = document.getElementById('hall-breakpoints')
     var gEl = document.getElementById('hall-goals')
     var day = data.day || '—'
     var last = data.last_activity
@@ -363,8 +362,57 @@
         .join('')
     }
 
-    listOrEmpty(bpEl, board.breakpoints || [], '今日暂无公开断点')
     listOrEmpty(gEl, board.goals || [], '今日暂无公开工作目标')
+  }
+
+  function renderAiDriver(data) {
+    var el = document.getElementById('hall-ai-driver')
+    if (!el) return
+    var driver = data.ai_driver || {}
+    var quota = driver.quota || {}
+    var state = driver.state || 'standby'
+    var provider = driver.provider || '待选择'
+    var model = driver.model || '暂无可用模型'
+    var remaining = quota.remaining_percent
+    var quotaText = '额度未知'
+    if (remaining !== null && remaining !== undefined && remaining !== '') {
+      quotaText = esc(remaining) + '%'
+    } else if (quota.state === 'healthy') {
+      quotaText = '正常'
+    } else if (quota.state === 'warning') {
+      quotaText = '预警'
+    } else if (quota.state === 'exhausted') {
+      quotaText = '已耗尽'
+    }
+    var stateClass = state === 'degraded' ? ' is-degraded' : state === 'driving' ? '' : ' is-standby'
+    var checked = driver.last_checked_at ? fmtGen(driver.last_checked_at) : '尚无巡检时间'
+
+    el.innerHTML =
+      '<div class="ai-driver-card">' +
+      '<div class="ai-driver-top"><div class="ai-driver-person">' +
+      '<span class="ai-driver-avatar" aria-hidden="true">LLM</span><div><strong>' +
+      esc(driver.name || 'LLM 运维工程师') +
+      '</strong><span>' +
+      esc(driver.employee_id || 'llm-ops-engineer') +
+      '</span></div></div><span class="ai-driver-state' +
+      stateClass +
+      '">' +
+      esc(driver.state_label || '待启动') +
+      '</span></div>' +
+      '<div class="ai-driver-route"><div><small>当前平台路由</small><strong>' +
+      esc(provider) +
+      ' · ' +
+      esc(model) +
+      '</strong></div><div class="ai-driver-quota"><small>' +
+      esc(quota.visibility === 'exact' ? '精确可用额度' : '额度状态') +
+      '</small><strong>' +
+      quotaText +
+      '</strong></div></div>' +
+      '<p class="ai-driver-foot">' +
+      esc(driver.last_action_label || '尚无巡检记录') +
+      ' · 最近检查 ' +
+      esc(checked) +
+      '</p></div>'
   }
 
   function renderReport(data) {
@@ -373,6 +421,7 @@
     var c = data.counts || {}
     var r = data.report || {}
     var b = data.board || {}
+    var driver = data.ai_driver || {}
     var busiest = r.busiest_dept || {}
     var mvp = r.mvp || {}
     var pm = data.presence_model || {}
@@ -392,9 +441,9 @@
       '"><strong>' +
       esc(c.idle || 0) +
       '</strong><span>编制待命</span></div>' +
-      '<div><strong>' +
-      esc(b.breakpoints_total || 0) +
-      '</strong><span>断点</span></div>' +
+      '<div><strong class="hall-report-driver">' +
+      esc(driver.state_label || '待启动') +
+      '</strong><span>AI 驾驶</span></div>' +
       '<div><strong>' +
       esc(b.goals_total || 0) +
       '</strong><span>工作目标</span></div>' +
@@ -481,6 +530,7 @@
     renderDepartments(data.departments || [])
     renderFeed(data)
     renderBoardLists(data)
+    renderAiDriver(data)
     renderReport(data)
   }
 
@@ -495,20 +545,32 @@
       counts: { roster: 0, working: 0, alert: 0, idle: 0 },
       departments: [],
       feed: [],
+      ai_driver: { state: 'standby', state_label: '待启动', quota: {} },
       board: { breakpoints: [], goals: [] },
       report: {},
       presence_model: {},
     })
   }
 
-  fetch('/download-company-hall.json', { cache: 'no-store' })
-    .then(function (res) {
+  function fetchHall(url, wrapped) {
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
       if (!res.ok) throw new Error('hall ' + res.status)
       return res.json()
+    }).then(function (payload) {
+      if (!wrapped) return payload
+      if (!payload || payload.ok !== true || !payload.data) throw new Error('live hall unavailable')
+      return payload.data
+    })
+  }
+
+  function loadHall() {
+    return fetchHall('/api/public/company-hall', true)
+    .catch(function () {
+      return fetchHall('/download-company-hall.json', false)
     })
     .then(render)
     .catch(function () {
-      fetch('/download-action-board.json', { cache: 'no-store' })
+      return fetch('/download-action-board.json', { cache: 'no-store' })
         .then(function (res) {
           if (!res.ok) throw new Error('board')
           return res.json()
@@ -534,6 +596,14 @@
               idle: 0,
             },
             departments: [],
+            ai_driver: {
+              employee_id: 'llm-ops-engineer',
+              name: 'LLM 运维工程师',
+              state: 'standby',
+              state_label: '状态未知',
+              last_action_label: '大厅投影回退到行动板，不推测驾驶状态',
+              quota: {},
+            },
             feed: traj.map(function (t) {
               return {
                 ts: t.ts,
@@ -573,4 +643,8 @@
           bootEmpty('公开大厅暂不可用（未造假数据）。')
         })
     })
+  }
+
+  loadHall()
+  window.setInterval(loadHall, 60000)
 })()

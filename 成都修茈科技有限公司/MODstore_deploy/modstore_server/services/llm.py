@@ -189,7 +189,8 @@ _BENCH_DEFAULT_MODELS: dict[str, str] = {
     "moonshot": "moonshot-v1-8k",
     # 小米网关型号以控制台为准；flash 在部分 token 计划不可用，基准默认与别名统一到 v2.5-pro
     "xiaomi": "mimo-v2.5-pro",
-    "minimax": "abab6.5s-chat",
+    # MiniMax OpenAI-compatible API current general agent model.
+    "minimax": "MiniMax-M2.7",
     "doubao": "doubao-1-5-lite-32k-240828",
     "wenxin": "ernie-4.0-turbo-8k",
     "hunyuan": "hunyuan-lite",
@@ -209,8 +210,9 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
     """Resolve provider + model for bench evaluation using platform keys only.
 
     Priority:
-    1. Env ``MODSTORE_EMPLOYEE_BENCH_PROVIDER`` + ``MODSTORE_EMPLOYEE_BENCH_MODEL``
-    2. First ``KNOWN_PROVIDERS`` entry with a ``platform_api_key`` configured,
+    1. Runtime route selected from the canonical platform model catalog
+    2. Env ``MODSTORE_EMPLOYEE_BENCH_PROVIDER`` + ``MODSTORE_EMPLOYEE_BENCH_MODEL``
+    3. First ``KNOWN_PROVIDERS`` entry with a ``platform_api_key`` configured,
        paired with the ``_BENCH_DEFAULT_MODELS`` fallback for that provider.
 
     Returns ``(provider, model)`` or ``(None, None)`` when no platform key is
@@ -219,6 +221,21 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
     import os
 
     from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, platform_api_key
+
+    # Runtime route is persisted under MODSTORE_RUNTIME_DIR and read on every
+    # resolution, so all API/scheduler workers observe an operator or
+    # llm-ops-engineer switch without process restart.
+    try:
+        from modstore_server.llm_runtime_route import current_runtime_route
+
+        runtime = current_runtime_route()
+    except Exception:
+        runtime = None
+    if runtime:
+        runtime_prov = str(runtime.get("provider") or "").strip()
+        runtime_model = str(runtime.get("model") or "").strip()
+        if runtime_prov in KNOWN_PROVIDERS and runtime_model and platform_api_key(runtime_prov):
+            return runtime_prov, runtime_model
 
     env_prov = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_PROVIDER") or "").strip()
     env_mdl = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_MODEL") or "").strip()

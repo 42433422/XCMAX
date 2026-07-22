@@ -72,7 +72,6 @@ from modstore_server.models import (
     AiModelPrice,
     ChatConversation,
     ChatMessage,
-    LlmBillingSettings,
     LlmCallLog,
     User,
     UserLlmCredential,
@@ -125,7 +124,7 @@ async def resolve_default_llm_route(db: Session, user_id: int) -> dict[str, Any]
 
     async def first_model_id(provider: str) -> str:
         block = await get_models_for_provider(db, uid, provider, force_refresh=False)
-        mids = list(block.get("models") or [])
+        mids = list(block.get("runtime_models") or block.get("models") or [])
         return str(mids[0]).strip() if mids else ""
 
     if pref_p in KNOWN_PROVIDERS and pref_m and pref_p in keys:
@@ -300,7 +299,7 @@ def _active_plan_id(db: Session, user_id: int) -> str:
 
     row = (
         db.query(UserPlan)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active == True)
+        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
         .order_by(UserPlan.id.desc())
         .first()
     )
@@ -401,6 +400,7 @@ async def _fetch_catalog_provider_block(
         "label": labels.get(provider, provider),
         "models": [],
         "models_detailed": [],
+        "runtime_models": [],
         "media_counts": media_counts_from_detailed([]),
         "supports_openai_images": provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
         "fetched_at": None,
@@ -414,11 +414,14 @@ async def _fetch_catalog_provider_block(
                 timeout=_CATALOG_PROVIDER_TIMEOUT_SEC,
             )
         mids: List[str] = list(block.get("models") or [])
-        detailed = build_models_detailed(provider, mids)
+        detailed = list(block.get("models_detailed") or [])
+        if not detailed:
+            detailed = build_models_detailed(provider, mids)
         return {
             **empty,
             "models": mids,
             "models_detailed": detailed,
+            "runtime_models": list(block.get("runtime_models") or []),
             "media_counts": media_counts_from_detailed(detailed),
             "supports_openai_images": provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
             "fetched_at": block.get("fetched_at"),
@@ -484,6 +487,126 @@ async def llm_catalog(
         },
         "billing_settings": settings,
     }
+
+
+class PlatformRuntimeRouteDTO(BaseModel):
+    provider: str = Field(..., min_length=2, max_length=64)
+    model: str = Field(..., min_length=1, max_length=256)
+    reason: str = Field("", max_length=1000)
+    refresh_catalog: bool = False
+    force: bool = False
+
+
+class PlatformRuntimeRollbackDTO(BaseModel):
+    reason: str = Field("", max_length=1000)
+    force: bool = False
+
+
+@router.get("/admin/runtime-route")
+async def get_platform_runtime_route(
+    admin: User = Depends(_require_admin),
+):
+    """Current platform-funded AI employee route plus effective fallback."""
+
+    from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, platform_api_key
+    from modstore_server.llm_runtime_route import read_runtime_route_state, rollback_target
+    from modstore_server.services.llm import resolve_platform_bench_llm
+
+    provider, model = resolve_platform_bench_llm()
+    return {
+        "ok": True,
+        "scope": "platform_ai_employees",
+        "state": read_runtime_route_state(),
+        "effective": {"provider": provider, "model": model},
+        "configured_providers": [p for p in KNOWN_PROVIDERS if platform_api_key(p)],
+        "rollback": rollback_target(),
+        "actor": f"admin:{admin.id}",
+    }
+
+
+@router.get("/admin/runtime-route/catalog")
+async def get_platform_runtime_route_catalog(
+    provider: Optional[str] = Query(None, max_length=64),
+    refresh: int = Query(0, ge=0, le=1),
+    admin: User = Depends(_require_admin),
+):
+    """Selectable models from the same source as ``GET /api/llm/catalog``."""
+
+    from modstore_server.llm_runtime_route import platform_model_catalog
+
+    _ = admin
+    result = await platform_model_catalog(provider, refresh=bool(refresh))
+    if not result.get("ok"):
+        raise HTTPException(400, str(result.get("error") or "catalog failed"))
+    return result
+
+
+@router.get("/admin/runtime-route/quota")
+async def get_platform_runtime_route_quota(
+    live_probe: int = Query(0, ge=0, le=1),
+    admin: User = Depends(_require_admin),
+):
+    """Secret-safe provider quota and usage status for the admin control plane."""
+
+    from modstore_server.llm_quota_monitor import platform_quota_snapshot
+
+    result = await platform_quota_snapshot(live_probe=bool(live_probe))
+    result["scope"] = "platform_ai_employees"
+    result["actor"] = f"admin:{admin.id}"
+    return result
+
+
+@router.get("/admin/runtime-route/autopilot")
+async def get_platform_runtime_route_autopilot(
+    admin: User = Depends(_require_admin),
+):
+    """Read-only autopilot policy and latest decision receipt."""
+
+    from modstore_server.llm_runtime_autopilot import autopilot_status
+
+    result = autopilot_status()
+    result["scope"] = "platform_ai_employees"
+    result["actor"] = f"admin:{admin.id}"
+    return result
+
+
+@router.put("/admin/runtime-route")
+async def put_platform_runtime_route(
+    body: PlatformRuntimeRouteDTO,
+    admin: User = Depends(_require_admin),
+):
+    """Health-check and atomically switch the next platform employee LLM call."""
+
+    from modstore_server.llm_runtime_route import switch_runtime_route
+
+    result = await switch_runtime_route(
+        body.provider,
+        body.model,
+        actor=f"admin:{admin.id}",
+        reason=body.reason,
+        refresh_catalog=body.refresh_catalog,
+        force=body.force,
+    )
+    if not result.get("ok"):
+        raise HTTPException(400, detail=result)
+    return result
+
+
+@router.post("/admin/runtime-route/rollback")
+async def post_platform_runtime_route_rollback(
+    body: PlatformRuntimeRollbackDTO,
+    admin: User = Depends(_require_admin),
+):
+    from modstore_server.llm_runtime_route import rollback_runtime_route
+
+    result = await rollback_runtime_route(
+        actor=f"admin:{admin.id}",
+        reason=body.reason,
+        force=body.force,
+    )
+    if not result.get("ok"):
+        raise HTTPException(400, detail=result)
+    return result
 
 
 class LlmCredentialDTO(BaseModel):
@@ -692,7 +815,7 @@ async def llm_pricing(
     user: User = Depends(_get_current_user),
 ):
     settings = billing_settings_dict(db)
-    rows = db.query(AiModelPrice).filter(AiModelPrice.enabled == True).all()
+    rows = db.query(AiModelPrice).filter(AiModelPrice.enabled.is_(True)).all()
     return {
         **settings,
         "items": [

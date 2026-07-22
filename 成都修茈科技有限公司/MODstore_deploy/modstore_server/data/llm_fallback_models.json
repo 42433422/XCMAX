@@ -7,6 +7,10 @@
     {"model": "qwen-plus", "display": "通义千问 Plus", "max_tokens": 8192},
     {"model": "qwen-turbo", "display": "通义千问 Turbo", "max_tokens": 8192}
   ],
+  "minimax": [
+    {"model": "MiniMax-M2.7", "display": "MiniMax M2.7", "type": "chat"},
+    {"model": "MiniMax-M2.7-highspeed", "display": "MiniMax M2.7 Highspeed", "type": "chat"}
+  ],
   "wenxin": [
     {"model": "ernie-4.0-8k", "display": "文心一言 4.0", "max_tokens": 4096},
     {"model": "ernie-3.5-8k", "display": "文心一言 3.5", "max_tokens": 4096}

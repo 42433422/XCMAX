@@ -90,6 +90,30 @@ def test_agent_runner_one_tool_then_answer(tmp_path):
     assert tc["result"]["ok"] is True
 
 
+def test_agent_runner_parses_tool_call_after_reasoning_wrapper(tmp_path):
+    """MiniMax-style think blocks must not hide the ReAct protocol object."""
+    from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner
+
+    ctx = _make_ctx(
+        [
+            (
+                "<think>I should inspect {an example object} first.</think>\n"
+                '{"thought":"inspect","tool":"list_workspace_dir","input":{"path":"."}}'
+            ),
+            (
+                "<think>The directory was observed.</think>\n"
+                '{"thought":"done","answer":"workspace inspected"}'
+            ),
+        ],
+        str(tmp_path),
+    )
+    result = asyncio.run(EmployeeAgentRunner(ctx).run("inspect workspace"))
+
+    assert result["ok"] is True
+    assert result["summary"] == "workspace inspected"
+    assert [row["tool"] for row in result["tool_calls"]] == ["list_workspace_dir"]
+
+
 def test_agent_runner_read_and_write(tmp_path):
     """LLM reads a file then writes a new file."""
     from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner

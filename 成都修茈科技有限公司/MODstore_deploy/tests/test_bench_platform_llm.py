@@ -91,6 +91,22 @@ def test_resolve_platform_bench_llm_xiaomi_uses_current_default_model(monkeypatc
     assert mdl == "mimo-v2.5-pro"
 
 
+def test_resolve_platform_bench_llm_minimax_uses_current_default_model(monkeypatch):
+    monkeypatch.delenv("MODSTORE_EMPLOYEE_BENCH_PROVIDER", raising=False)
+    monkeypatch.delenv("MODSTORE_EMPLOYEE_BENCH_MODEL", raising=False)
+
+    def _fake_platform_key(provider: str):
+        return "sk-test" if provider == "minimax" else None
+
+    with patch("modstore_server.llm_key_resolver.platform_api_key", side_effect=_fake_platform_key):
+        from modstore_server.services.llm import resolve_platform_bench_llm
+
+        prov, mdl = resolve_platform_bench_llm()
+
+    assert prov == "minimax"
+    assert mdl == "MiniMax-M2.7"
+
+
 def test_xiaomi_legacy_7b_model_alias_maps_to_pro():
     from modstore_server.llm_chat_proxy import normalize_model
 
@@ -100,6 +116,12 @@ def test_xiaomi_legacy_7b_model_alias_maps_to_pro():
     assert normalize_model("xiaomi", "mimo-v2-omni") == "mimo-v2.5"
     assert normalize_model("xiaomi", "mimo-v2-pro") == "mimo-v2.5-pro"
     assert normalize_model("xiaomi", "mimo-v2-tts") == "mimo-v2.5-tts"
+
+
+def test_minimax_legacy_model_alias_maps_to_current_agent_model():
+    from modstore_server.llm_chat_proxy import normalize_model
+
+    assert normalize_model("minimax", "abab6.5s-chat") == "MiniMax-M2.7"
 
 
 def test_dimensions_still_open():
@@ -316,6 +338,7 @@ async def test_run_and_score_bench_passes_override_to_single_task():
 
     with (
         patch("modstore_server.employee_bench._run_single_task", side_effect=fake_run_single_task),
+        patch("modstore_server.employee_bench._read_employee_brief", return_value=("", "")),
         patch(
             "modstore_server.employee_bench._run_five_dim_audit",
             new=AsyncMock(return_value=fake_audit),
