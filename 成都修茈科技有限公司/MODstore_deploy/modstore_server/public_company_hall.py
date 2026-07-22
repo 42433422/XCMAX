@@ -120,6 +120,99 @@ def _sort_feed(feed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(feed, key=_feed_sort_key, reverse=True)
 
 
+def _public_ai_driver_snapshot() -> Dict[str, Any]:
+    """Build a secret-safe public view of the active platform LLM driver."""
+    driver: Dict[str, Any] = {
+        "employee_id": "llm-ops-engineer",
+        "name": "LLM 运维工程师",
+        "enabled": False,
+        "state": "standby",
+        "state_label": "待启动",
+        "provider": "",
+        "model": "",
+        "route_source": "unavailable",
+        "last_action": "",
+        "last_action_label": "尚无巡检记录",
+        "last_checked_at": None,
+        "quota": {
+            "state": "unknown",
+            "visibility": "unknown",
+            "remaining_percent": None,
+        },
+    }
+
+    runtime_route: Optional[Dict[str, Any]] = None
+    try:
+        from modstore_server.llm_runtime_route import current_runtime_route
+        from modstore_server.services.llm import resolve_platform_bench_llm
+
+        runtime_route = current_runtime_route()
+        provider, model = resolve_platform_bench_llm()
+        driver["provider"] = _clean(str(provider or ""), 48)
+        driver["model"] = _clean(str(model or ""), 96)
+        driver["route_source"] = "runtime_route" if runtime_route else "platform_default"
+    except Exception:
+        logger.exception("company_hall: resolve public AI driver route failed")
+
+    try:
+        from modstore_server.llm_runtime_autopilot import autopilot_status
+
+        status = autopilot_status()
+        enabled = bool(status.get("enabled"))
+        last = status.get("last_run") if isinstance(status.get("last_run"), dict) else {}
+        action = str(last.get("action") or "").strip()
+        driver["enabled"] = enabled
+        driver["last_action"] = _clean(action, 48)
+        driver["last_checked_at"] = _iso(
+            last.get("checked_at")
+            or ((runtime_route or {}).get("switched_at") if runtime_route else None)
+        )
+
+        action_labels = {
+            "kept": "当前路由健康，继续驾驶",
+            "switched": "已自动切换并复验",
+            "kept_warning": "检测到限流，保持并继续观察",
+            "observed_unhealthy": "检测异常，正在连续确认",
+            "concurrent_change_detected": "检测到管理员切换，已避让",
+            "degraded_no_candidate": "API 路由降级，CLI 兜底待命",
+            "observation_failed": "巡检未完成",
+            "switch_failed": "自动切换失败",
+            "rolled_back": "新路由复验失败，已回滚",
+            "rollback_failed": "回滚异常，需要人工介入",
+            "disabled": "自动驾驶未启用",
+        }
+        driver["last_action_label"] = action_labels.get(
+            action, "已记录最近一次自动巡检" if action else "尚无巡检记录"
+        )
+
+        degraded_actions = {
+            "degraded_no_candidate",
+            "observation_failed",
+            "switch_failed",
+            "rolled_back",
+            "rollback_failed",
+        }
+        if enabled and action in degraded_actions:
+            driver["state"] = "degraded"
+            driver["state_label"] = "降级巡检"
+        elif enabled:
+            driver["state"] = "driving"
+            driver["state_label"] = "自动驾驶中"
+
+        quota_rows = last.get("quota") if isinstance(last.get("quota"), dict) else {}
+        quota = quota_rows.get(driver["provider"])
+        if isinstance(quota, dict):
+            driver["quota"] = {
+                "state": _clean(str(quota.get("state") or "unknown"), 24),
+                "visibility": _clean(str(quota.get("visibility") or "unknown"), 24),
+                "remaining_percent": quota.get("remaining_percent"),
+            }
+    except Exception:
+        logger.exception("company_hall: resolve public AI driver status failed")
+
+    return driver
+
+
 def _dept_members() -> Dict[str, List[str]]:
     from modstore_server.duty_roster import SIX_LINE_DEPARTMENTS
 
@@ -566,6 +659,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         "counts": counts,
         "departments": departments,
         "employees": employees,
+        "ai_driver": _public_ai_driver_snapshot(),
         "feed": feed,
         "last_activity": last_activity,
         "board": {

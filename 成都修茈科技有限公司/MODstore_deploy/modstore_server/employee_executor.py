@@ -693,6 +693,29 @@ async def _cognition_real(
         except Exception:
             pass
 
+    # 平台出资的后台员工统一由 LLM 运维工程师驾驶。这里覆盖历史包、
+    # 数据库快照中仍写死的 provider/model，使运行时路由切换能立即对所有
+    # user_id=0 的定时/自治员工生效。正数 user_id 仍保留用户 BYOK 与显式模型语义。
+    if not bench_llm_override and int(user_id or 0) <= 0:
+        from modstore_server.services.llm import resolve_platform_bench_llm
+
+        _pp, _pm = resolve_platform_bench_llm()
+        if not _pp or not _pm:
+            return {
+                "reasoning": "",
+                "error": (
+                    "平台自动驾驶选择模型失败：未配置可用 LLM（请配置平台 API Key "
+                    "或 MODSTORE_EMPLOYEE_BENCH_PROVIDER / MODSTORE_EMPLOYEE_BENCH_MODEL）"
+                ),
+                "input": perceived.get("normalized_input", {}),
+                "memory": memory,
+                "knowledge": {"enabled": False, "items": [], "error": ""},
+                "provider": "auto",
+                "model": "auto",
+            }
+        bench_llm_override = (_pp, _pm)
+        use_platform_dispatch = True
+
     if bench_llm_override:
         provider, model_name = bench_llm_override
     else:
