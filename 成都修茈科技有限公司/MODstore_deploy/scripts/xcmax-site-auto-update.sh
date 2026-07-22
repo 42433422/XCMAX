@@ -260,7 +260,9 @@ paths_changed_since() {
   if [[ -z "$old_sha" || "$old_sha" == "$new_sha" ]]; then
     return 0
   fi
-  git -C "$repo" diff --name-only "$old_sha" "$new_sha" | grep -qE "$pattern"
+  # Keep non-ASCII paths literal: quoted C-style paths cannot match the
+  # Chinese repository prefixes used by the market and corporate site.
+  git -C "$repo" -c core.quotePath=false diff --name-only "$old_sha" "$new_sha" | grep -qE "$pattern"
 }
 
 sync_site_static() {
@@ -270,7 +272,7 @@ sync_site_static() {
     return 0
   fi
   local changed
-  changed="$(git -C "$XCMAX_ROOT" diff --name-only "$old_sha" "$new_sha" \
+  changed="$(git -C "$XCMAX_ROOT" -c core.quotePath=false diff --name-only "$old_sha" "$new_sha" \
     | grep "^${SITE_SUBDIR}/" | grep -v "^${MODSTORE_PREFIX}/" || true)"
   if [[ -z "$changed" ]]; then
     log "官网静态无变更"
