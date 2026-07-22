@@ -62,7 +62,7 @@ function goPlans() {
         收纳文件
         <span class="butler-files__count">{{ overflowCount }}</span>
       </h3>
-      <p class="butler-files__hint">顶栏仅展示少量卡片，其余收纳在 AI 管家中。</p>
+      <p class="butler-files__hint">顶栏仅展示少量卡片，其余收纳在小C助理中。</p>
       <ul class="butler-files__list">
         <li
           v-for="f in overflowAttachments"
