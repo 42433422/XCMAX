@@ -542,9 +542,7 @@ class TestProviderProfiles:
         minimax = next(p for p in _PROVIDER_PROFILES if p["name"] == "minimax")
         assert minimax["env_keys"][0] == "MINIMAX_TOKEN_PLAN_API_KEY"
         assert minimax["default_model"] == "MiniMax-M2.7"
-        assert minimax["billing_endpoints"] == [
-            "https://www.minimaxi.com/v1/token_plan/remains"
-        ]
+        assert minimax["billing_endpoints"] == ["https://www.minimaxi.com/v1/token_plan/remains"]
 
     def test_bai_and_openai_share_openai_key(self):
         """b.ai 和 openai 都用 OPENAI_API_KEY（通过 base_url 区分）。"""

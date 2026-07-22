@@ -1352,7 +1352,11 @@ async def tool_query_provider_usage(params: dict[str, Any], ctx: dict[str, Any])
                 headers["Authorization"] = f"Bearer {key}"
             checked += 1
             for ep in endpoints:
-                url = ep if str(ep).startswith(("https://", "http://")) else f"{base_url.rstrip('/')}{ep}"
+                url = (
+                    ep
+                    if str(ep).startswith(("https://", "http://"))
+                    else f"{base_url.rstrip('/')}{ep}"
+                )
                 try:
                     resp = await client.get(url, headers=headers)
                     body: Any
