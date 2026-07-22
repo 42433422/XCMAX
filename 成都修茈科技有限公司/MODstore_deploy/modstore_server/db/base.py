@@ -109,6 +109,16 @@ def _sqlite_add_column_if_missing(engine: Engine, table: str, column: str, ddl_t
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
+def _ddl_type_for_dialect(dialect: str, ddl_type: str) -> str:
+    """Translate compatibility DDL aliases before issuing an ALTER statement."""
+    normalized = ddl_type.strip()
+    head, separator, suffix = normalized.partition(" ")
+    if dialect == "postgresql" and head.upper() == "DATETIME":
+        replacement = "TIMESTAMP WITHOUT TIME ZONE"
+        return f"{replacement}{separator}{suffix}" if suffix else replacement
+    return normalized
+
+
 def _add_column_if_missing(engine: Engine, table: str, column: str, ddl_type: str) -> None:
     """通用表结构演进：同时支持 SQLite 与 PostgreSQL，缺列时 ALTER ADD（幂等）。"""
     if engine.dialect.name == "sqlite":
@@ -124,7 +134,8 @@ def _add_column_if_missing(engine: Engine, table: str, column: str, ddl_type: st
         ).first()
         if exists:
             return
-        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+        compatible_ddl = _ddl_type_for_dialect(engine.dialect.name, ddl_type)
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {compatible_ddl}"))
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
