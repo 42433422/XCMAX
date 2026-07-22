@@ -139,10 +139,10 @@ jobs:
             if [ -x "${MOD_ROOT}/.venv/bin/python" ]; then
               echo "[info] regenerating public action board + company hall"
               ( cd "${MOD_ROOT}" && PYTHONPATH=. ./.venv/bin/python - <<'PY'
-from modstore_server.public_action_board import write_public_action_board
-r = write_public_action_board()
-print("public_board", {k: r.get(k) for k in ("ok", "day", "written")} if isinstance(r, dict) else r)
-PY
+            from modstore_server.public_action_board import write_public_action_board
+            r = write_public_action_board()
+            print("public_board", {k: r.get(k) for k in ("ok", "day", "written")} if isinstance(r, dict) else r)
+            PY
               ) || echo "[warn] public board regenerate failed (non-fatal)"
             fi
             # Loopback HTTPS over h2 is flaky on this host (curl exit 16); prefer http1.1 + retry.
