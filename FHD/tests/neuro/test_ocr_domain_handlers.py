@@ -127,9 +127,7 @@ class TestHandleOcrCompleted:
         assert published[0][1]["total_amount"] == 200.0
 
     @pytest.mark.asyncio
-    async def test_receipt_doc_type_archives(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_receipt_doc_type_archives(self, monkeypatch: pytest.MonkeyPatch) -> None:
         archive_calls: list[dict] = []
 
         def _fake_archive(payload: dict) -> dict:
@@ -245,9 +243,7 @@ class TestHandleOcrCompleted:
 
 
 class TestOCRServiceDomainHandlersRegister:
-    def test_register_subscribes_all_handlers(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_register_subscribes_all_handlers(self, monkeypatch: pytest.MonkeyPatch) -> None:
         bus = MagicMock()
         monkeypatch.setattr(odh.neuro_bus, "get_neuro_bus", lambda: bus)
 

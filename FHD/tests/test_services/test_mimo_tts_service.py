@@ -54,7 +54,12 @@ class TestResolveCredentials:
     def test_strips_v1_suffix(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MIMO_API_KEY", "k2")
         monkeypatch.setenv("MIMO_BASE_URL", "https://api.example.com/v1")
-        for v in ("XIAOMI_API_KEY", "XIAOMI_MIMO_API_KEY", "XIAOMI_BASE_URL", "XIAOMI_MIMO_BASE_URL"):
+        for v in (
+            "XIAOMI_API_KEY",
+            "XIAOMI_MIMO_API_KEY",
+            "XIAOMI_BASE_URL",
+            "XIAOMI_MIMO_BASE_URL",
+        ):
             monkeypatch.delenv(v, raising=False)
         key, root = mimo.resolve_mimo_credentials()
         assert key == "k2"
@@ -63,14 +68,25 @@ class TestResolveCredentials:
     def test_prefers_xiaomi_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "primary")
         monkeypatch.setenv("MIMO_API_KEY", "fallback")
-        for v in ("XIAOMI_MIMO_API_KEY", "XIAOMI_BASE_URL", "MIMO_BASE_URL", "XIAOMI_MIMO_BASE_URL"):
+        for v in (
+            "XIAOMI_MIMO_API_KEY",
+            "XIAOMI_BASE_URL",
+            "MIMO_BASE_URL",
+            "XIAOMI_MIMO_BASE_URL",
+        ):
             monkeypatch.delenv(v, raising=False)
         key, _ = mimo.resolve_mimo_credentials()
         assert key == "primary"
 
     def test_returns_none_when_only_whitespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "   ")
-        for v in ("MIMO_API_KEY", "XIAOMI_MIMO_API_KEY", "XIAOMI_BASE_URL", "MIMO_BASE_URL", "XIAOMI_MIMO_BASE_URL"):
+        for v in (
+            "MIMO_API_KEY",
+            "XIAOMI_MIMO_API_KEY",
+            "XIAOMI_BASE_URL",
+            "MIMO_BASE_URL",
+            "XIAOMI_MIMO_BASE_URL",
+        ):
             monkeypatch.delenv(v, raising=False)
         key, _ = mimo.resolve_mimo_credentials()
         assert key is None
@@ -199,7 +215,9 @@ class TestSynthesizeMimoBytes:
             with pytest.raises(RuntimeError, match="mimo-tts response missing audio.data"):
                 mimo.synthesize_mimo_bytes("hi")
 
-    def test_decoded_empty_audio_raises_runtime_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_decoded_empty_audio_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
         fake_client = MagicMock()
         fake_client.__enter__ = MagicMock(return_value=fake_client)
@@ -226,9 +244,7 @@ class TestSynthesizeMimoBytes:
         _args, kwargs = fake_client.post.call_args
         assert kwargs["json"]["audio"]["voice"] == mimo.DEFAULT_VOICE
 
-    def test_raise_for_status_propagates_http_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_raise_for_status_propagates_http_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "k1")
         fake_client = MagicMock()
         fake_client.__enter__ = MagicMock(return_value=fake_client)
@@ -255,9 +271,7 @@ class TestSynthesizeMimoBytes:
         _args, kwargs = fake_client.post.call_args
         assert kwargs["json"]["model"] == "custom-mimo-model"
 
-    def test_headers_include_both_api_key_and_bearer(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_headers_include_both_api_key_and_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XIAOMI_API_KEY", "secret-key")
         fake_client = MagicMock()
         fake_client.__enter__ = MagicMock(return_value=fake_client)

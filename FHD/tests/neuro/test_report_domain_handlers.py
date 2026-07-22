@@ -100,9 +100,7 @@ class TestResolveGenerator:
 
         assert result is sentinel
 
-    def test_lazy_imports_when_module_level_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lazy_imports_when_module_level_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(rdh, "generate_monthly_finance_summary", None)
         lazy_fn = MagicMock()
         # Patch the lazy import path used inside _resolve_generator
@@ -284,7 +282,9 @@ class TestReportServiceDomainHandlers:
         bus = MagicMock()
         # Pre-populate _handlers to verify the count log line works
         bus._handlers = {"report.monthly_summary_requested": [handle_monthly_summary_requested]}
-        monkeypatch.setattr("app.neuro_bus.domains.report_domain_handlers.get_neuro_bus", lambda: bus)
+        monkeypatch.setattr(
+            "app.neuro_bus.domains.report_domain_handlers.get_neuro_bus", lambda: bus
+        )
 
         handlers = ReportServiceDomainHandlers()
         handlers.register()
@@ -297,7 +297,9 @@ class TestReportServiceDomainHandlers:
 class TestGetReportHandlers:
     def test_singleton_returns_same_instance(self, monkeypatch: pytest.MonkeyPatch) -> None:
         bus = MagicMock()
-        monkeypatch.setattr("app.neuro_bus.domains.report_domain_handlers.get_neuro_bus", lambda: bus)
+        monkeypatch.setattr(
+            "app.neuro_bus.domains.report_domain_handlers.get_neuro_bus", lambda: bus
+        )
 
         h1 = get_report_handlers()
         h2 = get_report_handlers()
@@ -309,7 +311,9 @@ class TestRegisterReportDomainHandlers:
     def test_registers_via_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
         bus = MagicMock()
         bus._handlers = {}
-        monkeypatch.setattr("app.neuro_bus.domains.report_domain_handlers.get_neuro_bus", lambda: bus)
+        monkeypatch.setattr(
+            "app.neuro_bus.domains.report_domain_handlers.get_neuro_bus", lambda: bus
+        )
 
         register_report_domain_handlers(bus)
 

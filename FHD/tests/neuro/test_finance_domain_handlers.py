@@ -120,9 +120,7 @@ class TestResolveApprovalService:
 
         assert _resolve_approval_service() is sentinel
 
-    def test_lazy_imports_when_module_level_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lazy_imports_when_module_level_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(fdh, "get_approval_service", None)
         lazy_fn = MagicMock()
         fake_module = MagicMock()
@@ -150,9 +148,7 @@ class TestResolvePurchaseService:
 
         assert _resolve_purchase_service_cls() is sentinel
 
-    def test_lazy_imports_when_module_level_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lazy_imports_when_module_level_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(fdh, "PurchaseService", None)
         lazy_cls = MagicMock()
         fake_module = MagicMock()
@@ -203,9 +199,7 @@ class TestHandleApprovalRequested:
         assert published[0][1]["amount"] == 500.0
 
     @pytest.mark.asyncio
-    async def test_high_amount_sets_medium_risk(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_high_amount_sets_medium_risk(self, monkeypatch: pytest.MonkeyPatch) -> None:
         request = MagicMock()
         request.request_id = "appr-2"
         request.status.value = "pending"
@@ -236,9 +230,7 @@ class TestHandleApprovalRequested:
         assert captured_nodes[0].risk == "medium"
 
     @pytest.mark.asyncio
-    async def test_low_amount_sets_low_risk(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_low_amount_sets_low_risk(self, monkeypatch: pytest.MonkeyPatch) -> None:
         request = MagicMock()
         request.request_id = "appr-3"
         request.status.value = "pending"
@@ -249,7 +241,9 @@ class TestHandleApprovalRequested:
         monkeypatch.setattr(fdh, "get_approval_service", factory)
 
         captured_nodes: list = []
-        svc.create_approval_request.side_effect = lambda pid, node: captured_nodes.append(node) or request
+        svc.create_approval_request.side_effect = lambda pid, node: (
+            captured_nodes.append(node) or request
+        )
 
         monkeypatch.setattr(
             fdh,
@@ -370,9 +364,7 @@ class TestHandleApprovalCompleted:
         assert result["decision"] == "rejected"
 
     @pytest.mark.asyncio
-    async def test_unknown_decision_publishes_failed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_unknown_decision_publishes_failed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         published: list[tuple[str, dict]] = []
         monkeypatch.setattr(
             fdh,
@@ -389,9 +381,7 @@ class TestHandleApprovalCompleted:
         assert published[0][1]["stage"] == "validate_decision"
 
     @pytest.mark.asyncio
-    async def test_import_failure_publishes_failed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_import_failure_publishes_failed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(fdh, "PurchaseService", None)
         monkeypatch.setattr(
             fdh,
@@ -435,9 +425,7 @@ class TestHandleApprovalCompleted:
         assert result["error"] == "db down"
 
     @pytest.mark.asyncio
-    async def test_business_failure_publishes_failed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_business_failure_publishes_failed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         svc_instance = MagicMock()
         svc_instance.update_inbound_approval_status.return_value = {
             "success": False,
@@ -509,7 +497,9 @@ class TestFinanceServiceDomainHandlersRegister:
             "finance.approval_requested": [handle_approval_requested],
             "finance.approval_completed": [handle_approval_completed],
         }
-        monkeypatch.setattr("app.neuro_bus.domains.finance_domain_handlers.get_neuro_bus", lambda: bus)
+        monkeypatch.setattr(
+            "app.neuro_bus.domains.finance_domain_handlers.get_neuro_bus", lambda: bus
+        )
 
         handlers = FinanceServiceDomainHandlers()
         handlers.register()
@@ -522,7 +512,9 @@ class TestFinanceServiceDomainHandlersRegister:
 class TestGetFinanceHandlers:
     def test_singleton_returns_same_instance(self, monkeypatch: pytest.MonkeyPatch) -> None:
         bus = MagicMock()
-        monkeypatch.setattr("app.neuro_bus.domains.finance_domain_handlers.get_neuro_bus", lambda: bus)
+        monkeypatch.setattr(
+            "app.neuro_bus.domains.finance_domain_handlers.get_neuro_bus", lambda: bus
+        )
 
         h1 = get_finance_handlers()
         h2 = get_finance_handlers()
@@ -533,7 +525,9 @@ class TestGetFinanceHandlers:
 class TestRegisterFinanceDomainHandlers:
     def test_registers_via_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
         bus = MagicMock()
-        monkeypatch.setattr("app.neuro_bus.domains.finance_domain_handlers.get_neuro_bus", lambda: bus)
+        monkeypatch.setattr(
+            "app.neuro_bus.domains.finance_domain_handlers.get_neuro_bus", lambda: bus
+        )
 
         register_finance_domain_handlers(bus)
 
