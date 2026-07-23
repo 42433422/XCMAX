@@ -14,7 +14,7 @@
       <h2>新增/编辑审核标准</h2>
       <div class="form-grid">
         <label>名称<input v-model="standardForm.name" /></label>
-        <label>场景<input v-model="standardForm.scenario" placeholder="refund / catalog_complaint / catalog_review" /></label>
+        <label>场景<input v-model="standardForm.scenario" placeholder="refund / catalog_complaint / catalog_review / account_support" /></label>
         <label>风险等级<input v-model="standardForm.risk_level" /></label>
         <label>优先级<input v-model.number="standardForm.priority" type="number" /></label>
       </div>

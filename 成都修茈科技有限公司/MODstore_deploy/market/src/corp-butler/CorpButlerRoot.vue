@@ -26,7 +26,7 @@
       </Transition>
 
       <CorpContactIntakeModal v-if="showMobileContactIntake" />
-      <!-- 双语字幕仅官网小C；软件工作台/桌面不挂 -->
+      <!-- 中文字幕仅官网小C；软件工作台/桌面不挂 -->
       <TtsSubtitleOverlay />
     </div>
   </Teleport>
@@ -46,6 +46,7 @@ import {
   hasIntroducedPageThisSession,
   isCorpProactiveIntroEnabled,
   markPageIntroduced,
+  prefersReducedMotion,
   speakCorpIntro,
   stopCorpIntroSpeech,
 } from './corpPageIntro'
@@ -57,11 +58,58 @@ import TtsSubtitleOverlay from '../components/TtsSubtitleOverlay.vue'
 
 const agentStore = useAgentStore()
 const { isOpen, showPermissionDialog, position } = storeToRefs(agentStore)
-const { handleInput, runIntakeTask } = useCorpAgentEngine()
+const { handleInput: engineHandleInput, runIntakeTask: engineRunIntakeTask } = useCorpAgentEngine()
 const pendingIntakeAction = ref<QuickAction | null>(null)
 const introSpeaking = ref(false)
 let introTimer: number | null = null
 let introSeq = 0
+
+function clipForSpeech(text: string, max = 480): string {
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, Math.max(0, max - 1))}…`
+}
+
+async function speakAssistantReply(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (prefersReducedMotion()) return
+  const last = agentStore.messages[agentStore.messages.length - 1]
+  if (!last || last.role !== 'assistant' || last.isLoading) return
+  const text = clipForSpeech(last.content || '')
+  if (!text || text === '…') return
+
+  stopCorpIntroSpeech()
+  const seq = ++introSeq
+  introSpeaking.value = true
+  agentStore.setMode('speaking')
+  try {
+    await speakCorpIntro(text)
+  } finally {
+    if (seq === introSeq) {
+      introSpeaking.value = false
+      if (agentStore.mode === 'speaking') agentStore.setMode('idle')
+    }
+  }
+}
+
+async function handleInput(
+  text: string,
+  opts?: { skipUserInsert?: boolean; withScreenshot?: boolean; imageDataUrl?: string | null },
+): Promise<void> {
+  stopCorpIntroSpeech()
+  introSpeaking.value = false
+  await engineHandleInput(text, opts)
+  await speakAssistantReply()
+}
+
+async function runIntakeTask(action: QuickAction): Promise<void> {
+  stopCorpIntroSpeech()
+  introSpeaking.value = false
+  await engineRunIntakeTask(action)
+  await speakAssistantReply()
+}
 
 function flushPendingIntakeFill() {
   const action = pendingIntakeAction.value
@@ -83,7 +131,7 @@ async function runProactivePageIntro(reason: 'consent' | 'page') {
 
   markPageIntroduced(pageId)
 
-  // 主动介绍：只播 TTS + 底部双语字幕，不强制拉开聊天面板（面板像工作台会显「错」）
+  // 主动介绍：只播 TTS + 底部中文字幕，不强制拉开聊天面板（面板像工作台会显「错」）
   const last = agentStore.messages[agentStore.messages.length - 1]
   if (!(last && last.role === 'assistant' && last.content === text)) {
     agentStore.addMessage({
@@ -228,8 +276,8 @@ onBeforeUnmount(() => {
 /* Teleport 到 body 后仅作包装，不铺满视口 */
 .butler-float-root--corp {
   --corp-ball-bottom: 24px;
-  --corp-ball-w: 64px;
-  --corp-ball-h: 82px;
+  --corp-ball-w: 72px;
+  --corp-ball-h: 88px;
   --corp-panel-gap: 10px;
   position: relative;
   z-index: 20000;

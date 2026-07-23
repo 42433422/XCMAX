@@ -974,13 +974,51 @@ def _corp_chat_rate_allow(client_key: str) -> None:
 
 
 def _resolve_corp_credentials(db: Session):
-    """官网公开咨询 LLM 凭证（环境变量或指定系统用户）。"""
+    """官网公开咨询 LLM 凭证。
+
+    优先级：
+    1. 显式 ``BUTLER_CORP_*`` 钉死（运维手动覆盖）
+    2. 平台运行时路由（``llm-ops-engineer`` / ``runtime_route.json``）
+    3. ``BUTLER_CORP_USER_ID`` / 分 provider 的 corp key
+    4. 遗留 ``BUTLER_QQ_LLM_*``
+    """
     provider = (os.environ.get("BUTLER_CORP_PROVIDER") or "").strip()
-    model = (os.environ.get("BUTLER_CORP_MODEL") or "gpt-4o-mini").strip()
+    model = (os.environ.get("BUTLER_CORP_MODEL") or "").strip()
     api_key = (os.environ.get("BUTLER_CORP_API_KEY") or "").strip()
     base_url = None
-
     user_id_raw = (os.environ.get("BUTLER_CORP_USER_ID") or "").strip()
+
+    # 1) 显式钉死：provider + key 齐全时不走动态路由
+    if provider and api_key:
+        if not model:
+            model = "gpt-4o-mini"
+        if base_url is None and provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+            from modstore_server.llm_key_resolver import platform_base_url
+
+            base_url = platform_base_url(provider)
+            if base_url is None and user_id_raw.isdigit():
+                base_url = resolve_base_url(db, int(user_id_raw), provider)
+        return provider, model, api_key, base_url
+
+    # 2) LLM 运维工程师维护的平台运行时路由（与后台 AI 员工同一套调度）
+    try:
+        from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+        from modstore_server.services.llm import resolve_platform_bench_llm
+
+        route_provider, route_model = resolve_platform_bench_llm()
+        if route_provider and route_model:
+            route_key = platform_api_key(route_provider)
+            if route_key:
+                return (
+                    route_provider,
+                    route_model,
+                    route_key,
+                    platform_base_url(route_provider),
+                )
+    except Exception:  # noqa: BLE001
+        logger.debug("corp-chat: platform runtime route unavailable", exc_info=True)
+
+    # 3) 指定系统用户 BYOK / 分 provider corp key
     if not api_key and user_id_raw.isdigit():
         uid = int(user_id_raw)
         if not provider:
@@ -1011,7 +1049,7 @@ def _resolve_corp_credentials(db: Session):
                 provider = (
                     os.environ.get("BUTLER_QQ_LLM_PROVIDER") or provider or "openai"
                 ).strip()
-            if not (os.environ.get("BUTLER_CORP_MODEL") or "").strip():
+            if not model:
                 qq_model = (os.environ.get("BUTLER_QQ_LLM_MODEL") or "").strip()
                 if qq_model:
                     model = qq_model
@@ -1020,6 +1058,9 @@ def _resolve_corp_credentials(db: Session):
                 if qq_base:
                     base_url = qq_base
 
+    if not model:
+        model = "gpt-4o-mini"
+
     if not api_key:
         raise HTTPException(
             503,
@@ -1027,9 +1068,11 @@ def _resolve_corp_credentials(db: Session):
         )
 
     if base_url is None and provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
-        base_url = (
-            resolve_base_url(db, int(user_id_raw), provider) if user_id_raw.isdigit() else None
-        )
+        from modstore_server.llm_key_resolver import platform_base_url
+
+        base_url = platform_base_url(provider)
+        if base_url is None and user_id_raw.isdigit():
+            base_url = resolve_base_url(db, int(user_id_raw), provider)
 
     return provider, model, api_key, base_url
 

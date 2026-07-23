@@ -132,13 +132,26 @@ export const openApiConnectors = {
 
 export const customerService = {
   customerServiceChat: (payload: { message: string; session_id?: number | null; context?: Record<string, unknown> }) =>
-    req('/api/customer-service/chat', { method: 'POST', body: JSON.stringify(payload) }),
-  customerServiceSessions: () => req('/api/customer-service/sessions'),
-  customerServiceSessionDetail: (id: number | string) => req(`/api/customer-service/sessions/${encodeURIComponent(String(id))}`),
-  customerServiceTickets: (status = '') => req(`/api/customer-service/tickets${status ? `?status=${encodeURIComponent(status)}` : ''}`),
-  customerServiceTicketDetail: (id: number | string) => req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`),
-  customerServiceActions: (ticketId?: number | string) => req(`/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`),
-  customerServiceStandards: () => req('/api/customer-service/standards'),
+    req('/api/customer-service/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      // 后端建单后的 incident 派发已异步；前端仍加超时，避免「处理中…」永久卡住
+      timeoutMs: 30_000,
+    }),
+  customerServiceSessions: () => req('/api/customer-service/sessions', { timeoutMs: 15_000 }),
+  customerServiceSessionDetail: (id: number | string) =>
+    req(`/api/customer-service/sessions/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
+  customerServiceTickets: (status = '') =>
+    req(`/api/customer-service/tickets${status ? `?status=${encodeURIComponent(status)}` : ''}`, {
+      timeoutMs: 15_000,
+    }),
+  customerServiceTicketDetail: (id: number | string) =>
+    req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
+  customerServiceActions: (ticketId?: number | string) =>
+    req(`/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`, {
+      timeoutMs: 15_000,
+    }),
+  customerServiceStandards: () => req('/api/customer-service/standards', { timeoutMs: 15_000 }),
   customerServiceCreateStandard: (payload: unknown) => req('/api/customer-service/standards', { method: 'POST', body: JSON.stringify(payload || {}) }),
   customerServiceUpdateStandard: (id: number | string, payload: unknown) =>
     req(`/api/customer-service/standards/${encodeURIComponent(String(id))}`, { method: 'PUT', body: JSON.stringify(payload || {}) }),
@@ -150,7 +163,7 @@ export const customerService = {
 
 export const butler = {
   agentCorpChat: (payload: {
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: unknown }>
     page_id?: string
     page_context?: string
     max_tokens?: number
