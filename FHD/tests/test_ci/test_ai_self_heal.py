@@ -109,6 +109,28 @@ class TestExtractErrors:
         assert "upload started" in excerpt
         assert excerpt.count("unrelated later job") < 30
 
+    def test_actionable_errors_drop_advisories_from_successful_jobs(self) -> None:
+        log = (
+            "app/advisory.py:12: error: Optional check from a successful job [arg-type]\n"
+            "cvm-push-release\tPush to CVM update server\t"
+            "2026-07-23T09:16:55Z ##[error]CVM push failed with status 124.\n"
+            "cvm-push-release\tPush to CVM update server\t"
+            "2026-07-23T09:17:00Z ##[error]Process completed with exit code 124."
+        )
+
+        selected = heal.select_actionable_errors(heal.extract_errors(log))
+
+        assert len(selected) == 1
+        assert selected[0].tool == "github-actions"
+        assert selected[0].code == "EXIT_124"
+        assert "CVM push failed" in selected[0].message
+        assert all(not error.file_path for error in selected)
+
+    def test_actionable_errors_keep_tool_errors_without_action_marker(self) -> None:
+        errors = heal.extract_errors("app/foo.py:10:1: F401 'os' imported but unused")
+
+        assert heal.select_actionable_errors(errors) == errors
+
 
 # =====================================================================
 # compute_fingerprint 测试

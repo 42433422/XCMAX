@@ -344,6 +344,29 @@ class TestProcessRegularPr:
         assert "veto:hold-merge" in rec["reason"]
 
 
+class TestProcessAiGeneratedPr:
+    def test_missing_risk_label_fails_closed_to_manual_review(self) -> None:
+        pr = _make_pr(labels=[])
+        pr.kind = "ai_generated"
+        pr.created_at = time.time() - 24 * 3600
+        client = _mock_client()
+
+        action = sla.process_pr(
+            client,
+            pr,
+            r0_hours=0,
+            r1_hours=0,
+            r2_stale_days=7,
+            r2_close_days=14,
+            r3_stale_days=7,
+            r3_close_days=30,
+        )
+
+        assert action == "skipped"
+        client.get_pr_check_runs.assert_not_called()
+        client.merge_pr.assert_not_called()
+
+
 # =====================================================================
 # list_regular_prs 测试（通过 mock client）
 # =====================================================================
