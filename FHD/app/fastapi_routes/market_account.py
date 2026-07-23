@@ -835,6 +835,15 @@ async def resolve_valid_market_access_token(session_id: str) -> str:
             me.get("status_code"),
         )
         return tok
+    # MODstore intentionally returns HTTP 200 for an anonymous /auth/me so
+    # browser consoles do not fill with 401s.  The authentication state is in
+    # the JSON contract instead.  Treat either explicit false flag as an
+    # expired access token; otherwise a stale token is cached forever and all
+    # downstream admin evidence calls fail with 401 despite a valid persisted
+    # refresh token.
+    if isinstance(me, dict) and (me.get("ok") is False or me.get("success") is False):
+        refreshed = await refresh_session_market_token(sid)
+        return _normalize_bearer_token(refreshed)
     return tok
 
 

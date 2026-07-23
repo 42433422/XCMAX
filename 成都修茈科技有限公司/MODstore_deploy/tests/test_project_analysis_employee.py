@@ -311,3 +311,66 @@ def test_action_agent_runner_invalid_project_root(tmp_path):
         result = _action_agent_runner(actions_cfg, reasoning, "task", "emp1", 1)
     assert result["ok"] is False
     assert "project_root" in result["error"].lower() or "路径" in result["error"]
+
+
+def test_system_read_only_burn_in_accepts_configured_monorepo_child(tmp_path, monkeypatch):
+    from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+    repo = tmp_path / "repo"
+    project = repo / "成都修茈科技有限公司"
+    project.mkdir(parents=True)
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(repo))
+
+    resolved = _trusted_system_burn_in_project_root(
+        project,
+        cog_input={"burn_in_read_only": True},
+        user_id=0,
+        read_only=True,
+    )
+
+    assert resolved == str(project.resolve())
+
+
+@pytest.mark.parametrize(
+    ("user_id", "read_only", "burn_in_read_only"),
+    [(1, True, True), (0, False, True), (0, True, False)],
+)
+def test_system_burn_in_repo_exception_remains_narrow(
+    tmp_path, monkeypatch, user_id, read_only, burn_in_read_only
+):
+    from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+    repo = tmp_path / "repo"
+    project = repo / "project"
+    project.mkdir(parents=True)
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(repo))
+
+    assert (
+        _trusted_system_burn_in_project_root(
+            project,
+            cog_input={"burn_in_read_only": burn_in_read_only},
+            user_id=user_id,
+            read_only=read_only,
+        )
+        == ""
+    )
+
+
+def test_system_burn_in_repo_exception_rejects_outside_path(tmp_path, monkeypatch):
+    from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+    repo = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    repo.mkdir()
+    outside.mkdir()
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(repo))
+
+    assert (
+        _trusted_system_burn_in_project_root(
+            outside,
+            cog_input={"burn_in_read_only": True},
+            user_id=0,
+            read_only=True,
+        )
+        == ""
+    )
