@@ -156,13 +156,62 @@
         padding: 0 0 16px 0;
       }
       body[data-page='world-will'] .hall-timeline-item:last-child { padding-bottom: 0; }
-      body[data-page='world-will'] .hall-timeline-item a {
+      body[data-page='world-will'] .hall-timeline-btn {
         display: grid;
         grid-template-columns: 76px 16px 1fr;
         gap: 8px;
-        text-decoration: none;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
         color: inherit;
+        cursor: pointer;
+        font: inherit;
+        border-radius: 10px;
       }
+      body[data-page='world-will'] .hall-timeline-btn:hover {
+        background: #f8fafc;
+      }
+      body[data-page='world-will'] .hall-timeline-btn:focus-visible {
+        outline: 2px solid #93c5fd;
+        outline-offset: 2px;
+      }
+      body[data-page='world-will'] .hall-feed-more {
+        display: inline-block;
+        margin-top: 6px;
+        color: #0b63f6;
+        font-size: 11px;
+        font-weight: 650;
+      }
+      body[data-page='world-will'] .hall-feed-detail {
+        margin: 12px 0 0;
+        padding: 14px 16px;
+        border: 1px solid #e2e6ec;
+        border-radius: 12px;
+        background: #fbfdff;
+      }
+      body[data-page='world-will'] .hall-feed-detail-meta {
+        margin: 0 0 10px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      body[data-page='world-will'] .hall-feed-detail-body {
+        margin: 0;
+        color: #0f172a;
+        font-size: 13px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      body[data-page='world-will'] .hall-feed-detail-link {
+        margin: 12px 0 0;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      body[data-page='world-will'] .hall-feed-detail-link a { color: #0b63f6; }
       body[data-page='world-will'] .hall-timeline-item time {
         color: #94a3b8;
         font-size: 12px;
@@ -553,6 +602,7 @@
                 <a href="#ai-driver">查看驾驶员 →</a>
               </div>
               <div class="ww-feed" id="hall-feed" aria-live="polite"></div>
+              <div id="hall-feed-detail" class="hall-feed-detail" hidden></div>
             </section>
             <section class="ww-panel" aria-labelledby="hall-report-title">
               <div class="ww-panel-head">

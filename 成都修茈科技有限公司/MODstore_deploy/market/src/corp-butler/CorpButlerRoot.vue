@@ -26,7 +26,7 @@
       </Transition>
 
       <CorpContactIntakeModal v-if="showMobileContactIntake" />
-      <!-- 双语字幕仅官网小C；软件工作台/桌面不挂 -->
+      <!-- 中文字幕仅官网小C；软件工作台/桌面不挂 -->
       <TtsSubtitleOverlay />
     </div>
   </Teleport>
@@ -83,7 +83,7 @@ async function runProactivePageIntro(reason: 'consent' | 'page') {
 
   markPageIntroduced(pageId)
 
-  // 主动介绍：只播 TTS + 底部双语字幕，不强制拉开聊天面板（面板像工作台会显「错」）
+  // 主动介绍：只播 TTS + 底部中文字幕，不强制拉开聊天面板（面板像工作台会显「错」）
   const last = agentStore.messages[agentStore.messages.length - 1]
   if (!(last && last.role === 'assistant' && last.content === text)) {
     agentStore.addMessage({

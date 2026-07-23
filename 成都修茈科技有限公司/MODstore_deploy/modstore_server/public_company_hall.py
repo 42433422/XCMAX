@@ -53,6 +53,14 @@ _WORKING_STATUSES = frozenset({"open", "dispatched", "in_progress"})
 _DONE_STATUSES = frozenset({"merged", "closed"})
 _PATH_TICK = re.compile(r"`([^`]*/[^`]*)`")
 _CODE_FENCE = re.compile(r"```[\s\S]*?```")
+# 公开动态勿直接泄漏内部角色提示 / 执行 SOP
+_ROLE_PROMPT = re.compile(r"^你是[^。\n]{2,80}。[ \t]*")
+_META_KV = re.compile(
+    r"(?:执行模式|风险级别|事件类型|输出采用|必须使用)[^。；;\n]{0,80}[。；;]?"
+)
+_TASK_FIELD = re.compile(
+    r"(?:岗位任务|问题摘要|任务摘要|公开摘要)[:：]\s*([^。\n]{4,160})"
+)
 
 
 def _repo_root() -> Path:
@@ -70,6 +78,32 @@ def _clean(text: str, max_len: int = 120) -> str:
     if len(s) > max_len:
         s = s[: max_len - 1] + "…"
     return s
+
+
+def _publicize_feed_text(raw: str, *, summary_len: int = 96, detail_len: int = 600) -> Tuple[str, str]:
+    """把内部任务/提示词压成官网可读摘要；返回 (列表摘要, 详情全文)。"""
+    s = str(raw or "")
+    s = _CODE_FENCE.sub("", s)
+    s = _PATH_TICK.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return "（暂无公开摘要）", "（暂无公开摘要）"
+
+    preferred = ""
+    m = _TASK_FIELD.search(s)
+    if m:
+        preferred = (m.group(1) or "").strip(" ·:-")
+
+    cleaned = _ROLE_PROMPT.sub("", s)
+    cleaned = _META_KV.sub("", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ·:-；;")
+    # 若仍以角色口吻开头，再剥一层
+    cleaned = _ROLE_PROMPT.sub("", cleaned).strip(" ·:-")
+
+    detail_src = preferred or cleaned or s
+    detail = _clean(detail_src, detail_len) or "（暂无公开摘要）"
+    summary = _clean(preferred or cleaned or s, summary_len) or detail
+    return summary, detail
 
 
 def _iso(dt: Any) -> Optional[str]:
@@ -348,7 +382,8 @@ def _metric_signals(employee_ids: List[str]) -> Dict[str, Dict[str, Any]]:
                 slot["fail_24h"] += 1
             if slot["last_at"] is None:
                 slot["last_status"] = st
-                slot["last_task"] = _clean(str(m.task or ""), 80)
+                # 保留较长原文，公开投影时再摘要；避免列表层二次截断丢详情
+                slot["last_task"] = _clean(str(m.task or ""), 600)
                 slot["last_at"] = _iso(m.created_at)
     except Exception:
         logger.exception("company_hall: metric signals failed")
@@ -558,6 +593,12 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             day=t.get("day") or board.get("day"),
             clock=t.get("ts"),
         )
+        summary, detail = _publicize_feed_text(
+            str(t.get("title") or t.get("text") or "")
+        )
+        href = str(t.get("href") or "").strip()
+        if href in {"", "/", "/world-will", "/world-will.html"}:
+            href = ""
         feed.append(
             {
                 "ts": t.get("ts") or "—",
@@ -575,8 +616,9 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 or ("working" if t.get("status") in _WORKING_STATUSES else "idle"),
                 "status": t.get("status"),
                 "status_label": t.get("status_label"),
-                "text": t.get("title") or t.get("text") or "",
-                "href": t.get("href") or "/world-will",
+                "text": summary,
+                "detail": detail,
+                "href": href,
                 "source": "action_board",
             }
         )
@@ -590,6 +632,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         emp = by_emp.get(eid) or {}
         mood = "alert" if str(met.get("last_status")) != "success" else "idle"
         occurred_at = _feed_occurred_at(raw=met.get("last_at"))
+        summary, detail = _publicize_feed_text(str(met.get("last_task") or ""))
         feed.append(
             {
                 "ts": (occurred_at[11:16] if occurred_at else "—"),
@@ -603,8 +646,9 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 "presence": mood if mood == "alert" else emp.get("presence") or "idle",
                 "status": met.get("last_status"),
                 "status_label": "执行失败" if mood == "alert" else "最近执行",
-                "text": met.get("last_task"),
-                "href": "/world-will",
+                "text": summary,
+                "detail": detail,
+                "href": "",
                 "source": "execution_metric",
             }
         )

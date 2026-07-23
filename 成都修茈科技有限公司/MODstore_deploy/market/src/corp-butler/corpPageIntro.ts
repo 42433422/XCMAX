@@ -1,4 +1,4 @@
-/** 官网小C：同意后主动介绍当前页（TTS + 双语字幕）。软件工作台不挂字幕。 */
+/** 官网小C：同意后主动介绍当前页（TTS + 中文字幕）。软件工作台不挂字幕。 */
 
 import { getCorpPageKnowledge, resolveCorpPageId } from '../content/siteKnowledge'
 import {
@@ -6,9 +6,7 @@ import {
   endTtsSubtitles,
   isTtsSubtitleSession,
   setTtsSubtitleIndex,
-  updateTtsSubtitleEn,
 } from '../composables/ttsSubtitleStore'
-import { prefetchSubtitleTranslations } from '../utils/ttsSubtitleTranslate'
 import { splitSentences } from '../utils/ttsSentenceSplit'
 
 export const CORP_PROACTIVE_INTRO_KEY = 'xc_corp_proactive_intro'
@@ -83,7 +81,6 @@ export function prefersReducedMotion(): boolean {
 }
 
 let corpIntroAudio: HTMLAudioElement | null = null
-let corpSubtitleAbort: AbortController | null = null
 let corpSubtitleGen = 0
 
 export function stopCorpIntroSpeech(): void {
@@ -98,8 +95,6 @@ export function stopCorpIntroSpeech(): void {
     }
     corpIntroAudio = null
   }
-  corpSubtitleAbort?.abort()
-  corpSubtitleAbort = null
   endTtsSubtitles(corpSubtitleGen)
 }
 
@@ -149,16 +144,8 @@ export function speakCorpIntro(text: string): Promise<void> {
   const plain = text.trim()
   const lines = splitSentences(plain)
   const zhLines = lines.length ? lines : [plain]
-  corpSubtitleAbort = new AbortController()
   corpSubtitleGen = beginTtsSubtitles(zhLines)
   const gen = corpSubtitleGen
-  prefetchSubtitleTranslations(
-    zhLines,
-    (i, en) => {
-      if (isTtsSubtitleSession(gen)) updateTtsSubtitleEn(i, en, gen)
-    },
-    { signal: corpSubtitleAbort.signal, concurrency: 2 },
-  )
   setTtsSubtitleIndex(0, gen)
 
   return (async () => {
@@ -185,7 +172,6 @@ export function speakCorpIntro(text: string): Promise<void> {
       // fail-open：不使用 speechSynthesis
     } finally {
       endTtsSubtitles(gen)
-      corpSubtitleAbort = null
     }
   })()
 }
