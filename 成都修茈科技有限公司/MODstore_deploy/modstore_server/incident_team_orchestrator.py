@@ -291,22 +291,35 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             role=role,
             scout_result=scout_result,
         )
-        result = execute_employee_task(
+        from modstore_server.duty_workforce_contracts import duty_event_execution_input
+
+        duty_input = duty_event_execution_input(
             employee_id,
-            task,
+            event_type=event_type,
+            source=source,
+            incident=payload,
+        )
+        runtime_input = duty_input or {
+            "allow_high_risk_real_run": role in {"fix", "verify"},
+            "allow_medium_risk": True,
+            "incident": payload,
+            "source": source,
+            "suppress_lifecycle_events": True,
+            "unified_incident_bus": True,
+        }
+        runtime_input.update(
             {
-                "allow_high_risk_real_run": role in {"fix", "verify"},
-                "allow_medium_risk": True,
-                "incident": payload,
                 "incident_team": team_plan,
                 "model_route": route,
                 "release_recovery": recovery,
                 "role": role,
-                "source": source,
-                "suppress_lifecycle_events": True,
-                "unified_incident_bus": True,
-            },
-            user_id=uid,
+            }
+        )
+        result = execute_employee_task(
+            employee_id,
+            task,
+            runtime_input,
+            user_id=0 if duty_input else uid,
             bench_llm_override=bench_override,
         )
         status = str(result.get("status") or result.get("execution_status") or "").strip().lower()

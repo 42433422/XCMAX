@@ -183,10 +183,77 @@ def workforce_event_bindings(path: Optional[Path] = None) -> list[Dict[str, Any]
     return out
 
 
+def matching_duty_event_contract(
+    employee_id: str,
+    event_type: str,
+    source: str = "",
+    *,
+    path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Return a safe reviewed contract for one concrete event dispatch.
+
+    A source-qualified subscription such as ``employee.task.done:intent-analyst``
+    matches only that source.  High-risk contracts intentionally never become
+    unattended event work; they continue through approval/veto and release
+    verification paths.
+    """
+
+    contract = workforce_contract_map(path).get(str(employee_id or "").strip()) or {}
+    if str(contract.get("risk_level") or "").strip().lower() not in {"low", "medium"}:
+        return {}
+    trigger = contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+    declared = {str(item or "").strip() for item in trigger.get("events") or []}
+    event_key = str(event_type or "").strip()
+    source_key = str(source or "").strip()
+    if event_key in declared or (source_key and f"{event_key}:{source_key}" in declared):
+        return dict(contract)
+    return {}
+
+
+def duty_event_execution_input(
+    employee_id: str,
+    *,
+    event_type: str,
+    source: str,
+    incident: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build fail-closed executor input for a reviewed low/medium event duty."""
+
+    contract = matching_duty_event_contract(employee_id, event_type, source)
+    if not contract:
+        return {}
+    project_root = str(
+        os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or os.environ.get("XCMAX_MONOREPO_ROOT") or ""
+    ).strip()
+    payload: Dict[str, Any] = {
+        "allow_high_risk_real_run": False,
+        "allow_medium_risk": True,
+        "event_type": str(event_type or "").strip(),
+        "incident": dict(incident or {}),
+        "non_blocking_human_questions": True,
+        "schedule_source": "duty_work_contract",
+        "source": str(source or "").strip(),
+        "suppress_lifecycle_events": True,
+        "trigger": "event",
+        "unified_incident_bus": True,
+        "work_contract": {
+            "schema": "xcagi.duty_employee_work_contracts/v1",
+            "mode": str(contract.get("mode") or "event"),
+            "risk_level": str(contract.get("risk_level") or "medium"),
+            "acceptance": list(contract.get("acceptance") or []),
+        },
+    }
+    if project_root:
+        payload["project_root"] = project_root
+    return payload
+
+
 __all__ = [
     "contract_schedule",
+    "duty_event_execution_input",
     "load_workforce_contracts",
     "load_reviewed_duty_manifest",
+    "matching_duty_event_contract",
     "resolve_reviewed_duty_employee_root",
     "resolve_work_contracts_path",
     "workforce_contract_map",
