@@ -158,12 +158,12 @@ else
   log "creating release-specific Python environment"
   python3 -m venv "$DEPLOY_DIR/.venv"
   "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
-  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge]')
+  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge,evolution-metrics]')
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \
     MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build" \
-    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, uvicorn, modstore_server.app'
+    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app'
   rm -rf -- "$BUILD_ROOT/.runtime-build"
 
   if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
