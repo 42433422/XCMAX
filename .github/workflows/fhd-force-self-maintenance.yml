@@ -29,7 +29,9 @@ jobs:
   force-loop:
     name: Force self-maintenance (${{ inputs.environment }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # One real loop can legitimately spend up to 30 minutes in each of code,
+    # review, and QA. Leave margin for device retries and the deploy callback.
+    timeout-minutes: 120
     steps:
       - name: Require CVM SSH secrets
         env:
