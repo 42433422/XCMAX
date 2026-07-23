@@ -12,8 +12,8 @@ import pytest
 
 from modstore_server.build_employee_pack import (
     PackSchemaError,
-    build_xcemp_archive,
     build_pack_from_commit,
+    build_xcemp_archive,
     register_in_packages_json,
     validate_pack_schema,
 )
