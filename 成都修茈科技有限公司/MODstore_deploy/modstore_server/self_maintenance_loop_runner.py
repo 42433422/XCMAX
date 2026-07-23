@@ -838,10 +838,14 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if action not in {
-        "auto_merged_low_risk",
-        "auto_continue",
-    } and status != "completed_merged":
+    if (
+        action
+        not in {
+            "auto_merged_low_risk",
+            "auto_continue",
+        }
+        and status != "completed_merged"
+    ):
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
@@ -1022,7 +1026,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "failed_steps": ["code"],
                     "para_task_id": para_task_id,
                     "reason": "resume_para_ai_review_rejection",
-                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[:4000],
+                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
+                        :4000
+                    ],
                 }
 
     last_decision = memory.get("last_policy_decision")
