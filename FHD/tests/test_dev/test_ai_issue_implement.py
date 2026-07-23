@@ -523,3 +523,29 @@ class TestCallLlmNoKey:
         result = _ai_impl._call_llm(prompt="test", api_key="")
         assert result["ok"] is False
         assert "LLM_API_KEY" in result["error"]
+
+
+class TestChatCompletionsUrl:
+    @pytest.mark.parametrize(
+        ("base", "expected"),
+        [
+            (
+                "https://api.minimaxi.com",
+                "https://api.minimaxi.com/v1/chat/completions",
+            ),
+            (
+                "https://api.minimax.io/",
+                "https://api.minimax.io/v1/chat/completions",
+            ),
+            (
+                "https://api.minimaxi.com/v1",
+                "https://api.minimaxi.com/v1/chat/completions",
+            ),
+            (
+                "https://gateway.example/v1/chat/completions",
+                "https://gateway.example/v1/chat/completions",
+            ),
+        ],
+    )
+    def test_normalizes_provider_root(self, base: str, expected: str) -> None:
+        assert _ai_impl._chat_completions_url(base) == expected
