@@ -949,6 +949,12 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Target branch to verify: `devfleet/codex/sub-1`" in qa
     assert "Do not inspect your own report-only task branch" in review
     assert "Do not inspect your own report-only task branch" in qa
+    assert "bootstrap has already fetched" in review
+    assert "bootstrap has already fetched" in qa
+    assert "Do not run git fetch, clone" in review
+    assert "Do not run git fetch, clone" in qa
+    assert "Verify both refs with `git cat-file -e`" in review
+    assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
     assert "platform-equivalent local `python -m pytest` command" in qa
