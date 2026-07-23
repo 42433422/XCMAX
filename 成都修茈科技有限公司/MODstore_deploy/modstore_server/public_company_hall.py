@@ -126,7 +126,9 @@ def _public_fallback_from_raw(raw: str) -> str:
     return "岗位任务执行摘要（内部提示词已隐藏）"
 
 
-def _publicize_feed_text(raw: str, *, summary_len: int = 96, detail_len: int = 600) -> Tuple[str, str]:
+def _publicize_feed_text(
+    raw: str, *, summary_len: int = 96, detail_len: int = 600
+) -> Tuple[str, str]:
     """把内部任务/提示词压成官网可读摘要；返回 (列表摘要, 详情全文)。"""
     s = str(raw or "")
     s = _CODE_FENCE.sub("", s)
@@ -650,9 +652,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             day=t.get("day") or board.get("day"),
             clock=t.get("ts"),
         )
-        summary, detail = _publicize_feed_text(
-            str(t.get("title") or t.get("text") or "")
-        )
+        summary, detail = _publicize_feed_text(str(t.get("title") or t.get("text") or ""))
         href = str(t.get("href") or "").strip()
         if href in {"", "/", "/world-will", "/world-will.html"}:
             href = ""
