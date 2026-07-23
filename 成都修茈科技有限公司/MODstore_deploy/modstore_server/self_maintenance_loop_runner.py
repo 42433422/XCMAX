@@ -1730,6 +1730,22 @@ def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
     return any(term in text for term in transient_terms)
 
 
+def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
+    """Detect an accepted Para task whose synchronous wait expired."""
+
+    inner = result.get("result") if isinstance(result.get("result"), dict) else result
+    outputs = inner.get("outputs") if isinstance(inner, dict) else None
+    if not isinstance(outputs, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("handler") == "para_delegate"
+        and item.get("accepted") is True
+        and str(item.get("status") or "").strip().lower() == "para_task_timeout"
+        for item in outputs
+    )
+
+
 def _loop_platform_bench_override() -> Optional[tuple]:
     """后台自维护/进化 loop 默认走平台派发：LLM 成本记平台密钥、不查/扣用户 ``llm_calls`` 配额。
 
@@ -1870,7 +1886,9 @@ def _run_step_with_inner_retries(
             # code step: dispatch/code 失败 → 反馈原因让员工修代码再交付
             # review/qa step: dispatch 失败不重试内层（_execute_employee_task_with_retries
             #                 已重试过瞬态失败），让外层走 _decide_post_loop_policy
-            if retry_kind == "code_fix":
+            # Para 已受理但同步等待超时并非代码缺陷；让外层记忆负责后续有界重试，
+            # 避免同一轮立即创建重复 Para 任务。
+            if retry_kind == "code_fix" and not _is_accepted_para_wait_timeout(result):
                 should_retry = True
         elif ok and retry_kind == "marker" and not is_final:
             # dispatch 成功但 marker/协议不合规 → 打回重跑（攻克遵循率缺口）
