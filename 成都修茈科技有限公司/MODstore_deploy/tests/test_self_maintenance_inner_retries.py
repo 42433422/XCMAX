@@ -126,6 +126,46 @@ def test_code_step_all_attempts_fail(monkeypatch, captured_ledger):
     assert step_retry_records[1]["inner_attempt"] == 2
 
 
+def test_code_step_accepted_para_timeout_does_not_start_duplicate_retry(
+    monkeypatch, captured_ledger
+):
+    """已受理 Para 任务等待超时后，不能把它当成代码缺陷再次派发。"""
+    timeout = {
+        "result": {
+            "ok": False,
+            "outputs": [
+                {
+                    "accepted": True,
+                    "error": "Para task task-1 未在 900s 内完成",
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "para_result": {"task_id": "task-1", "task_status": "running"},
+                    "status": "para_task_timeout",
+                }
+            ],
+            "status": "failed",
+        }
+    }
+    calls = _patch_dispatch(monkeypatch, [timeout])
+
+    outcome = mod._run_step_with_inner_retries(
+        employee_id="vibe-coding-maintainer",
+        step_name="code",
+        task_text="base task",
+        extra={},
+        user_id=1,
+        run_id="run-timeout",
+    )
+    _, ok, failure_reason, para_meta, _, code_fix_rounds, _ = outcome
+
+    assert ok is False
+    assert "未在 900s 内完成" in failure_reason
+    assert para_meta["task_id"] == "task-1"
+    assert code_fix_rounds == 0
+    assert len(calls) == 1
+    assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
+
+
 def test_review_step_marker_missing_then_present(monkeypatch, captured_ledger):
     """review step dispatch ok 但 marker 缺失 → 重试 → marker 出现。"""
     calls = _patch_dispatch(
