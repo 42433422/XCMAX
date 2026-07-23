@@ -302,6 +302,13 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     assert 'print("1" if success else "0")' in script
     assert "raise SystemExit(0 if success else 3)" in script
     assert "timeout-minutes: 120" in workflow
+    assert 'SSH_OPTS=(-i "$KEY_FILE"' in workflow
+    assert 'SCP_OPTS=(-i "$KEY_FILE"' in workflow
+    assert workflow.count("-o ServerAliveInterval=30") == 2
+    assert workflow.count("-o ServerAliveCountMax=120") == 2
+    assert workflow.count("-o TCPKeepAlive=yes") == 2
+    assert 'ssh "${SSH_OPTS[@]}"' in workflow
+    assert workflow.count('scp "${SCP_OPTS[@]}"') == 3
 
 
 def test_forced_self_maintenance_does_not_put_secret_or_reason_in_ssh_argv() -> None:
