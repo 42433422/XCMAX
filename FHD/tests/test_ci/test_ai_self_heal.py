@@ -83,6 +83,32 @@ class TestExtractErrors:
         errors = heal.extract_errors(log)
         assert len(errors) == 1
 
+    def test_github_action_timeout_with_envelope_is_parsed(self) -> None:
+        log = (
+            "cvm-push-release\tPush to CVM update server\t"
+            "2026-07-23T09:16:55.1008330Z ##[error]CVM push failed with status 124.\n"
+            "cvm-push-release\tPush to CVM update server\t"
+            "2026-07-23T09:17:00.1021661Z ##[error]Process completed with exit code 124."
+        )
+
+        errors = heal.extract_errors(log)
+
+        assert {error.code for error in errors} == {"EXIT_124"}
+        assert any("CVM push failed" in error.message for error in errors)
+
+    def test_incident_excerpt_prefers_failure_context(self) -> None:
+        log = "\n".join(
+            ["unrelated checkout output"] * 30
+            + ["upload started", "##[error]CVM push failed with status 124."]
+            + ["unrelated later job"] * 30
+        )
+
+        excerpt = heal.select_incident_log_excerpt(log, max_chars=1000)
+
+        assert "CVM push failed with status 124" in excerpt
+        assert "upload started" in excerpt
+        assert excerpt.count("unrelated later job") < 30
+
 
 # =====================================================================
 # compute_fingerprint 测试
@@ -311,6 +337,25 @@ class TestCreateRemediationIssue:
             "auto-incident",
         ]
 
+    def test_dispatches_issue_implementation_explicitly(self) -> None:
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 204
+        client.post.return_value = response
+
+        ok = heal.dispatch_issue_implementation(
+            "https://github.com/owner/repo/issues/505",
+            token="tok",
+            repo="owner/repo",
+            client=client,
+        )
+
+        assert ok is True
+        assert client.post.call_args.kwargs["json"] == {
+            "ref": "main",
+            "inputs": {"issue_number": "505"},
+        }
+
     def test_no_repo_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
@@ -521,6 +566,12 @@ class TestMainFlow:
             "create_remediation_issue",
             lambda **kwargs: "https://github.com/a/b/issues/1",
         )
+        dispatched = []
+        monkeypatch.setattr(
+            heal,
+            "dispatch_issue_implementation",
+            lambda issue_url, **kwargs: dispatched.append(issue_url) or True,
+        )
         rc = heal.main(
             [
                 "--run-id",
@@ -534,6 +585,7 @@ class TestMainFlow:
             ]
         )
         assert rc == 2
+        assert dispatched == ["https://github.com/a/b/issues/1"]
 
     def test_dry_run_does_not_create_pr(
         self,

@@ -145,6 +145,19 @@ _MYPY_RE = re.compile(r"^(?P<file>[^\s:]+):(?P<line>\d+):\s*error:\s*(?P<msg>.*)
 _MYPY_CODE_RE = re.compile(r"\[(?P<code>[\w-]+)\]")
 _PYTEST_FAIL_RE = re.compile(r"^(?P<file>[^\s:]+):(?P<line>\d+):\s*(?P<msg>FAILED|ERROR.*)$")
 _PYTEST_FAILED_RE = re.compile(r"^FAILED\s+(?P<msg>.*)$")
+_ACTION_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+")
+_ACTION_ERROR_RE = re.compile(r"##\[error\](?P<msg>.+)", re.IGNORECASE)
+_ACTION_EXIT_RE = re.compile(r"Process completed with exit code\s+(?P<code>\d+)", re.IGNORECASE)
+_ACTION_STATUS_RE = re.compile(r"(?:failed with status|status)\s+(?P<code>\d+)", re.IGNORECASE)
+
+
+def _normalize_action_log_line(raw_line: str) -> str:
+    """Remove GitHub's job/step/timestamp envelope without losing evidence."""
+
+    line = str(raw_line or "").rstrip("\r").lstrip("\ufeff")
+    if line.count("\t") >= 2:
+        line = line.split("\t", 2)[-1]
+    return _ACTION_TIMESTAMP_RE.sub("", line.lstrip("\ufeff"), count=1)
 
 
 def extract_errors(log_text: str) -> list[ErrorEntry]:
@@ -158,7 +171,7 @@ def extract_errors(log_text: str) -> list[ErrorEntry]:
     seen: set[tuple[str, str, str, str]] = set()
     out: list[ErrorEntry] = []
     for raw_line in log_text.splitlines():
-        line = raw_line.rstrip("\r")
+        line = _normalize_action_log_line(raw_line)
         if not line:
             continue
         m = _RUFF_RE.match(line)
@@ -218,13 +231,54 @@ def extract_errors(log_text: str) -> list[ErrorEntry]:
                                 raw=line,
                             )
                         else:
-                            continue
+                            action_error = _ACTION_ERROR_RE.search(line)
+                            action_exit = _ACTION_EXIT_RE.search(line)
+                            action_status = _ACTION_STATUS_RE.search(line)
+                            if not (action_error or action_exit or action_status):
+                                continue
+                            code_match = action_exit or action_status
+                            code = code_match.group("code") if code_match else "ERROR"
+                            message = (
+                                action_error.group("msg").strip() if action_error else line.strip()
+                            )
+                            entry = ErrorEntry(
+                                tool="github-actions",
+                                code=f"EXIT_{code}" if code.isdigit() else code,
+                                message=message,
+                                file_path="",
+                                line=0,
+                                raw=line,
+                            )
         key = (entry.tool, entry.code, entry.file_path, entry.message)
         if key in seen:
             continue
         seen.add(key)
         out.append(entry)
     return out
+
+
+def select_incident_log_excerpt(log_text: str, *, max_chars: int = 12000) -> str:
+    """Prefer failing-step evidence over an arbitrary tail from another job."""
+
+    lines = list((log_text or "").splitlines())
+    interesting = [
+        index
+        for index, raw in enumerate(lines)
+        if _ACTION_ERROR_RE.search(_normalize_action_log_line(raw))
+        or _ACTION_EXIT_RE.search(_normalize_action_log_line(raw))
+        or _ACTION_STATUS_RE.search(_normalize_action_log_line(raw))
+    ]
+    if not interesting:
+        return "\n".join(lines)[-max_chars:]
+    selected: list[str] = []
+    seen: set[int] = set()
+    for index in interesting:
+        for current in range(max(0, index - 8), min(len(lines), index + 4)):
+            if current in seen:
+                continue
+            seen.add(current)
+            selected.append(lines[current])
+    return "\n".join(selected)[-max_chars:]
 
 
 # =====================================================================
@@ -419,7 +473,13 @@ def match_rules(errors: list[ErrorEntry]) -> list[Fix]:
             )
             continue
         fixes.append(
-            Fix(error=err, patch="", needs_human=True, description="未知工具错误（r3）", risk_level="r3")
+            Fix(
+                error=err,
+                patch="",
+                needs_human=True,
+                description="未知工具错误（r3）",
+                risk_level="r3",
+            )
         )
     return fixes
 
@@ -685,6 +745,58 @@ def create_remediation_issue(
                 pass
 
 
+def dispatch_issue_implementation(
+    issue_url: str,
+    *,
+    token: str | None = None,
+    repo: str | None = None,
+    ref: str = "main",
+    client: Any = None,
+) -> bool:
+    """Explicitly dispatch the implementation loop for a token-created issue.
+
+    Events emitted with ``GITHUB_TOKEN`` do not recursively start most other
+    workflows. ``workflow_dispatch`` is the supported exception, so incident
+    creation and implementation handoff must be two explicit API operations.
+    """
+
+    match = re.search(r"/issues/(?P<number>\d+)/?$", str(issue_url or ""))
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    token = token or os.environ.get("GITHUB_TOKEN", "")
+    if not match or not repo or not token or not str(ref or "").strip():
+        return False
+    if client is None:
+        if httpx is None:
+            return False
+        client = httpx.Client(timeout=30.0)
+        close_after = True
+    else:
+        close_after = False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = client.post(
+            f"{GITHUB_API}/repos/{repo}/actions/workflows/fhd-ai-issue-implement.yml/dispatches",
+            headers=headers,
+            json={
+                "ref": str(ref).strip(),
+                "inputs": {"issue_number": match.group("number")},
+            },
+        )
+        return response.status_code == 204
+    except Exception:
+        return False
+    finally:
+        if close_after:
+            try:
+                client.close()
+            except Exception:  # pragma: no cover
+                pass
+
+
 # =====================================================================
 # 分支递归检查
 # =====================================================================
@@ -788,7 +900,7 @@ def main(argv: list[str] | None = None) -> int:
         workflow=args.workflow,
         branch=args.branch,
         fingerprint=fingerprint,
-        log_excerpt=log_text,
+        log_excerpt=select_incident_log_excerpt(log_text),
         errors=errors,
         token=token,
         repo=repo,
@@ -797,6 +909,16 @@ def main(argv: list[str] | None = None) -> int:
         print("::error::[heal] remediation incident creation failed")
         return 2
 
+    implementation_dispatched = dispatch_issue_implementation(
+        issue_url,
+        token=token,
+        repo=repo,
+    )
+    if implementation_dispatched:
+        print(f"[heal] implementation workflow dispatched for {issue_url}")
+    else:
+        print(f"::warning::[heal] incident created but implementation dispatch failed: {issue_url}")
+
     record_fingerprint(
         fingerprint=fingerprint,
         pr_url=issue_url,
@@ -804,7 +926,9 @@ def main(argv: list[str] | None = None) -> int:
         workflow=args.workflow,
         store_path=args.store,
     )
-    print(f"::error::[heal] original failure is not healed; remediation incident created: {issue_url}")
+    print(
+        f"::error::[heal] original failure is not healed; remediation incident created: {issue_url}"
+    )
     print(f"[heal] fingerprint recorded: {fingerprint[:8]}")
     return 2
 
