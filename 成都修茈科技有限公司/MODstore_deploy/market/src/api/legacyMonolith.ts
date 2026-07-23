@@ -1365,7 +1365,11 @@ export const legacyApi = {
     req(`/api/openapi-connectors/${encodeURIComponent(String(id))}/logs?limit=${limit}&offset=${offset}`),
 
   customerServiceChat: (payload: { message: string; session_id?: number | null; context?: Record<string, unknown> }) =>
-    req('/api/customer-service/chat', { method: 'POST', body: JSON.stringify(payload) }),
+    req('/api/customer-service/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: 30_000,
+    }),
   customerServiceSessions: () => req('/api/customer-service/sessions'),
   customerServiceSessionDetail: (id: number | string) =>
     req(`/api/customer-service/sessions/${encodeURIComponent(String(id))}`),

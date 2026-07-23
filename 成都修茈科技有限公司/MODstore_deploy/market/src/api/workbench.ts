@@ -132,7 +132,12 @@ export const openApiConnectors = {
 
 export const customerService = {
   customerServiceChat: (payload: { message: string; session_id?: number | null; context?: Record<string, unknown> }) =>
-    req('/api/customer-service/chat', { method: 'POST', body: JSON.stringify(payload) }),
+    req('/api/customer-service/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      // 后端建单后的 incident 派发已异步；前端仍加超时，避免「处理中…」永久卡住
+      timeoutMs: 30_000,
+    }),
   customerServiceSessions: () => req('/api/customer-service/sessions'),
   customerServiceSessionDetail: (id: number | string) => req(`/api/customer-service/sessions/${encodeURIComponent(String(id))}`),
   customerServiceTickets: (status = '') => req(`/api/customer-service/tickets${status ? `?status=${encodeURIComponent(status)}` : ''}`),
