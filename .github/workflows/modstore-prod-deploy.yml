@@ -19,6 +19,11 @@ on:
         default: "true"
         type: choice
         options: ["true", "false"]
+      self_maintenance_run_id:
+        description: Optional exact self-maintenance run id for merge/deploy correlation
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: modstore-prod-deploy
@@ -49,6 +54,26 @@ jobs:
           fi
           [[ "$target" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid exact SHA: $target"; exit 1; }
           echo "sha=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve exact deployment correlation
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          SELF_MAINTENANCE_RUN_ID: ${{ inputs.self_maintenance_run_id }}
+        run: |
+          set -euo pipefail
+          jq -nc \
+            --arg merge_sha "$TARGET_SHA" \
+            --arg run_id "${SELF_MAINTENANCE_RUN_ID:-}" \
+            '{merge_sha:$merge_sha,run_id:$run_id,environment:"production"}' \
+            > "${RUNNER_TEMP}/modstore-deployment-correlation.json"
+
+      - name: Upload deployment correlation
+        uses: actions/upload-artifact@v4
+        with:
+          name: modstore-deployment-correlation
+          path: ${{ runner.temp }}/modstore-deployment-correlation.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Deploy immutable release and verify exact runtime identity
         uses: appleboy/ssh-action@v1.2.2
