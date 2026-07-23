@@ -323,7 +323,7 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
         }
     ).encode("utf-8")
     req = urllib.request.Request(
-        f"{base}/chat/completions",
+        _chat_completions_url(base),
         data=body,
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -344,6 +344,25 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
         return plan
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"LLM 调用失败：{exc}"}
+
+
+def _chat_completions_url(base_url: str) -> str:
+    """Normalize provider roots to an OpenAI-compatible chat endpoint.
+
+    The runtime catalog stores MiniMax at the provider root while the official
+    compatible API lives at ``/v1/chat/completions``.  CI previously appended
+    only ``/chat/completions`` and received HTTP 404 after switching from MiMo.
+    Existing versioned gateways remain unchanged.
+    """
+
+    base = str(base_url or "").strip().rstrip("/")
+    if not base:
+        base = "https://api.deepseek.com/v1"
+    if base.endswith("/chat/completions"):
+        return base
+    if base in {"https://api.minimaxi.com", "https://api.minimax.io"}:
+        base += "/v1"
+    return f"{base}/chat/completions"
 
 
 def _git(*args: str, cwd: str | None = None, check: bool = True) -> subprocess.CompletedProcess:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 
 import pytest
 
-from modstore_server import self_maintenance_loop_runner
+from modstore_server import models, self_maintenance_loop_api, self_maintenance_loop_runner
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DeploymentReceiptError,
@@ -39,6 +40,116 @@ def test_deployment_receipt_callback_requires_exact_shared_token(monkeypatch) ->
     assert _deployment_receipt_token_valid(None, "expected-token") is True
     assert _deployment_receipt_token_valid("Bearer wrong-token", None) is False
     assert _deployment_receipt_token_valid(None, None) is False
+
+
+def test_only_verified_production_receipt_credits_release_officer(tmp_path, monkeypatch) -> None:
+    models._engine = None
+    models._SessionFactory = None
+    monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "deploy-receipt.sqlite"))
+    models.init_db()
+    sf = models.get_session_factory()
+    with sf() as session:
+        session.add(
+            models.User(
+                username="deploy_admin",
+                password_hash="x",
+                email="deploy@example.com",
+                is_admin=True,
+            )
+        )
+        session.commit()
+
+    base = {
+        "event": "post_deploy_verified",
+        "environment": "production",
+        "ok": True,
+        "identity_verified": True,
+        "status": "verified",
+        "run_id": "self-maintenance-123",
+        "merge_sha": MERGE_SHA,
+        "workflow_run_id": "98765",
+    }
+    assert self_maintenance_loop_runner._record_verified_deploy_employee_metric(base) is True
+    assert self_maintenance_loop_runner._record_verified_deploy_employee_metric(base) is False
+    assert (
+        self_maintenance_loop_runner._record_verified_deploy_employee_metric(
+            {**base, "environment": "staging", "workflow_run_id": "98766"}
+        )
+        is False
+    )
+
+    with sf() as session:
+        rows = (
+            session.query(models.EmployeeExecutionMetric)
+            .filter(models.EmployeeExecutionMetric.employee_id == "deploy-release-officer")
+            .all()
+        )
+    assert len(rows) == 1
+    assert rows[0].status == "success"
+    assert MERGE_SHA[:12] in rows[0].task
+    models._engine = None
+    models._SessionFactory = None
+
+
+def test_deployment_receipt_callback_routes_verified_event_to_employee_metric(
+    monkeypatch,
+) -> None:
+    events: list[dict] = []
+    metric_events: list[dict] = []
+    monkeypatch.setenv("MODSTORE_OPS_INGEST_TOKEN", "receipt-token")
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_api._release_manifest_payload",
+        lambda: {"git_sha": MERGE_SHA, "artifact_sha256": ARTIFACT_SHA},
+    )
+    monkeypatch.setattr(
+        "modstore_server.deploy_context.health_payload",
+        lambda: {"git_sha": MERGE_SHA, "artifact_sha256": ARTIFACT_SHA},
+    )
+    monkeypatch.setattr(self_maintenance_loop_runner, "_append_ledger", events.append)
+    monkeypatch.setattr(self_maintenance_loop_runner, "_append_governance_audit", lambda _e: None)
+    monkeypatch.setattr(
+        self_maintenance_loop_runner,
+        "_record_verified_deploy_employee_metric",
+        lambda event: metric_events.append(dict(event)) or True,
+    )
+    monkeypatch.setattr(self_maintenance_loop_runner, "_read_ledger", lambda limit=5000: [])
+
+    def fake_record_completed_deployment_receipt(**kwargs):
+        event = {
+            "event": "post_deploy_verified",
+            "environment": "production",
+            "ok": True,
+            "identity_verified": True,
+            "status": "verified",
+            "run_id": "self-maintenance-123",
+            "merge_sha": MERGE_SHA,
+            "workflow_run_id": "98765",
+        }
+        kwargs["record_event"](event)
+        return {"recorded": True, "run_id": event["run_id"]}
+
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_deploy_receipts.record_completed_deployment_receipt",
+        fake_record_completed_deployment_receipt,
+    )
+
+    result = asyncio.run(
+        self_maintenance_loop_api.record_self_maintenance_deployment_receipt(
+            body={
+                "merge_sha": MERGE_SHA,
+                "environment": "production",
+                "workflow_run_id": "98765",
+                "workflow_status": "completed",
+                "workflow_conclusion": "success",
+            },
+            authorization=None,
+            x_autonomy_token="receipt-token",
+        )
+    )
+
+    assert result["recorded"] is True
+    assert len(events) == 1
+    assert metric_events == [events[0]]
 
 
 @dataclass

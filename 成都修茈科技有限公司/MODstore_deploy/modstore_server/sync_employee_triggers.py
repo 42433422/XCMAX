@@ -99,6 +99,57 @@ def sync_triggers_for_manifest(manifest: Dict[str, Any], *, session=None) -> int
     return n
 
 
+def sync_duty_contract_event_bindings(*, session=None) -> int:
+    """Upsert reviewed low/medium duty event contracts into the incident bus.
+
+    High-risk release, payment and infrastructure duties are deliberately not
+    subscribed for unattended execution.
+    """
+
+    from modstore_server.duty_workforce_contracts import workforce_event_bindings
+    from modstore_server.models import EmployeeTriggerBinding, get_session_factory
+
+    event_types = _get_event_types()
+
+    def _do_sync(sess) -> int:
+        total = 0
+        for binding in workforce_event_bindings():
+            risk = str(binding.get("risk_level") or "").strip().lower()
+            event_key = str(binding.get("event_type") or "").strip()
+            base = event_key.split(":", 1)[0].strip()
+            if risk not in {"low", "medium"} or not event_key or base not in event_types:
+                continue
+            employee_id = str(binding.get("employee_id") or "").strip()
+            row = (
+                sess.query(EmployeeTriggerBinding)
+                .filter(
+                    EmployeeTriggerBinding.employee_id == employee_id,
+                    EmployeeTriggerBinding.event_type == event_key,
+                )
+                .first()
+            )
+            if row:
+                row.is_active = True
+            else:
+                sess.add(
+                    EmployeeTriggerBinding(
+                        employee_id=employee_id,
+                        event_type=event_key,
+                        is_active=True,
+                    )
+                )
+            total += 1
+        return total
+
+    if session is not None:
+        return _do_sync(session)
+    sf = get_session_factory()
+    with sf() as sess:
+        total = _do_sync(sess)
+        sess.commit()
+    return total
+
+
 def sync_all_employee_triggers() -> int:
     """全量同步：遍历所有已注册员工包，读取其 manifest 并同步 triggers 到 DB。"""
     try:
@@ -126,6 +177,7 @@ def sync_all_employee_triggers() -> int:
                     total += n
                 except Exception:
                     logger.exception("sync_triggers: failed for pack %s", row.pkg_id)
+            total += sync_duty_contract_event_bindings(session=session)
             session.commit()
         logger.info("sync_all_employee_triggers: upserted %d bindings", total)
         return total
@@ -134,4 +186,8 @@ def sync_all_employee_triggers() -> int:
         return 0
 
 
-__all__ = ["sync_triggers_for_manifest", "sync_all_employee_triggers"]
+__all__ = [
+    "sync_all_employee_triggers",
+    "sync_duty_contract_event_bindings",
+    "sync_triggers_for_manifest",
+]
