@@ -292,6 +292,44 @@ class TestMatchRules:
         findings = review.match_high_risk_rules(hunks)
         assert len(findings) == 0
 
+    def test_kb_evidence_diff_does_not_trigger_executable_code_rules(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="FHD/XCAGI/kb/fixes/example.json",
+                start_line=7,
+                lines=[
+                    (
+                        7,
+                        "+",
+                        '"fix_diff": "for u in users: db.query(User).get(u.id)\\nwhile True:",',
+                    )
+                ],
+                raw_header="@@ -7,1 +7,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert not any(
+            finding.rule in {"n-plus-one-inline", "unbounded-while-true"} for finding in findings
+        )
+
+    def test_kb_evidence_still_scans_for_committed_secrets(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="FHD/XCAGI/kb/fixes/example.json",
+                start_line=7,
+                lines=[
+                    (
+                        7,
+                        "+",
+                        '"fix_diff": "TOKEN = \'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789\'",',
+                    )
+                ],
+                raw_header="@@ -7,1 +7,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert any(finding.rule == "hardcoded-aws-secret" for finding in findings)
+
     def test_dedup_same_rule_same_line(self) -> None:
         hunks = [
             review.DiffHunk(
