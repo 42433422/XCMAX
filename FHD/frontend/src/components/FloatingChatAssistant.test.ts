@@ -75,6 +75,7 @@ describe('FloatingChatAssistant', () => {
     const avatar = wrapper.find('.floating-chat-toggle-avatar img')
     expect(avatar.exists()).toBe(true)
     expect(avatar.attributes('src')).toBe('/ai-butler-female-avatar-v1.png')
+    expect(avatar.attributes('draggable')).toBe('false')
   })
 
   it('renders the male avatar in the standalone round toggle for administration', () => {
