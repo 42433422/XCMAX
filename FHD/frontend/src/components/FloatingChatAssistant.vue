@@ -18,7 +18,7 @@
       @click="toggleOpen"
     >
       <span class="floating-chat-toggle-avatar" aria-hidden="true">
-        <img :src="avatarUrl" alt="" width="42" height="42" decoding="async" />
+        <img :src="avatarUrl" alt="" draggable="false" width="42" height="42" decoding="async" />
       </span>
       <span class="floating-chat-toggle-label">小C助理</span>
     </button>
@@ -363,6 +363,9 @@ onBeforeUnmount(() => {
   object-fit: cover;
   object-position: 50% 37%;
   transform: scale(1.08);
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .floating-chat-toggle--admin .floating-chat-toggle-avatar {
