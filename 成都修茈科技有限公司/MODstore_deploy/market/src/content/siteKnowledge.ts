@@ -320,9 +320,10 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     title: '产品下载 | 成都修茈科技有限公司',
     description: '下载 XCAGI 桌面端与相关产品包，查看版本与系统要求。',
     welcomeTitle: 'Hi，需要下载 XCAGI？',
-    welcomeDesc: '可问各端安装包、系统要求或授权购买；也可预约方案沟通。',
-    summary: '产品下载页提供 XCAGI 安装包与版本信息，便于试用与部署。',
-    highlights: ['桌面端下载', '版本与系统要求', '授权与试用'],
+    welcomeDesc: '可问 macOS、Windows、Android 安装包、系统要求或授权购买。',
+    summary:
+      '这里是 XCAGI 产品下载页，可选 macOS、Windows 或 Android 安装包，并查看版本与系统要求。',
+    highlights: ['macOS / Windows / Android', '版本与系统要求', '授权与试用'],
     quickActions: [
       { label: '怎么下载', message: '怎么下载 XCAGI？' },
       { label: '支持哪些系统', message: 'XCAGI 支持哪些操作系统？' },
