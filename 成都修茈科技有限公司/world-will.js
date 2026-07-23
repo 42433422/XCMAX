@@ -16,6 +16,22 @@
       .replace(/"/g, '&quot;')
   }
 
+  /** 前端二次脱敏：避免接口/回退板仍带出角色提示词 */
+  function sanitizePublicFeedText(raw) {
+    var s = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim()
+    if (!s) return '（暂无公开摘要）'
+    if (
+      /你是|回复必须说人话|SYSTEM\s*PROMPT|事故处理小组的\s*scout|不要直接倾倒|你的任务是|内部字段或英文模板/i.test(
+        s,
+      )
+    ) {
+      var m = s.match(/事件类型[:：]\s*([a-z][a-z0-9_.-]{2,64})/i)
+      if (m) return '事故巡检：处理事件 ' + m[1]
+      return '岗位任务执行摘要（内部提示词已隐藏）'
+    }
+    return s
+  }
+
   function fmtGen(iso) {
     if (!iso) return '—'
     try {
@@ -415,7 +431,7 @@
       feed
         .map(function (f, idx) {
           var stamp = fmtFeedStamp(f)
-          var preview = String(f.text || '')
+          var preview = sanitizePublicFeedText(f.text || '')
           return (
             '<li class="hall-timeline-item hall-timeline-item--' +
             esc(f.presence || 'idle') +
@@ -470,7 +486,7 @@
     var panel = document.getElementById('hall-feed-detail')
     if (!panel) return
     var stamp = fmtFeedStamp(item)
-    var body = String(item.detail || item.text || '（暂无公开摘要）')
+    var body = sanitizePublicFeedText(item.detail || item.text || '（暂无公开摘要）')
     var href = String(item.href || '').trim()
     var truncated =
       item.detail_truncated === true ||

@@ -122,3 +122,28 @@ def test_publicize_feed_text_prefers_gangwei_task_field():
     assert summary.startswith("汇总伙伴交付")
     assert "执行模式" not in summary
     assert "汇总伙伴交付" in detail
+
+
+def test_publicize_feed_text_hides_scout_instruction_prompt():
+    summary, detail = _publicize_feed_text(
+        "你是事故处理小组的 scout。事件类型：ops.incident.email。"
+        "问题摘要：ops.incident.email。 回复必须说人话：先给结论/状态，再说下一步。"
+    )
+    assert "你是" not in summary
+    assert "回复必须说人话" not in summary
+    assert "scout" not in summary.lower()
+    assert "ops.incident.email" in summary
+    assert "事故巡检" in summary
+    assert "你是" not in detail
+    assert "回复必须说人话" not in detail
+
+
+def test_publicize_feed_text_hides_json_dump_instruction():
+    summary, detail = _publicize_feed_text(
+        "不要直接倾倒 JSON、内部字段或英文模板。你的任务是判断最可能的原因、影响范围与下一步。"
+    )
+    assert "不要直接倾倒" not in summary
+    assert "你的任务是" not in summary
+    assert "JSON" not in summary
+    assert "提示词已隐藏" in summary or "事故巡检" in summary
+    assert "不要直接倾倒" not in detail
