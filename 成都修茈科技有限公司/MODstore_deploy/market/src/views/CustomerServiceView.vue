@@ -667,7 +667,68 @@ html:not([data-workbench-theme='light']) .cs-side-empty {
   color: #f2f2f7;
 }
 
+<<<<<<< Updated upstream
 html:not([data-workbench-theme='light']) .cs-btn--ghost {
   color: #f2f2f7;
+=======
+html[data-workbench-theme='light'] .cs-hero__panel,
+html[data-workbench-theme='light'] .cs-chat,
+html[data-workbench-theme='light'] .cs-side-card {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+}
+
+html[data-workbench-theme='light'] .cs-toolbar {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] .cs-bubble,
+html[data-workbench-theme='light'] .cs-empty {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #0f172a;
+}
+
+html[data-workbench-theme='light'] .cs-bubble p {
+  color: #0f172a;
+}
+
+html[data-workbench-theme='light'] .cs-message--user .cs-bubble {
+  background: rgba(0, 113, 227, 0.08);
+  border-color: rgba(0, 113, 227, 0.12);
+}
+
+html[data-workbench-theme='light'] .cs-composer {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] .cs-composer textarea {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .cs-composer textarea::placeholder {
+  color: #86868b;
+}
+
+html[data-workbench-theme='light'] .cs-btn {
+  background: #0071e3;
+  color: #fff;
+}
+
+html[data-workbench-theme='light'] .cs-btn--ghost {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-workbench-theme='light'] .cs-ticket,
+html[data-workbench-theme='light'] .cs-standard {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+  color: #1d1d1f;
+>>>>>>> Stashed changes
 }
 </style>
