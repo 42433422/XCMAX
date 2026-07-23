@@ -838,11 +838,14 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if action not in {
-        "auto_merged_low_risk",
-        "auto_merge_requested_low_risk",
-        "auto_continue",
-    } and status not in {"completed_merged", "completed_merge_requested"}:
+    if (
+        action
+        not in {
+            "auto_merged_low_risk",
+            "auto_continue",
+        }
+        and status != "completed_merged"
+    ):
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
@@ -1002,6 +1005,31 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 int(item.get("retry_count") or 0),
             )
             return None
+
+        # A merge request is only a hand-off, not completion.  When the Para
+        # merge worker's independent AI review vetoes a PR, start a new code
+        # task from the rejected branch and carry the exact findings forward.
+        for item in reversed(open_items_raw):
+            if not isinstance(item, dict):
+                continue
+            if item.get("kind") != "automated_remediation":
+                continue
+            if item.get("reason") != "para_ai_review_rejected":
+                continue
+            branch = str(item.get("branch") or "").strip()
+            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+            if branch and para_task_id:
+                return {
+                    "branch": branch,
+                    "continue_existing_code_task": True,
+                    "failed_run_id": str(item.get("run_id") or "").strip(),
+                    "failed_steps": ["code"],
+                    "para_task_id": para_task_id,
+                    "reason": "resume_para_ai_review_rejection",
+                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
+                        :4000
+                    ],
+                }
 
     last_decision = memory.get("last_policy_decision")
     last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
@@ -2047,6 +2075,145 @@ def _fetch_para_task_report_excerpt(
     return "\n".join(chunks)[-limit:]
 
 
+def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
+    headers = _guest_auth_headers(api_base)
+    with httpx.Client(timeout=20.0, trust_env=False, verify=False) as client:
+        resp = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
+        resp.raise_for_status()
+        task = (resp.json() or {}).get("task") or {}
+    return task if isinstance(task, dict) else {}
+
+
+def _reconcile_requested_merge_feedback(
+    memory: Dict[str, Any],
+    *,
+    api_base: Optional[str] = None,
+    task_fetcher: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Settle requested merges from Para without confusing request with success.
+
+    ``completed_merge_requested`` remains open until Para reports a real merged
+    SHA.  An independent merge-review veto becomes an automated remediation
+    item containing the exact findings, so the next code employee can fix them.
+    """
+
+    base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
+    recent_runs = memory.get("recent_runs")
+    open_items = memory.get("open_items")
+    if not base or not isinstance(recent_runs, list):
+        return {"changed": False, "merged": 0, "remediation_added": 0}
+    if not isinstance(open_items, list):
+        open_items = []
+        memory["open_items"] = open_items
+
+    fetcher = task_fetcher or _fetch_para_task_state
+    changed = False
+    merged = 0
+    remediation_added = 0
+    checked_task_ids: set[str] = set()
+    for run in reversed(recent_runs):
+        if not isinstance(run, dict):
+            continue
+        if str(run.get("status") or "") != "completed_merge_requested":
+            continue
+        task_id = str(run.get("para_task_id") or "").strip()
+        if not task_id or task_id in checked_task_ids:
+            continue
+        checked_task_ids.add(task_id)
+        try:
+            task = fetcher(base, task_id)
+        except Exception:
+            logger.exception("failed to reconcile requested Para merge task_id=%s", task_id)
+            continue
+        task_status = str(task.get("status") or "").strip().lower()
+        branch = str(run.get("branch") or "").strip()
+        if task_status == "merged" and str(task.get("merge_commit_sha") or "").strip():
+            merge_sha = str(task.get("merge_commit_sha") or "").strip()
+            existing_receipt = run.get("merge_reconciliation")
+            receipt = {
+                "merge_commit_sha": merge_sha,
+                "reconciled_at": _iso(_utc_now()),
+                "status": "merged",
+                "task_id": task_id,
+            }
+            if not (
+                isinstance(existing_receipt, dict)
+                and existing_receipt.get("status") == "merged"
+                and existing_receipt.get("task_id") == task_id
+                and existing_receipt.get("merge_commit_sha") == merge_sha
+            ):
+                run["merge_reconciliation"] = receipt
+                changed = True
+            closed = _close_open_items_in_memory(
+                memory,
+                actor="para_merge_reconciler",
+                branches=[branch],
+                resolution_reason="para_reported_real_merge_sha",
+                task_ids=[task_id],
+            )
+            if closed.get("closed_count"):
+                changed = True
+            merged += 1
+            continue
+        if task_status != "merge_conflict":
+            continue
+        conflict = task.get("merge_conflict")
+        if not isinstance(conflict, dict):
+            conflict = {}
+        source = str(conflict.get("source") or "").strip()
+        detail = str(conflict.get("detail") or task.get("fail_reason") or "").strip()[:4000]
+        reason = "para_ai_review_rejected" if source == "ai-review-veto" else "para_merge_conflict"
+        existing_receipt = run.get("merge_reconciliation")
+        receipt = {
+            "detail": detail,
+            "reconciled_at": _iso(_utc_now()),
+            "source": source,
+            "status": "merge_conflict",
+            "task_id": task_id,
+        }
+        if not (
+            isinstance(existing_receipt, dict)
+            and existing_receipt.get("status") == "merge_conflict"
+            and existing_receipt.get("task_id") == task_id
+            and existing_receipt.get("source") == source
+            and existing_receipt.get("detail") == detail
+        ):
+            run["merge_reconciliation"] = receipt
+            changed = True
+        already_open = any(
+            isinstance(item, dict)
+            and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
+            and item.get("reason") == reason
+            for item in open_items
+        )
+        if source == "ai-review-veto" and detail and not already_open:
+            open_items.append(
+                {
+                    "branch": str(conflict.get("branch_name") or branch).strip(),
+                    "created_at": _iso(_utc_now()),
+                    "detail": detail,
+                    "kind": "automated_remediation",
+                    "para_task_id": task_id,
+                    "reason": reason,
+                    "review_feedback": detail,
+                    "run_id": str(run.get("run_id") or "").strip(),
+                    "source": source,
+                    "task_id": task_id,
+                }
+            )
+            changed = True
+            remediation_added += 1
+
+    if changed:
+        memory["open_items"] = (memory.get("open_items") or [])[-50:]
+        memory["updated_at"] = _iso(_utc_now())
+    return {
+        "changed": changed,
+        "merged": merged,
+        "remediation_added": remediation_added,
+    }
+
+
 def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     data: Dict[str, Any] = {
         "branch": os.environ.get("MODSTORE_PARA_BRANCH"),
@@ -2184,6 +2351,21 @@ def _code_task_text(
         "risk_score_v3_below_threshold_or_blocked",
     }:
         selected_remediation = last_decision
+    external_review_remediation = ""
+    if (
+        isinstance(resume_candidate, dict)
+        and resume_candidate.get("reason") == "resume_para_ai_review_rejection"
+    ):
+        feedback = str(resume_candidate.get("review_feedback") or "").strip()[:4000]
+        external_review_remediation = (
+            "\n\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\n"
+            "The independent Para merge reviewer vetoed the previous candidate. "
+            "Your current isolated work branch is based on that rejected branch. "
+            "Address every finding below in production code and focused regression tests; "
+            "do not remove the original fix, weaken safety gates, or merely rewrite comments. "
+            "After the fix, run the mandatory policy suite, commit, and push the current work branch. "
+            f"Exact reviewer findings: {feedback or '(missing feedback: fail closed and inspect the parent diff)'}"
+        )
     score_remediation = ""
     if isinstance(selected_remediation, dict):
         merge_result = (
@@ -2309,6 +2491,7 @@ def _code_task_text(
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"{score_remediation}"
+        f"{external_review_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
@@ -6055,6 +6238,9 @@ def _run_self_maintenance_loop_unlocked(
 
     user_id = _self_maintenance_actor_user_id()
     loop_memory = _load_loop_memory()
+    merge_reconciliation = _reconcile_requested_merge_feedback(loop_memory)
+    if merge_reconciliation.get("changed"):
+        _write_loop_memory(loop_memory)
     resume_candidate = _resume_review_qa_candidate(loop_memory)
     start_record = {
         "created_at": _iso(started_at),
@@ -6070,6 +6256,8 @@ def _run_self_maintenance_loop_unlocked(
         "user_id": user_id,
         "runtime_provenance": gate.get("runtime_provenance"),
     }
+    if any(merge_reconciliation.values()):
+        start_record["merge_reconciliation"] = merge_reconciliation
     if resume_candidate:
         start_record["resume_candidate"] = resume_candidate
     _append_ledger(start_record)
