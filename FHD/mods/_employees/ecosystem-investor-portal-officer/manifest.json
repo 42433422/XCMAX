@@ -1,7 +1,7 @@
 {
   "id": "ecosystem-investor-portal-officer",
   "name": "投资方只读门户员",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "admin",
   "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "ecosystem-investor-portal-officer",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "artifact": "employee_pack",
       "name": "投资方只读门户员",
       "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
@@ -98,13 +98,33 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "agent"
-      ],
-      "agent": {
-        "workspace": {
-          "requires_project_root": true,
-          "read_only": true
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "ecosystem_investor_portal_officer",
+        "action": "build_public_snapshot",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["milestones", "risks"],
+          "properties": {
+            "milestones": {"type": "array"},
+            "risks": {"type": "array"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "public_snapshot", "redacted_fields", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "milestones": [{"id": "release-readiness", "status": "on_track", "progress_pct": 82, "evidence_ref": "release://sha256/demo"}],
+          "risks": [{"id": "capacity", "severity": "low", "status": "monitored", "mitigation": "weekly review"}]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
         }
       }
     },

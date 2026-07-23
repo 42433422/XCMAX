@@ -17,8 +17,12 @@ EMPLOYEES = {
     "delivery-receipt-officer": "delivery_receipt_officer",
     "doc-knowledge-curator": "doc_knowledge_curator",
     "ecosystem-delivery-reporter": "ecosystem_delivery_reporter",
+    "ecosystem-investor-portal-officer": "ecosystem_investor_portal_officer",
+    "ecosystem-joint-catalog-officer": "ecosystem_joint_catalog_officer",
     "ecosystem-revenue-share-reconciler": "ecosystem_revenue_share_reconciler",
+    "employee-planner": "employee_planner",
     "employee-pack-quality-interviewer": "employee_pack_quality_interviewer",
+    "enterprise-adoption-officer": "enterprise_adoption_officer",
     "quality-validator": "quality_validator",
     "sandbox-tester": "sandbox_tester",
     "test-qa-runner": "test_qa_runner",
@@ -223,6 +227,104 @@ def test_top_architect_reports_forbidden_dependency_direction() -> None:
     )
     assert output["status"] == "rejected"
     assert output["violations"][0]["reason"] == "forbidden_layer_dependency:domain->interface"
+
+
+def test_investor_snapshot_rejects_private_customer_fields() -> None:
+    output = _module("ecosystem-investor-portal-officer").run(
+        {
+            "milestones": [
+                {
+                    "id": "delivery",
+                    "status": "on_track",
+                    "progress_pct": 80,
+                    "customer_id": "private-customer",
+                }
+            ],
+            "risks": [],
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["public_snapshot"] == {}
+    assert output["redacted_fields"] == ["input.milestones[0].customer_id"]
+
+
+def test_joint_catalog_reports_version_drift() -> None:
+    output = _module("ecosystem-joint-catalog-officer").run(
+        {
+            "primary_catalog": [{"id": "pack", "version": "2.0", "status": "listed"}],
+            "partner_catalog": [{"id": "pack", "version": "1.0", "status": "listed"}],
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["consistent"] is False
+    assert output["differences"] == [
+        {
+            "id": "pack",
+            "kind": "version_mismatch",
+            "primary": "2.0",
+            "partner": "1.0",
+        }
+    ]
+
+
+def test_employee_planner_rejects_unassigned_capability() -> None:
+    output = _module("employee-planner").run(
+        {
+            "requirements": [{"id": "ship", "capabilities": ["release"], "depends_on": []}],
+            "employees": [{"id": "qa", "capabilities": ["qa"], "available": True}],
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["plan"] == []
+    assert output["blockers"] == [
+        {
+            "kind": "capability_unassigned",
+            "requirement_id": "ship",
+            "capabilities": ["release"],
+        }
+    ]
+
+
+def test_enterprise_adoption_aggregates_without_exposing_tenant_rows() -> None:
+    output = _module("enterprise-adoption-officer").run(
+        {
+            "tenants": [
+                {
+                    "tenant_id": "tenant-a",
+                    "activated": True,
+                    "active_days_30": 9,
+                    "adopted_features": ["goals"],
+                    "blocked_reasons": ["training"],
+                    "value_milestones": ["delivery"],
+                },
+                {
+                    "tenant_id": "tenant-b",
+                    "activated": False,
+                    "active_days_30": 0,
+                    "adopted_features": [],
+                    "blocked_reasons": ["training"],
+                    "value_milestones": [],
+                },
+            ]
+        },
+        {},
+    )
+    assert output["status"] == "approved"
+    assert output["funnel"] == {
+        "observed": 2,
+        "activated": 1,
+        "active_30d": 1,
+        "feature_adopted": 1,
+        "value_milestone_reached": 1,
+        "activation_rate": 0.5,
+        "adoption_rate": 0.5,
+        "value_rate": 0.5,
+    }
+    assert output["blockers"] == [{"reason": "training", "tenant_count": 2}]
+    assert "tenants" not in output
 
 
 def test_qa_runner_never_releases_failed_tests() -> None:

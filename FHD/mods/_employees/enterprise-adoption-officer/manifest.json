@@ -1,7 +1,7 @@
 {
   "id": "enterprise-adoption-officer",
   "name": "企业使用跟踪员",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "admin",
   "description": "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "enterprise-adoption-officer",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "artifact": "employee_pack",
       "name": "企业使用跟踪员",
       "description": "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
@@ -97,13 +97,29 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "agent"
-      ],
-      "agent": {
-        "workspace": {
-          "requires_project_root": true,
-          "read_only": true
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "enterprise_adoption_officer",
+        "action": "summarize_adoption",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["tenants"],
+          "properties": {"tenants": {"type": "array"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "funnel", "blockers", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "tenants": [{"tenant_id": "tenant-demo", "activated": true, "active_days_30": 12, "adopted_features": ["goals", "loops"], "blocked_reasons": [], "value_milestones": ["first-delivery"]}]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
         }
       }
     },

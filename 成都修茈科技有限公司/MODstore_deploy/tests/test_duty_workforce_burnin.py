@@ -123,7 +123,9 @@ def _accepted_direct_execution() -> dict:
     }
 
 
-def test_plan_only_selects_unproven_low_risk_real_read_only_capability(monkeypatch) -> None:
+def test_plan_only_selects_unproven_low_risk_real_read_only_capability(
+    monkeypatch,
+) -> None:
     contracts = {
         "safe-agent": _contract("safe-agent"),
         "already-proven": _contract("already-proven"),
@@ -192,6 +194,34 @@ def test_plan_accepts_only_fully_declared_read_only_direct_python_contract(
     assert plan["candidates"][0]["burn_in_fixture"] == {"record": {"id": "fixture"}}
     reasons = {row["employee_id"]: row["reason"] for row in plan["skipped"]}
     assert reasons["undeclared-direct"] == "direct_python_input_not_declared"
+
+
+def test_changed_reviewed_manifest_bypasses_attempt_cooldown(monkeypatch) -> None:
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", "2")
+    contract = _contract("safe-direct")
+    manifest = _direct_manifest()
+    current_sha = burnin._payload_sha256(manifest)
+
+    unchanged = burnin.build_burn_in_plan(
+        limit=2,
+        _contracts={"safe-direct": contract},
+        _manifests={"safe-direct": manifest},
+        _proven_ids=set(),
+        _recent_ids={"safe-direct"},
+        _recent_manifest_shas={"safe-direct": {current_sha}},
+    )
+    changed = burnin.build_burn_in_plan(
+        limit=2,
+        _contracts={"safe-direct": contract},
+        _manifests={"safe-direct": manifest},
+        _proven_ids=set(),
+        _recent_ids={"safe-direct"},
+        _recent_manifest_shas={"safe-direct": {"a" * 64}},
+    )
+
+    assert unchanged["candidates"] == []
+    assert unchanged["skipped"] == [{"employee_id": "safe-direct", "reason": "attempt_cooldown"}]
+    assert [row["employee_id"] for row in changed["candidates"]] == ["safe-direct"]
 
 
 def test_medium_risk_is_eligible_only_for_reviewed_read_only_direct_python(
