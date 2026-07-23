@@ -4939,9 +4939,7 @@ def _auto_merge_low_risk_branch(
         # the branch is absent; review/QA and the autonomy guard still run here
         # before the merge request is emitted.
         head_verification = (
-            "verified_on_cvm"
-            if branch_head_sha
-            else "delegated_to_para_merge_worker"
+            "verified_on_cvm" if branch_head_sha else "delegated_to_para_merge_worker"
         )
 
         from modstore_server.autonomy_guard_delegate import evaluate_risk

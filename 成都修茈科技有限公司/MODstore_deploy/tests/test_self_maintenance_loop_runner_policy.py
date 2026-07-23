@@ -203,9 +203,7 @@ def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch
     assert result["merge_requested"] is True
     assert result["branch_head_sha"] == ""
     assert result["head_verification"] == "delegated_to_para_merge_worker"
-    assert merge_calls == [
-        {"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}
-    ]
+    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
     assert ledger_rows[0]["head_verification"] == "delegated_to_para_merge_worker"
 
 
