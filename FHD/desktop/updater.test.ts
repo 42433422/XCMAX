@@ -124,6 +124,45 @@ releaseDate: '2026-07-05T00:00:00.000Z'`
   })
 })
 
+
+describe('updater — same-version rebuild ordering', () => {
+  it('rejects SHA mismatch when remote releaseDate is older than local package', async () => {
+    const { isSameVersionRebuildNewer } = await import('./updater.js')
+    expect(
+      isSameVersionRebuildNewer({
+        remoteSha: 'a'.repeat(40),
+        localSha: 'b'.repeat(40),
+        remoteReleaseDate: '2026-07-13T15:04:08.075Z',
+        localBuildTimeMs: Date.parse('2026-07-23T00:00:00.000Z'),
+      }),
+    ).toBe(false)
+  })
+
+  it('accepts SHA mismatch when remote releaseDate is newer than local package', async () => {
+    const { isSameVersionRebuildNewer } = await import('./updater.js')
+    expect(
+      isSameVersionRebuildNewer({
+        remoteSha: 'a'.repeat(40),
+        localSha: 'b'.repeat(40),
+        remoteReleaseDate: '2026-07-23T12:00:00.000Z',
+        localBuildTimeMs: Date.parse('2026-07-13T15:04:08.075Z'),
+      }),
+    ).toBe(true)
+  })
+
+  it('rejects SHA mismatch when releaseDate or local time is missing', async () => {
+    const { isSameVersionRebuildNewer } = await import('./updater.js')
+    expect(
+      isSameVersionRebuildNewer({
+        remoteSha: 'a'.repeat(40),
+        localSha: 'b'.repeat(40),
+        remoteReleaseDate: '',
+        localBuildTimeMs: Date.parse('2026-07-13T15:04:08.075Z'),
+      }),
+    ).toBe(false)
+  })
+})
+
 describe('updater — parseYamlField', () => {
   it('extracts buildSha from yaml text', async () => {
     const { parseYamlField } = await import('./updater.js')
