@@ -862,6 +862,45 @@ def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
     }
 
 
+def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_only():
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-legacy-target-ref",
+                "task_id": "task-legacy-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": branch,
+        "failed_run_id": "r-legacy-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-legacy-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 @pytest.mark.parametrize(
     "hold_reason",
     [
