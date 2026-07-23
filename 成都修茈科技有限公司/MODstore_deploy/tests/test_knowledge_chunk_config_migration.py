@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
 
-def _load_migration():
+def _load_migration(monkeypatch):
+    alembic_module = types.ModuleType("alembic")
+    alembic_module.op = types.SimpleNamespace()
+    monkeypatch.setitem(sys.modules, "alembic", alembic_module)
     path = (
         Path(__file__).resolve().parents[1]
         / "alembic"
@@ -31,7 +36,7 @@ class _Ops:
 
 
 def test_upgrade_adds_chunk_config_once(monkeypatch) -> None:
-    migration = _load_migration()
+    migration = _load_migration(monkeypatch)
     ops = _Ops()
     monkeypatch.setattr(migration, "op", ops)
     monkeypatch.setattr(migration, "_table_exists", lambda table: table == "knowledge_collections")
@@ -48,7 +53,7 @@ def test_upgrade_adds_chunk_config_once(monkeypatch) -> None:
 
 
 def test_upgrade_and_downgrade_are_idempotent(monkeypatch) -> None:
-    migration = _load_migration()
+    migration = _load_migration(monkeypatch)
     ops = _Ops()
     monkeypatch.setattr(migration, "op", ops)
     monkeypatch.setattr(migration, "_table_exists", lambda _table: True)
