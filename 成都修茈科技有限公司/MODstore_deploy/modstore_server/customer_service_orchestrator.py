@@ -195,15 +195,8 @@ def handle_customer_message(
 
     if not need_ticket:
         reply = _chat_only_reply(text, intent=intent, user=user, db=db)
-        cards: list[Dict[str, Any]] = [
-            {
-                "type": "intent",
-                "intent": intent,
-                "need_ticket": False,
-                "source": classified.get("source"),
-                "confidence": classified.get("confidence"),
-            }
-        ]
+        # 对话优先：不对客户展示意图/调试卡片，元数据只进 payload 供审计
+        cards: list[Dict[str, Any]] = []
         assistant_msg = CustomerServiceMessage(
             session_id=session.id,
             ticket_id=None,
@@ -583,8 +576,8 @@ def _chat_only_reply(
             pass
         hello = f"{name}，" if name else ""
         return (
-            f"我是小C。{hello}你好！可以直接问产品、购买、会员权益，"
-            "或说明退款/投诉等需求；需要正式受理时再说「提交工单」。"
+            f"我是小C。{hello}你好！有什么可以帮你的？"
+            "比如产品怎么买、会员权益，或订单/退款问题，直接说就行。"
         )
     xiaoc = _xiaoc_general_reply(text, user=user, db=db, ticketed=False)
     if xiaoc:
