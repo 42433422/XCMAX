@@ -299,7 +299,6 @@ EnvironmentFile=-${release_env}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=MODSTORE_RUN_BACKGROUND_JOBS=0
-Environment=MODSTORE_BUS=rabbitmq
 ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9999 --workers 4
 Restart=always
 RestartSec=5
@@ -328,7 +327,6 @@ EnvironmentFile=-${release_env}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=MODSTORE_RUN_BACKGROUND_JOBS=1
-Environment=MODSTORE_BUS=rabbitmq
 ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990 --workers 1
 Restart=on-failure
 RestartSec=10

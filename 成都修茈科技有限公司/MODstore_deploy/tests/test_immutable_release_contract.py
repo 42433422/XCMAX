@@ -39,6 +39,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
     assert ".[web,knowledge,evolution-metrics]" in script
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
+    assert "Environment=MODSTORE_BUS=rabbitmq" not in script
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
     assert "node scripts/install-native-bindings.mjs" in script
     assert script.index("--ignore-scripts") < script.index("npm run build")

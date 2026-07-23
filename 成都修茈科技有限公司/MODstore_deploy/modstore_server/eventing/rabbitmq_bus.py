@@ -33,7 +33,6 @@ import logging
 import os
 import socket
 import threading
-import time
 from typing import Any
 
 from modstore_server.eventing.bus import InMemoryNeuroBus
@@ -312,6 +311,8 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
         result = InMemoryNeuroBus.publish(self, event)
         if self._channel and self._connected:
             try:
+                import pika
+
                 body = json.dumps(
                     {
                         **event.to_dict(),
