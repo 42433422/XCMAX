@@ -107,6 +107,31 @@ def test_ineligible_non_dict():
     assert not h._device_eligible("nope", "codex")
 
 
+def test_selects_idle_same_device_fallback_when_codex_is_busy():
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": "other"},
+            {"toolName": "claude_code", "status": "idle"},
+            {"toolName": "cursor", "status": "idle"},
+        ],
+    }
+    assert h._selected_tool_for_device(item, {"raw_input": {}}) == "claude_code"
+
+
+def test_explicit_tool_is_strict_without_fallback_opt_in():
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": "other"},
+            {"toolName": "cursor", "status": "idle"},
+        ],
+    }
+    assert h._selected_tool_for_device(item, {"tool_name": "codex", "raw_input": {}}) == ""
+
+
 # ─────────────── _select_local_device ───────────────
 
 
@@ -186,6 +211,23 @@ def test_explicit_device_id_zero_regression():
     tier, devices, reason = h._resolve_dispatch_devices(_FakeClient([]), "http://p", "tok", req)
     assert tier == 1
     assert [d["id"] for d in devices] == ["fixed-dev"]
+
+
+def test_explicit_device_uses_idle_tool_fallback():
+    fleet = [
+        {
+            "id": "fixed-dev",
+            "status": "online",
+            "tools": [
+                {"toolName": "codex", "status": "running", "currentTask": "other"},
+                {"toolName": "cursor", "status": "idle"},
+            ],
+        }
+    ]
+    req = {"device_id": "fixed-dev", "raw_input": {}}
+    tier, devices, reason = h._resolve_dispatch_devices(_FakeClient(fleet), "http://p", "tok", req)
+    assert tier == 1
+    assert devices[0]["_selected_tool"] == "cursor"
 
 
 def test_discovery_tier_one_picks_local(monkeypatch):
@@ -356,3 +398,28 @@ def test_post_para_api_explicit_device_id_zero_regression(monkeypatch):
     assert out["para_tier"] == 1
     assert [d["device_id"] for d in out["devices"]] == ["fixed-dev"]
     assert client.posted_tasks[0]["device_id"] == "fixed-dev"
+
+
+def test_post_para_api_routes_busy_codex_to_idle_same_device_tool(monkeypatch):
+    _integ_env(monkeypatch)
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "fixed-dev")
+    client = _IntegClient(
+        [
+            {
+                "id": "fixed-dev",
+                "status": "online",
+                "tools": [
+                    {"toolName": "codex", "status": "running", "currentTask": "other"},
+                    {"toolName": "claude_code", "status": "idle"},
+                ],
+            }
+        ]
+    )
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
+
+    out = h.dispatch_para_delegate(task="验证分支", input_data={}, employee_id="test-qa-runner")
+
+    assert out["ok"] is True
+    assert client.posted_tasks[0]["device_id"] == "fixed-dev"
+    assert client.posted_tasks[0]["tool_name"] == "claude_code"
+    assert out["devices"][0]["tool_name"] == "claude_code"
