@@ -1404,7 +1404,7 @@ export const legacyApi = {
   // ─── AI 数字管家 Butler ─────────────────────────────────────────────
   /** POST /api/agent/butler/corp-chat — 官网公开咨询（无需登录） */
   agentCorpChat: (payload: {
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: unknown }>
     page_id?: string
     page_context?: string
     max_tokens?: number
