@@ -44,6 +44,10 @@ employee-docs = [
     "pypdf>=4.0",
     "python-docx>=1.0",
 ]
+evolution-metrics = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+]
 aliyun-tts = [
     "dashscope>=1.14",
 ]

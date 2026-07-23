@@ -80,9 +80,36 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "code_validator",
+        "action": "validate_source",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["source", "language"],
+          "properties": {
+            "source": {"type": "string"},
+            "language": {"type": "string"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "syntax_valid", "safe", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "source": "def add(left, right):\n    return left + right\n",
+          "language": "python"
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

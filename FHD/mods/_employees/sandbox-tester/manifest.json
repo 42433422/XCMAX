@@ -80,9 +80,39 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "sandbox_tester",
+        "action": "verify_sandbox_receipt",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["test_run"],
+          "properties": {"test_run": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "checks", "blockers", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "test_run": {
+            "sandboxed": true,
+            "exit_code": 0,
+            "network_attempts": 0,
+            "filesystem_escape_attempts": 0,
+            "reproducible": true,
+            "tests": [{"name": "fixture smoke", "status": "passed"}]
+          }
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

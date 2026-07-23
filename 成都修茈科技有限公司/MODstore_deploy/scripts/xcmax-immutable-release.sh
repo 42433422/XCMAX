@@ -158,12 +158,12 @@ else
   log "creating release-specific Python environment"
   python3 -m venv "$DEPLOY_DIR/.venv"
   "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
-  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge]')
+  (cd "$DEPLOY_DIR" && .venv/bin/pip install -q -e '.[web,knowledge,evolution-metrics]')
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \
     MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build" \
-    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, uvicorn, modstore_server.app'
+    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app'
   rm -rf -- "$BUILD_ROOT/.runtime-build"
 
   if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
@@ -299,7 +299,6 @@ EnvironmentFile=-${release_env}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=MODSTORE_RUN_BACKGROUND_JOBS=0
-Environment=MODSTORE_BUS=rabbitmq
 ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9999 --workers 4
 Restart=always
 RestartSec=5
@@ -328,7 +327,6 @@ EnvironmentFile=-${release_env}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=MODSTORE_RUN_BACKGROUND_JOBS=1
-Environment=MODSTORE_BUS=rabbitmq
 ExecStart=${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python -m uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990 --workers 1
 Restart=on-failure
 RestartSec=10

@@ -82,9 +82,38 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
+        "direct_python"
       ],
+      "direct_python": {
+        "module": "doc_knowledge_curator",
+        "action": "curate_facts",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["facts"],
+          "properties": {"facts": {"type": "array"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "accepted_entries", "rejected_entries", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "facts": [
+            {
+              "statement": "fixture health probe returned healthy",
+              "source": "fixture://health-probe/001",
+              "verified": true
+            }
+          ]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      },
       "doc_sync": {
         "workspace_root": "auto",
         "scope_globs_ref": "scope_globs",
