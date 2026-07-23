@@ -837,6 +837,31 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
     }
 
 
+def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-target-ref",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_target_branch_unavailable",
+                "run_id": "r-target-ref",
+                "task_id": "task-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-target-ref",
+        "failed_run_id": "r-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 @pytest.mark.parametrize(
     "hold_reason",
     [
@@ -1082,6 +1107,30 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_prioritizes_missing_target_ref(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["target_branch_unavailable"],'
+                '"tested_commands":[],"target_branch_available":false,'
+                '"test_delta":{"new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"high","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["reason"] == "structured_qa_target_branch_unavailable"
+    assert result["qa"]["target_branch_available"] is False
 
 
 def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):

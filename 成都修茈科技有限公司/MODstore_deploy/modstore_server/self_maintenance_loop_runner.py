@@ -888,6 +888,7 @@ _AUTOMATED_REMEDIATION_QA_ONLY_REASONS = frozenset(
         "missing_report_only_evidence",
         "max_retries_exceeded",
         "structured_qa_focused_command_not_passed",
+        "structured_qa_target_branch_unavailable",
     }
 )
 _AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
@@ -2676,17 +2677,17 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "review": review_json,
                 "qa": qa_json,
             }
+        if qa_json.get("target_branch_available") is not True:
+            return {
+                "ok": False,
+                "reason": "structured_qa_target_branch_unavailable",
+                "qa": qa_json,
+            }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
             return {
                 "ok": False,
                 "reason": "structured_qa_verdict_not_pass",
-                "qa": qa_json,
-            }
-        if qa_json.get("target_branch_available") is not True:
-            return {
-                "ok": False,
-                "reason": "structured_qa_target_branch_unavailable",
                 "qa": qa_json,
             }
         blocking = qa_json.get("blocking_findings")
