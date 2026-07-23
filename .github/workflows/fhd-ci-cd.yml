@@ -562,7 +562,7 @@ jobs:
           FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
           FHD_CVM_PUSH_STRICT: "true"
           FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' && inputs.push_image_tar && '1' || '0' }}
-          FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' && inputs.push_image_tar && '55m' || '15m' }}
+          FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' && inputs.push_image_tar && '55m' || '40m' }}
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
