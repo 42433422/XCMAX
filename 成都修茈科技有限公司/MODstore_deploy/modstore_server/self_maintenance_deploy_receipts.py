@@ -158,6 +158,7 @@ def verify_deployed_identity(
 
 
 EventSink = Callable[[Dict[str, Any]], None]
+AncestorCheck = Callable[[str, str], bool]
 
 
 def _deploy_one(
@@ -339,6 +340,220 @@ def correlated_verified_deploys(
         if key in dispatched:
             verified.append(row)
     return verified
+
+
+def _completed_receipt(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    merge_sha: str,
+    environment: str,
+    workflow_run_id: str,
+) -> Dict[str, Any] | None:
+    """Return an already-recorded exact receipt for callback idempotency."""
+
+    for raw in reversed(list(rows)):
+        row = dict(raw) if isinstance(raw, Mapping) else {}
+        if (
+            row.get("event") == "post_deploy_verified"
+            and row.get("ok") is True
+            and row.get("identity_verified") is True
+            and _sha(row.get("merge_sha")) == merge_sha
+            and str(row.get("environment") or "").lower() == environment
+            and str(row.get("workflow_run_id") or "") == workflow_run_id
+        ):
+            return row
+    return None
+
+
+def resolve_pending_merge_request(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    merge_sha: str,
+    is_ancestor: AncestorCheck,
+    requested_run_id: str = "",
+) -> Dict[str, Any]:
+    """Resolve one pending loop merge by exact Git ancestry.
+
+    The remote Para worker performs a normal Git merge on the base branch.  A
+    self-maintenance request is therefore correlated only when its reviewed
+    branch head is an ancestor of the deployed merge commit.  Zero or multiple
+    matches remain unscoreable instead of being guessed from timestamps.
+    """
+
+    merge_sha = _merge_sha(merge_sha)
+    requested_run_id = str(requested_run_id or "").strip()
+    normalized = [dict(row) for row in rows if isinstance(row, Mapping)]
+    terminal_run_ids = {
+        str(row.get("run_id") or "").strip()
+        for row in normalized
+        if row.get("event") == "merge_completed" and row.get("ok") is True
+    }
+    pending_by_run: Dict[str, Dict[str, Any]] = {}
+    for row in normalized:
+        run_id = str(row.get("run_id") or "").strip()
+        branch_head = _sha(row.get("branch_head_sha"))
+        if (
+            row.get("event") != "merge_requested"
+            or row.get("ok") is not True
+            or str(row.get("status") or "").lower() != "pending"
+            or not run_id
+            or run_id in terminal_run_ids
+            or not _COMMIT_RE.fullmatch(branch_head)
+        ):
+            continue
+        if requested_run_id and run_id != requested_run_id:
+            continue
+        pending_by_run[run_id] = row
+
+    matches: List[Dict[str, Any]] = []
+    for row in pending_by_run.values():
+        branch_head = _sha(row.get("branch_head_sha"))
+        try:
+            matched = bool(is_ancestor(branch_head, merge_sha))
+        except Exception:
+            matched = False
+        if matched:
+            matches.append(row)
+    if not matches:
+        raise DeploymentReceiptError("pending_merge_not_found")
+    if len(matches) != 1:
+        raise DeploymentReceiptError("pending_merge_ambiguous")
+    return matches[0]
+
+
+def record_completed_deployment_receipt(
+    *,
+    rows: Iterable[Mapping[str, Any]],
+    record_event: EventSink,
+    merge_sha: str,
+    environment: str,
+    workflow_run_id: str,
+    workflow_status: str,
+    workflow_conclusion: str,
+    release: BuildIdentity,
+    health: BuildIdentity,
+    is_ancestor: AncestorCheck,
+    requested_run_id: str = "",
+    workflow_url: str = "",
+    action_id: str = "",
+    observed_at: str = "",
+) -> Dict[str, Any]:
+    """Record an authenticated workflow completion against one pending loop.
+
+    GitHub's callback is only an execution attestation.  The deployed release
+    and health identities are independently read by the server and must expose
+    the same exact merge SHA and artifact digest before any scoreable rows are
+    appended.
+    """
+
+    normalized_rows = [dict(row) for row in rows if isinstance(row, Mapping)]
+    merge_sha = _merge_sha(merge_sha)
+    environment = _environment(environment)
+    workflow_run_id = str(workflow_run_id or "").strip()
+    if not workflow_run_id:
+        raise DeploymentReceiptError("dispatch_missing_workflow_run_id")
+    if str(workflow_status or "").strip().lower() != "completed":
+        raise DeploymentReceiptError("workflow_not_completed")
+    if str(workflow_conclusion or "").strip().lower() != "success":
+        raise DeploymentReceiptError("workflow_not_successful")
+
+    existing = _completed_receipt(
+        normalized_rows,
+        merge_sha=merge_sha,
+        environment=environment,
+        workflow_run_id=workflow_run_id,
+    )
+    if existing is not None:
+        run_id = str(existing.get("run_id") or "")
+        merge_recorded = any(
+            row.get("event") == "merge_completed"
+            and row.get("ok") is True
+            and str(row.get("run_id") or "") == run_id
+            and _sha(row.get("merge_sha")) == merge_sha
+            for row in normalized_rows
+        )
+        if not merge_recorded:
+            record_event(
+                {
+                    **existing,
+                    "event": "merge_completed",
+                    "phase": "merge",
+                    "status": "completed_merged",
+                    "ok": True,
+                }
+            )
+        return {
+            "ok": True,
+            "recorded": False,
+            "idempotent": True,
+            "run_id": run_id,
+            "merge_sha": merge_sha,
+            "environment": environment,
+            "workflow_run_id": workflow_run_id,
+        }
+
+    pending = resolve_pending_merge_request(
+        normalized_rows,
+        merge_sha=merge_sha,
+        is_ancestor=is_ancestor,
+        requested_run_id=requested_run_id,
+    )
+    identity = verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
+    run_id = str(pending.get("run_id") or "").strip()
+    branch_head_sha = _sha(pending.get("branch_head_sha"))
+    action_id = str(action_id or "").strip() or (
+        f"loop:{run_id}:deploy:{environment}:{merge_sha[:12]}"
+    )
+    correlation: Dict[str, Any] = {
+        "action_id": action_id,
+        "branch": str(pending.get("branch") or ""),
+        "branch_head_sha": branch_head_sha,
+        "created_at": str(observed_at or ""),
+        "environment": environment,
+        "merge_sha": merge_sha,
+        "para_task_id": str(pending.get("para_task_id") or ""),
+        "run_id": run_id,
+        "workflow_run_id": workflow_run_id,
+        "workflow_url": str(workflow_url or ""),
+    }
+    events = [
+        {
+            **correlation,
+            "event": "deploy_dispatch",
+            "phase": "deployment",
+            "status": "accepted",
+            "ok": True,
+            "verification_state": "completed",
+        },
+        {
+            **correlation,
+            **identity,
+            "event": "post_deploy_verified",
+            "phase": "deployment",
+            "status": "verified",
+            "ok": True,
+            "identity_verified": True,
+        },
+        {
+            **correlation,
+            "event": "merge_completed",
+            "phase": "merge",
+            "status": "completed_merged",
+            "ok": True,
+        },
+    ]
+    for event in events:
+        record_event(event)
+    return {
+        "ok": True,
+        "recorded": True,
+        "idempotent": False,
+        "run_id": run_id,
+        "merge_sha": merge_sha,
+        "environment": environment,
+        "workflow_run_id": workflow_run_id,
+        **identity,
+    }
 
 
 class GhActionsDeploymentGateway:
@@ -540,6 +755,8 @@ __all__ = [
     "GhActionsDeploymentGateway",
     "WorkflowCompletion",
     "correlated_verified_deploys",
+    "record_completed_deployment_receipt",
+    "resolve_pending_merge_request",
     "run_staged_deployment_chain",
     "verify_deployed_identity",
 ]

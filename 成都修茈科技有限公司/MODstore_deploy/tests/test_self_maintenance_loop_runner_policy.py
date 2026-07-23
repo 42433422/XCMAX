@@ -107,6 +107,12 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
         "_request_para_task_merge",
         lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
     )
+    heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
+    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads[branch])
+    ledger_rows = []
+    governance_rows = []
+    monkeypatch.setattr(loop_runner, "_append_ledger", ledger_rows.append)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", governance_rows.append)
 
     result = loop_runner._auto_merge_low_risk_branch(
         run_id="remote-risk-gate",
@@ -117,9 +123,13 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
 
     assert result["ok"] is True
     assert result["merge_requested"] is True
+    assert result["branch_head_sha"] == "a" * 40
     assert risk_calls[0][0] == "self_maintenance_l1_merge"
     assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
     assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
+    assert ledger_rows[0]["event"] == "merge_requested"
+    assert ledger_rows[0]["run_id"] == "remote-risk-gate"
+    assert governance_rows[0]["kind"] == "merge_requested"
 
 
 def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
@@ -128,6 +138,8 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
     monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
+    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads[branch])
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
         lambda *args, **kwargs: SimpleNamespace(
@@ -150,6 +162,30 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
 
     assert result["ok"] is False
     assert result["reason"] == "autonomy_guard_blocked"
+
+
+def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
+    monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, _branch: None)
+    monkeypatch.setattr(
+        loop_runner,
+        "_request_para_task_merge",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("unresolved branch was queued")),
+    )
+
+    result = loop_runner._auto_merge_low_risk_branch(
+        run_id="remote-missing-head",
+        task_id="task-remote",
+        branch="devfleet/codex/sub-1",
+        steps=[],
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "remote_branch_head_unavailable"
 
 
 def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_path):
@@ -384,7 +420,9 @@ def test_diff_semantic_scan_ignores_risky_api_named_only_by_regression_test():
     assert result["penalty"] == 0
 
 
-def test_validate_remediation_branch_delivery_requires_advanced_work_branch(monkeypatch):
+def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
+    monkeypatch,
+):
     heads = {
         "candidate": "a" * 40,
         "work-unchanged": "a" * 40,
