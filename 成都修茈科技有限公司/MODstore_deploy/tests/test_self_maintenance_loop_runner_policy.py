@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -833,6 +835,47 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
         "para_task_id": "task-platform",
         "reason": "resume_automated_remediation_candidate",
     }
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_qa_verdict_not_pass",
+        "structured_qa_blocking_findings",
+    ],
+)
+def test_resume_review_qa_candidate_retries_structured_findings_on_existing_branch(
+    hold_reason: str,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-structured",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "r-structured",
+                "task_id": "task-structured",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/codex/sub-1-structured",
+        "continue_existing_code_task": True,
+        "failed_run_id": "r-structured",
+        "failed_steps": ["code"],
+        "para_task_id": "task-structured",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_steps(result) == {"code", "review", "qa"}
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (
+        None,
+        "devfleet/codex/sub-1-structured",
+    )
 
 
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():

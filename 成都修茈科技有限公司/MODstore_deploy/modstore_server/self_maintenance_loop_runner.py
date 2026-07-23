@@ -880,6 +880,42 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
     )
 
 
+_AUTOMATED_REMEDIATION_QA_ONLY_REASONS = frozenset(
+    {
+        "changed_files_match_forbidden_globs",
+        "changed_files_outside_dynamic_low_risk_scope",
+        "changed_files_outside_low_risk_globs",
+        "missing_report_only_evidence",
+        "max_retries_exceeded",
+        "structured_qa_focused_command_not_passed",
+    }
+)
+_AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
+    {
+        "structured_qa_blocking_findings",
+        "structured_qa_new_errors",
+        "structured_qa_new_failures",
+        "structured_qa_verdict_not_pass",
+        "structured_review_blocking_findings",
+        "structured_review_dimension_fail",
+        "structured_review_high_severity",
+    }
+)
+
+
+def _automated_remediation_resume_plan(reason: str) -> Optional[Tuple[List[str], bool]]:
+    """Map hold_for_automated_remediation reasons to resume steps and branch pinning."""
+
+    normalized = str(reason or "").strip()
+    if normalized in _AUTOMATED_REMEDIATION_QA_ONLY_REASONS:
+        return (["qa"], False)
+    if normalized in _AUTOMATED_REMEDIATION_CODE_REASONS:
+        return (["code"], True)
+    if normalized.startswith("structured_qa_new_"):
+        return (["code"], True)
+    return None
+
+
 def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_RESUME_REVIEW_QA", True):
         return None
@@ -1037,26 +1073,24 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "reason": "resume_safety_score_remediation",
                 }
             continue
-        if reason not in {
-            "changed_files_match_forbidden_globs",
-            "changed_files_outside_dynamic_low_risk_scope",
-            "changed_files_outside_low_risk_globs",
-            "missing_report_only_evidence",
-            "max_retries_exceeded",
-            "structured_qa_focused_command_not_passed",
-        }:
+        resume_plan = _automated_remediation_resume_plan(reason)
+        if resume_plan is None:
             continue
+        failed_steps, continue_existing_code_task = resume_plan
         branch = str(item.get("branch") or "").strip()
         para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         run_id = str(item.get("run_id") or "").strip()
         if branch and para_task_id:
-            return {
+            candidate: Dict[str, Any] = {
                 "branch": branch,
                 "failed_run_id": run_id,
-                "failed_steps": ["qa"],
+                "failed_steps": list(failed_steps),
                 "para_task_id": para_task_id,
                 "reason": "resume_automated_remediation_candidate",
             }
+            if continue_existing_code_task:
+                candidate["continue_existing_code_task"] = True
+            return candidate
     return None
 
 
