@@ -28,6 +28,7 @@ const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_R
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
 const TOKEN_TTL_MS = 5 * 60 * 1000; // Para guest 限 15min/30 次，复用 5 分钟避免耗尽
 export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
+export const INITIAL_PR_LABELS = Object.freeze(['hold-merge']);
 
 // CI 等待策略（写进代码，不做隐式默认）：
 // - 等哪些 check：`gh pr checks --required`（branch protection 上标记为 required 的全部）
@@ -136,11 +137,17 @@ async function postJson(token, path, body) {
   return { ok: resp.ok, status: resp.status, body: parsed, text };
 }
 
-async function reportMergeConflict(token, task, reason) {
-  const conflict = {
-    branch: task.subTasks?.[0]?.branch_name || '',
-    reason: String(reason).slice(0, 1000),
+export function buildMergeConflictPayload(task, reason, source = 'merge-worker') {
+  return {
+    branch_name: task.subTasks?.[0]?.branch_name || '',
+    detail: String(reason).slice(0, 1000),
+    source,
+    workspace_path: String(task.workspace_path || ''),
   };
+}
+
+async function reportMergeConflict(token, task, reason, source = 'merge-worker') {
+  const conflict = buildMergeConflictPayload(task, reason, source);
   return postJson(token, `/api/tasks/${task.id}/merge-conflict`, conflict);
 }
 
@@ -282,8 +289,8 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     ``,
     `本 PR 由 merge-worker 自动创建，源任务由 Trae CLI 执行。`,
     ``,
-    `**风险分级**：标 \`risk:r0\`（loop 已过 review/QA/autonomy_guard 三层 gate）。`,
-    `AI review APPROVE → 触发 GitHub Actions bot 三重门禁合并；AI review REJECT → 打 \`hold-merge\` 强制 veto。`,
+    `**初始状态**：标 \`hold-merge\`，在独立 AI review 完成前禁止合并。`,
+    `AI review APPROVE → 添加 \`risk:r0\`、移除 \`hold-merge\`，再触发 GitHub Actions bot 三重门禁合并。`,
     `合并身份固定为 \`github-actions[bot]\`，且仍受 required checks 和 branch protection 约束。`,
   ].join('\n');
   const args = [
@@ -292,10 +299,9 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     '--base', baseBranch,
     '--title', title,
     '--body', body,
-    // Do not add ai-generated here: that label intentionally enters the
-    // 12-hour SLA lane.  Loop-approved PRs use the immediate regular-PR
-    // three-gate lane and are still merged only by github-actions[bot].
-    '--label', AUTO_PR_LABELS.join(','),
+    // A PR must be visibly blocked before the independent merge review starts.
+    // risk:r0 is added only after that review approves the exact diff.
+    '--label', INITIAL_PR_LABELS.join(','),
   ];
   if (repoFull) args.push('--repo', repoFull);
   const cwd = workspace || process.env.HOME;
@@ -311,16 +317,59 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
   return { url: urlMatch ? urlMatch[0] : out, number: numMatch ? numMatch[1] : '' };
 }
 
+export function githubIssueLabelsEndpoint(repoFull, prNumber) {
+  return `repos/${repoFull}/issues/${prNumber}/labels`;
+}
+
+export function githubIssueLabelEndpoint(repoFull, prNumber, label) {
+  return `${githubIssueLabelsEndpoint(repoFull, prNumber)}/${encodeURIComponent(label)}`;
+}
+
 async function addPrLabels(workspace, prNumber, repoFull, labels) {
-  // Best-effort 打标签（gh pr edit --add-label）；失败不阻塞主流程
-  if (!prNumber) return;
-  const args = ['pr', 'edit', prNumber, '--add-label', labels.join(',')];
-  if (repoFull) args.push('--repo', repoFull);
+  // Best-effort 打标签。优先走 issues REST API，避免 `gh pr edit`
+  // 查询已下线 Projects Classic 字段时连带失败，导致 veto 标签丢失。
+  if (!prNumber) return false;
+  const args = repoFull
+    ? [
+      'api',
+      '--method', 'POST',
+      githubIssueLabelsEndpoint(repoFull, prNumber),
+      ...labels.flatMap((label) => ['-f', `labels[]=${label}`]),
+    ]
+    : ['pr', 'edit', prNumber, '--add-label', labels.join(',')];
   const cwd = workspace || process.env.HOME;
   try {
     await execFileAsync('gh', args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 });
+    return true;
   } catch (err) {
     log(`  ⚠️ addPrLabels(${labels.join(',')}) 失败 PR #${prNumber}: ${String(err).slice(0, 200)}`);
+    return false;
+  }
+}
+
+async function removePrLabels(workspace, prNumber, repoFull, labels) {
+  if (!prNumber) return false;
+  const cwd = workspace || process.env.HOME;
+  try {
+    if (repoFull) {
+      for (const label of labels) {
+        await execFileAsync(
+          'gh',
+          ['api', '--method', 'DELETE', githubIssueLabelEndpoint(repoFull, prNumber, label)],
+          { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 },
+        );
+      }
+    } else {
+      await execFileAsync(
+        'gh',
+        ['pr', 'edit', prNumber, '--remove-label', labels.join(',')],
+        { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 },
+      );
+    }
+    return true;
+  } catch (err) {
+    log(`  ⚠️ removePrLabels(${labels.join(',')}) 失败 PR #${prNumber}: ${String(err).slice(0, 200)}`);
+    return false;
   }
 }
 
@@ -682,6 +731,13 @@ async function processTask(token, task, state) {
             log(`  ✓ ${branch} → PR #${prNumber}: ${prUrl}`);
           }
 
+          // Existing PRs from older workers may already carry risk:r0.  Apply
+          // the veto before updating or reviewing so no bot-merge race exists.
+          const heldBeforeReview = await addPrLabels(
+            workspaceExists ? workspace : '', prNumber, repoFull, INITIAL_PR_LABELS,
+          );
+          if (!heldBeforeReview) throw new Error('hold-merge-label-failed-before-review');
+
           // Bring the proposed branch onto the current base before reviewing.
           // A real conflict fails below and is never silently merged.
           await updatePullRequestBranch(workspaceExists ? workspace : '', prNumber, repoFull);
@@ -709,6 +765,14 @@ async function processTask(token, task, state) {
           const review = await aiReviewPR(workspaceExists ? workspace : '', branch, baseBranch, prNumber, repoFull);
           if (review.verdict === 'approve') {
             log(`  ✓ AI review: APPROVE → 启用 auto-merge for PR #${prNumber}`);
+            const riskLabelAdded = await addPrLabels(
+              workspaceExists ? workspace : '', prNumber, repoFull, AUTO_PR_LABELS,
+            );
+            if (!riskLabelAdded) throw new Error('risk-label-failed-after-review');
+            const holdRemoved = await removePrLabels(
+              workspaceExists ? workspace : '', prNumber, repoFull, INITIAL_PR_LABELS,
+            );
+            if (!holdRemoved) throw new Error('hold-merge-label-remove-failed-after-review');
             const mergeSha = await mergePR(workspaceExists ? workspace : '', prNumber, repoFull);
             results.push({ branch, prUrl, prNumber, merged: true, sha: mergeSha });
             log(`  ✓ merged (${mergeSha.slice(0, 10)})`);
@@ -760,7 +824,10 @@ async function processTask(token, task, state) {
           }
           terminalAttempts = retry.attempts;
         }
-        await reportMergeConflict(token, task, reason);
+        const conflictSource = failed.some((result) => result.vetoed)
+          ? 'ai-review-veto'
+          : 'merge-worker';
+        await reportMergeConflict(token, task, reason, conflictSource);
         state[task.id] = {
           status: retryable ? 'conflict' : 'ai_rejected',
           at: new Date().toISOString(),

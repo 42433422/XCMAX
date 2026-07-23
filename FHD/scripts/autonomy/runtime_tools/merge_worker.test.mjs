@@ -6,7 +6,11 @@ import {
   CI_TIMEOUT_POLICY,
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
+  INITIAL_PR_LABELS,
+  buildMergeConflictPayload,
   forbiddenAutoMergePaths,
+  githubIssueLabelEndpoint,
+  githubIssueLabelsEndpoint,
   isTransientMergeFailure,
   mergeRetryDelayMs,
   nextMergeRetryState,
@@ -14,8 +18,41 @@ import {
 } from './merge_worker.mjs';
 
 
+test('merge review veto uses the Para merge-conflict API contract', () => {
+  assert.deepEqual(
+    buildMergeConflictPayload(
+      {
+        subTasks: [{ branch_name: 'devfleet/codex/fix-1' }],
+        workspace_path: '/tmp/task-1',
+      },
+      'REJECT: unsafe behavior',
+      'ai-review-veto',
+    ),
+    {
+      branch_name: 'devfleet/codex/fix-1',
+      detail: 'REJECT: unsafe behavior',
+      source: 'ai-review-veto',
+      workspace_path: '/tmp/task-1',
+    },
+  );
+});
+
+
+test('veto labels use the issue labels REST endpoint', () => {
+  assert.equal(
+    githubIssueLabelsEndpoint('42433422/XCMAX', '555'),
+    'repos/42433422/XCMAX/issues/555/labels',
+  );
+  assert.equal(
+    githubIssueLabelEndpoint('42433422/XCMAX', '555', 'hold-merge'),
+    'repos/42433422/XCMAX/issues/555/labels/hold-merge',
+  );
+});
+
+
 test('loop-approved PRs use the immediate bot-gated lane', () => {
   assert.deepEqual(AUTO_PR_LABELS, ['risk:r0']);
+  assert.deepEqual(INITIAL_PR_LABELS, ['hold-merge']);
   assert.equal(AUTO_PR_LABELS.includes('ai-generated'), false);
 });
 
