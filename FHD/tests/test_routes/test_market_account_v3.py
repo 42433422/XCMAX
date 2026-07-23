@@ -445,6 +445,29 @@ class TestResolveValidMarketAccessToken:
         assert result == "new_tok"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "anonymous_payload",
+        [
+            {"ok": False, "success": False, "error": "请先登录"},
+            {"success": False, "error": "请先登录"},
+        ],
+    )
+    async def test_http_200_anonymous_me_triggers_refresh(self, anonymous_payload):
+        ma._MARKET_SESSION_TOKENS["sid1"] = "expired_tok"
+        with (
+            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch(
+                "app.application.surface_audit_demo_account.is_local_demo_market_token",
+                return_value=False,
+            ),
+            patch.object(ma, "_proxy_json", return_value=anonymous_payload),
+            patch.object(ma, "refresh_session_market_token", return_value="new_tok") as refresh,
+        ):
+            result = await ma.resolve_valid_market_access_token("sid1")
+        assert result == "new_tok"
+        refresh.assert_awaited_once_with("sid1")
+
+    @pytest.mark.asyncio
     async def test_market_unreachable_returns_local_token(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "local_tok"
         with (
