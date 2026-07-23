@@ -34,9 +34,7 @@ from modstore_server.models import (
     get_session_factory,
 )
 
-router = APIRouter(
-    prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"]
-)
+router = APIRouter(prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"])
 
 _MENTION_RE = re.compile(r"@([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})")
 _HOLLOW_DUTY_HANDLERS = frozenset({"echo", "llm_md"})
@@ -104,17 +102,11 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
     shell_ids: list[str] = []
     for employee_id in sorted(planned):
         contract = (
-            contracts.get(employee_id)
-            if isinstance(contracts.get(employee_id), dict)
-            else {}
+            contracts.get(employee_id) if isinstance(contracts.get(employee_id), dict) else {}
         )
-        trigger = (
-            contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
-        )
+        trigger = contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
         acceptance = (
-            contract.get("acceptance")
-            if isinstance(contract.get("acceptance"), list)
-            else []
+            contract.get("acceptance") if isinstance(contract.get("acceptance"), list) else []
         )
         assigned = all(
             (
@@ -131,15 +123,11 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
         try:
             manifest = load_reviewed_duty_manifest(employee_id)
             config = parse_employee_config_v2(manifest)
-            actions = (
-                config.get("actions") if isinstance(config.get("actions"), dict) else {}
-            )
+            actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
             if isinstance(actions.get("actions"), dict):
                 actions = actions["actions"]
             handlers = {
-                str(item).strip()
-                for item in actions.get("handlers") or []
-                if str(item).strip()
+                str(item).strip() for item in actions.get("handlers") or [] if str(item).strip()
             }
         except Exception:  # noqa: BLE001 - missing/invalid reviewed runtime is a shell
             handlers = set()
@@ -173,9 +161,7 @@ def get_execution_coverage(
     _ = _admin_user
     from modstore_server.duty_roster import all_planned_employee_ids
 
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
-        hours=window_hours
-    )
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=window_hours)
     planned = set(all_planned_employee_ids())
     sf = get_session_factory()
     with sf() as session:
@@ -221,13 +207,9 @@ def get_execution_coverage(
         "assignment_required_count": assigned_required,
         "proof_required_count": proven_required,
         "assignment_ratio": (
-            round(assignment["assigned_count"] / planned_count, 4)
-            if planned_count
-            else 0.0
+            round(assignment["assigned_count"] / planned_count, 4) if planned_count else 0.0
         ),
-        "proof_ratio": (
-            round(len(receipts) / planned_count, 4) if planned_count else 0.0
-        ),
+        "proof_ratio": (round(len(receipts) / planned_count, 4) if planned_count else 0.0),
         "workforce_ready": workforce_ready,
         "employee_ids": [item["employee_id"] for item in receipts],
         "receipts": receipts,
@@ -409,9 +391,7 @@ def batch_review_employee_suggestions(
             ok += 1
         else:
             failed += 1
-            errors.append(
-                {"id": sid, "error": str(out.get("error") or "unknown")[:300]}
-            )
+            errors.append({"id": sid, "error": str(out.get("error") or "unknown")[:300]})
     return {
         "ok": True,
         "action": action,
@@ -493,9 +473,7 @@ def list_collab_threads(
     _ = _auth_user
     sf = get_session_factory()
     with sf() as session:
-        q = session.query(EmployeeCollabThread).order_by(
-            EmployeeCollabThread.updated_at.desc()
-        )
+        q = session.query(EmployeeCollabThread).order_by(EmployeeCollabThread.updated_at.desc())
         st = (status or "").strip()
         if st:
             q = q.filter(EmployeeCollabThread.status == st)
@@ -522,9 +500,7 @@ def create_collab_thread_api(
 ) -> Dict[str, Any]:
     _ = _admin_user
     title = str(body.get("title") or "").strip() or "协作线程"
-    participants = (
-        body.get("participants") if isinstance(body.get("participants"), list) else []
-    )
+    participants = body.get("participants") if isinstance(body.get("participants"), list) else []
     created_by = str(body.get("created_by_employee_id") or "admin").strip() or "admin"
     out = create_collab_thread(
         title=title,
@@ -606,9 +582,7 @@ def post_collab_message_api(
 
 @router.get("/questions")
 def list_pending_human_questions(
-    include_history: bool = Query(
-        False, description="true 则包含 answered/expired 历史"
-    ),
+    include_history: bool = Query(False, description="true 则包含 answered/expired 历史"),
     limit: int = Query(50, ge=1, le=200),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -704,9 +678,7 @@ def human_questions_stats(
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(
-                PendingHumanQuestion.status, func.count(PendingHumanQuestion.id)
-            )
+            session.query(PendingHumanQuestion.status, func.count(PendingHumanQuestion.id))
             .filter(PendingHumanQuestion.user_id == _admin_user.id)
             .group_by(PendingHumanQuestion.status)
             .all()
@@ -729,9 +701,7 @@ def human_questions_stats(
 def get_employee_scorecard_api(
     employee_id: str,
     days: int = Query(7, ge=1, le=90, description="回看多少天"),
-    human_friendly: bool = Query(
-        False, description="true 则返回人话文本，否则返回 JSON"
-    ),
+    human_friendly: bool = Query(False, description="true 则返回人话文本，否则返回 JSON"),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """单个员工的成绩单 — 任务数/成功率/失败原因/处理时长/最近任务。

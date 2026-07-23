@@ -27,9 +27,7 @@ EMPLOYEES = {
 
 
 def _manifest(employee_id: str) -> dict:
-    return json.loads(
-        (EMPLOYEE_ROOT / employee_id / "manifest.json").read_text(encoding="utf-8")
-    )
+    return json.loads((EMPLOYEE_ROOT / employee_id / "manifest.json").read_text(encoding="utf-8"))
 
 
 def _module(employee_id: str) -> ModuleType:
@@ -175,9 +173,7 @@ def test_delivery_report_requires_next_step_for_breached_sla() -> None:
     assert output["blockers"] == [{"index": 0, "reasons": ["next_step"]}]
 
 
-def test_revenue_share_reconciler_reports_difference_without_payment_side_effect() -> (
-    None
-):
+def test_revenue_share_reconciler_reports_difference_without_payment_side_effect() -> None:
     output = _module("ecosystem-revenue-share-reconciler").run(
         {
             "entries": [
@@ -226,10 +222,7 @@ def test_top_architect_reports_forbidden_dependency_direction() -> None:
         {},
     )
     assert output["status"] == "rejected"
-    assert (
-        output["violations"][0]["reason"]
-        == "forbidden_layer_dependency:domain->interface"
-    )
+    assert output["violations"][0]["reason"] == "forbidden_layer_dependency:domain->interface"
 
 
 def test_qa_runner_never_releases_failed_tests() -> None:
