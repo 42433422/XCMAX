@@ -16,7 +16,7 @@
 1. CI 全绿
 2. PR 体量
    - ai-self-heal: ≤ 3 文件 + ≤ 50 diff 行（严格，机械修复）
-   - ai-generated: ≤ 5 文件 + ≤ 100 diff 行（宽松，allowlist 域已预过滤低风险）
+   - ai-generated: ≤ 5 文件 + ≤ 100 diff 行（仅显式 r0/r1 候选可进入）
 3. 文件类型
    - ai-self-heal: 仅 .py / .md
    - ai-generated: .py / .md / .ts / .vue / .js / .json / .yaml / .yml
@@ -564,14 +564,15 @@ def process_pr(
     age_hours = (now - pr.created_at) / 3600
     age_days = age_hours / 24
 
-    # 提取风险等级；ai-generated PR 无 risk 标签时默认 r0（allowlist 已预过滤低风险）
+    # 缺少显式风险标签时 fail closed。域预授权只授权执行，不能证明
+    # 任意 LLM 代码是可自动合并的机械变更。
     risk = ""
     for lab in pr.labels:
         if lab.startswith("risk:"):
             risk = lab.split(":", 1)[1]
             break
     if not risk:
-        risk = "r0" if pr.kind == "ai_generated" else "r3"
+        risk = "r2" if pr.kind == "ai_generated" else "r3"
 
     print(f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}")
 
