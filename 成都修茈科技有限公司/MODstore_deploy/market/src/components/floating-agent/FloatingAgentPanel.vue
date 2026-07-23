@@ -134,6 +134,24 @@
             :session-ready="voiceSessionReady"
             @toggle="toggleVoice"
           />
+          <button
+            type="button"
+            class="panel-shot-btn"
+            :class="{
+              'panel-shot-btn--active': withScreenshot,
+              'panel-shot-btn--light': isLightTheme,
+            }"
+            :aria-pressed="withScreenshot"
+            aria-label="附带截图"
+            :title="withScreenshot ? '已开启：发送时附带页面截图' : '点击附带截图发给 AI（需 vision 模型）'"
+            @click="withScreenshot = !withScreenshot"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
+              <path d="M3.5 16.5 9 12l3.2 2.8L15 12l5.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
           <textarea
             ref="textareaRef"
             v-model="draft"
@@ -158,14 +176,34 @@
         </div>
       </template>
       <template v-else>
-        <AgentVoiceInput
-          :voice-state="voiceState"
-          :is-supported="voiceIsSupported"
-          :error="voiceError"
-          :loading-hint="voiceLoadingHint"
-          :session-ready="voiceSessionReady"
-          @toggle="toggleVoice"
-        />
+        <div class="panel-tools">
+          <AgentVoiceInput
+            :voice-state="voiceState"
+            :is-supported="voiceIsSupported"
+            :error="voiceError"
+            :loading-hint="voiceLoadingHint"
+            :session-ready="voiceSessionReady"
+            @toggle="toggleVoice"
+          />
+          <button
+            type="button"
+            class="panel-shot-btn"
+            :class="{
+              'panel-shot-btn--active': withScreenshot,
+              'panel-shot-btn--light': isLightTheme,
+            }"
+            :aria-pressed="withScreenshot"
+            aria-label="附带截图"
+            :title="withScreenshot ? '已开启：发送时附带页面截图' : '点击附带截图发给 AI（需 vision 模型）'"
+            @click="withScreenshot = !withScreenshot"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
+              <path d="M3.5 16.5 9 12l3.2 2.8L15 12l5.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
         <div class="panel-composer">
           <textarea
             ref="textareaRef"
@@ -189,13 +227,6 @@
             </svg>
           </button>
         </div>
-        <label
-          class="panel-screenshot-toggle"
-          title="是否附带截图发给 AI（需 vision 模型）"
-        >
-          <input v-model="withScreenshot" type="checkbox" />
-          <span>附带截图</span>
-        </label>
       </template>
     </footer>
   </div>
@@ -658,19 +689,60 @@ function autoResize() {
 .panel-send:hover:not(:disabled) { background: rgba(59, 130, 246, 0.38); }
 .panel-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.panel-screenshot-toggle {
+.panel-tools {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.34);
-  cursor: pointer;
-  user-select: none;
-  align-self: flex-end;
+  gap: 6px;
 }
 
-.panel-screenshot-toggle input { accent-color: #64748b; cursor: pointer; }
-.panel-screenshot-toggle:hover { color: rgba(255, 255, 255, 0.55); }
+.panel-shot-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.panel-shot-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.panel-shot-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.panel-shot-btn--active {
+  background: rgba(0, 220, 255, 0.15);
+  border-color: rgba(0, 220, 255, 0.45);
+  color: #00dcff;
+}
+
+.panel-shot-btn--light {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.panel-shot-btn--light:hover {
+  background: #e2e8f0;
+  color: #1e3a8a;
+}
+
+.panel-shot-btn--light.panel-shot-btn--active {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: rgba(37, 99, 235, 0.5);
+  color: #2563eb;
+}
 
 /* 浅色工作台：与「智能对话」悬浮窗一致 */
 .butler-panel.butler-panel--light {
@@ -757,14 +829,6 @@ function autoResize() {
 
 .butler-panel--light .panel-send:hover:not(:disabled) {
   background: #1d4ed8;
-}
-
-.butler-panel--light .panel-screenshot-toggle {
-  color: #64748b;
-}
-
-.butler-panel--light .panel-screenshot-toggle:hover {
-  color: #334155;
 }
 
 .butler-panel--light :deep(.status-bar) {
