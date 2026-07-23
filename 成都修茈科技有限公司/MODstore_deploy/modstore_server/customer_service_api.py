@@ -226,6 +226,19 @@ async def list_standards(
     user: User = Depends(_get_current_user),
 ):
     rows = db.query(CustomerServiceStandard).order_by(CustomerServiceStandard.priority.asc()).all()
+    # SSOT 四种默认标准：库空时自愈补种（避免发布/迁库后后台空白）
+    if not rows:
+        try:
+            from modstore_server.models_db import init_default_customer_service_standards
+
+            init_default_customer_service_standards()
+            rows = (
+                db.query(CustomerServiceStandard)
+                .order_by(CustomerServiceStandard.priority.asc())
+                .all()
+            )
+        except Exception:
+            rows = []
     return {"items": [_standard_payload(r, include_policy=user.is_admin) for r in rows]}
 
 
