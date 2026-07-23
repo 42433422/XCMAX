@@ -943,6 +943,74 @@ def _display_name_for_user(
     return address, member_hint
 
 
+def _summarize_user_issue(user_text: str, *, max_len: int = 48) -> str:
+    """压缩用户原话，供兜底复述；去掉寒暄前缀。"""
+    t = re.sub(r"\s+", "", (user_text or "").strip())
+    for prefix in ("我有问题", "有个问题", "请问一下", "请问", "你好", "您好"):
+        if t.startswith(prefix):
+            t = t[len(prefix) :]
+            break
+    t = t.lstrip("，,。.!！、：:")
+    if not t:
+        t = (user_text or "").strip()
+    if len(t) > max_len:
+        return t[: max_len - 1] + "…"
+    return t
+
+
+def _looks_like_concrete_issue(user_text: str) -> bool:
+    """用户是否已描述具体问题（而非空话/寒暄）。"""
+    t = (user_text or "").strip()
+    if len(t) < 6:
+        return False
+    if is_greeting(t):
+        return False
+    # 明显在陈述故障/体验/诉求
+    if any(
+        x in t
+        for x in (
+            "看不清",
+            "浅色",
+            "深色",
+            "对比",
+            "按钮",
+            "打不开",
+            "进不去",
+            "失败",
+            "报错",
+            "卡住",
+            "加载",
+            "空白",
+            "闪退",
+            "用不了",
+            "没反应",
+            "太慢",
+            "bug",
+            "Bug",
+            "问题",
+            "故障",
+            "异常",
+        )
+    ):
+        return True
+    return len(re.sub(r"\s+", "", t)) >= 10
+
+
+def _ack_concrete_issue_reply(user_text: str, *, hello: str, ticketed: bool) -> str:
+    """知识库无可用摘录时：复述用户问题，不再甩购买/会员开场白。"""
+    summary = _summarize_user_issue(user_text)
+    if ticketed:
+        return (
+            f"我是小C。{hello}已记下你的问题：「{summary}」，并登记工单；"
+            "你可以继续补充页面位置、截图或复现步骤，我们会尽快处理。"
+        )
+    return (
+        f"我是小C。{hello}收到，你说的是「{summary}」。"
+        "方便补充一下大概在哪个页面/功能、是文字还是图标按钮吗？"
+        "需要正式跟进修复时，直接回「提交工单」即可。"
+    )
+
+
 def _xiaoc_general_reply(
     user_text: str,
     *,
@@ -969,7 +1037,11 @@ def _xiaoc_general_reply(
         body = "；".join(tips)
         return f"我是小C。{hello}{body} 若还要补充，直接说具体场景就行。"
     if ticketed:
+        if _looks_like_concrete_issue(user_text):
+            return _ack_concrete_issue_reply(user_text, hello=hello, ticketed=True)
         return f"我是小C。{hello}已为你登记工单；" "你可以继续补充材料，我们会尽快处理。"
+    if _looks_like_concrete_issue(user_text):
+        return _ack_concrete_issue_reply(user_text, hello=hello, ticketed=False)
     return (
         f"我是小C。{hello}可以先说说你的具体问题，"
         "比如购买、会员权益、订单或余额；需要正式受理时我会帮你建工单。"

@@ -235,6 +235,24 @@ def test_infer_intent_balance_is_account_support():
     _ = _xiaoc_general_reply
 
 
+def test_xiaoc_general_reply_acks_concrete_ui_issue(monkeypatch):
+    """知识库只有 hybrid 脏数据时，应复述用户问题，而不是购买/会员开场白。"""
+    from modstore_server.customer_service_orchestrator import _xiaoc_general_reply
+    import modstore_server.xiaoc_cs_ssot as ssot
+
+    dirty = (
+        '1. (hybrid) {"fields": [{"name": "template_name", "value": "发货模板"}]}\n'
+        "2. (hybrid) 购货单位：ACME Trading\n"
+    )
+    monkeypatch.setattr(ssot, "knowledge_block_for_query", lambda *a, **k: dirty)
+    reply = _xiaoc_general_reply("我有问题你们平台的浅色有的键看不清")
+    assert "浅色" in reply or "看不清" in reply
+    assert "购买" not in reply
+    assert "会员权益" not in reply
+    assert "hybrid" not in reply
+    assert "提交工单" in reply
+
+
 def test_customer_service_balance_creates_account_ticket(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app
