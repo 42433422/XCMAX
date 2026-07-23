@@ -135,6 +135,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -149,14 +150,17 @@ jobs:
       - name: Build employee_pack from merge commit
         id: build
         working-directory: .
+        env:
+          SOURCE_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
-          git pull origin main
           python -c "
           import os, sys, json
           sys.path.insert(0, '成都修茈科技有限公司/MODstore_deploy')
           from modstore_server.build_employee_pack import build_pack_from_commit
           from pathlib import Path
-          result = build_pack_from_commit(commit_sha='HEAD', repo_root=Path('.'))
+          result = build_pack_from_commit(
+              commit_sha=os.environ['SOURCE_MERGE_SHA'], repo_root=Path('.')
+          )
           print(json.dumps(result, indent=2, default=str))
           Path('/tmp/evolution-build-result.json').write_text(
               json.dumps(result, ensure_ascii=False, sort_keys=True), encoding='utf-8'
