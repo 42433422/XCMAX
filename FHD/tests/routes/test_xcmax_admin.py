@@ -1256,6 +1256,19 @@ class TestOpsFounderAutonomy:
                         },
                     }
                     if path == "/api/public/action-board"
+                    else {
+                        "ok": True,
+                        "data": {
+                            "ready": True,
+                            "verified_receipt_count": 1,
+                            "roles": {
+                                "persy": {"status": "grounded"},
+                                "para": {"status": "linked"},
+                                "retort": {"status": "aligned", "engine_available": True},
+                            },
+                        },
+                    }
+                    if path.startswith("/api/xcmax/strategic/council/status")
                     else {"ok": True}
                 ),
             ) as proxy,
@@ -1280,7 +1293,7 @@ class TestOpsFounderAutonomy:
 
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "data": snapshot}
-        assert proxy.await_count == 9
+        assert proxy.await_count == 10
         assert build_snapshot.call_args.kwargs["runtime"] == {
             "ok": True,
             "runtime": "live",
@@ -1292,6 +1305,7 @@ class TestOpsFounderAutonomy:
             "completion_rate": 75.0,
         }
         assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is True
+        assert build_snapshot.call_args.kwargs["strategic_council"]["data"]["ready"] is True
 
 
 class TestOpsStaffingOnboard:

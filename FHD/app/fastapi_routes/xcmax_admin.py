@@ -2313,6 +2313,7 @@ async def ops_founder_autonomy(request: Request):
         autonomy_audit,
         dead_letters,
         strategic_decisions,
+        strategic_council,
         action_board,
     ) = await asyncio.gather(
         _safe_proxy("/api/ops/self-maintenance/status?limit=100"),
@@ -2323,6 +2324,7 @@ async def ops_founder_autonomy(request: Request):
         _safe_proxy("/api/admin/autonomy/evidence?window_days=30&limit=100"),
         _safe_proxy("/api/admin/events/dlq/health"),
         _safe_proxy("/api/xcmax/strategic/decisions?limit=100"),
+        _safe_proxy("/api/xcmax/strategic/council/status?limit=20"),
         _safe_proxy("/api/public/action-board"),
     )
 
@@ -2363,6 +2365,7 @@ async def ops_founder_autonomy(request: Request):
         employee_capability=employee_capability,
         dead_letters=dead_letters,
         strategic_decisions=strategic_decisions,
+        strategic_council=strategic_council,
         surfaces={
             "founder_cockpit": True,
             "approval_center": True,
