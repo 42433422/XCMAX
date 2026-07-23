@@ -1142,11 +1142,7 @@ def _trusted_system_burn_in_project_root(
     paths before the containment check prevents symlink or ``..`` escapes.
     """
 
-    if (
-        int(user_id or 0) > 0
-        or not read_only
-        or cog_input.get("burn_in_read_only") is not True
-    ):
+    if int(user_id or 0) > 0 or not read_only or cog_input.get("burn_in_read_only") is not True:
         return ""
     configured = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if not configured:
