@@ -1989,7 +1989,7 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "repo_url": os.environ.get("MODSTORE_PARA_REPO_URL"),
         "suppress_lifecycle_events": True,
         "wait_for_para": True,
-        "wait_timeout_sec": _env_int("MODSTORE_PARA_WAIT_TIMEOUT_SEC", 900),
+        "wait_timeout_sec": _env_int("MODSTORE_PARA_WAIT_TIMEOUT_SEC", 1800),
         # vibe-coding-maintainer 的 agent handler 在 Para 未启用 fallback 时需要
         # project_root 才能分析文件；para_delegate 模式会忽略此字段。
         # 默认指向生产仓库根目录，可用 MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT 覆盖。
