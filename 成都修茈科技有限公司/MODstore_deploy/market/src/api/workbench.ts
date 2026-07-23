@@ -163,7 +163,7 @@ export const customerService = {
 
 export const butler = {
   agentCorpChat: (payload: {
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: unknown }>
     page_id?: string
     page_context?: string
     max_tokens?: number
