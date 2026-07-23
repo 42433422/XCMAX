@@ -47,5 +47,8 @@ def test_immutable_release_preserves_public_founder_projection() -> None:
 
     assert "XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public" in release_script
     assert 'install -d -m 755 "$PUBLIC_SITE_STATE_DIR"' in release_script
-    assert 'PUBLIC_PROJECTION_PATH="${PUBLIC_SITE_STATE_DIR}/download-founder-autonomy.json"' in release_script
+    assert (
+        'PUBLIC_PROJECTION_PATH="${PUBLIC_SITE_STATE_DIR}/download-founder-autonomy.json"'
+        in release_script
+    )
     assert "seeded persistent public founder projection" in release_script
