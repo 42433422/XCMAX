@@ -4,6 +4,7 @@ import json
 
 from modstore_server.public_company_hall import (
     DEPARTMENT_ORDER,
+    _publicize_feed_text,
     _sort_feed,
     build_public_company_hall,
     write_public_company_hall,
@@ -97,3 +98,52 @@ def test_company_hall_feed_merges_sources_by_full_timestamp():
         "middle-metric",
         "action-owner",
     ]
+
+
+def test_publicize_feed_text_strips_role_prompt_and_keeps_task():
+    summary, detail = _publicize_feed_text(
+        "你是事故处理小组的 scout。事件类型：ops.intake.email。"
+        "问题摘要：官网邮件接入超时需人工复核。"
+        "执行模式：execute；风险级别：low。必须使用真实日志核对。"
+    )
+    assert "你是" not in summary
+    assert "执行模式" not in summary
+    assert "官网邮件接入超时" in summary
+    assert "官网邮件接入超时" in detail
+    assert len(summary) <= len(detail)
+
+
+def test_publicize_feed_text_prefers_gangwei_task_field():
+    summary, detail = _publicize_feed_text(
+        "岗位任务：汇总伙伴交付、验收和 SLA 状态。"
+        "执行模式：execute；风险级别：low。"
+        "验收回执：状态关联真实交付回执；延期明确责任与下一步。必须使用真实数据。"
+    )
+    assert summary.startswith("汇总伙伴交付")
+    assert "执行模式" not in summary
+    assert "汇总伙伴交付" in detail
+
+
+def test_publicize_feed_text_hides_scout_instruction_prompt():
+    summary, detail = _publicize_feed_text(
+        "你是事故处理小组的 scout。事件类型：ops.incident.email。"
+        "问题摘要：ops.incident.email。 回复必须说人话：先给结论/状态，再说下一步。"
+    )
+    assert "你是" not in summary
+    assert "回复必须说人话" not in summary
+    assert "scout" not in summary.lower()
+    assert "ops.incident.email" in summary
+    assert "事故巡检" in summary
+    assert "你是" not in detail
+    assert "回复必须说人话" not in detail
+
+
+def test_publicize_feed_text_hides_json_dump_instruction():
+    summary, detail = _publicize_feed_text(
+        "不要直接倾倒 JSON、内部字段或英文模板。你的任务是判断最可能的原因、影响范围与下一步。"
+    )
+    assert "不要直接倾倒" not in summary
+    assert "你的任务是" not in summary
+    assert "JSON" not in summary
+    assert "提示词已隐藏" in summary or "事故巡检" in summary
+    assert "不要直接倾倒" not in detail

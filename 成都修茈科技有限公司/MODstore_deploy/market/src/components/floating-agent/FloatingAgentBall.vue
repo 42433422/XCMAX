@@ -22,10 +22,11 @@
         class="butler-ball__logo"
         :src="brandLogoUrl"
         alt=""
-        draggable="false"
-        :width="props.corpMode ? 46 : 38"
-        :height="props.corpMode ? 46 : 38"
+        :width="56"
+        :height="56"
         decoding="async"
+        draggable="false"
+        @dragstart.prevent
       />
     </span>
     <span class="butler-ball__label">小C助理</span>
@@ -63,7 +64,7 @@ const props = defineProps<{
   isSpeaking?: boolean
   forceLight?: boolean
   corpMode?: boolean
-  /** 管理端使用男版；官网与客户端统一使用女版小 C。 */
+  /** 管理员账号使用男版；普通用户与官网统一女版小 C。 */
   maleAvatar?: boolean
 }>()
 
@@ -71,7 +72,7 @@ const avatarFileName = computed(() =>
   props.maleAvatar ? 'ai-butler-male-avatar-v1.jpg' : 'ai-butler-female-avatar-v1.png',
 )
 
-/** 官网与客户端使用女版小 C；管理端明确使用男版。 */
+/** 官网固定女版；市场内按 maleAvatar 切换管理员男版 / 普通女版。 */
 const brandLogoUrl = computed(() =>
   props.corpMode
     ? '/corp-butler/ai-butler-female-avatar-v1.png'
@@ -81,10 +82,11 @@ const brandLogoUrl = computed(() =>
 const ballRef = ref<HTMLButtonElement | null>(null)
 
 const DRAG_THRESHOLD_PX = 6
-const BALL_WIDTH_ESTIMATE = 64
-const CORP_BALL_WIDTH_ESTIMATE = 64
-const BALL_HEIGHT_ESTIMATE = 82
-const CORP_BALL_HEIGHT_ESTIMATE = 82
+/** 竖排：头像上 + 名称下（非胶囊） */
+const BALL_WIDTH_ESTIMATE = 72
+const CORP_BALL_WIDTH_ESTIMATE = 72
+const BALL_HEIGHT_ESTIMATE = 88
+const CORP_BALL_HEIGHT_ESTIMATE = 88
 let isDragging = false
 let dragStartX = 0
 let dragStartY = 0
@@ -177,22 +179,21 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 独立圆形头像，名称置于头像下方；不使用胶囊外框。 */
+/* 竖排固定格式：圆形头像居中上 + 底部名称；无胶囊底栏 */
 .butler-ball {
   position: fixed;
   top: 0;
   left: 0;
   z-index: 11000;
   pointer-events: auto;
-  touch-action: manipulation;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  width: 64px;
-  min-width: 64px;
-  min-height: 82px;
+  width: 72px;
+  min-width: 72px;
+  min-height: 88px;
   max-width: calc(100vw - 32px);
   padding: 0;
   margin: 0;
@@ -204,11 +205,10 @@ onBeforeUnmount(() => {
   cursor: grab;
   touch-action: none;
   backdrop-filter: none;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
     transform 180ms ease,
-    box-shadow 180ms ease,
-    border-color 180ms ease,
-    background 180ms ease,
     opacity 180ms ease;
 }
 
@@ -216,32 +216,19 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
-.butler-ball:hover {
-  background: transparent;
-}
-
 .butler-ball:hover .butler-ball__logo-wrap {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 72%, transparent);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wb-accent-primary, #818cf8) 16%, transparent),
-    0 8px 18px rgba(0, 0, 0, 0.34);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
 }
 
 .butler-ball:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 42%, transparent);
-  outline-offset: 2px;
-  border-radius: 10px;
+  outline-offset: 4px;
+  border-radius: 16px;
 }
 
 .butler-ball--open {
   z-index: 11020;
-}
-
-.butler-ball--open .butler-ball__logo-wrap {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 78%, transparent);
-  box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--wb-accent-primary, #818cf8) 18%, transparent),
-    0 8px 18px rgba(0, 0, 0, 0.34);
 }
 
 .butler-ball--consent-pending {
@@ -270,11 +257,12 @@ onBeforeUnmount(() => {
   place-items: center;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.94);
-  border: 2px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 54%, #fff);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--wb-accent-primary, #818cf8) 20%, transparent),
-    0 6px 14px rgba(0, 0, 0, 0.28);
+  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 36%, transparent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   flex: 0 0 auto;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .butler-ball__logo {
@@ -284,27 +272,29 @@ onBeforeUnmount(() => {
   object-position: 50% 37%;
   transform: scale(1.08);
   display: block;
+  pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
-  pointer-events: none;
 }
 
 .butler-ball__label {
-  font-size: 13px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 1.15;
   font-weight: 800;
   letter-spacing: 0.01em;
   white-space: nowrap;
   color: var(--wb-text-primary, #f0f0f5);
   flex: 0 0 auto;
   text-align: center;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.34);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.35),
+    0 0 8px rgba(0, 0, 0, 0.25);
 }
 
 .butler-ball__badge {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 4px;
+  right: 4px;
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
@@ -334,42 +324,31 @@ onBeforeUnmount(() => {
   color: var(--wb-text-secondary, rgba(240, 240, 245, 0.82));
   white-space: nowrap;
   pointer-events: none;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  border-radius: 0;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 32%, transparent);
+  padding: 3px 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .butler-ball.butler-ball--light {
-  border-color: transparent;
   background: transparent;
-  color: var(--wb-text-primary, #1d1d1f);
+  border: 0;
   box-shadow: none;
-  backdrop-filter: none;
-}
-
-.butler-ball.butler-ball--light:hover {
-  background: transparent;
-}
-
-.butler-ball.butler-ball--light:hover .butler-ball__logo-wrap,
-.butler-ball.butler-ball--light.butler-ball--open .butler-ball__logo-wrap {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 72%, #fff);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wb-accent-primary, #0071e3) 16%, transparent),
-    0 8px 18px rgba(15, 76, 129, 0.2);
+  color: var(--wb-text-primary, #1d1d1f);
 }
 
 .butler-ball.butler-ball--light .butler-ball__logo-wrap {
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.96);
   border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 38%, transparent);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
 
 .butler-ball.butler-ball--light .butler-ball__label {
   color: var(--wb-text-primary, #1d1d1f);
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 8px rgba(255, 255, 255, 0.55);
 }
 
 .butler-ball.butler-ball--light .butler-ball__badge {
@@ -378,12 +357,12 @@ onBeforeUnmount(() => {
 
 .butler-ball.butler-ball--light .butler-ball__hint {
   color: var(--wb-accent-primary, #0071e3);
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 32%, transparent);
+  box-shadow: var(--wb-card-shadow, 0 4px 12px rgba(0, 0, 0, 0.08));
 }
 
-/* 官网：默认 top/left 0，实际位置由 transform + xc_butler_pos_corp 决定，可拖动 */
+/* 官网：与市场同为竖排头像+名称（无胶囊底） */
 .butler-ball.butler-ball--corp-anchor {
   top: 0;
   left: 0;
@@ -393,13 +372,13 @@ onBeforeUnmount(() => {
   touch-action: none;
   /* 面板打开时仍须高于 .butler-panel(20002)，否则拖不动 */
   z-index: 20005;
-  width: 64px;
-  min-width: 64px;
-  min-height: 82px;
-  height: 82px;
+  width: 72px;
+  min-width: 72px;
+  min-height: 88px;
+  height: auto;
   gap: 6px;
   padding: 0;
-  border-color: transparent;
+  border: 0;
   background: transparent;
   box-shadow: none;
 }
@@ -408,7 +387,9 @@ onBeforeUnmount(() => {
   display: block;
   color: #20274a;
   letter-spacing: 0.025em;
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 8px rgba(255, 255, 255, 0.6);
 }
 
 .butler-ball.butler-ball--corp-anchor .butler-ball__logo-wrap {
@@ -422,14 +403,7 @@ onBeforeUnmount(() => {
 
 .butler-ball.butler-ball--corp-anchor:hover {
   background: transparent;
-}
-
-.butler-ball.butler-ball--corp-anchor:hover .butler-ball__logo-wrap,
-.butler-ball.butler-ball--corp-anchor.butler-ball--open .butler-ball__logo-wrap {
-  border-color: rgba(104, 98, 245, 0.8);
-  box-shadow:
-    0 0 0 4px rgba(130, 115, 255, 0.14),
-    0 8px 18px rgba(28, 78, 148, 0.24);
+  box-shadow: none;
 }
 
 .butler-ball.butler-ball--corp-anchor.butler-ball--open {

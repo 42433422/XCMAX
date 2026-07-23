@@ -153,18 +153,34 @@ async function doRegister() {
   padding: 0 var(--layout-pad-x, 16px) 1rem;
 }
 .auth-card {
-  background: #111111;
+  background: var(--wb-surface-elevated, #ffffff);
   border-radius: 12px;
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border: 0.5px solid var(--wb-border-default, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--wb-card-shadow, 0 8px 28px rgba(0, 0, 0, 0.06));
   padding: 32px;
   width: 100%;
   max-width: min(400px, 100%);
   box-sizing: border-box;
 }
-.auth-card h2 { font-size: 22px; margin-bottom: 24px; text-align: center; color: #ffffff; }
+.auth-card h2 {
+  font-size: 22px;
+  margin-bottom: 24px;
+  text-align: center;
+  color: var(--wb-text-primary, #1d1d1f);
+}
 .form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
-.field-hint { font-size: 12px; color: rgba(255,255,255,0.35); margin: 0 0 8px; line-height: 1.45; }
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--wb-text-muted, #86868b);
+  margin-bottom: 6px;
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--wb-text-muted, #86868b);
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
 .code-row { display: flex; gap: 10px; align-items: stretch; }
 .input-code { flex: 1; min-width: 0; }
 .btn-send {
@@ -173,21 +189,29 @@ async function doRegister() {
   font-size: 13px;
   font-weight: 500;
   border-radius: 8px;
-  border: 0.5px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.85);
+  border: 0.5px solid var(--wb-border-default, rgba(0, 0, 0, 0.12));
+  background: var(--wb-surface-sunken, rgba(0, 0, 0, 0.04));
+  color: var(--wb-text-primary, #1d1d1f);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, opacity 0.15s ease;
 }
 .btn-send:hover:not(:disabled) {
-  background: rgba(255,255,255,0.12);
+  background: var(--wb-surface-overlay, rgba(0, 0, 0, 0.06));
 }
 .btn-send:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 .btn-block { width: 100%; }
-.auth-footer { text-align: center; margin-top: 16px; font-size: 14px; color: rgba(255,255,255,0.5); }
-.link { color: #ffffff; font-weight: 500; }
+.auth-footer {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--wb-text-muted, #86868b);
+}
+.link {
+  color: var(--wb-accent-primary, #0071e3);
+  font-weight: 500;
+}
 </style>

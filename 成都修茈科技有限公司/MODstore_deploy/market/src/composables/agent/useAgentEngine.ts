@@ -27,16 +27,21 @@ export function useAgentEngine() {
   const { getPageContext } = usePageAnalyzer()
 
   /** 主入口：处理用户输入 */
-  async function handleInput(userText: string, opts?: { withScreenshot?: boolean }): Promise<void> {
-    if (!userText.trim()) return
+  async function handleInput(
+    userText: string,
+    opts?: { withScreenshot?: boolean; imageDataUrl?: string | null; skipUserInsert?: boolean },
+  ): Promise<void> {
+    const text = userText.trim()
+    const uploaded = typeof opts?.imageDataUrl === 'string' ? opts.imageDataUrl.trim() : ''
+    if (!text && !uploaded && !opts?.withScreenshot) return
     agentStore.isLoading = true
     agentStore.setMode('thinking')
 
-    const userMsg = makeUserMsg(userText)
-    agentStore.addMessage(userMsg)
-
-    const thinkingMsg = makeAssistantMsg('…', true)
-    agentStore.addMessage(thinkingMsg)
+    const displayText = text || (uploaded || opts?.withScreenshot ? '[图片]' : '')
+    if (!opts?.skipUserInsert) {
+      agentStore.addMessage(makeUserMsg(displayText))
+      agentStore.addMessage(makeAssistantMsg('…', true))
+    }
 
     try {
       const routeName = route.name ? String(route.name) : null
@@ -45,25 +50,30 @@ export function useAgentEngine() {
         route: route.fullPath,
         pageTitle: document.title,
         pageSummary: getStructuredPageSummary({ routeName, domExcerpt }),
-        userMessage: userText,
+        userMessage: text || displayText,
         history: agentStore.messages.slice(-12),
       }
 
-      // 先尝试关键词匹配（Phase 1/2 离线路径）
-      const matchedSkill = skillRegistry.matchByIntent(context)
-      if (matchedSkill && !agentStore.currentConversationId) {
-        const result = await matchedSkill.execute(context)
-        agentStore.updateLastMessage({
-          content: result.assistantReply || result.message,
-          isLoading: false,
-        })
-        agentStore.setMode('idle')
-        agentStore.isLoading = false
-        return
+      // 有附图时跳过离线技能，直接走 LLM vision
+      if (!uploaded && !opts?.withScreenshot) {
+        const matchedSkill = skillRegistry.matchByIntent(context)
+        if (matchedSkill && !agentStore.currentConversationId) {
+          const result = await matchedSkill.execute(context)
+          agentStore.updateLastMessage({
+            content: result.assistantReply || result.message,
+            isLoading: false,
+          })
+          agentStore.setMode('idle')
+          agentStore.isLoading = false
+          return
+        }
       }
 
       // Phase 3+: LLM brain
-      await callLLMBrain(context, opts?.withScreenshot ?? false)
+      await callLLMBrain(context, {
+        withScreenshot: opts?.withScreenshot ?? false,
+        imageDataUrl: uploaded || null,
+      })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       agentStore.updateLastMessage({ content: `出错了：${msg}`, isLoading: false })
@@ -74,12 +84,21 @@ export function useAgentEngine() {
     }
   }
 
-  async function callLLMBrain(context: AgentContext, withScreenshot: boolean) {
-    let screenshotDataUrl: string | null = null
-    if (withScreenshot) {
+  async function callLLMBrain(
+    context: AgentContext,
+    opts: { withScreenshot: boolean; imageDataUrl?: string | null },
+  ) {
+    let screenshotDataUrl: string | null =
+      typeof opts.imageDataUrl === 'string' && opts.imageDataUrl.trim()
+        ? opts.imageDataUrl.trim()
+        : null
+    if (!screenshotDataUrl && opts.withScreenshot) {
       try {
         const { captureViewport } = await import('../../utils/agent/screenshotCapture')
-        screenshotDataUrl = await captureViewport()
+        const captured = await captureViewport()
+        if (captured.ok && captured.kind === 'image' && captured.dataUrl) {
+          screenshotDataUrl = captured.dataUrl
+        }
       } catch {
         // fallback: no screenshot
       }
@@ -96,7 +115,7 @@ export function useAgentEngine() {
       .slice(-10)
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-    // 末尾用户消息（含可选截图）
+    // 末尾用户消息（含可选截图/上传图）
     let userContent: unknown = context.userMessage
     if (screenshotDataUrl) {
       userContent = [

@@ -170,4 +170,22 @@ Emoji: 🚀 done`
     expect(result).toContain('100')
     expect(result).toContain('50%')
   })
+
+  it('strips bare site paths and urls for speech', () => {
+    const input = '教育案例详情：/case-edu.html\n更多案例：/cases.html\n官网 https://xiu-ci.com/about.html'
+    const result = cleanTextForTts(input)
+    expect(result).not.toMatch(/case-edu|cases\.html|https?:|xiu-ci\.com/i)
+    expect(result).toContain('教育案例详情')
+    expect(result).toContain('更多案例')
+  })
+
+  it('strips decorative arrows and bullets', () => {
+    const input = '制造案例 → /case-manufacture.html\n• 园区案例'
+    const result = cleanTextForTts(input)
+    expect(result).not.toContain('→')
+    expect(result).not.toContain('•')
+    expect(result).not.toContain('case-manufacture')
+    expect(result).toContain('制造案例')
+    expect(result).toContain('园区案例')
+  })
 })

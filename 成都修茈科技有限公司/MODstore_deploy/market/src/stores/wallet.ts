@@ -22,11 +22,13 @@ export const useWalletStore = defineStore('wallet', () => {
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
         const res = await api.balance()
-        if (res && typeof res.balance === 'number') {
-          balance.value = res.balance
-          setMembershipReferenceYuan(res?.membership_reference_yuan)
+        // Java/payment 可能返回 number 或 numeric 字符串；缺钱包时为 0
+        const n = Number((res as { balance?: unknown } | null)?.balance)
+        if (res && Number.isFinite(n)) {
+          balance.value = n
+          setMembershipReferenceYuan((res as { membership_reference_yuan?: unknown }).membership_reference_yuan)
           lastUpdated.value = Date.now()
-          console.log(`[Wallet] 余额刷新成功: ¥${res.balance.toFixed(2)}`)
+          console.log(`[Wallet] 余额刷新成功: ¥${n.toFixed(2)}`)
           return balance.value
         } else {
           throw new Error('Invalid API response format')
