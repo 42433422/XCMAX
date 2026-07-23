@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from modstore_server import self_maintenance_loop_runner
+from modstore_server import models, self_maintenance_loop_runner
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
     DeploymentReceiptError,
@@ -39,6 +39,55 @@ def test_deployment_receipt_callback_requires_exact_shared_token(monkeypatch) ->
     assert _deployment_receipt_token_valid(None, "expected-token") is True
     assert _deployment_receipt_token_valid("Bearer wrong-token", None) is False
     assert _deployment_receipt_token_valid(None, None) is False
+
+
+def test_only_verified_production_receipt_credits_release_officer(tmp_path, monkeypatch) -> None:
+    models._engine = None
+    models._SessionFactory = None
+    monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "deploy-receipt.sqlite"))
+    models.init_db()
+    sf = models.get_session_factory()
+    with sf() as session:
+        session.add(
+            models.User(
+                username="deploy_admin",
+                password_hash="x",
+                email="deploy@example.com",
+                is_admin=True,
+            )
+        )
+        session.commit()
+
+    base = {
+        "event": "post_deploy_verified",
+        "environment": "production",
+        "ok": True,
+        "identity_verified": True,
+        "status": "verified",
+        "run_id": "self-maintenance-123",
+        "merge_sha": MERGE_SHA,
+        "workflow_run_id": "98765",
+    }
+    assert self_maintenance_loop_runner._record_verified_deploy_employee_metric(base) is True
+    assert self_maintenance_loop_runner._record_verified_deploy_employee_metric(base) is False
+    assert (
+        self_maintenance_loop_runner._record_verified_deploy_employee_metric(
+            {**base, "environment": "staging", "workflow_run_id": "98766"}
+        )
+        is False
+    )
+
+    with sf() as session:
+        rows = (
+            session.query(models.EmployeeExecutionMetric)
+            .filter(models.EmployeeExecutionMetric.employee_id == "deploy-release-officer")
+            .all()
+        )
+    assert len(rows) == 1
+    assert rows[0].status == "success"
+    assert MERGE_SHA[:12] in rows[0].task
+    models._engine = None
+    models._SessionFactory = None
 
 
 @dataclass
