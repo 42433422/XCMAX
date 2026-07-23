@@ -30,6 +30,10 @@ jobs:
   release-preflight:
     if: ${{ inputs.verify_only != true }}
     runs-on: ubuntu-latest
+    # Preflight has no checkout; do not inherit defaults.working-directory=FHD.
+    defaults:
+      run:
+        working-directory: .
     env:
       ES_USERNAME: ${{ secrets.ES_USERNAME }}
       ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
