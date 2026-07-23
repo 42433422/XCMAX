@@ -285,9 +285,9 @@ def test_autonomy_deploy_has_no_human_environment_approval() -> None:
 
 
 def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
-    script = (
-        FHD_ROOT / "scripts/deploy/force_self_maintenance_remote.sh"
-    ).read_text(encoding="utf-8")
+    script = (FHD_ROOT / "scripts/deploy/force_self_maintenance_remote.sh").read_text(
+        encoding="utf-8"
+    )
 
     inprocess_call = script.index("if run_inprocess_with_live_env; then")
     http_call = script.index("if choose_base_via_http; then")
@@ -299,9 +299,9 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
 
 
 def test_forced_self_maintenance_does_not_put_secret_or_reason_in_ssh_argv() -> None:
-    workflow = (
-        REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert 'printf \'%s\' "$LOOP_REASON" > "$LOCAL_REASON_FILE"' in workflow
     assert 'printf \'%s\' "$OPS_TOKEN" > "$LOCAL_TOKEN_FILE"' in workflow
