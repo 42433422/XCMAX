@@ -94,7 +94,8 @@ class ReviewDecisionRequest(BaseModel):
 
 class ScheduleMeetingRequest(BaseModel):
     meeting_type: str = Field(
-        "ad_hoc", description="daily_standup/weekly_review/monthly_strategy/ad_hoc/incident_review"
+        "ad_hoc",
+        description="daily_standup/weekly_review/monthly_strategy/ad_hoc/incident_review",
     )
     title: str = Field(..., min_length=1, max_length=200)
     scheduled_at: str = Field(..., description="开始时间 ISO 字符串")
@@ -142,6 +143,19 @@ class GenerateMonthlyReportRequest(BaseModel):
     actor: str = Field("ai-strategist", max_length=128, description="生成人 ID")
 
 
+class StrategicCouncilReviewRequest(BaseModel):
+    proposal_id: str = Field(..., min_length=1, max_length=128)
+    run_id: str = Field(..., min_length=1, max_length=128)
+    package_id: str = Field(..., min_length=1, max_length=128)
+    version: str = Field(..., min_length=1, max_length=64)
+    package_sha256: str = Field(..., min_length=64, max_length=64)
+    goal_id: str = Field(..., min_length=1, max_length=128)
+    loop_run_id: str = Field(..., min_length=1, max_length=128)
+    para_task_id: str = Field(..., min_length=1, max_length=128)
+    strategy_intent: str = Field(..., min_length=1, max_length=4000)
+    changed_files: List[Any] = Field(default_factory=list)
+
+
 # ─── 工具函数 ───────────────────────────────────────────────────────────────
 
 
@@ -187,6 +201,37 @@ def _lifecycle_error_to_http(exc: Exception) -> HTTPException:
         return HTTPException(422, str(exc))
     logger.exception("strategic layer unexpected error")
     return HTTPException(500, f"internal error: {exc}")
+
+
+# ─── Persy / Para / Retort 战略三席 ────────────────────────────────────────
+
+
+@router.get("/council/status", response_model=Dict[str, Any])
+def get_strategic_council_status(
+    limit: int = Query(20, ge=1, le=100),
+    _: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return only hash-chain-verified council receipts."""
+
+    from modstore_server.strategic_council import strategic_council_status
+
+    return {"ok": True, "data": strategic_council_status(limit=limit)}
+
+
+@router.post("/council/review", response_model=Dict[str, Any])
+def run_strategic_council_review(
+    body: StrategicCouncilReviewRequest,
+    _: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Run the three seats against live evidence and append one immutable attempt."""
+
+    from modstore_server.strategic_council import build_live_strategic_council_receipt
+
+    try:
+        receipt = build_live_strategic_council_receipt(**body.model_dump())
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": receipt.get("verified") is True, "receipt": receipt}
 
 
 # ─── 决策账本路由 ──────────────────────────────────────────────────────────
