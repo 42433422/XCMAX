@@ -52,7 +52,7 @@ WORKFLOW_RENAMES = {
 # These workflows use only absolute/remote commands.  Injecting the normal FHD
 # working directory before checkout makes their first preflight step fail.
 FHD_NO_DEFAULTS = {"cvm-autonomy-watcher.yml"}
-MOD_NO_DEFAULTS = {"prod-deploy.yml"}
+MOD_NO_DEFAULTS = {"prod-deploy-receipt.yml", "prod-deploy.yml"}
 
 MOD_RENAMES = {
     "ci-backend-python.yml": "modstore-ci-backend-python.yml",
