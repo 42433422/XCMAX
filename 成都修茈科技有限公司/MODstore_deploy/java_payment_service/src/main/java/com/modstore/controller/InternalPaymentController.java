@@ -186,10 +186,24 @@ public class InternalPaymentController {
                 "fulfillment_artifact_sha256",
                 String.valueOf(fulfillment.getOrDefault("artifact_sha256", ""))
         );
+        row.put(
+                "fulfillment_artifact_kind",
+                String.valueOf(fulfillment.getOrDefault("artifact_kind", ""))
+        );
         Object fulfilledAt = fulfillment.get("fulfilled_at");
         row.put(
                 "fulfilled_at",
                 fulfilledAt instanceof LocalDateTime ? toUtcTimestamp((LocalDateTime) fulfilledAt) : ""
+        );
+        row.put("acceptance_verified", Boolean.TRUE.equals(fulfillment.get("acceptance_verified")));
+        row.put(
+                "acceptance_reason",
+                String.valueOf(fulfillment.getOrDefault("acceptance_reason", ""))
+        );
+        Object acceptedAt = fulfillment.get("accepted_at");
+        row.put(
+                "accepted_at",
+                acceptedAt instanceof LocalDateTime ? toUtcTimestamp((LocalDateTime) acceptedAt) : ""
         );
         return row;
     }
