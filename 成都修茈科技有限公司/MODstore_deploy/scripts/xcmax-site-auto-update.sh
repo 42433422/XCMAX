@@ -437,6 +437,23 @@ restart_app_services() {
   done
 }
 
+# Hotfix hold: when production release is pinned to a SHA that is not current
+# origin/main (e.g. PR-not-yet-merged restore), do not overwrite live static /
+# market dist from the older git tip every cron tick.
+live_release_sha=""
+if [[ -f /etc/xcmax/modstore-release.env ]]; then
+  live_release_sha="$(
+    awk -F= '$1=="MODSTORE_GIT_SHA" || $1=="MODSTORE_EXPECTED_GIT_SHA" {print $2; exit}'       /etc/xcmax/modstore-release.env | tr -d " \r"
+  )"
+fi
+if [[ -n "${live_release_sha}" ]]; then
+  remote_main_sha="$(git -C "$XCMAX_ROOT" rev-parse "origin/${BRANCH}" 2>/dev/null || true)"
+  if [[ -n "${remote_main_sha}" && "${live_release_sha}" != "${remote_main_sha}"       && "${XCMAX_FORCE_AUTO_UPDATE:-0}" != "1" ]]; then
+    log "hotfix hold: live release ${live_release_sha:0:12} != origin/${BRANCH} ${remote_main_sha:0:12}; skip overwrite"
+    exit 0
+  fi
+fi
+
 OLD_XCMAX_SHA=""
 if [[ -f "${STATE_DIR}/xcmax.sha" ]]; then
   OLD_XCMAX_SHA="$(tr -d '[:space:]' <"${STATE_DIR}/xcmax.sha")"
