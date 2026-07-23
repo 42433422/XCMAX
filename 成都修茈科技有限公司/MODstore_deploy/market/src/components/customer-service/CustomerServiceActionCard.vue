@@ -3,14 +3,19 @@
   <section v-if="isCustomerFacing" class="cs-card">
     <div class="cs-card__head">
       <span class="cs-card__type">{{ title }}</span>
-      <span v-if="status" :class="['cs-card__status', `cs-card__status--${status}`]">{{ statusLabel }}</span>
+      <span v-if="status" :class="['cs-card__status', `cs-card__status--${statusKey}`]">{{ statusLabel }}</span>
     </div>
 
     <div v-if="card.type === 'ticket'" class="cs-grid">
       <div><b>工单号</b><span>{{ card.ticket_no || '—' }}</span></div>
       <div><b>场景</b><span>{{ intentLabel }}</span></div>
+<<<<<<< Updated upstream
       <div><b>对象</b><span>{{ card.subject_type || '—' }} {{ card.subject_id || '' }}</span></div>
       <div><b>状态</b><span>{{ card.status || '—' }}</span></div>
+=======
+      <div><b>对象</b><span>{{ subjectLabel }}</span></div>
+      <div><b>状态</b><span>{{ statusText(card.status) }}</span></div>
+>>>>>>> Stashed changes
     </div>
 
     <div v-else-if="card.type === 'decision'" class="cs-decision">
@@ -25,7 +30,13 @@
     <div v-else-if="card.type === 'actions'" class="cs-actions">
       <div v-for="item in card.items || []" :key="item.id || item.action_type" class="cs-action-row">
         <span>{{ actionLabel(item.action_type) }}</span>
+<<<<<<< Updated upstream
         <span :class="['cs-card__status', `cs-card__status--${item.status}`]">{{ statusText(item.status) }}</span>
+=======
+        <span :class="['cs-card__status', `cs-card__status--${String(item.status || '')}`]">
+          {{ statusText(item.status) }}
+        </span>
+>>>>>>> Stashed changes
       </div>
     </div>
   </section>
@@ -62,6 +73,23 @@ const intentLabel = computed(() => {
   return map[String(props.card.intent || '')] || String(props.card.intent || '咨询')
 })
 
+<<<<<<< Updated upstream
+=======
+const subjectLabel = computed(() => {
+  const typeMap: Record<string, string> = {
+    order: '订单',
+    catalog_item: '商品',
+    account: '账号',
+    llm_model: '模型',
+    general: '一般咨询',
+  }
+  const t = String(props.card.subject_type || '')
+  const id = String(props.card.subject_id || '').trim()
+  const label = typeMap[t] || (t && t !== 'general' ? t : '—')
+  return id ? `${label} ${id}` : label
+})
+
+>>>>>>> Stashed changes
 const decisionLabel = computed(() => {
   const map: Record<string, string> = {
     approved: '已受理',
@@ -77,6 +105,10 @@ const riskLabel = computed(() => {
 })
 
 const status = computed(() => String(props.card.status || props.card.decision || '').trim())
+<<<<<<< Updated upstream
+=======
+const statusKey = computed(() => status.value.toLowerCase().replace(/\s+/g, '_') || 'pending')
+>>>>>>> Stashed changes
 const statusLabel = computed(() => statusText(status.value) || '处理中')
 const confidenceText = computed(() => {
   const n = Number(props.card.confidence || 0)
@@ -118,11 +150,12 @@ function actionLabel(raw: unknown) {
 
 <style scoped>
 .cs-card {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #f8fafc;
+  border-radius: 14px;
   padding: 14px;
   margin-top: 10px;
+  color: #0f172a;
 }
 
 .cs-card__head,
@@ -134,29 +167,43 @@ function actionLabel(raw: unknown) {
 }
 
 .cs-card__type {
-  color: #f7e9bf;
+  color: #9a3412;
   font-weight: 800;
+  font-size: 13px;
 }
 
 .cs-card__status {
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(22, 163, 74, 0.35);
   border-radius: 999px;
   padding: 4px 9px;
-  color: #d7fbe8;
-  background: rgba(35, 195, 126, 0.12);
+  color: #166534;
+  background: rgba(22, 163, 74, 0.12);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .cs-card__status--failed,
 .cs-card__status--rejected {
-  color: #ffd3d3;
-  background: rgba(255, 72, 72, 0.14);
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.35);
+  background: rgba(254, 226, 226, 0.9);
 }
 
 .cs-card__status--needs_more_info,
 .cs-card__status--waiting_user {
-  color: #ffe4a3;
-  background: rgba(255, 180, 51, 0.14);
+  color: #92400e;
+  border-color: rgba(217, 119, 6, 0.35);
+  background: rgba(254, 243, 199, 0.95);
+}
+
+.cs-card__status--resolved,
+.cs-card__status--done,
+.cs-card__status--closed,
+.cs-card__status--completed,
+.cs-card__status--approved {
+  color: #166534;
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(220, 252, 231, 0.95);
 }
 
 .cs-grid {
@@ -172,14 +219,22 @@ function actionLabel(raw: unknown) {
 }
 
 .cs-grid b {
-  color: rgba(255, 255, 255, 0.56);
+  color: #64748b;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .cs-grid span,
 .cs-decision p,
 .cs-action-row {
-  color: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.cs-decision p {
+  margin: 10px 0 0;
 }
 
 .cs-actions {
@@ -188,9 +243,30 @@ function actionLabel(raw: unknown) {
   margin-top: 12px;
 }
 
-.cs-json {
-  margin-top: 10px;
-  white-space: pre-wrap;
-  color: rgba(255, 255, 255, 0.75);
+/* 深色主题：提高对比，避免发灰发白 */
+html:not([data-workbench-theme='light']) .cs-card {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+}
+
+html:not([data-workbench-theme='light']) .cs-card__type {
+  color: #fde68a;
+}
+
+html:not([data-workbench-theme='light']) .cs-card__status {
+  color: #bbf7d0;
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(22, 163, 74, 0.18);
+}
+
+html:not([data-workbench-theme='light']) .cs-grid b {
+  color: rgba(226, 232, 240, 0.72);
+}
+
+html:not([data-workbench-theme='light']) .cs-grid span,
+html:not([data-workbench-theme='light']) .cs-decision p,
+html:not([data-workbench-theme='light']) .cs-action-row {
+  color: #f8fafc;
 }
 </style>
