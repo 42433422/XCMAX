@@ -24,18 +24,28 @@ describe('corpPageIntro', () => {
     expect(isCorpProactiveIntroEnabled()).toBe(true)
   })
 
-  it('builds short 小C intro for home without page context', () => {
+  it('builds page-specific intro for home', () => {
     const { pageId, text } = buildCorpPageIntroScript('/index.html')
     expect(pageId).toBe('home')
     expect(text).toContain('小C')
+    expect(text).toMatch(/XCAGI|行业 Mod|桌面/)
     expect(text).not.toMatch(/你现在在|这页重点/)
-    expect(text.length).toBeLessThanOrEqual(80)
+    expect(text.length).toBeLessThanOrEqual(140)
   })
 
-  it('builds same style intro for services page without page dump', () => {
+  it('builds page-specific intro for download page', () => {
+    const { pageId, text } = buildCorpPageIntroScript('/download')
+    expect(pageId).toBe('download')
+    expect(text).toContain('小C')
+    expect(text).toMatch(/下载|安装包|macOS|Windows|Android/)
+    expect(text).not.toMatch(/你现在在/)
+  })
+
+  it('builds page-specific intro for services page', () => {
     const { pageId, text } = buildCorpPageIntroScript('/services.html')
     expect(pageId).toBe('services')
     expect(text).toContain('小C')
-    expect(text).not.toMatch(/你现在在|产品中心|这页重点/)
+    expect(text).toMatch(/产品|Excel|单据|MODstore|标签/)
+    expect(text).not.toMatch(/你现在在/)
   })
 })
