@@ -50,6 +50,8 @@ fi
 REMOTE="${USER}@${HOST}"
 SSH=(ssh "${SSH_OPTS[@]}")
 SCP=(scp "${SCP_OPTS[@]}")
+RSYNC_SHELL=""
+printf -v RSYNC_SHELL '%q ' "${SSH[@]}"
 
 APPLY_NOW="${FHD_PUSH_APPLY_NOW:-}"
 if [[ -z "$APPLY_NOW" ]]; then
@@ -144,11 +146,31 @@ atomic_upload() {
   local src="$1"
   local dest="$2"
   local part="${dest}.part"
-  local local_sz attempt
+  local local_sz attempt transfer_mode
   local_sz="$(wc -c < "$src" | tr -d '[:space:]')"
+  transfer_mode="scp"
+  if command -v rsync >/dev/null 2>&1 && \
+      "${SSH[@]}" "$REMOTE" "command -v rsync >/dev/null 2>&1"; then
+    transfer_mode="rsync"
+  fi
+  deploy_emit transfer started "artifact=$(basename "$src") mode=$transfer_mode bytes=$local_sz"
   for attempt in 1 2 3; do
-    if ! "${SCP[@]}" "$src" "${REMOTE}:${part}"; then
+    if [[ "$transfer_mode" == "rsync" ]]; then
+      # Preserve the remote .part file across interrupted CI runs.  A rerun of
+      # the same immutable artifact resumes from the verified prefix instead
+      # of retransmitting it from byte zero over the high-latency CVM link.
+      if rsync --archive --partial --append-verify --timeout=180 \
+          -e "$RSYNC_SHELL" "$src" "${REMOTE}:${part}"; then
+        :
+      else
+        echo "[warn] rsync attempt $attempt interrupted for $(basename "$src"); partial retained" >&2
+        sleep "$attempt"
+        continue
+      fi
+    elif ! "${SCP[@]}" "$src" "${REMOTE}:${part}"; then
       echo "[warn] scp attempt $attempt failed for $(basename "$src")" >&2
+      # scp cannot resume safely; remove only its incomplete target before a
+      # retry.  rsync partials above are intentionally retained.
       "${SSH[@]}" "$REMOTE" "rm -f '$part'" || true
       sleep "$attempt"
       continue
