@@ -404,10 +404,8 @@ const shouldShowButler = computed(() => {
   if (isAndroidEmbeddedShell.value) return false
   return !BUTLER_EXCLUDED_PATHS.some((ep) => p === ep || p.startsWith(ep + '/'))
 })
-/** 客户端（含桌面）统一女版；管理端所有页面统一男版。 */
-const shouldUseMaleButlerAvatar = computed(
-  () => currentMode.value === 'admin' || (route.path || '').startsWith('/admin'),
-)
+/** 管理员账号统一男版小 C；普通用户统一女版（含桌面客户端）。 */
+const shouldUseMaleButlerAvatar = computed(() => isAdmin.value)
 /** 未登录访客在公开落地页使用官网咨询引擎（不调用需登录的 Butler API） */
 const shouldShowGuestCorpButler = computed(() => {
   if (isLoggedIn.value) return false

@@ -62,7 +62,7 @@ const props = defineProps<{
   isSpeaking?: boolean
   forceLight?: boolean
   corpMode?: boolean
-  /** 管理端使用男版；官网与客户端统一使用女版小 C。 */
+  /** 管理员账号使用男版；普通用户与官网统一女版小 C。 */
   maleAvatar?: boolean
 }>()
 
@@ -70,7 +70,7 @@ const avatarFileName = computed(() =>
   props.maleAvatar ? 'ai-butler-male-avatar-v1.jpg' : 'ai-butler-female-avatar-v1.png',
 )
 
-/** 官网与客户端使用女版小 C；管理端明确使用男版。 */
+/** 官网固定女版；市场内按 maleAvatar 切换管理员男版 / 普通女版。 */
 const brandLogoUrl = computed(() =>
   props.corpMode
     ? '/corp-butler/ai-butler-female-avatar-v1.png'
