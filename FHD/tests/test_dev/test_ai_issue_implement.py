@@ -257,9 +257,9 @@ class TestIsAuthorized:
 
 
 class TestCommitAndPrLabelRouting:
-    """_commit_and_pr 按授权来源分流标签（Gap-1 核心保证）。"""
+    """LLM code remains review-gated regardless of execution authorization."""
 
-    def test_allowlist_source_labels_r0(
+    def test_allowlist_source_still_requires_r2_review(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         captured: dict[str, Any] = {}
@@ -291,9 +291,9 @@ class TestCommitAndPrLabelRouting:
         )
         assert pr_num == 1
         assert "ai-generated" in captured["labels_payload"]["labels"]
-        assert "risk:r0" in captured["labels_payload"]["labels"]
-        assert "needs-human" not in captured["labels_payload"]["labels"]
-        assert "risk:r2" not in captured["labels_payload"]["labels"]
+        assert "risk:r2" in captured["labels_payload"]["labels"]
+        assert "needs-human" in captured["labels_payload"]["labels"]
+        assert "risk:r0" not in captured["labels_payload"]["labels"]
         # PR body 必须含 allowlist 来源说明
         assert "allowlist" in captured["pr_payload"]["body"]
 
@@ -416,10 +416,32 @@ class TestApplyFiles:
         assert written[0] == "new_module.py"
         assert (tmp_path / "new_module.py").read_text(encoding="utf-8") == "print('hello')\n"
 
-    def test_modify_not_applied(self, tmp_path: Path) -> None:
-        files = [{"path": "existing.py", "action": "modify", "content": "..."}]
+    def test_modify_requires_exact_replacement(self, tmp_path: Path) -> None:
+        (tmp_path / "existing.py").write_text("before value\n", encoding="utf-8")
+        files = [
+            {
+                "path": "existing.py",
+                "action": "modify",
+                "old_text": "before value",
+                "new_text": "after value",
+            }
+        ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert written == []
+        assert written == ["existing.py"]
+        assert (tmp_path / "existing.py").read_text(encoding="utf-8") == "after value\n"
+
+    def test_modify_rejects_missing_or_ambiguous_old_text(self, tmp_path: Path) -> None:
+        (tmp_path / "existing.py").write_text("duplicate line\nduplicate line\n", encoding="utf-8")
+        files = [
+            {
+                "path": "existing.py",
+                "action": "modify",
+                "old_text": "duplicate line",
+                "new_text": "replacement",
+            }
+        ]
+
+        assert _ai_impl._apply_files(tmp_path, files) == []
 
     def test_path_traversal_blocked(self, tmp_path: Path) -> None:
         files = [{"path": "../escape.py", "action": "create", "content": "x"}]
@@ -448,7 +470,7 @@ class TestApplyFiles:
         assert written == []
         assert (tmp_path / "exists.py").read_text(encoding="utf-8") == "ORIGINAL"
 
-    def test_nested_dir_created(self, tmp_path: Path) -> None:
+    def test_fabricated_parent_directory_rejected(self, tmp_path: Path) -> None:
         files = [
             {
                 "path": "deep/nested/dir/file.py",
@@ -457,15 +479,15 @@ class TestApplyFiles:
             }
         ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert len(written) == 1
-        assert (tmp_path / "deep/nested/dir/file.py").is_file()
+        assert written == []
+        assert not (tmp_path / "deep/nested/dir/file.py").exists()
 
     def test_empty_path_skipped(self, tmp_path: Path) -> None:
         files = [{"path": "", "action": "create", "content": "x"}]
         written = _ai_impl._apply_files(tmp_path, files)
         assert written == []
 
-    def test_no_content_uses_summary(self, tmp_path: Path) -> None:
+    def test_summary_is_never_used_as_source_code(self, tmp_path: Path) -> None:
         files = [
             {
                 "path": "from_summary.py",
@@ -474,19 +496,30 @@ class TestApplyFiles:
             }
         ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert len(written) == 1
-        assert "stub" in (tmp_path / "from_summary.py").read_text(encoding="utf-8")
+        assert written == []
+        assert not (tmp_path / "from_summary.py").exists()
 
     def test_multiple_files_mixed_actions(self, tmp_path: Path) -> None:
-        (tmp_path / "existing.py").write_text("ORIG", encoding="utf-8")
+        (tmp_path / "existing.py").write_text("ORIGINAL", encoding="utf-8")
         files = [
-            {"path": "existing.py", "action": "modify", "content": "x"},
+            {
+                "path": "existing.py",
+                "action": "modify",
+                "old_text": "ORIGINAL",
+                "new_text": "UPDATED",
+            },
             {"path": "new1.py", "action": "create", "content": "1"},
             {"path": "new2.py", "action": "create", "content": "2"},
             {"path": "../escape.py", "action": "create", "content": "x"},
         ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert sorted(written) == ["new1.py", "new2.py"]
+        assert sorted(written) == ["existing.py", "new1.py", "new2.py"]
+
+    def test_fhd_prefix_is_normalized(self, tmp_path: Path) -> None:
+        files = [{"path": "FHD/new_module.py", "action": "create", "content": "value = 1\n"}]
+
+        assert _ai_impl._apply_files(tmp_path, files) == ["new_module.py"]
+        assert (tmp_path / "new_module.py").is_file()
 
 
 class TestImplementResultDataclass:
