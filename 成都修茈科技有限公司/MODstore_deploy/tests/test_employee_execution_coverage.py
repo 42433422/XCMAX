@@ -61,6 +61,14 @@ def test_execution_coverage_counts_only_fresh_successful_roster_receipts(
 
     assert result["proven_count"] == 1
     assert result["employee_ids"] == ["quality-validator"]
+    assert result["assigned_count"] == result["planned_count"] == 55
+    assert result["assignment_required_count"] == 53
+    assert result["proof_required_count"] == 44
+    assert result["assignment_ratio"] == 1.0
+    assert result["proof_ratio"] == round(1 / 55, 4)
+    assert result["shell_count"] == 0
+    assert result["shell_employee_ids"] == []
+    assert result["workforce_ready"] is False
     assert result["platform_llm"] == {
         "configured": True,
         "provider": "minimax",

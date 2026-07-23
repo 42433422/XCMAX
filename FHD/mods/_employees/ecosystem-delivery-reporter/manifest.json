@@ -99,9 +99,39 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "ecosystem_delivery_reporter",
+        "action": "summarize_deliveries",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["deliveries"],
+          "properties": {"deliveries": {"type": "array"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "sla_counts", "blockers", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "deliveries": [
+            {
+              "partner_id": "partner-fixture-001",
+              "delivery_receipt_id": "receipt-fixture-001",
+              "owner": "ecosystem-owner",
+              "sla_status": "met"
+            }
+          ]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

@@ -83,9 +83,39 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "test_qa_runner",
+        "action": "validate_qa_receipt",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["qa_run"],
+          "properties": {"qa_run": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "release_allowed", "blockers", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "qa_run": {
+            "command": "pytest -q tests/test_fixture.py",
+            "exit_code": 0,
+            "total": 3,
+            "passed": 3,
+            "failed": 0,
+            "artifact_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.3",

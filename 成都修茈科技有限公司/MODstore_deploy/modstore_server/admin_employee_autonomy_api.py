@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import secrets
@@ -33,9 +34,12 @@ from modstore_server.models import (
     get_session_factory,
 )
 
-router = APIRouter(prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"])
+router = APIRouter(
+    prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"]
+)
 
 _MENTION_RE = re.compile(r"@([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})")
+_HOLLOW_DUTY_HANDLERS = frozenset({"echo", "llm_md"})
 
 
 def _jloads(text: str, default: Any) -> Any:
@@ -86,6 +90,70 @@ def _require_admin_or_internal(
     return require_admin(get_current_user(authorization))
 
 
+def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
+    """Derive real assignment and shell counts from reviewed duty SSOTs."""
+
+    from modstore_server.duty_workforce_contracts import (
+        load_reviewed_duty_manifest,
+        workforce_contract_map,
+    )
+    from modstore_server.employee_runtime import parse_employee_config_v2
+
+    contracts = workforce_contract_map()
+    assigned_ids: list[str] = []
+    shell_ids: list[str] = []
+    for employee_id in sorted(planned):
+        contract = (
+            contracts.get(employee_id)
+            if isinstance(contracts.get(employee_id), dict)
+            else {}
+        )
+        trigger = (
+            contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+        )
+        acceptance = (
+            contract.get("acceptance")
+            if isinstance(contract.get("acceptance"), list)
+            else []
+        )
+        assigned = all(
+            (
+                str(contract.get("mission") or "").strip(),
+                str(contract.get("mode") or "").strip(),
+                str(contract.get("risk_level") or "").strip(),
+                bool(str(trigger.get("cron") or "").strip() or trigger.get("events")),
+                bool([item for item in acceptance if str(item or "").strip()]),
+            )
+        )
+        if assigned:
+            assigned_ids.append(employee_id)
+
+        try:
+            manifest = load_reviewed_duty_manifest(employee_id)
+            config = parse_employee_config_v2(manifest)
+            actions = (
+                config.get("actions") if isinstance(config.get("actions"), dict) else {}
+            )
+            if isinstance(actions.get("actions"), dict):
+                actions = actions["actions"]
+            handlers = {
+                str(item).strip()
+                for item in actions.get("handlers") or []
+                if str(item).strip()
+            }
+        except Exception:  # noqa: BLE001 - missing/invalid reviewed runtime is a shell
+            handlers = set()
+        if not handlers or handlers.issubset(_HOLLOW_DUTY_HANDLERS):
+            shell_ids.append(employee_id)
+
+    return {
+        "assigned_count": len(assigned_ids),
+        "assigned_employee_ids": assigned_ids,
+        "shell_count": len(shell_ids),
+        "shell_employee_ids": shell_ids,
+    }
+
+
 @router.get("/dashboard")
 def get_autonomy_dashboard(
     limit_recent: int = Query(30, ge=1, le=200),
@@ -105,7 +173,9 @@ def get_execution_coverage(
     _ = _admin_user
     from modstore_server.duty_roster import all_planned_employee_ids
 
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=window_hours)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+        hours=window_hours
+    )
     planned = set(all_planned_employee_ids())
     sf = get_session_factory()
     with sf() as session:
@@ -127,6 +197,17 @@ def get_execution_coverage(
         if str(employee_id or "") in planned and created_at is not None
     ]
     receipts.sort(key=lambda item: item["employee_id"])
+    assignment = _workforce_assignment_snapshot(planned)
+    planned_count = len(planned)
+    assigned_required = math.ceil(planned_count * 0.95) if planned_count else 0
+    proven_required = math.ceil(planned_count * 0.80) if planned_count else 0
+    workforce_ready = bool(planned_count) and all(
+        (
+            assignment["assigned_count"] >= assigned_required,
+            len(receipts) >= proven_required,
+            assignment["shell_count"] == 0,
+        )
+    )
     from modstore_server.services.llm import resolve_platform_bench_llm
 
     bench_provider, bench_model = resolve_platform_bench_llm()
@@ -134,8 +215,20 @@ def get_execution_coverage(
         "ok": True,
         "window_hours": window_hours,
         "cutoff": cutoff.isoformat(),
-        "planned_count": len(planned),
+        "planned_count": planned_count,
+        **assignment,
         "proven_count": len(receipts),
+        "assignment_required_count": assigned_required,
+        "proof_required_count": proven_required,
+        "assignment_ratio": (
+            round(assignment["assigned_count"] / planned_count, 4)
+            if planned_count
+            else 0.0
+        ),
+        "proof_ratio": (
+            round(len(receipts) / planned_count, 4) if planned_count else 0.0
+        ),
+        "workforce_ready": workforce_ready,
         "employee_ids": [item["employee_id"] for item in receipts],
         "receipts": receipts,
         # Observable routing truth without exposing credential material.
@@ -316,7 +409,9 @@ def batch_review_employee_suggestions(
             ok += 1
         else:
             failed += 1
-            errors.append({"id": sid, "error": str(out.get("error") or "unknown")[:300]})
+            errors.append(
+                {"id": sid, "error": str(out.get("error") or "unknown")[:300]}
+            )
     return {
         "ok": True,
         "action": action,
@@ -398,7 +493,9 @@ def list_collab_threads(
     _ = _auth_user
     sf = get_session_factory()
     with sf() as session:
-        q = session.query(EmployeeCollabThread).order_by(EmployeeCollabThread.updated_at.desc())
+        q = session.query(EmployeeCollabThread).order_by(
+            EmployeeCollabThread.updated_at.desc()
+        )
         st = (status or "").strip()
         if st:
             q = q.filter(EmployeeCollabThread.status == st)
@@ -425,7 +522,9 @@ def create_collab_thread_api(
 ) -> Dict[str, Any]:
     _ = _admin_user
     title = str(body.get("title") or "").strip() or "协作线程"
-    participants = body.get("participants") if isinstance(body.get("participants"), list) else []
+    participants = (
+        body.get("participants") if isinstance(body.get("participants"), list) else []
+    )
     created_by = str(body.get("created_by_employee_id") or "admin").strip() or "admin"
     out = create_collab_thread(
         title=title,
@@ -507,7 +606,9 @@ def post_collab_message_api(
 
 @router.get("/questions")
 def list_pending_human_questions(
-    include_history: bool = Query(False, description="true 则包含 answered/expired 历史"),
+    include_history: bool = Query(
+        False, description="true 则包含 answered/expired 历史"
+    ),
     limit: int = Query(50, ge=1, le=200),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -603,7 +704,9 @@ def human_questions_stats(
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(PendingHumanQuestion.status, func.count(PendingHumanQuestion.id))
+            session.query(
+                PendingHumanQuestion.status, func.count(PendingHumanQuestion.id)
+            )
             .filter(PendingHumanQuestion.user_id == _admin_user.id)
             .group_by(PendingHumanQuestion.status)
             .all()
@@ -626,7 +729,9 @@ def human_questions_stats(
 def get_employee_scorecard_api(
     employee_id: str,
     days: int = Query(7, ge=1, le=90, description="回看多少天"),
-    human_friendly: bool = Query(False, description="true 则返回人话文本，否则返回 JSON"),
+    human_friendly: bool = Query(
+        False, description="true 则返回人话文本，否则返回 JSON"
+    ),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """单个员工的成绩单 — 任务数/成功率/失败原因/处理时长/最近任务。

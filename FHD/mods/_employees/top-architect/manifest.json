@@ -86,9 +86,44 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "top_architect",
+        "action": "review_boundaries",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["architecture"],
+          "properties": {"architecture": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "violations", "priorities", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "architecture": {
+            "modules": [
+              {"name": "orders-domain", "layer": "domain"},
+              {"name": "orders-api", "layer": "interface"}
+            ],
+            "dependencies": [
+              {"source": "orders-api", "target": "orders-domain"}
+            ],
+            "allowed_dependencies": {
+              "domain": [],
+              "interface": ["application", "domain"]
+            }
+          }
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

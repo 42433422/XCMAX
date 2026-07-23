@@ -16,8 +16,13 @@ EMPLOYEES = {
     "code-validator": "code_validator",
     "delivery-receipt-officer": "delivery_receipt_officer",
     "doc-knowledge-curator": "doc_knowledge_curator",
+    "ecosystem-delivery-reporter": "ecosystem_delivery_reporter",
+    "ecosystem-revenue-share-reconciler": "ecosystem_revenue_share_reconciler",
+    "employee-pack-quality-interviewer": "employee_pack_quality_interviewer",
     "quality-validator": "quality_validator",
     "sandbox-tester": "sandbox_tester",
+    "test-qa-runner": "test_qa_runner",
+    "top-architect": "top_architect",
 }
 
 
@@ -47,11 +52,9 @@ def test_reviewed_fixture_executes_real_read_only_capability(employee_id: str) -
     assert direct["implementation"] == "employee_module"
     assert direct["execution_mode"] == "deterministic"
     assert direct["read_only"] is True
-    assert direct["burn_in_policy"] == {
-        "reviewed": True,
-        "scope": "fixture_only",
-        "external_effects": False,
-    }
+    assert direct["burn_in_policy"]["reviewed"] is True
+    assert direct["burn_in_policy"]["scope"] == "fixture_only"
+    assert direct["burn_in_policy"]["external_effects"] is False
 
     output = _module(employee_id).run(direct["burn_in_fixture"], {})
     assert output["ok"] is True
@@ -65,7 +68,11 @@ def test_reviewed_fixture_executes_real_read_only_capability(employee_id: str) -
     contract = workforce_contract_map()[employee_id]
     eligibility = assess_burn_in_eligibility(employee_id, contract, manifest)
     assert eligibility["eligible"] is True
-    assert eligibility["reason"] == "eligible_read_only_direct_python"
+    assert eligibility["reason"] == (
+        "eligible_medium_read_only_direct_python"
+        if employee_id == "top-architect"
+        else "eligible_read_only_direct_python"
+    )
 
 
 def test_code_validator_blocks_dangerous_source_without_executing_it() -> None:
@@ -148,3 +155,97 @@ def test_sandbox_receipt_rejects_network_attempt() -> None:
     )
     assert output["status"] == "rejected"
     assert output["blockers"] == ["no_network_attempts"]
+
+
+def test_delivery_report_requires_next_step_for_breached_sla() -> None:
+    output = _module("ecosystem-delivery-reporter").run(
+        {
+            "deliveries": [
+                {
+                    "partner_id": "partner-1",
+                    "delivery_receipt_id": "receipt-1",
+                    "owner": "owner-1",
+                    "sla_status": "breached",
+                }
+            ]
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["blockers"] == [{"index": 0, "reasons": ["next_step"]}]
+
+
+def test_revenue_share_reconciler_reports_difference_without_payment_side_effect() -> (
+    None
+):
+    output = _module("ecosystem-revenue-share-reconciler").run(
+        {
+            "entries": [
+                {
+                    "partner_id": "partner-1",
+                    "gross_cents": 10000,
+                    "share_bps": 1000,
+                    "recorded_share_cents": 900,
+                }
+            ]
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["differences"][0]["delta_cents"] == -100
+    assert output["side_effects"] == []
+
+
+def test_quality_interviewer_rejects_hollow_handlers() -> None:
+    output = _module("employee-pack-quality-interviewer").run(
+        {
+            "capability": {
+                "input_contract": {"required": ["artifact"]},
+                "handlers": ["echo", "llm_md"],
+                "acceptance": ["receipt"],
+            }
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["gaps"] == ["executable_handler_missing"]
+
+
+def test_top_architect_reports_forbidden_dependency_direction() -> None:
+    output = _module("top-architect").run(
+        {
+            "architecture": {
+                "modules": [
+                    {"name": "domain", "layer": "domain"},
+                    {"name": "api", "layer": "interface"},
+                ],
+                "dependencies": [{"source": "domain", "target": "api"}],
+                "allowed_dependencies": {"domain": [], "interface": ["domain"]},
+            }
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert (
+        output["violations"][0]["reason"]
+        == "forbidden_layer_dependency:domain->interface"
+    )
+
+
+def test_qa_runner_never_releases_failed_tests() -> None:
+    output = _module("test-qa-runner").run(
+        {
+            "qa_run": {
+                "command": "pytest -q",
+                "exit_code": 1,
+                "total": 2,
+                "passed": 1,
+                "failed": 1,
+                "artifact_sha256": "a" * 64,
+            }
+        },
+        {},
+    )
+    assert output["status"] == "rejected"
+    assert output["release_allowed"] is False
+    assert output["blockers"] == ["tests_failed", "exit_code_nonzero"]
