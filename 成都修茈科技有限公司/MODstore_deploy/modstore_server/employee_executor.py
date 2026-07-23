@@ -1115,6 +1115,10 @@ def _merge_original_input_into_reasoning(
         "suppress_handoff",
         "suppress_change_requests",
         "im_reply_managed",
+        # Set only after the executor verifies the platform work-contract
+        # source, employee id, trigger, risk and acceptance fields.  Callers
+        # cannot grant themselves this marker.
+        "_trusted_duty_contract_execution",
         # Inputs for capability-scoped employee tools.  They are still checked
         # again by the agent runner (workspace boundary / host allowlist).
         "base_url",
@@ -1142,7 +1146,12 @@ def _trusted_system_burn_in_project_root(
     paths before the containment check prevents symlink or ``..`` escapes.
     """
 
-    if int(user_id or 0) > 0 or not read_only or cog_input.get("burn_in_read_only") is not True:
+    trusted_duty_execution = cog_input.get("_trusted_duty_contract_execution") is True
+    if (
+        int(user_id or 0) > 0
+        or not read_only
+        or not (cog_input.get("burn_in_read_only") is True or trusted_duty_execution)
+    ):
         return ""
     configured = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if not configured:
@@ -1156,6 +1165,76 @@ def _trusted_system_burn_in_project_root(
     if not trusted_root.is_dir() or not candidate.is_dir():
         return ""
     return str(candidate)
+
+
+def _trusted_system_duty_contract_execution(
+    employee_id: str,
+    payload: Dict[str, Any],
+    *,
+    user_id: int,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Resolve the reviewed duty runtime for a verified system trigger.
+
+    Catalog archives are customer/store delivery artifacts and can lag the
+    reviewed duty source.  System schedule/event execution may use that source
+    only when every caller-provided contract field matches the contract SSOT.
+    High-risk roles remain on the existing approval/veto path.
+    """
+
+    if int(user_id or 0) > 0 or not isinstance(payload, dict):
+        return {}, {}
+    trigger = str(payload.get("trigger") or "").strip().lower()
+    if trigger not in {"schedule", "event"}:
+        return {}, {}
+    if str(payload.get("schedule_source") or "").strip() != "duty_work_contract":
+        return {}, {}
+    provided = payload.get("work_contract")
+    if not isinstance(provided, dict) or str(provided.get("schema") or "").strip() != (
+        "xcagi.duty_employee_work_contracts/v1"
+    ):
+        return {}, {}
+    try:
+        from modstore_server.duty_workforce_contracts import (
+            load_reviewed_duty_manifest,
+            workforce_contract_map,
+        )
+
+        contract = workforce_contract_map().get(str(employee_id or "").strip()) or {}
+        risk = str(contract.get("risk_level") or "").strip().lower()
+        if risk not in {"low", "medium"}:
+            return {}, {}
+        contract_trigger = (
+            contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+        )
+        if trigger == "schedule" and not str(contract_trigger.get("cron") or "").strip():
+            return {}, {}
+        if trigger == "event":
+            event_type = str(payload.get("event_type") or "").strip()
+            source = str(payload.get("source") or "").strip()
+            allowed_events = {
+                str(item or "").strip() for item in contract_trigger.get("events") or []
+            }
+            if not event_type or not (
+                event_type in allowed_events
+                or (source and f"{event_type}:{source}" in allowed_events)
+            ):
+                return {}, {}
+        expected_acceptance = [str(item) for item in contract.get("acceptance") or []]
+        provided_acceptance = [str(item) for item in provided.get("acceptance") or []]
+        if (
+            str(provided.get("mode") or "").strip() != str(contract.get("mode") or "").strip()
+            or str(provided.get("risk_level") or "").strip().lower() != risk
+            or provided_acceptance != expected_acceptance
+        ):
+            return {}, {}
+        return dict(contract), load_reviewed_duty_manifest(employee_id)
+    except Exception:
+        logger.warning(
+            "trusted duty contract resolution failed employee_id=%s",
+            employee_id,
+            exc_info=True,
+        )
+        return {}, {}
 
 
 def _action_agent_runner(
@@ -1533,7 +1612,10 @@ def _action_direct_python(
         reviewed_burn_in = _flag_enabled(direct_input.get("burn_in")) and _flag_enabled(
             direct_input.get("burn_in_read_only")
         )
-        if reviewed_burn_in:
+        reviewed_duty_execution = _flag_enabled(
+            direct_input.get("_trusted_duty_contract_execution")
+        )
+        if reviewed_burn_in or reviewed_duty_execution:
             # The executor already validated the reviewed duty manifest. Run
             # the module beside that exact manifest instead of silently
             # falling back to a possibly stale catalog ZIP.
@@ -2194,6 +2276,9 @@ def execute_employee_task(
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
     payload = dict(input_data or {})
+    # This marker is derived below after SSOT validation; never trust a caller
+    # that attempts to provide it directly.
+    payload.pop("_trusted_duty_contract_execution", None)
     detail_log = _executor_detail_log_enabled()
     recovery_meta: Dict[str, Any] = {}
     logger.info(
@@ -2211,7 +2296,23 @@ def execute_employee_task(
             try:
                 pack = load_employee_pack_resolved(session, employee_id)
                 manifest = pack.get("manifest") or {}
-                if _flag_enabled(payload.get("burn_in")) and _flag_enabled(
+                reviewed_contract, reviewed_manifest = _trusted_system_duty_contract_execution(
+                    employee_id,
+                    payload,
+                    user_id=user_id,
+                )
+                if reviewed_contract and reviewed_manifest:
+                    manifest = reviewed_manifest
+                    payload["_trusted_duty_contract_execution"] = True
+                    payload["work_contract"] = {
+                        "schema": "xcagi.duty_employee_work_contracts/v1",
+                        "employee_id": employee_id,
+                        "mission": str(reviewed_contract.get("mission") or ""),
+                        "mode": str(reviewed_contract.get("mode") or ""),
+                        "risk_level": str(reviewed_contract.get("risk_level") or ""),
+                        "acceptance": list(reviewed_contract.get("acceptance") or []),
+                    }
+                elif _flag_enabled(payload.get("burn_in")) and _flag_enabled(
                     payload.get("burn_in_read_only")
                 ):
                     # Burn-in proves the reviewed duty SSOT, not a stale

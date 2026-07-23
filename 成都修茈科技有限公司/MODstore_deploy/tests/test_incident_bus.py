@@ -10,6 +10,7 @@ from modstore_server.incident_bus import (
     publish,
     sync_employee_trigger_bindings_from_yuangon,
 )
+from modstore_server.sync_employee_triggers import sync_duty_contract_event_bindings
 
 
 @pytest.fixture
@@ -269,3 +270,16 @@ def test_sync_employee_trigger_bindings_subscribes(fresh_db):
         assert "on_error" in types
         assert "employee.task.done:modstore-backend-api" in types
         assert "employee.task.done:market-frontend-dev" in types
+
+
+def test_sync_duty_contract_event_bindings_excludes_high_risk(fresh_db):
+    n = sync_duty_contract_event_bindings()
+
+    assert n > 0
+    sf = models.get_session_factory()
+    with sf() as s:
+        rows = s.query(models.EmployeeTriggerBinding).all()
+        bindings = {(row.employee_id, row.event_type) for row in rows}
+    assert ("fhd-core-maintainer", "on_error") in bindings
+    assert ("employee-planner", "employee.task.done:intent-analyst") in bindings
+    assert ("deploy-release-officer", "ci.passed") not in bindings
