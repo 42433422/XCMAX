@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
+RELEASE_SCRIPT = ROOT / "scripts/xcmax-immutable-release.sh"
 
 
 def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
-    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text(encoding="utf-8")
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
 
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
     assert 'git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA"' in script
-    assert "releases/${TARGET_SHA}" in script
+    assert 'FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"' in script
     assert 'chmod 0555 "$FINAL_ROOT"' in script
     assert script.index('chmod 0555 "$FINAL_ROOT"') < script.index(
         'ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"'
@@ -60,6 +64,9 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
+    assert 'RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"' in script
+    assert 'prune_releases "$CURRENT_ROOT_BEFORE_BUILD" "$RELEASES_DIR/$TARGET_SHA"' in script
+    assert 'prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT"' in script
     payment_restart = script.index(
         "systemctl restart modstore-payment.service",
         script.index('ln -s "$FINAL_ROOT"'),
@@ -93,6 +100,93 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert payment_config["info"]["xcmax"]["artifact-sha256"] == (
         "${MODSTORE_RELEASE_ARTIFACT_SHA256:}"
     )
+
+
+def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    release_base = tmp_path / "xcmax"
+    releases = release_base / "releases"
+    runtime = release_base / "runtime"
+    env_dir = tmp_path / "env"
+    public_state = tmp_path / "public"
+    source_root.mkdir()
+    (source_root / ".git").mkdir()
+    releases.mkdir(parents=True)
+
+    shas = [f"{number:040x}" for number in range(1, 7)]
+    for position, sha in enumerate(shas, start=1):
+        release = releases / sha
+        release.mkdir()
+        (release / ".xcmax-release.json").write_text(json.dumps({"git_sha": sha}), encoding="utf-8")
+        os.utime(release, (position, position))
+
+    malformed_sha = "f" * 40
+    malformed = releases / malformed_sha
+    malformed.mkdir()
+    (malformed / ".xcmax-release.json").write_text(
+        json.dumps({"git_sha": "0" * 40}), encoding="utf-8"
+    )
+    os.utime(malformed, (99, 99))
+    unrelated = releases / "manual-backup"
+    unrelated.mkdir()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_flock = fake_bin / "flock"
+    fake_flock.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    fake_flock.chmod(0o755)
+    current_link = release_base / "current"
+    current_link.symlink_to(releases / shas[0])
+
+    result = subprocess.run(
+        ["bash", str(RELEASE_SCRIPT)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "XCMAX_ALLOW_CUSTOM_RELEASE_BASE": "1",
+            "XCMAX_CURRENT_LINK": str(current_link),
+            "XCMAX_PUBLIC_SITE_STATE_DIR": str(public_state),
+            "XCMAX_RELEASE_BASE": str(release_base),
+            "XCMAX_RELEASE_LOCK": str(tmp_path / "release.lock"),
+            "XCMAX_RELEASE_PRUNE_ONLY": "1",
+            "XCMAX_RELEASES_TO_KEEP": "3",
+            "XCMAX_SOURCE_ROOT": str(source_root),
+            "XCMAX_TARGET_SHA": shas[1],
+            "MODSTORE_ENV_DIR": str(env_dir),
+            "MODSTORE_RUNTIME_DIR": str(runtime),
+        },
+    )
+
+    remaining = {item.name for item in releases.iterdir()}
+    assert remaining.intersection(shas) == {shas[0], shas[1], shas[-1]}
+    assert malformed_sha in remaining
+    assert unrelated.name in remaining
+    assert "release retention complete kept=3 removed=3 limit=3" in result.stdout
+    assert "skipping unverified release directory" in result.stdout
+
+
+def test_release_retention_rejects_unsafe_limit(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / ".git").mkdir()
+    result = subprocess.run(
+        ["bash", str(RELEASE_SCRIPT)],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "XCMAX_ALLOW_CUSTOM_RELEASE_BASE": "1",
+            "XCMAX_RELEASE_BASE": str(tmp_path / "xcmax"),
+            "XCMAX_RELEASES_TO_KEEP": "1",
+            "XCMAX_SOURCE_ROOT": str(source_root),
+            "XCMAX_TARGET_SHA": "1" * 40,
+        },
+    )
+
+    assert result.returncode != 0
+    assert "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2" in result.stderr
 
 
 def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
