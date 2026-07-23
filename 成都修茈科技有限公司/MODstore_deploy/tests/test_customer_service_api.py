@@ -110,6 +110,45 @@ def test_customer_service_missing_fields_requests_more_info(client, monkeypatch)
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
+def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
+    """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
+    import time
+
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_async_inc")
+    started = {"ok": False}
+
+    def slow_publish(payload):
+        started["ok"] = True
+        time.sleep(3)
+        return None
+
+    monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        t0 = time.time()
+        r = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "订单号 RF123456 想退款，原因是重复购买",
+                "context": {"channel": "web"},
+            },
+        )
+        elapsed = time.time() - t0
+        assert r.status_code == 200, r.text
+        assert r.json().get("ticket")
+        assert elapsed < 1.5, f"chat blocked on incident publish: {elapsed:.2f}s"
+        deadline = time.time() + 1.0
+        while time.time() < deadline and not started["ok"]:
+            time.sleep(0.05)
+        assert started["ok"] is True
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
 def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app
