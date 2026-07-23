@@ -512,7 +512,9 @@ def _tool_candidates(req: Dict[str, Any]) -> list[str]:
     the same authorized device instead of waiting behind a busy Codex slot.
     """
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
-    explicit = str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "").strip()
+    explicit = str(
+        req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or ""
+    ).strip()
     preferred = explicit or _dev_tool()
     if preferred not in _VALID_DEV_TOOLS:
         preferred = _dev_tool()
@@ -603,9 +605,7 @@ def _select_local_device_with_fallback(devices: list, req: Dict[str, Any]) -> li
             if isinstance(item, dict) and str(item.get("id") or "") == local_id
         )
     else:
-        primary = [
-            item for item in devices if isinstance(item, dict) and item.get("isPrimary")
-        ]
+        primary = [item for item in devices if isinstance(item, dict) and item.get("isPrimary")]
         ordered.extend(primary or [item for item in devices if isinstance(item, dict)])
     for item in ordered:
         selected_tool = _selected_tool_for_device(item, req)

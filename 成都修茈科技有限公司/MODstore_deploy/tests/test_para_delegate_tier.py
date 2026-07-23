@@ -225,9 +225,7 @@ def test_explicit_device_uses_idle_tool_fallback():
         }
     ]
     req = {"device_id": "fixed-dev", "raw_input": {}}
-    tier, devices, reason = h._resolve_dispatch_devices(
-        _FakeClient(fleet), "http://p", "tok", req
-    )
+    tier, devices, reason = h._resolve_dispatch_devices(_FakeClient(fleet), "http://p", "tok", req)
     assert tier == 1
     assert devices[0]["_selected_tool"] == "cursor"
 
