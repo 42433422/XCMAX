@@ -967,11 +967,12 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 and int(item.get("retry_count") or 1) >= max_retries
             ):
                 over_retry_items.append(item)
-        
+
         # Enqueue non-code escalated items to human uncertainty queue first, only mark escalated on success
         if over_retry_items:
             try:
                 from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
+
                 for item in over_retry_items:
                     steps = item.get("steps") or []
                     if "code" in steps:
@@ -1004,21 +1005,34 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                                 "branch": item.get("branch"),
                                 "para_task_id": item.get("para_task_id"),
                             },
-                            decision={"action": "await_human_strategy_approval", "reason": "max_retries_exceeded"},
+                            decision={
+                                "action": "await_human_strategy_approval",
+                                "reason": "max_retries_exceeded",
+                            },
                             reason=f"self-maintenance step {steps} failed {item.get('retry_count')} times, exceeded max retries",
                         )
                         if result.get("queued"):
                             item["escalated"] = True
                             successfully_enqueued_items.append(item_key)
                             escalated_items.append(item)
-                            logger.info("successfully enqueued escalated item run_id=%s to human queue", item.get("run_id"))
+                            logger.info(
+                                "successfully enqueued escalated item run_id=%s to human queue",
+                                item.get("run_id"),
+                            )
                         else:
-                            logger.warning("failed to enqueue escalated item run_id=%s to human queue, will retry next loop", item.get("run_id"))
+                            logger.warning(
+                                "failed to enqueue escalated item run_id=%s to human queue, will retry next loop",
+                                item.get("run_id"),
+                            )
                     except Exception as exc:
-                        logger.warning("failed to enqueue escalated item run_id=%s to human queue: %s, will retry next loop", item.get("run_id"), exc)
+                        logger.warning(
+                            "failed to enqueue escalated item run_id=%s to human queue: %s, will retry next loop",
+                            item.get("run_id"),
+                            exc,
+                        )
             except Exception as exc:
                 logger.warning("failed to import human uncertainty queue: %s", exc)
-        
+
         # Remove only successfully enqueued non-code escalated items from open_items; keep others for retry/visibility
         if successfully_enqueued_items:
             memory["open_items"] = [
@@ -1034,7 +1048,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                         str(item.get("branch") or ""),
                         str(item.get("para_task_id") or item.get("task_id") or ""),
                         tuple(str(s) for s in (item.get("steps") or [])),
-                    ) in successfully_enqueued_items
+                    )
+                    in successfully_enqueued_items
                 )
             ]
         else:
