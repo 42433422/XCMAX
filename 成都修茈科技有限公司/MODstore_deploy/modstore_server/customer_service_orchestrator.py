@@ -601,7 +601,7 @@ def _chat_only_reply(
         return xiaoc
     return (
         "我是小C。已收到你的问题。你可以继续补充细节；"
-        "若需要平台正式受理，直接说「提交工单」或说明退款/投诉诉求。"
+        "若需要平台正式受理，点击「提交工单」或说明退款/投诉诉求。"
     )
 
 
@@ -1007,7 +1007,7 @@ def _ack_concrete_issue_reply(user_text: str, *, hello: str, ticketed: bool) -> 
     return (
         f"我是小C。{hello}收到，你说的是「{summary}」。"
         "方便补充一下大概在哪个页面/功能、是文字还是图标按钮吗？"
-        "需要正式跟进修复时，直接回「提交工单」即可。"
+        "需要正式跟进修复时，点击「提交工单」即可。"
     )
 
 

@@ -25,7 +25,11 @@
         <div ref="messagesEl" class="cs-messages">
           <article v-for="msg in messages" :key="msg.id" :class="['cs-message', `cs-message--${msg.role}`]">
             <div class="cs-bubble">
-              <p>{{ msg.content }}</p>
+              <p
+                class="cs-bubble__text"
+                v-html="renderCsBubbleHtml(msg.content)"
+                @click="onBubbleClick($event, msg)"
+              />
               <CustomerServiceActionCard
                 v-for="(card, idx) in msg.cards || []"
                 :key="`${msg.id}-${idx}`"
@@ -111,6 +115,7 @@ import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api'
 import CustomerServiceActionCard from '../components/customer-service/CustomerServiceActionCard.vue'
+import { renderCsBubbleHtml } from '../utils/csBubbleText'
 
 type UiMessage = {
   id: string
@@ -190,8 +195,24 @@ async function scrollMessagesToEnd() {
   if (el) el.scrollTop = el.scrollHeight
 }
 
+function onBubbleClick(ev: MouseEvent, msg: UiMessage) {
+  if (msg.role !== 'assistant') return
+  const target = ev.target as HTMLElement | null
+  const link = target?.closest?.('[data-cs-action]') as HTMLElement | null
+  if (!link) return
+  ev.preventDefault()
+  const action = String(link.getAttribute('data-cs-action') || '')
+  if (action === 'submit-ticket') {
+    void sendText('提交工单')
+  }
+}
+
 async function send() {
-  const text = draft.value.trim()
+  await sendText(draft.value.trim())
+}
+
+async function sendText(raw: string) {
+  const text = String(raw || '').trim()
   if (!text || loading.value) return
   error.value = ''
   loading.value = true
@@ -420,12 +441,25 @@ async function openTicket(ticket: any) {
   border: 1px solid var(--cs-border);
 }
 
-.cs-bubble p {
+.cs-bubble p,
+.cs-bubble__text {
   margin: 0;
   font-size: 0.92rem;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.cs-action-link {
+  color: var(--cs-accent, #2563eb);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.cs-action-link:hover {
+  filter: brightness(0.92);
 }
 
 .cs-message--user .cs-bubble {
