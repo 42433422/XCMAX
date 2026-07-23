@@ -231,9 +231,9 @@ public class EntitlementService {
         }
         UserPlan userPlan = userPlanRow.get();
         PlanTemplate plan = userPlan.getPlan();
-        if (!userPlan.isActive() || plan == null || plan.getId() == null
+        if (plan == null || plan.getId() == null
                 || !planId.trim().equals(plan.getId().trim())) {
-            result.put("reason", "user_plan_inactive_or_mismatched");
+            result.put("reason", "user_plan_mismatched");
             return result;
         }
         if (userPlan.getStartedAt() == null || entitlement.getGrantedAt() == null) {
@@ -252,11 +252,17 @@ public class EntitlementService {
                 entitlement.getGrantedAt().toString());
 
         Map<String, Integer> contractedQuotas = parseContractedQuotas(plan.getQuotasJson());
-        List<Quota> usedContractedQuotas = quotaRepository.findByUser(entitlement.getUser()).stream()
-                .filter(quota -> quota.getQuotaType() != null)
-                .filter(quota -> contractedQuotas.containsKey(quota.getQuotaType()))
-                .filter(quota -> quota.getUsed() > 0)
-                .toList();
+        // A later upgrade deactivates the previous UserPlan, but it does not erase
+        // the paid plan's historical activation.  Keep delivery verification tied
+        // to the immutable activation timestamps while refusing to attribute the
+        // current plan's quota usage to a superseded plan.
+        List<Quota> usedContractedQuotas = userPlan.isActive()
+                ? quotaRepository.findByUser(entitlement.getUser()).stream()
+                        .filter(quota -> quota.getQuotaType() != null)
+                        .filter(quota -> contractedQuotas.containsKey(quota.getQuotaType()))
+                        .filter(quota -> quota.getUsed() > 0)
+                        .toList()
+                : List.of();
         int usageCount = usedContractedQuotas.stream().mapToInt(Quota::getUsed).sum();
         LocalDateTime acceptedAt = usedContractedQuotas.stream()
                 .map(Quota::getUpdatedAt)
@@ -266,13 +272,18 @@ public class EntitlementService {
         boolean acceptanceVerified = usageCount > 0 && acceptedAt != null;
 
         result.put("verified", true);
-        result.put("reason", "verified");
+        result.put("reason", userPlan.isActive() ? "verified" : "verified_historical_activation");
         result.put("artifact_id", artifactId);
         result.put("artifact_sha256", sha256Hex(artifactDescriptor));
         result.put("artifact_kind", "service_plan_activation");
         result.put("fulfilled_at", userPlan.getStartedAt());
         result.put("acceptance_verified", acceptanceVerified);
-        result.put("acceptance_reason", acceptanceVerified ? "verified_plan_usage" : "usage_not_observed");
+        result.put(
+                "acceptance_reason",
+                acceptanceVerified
+                        ? "verified_plan_usage"
+                        : (userPlan.isActive() ? "usage_not_observed" : "historical_plan_superseded")
+        );
         result.put("accepted_at", acceptedAt);
         return result;
     }
