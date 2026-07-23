@@ -35,7 +35,7 @@ from apscheduler.triggers.cron import CronTrigger
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .employee_executor import execute_employee_task
-from .models import EmployeeExecutionMetric, IncidentEvent, get_session_factory
+from .models import EmployeeExecutionMetric, IncidentEvent, User, get_session_factory
 from .platform_llm_scope import platform_llm_scoped
 from .runtime_provenance import collect_runtime_provenance
 from .self_evolution_knowledge import (
@@ -1730,6 +1730,22 @@ def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
     return any(term in text for term in transient_terms)
 
 
+def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
+    """Detect an accepted Para task whose synchronous wait expired."""
+
+    inner = result.get("result") if isinstance(result.get("result"), dict) else result
+    outputs = inner.get("outputs") if isinstance(inner, dict) else None
+    if not isinstance(outputs, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("handler") == "para_delegate"
+        and item.get("accepted") is True
+        and str(item.get("status") or "").strip().lower() == "para_task_timeout"
+        for item in outputs
+    )
+
+
 def _loop_platform_bench_override() -> Optional[tuple]:
     """后台自维护/进化 loop 默认走平台派发：LLM 成本记平台密钥、不查/扣用户 ``llm_calls`` 配额。
 
@@ -1870,7 +1886,9 @@ def _run_step_with_inner_retries(
             # code step: dispatch/code 失败 → 反馈原因让员工修代码再交付
             # review/qa step: dispatch 失败不重试内层（_execute_employee_task_with_retries
             #                 已重试过瞬态失败），让外层走 _decide_post_loop_policy
-            if retry_kind == "code_fix":
+            # Para 已受理但同步等待超时并非代码缺陷；让外层记忆负责后续有界重试，
+            # 避免同一轮立即创建重复 Para 任务。
+            if retry_kind == "code_fix" and not _is_accepted_para_wait_timeout(result):
                 should_retry = True
         elif ok and retry_kind == "marker" and not is_final:
             # dispatch 成功但 marker/协议不合规 → 打回重跑（攻克遵循率缺口）
@@ -1971,7 +1989,7 @@ def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "repo_url": os.environ.get("MODSTORE_PARA_REPO_URL"),
         "suppress_lifecycle_events": True,
         "wait_for_para": True,
-        "wait_timeout_sec": _env_int("MODSTORE_PARA_WAIT_TIMEOUT_SEC", 900),
+        "wait_timeout_sec": _env_int("MODSTORE_PARA_WAIT_TIMEOUT_SEC", 1800),
         # vibe-coding-maintainer 的 agent handler 在 Para 未启用 fallback 时需要
         # project_root 才能分析文件；para_delegate 模式会忽略此字段。
         # 默认指向生产仓库根目录，可用 MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT 覆盖。
@@ -4835,6 +4853,22 @@ def _auto_merge_low_risk_branch(
                 "structured_report_gate": report_gate,
             }
 
+        branch_head_sha = _remote_branch_head(repo_url, branch)
+        base_head_sha = _remote_branch_head(repo_url, base_branch)
+        if not branch_head_sha:
+            return {
+                "ok": False,
+                "reason": "remote_branch_head_unavailable",
+                "branch": branch,
+            }
+        if base_head_sha and branch_head_sha == base_head_sha:
+            return {
+                "ok": False,
+                "reason": "remote_branch_not_advanced",
+                "branch": branch,
+                "branch_head_sha": branch_head_sha,
+            }
+
         from modstore_server.autonomy_guard_delegate import evaluate_risk
 
         decision = evaluate_risk(
@@ -4857,8 +4891,30 @@ def _auto_merge_low_risk_branch(
                 "reason": "para_merge_request_failed",
                 "risk_decision": decision.to_dict(),
             }
+        merge_request_record = {
+            "base_branch": base_branch,
+            "base_head_sha": base_head_sha or "",
+            "branch": branch,
+            "branch_head_sha": branch_head_sha,
+            "created_at": _iso(_utc_now()),
+            "event": "merge_requested",
+            "ok": True,
+            "para_task_id": task_id,
+            "phase": "merge",
+            "run_id": run_id,
+            "status": "pending",
+        }
+        _append_ledger(merge_request_record)
+        _append_governance_audit(
+            {
+                **merge_request_record,
+                "kind": "merge_requested",
+            }
+        )
         return {
             "ok": True,
+            "base_head_sha": base_head_sha or "",
+            "branch_head_sha": branch_head_sha,
             "merge_requested": True,
             "para_request": request_result,
             "reason": "merge_requested_after_loop_risk_gate",
@@ -5226,6 +5282,68 @@ def _emit_deploy_callback(
         logger.debug("deploy_callback HTTP fallback failed", exc_info=True)
 
 
+def _record_verified_deploy_employee_metric(record: Dict[str, Any]) -> bool:
+    """Credit the release officer only for an exact verified production deploy.
+
+    Dispatch acceptance, staging success and uncorrelated health checks are not
+    employee evidence.  The deterministic task marker makes callback retries
+    idempotent.
+    """
+
+    if not (
+        str(record.get("event") or "") == "post_deploy_verified"
+        and str(record.get("environment") or "").strip().lower() == "production"
+        and record.get("ok") is True
+        and record.get("identity_verified") is True
+        and str(record.get("status") or "").strip().lower() == "verified"
+    ):
+        return False
+    run_id = str(record.get("run_id") or "").strip()
+    merge_sha = str(record.get("merge_sha") or "").strip().lower()
+    workflow_run_id = str(record.get("workflow_run_id") or "").strip()
+    if not run_id or not re.fullmatch(r"[0-9a-f]{40,64}", merge_sha) or not workflow_run_id:
+        return False
+    marker = f"[deploy-receipt:{run_id}:{merge_sha[:12]}:{workflow_run_id}]"[:128]
+    try:
+        sf = get_session_factory()
+        with sf() as session:
+            exists = (
+                session.query(EmployeeExecutionMetric.id)
+                .filter(
+                    EmployeeExecutionMetric.employee_id == "deploy-release-officer",
+                    EmployeeExecutionMetric.task == marker,
+                    EmployeeExecutionMetric.status == "success",
+                )
+                .first()
+            )
+            if exists:
+                return False
+            user = (
+                session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+                or session.query(User).order_by(User.id.asc()).first()
+            )
+            if user is None:
+                logger.warning("deploy receipt metric skipped: no user row")
+                return False
+            session.add(
+                EmployeeExecutionMetric(
+                    user_id=int(user.id),
+                    employee_id="deploy-release-officer",
+                    task=marker,
+                    status="success",
+                    duration_ms=0.0,
+                    llm_tokens=0,
+                    error="",
+                    failure_kind="",
+                )
+            )
+            session.commit()
+        return True
+    except Exception:
+        logger.exception("failed to record verified deploy release employee metric")
+        return False
+
+
 def _append_deploy_receipt_event(record: Dict[str, Any]) -> None:
     """Write the same deployment receipt to loop and governance ledgers."""
 
@@ -5236,6 +5354,7 @@ def _append_deploy_receipt_event(record: Dict[str, Any]) -> None:
             "kind": str(record.get("event") or "deployment_receipt"),
         }
     )
+    _record_verified_deploy_employee_metric(record)
 
 
 def _run_deploy_receipts_after_merge(
@@ -6517,6 +6636,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         item = _timeline_item(row)
         for key in (
             "action",
+            "catalog_readback_verified",
             "deployment_state",
             "dry_run",
             "environment",
@@ -6524,9 +6644,17 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "event_type",
             "final_status",
             "identity_verified",
+            "installability_verified",
             "merge_sha",
             "ok",
+            "package_id",
+            "package_sha256",
+            "runtime_contract_verified",
+            "stored_filename",
+            "strategic_council_receipt_id",
+            "strategic_council_verified",
             "triggered_by",
+            "version",
             "workflow_run_id",
         ):
             if key in row:

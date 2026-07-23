@@ -1,11 +1,35 @@
 {
+  "id": "pilot-low-risk-clerk",
   "name": "pilot-low-risk-clerk",
   "version": "1.0.0",
+  "source_schema_version": 1,
+  "artifact": "employee_pack",
+  "scope": "global",
   "department": "engineering",
   "description": "T-C11 真实上架试点：低风险 employee_pack，仅做 trace 验证与 ledger 闭环，不触碰任何 HIGH_RISK_PATTERNS。文件数 3（manifest.json + prompt.txt + skills.json），符合 ≤5 限制。",
   "prompt_template": "You are a pilot low-risk clerk. Your responsibility is to validate the evolution closed-loop end-to-end trace pipeline. Do not modify any production code. Do not touch HIGH_RISK_PATTERNS. Always emit a trace_id with your outputs.",
   "skills": ["trace-validation", "ledger-append"],
   "tools": ["read_file", "append_event"],
+  "employee": {
+    "id": "pilot-low-risk-clerk",
+    "label": "低风险闭环验证员"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "pilot-low-risk-clerk",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "低风险闭环验证员",
+      "description": "验证自动演化、制品上架和运行时读回闭环。"
+    },
+    "perception": {"type": "text"},
+    "memory": {"type": "session"},
+    "cognition": {
+      "system_prompt": "仅执行低风险跟踪验证，不修改业务数据或治理边界。",
+      "reasoning_mode": "default"
+    },
+    "actions": {"handlers": ["echo"]}
+  },
   "acceptance_criteria": [
     "trace_id consistent across all events",
     "ledger has pack_listed event with final_status=closed_loop_completed",

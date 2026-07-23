@@ -73,7 +73,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void customerValueFulfillmentEvidenceDelegatesOnlyForFulfilledCatalogOrders() {
+    void customerValueFulfillmentEvidenceDelegatesForFulfilledCatalogAndPlanOrders() {
         Order order = buildPaidOrder("OT-VALUE", "item", new BigDecimal("9.90"));
         order.setItemId(42L);
         order.setFulfilled(true);
@@ -84,6 +84,16 @@ class OrderServiceTest {
 
         assertThat(result.get("verified")).isEqualTo(true);
         verify(entitlementService).catalogFulfillmentEvidence("OT-VALUE", 42L);
+
+        Order planOrder = buildPaidOrder("OT-PLAN-VALUE", "plan", new BigDecimal("19.90"));
+        planOrder.setPlanId("pro");
+        planOrder.setFulfilled(true);
+        when(entitlementService.planFulfillmentEvidence("OT-PLAN-VALUE", "pro"))
+                .thenReturn(Map.of("verified", true, "artifact_id", "service-plan:pro@abc"));
+
+        assertThat(orderService.getCustomerValueFulfillmentEvidence(planOrder).get("verified"))
+                .isEqualTo(true);
+        verify(entitlementService).planFulfillmentEvidence("OT-PLAN-VALUE", "pro");
 
         order.setFulfilled(false);
         assertThat(orderService.getCustomerValueFulfillmentEvidence(order).get("reason"))

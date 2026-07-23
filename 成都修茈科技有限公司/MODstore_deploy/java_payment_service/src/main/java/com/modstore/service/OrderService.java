@@ -182,13 +182,20 @@ public class OrderService {
         if (order == null || !order.isFulfilled()) {
             return Map.of("verified", false, "reason", "order_not_fulfilled");
         }
-        if (!"item".equalsIgnoreCase(order.getOrderKind()) || order.getItemId() == null) {
-            return Map.of("verified", false, "reason", "non_catalog_order");
+        if ("item".equalsIgnoreCase(order.getOrderKind()) && order.getItemId() != null) {
+            return entitlementService.catalogFulfillmentEvidence(
+                    order.getOutTradeNo(),
+                    order.getItemId()
+            );
         }
-        return entitlementService.catalogFulfillmentEvidence(
-                order.getOutTradeNo(),
-                order.getItemId()
-        );
+        if ("plan".equalsIgnoreCase(order.getOrderKind())
+                && order.getPlanId() != null && !order.getPlanId().isBlank()) {
+            return entitlementService.planFulfillmentEvidence(
+                    order.getOutTradeNo(),
+                    order.getPlanId()
+            );
+        }
+        return Map.of("verified", false, "reason", "unsupported_order_kind");
     }
 
     /** 将非「待支付/已支付/退款中」的订单从列表中隐藏（不删数据）。 */
