@@ -1127,6 +1127,41 @@ def _merge_original_input_into_reasoning(
     return out
 
 
+def _trusted_system_burn_in_project_root(
+    project_root: Any,
+    *,
+    cog_input: Dict[str, Any],
+    user_id: int,
+    read_only: bool,
+) -> str:
+    """Allow only system read-only burn-ins to observe the configured repo.
+
+    Normal agent runs remain tenant-workspace scoped.  The exception requires
+    all of: system identity, the burn-in marker, effective read-only mode, and
+    a real directory contained by ``XCMAX_MONOREPO_ROOT``.  Resolving both
+    paths before the containment check prevents symlink or ``..`` escapes.
+    """
+
+    if (
+        int(user_id or 0) > 0
+        or not read_only
+        or cog_input.get("burn_in_read_only") is not True
+    ):
+        return ""
+    configured = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    if not configured:
+        return ""
+    trusted_root = Path(configured).expanduser().resolve()
+    candidate = Path(str(project_root or "")).expanduser().resolve()
+    try:
+        candidate.relative_to(trusted_root)
+    except ValueError:
+        return ""
+    if not trusted_root.is_dir() or not candidate.is_dir():
+        return ""
+    return str(candidate)
+
+
 def _action_agent_runner(
     actions_cfg: Dict[str, Any],
     reasoning: Dict[str, Any],
@@ -1182,11 +1217,18 @@ def _action_agent_runner(
 
     if project_root_raw:
         try:
-            from modstore_server.integrations.vibe_adapter import ensure_within_workspace
-
-            resolved = str(
-                ensure_within_workspace(str(project_root_raw), user_id=int(user_id or 0))
+            resolved = _trusted_system_burn_in_project_root(
+                project_root_raw,
+                cog_input=cog_input,
+                user_id=user_id,
+                read_only=read_only,
             )
+            if not resolved:
+                from modstore_server.integrations.vibe_adapter import ensure_within_workspace
+
+                resolved = str(
+                    ensure_within_workspace(str(project_root_raw), user_id=int(user_id or 0))
+                )
             workspace_root = resolved
         except Exception as exc:  # noqa: BLE001
             return {
