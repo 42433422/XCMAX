@@ -10,6 +10,8 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -151,6 +153,55 @@ class EntitlementServiceTest {
             assertThat(result.get("verified")).isEqualTo(false);
             assertThat(result.get("reason"))
                     .isEqualTo("catalog_artifact_identity_incomplete");
+        }
+    }
+
+    @Nested
+    class PlanFulfillmentEvidence {
+        @Test
+        void verifiesActivationAndSeparatesObservedUsageAcceptance() {
+            LocalDateTime startedAt = LocalDateTime.of(2026, 7, 22, 20, 5);
+            LocalDateTime acceptedAt = LocalDateTime.of(2026, 7, 22, 20, 30);
+            PlanTemplate plan = new PlanTemplate();
+            plan.setId("pro");
+            plan.setQuotasJson("{\"ai_calls\":100,\"storage\":50}");
+            Entitlement entitlement = new Entitlement();
+            entitlement.setUser(user);
+            entitlement.setActive(true);
+            entitlement.setEntitlementType("plan");
+            entitlement.setGrantedAt(startedAt);
+            UserPlan userPlan = new UserPlan();
+            userPlan.setUser(user);
+            userPlan.setPlan(plan);
+            userPlan.setActive(true);
+            userPlan.setStartedAt(startedAt);
+            Quota usedQuota = new Quota();
+            usedQuota.setUser(user);
+            usedQuota.setQuotaType("ai_calls");
+            usedQuota.setUsed(3);
+            usedQuota.setUpdatedAt(acceptedAt);
+            Quota unrelatedQuota = new Quota();
+            unrelatedQuota.setUser(user);
+            unrelatedQuota.setQuotaType("employee_count");
+            unrelatedQuota.setUsed(99);
+            unrelatedQuota.setUpdatedAt(acceptedAt.plusHours(1));
+
+            when(entitlementRepository.findBySourceOrderId("OT-PLAN-VALUE"))
+                    .thenReturn(Optional.of(entitlement));
+            when(userPlanRepository.findByUserAndSourceOrderId(user, "OT-PLAN-VALUE"))
+                    .thenReturn(Optional.of(userPlan));
+            when(quotaRepository.findByUser(user)).thenReturn(List.of(usedQuota, unrelatedQuota));
+
+            var result = entitlementService.planFulfillmentEvidence("OT-PLAN-VALUE", "pro");
+
+            assertThat(result.get("verified")).isEqualTo(true);
+            assertThat(result.get("artifact_id").toString())
+                    .startsWith("service-plan:pro@");
+            assertThat(result.get("artifact_sha256").toString()).matches("[0-9a-f]{64}");
+            assertThat(result.get("artifact_kind")).isEqualTo("service_plan_activation");
+            assertThat(result.get("acceptance_verified")).isEqualTo(true);
+            assertThat(result.get("acceptance_reason")).isEqualTo("verified_plan_usage");
+            assertThat(result.get("accepted_at")).isEqualTo(acceptedAt);
         }
     }
 
