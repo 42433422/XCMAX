@@ -8,6 +8,7 @@ import {
   setTtsSubtitleIndex,
 } from '../composables/ttsSubtitleStore'
 import { splitSentences } from '../utils/ttsSentenceSplit'
+import { cleanTextForTts } from '../utils/ttsTextClean'
 
 export const CORP_PROACTIVE_INTRO_KEY = 'xc_corp_proactive_intro'
 const SESSION_PREFIX = 'xc-corp-intro-done:'
@@ -134,7 +135,9 @@ export function speakCorpIntro(text: string): Promise<void> {
   if (prefersReducedMotion()) return Promise.resolve()
 
   stopCorpIntroSpeech()
-  const plain = text.trim()
+  // 朗读/字幕共用清洗：去掉网址、路径、装饰符，避免念出 slash、html、箭头
+  const plain = cleanTextForTts(text, 800)
+  if (!plain) return Promise.resolve()
   const lines = splitSentences(plain)
   const zhLines = lines.length ? lines : [plain]
   corpSubtitleGen = beginTtsSubtitles(zhLines)
