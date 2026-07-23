@@ -30,13 +30,16 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "reset --hard" not in script
     assert "/etc/xcmax" in script
     assert script.index('migrate_env_file "$ENV_FILE"') < script.index(
-        "import fastapi, uvicorn, modstore_server.app"
+        "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app"
     )
     assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
+    assert ".[web,knowledge,evolution-metrics]" in script
+    assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
+    assert "Environment=MODSTORE_BUS=rabbitmq" not in script
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
     assert "node scripts/install-native-bindings.mjs" in script
     assert script.index("--ignore-scripts") < script.index("npm run build")

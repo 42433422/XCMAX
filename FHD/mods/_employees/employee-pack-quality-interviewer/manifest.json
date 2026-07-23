@@ -81,9 +81,36 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "employee_pack_quality_interviewer",
+        "action": "assess_capability_closure",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["capability"],
+          "properties": {"capability": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "closure_ready", "gaps", "recommendations", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "capability": {
+            "input_contract": {"required": ["artifact"]},
+            "handlers": ["direct_python"],
+            "acceptance": ["verified output receipt"]
+          }
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

@@ -99,9 +99,38 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "delivery_receipt_officer",
+        "action": "verify_receipt",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["receipt"],
+          "properties": {"receipt": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "linked", "acceptance_count", "blockers", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "receipt": {
+            "goal_id": "goal-fixture-001",
+            "artifact_id": "artifact-fixture-001",
+            "customer_id": "customer-fixture-001",
+            "acceptance": [{"check": "artifact hash matched", "passed": true}],
+            "value_evidence": ["fixture acceptance evidence"]
+          }
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",

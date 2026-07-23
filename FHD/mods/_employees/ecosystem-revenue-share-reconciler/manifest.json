@@ -99,9 +99,40 @@
     },
     "actions": {
       "handlers": [
-        "llm_md",
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "ecosystem_revenue_share_reconciler",
+        "action": "reconcile_entries",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["entries"],
+          "properties": {"entries": {"type": "array"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "differences", "invalid_entries", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "entries": [
+            {
+              "partner_id": "partner-fixture-001",
+              "gross_cents": 100000,
+              "share_bps": 1500,
+              "recorded_share_cents": 15000
+            }
+          ]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false,
+          "allow_prohibited_semantics_fixture": true
+        }
+      }
     },
     "metadata": {
       "framework_version": "2.0.0",
