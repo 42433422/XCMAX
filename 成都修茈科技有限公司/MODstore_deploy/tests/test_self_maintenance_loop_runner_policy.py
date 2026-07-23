@@ -24,6 +24,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _guest_auth_headers,
     _has_high_risk_report,
     _historical_rollback_rate,
+    _is_accepted_para_wait_timeout,
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _matches_focused_test_command,
@@ -590,6 +591,22 @@ def test_business_failure_is_not_retryable():
     result = {"result": {"outputs": [{"error": "pytest failed: assertion error"}]}}
 
     assert _is_transient_employee_dispatch_failure(result) is False
+
+
+def test_accepted_para_wait_timeout_is_not_a_code_delivery_failure():
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": True,
+                    "handler": "para_delegate",
+                    "status": "para_task_timeout",
+                }
+            ]
+        }
+    }
+
+    assert _is_accepted_para_wait_timeout(result) is True
 
 
 def test_guest_auth_headers_uses_injected_token(monkeypatch):
