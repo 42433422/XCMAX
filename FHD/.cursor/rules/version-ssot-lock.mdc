@@ -1,0 +1,15 @@
+---
+description: FHD 版本以 VERSION.md 为唯一 SSOT，按锚点动态同步与校验
+alwaysApply: true
+---
+
+# 版本 SSOT（动态锚点）
+
+版本锚点、映射表和变更出口均以 [`VERSION.md`](../../VERSION.md) 为准；产品四段版与工具链三段映射从该文件动态解析，不在本规则内写死版本号。
+
+改功能、重构和重新打包不会自动改变版本号。先改 `VERSION.md`，再同步；历史证据不得回写为新制品口径。发版前运行：
+
+```bash
+python3 scripts/dev/version_sync.py --apply
+python3 scripts/dev/verify_version_anchors.py
+```
