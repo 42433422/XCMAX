@@ -108,10 +108,13 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
       `登录 AI 市场可体验完整工作台与数字管家能力：${CORP_LINKS.market}\n\n若尚未注册，可先预约方案沟通：${CORP_LINKS.contact}`,
     )
   }
-  if (/价格|报价|费用|多少钱|收费|会员.*价/.test(q)) {
+  if (/购买|怎么买|如何买|下单|开通|买会员|买套餐|授权/.test(q) || /价格|报价|费用|多少钱|收费|会员.*价/.test(q)) {
     return reply(
-      `方案与报价因业务场景而异，请通过「预约方案沟通」提交需求：${CORP_LINKS.contact}\n\n` +
-        `已注册用户也可在 AI 市场查看会员方案：${CORP_LINKS.market.replace(/\/$/, '')}/plans`,
+      `购买与开通路径：\n` +
+        `1. 注册/登录 AI 市场：${CORP_LINKS.market}\n` +
+        `2. 在会员方案页选择套餐并支付：${CORP_LINKS.market.replace(/\/$/, '')}/plans\n` +
+        `3. 企业定制或批量授权，请预约沟通：${CORP_LINKS.contact}\n\n` +
+        `桌面端/客户端授权也可从下载页了解：${CORP_LINKS.download}`,
     )
   }
   if (/公司|修茈|关于|是谁|介绍/.test(q)) {
