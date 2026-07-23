@@ -19,6 +19,15 @@ def test_normal_cvm_release_skips_optional_image_archive() -> None:
     assert 'deploy_emit push skipped "artifact=fhd-api-image.tar.gz reason=optional"' in script
 
 
+def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+
+    assert "rsync --archive --partial --append-verify --timeout=180" in script
+    assert 'transfer_mode="rsync"' in script
+    assert "partial retained" in script
+    assert "RSYNC_SHELL" in script
+
+
 def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> None:
     out_dir = tmp_path / "dist"
     out_dir.mkdir()
@@ -44,6 +53,7 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
     mock_bin.mkdir()
     for name, body in {
         "scp": '#!/usr/bin/env bash\nprintf "scp %s\\n" "$*" >> "$CALLS_LOG"\n',
+        "rsync": '#!/usr/bin/env bash\nprintf "rsync %s\\n" "$*" >> "$CALLS_LOG"\n',
         "ssh": (
             '#!/usr/bin/env bash\nprintf "ssh %s\\n" "$*" >> "$CALLS_LOG"\nprintf \'OK_MOVED\\n\'\n'
         ),
@@ -122,6 +132,9 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     scp = mock_bin / "scp"
     scp.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     scp.chmod(0o755)
+    rsync = mock_bin / "rsync"
+    rsync.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    rsync.chmod(0o755)
     ssh = mock_bin / "ssh"
     ssh.write_text(
         "#!/usr/bin/env bash\n"
@@ -224,7 +237,7 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
         ) in workflow
         assert (
             "FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' "
-            "&& inputs.push_image_tar && '55m' || '15m' }}"
+            "&& inputs.push_image_tar && '55m' || '40m' }}"
         ) in workflow
 
 
