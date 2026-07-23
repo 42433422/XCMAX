@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -835,6 +837,111 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
     }
 
 
+def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-target-ref",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_target_branch_unavailable",
+                "run_id": "r-target-ref",
+                "task_id": "task-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-target-ref",
+        "failed_run_id": "r-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_only():
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-legacy-target-ref",
+                "task_id": "task-legacy-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": branch,
+        "failed_run_id": "r-legacy-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-legacy-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_qa_verdict_not_pass",
+        "structured_qa_blocking_findings",
+    ],
+)
+def test_resume_review_qa_candidate_retries_structured_findings_on_existing_branch(
+    hold_reason: str,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-structured",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "r-structured",
+                "task_id": "task-structured",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/codex/sub-1-structured",
+        "continue_existing_code_task": True,
+        "failed_run_id": "r-structured",
+        "failed_steps": ["code"],
+        "para_task_id": "task-structured",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_steps(result) == {"code", "review", "qa"}
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (
+        None,
+        "devfleet/codex/sub-1-structured",
+    )
+
+
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
     memory = {
         "open_items": [
@@ -1039,6 +1146,30 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_prioritizes_missing_target_ref(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["target_branch_unavailable"],'
+                '"tested_commands":[],"target_branch_available":false,'
+                '"test_delta":{"new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"high","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["reason"] == "structured_qa_target_branch_unavailable"
+    assert result["qa"]["target_branch_available"] is False
 
 
 def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
