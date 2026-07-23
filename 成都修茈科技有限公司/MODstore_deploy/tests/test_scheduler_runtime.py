@@ -95,6 +95,28 @@ def test_customer_value_scheduler_requires_authoritative_source():
         )
 
 
+def test_customer_value_unready_source_is_recorded_as_job_failure(db_ready):
+    from modstore_server.scheduler_runtime import get_runtime_status
+    from modstore_server.workflow_scheduler import _run_authoritative_customer_value_job
+
+    with pytest.raises(
+        RuntimeError,
+        match="customer_value_source_unready:java_postgresql_internal_api",
+    ):
+        _run_authoritative_customer_value_job(
+            lambda: {
+                "source_ready": False,
+                "source_owner": "java_postgresql_internal_api",
+            }
+        )
+
+    entry = _find(get_runtime_status(), "customer_value_reconciler")
+    assert entry is not None
+    assert entry["state"] == "failing"
+    assert entry["last_status"] == "failed"
+    assert entry["consecutive_failures"] >= 1
+
+
 def test_stale_when_last_success_too_old(db_ready):
     from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
 
