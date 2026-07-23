@@ -15,6 +15,9 @@ import {
   mergeRetryDelayMs,
   nextMergeRetryState,
   parseGithubRepo,
+  parseReviewVerdict,
+  resolveReviewWithFallback,
+  selectTaskMergeBase,
 } from './merge_worker.mjs';
 
 
@@ -119,4 +122,51 @@ test('CI wait policy is explicit in code', () => {
   assert.equal(CI_WAIT_MODE, 'required');
   assert.equal(CI_WAIT_TIMEOUT_MS >= 60_000, true);
   assert.equal(['fail', 'human'].includes(CI_TIMEOUT_POLICY), true);
+});
+
+
+test('review verdict parser accepts strict lines and structured JSON', () => {
+  assert.equal(parseReviewVerdict('analysis\nAPPROVE')?.verdict, 'approve');
+  assert.equal(parseReviewVerdict('VERDICT: APPROVE')?.verdict, 'approve');
+  assert.equal(
+    parseReviewVerdict('{"verdict":"reject","reason":"business_logic=data loss"}')?.reason,
+    'REJECT: business_logic=data loss',
+  );
+  assert.equal(parseReviewVerdict('looks good but no protocol'), null);
+});
+
+
+test('indeterminate Trae review falls back to MiniMax', async () => {
+  const result = await resolveReviewWithFallback({
+    primary: async () => 'analysis without a verdict',
+    fallback: async () => '{"verdict":"approve","reason":"all dimensions pass"}',
+  });
+  assert.equal(result.verdict, 'approve');
+  assert.equal(result.provider, 'minimax');
+});
+
+
+test('review remains fail-closed when Trae and MiniMax are unavailable', async () => {
+  const result = await resolveReviewWithFallback({
+    primary: async () => { throw new Error('timeout'); },
+    fallback: async () => { throw new Error('minimax-key-unavailable'); },
+  });
+  assert.equal(result.verdict, 'reject');
+  assert.equal(result.reason, 'indeterminate-review');
+  assert.match(result.diagnostics.primary, /timeout/);
+  assert.match(result.diagnostics.fallback, /minimax-key-unavailable/);
+});
+
+
+test('review remediation branches are promoted to the rejected PR canonical base', () => {
+  const task = {
+    branch: 'devfleet/codex/rejected-candidate',
+    description: 'context\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\nexact findings',
+  };
+  assert.equal(selectTaskMergeBase(task, 'main'), 'main');
+  assert.throws(
+    () => selectTaskMergeBase(task, ''),
+    /remediation-parent-base-unavailable/,
+  );
+  assert.equal(selectTaskMergeBase({ branch: 'release/1', description: 'ordinary' }), 'release/1');
 });
