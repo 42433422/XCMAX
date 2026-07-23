@@ -7,6 +7,18 @@ super_employee_service 的分级模型同构, 但在 MODstore_deploy 包内独�
 
 from modstore_server import para_delegate_handler as h
 
+
+def test_wait_timeout_default_covers_long_autonomous_tasks(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_WAIT_TIMEOUT_SEC", raising=False)
+    assert h._wait_timeout_sec({}) == 1800.0
+    assert h._wait_timeout_sec({"wait_timeout_sec": 30}) == 30.0
+
+
+def test_wait_timeout_invalid_value_falls_back_to_safe_default(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_WAIT_TIMEOUT_SEC", "invalid")
+    assert h._wait_timeout_sec({}) == 1800.0
+
+
 # ─────────────── _resolve_tier ───────────────
 
 

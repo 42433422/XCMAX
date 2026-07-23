@@ -13,6 +13,7 @@ from modstore_server.self_maintenance_loop_runner import (
     KB_SCHEMA_RETRY_MAX,
     NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
+    _base_para_input,
     _code_task_text,
     _employee_result_ok,
     _existing_kb_schema_retry_item,
@@ -607,6 +608,14 @@ def test_accepted_para_wait_timeout_is_not_a_code_delivery_failure():
     }
 
     assert _is_accepted_para_wait_timeout(result) is True
+
+
+def test_base_para_input_default_wait_budget_covers_real_agent_runtime(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_WAIT_TIMEOUT_SEC", raising=False)
+    assert _base_para_input()["wait_timeout_sec"] == 1800
+
+    monkeypatch.setenv("MODSTORE_PARA_WAIT_TIMEOUT_SEC", "2100")
+    assert _base_para_input()["wait_timeout_sec"] == 2100
 
 
 def test_guest_auth_headers_uses_injected_token(monkeypatch):
