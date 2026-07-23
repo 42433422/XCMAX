@@ -8,6 +8,7 @@ RELEASE_BASE="${XCMAX_RELEASE_BASE:-/opt/xcmax}"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
+PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
 ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
 ENV_FILE="${MODSTORE_ENV_FILE:-${ENV_DIR}/modstore.env}"
 SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler.env}"
@@ -67,6 +68,7 @@ resolve_java_home() {
 install -d -m 755 "$RELEASE_BASE/releases"
 install -d -m 700 "$RUNTIME_DIR"
 install -d -m 700 "$ENV_DIR"
+install -d -m 755 "$PUBLIC_SITE_STATE_DIR"
 exec 9>"$LOCK_FILE"
 flock -n 9 || fail "another immutable release is active"
 
@@ -264,6 +266,22 @@ if [[ ! -L "$CURRENT_LINK" ]]; then
 fi
 PREVIOUS_ROOT="$(readlink -f "$CURRENT_LINK")"
 [[ -d "$PREVIOUS_ROOT" ]] || fail "current release target is invalid: $PREVIOUS_ROOT"
+
+# Public runtime projections must survive immutable release promotion.  Seed
+# the persistent nginx root once from the previous release when available;
+# subsequent authenticated founder snapshots update this same external file.
+PUBLIC_PROJECTION_PATH="${PUBLIC_SITE_STATE_DIR}/download-founder-autonomy.json"
+if [[ ! -f "$PUBLIC_PROJECTION_PATH" ]]; then
+  for candidate in \
+    "${PREVIOUS_ROOT}/${SITE_SUBDIR}/download-founder-autonomy.json" \
+    "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/market/public/download-founder-autonomy.json"; do
+    if [[ -f "$candidate" ]]; then
+      install -m 644 "$candidate" "$PUBLIC_PROJECTION_PATH"
+      log "seeded persistent public founder projection"
+      break
+    fi
+  done
+fi
 
 if [[ -e "$SITE_LINK" && ! -L "$SITE_LINK" ]]; then
   fail "$SITE_LINK must be a symlink for atomic public-site promotion"
