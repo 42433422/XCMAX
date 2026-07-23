@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,10 +31,36 @@ from modstore_server.models_cs import (
     CustomerServiceTicket,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/customer-service", tags=["customer-service"])
 
 _get_current_user = get_current_user
 _require_admin = require_admin
+
+
+def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
+    """Fire-and-forget：工单事件派发可能跑员工编排/LLM，绝不能阻塞 /chat 响应。"""
+    try:
+        from modstore_server.incident_bus import publish as publish_incident
+
+        publish_incident(
+            "ops.intake.customer_ticket",
+            payload,
+            source="customer-service-api",
+            fingerprint=None,
+        )
+    except Exception:
+        logger.exception("customer-service ticket incident publish failed")
+
+
+def _schedule_customer_ticket_incident(payload: Dict[str, Any]) -> None:
+    threading.Thread(
+        target=_publish_customer_ticket_incident,
+        args=(payload,),
+        daemon=True,
+        name="cs-ticket-incident",
+    ).start()
 
 
 class CustomerServiceChatBody(BaseModel):
@@ -76,12 +104,10 @@ async def customer_service_chat(
         context=body.context,
     )
     db.commit()
-    try:
-        from modstore_server.incident_bus import publish as publish_incident
-
-        t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
-        if t:
-            payload = {
+    t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
+    if t:
+        _schedule_customer_ticket_incident(
+            {
                 "subject_id": str(t.get("ticket_no") or t.get("id") or ""),
                 "ticket_id": int(t.get("id") or 0),
                 "ticket_no": str(t.get("ticket_no") or "")[:128],
@@ -92,14 +118,7 @@ async def customer_service_chat(
                 "user_id": int(user.id or 0),
                 "session_id": int((result.get("session") or {}).get("id") or 0),
             }
-            publish_incident(
-                "ops.intake.customer_ticket",
-                payload,
-                source="customer-service-api",
-                fingerprint=None,
-            )
-    except Exception:
-        pass
+        )
     return result
 
 
@@ -226,6 +245,19 @@ async def list_standards(
     user: User = Depends(_get_current_user),
 ):
     rows = db.query(CustomerServiceStandard).order_by(CustomerServiceStandard.priority.asc()).all()
+    # SSOT 四种默认标准：库空时自愈补种（避免发布/迁库后后台空白）
+    if not rows:
+        try:
+            from modstore_server.models_db import init_default_customer_service_standards
+
+            init_default_customer_service_standards()
+            rows = (
+                db.query(CustomerServiceStandard)
+                .order_by(CustomerServiceStandard.priority.asc())
+                .all()
+            )
+        except Exception:
+            rows = []
     return {"items": [_standard_payload(r, include_policy=user.is_admin) for r in rows]}
 
 

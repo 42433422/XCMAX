@@ -1,4 +1,4 @@
-/** 官网小C：同意后主动介绍当前页（TTS + 双语字幕）。软件工作台不挂字幕。 */
+/** 官网小C：同意后主动介绍当前页（TTS + 中文字幕）。软件工作台不挂字幕。 */
 
 import { getCorpPageKnowledge, resolveCorpPageId } from '../content/siteKnowledge'
 import {
@@ -6,10 +6,9 @@ import {
   endTtsSubtitles,
   isTtsSubtitleSession,
   setTtsSubtitleIndex,
-  updateTtsSubtitleEn,
 } from '../composables/ttsSubtitleStore'
-import { prefetchSubtitleTranslations } from '../utils/ttsSubtitleTranslate'
 import { splitSentences } from '../utils/ttsSentenceSplit'
+import { cleanTextForTts } from '../utils/ttsTextClean'
 
 export const CORP_PROACTIVE_INTRO_KEY = 'xc_corp_proactive_intro'
 const SESSION_PREFIX = 'xc-corp-intro-done:'
@@ -55,20 +54,19 @@ function clip(text: string, max: number): string {
   return `${t.slice(0, Math.max(0, max - 1))}…`
 }
 
-/** 生成适合朗读的短介绍（控制在约 160 字内）。 */
+/** 生成适合朗读的短介绍：按当前页说清「这页是什么」，不堆「你现在在…」元叙述。 */
 export function buildCorpPageIntroScript(pathname: string): {
   pageId: string
   text: string
 } {
   const pageId = resolveCorpPageId(pathname)
-  const page = getCorpPageKnowledge(pageId)
-  const title = clip((page.title || '').split('|')[0] || page.pageId, 24)
-  const summary = clip(page.summary || page.description || '', 72)
-  const highlights = (page.highlights || []).slice(0, 2).join('、')
-  const hi = highlights ? clip(`这页重点：${highlights}。`, 40) : ''
+  const page = getCorpPageKnowledge(pageId, pathname)
+  const body = clip(page.summary || page.welcomeDesc || '', 72)
   const text = clip(
-    `嗨，我是小C。你现在在「${title}」。${summary}${hi ? ` ${hi}` : ''} 想细聊直接跟我说，或点快捷问题就行。`,
-    160,
+    body
+      ? `嗨，我是小C。${body}有需要直接问我，或点快捷问题。`
+      : '嗨，我是小C。想了解产品、案例或预约沟通，直接跟我说，或点快捷问题就行。',
+    140,
   )
   return { pageId, text }
 }
@@ -83,7 +81,6 @@ export function prefersReducedMotion(): boolean {
 }
 
 let corpIntroAudio: HTMLAudioElement | null = null
-let corpSubtitleAbort: AbortController | null = null
 let corpSubtitleGen = 0
 
 export function stopCorpIntroSpeech(): void {
@@ -98,8 +95,6 @@ export function stopCorpIntroSpeech(): void {
     }
     corpIntroAudio = null
   }
-  corpSubtitleAbort?.abort()
-  corpSubtitleAbort = null
   endTtsSubtitles(corpSubtitleGen)
 }
 
@@ -146,19 +141,13 @@ export function speakCorpIntro(text: string): Promise<void> {
   if (prefersReducedMotion()) return Promise.resolve()
 
   stopCorpIntroSpeech()
-  const plain = text.trim()
+  // 朗读/字幕共用清洗：去掉网址、路径、装饰符，避免念出 slash、html、箭头
+  const plain = cleanTextForTts(text, 800)
+  if (!plain) return Promise.resolve()
   const lines = splitSentences(plain)
   const zhLines = lines.length ? lines : [plain]
-  corpSubtitleAbort = new AbortController()
   corpSubtitleGen = beginTtsSubtitles(zhLines)
   const gen = corpSubtitleGen
-  prefetchSubtitleTranslations(
-    zhLines,
-    (i, en) => {
-      if (isTtsSubtitleSession(gen)) updateTtsSubtitleEn(i, en, gen)
-    },
-    { signal: corpSubtitleAbort.signal, concurrency: 2 },
-  )
   setTtsSubtitleIndex(0, gen)
 
   return (async () => {
@@ -185,7 +174,6 @@ export function speakCorpIntro(text: string): Promise<void> {
       // fail-open：不使用 speechSynthesis
     } finally {
       endTtsSubtitles(gen)
-      corpSubtitleAbort = null
     }
   })()
 }
