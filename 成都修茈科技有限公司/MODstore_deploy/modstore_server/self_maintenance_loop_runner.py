@@ -4835,6 +4835,22 @@ def _auto_merge_low_risk_branch(
                 "structured_report_gate": report_gate,
             }
 
+        branch_head_sha = _remote_branch_head(repo_url, branch)
+        base_head_sha = _remote_branch_head(repo_url, base_branch)
+        if not branch_head_sha:
+            return {
+                "ok": False,
+                "reason": "remote_branch_head_unavailable",
+                "branch": branch,
+            }
+        if base_head_sha and branch_head_sha == base_head_sha:
+            return {
+                "ok": False,
+                "reason": "remote_branch_not_advanced",
+                "branch": branch,
+                "branch_head_sha": branch_head_sha,
+            }
+
         from modstore_server.autonomy_guard_delegate import evaluate_risk
 
         decision = evaluate_risk(
@@ -4857,8 +4873,30 @@ def _auto_merge_low_risk_branch(
                 "reason": "para_merge_request_failed",
                 "risk_decision": decision.to_dict(),
             }
+        merge_request_record = {
+            "base_branch": base_branch,
+            "base_head_sha": base_head_sha or "",
+            "branch": branch,
+            "branch_head_sha": branch_head_sha,
+            "created_at": _iso(_utc_now()),
+            "event": "merge_requested",
+            "ok": True,
+            "para_task_id": task_id,
+            "phase": "merge",
+            "run_id": run_id,
+            "status": "pending",
+        }
+        _append_ledger(merge_request_record)
+        _append_governance_audit(
+            {
+                **merge_request_record,
+                "kind": "merge_requested",
+            }
+        )
         return {
             "ok": True,
+            "base_head_sha": base_head_sha or "",
+            "branch_head_sha": branch_head_sha,
             "merge_requested": True,
             "para_request": request_result,
             "reason": "merge_requested_after_loop_risk_gate",

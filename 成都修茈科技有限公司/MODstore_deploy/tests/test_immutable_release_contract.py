@@ -109,7 +109,28 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
         rendered = str(deploy)
         assert "TARGET_SHA" in rendered
         assert "xcmax-immutable-release.sh" in rendered
+        assert "modstore-deployment-correlation" in rendered
+        assert "actions/upload-artifact@v4" in rendered
         assert "reset --hard" not in rendered
+
+
+def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> None:
+    source = yaml.safe_load((ROOT / ".github/workflows/prod-deploy-receipt.yml").read_text())
+    published = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml").read_text()
+    )
+
+    for workflow in (source, published):
+        trigger = workflow[True]
+        assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
+        receipt = workflow["jobs"]["receipt"]
+        assert "workflow_run.conclusion == 'success'" in receipt["if"]
+        rendered = str(receipt)
+        assert "actions/download-artifact@v4" in rendered
+        assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
+        assert "/api/ops/self-maintenance/deployment-receipt" in rendered
+        assert "workflow_status" in rendered
+        assert "completed" in rendered
 
 
 def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
