@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +34,13 @@ def resolve_git_sha(explicit: str | None = None) -> str:
 
 def write_build_info(*, version: str, git_sha: str, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"schema_version": 1, "gitSha": git_sha, "version": version}
+    built_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = {
+        "schema_version": 1,
+        "gitSha": git_sha,
+        "version": version,
+        "builtAt": built_at,
+    }
     output.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
 
 

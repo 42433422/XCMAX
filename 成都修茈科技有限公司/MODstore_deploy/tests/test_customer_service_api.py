@@ -55,6 +55,7 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
     from modstore_server.models import RefundRequest, get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
 
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_user")
     order_no = _paid_order(tmp_path, monkeypatch, user.id)
     app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
@@ -91,10 +92,11 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
-def test_customer_service_missing_fields_requests_more_info(client):
+def test_customer_service_missing_fields_requests_more_info(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app
 
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_missing")
     app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
     try:
@@ -104,6 +106,156 @@ def test_customer_service_missing_fields_requests_more_info(client):
         assert data["ticket"]["intent"] == "refund"
         assert data["decision"]["decision"] == "needs_more_info"
         assert data["actions"] == []
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
+    """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
+    import time
+
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_async_inc")
+    started = {"ok": False}
+
+    def slow_publish(payload):
+        started["ok"] = True
+        time.sleep(3)
+        return None
+
+    monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        t0 = time.time()
+        r = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "订单号 RF123456 想退款，原因是重复购买",
+                "context": {"channel": "web"},
+            },
+        )
+        elapsed = time.time() - t0
+        assert r.status_code == 200, r.text
+        assert r.json().get("ticket")
+        assert elapsed < 1.5, f"chat blocked on incident publish: {elapsed:.2f}s"
+        deadline = time.time() + 1.0
+        while time.time() < deadline and not started["ok"]:
+            time.sleep(0.05)
+        assert started["ok"] is True
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_hi")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r = client.post("/api/customer-service/chat", json={"message": "你好", "context": {}})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ok"] is True
+        assert data["ticket"] is None
+        assert data["intent"]["intent"] == "greeting"
+        assert data["intent"]["need_ticket"] is False
+        assert data["cards"] == []
+        assert "小C" in data["message"]["content"]
+        assert "intent" not in data["message"]["content"]
+        assert "{" not in data["message"]["content"]
+
+        sf = get_session_factory()
+        with sf() as session:
+            n = (
+                session.query(CustomerServiceTicket)
+                .filter(CustomerServiceTicket.user_id == user.id)
+                .count()
+            )
+            assert n == 0
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_esc")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r = client.post(
+            "/api/customer-service/chat",
+            json={"message": "这个问题处理不了，请提交工单", "context": {}},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ticket"] is not None
+        assert data["ticket"]["intent"] == "general"
+        assert data["intent"]["need_ticket"] is True
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_infer_intent_order_no_alone_is_not_refund():
+    from modstore_server.customer_service_orchestrator import infer_intent, should_create_ticket
+
+    intent = infer_intent("订单号：ABC123456789", {"order_no": "ABC123456789"})
+    assert intent == "general"
+    assert should_create_ticket(intent, "订单号：ABC123456789") is False
+    assert should_create_ticket("refund", "我要退款") is True
+
+
+def test_infer_intent_balance_is_account_support():
+    from modstore_server.customer_service_orchestrator import (
+        _human_kb_tips,
+        _xiaoc_general_reply,
+        infer_intent,
+        should_create_ticket,
+    )
+
+    assert infer_intent("我的余额不对", {}) == "account_support"
+    assert should_create_ticket("account_support", "我的余额不对") is True
+
+    dirty = (
+        '1. (hybrid) {"fields": [{"name": "template_name", "value": "发货模板"}]}\n'
+        "2. 会员开通后权益一般几分钟内到账。\n"
+    )
+    tips = _human_kb_tips(dirty)
+    assert tips == ["会员开通后权益一般几分钟内到账。"]
+    # 无可用自然语言摘录时，不应把脏结构拼进回复
+    assert _human_kb_tips('(hybrid) {"fields": []}') == []
+    _ = _xiaoc_general_reply
+
+
+def test_customer_service_balance_creates_account_ticket(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_bal")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r = client.post(
+            "/api/customer-service/chat",
+            json={"message": "我的余额不对", "context": {}},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ticket"]["intent"] == "account_support"
+        content = data["message"]["content"]
+        assert "小C" in content
+        assert "hybrid" not in content
+        assert "fields" not in content
+        assert "发货模板" not in content
+        assert "工单" in content
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 

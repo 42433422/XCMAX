@@ -254,11 +254,28 @@ class TestVisitorIdentity:
         q.filter.return_value.order_by.return_value.first.return_value = None
         db = MagicMock()
         db.query.return_value = q
+        nested = MagicMock()
+        db.begin_nested.return_value = nested
         ident = resolve_user_identity(user, db=db, source="market_cs")
         block = format_visitor_block(ident)
         assert ident.membership == "普通用户"
         assert "会员=普通用户" in block
         assert "角色=" not in block
+        nested.commit.assert_called_once()
+
+    def test_active_plan_query_failure_uses_savepoint(self):
+        """套餐查询失败时回滚 SAVEPOINT，返回空串，不向外抛。"""
+        from unittest.mock import MagicMock
+
+        from modstore_server.xiaoc_cs_ssot import active_plan_id_for_user
+
+        db = MagicMock()
+        nested = MagicMock()
+        db.begin_nested.return_value = nested
+        db.query.side_effect = RuntimeError("column user_plans.auto_renew does not exist")
+        assert active_plan_id_for_user(db, 61) == ""
+        nested.rollback.assert_called_once()
+        nested.commit.assert_not_called()
 
 
 class TestButlerUsesSsot:

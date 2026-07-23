@@ -18,6 +18,8 @@ def fresh_db(tmp_path, monkeypatch):
     models._engine = None
     models._SessionFactory = None
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "incident.sqlite"))
+    # 单测断言派发副作用时保持同步，避免线程竞态。
+    monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
     models.init_db()
     yield tmp_path
     models._engine = None

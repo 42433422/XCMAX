@@ -63,3 +63,5 @@ class UserPlan(Base):
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    auto_renew = Column(Boolean, default=True, nullable=False)
+    renewal_fail_reason = Column(Text, default="")
