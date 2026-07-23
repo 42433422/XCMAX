@@ -32,6 +32,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _load_loop_memory,
     _matches_focused_test_command,
     _qa_task_text,
+    _reconcile_requested_merge_feedback,
     _reject_and_retry_kb_schema_failure,
     _resume_dispatch_context,
     _resume_review_qa_candidate,
@@ -1408,6 +1409,146 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+def test_merge_request_does_not_close_open_remediation(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/codex/fix-1",
+                        "kind": "failed_steps",
+                        "run_id": "failed-run",
+                        "steps": ["qa"],
+                        "para_task_id": "task-1",
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/codex/fix-1",
+            "completed_at": "2026-07-23T00:00:00+00:00",
+            "para_task_id": "task-1",
+            "policy_decision": {
+                "action": "auto_merge_requested_low_risk",
+                "reason": "low_risk_merge_requested",
+            },
+            "run_id": "new-run",
+            "status": "completed_merge_requested",
+            "steps": [{"ok": True, "step": "qa"}],
+        },
+        {"reason": "force"},
+    )
+    memory = _load_loop_memory()
+
+    assert len(memory["open_items"]) == 1
+    assert memory["closed_items"] == []
+    assert memory["last_resolution_record"]["closed_count"] == 0
+
+
+def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "para_task_id": "task-1",
+                "run_id": "run-1",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "REJECT: only mark escalated after enqueue succeeds"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-1",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["review_feedback"] == feedback
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate == {
+        "branch": "devfleet/codex/fix-1",
+        "continue_existing_code_task": True,
+        "failed_run_id": "run-1",
+        "failed_steps": ["code"],
+        "para_task_id": "task-1",
+        "reason": "resume_para_ai_review_rejection",
+        "review_feedback": feedback,
+    }
+    prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
+    assert "EXTERNAL MERGE REVIEW REMEDIATION" in prompt
+    assert feedback in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-1",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_real_para_merge_sha_closes_matching_open_item():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "kind": "automated_remediation",
+                "para_task_id": "task-1",
+                "reason": "para_ai_review_rejected",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "para_task_id": "task-1",
+                "run_id": "run-1",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merged",
+            "merge_commit_sha": "a" * 40,
+        },
+    )
+
+    assert result["merged"] == 1
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
 
 
 # ---------------------------------------------------------------------------
