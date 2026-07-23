@@ -63,16 +63,16 @@ def _catalog_files_root() -> Path:
 
 
 def _get_commit_diff_files(*, commit_sha: str, repo_root: Path) -> List[str]:
-    """git diff --name-only <commit>^..<commit>"""
+    """Return exact changed paths without Git's quoted-path presentation layer."""
+
     result = subprocess.run(
-        ["git", "diff", "--name-only", f"{commit_sha}^..{commit_sha}"],
+        ["git", "diff", "--name-only", "-z", f"{commit_sha}^..{commit_sha}"],
         cwd=str(repo_root),
         capture_output=True,
-        text=True,
     )
     if result.returncode != 0:
         return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return [os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
 
 
 def _read_pack_file(rel_path: str, repo_root: Path) -> str:
