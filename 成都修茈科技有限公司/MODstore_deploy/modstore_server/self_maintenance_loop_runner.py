@@ -6555,6 +6555,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         item = _timeline_item(row)
         for key in (
             "action",
+            "catalog_readback_verified",
             "deployment_state",
             "dry_run",
             "environment",
@@ -6562,9 +6563,17 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "event_type",
             "final_status",
             "identity_verified",
+            "installability_verified",
             "merge_sha",
             "ok",
+            "package_id",
+            "package_sha256",
+            "runtime_contract_verified",
+            "stored_filename",
+            "strategic_council_receipt_id",
+            "strategic_council_verified",
             "triggered_by",
+            "version",
             "workflow_run_id",
         ):
             if key in row:

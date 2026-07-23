@@ -184,6 +184,77 @@ async def record_self_maintenance_deployment_receipt(
     return result
 
 
+@router.post(
+    "/evolution-deployment-receipt",
+    summary="Verify changed employee packs against the live production catalog",
+)
+async def record_modstore_evolution_deployment_receipt(
+    body: Dict[str, Any] = Body(default_factory=dict),
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+):
+    """Signed deploy callback; fails closed unless all runtime identities agree."""
+
+    if not _deployment_receipt_token_valid(authorization, x_autonomy_token):
+        raise HTTPException(401, "invalid_deployment_receipt_token")
+    if str(body.get("workflow_status") or "").lower() != "completed":
+        raise HTTPException(409, "workflow_not_completed")
+    if str(body.get("workflow_conclusion") or "").lower() != "success":
+        raise HTTPException(409, "workflow_not_successful")
+    packages = body.get("packages")
+    if not isinstance(packages, list) or any(not isinstance(item, dict) for item in packages):
+        raise HTTPException(422, "packages_must_be_object_list")
+
+    from modstore_server.deploy_context import health_payload
+    from modstore_server.modstore_evolution_deploy_receipts import (
+        EvolutionDeploymentReceiptError,
+        record_evolution_deployment_receipts,
+    )
+    from modstore_server.self_maintenance_deploy_receipts import (
+        BuildIdentity,
+        DeploymentReceiptError,
+        verify_deployed_identity,
+    )
+    from modstore_server.self_maintenance_loop_runner import (
+        _append_governance_audit,
+        _append_ledger,
+        _read_ledger,
+    )
+
+    merge_sha = str(body.get("merge_sha") or "")
+    try:
+        verify_deployed_identity(
+            merge_sha=merge_sha,
+            release=BuildIdentity.from_payload(_release_manifest_payload()),
+            health=BuildIdentity.from_payload(health_payload()),
+        )
+    except DeploymentReceiptError as exc:
+        raise HTTPException(409, exc.reason) from exc
+
+    observed_at = datetime.now(timezone.utc).isoformat()
+
+    def _record(event: Dict[str, Any]) -> None:
+        event = {**event, "created_at": str(event.get("created_at") or observed_at)}
+        _append_ledger(event)
+        _append_governance_audit(
+            {
+                **event,
+                "kind": str(event.get("event_type") or "evolution_deployment_receipt"),
+            }
+        )
+
+    try:
+        return record_evolution_deployment_receipts(
+            packages=packages,
+            merge_sha=merge_sha,
+            workflow_run_id=str(body.get("workflow_run_id") or ""),
+            rows=_read_ledger(limit=20_000),
+            record_event=_record,
+        )
+    except EvolutionDeploymentReceiptError as exc:
+        raise HTTPException(409, exc.reason) from exc
+
+
 @router.post("/governance-review", summary="Acknowledge self-maintenance governance audit")
 async def review_self_maintenance_governance(
     body: Dict[str, Any] = Body(default_factory=dict),
