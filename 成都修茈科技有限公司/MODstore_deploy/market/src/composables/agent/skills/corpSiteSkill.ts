@@ -61,27 +61,30 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
       `${page.summary}\n\n详见产品中心：${CORP_LINKS.services}\n\n想深入某一场景可看解决方案：${CORP_LINKS.solutions}`,
     )
   }
-  if (/方案|制造|贸易|园区|教育|行业|场景/.test(q)) {
+  if (/方案|制造|贸易|园区|教育|行业|场景/.test(q) && !/案例|详情/.test(q)) {
     return reply(
-      `解决方案覆盖制造贸易、园区服务、教育协同与企业 AI 工作流：${CORP_LINKS.solutions}\n\n` +
-        `• 制造案例 → ${CORP_LINKS.caseManufacture}\n` +
-        `• 园区案例 → ${CORP_LINKS.casePark}\n` +
-        `• 教育案例 → ${CORP_LINKS.caseEdu}`,
+      `解决方案覆盖制造贸易、园区服务、教育协同与企业 AI 工作流。可打开解决方案页继续看：${CORP_LINKS.solutions}\n\n` +
+        `也可直接看案例：制造（${CORP_LINKS.caseManufacture}）、园区（${CORP_LINKS.casePark}）、教育（${CORP_LINKS.caseEdu}）。`,
     )
   }
   if (/制造|生产|库存/.test(q) && /案例|详情/.test(q)) {
-    return reply(`制造案例详情：${CORP_LINKS.caseManufacture}\n\n更多案例：${CORP_LINKS.cases}`)
+    const page = getCorpPageKnowledge('case-manufacture')
+    return reply(
+      `${page.summary}\n\n详情页：${CORP_LINKS.caseManufacture}\n更多案例：${CORP_LINKS.cases}`,
+    )
   }
   if (/园区/.test(q) && /案例|详情/.test(q)) {
-    return reply(`园区案例详情：${CORP_LINKS.casePark}\n\n更多案例：${CORP_LINKS.cases}`)
+    const page = getCorpPageKnowledge('case-park')
+    return reply(`${page.summary}\n\n详情页：${CORP_LINKS.casePark}\n更多案例：${CORP_LINKS.cases}`)
   }
-  if (/校园|教育/.test(q) && /案例|详情/.test(q)) {
-    return reply(`教育案例详情：${CORP_LINKS.caseEdu}\n\n更多案例：${CORP_LINKS.cases}`)
+  if (/校园|教育|移动服务/.test(q) && /案例|详情|服务/.test(q)) {
+    const page = getCorpPageKnowledge('case-edu')
+    return reply(`${page.summary}\n\n详情页：${CORP_LINKS.caseEdu}\n更多案例：${CORP_LINKS.cases}`)
   }
-  if (/案例|客户|行业/.test(q)) {
+  if (/案例|客户/.test(q)) {
     return reply(
-      `我们整理了制造、园区、教育等客户案例：${CORP_LINKS.cases}\n\n` +
-        `• ${CORP_LINKS.caseManufacture}\n• ${CORP_LINKS.casePark}\n• ${CORP_LINKS.caseEdu}`,
+      `我们整理了制造、园区、教育等客户案例，可在案例中心浏览摘要与详情：${CORP_LINKS.cases}\n\n` +
+        `制造：${CORP_LINKS.caseManufacture}\n园区：${CORP_LINKS.casePark}\n教育：${CORP_LINKS.caseEdu}`,
     )
   }
   if (/新闻|资讯|动态|行业观察/.test(q)) {
