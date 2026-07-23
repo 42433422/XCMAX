@@ -18,6 +18,9 @@ def test_founder_cockpit_nginx_snippet_preserves_auth_boundary() -> None:
     assert "location = /admin/founder-autonomy" in snippet
     assert "location ^~ /admin/assets/" in snippet
     assert "location = /api/xcmax/ops/founder-autonomy" in snippet
+    assert "location = /download-founder-autonomy.json" in snippet
+    assert "try_files /download-founder-autonomy.json =404;" in snippet
+    assert "default_type application/json;" in snippet
     assert "proxy_pass http://127.0.0.1:5100;" in snippet
     assert "proxy_set_header Cookie $http_cookie;" in snippet
     assert "proxy_set_header Authorization $http_authorization;" in snippet
