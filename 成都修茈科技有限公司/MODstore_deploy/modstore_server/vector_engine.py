@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -27,6 +28,37 @@ class VectorEngineError(RuntimeError):
 
 _lock = threading.Lock()
 _client = None  # type: ignore[assignment]
+_MIN_CHROMA_SQLITE_VERSION = (3, 35, 0)
+
+
+def _prepare_sqlite_for_chroma() -> None:
+    """Use the packaged SQLite DB-API when the host Python is too old for Chroma."""
+
+    import sqlite3
+
+    if tuple(sqlite3.sqlite_version_info) >= _MIN_CHROMA_SQLITE_VERSION:
+        return
+    try:
+        import pysqlite3
+    except ImportError as exc:
+        current = str(getattr(sqlite3, "sqlite_version", "unknown"))
+        raise VectorEngineError(
+            "SQLite "
+            f"{current} is too old for Chroma; install the MODstore knowledge extra "
+            "to provide pysqlite3-binary"
+        ) from exc
+
+    bundled_version = tuple(getattr(pysqlite3, "sqlite_version_info", (0, 0, 0)))
+    if bundled_version < _MIN_CHROMA_SQLITE_VERSION:
+        raise VectorEngineError(
+            "pysqlite3-binary does not provide the SQLite version required by Chroma"
+        )
+    sys.modules["sqlite3"] = pysqlite3
+    logger.info(
+        "vector_engine: using packaged SQLite %s instead of host SQLite %s",
+        getattr(pysqlite3, "sqlite_version", "unknown"),
+        getattr(sqlite3, "sqlite_version", "unknown"),
+    )
 
 
 def vector_db_dir() -> Path:
@@ -57,6 +89,7 @@ def get_client():
     with _lock:
         if _client is not None:
             return _client
+        _prepare_sqlite_for_chroma()
         try:
             import chromadb
         except ImportError as e:  # noqa: BLE001
