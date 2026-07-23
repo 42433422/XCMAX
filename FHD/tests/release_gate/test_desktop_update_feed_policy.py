@@ -191,4 +191,3 @@ def test_desktop_updater_rejects_same_version_downgrade_by_release_date() -> Non
     assert "remoteReleaseDate" in updater
     assert "readLocalBuildTimeMs" in updater
     assert "return Boolean(remoteSha && localSha && remoteSha !== localSha)" not in updater
-
