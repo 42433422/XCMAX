@@ -145,6 +145,7 @@ def _build_request(
         "device_id": str(
             input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
         ),
+        "tool_name": str(input_data.get("tool_name") or input_data.get("dev_tool") or ""),
         "depends_on": (
             input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
         ),
@@ -500,6 +501,44 @@ def _dev_tool() -> str:
     return (os.environ.get("MODSTORE_PARA_DEV_TOOL") or "codex").strip() or "codex"
 
 
+_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae")
+
+
+def _tool_candidates(req: Dict[str, Any]) -> list[str]:
+    """Return the preferred executor followed by allowed same-device fallbacks.
+
+    An explicitly requested tool remains strict unless the caller also opts in
+    with ``allow_tool_fallback``.  Normal loop dispatches may use an idle tool on
+    the same authorized device instead of waiting behind a busy Codex slot.
+    """
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    explicit = str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "").strip()
+    preferred = explicit or _dev_tool()
+    if preferred not in _VALID_DEV_TOOLS:
+        preferred = _dev_tool()
+
+    raw_fallback = raw.get("allow_tool_fallback")
+    if explicit and raw_fallback is None:
+        allow_fallback = False
+    elif raw_fallback is None:
+        allow_fallback = _env_bool("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    else:
+        allow_fallback = str(raw_fallback).strip().lower() in ("1", "true", "yes", "on")
+    if not allow_fallback:
+        return [preferred]
+
+    configured = os.environ.get(
+        "MODSTORE_PARA_TOOL_FALLBACK_ORDER",
+        "claude_code,cursor,trae",
+    )
+    candidates = [preferred]
+    for value in configured.split(","):
+        tool = value.strip()
+        if tool in _VALID_DEV_TOOLS and tool not in candidates:
+            candidates.append(tool)
+    return candidates
+
+
 def _device_discovery_enabled() -> bool:
     return _env_bool("MODSTORE_PARA_DEVICE_DISCOVERY", "1")
 
@@ -541,6 +580,61 @@ def _device_eligible(item: Any, tool_name: str) -> bool:
         # 无 tools 列表时，仅当声明的 devTool 匹配才视为就绪（避免盲派到缺 CLI 设备）
         return str(item.get("devTool") or "") == tool_name
     return True
+
+
+def _selected_tool_for_device(item: Any, req: Dict[str, Any]) -> str:
+    for tool_name in _tool_candidates(req):
+        if _device_eligible(item, tool_name):
+            return tool_name
+    return ""
+
+
+def _with_selected_tool(item: Dict[str, Any], tool_name: str) -> Dict[str, Any]:
+    return {**item, "_selected_tool": tool_name}
+
+
+def _select_local_device_with_fallback(devices: list, req: Dict[str, Any]) -> list:
+    local_id = (os.environ.get("MODSTORE_PARA_DEVICE_ID") or "").strip()
+    ordered: list = []
+    if local_id:
+        ordered.extend(
+            item
+            for item in devices
+            if isinstance(item, dict) and str(item.get("id") or "") == local_id
+        )
+    else:
+        primary = [
+            item for item in devices if isinstance(item, dict) and item.get("isPrimary")
+        ]
+        ordered.extend(primary or [item for item in devices if isinstance(item, dict)])
+    for item in ordered:
+        selected_tool = _selected_tool_for_device(item, req)
+        if selected_tool:
+            return [_with_selected_tool(item, selected_tool)]
+    return []
+
+
+def _select_fleet_devices_with_fallback(devices: list, req: Dict[str, Any]) -> list:
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    target = raw.get("target_devices")
+    targets = (
+        {str(x).strip() for x in target if str(x).strip()} if isinstance(target, list) else {"all"}
+    )
+    candidates: list = []
+    for item in devices:
+        if not isinstance(item, dict):
+            continue
+        if (
+            "all" not in targets
+            and str(item.get("id") or "") not in targets
+            and str(item.get("name") or "") not in targets
+        ):
+            continue
+        selected_tool = _selected_tool_for_device(item, req)
+        if selected_tool:
+            candidates.append(_with_selected_tool(item, selected_tool))
+    workers = [item for item in candidates if not item.get("isPrimary")]
+    return (workers or candidates)[: _max_fleet_devices(req)]
 
 
 def _filter_executor_ready(devices: list, tool_name: str) -> list:
@@ -650,7 +744,22 @@ def _resolve_dispatch_devices(
     """返回 (tier, [device dicts], reason)。显式 device_id → 零回归走一级单设备。"""
     explicit = str(req.get("device_id") or "").strip()
     if explicit:
-        return 1, [{"id": explicit}], ""
+        devices = _fetch_devices(client, base, token)
+        target = next(
+            (
+                item
+                for item in devices
+                if isinstance(item, dict) and str(item.get("id") or "") == explicit
+            ),
+            None,
+        )
+        if target is not None:
+            selected_tool = _selected_tool_for_device(target, req)
+            if selected_tool:
+                return 1, [_with_selected_tool(target, selected_tool)], ""
+        # Preserve the explicit-device contract when discovery is unavailable or
+        # every executor is busy: Para may queue the preferred tool safely.
+        return 1, [{"id": explicit, "_selected_tool": _tool_candidates(req)[0]}], ""
     if not _device_discovery_enabled():
         return (
             1,
@@ -663,11 +772,19 @@ def _resolve_dispatch_devices(
     if tier == 1:
         local = _select_local_device(devices, tool)
         if local:
+            return 1, [_with_selected_tool(local[0], tool)], ""
+        local = _select_local_device_with_fallback(devices, req)
+        if local:
             return 1, local, ""
         tier = 2  # 本机不可用 → 升二级
     selected = _select_fleet_devices(devices, req, tool)
+    if selected:
+        selected = [_with_selected_tool(item, tool) for item in selected]
+    else:
+        selected = _select_fleet_devices_with_fallback(devices, req)
     if not selected:
-        return tier, [], f"未发现在线可用 {tool} 设备(共 {len(devices)} 台)"
+        tools = ",".join(_tool_candidates(req))
+        return tier, [], f"未发现在线可用 {tools} 执行器(共 {len(devices)} 台设备)"
     return tier, selected, ""
 
 
@@ -765,6 +882,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                     "report_only": report_only,
                     "max_attempts": max_attempts,
                 }
+                selected_tool = str(device.get("_selected_tool") or "").strip()
+                if selected_tool:
+                    payload["tool_name"] = selected_tool
                 if repo_url:
                     payload["repo_url"] = repo_url
                 if auto_merge:
@@ -829,6 +949,7 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                         "device_id": device_id,
                         "device_name": accepted.get("device_name") or device.get("name"),
                         "subtask_id": accepted.get("subtask_id"),
+                        "tool_name": selected_tool or _dev_tool(),
                     }
                 )
 
