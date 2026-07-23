@@ -320,19 +320,19 @@ onBeforeUnmount(() => {
 
 .floating-chat-toggle {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 9px;
-  min-height: 56px;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 64px;
+  min-height: 82px;
   max-width: calc(100vw - 32px);
-  padding: 7px 15px 7px 8px;
-  border: 1px solid rgba(74, 144, 217, 0.36);
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.94));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #172033;
-  box-shadow:
-    0 14px 30px rgba(15, 76, 129, 0.18),
-    0 4px 12px rgba(37, 99, 235, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  box-shadow: none;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -345,8 +345,8 @@ onBeforeUnmount(() => {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
+  width: 56px;
+  height: 56px;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.96);
   border-radius: 50%;
@@ -380,13 +380,14 @@ onBeforeUnmount(() => {
 }
 
 .floating-chat-toggle:hover {
-  transform: translateY(-2px);
-  border-color: rgba(37, 99, 235, 0.58);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(219, 234, 254, 0.96));
+  background: transparent;
+}
+
+.floating-chat-toggle:hover .floating-chat-toggle-avatar {
+  border-color: rgba(255, 255, 255, 1);
   box-shadow:
-    0 18px 36px rgba(15, 76, 129, 0.22),
-    0 6px 16px rgba(37, 99, 235, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+    0 0 0 3px rgba(37, 99, 235, 0.24),
+    0 8px 18px rgba(37, 99, 235, 0.22);
 }
 
 .floating-chat-toggle:focus-visible,
@@ -395,21 +396,24 @@ onBeforeUnmount(() => {
 .floating-chat-input:focus-visible {
   outline: 3px solid rgba(24, 144, 255, 0.32);
   outline-offset: 2px;
+  border-radius: 10px;
 }
 
 .floating-chat-toggle-label {
   font-size: 13px;
-  line-height: 1;
+  line-height: 16px;
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
   color: #1e3a8a;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.88);
 }
 
 .floating-chat-panel {
   position: absolute;
   right: 0;
-  bottom: 68px;
+  bottom: 94px;
   width: min(380px, calc(100vw - 28px));
   height: min(560px, calc(100vh - 110px));
   display: flex;
@@ -566,12 +570,18 @@ onBeforeUnmount(() => {
   }
 
   .floating-chat-toggle {
-    min-height: 38px;
-    padding: 7px 12px;
+    width: 60px;
+    min-height: 78px;
+    padding: 0;
+  }
+
+  .floating-chat-toggle-avatar {
+    width: 52px;
+    height: 52px;
   }
 
   .floating-chat-panel {
-    bottom: 62px;
+    bottom: 90px;
     height: min(520px, calc(100vh - 90px));
   }
 }
