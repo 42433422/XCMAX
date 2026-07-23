@@ -24,6 +24,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}
+DEFAULT_PARA_WAIT_TIMEOUT_SEC = 1800.0
 
 
 def _env_bool(name: str, default: str = "0") -> bool:
@@ -57,11 +58,11 @@ def _wait_for_completion_default() -> bool:
 def _wait_timeout_sec(req: Dict[str, Any]) -> float:
     raw = req.get("wait_timeout_sec")
     if raw is None:
-        raw = os.environ.get("MODSTORE_PARA_WAIT_TIMEOUT_SEC") or "900"
+        raw = os.environ.get("MODSTORE_PARA_WAIT_TIMEOUT_SEC") or str(DEFAULT_PARA_WAIT_TIMEOUT_SEC)
     try:
         return max(5.0, float(raw))
     except (TypeError, ValueError):
-        return 900.0
+        return DEFAULT_PARA_WAIT_TIMEOUT_SEC
 
 
 def _wait_poll_sec() -> float:
