@@ -15,6 +15,7 @@ BACKUP_SUFFIX="$(date -u +%Y%m%dT%H%M%SZ)"
 node --check "$AGENT_SOURCE"
 node --check "$HELPER_SOURCE"
 node --check "$QUEUE_POLICY_SOURCE"
+node --test "$SCRIPT_DIR/report_only_target_branch.test.mjs"
 mkdir -p "$TARGET_DIR"
 
 AGENT_BACKUP=""

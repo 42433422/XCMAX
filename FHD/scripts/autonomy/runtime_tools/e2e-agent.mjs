@@ -603,12 +603,20 @@ function isReportOnlyTask(task) {
 
 function reportOnlyTargetBranch(task) {
   if (!isReportOnlyTask(task)) return '';
-  const text = `${task?.title || ''}\n${task?.description || ''}`;
-  const match = text.match(/target branch (?:to inspect|to verify)\s*:\s*`([^`]+)`/i)
-    || text.match(/\bTARGET_BRANCH=([^\s]+)/i);
-  const branch = (match?.[1] || '').trim();
-  if (!branch || branch.startsWith('-') || branch.includes('..') || /[\s~^:?*[\\]/.test(branch)) return '';
-  return branch;
+  const texts = [
+    String(task?.description || ''),
+    String(task?.title || ''),
+  ];
+  for (const text of texts) {
+    const match = text.match(/target branch (?:to inspect|to verify)\s*:\s*`([^`\r\n]+)`/i)
+      || text.match(/\bTARGET_BRANCH=([^\s\r\n]+)/i);
+    const branch = (match?.[1] || '').trim();
+    if (!branch || branch.startsWith('-') || branch.includes('..') || /[\s~^:?*[\\]/.test(branch)) {
+      continue;
+    }
+    return branch;
+  }
+  return '';
 }
 
 async function prepareReportOnlyTargetBranch(taskDir, task) {
