@@ -25,6 +25,8 @@
         :width="56"
         :height="56"
         decoding="async"
+        draggable="false"
+        @dragstart.prevent
       />
     </span>
     <span class="butler-ball__label">小C助理</span>
@@ -203,6 +205,8 @@ onBeforeUnmount(() => {
   cursor: grab;
   touch-action: none;
   backdrop-filter: none;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
     transform 180ms ease,
     opacity 180ms ease;
@@ -257,6 +261,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   flex: 0 0 auto;
   transition: transform 180ms ease, box-shadow 180ms ease;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .butler-ball__logo {
@@ -266,6 +272,9 @@ onBeforeUnmount(() => {
   object-position: 50% 37%;
   transform: scale(1.08);
   display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .butler-ball__label {
