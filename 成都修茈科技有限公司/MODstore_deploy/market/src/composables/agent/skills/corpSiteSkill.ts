@@ -20,7 +20,7 @@ function pageHintForPath(path: string): string {
   if (pageId === 'news') return '您正在新闻资讯页，可查看公司动态与行业观察。'
   if (pageId === 'honors') return '您正在资质与能力页，了解研发、交付与安全服务机制。'
   if (pageId === 'excel-to-ai') return '您正在 Excel 体验工具页，可上传表格试识别；完整能力见产品中心。'
-  if (pageId === 'home') return '您正在官网首页，可了解产品矩阵并进入 AI 市场或预约沟通。'
+  if (pageId === 'home') return '您正在官网首页，可了解 XCAGI 桌面与行业 Mod，并进入下载或预约沟通。'
   return `您正在「${page.title.replace(/\s*\|.*/, '')}」。${page.summary}`
 }
 

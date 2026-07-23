@@ -413,15 +413,18 @@
     el.innerHTML =
       '<ol class="hall-timeline">' +
       feed
-        .map(function (f) {
+        .map(function (f, idx) {
           var stamp = fmtFeedStamp(f)
+          var preview = String(f.text || '')
+          var detail = String(f.detail || f.text || '')
+          var hasMore = detail.length > preview.length || preview.indexOf('…') >= 0
           return (
             '<li class="hall-timeline-item hall-timeline-item--' +
             esc(f.presence || 'idle') +
             '">' +
-            '<a href="' +
-            esc(f.href || '/world-will') +
-            '">' +
+            '<button type="button" class="hall-timeline-btn" data-feed-idx="' +
+            idx +
+            '" aria-label="查看动态详情">' +
             '<time' +
             (stamp.datetime ? ' datetime="' + esc(stamp.datetime) + '"' : '') +
             ' title="' +
@@ -443,12 +446,70 @@
             esc(f.status_label || presenceLabel(f.presence)) +
             '</span>' +
             '<p>' +
-            esc(f.text || '') +
-            '</p></div></a></li>'
+            esc(preview) +
+            '</p>' +
+            '<span class="hall-feed-more">' +
+            (hasMore ? '查看全文' : '查看详情') +
+            '</span></div></button></li>'
           )
         })
         .join('') +
       '</ol>'
+
+    if (!el._feedBound) {
+      el._feedBound = true
+      el.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('[data-feed-idx]') : null
+        if (!btn || !el.contains(btn)) return
+        var idx = Number(btn.getAttribute('data-feed-idx'))
+        var list = filteredFeed((STATE.data && STATE.data.feed) || [])
+        var item = list[idx]
+        if (!item) return
+        openFeedDetail(item)
+      })
+    }
+  }
+
+  function openFeedDetail(item) {
+    var panel = document.getElementById('hall-feed-detail')
+    if (!panel) return
+    var stamp = fmtFeedStamp(item)
+    var body = String(item.detail || item.text || '（暂无公开摘要）')
+    var href = String(item.href || '').trim()
+    var linkHtml = ''
+    if (href && href !== '/world-will' && href !== '/world-will.html') {
+      linkHtml =
+        '<p class="hall-feed-detail-link"><a href="' +
+        esc(href) +
+        '">打开关联看板 →</a></p>'
+    }
+    panel.hidden = false
+    panel.innerHTML =
+      '<div class="hall-detail-head" style="--dept:' +
+      esc(item.dept_color || '#94a3b8') +
+      '"><h2>动态详情</h2>' +
+      '<button type="button" class="hall-close" id="hall-feed-close">收起</button></div>' +
+      '<p class="hall-feed-detail-meta">' +
+      esc(stamp.title || stamp.day + ' ' + stamp.clock) +
+      ' · ' +
+      esc(item.dept_label || '') +
+      ' · ' +
+      esc(item.employee_name || '') +
+      ' · ' +
+      esc(item.status_label || presenceLabel(item.presence)) +
+      '</p>' +
+      '<p class="hall-feed-detail-body">' +
+      esc(body) +
+      '</p>' +
+      linkHtml
+    var close = document.getElementById('hall-feed-close')
+    if (close) {
+      close.addEventListener('click', function () {
+        panel.hidden = true
+        panel.innerHTML = ''
+      })
+    }
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
   function renderBoardLists(data) {

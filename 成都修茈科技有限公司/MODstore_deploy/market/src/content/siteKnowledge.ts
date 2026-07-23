@@ -59,14 +59,14 @@ const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
     title: '成都修茈科技有限公司 | XCAGI 企业 AI 自动化',
     description:
       '成都修茈科技有限公司专注 AI 单据智能处理、Excel 识别、标签打印、出货收货管理和企业流程自动化，帮助中小企业把业务数据真正跑起来。',
-    welcomeTitle: 'Hi，想了解修茈能帮您做什么？',
-    welcomeDesc: '我可以介绍产品矩阵，并引导您查看行业方案、客户案例或预约沟通。',
+    welcomeTitle: 'Hi，想了解 XCAGI 能帮您做什么？',
+    welcomeDesc: '我可以介绍 XCAGI 桌面、行业 Mod，并引导您下载试用、查看方案或预约沟通。',
     summary:
-      '官网首页展示修茈科技产品矩阵：AI Excel 单据识别、标签打印与库存记录、MODstore 智能体市场，以及制造、园区、教育等场景案例入口。',
-    highlights: ['AI Excel Helper 单据识别', '标签打印与收发货记录', 'MODstore AI 工作台', '预约方案沟通'],
+      '首页主推 XCAGI AI 员工桌面：安装行业 Mod，用对话下达目标，AI 员工自动拆解协作，交付可复核的业务成果。',
+    highlights: ['行业 Mod 即装即用', '任务过程全程留痕', '结果可人工复核', '下载 XCAGI'],
     quickActions: [
-      { label: '介绍产品矩阵', message: '你们有哪些产品？' },
-      { label: '查看行业解决方案', message: '有哪些行业解决方案？' },
+      { label: '介绍 XCAGI', message: 'XCAGI 是什么？能做什么？' },
+      { label: '如何下载', message: '怎么下载 XCAGI？' },
       { label: '看看客户案例', message: '有哪些客户案例？' },
       CORP_CONTACT_NAV,
       CORP_MARKET_NAV,
