@@ -91,6 +91,56 @@ class InternalPaymentControllerTest {
         assertEquals("catalog:customer-value-pack@1.2.3", row.get("fulfillment_artifact_id"));
         assertEquals("a".repeat(64), row.get("fulfillment_artifact_sha256"));
         assertEquals("2026-07-22T12:05:00Z", row.get("fulfilled_at"));
+        assertEquals(false, row.get("acceptance_verified"));
+        assertEquals("", row.get("accepted_at"));
+        assertTrue(row.keySet().stream().noneMatch(key -> key.contains("user")));
+        assertTrue(row.keySet().stream().noneMatch(key -> key.contains("buyer")));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void valueEvidenceExportsPlanActivationAndObservedUsageWithoutCustomerIdentity() {
+        Order order = new Order();
+        order.setOutTradeNo("customer-plan-order-001");
+        order.setStatus("paid");
+        order.setSubject("Customer plan");
+        order.setOrderKind("plan");
+        order.setPlanId("pro");
+        order.setTotalAmount(new BigDecimal("19.90"));
+        order.setPaidAt(LocalDateTime.of(2026, 7, 22, 20, 0));
+        order.setPayType("page");
+        order.setTradeNo("provider-plan-trade-001");
+        order.setRefundStatus("none");
+        order.setFulfilled(true);
+        when(orderService.getCustomerValueFulfillmentEvidence(order)).thenReturn(Map.of(
+                "verified", true,
+                "reason", "verified",
+                "artifact_id", "service-plan:pro@0123456789abcdef",
+                "artifact_sha256", "b".repeat(64),
+                "artifact_kind", "service_plan_activation",
+                "fulfilled_at", LocalDateTime.of(2026, 7, 22, 20, 5),
+                "acceptance_verified", true,
+                "acceptance_reason", "verified_plan_usage",
+                "accepted_at", LocalDateTime.of(2026, 7, 22, 20, 30)
+        ));
+        when(orderService.findPaidValueEvidenceSince(any(), eq(1000), eq(0)))
+                .thenReturn(List.of(order));
+        when(orderService.countPaidValueEvidenceSince(any())).thenReturn(1L);
+
+        Map<String, Object> result = controller.valueEvidence(
+                "test-internal-key",
+                90,
+                1000,
+                0
+        );
+        Map<String, Object> row = ((List<Map<String, Object>>) result.get("orders")).get(0);
+
+        assertEquals("plan", row.get("order_kind"));
+        assertEquals("pro", row.get("plan_id"));
+        assertEquals("service_plan_activation", row.get("fulfillment_artifact_kind"));
+        assertEquals(true, row.get("acceptance_verified"));
+        assertEquals("verified_plan_usage", row.get("acceptance_reason"));
+        assertEquals("2026-07-22T12:30:00Z", row.get("accepted_at"));
         assertTrue(row.keySet().stream().noneMatch(key -> key.contains("user")));
         assertTrue(row.keySet().stream().noneMatch(key -> key.contains("buyer")));
     }
