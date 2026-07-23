@@ -416,8 +416,6 @@
         .map(function (f, idx) {
           var stamp = fmtFeedStamp(f)
           var preview = String(f.text || '')
-          var detail = String(f.detail || f.text || '')
-          var hasMore = detail.length > preview.length || preview.indexOf('…') >= 0
           return (
             '<li class="hall-timeline-item hall-timeline-item--' +
             esc(f.presence || 'idle') +
@@ -448,9 +446,7 @@
             '<p>' +
             esc(preview) +
             '</p>' +
-            '<span class="hall-feed-more">' +
-            (hasMore ? '查看全文' : '查看详情') +
-            '</span></div></button></li>'
+            '<span class="hall-feed-more">查看详情</span></div></button></li>'
           )
         })
         .join('') +
@@ -476,6 +472,10 @@
     var stamp = fmtFeedStamp(item)
     var body = String(item.detail || item.text || '（暂无公开摘要）')
     var href = String(item.href || '').trim()
+    var truncated =
+      item.detail_truncated === true ||
+      /…$/.test(body) ||
+      String(item.source || '') === 'execution_metric'
     var linkHtml = ''
     if (href && href !== '/world-will' && href !== '/world-will.html') {
       linkHtml =
@@ -483,6 +483,9 @@
         esc(href) +
         '">打开关联看板 →</a></p>'
     }
+    var noteHtml = truncated
+      ? '<p class="hall-feed-detail-note">这不是完整任务原文。公开执行指标仅保留约 128 字任务摘要；内部提示词与完整执行日志不在官网展示。</p>'
+      : ''
     panel.hidden = false
     panel.innerHTML =
       '<div class="hall-detail-head" style="--dept:' +
@@ -501,6 +504,7 @@
       '<p class="hall-feed-detail-body">' +
       esc(body) +
       '</p>' +
+      noteHtml +
       linkHtml
     var close = document.getElementById('hall-feed-close')
     if (close) {
