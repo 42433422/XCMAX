@@ -2,6 +2,7 @@
   "id": "pilot-low-risk-clerk",
   "name": "pilot-low-risk-clerk",
   "version": "1.0.0",
+  "source_schema_version": 1,
   "artifact": "employee_pack",
   "scope": "global",
   "department": "engineering",

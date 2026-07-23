@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,7 @@ import pytest
 
 from modstore_server.build_employee_pack import (
     PackSchemaError,
+    _get_commit_diff_files,
     build_pack_from_commit,
     build_xcemp_archive,
     register_in_packages_json,
@@ -44,6 +46,19 @@ def test_validate_pack_schema_passes_valid_pack(tmp_path):
     pack_dir = _make_pack_files(tmp_path)
     manifest = json.loads((pack_dir / "manifest.json").read_text(encoding="utf-8"))
     validate_pack_schema(manifest)  # 不抛异常即通过
+
+
+def test_commit_diff_preserves_unicode_paths(tmp_path):
+    changed = (
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/"
+        "pilot-low-risk-clerk@1.0.0/manifest.json"
+    )
+    completed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=(changed + "\0").encode("utf-8"), stderr=b""
+    )
+    with patch("modstore_server.build_employee_pack.subprocess.run", return_value=completed) as run:
+        assert _get_commit_diff_files(commit_sha="abc123", repo_root=tmp_path) == [changed]
+    assert "-z" in run.call_args.args[0]
 
 
 def test_validate_pack_schema_rejects_missing_field(tmp_path):
