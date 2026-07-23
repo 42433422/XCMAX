@@ -1,7 +1,7 @@
 {
   "id": "ecosystem-joint-catalog-officer",
   "name": "联合 Catalog 策展员",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "admin",
   "description": "O-B B2 生态联合 SKU · MODstore catalog 扩展 · 伙伴商品挂载与可见性策略。",
   "artifact": "employee_pack",
@@ -30,7 +30,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "ecosystem-joint-catalog-officer",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "artifact": "employee_pack",
       "name": "联合 Catalog 策展员",
       "description": "O-B B2 生态联合 SKU · MODstore catalog 扩展 · 伙伴商品挂载与可见性策略。",
@@ -98,13 +98,33 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "agent"
-      ],
-      "agent": {
-        "workspace": {
-          "requires_project_root": true,
-          "read_only": false
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "ecosystem_joint_catalog_officer",
+        "action": "compare_catalogs",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["primary_catalog", "partner_catalog"],
+          "properties": {
+            "primary_catalog": {"type": "array"},
+            "partner_catalog": {"type": "array"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "consistent", "differences", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "primary_catalog": [{"id": "partner-pack", "version": "1.0.0", "status": "listed"}],
+          "partner_catalog": [{"id": "partner-pack", "version": "1.0.0", "status": "listed"}]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
         }
       }
     },

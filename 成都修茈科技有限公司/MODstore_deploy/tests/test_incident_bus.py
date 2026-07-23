@@ -99,6 +99,109 @@ def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, m
     assert calls["n"] == 0
 
 
+def test_successful_task_event_only_dispatches_explicit_subscription(fresh_db, monkeypatch):
+    sf = models.get_session_factory()
+    with sf() as s:
+        s.add(
+            models.User(
+                username="binding_admin",
+                password_hash="x",
+                email="binding@example.com",
+                is_admin=True,
+            )
+        )
+        s.add(
+            models.CatalogItem(
+                pkg_id="employee-planner",
+                version="1.0.0",
+                name="Planner",
+                artifact="employee_pack",
+            )
+        )
+        s.add(
+            models.EmployeeTriggerBinding(
+                employee_id="employee-planner",
+                event_type="employee.task.done:intent-analyst",
+                is_active=True,
+                priority=1,
+            )
+        )
+        s.commit()
+
+    generic_calls = {"orchestrator": 0, "team": 0, "market": 0}
+    employee_calls: list[str] = []
+
+    def fail_generic(kind):
+        def _fail(*_args, **_kwargs):
+            generic_calls[kind] += 1
+            raise AssertionError(f"successful lifecycle event reached {kind}")
+
+        return _fail
+
+    monkeypatch.setattr(
+        "modstore_server.unified_autonomy_orchestrator.orchestrate_incident",
+        fail_generic("orchestrator"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator.dispatch_incident_team",
+        fail_generic("team"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_task_market.dispatch_incident_via_market",
+        fail_generic("market"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.execute_employee_task",
+        lambda employee_id, *_args, **_kwargs: employee_calls.append(employee_id) or {"ok": True},
+    )
+    monkeypatch.setattr(
+        "modstore_server.node_coordinator.claim_incident_for_node",
+        lambda _event_id: {"claimed": True},
+    )
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
+
+    assert publish(
+        "employee.task.done",
+        {"summary": "intent analysis completed", "execution_status": "success"},
+        source="intent-analyst",
+    )
+
+    assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
+    assert employee_calls == ["employee-planner"]
+
+
+def test_successful_task_event_without_subscription_is_record_only(fresh_db, monkeypatch):
+    sf = models.get_session_factory()
+    with sf() as s:
+        s.add(
+            models.User(
+                username="record_admin",
+                password_hash="x",
+                email="record@example.com",
+                is_admin=True,
+            )
+        )
+        s.commit()
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.execute_employee_task",
+        lambda employee_id, *_args, **_kwargs: calls.append(employee_id) or {"ok": True},
+    )
+    monkeypatch.setattr(
+        "modstore_server.node_coordinator.claim_incident_for_node",
+        lambda _event_id: {"claimed": True},
+    )
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
+
+    assert publish(
+        "employee.task.done",
+        {"summary": "quality validation completed", "execution_status": "success"},
+        source="quality-validator",
+    )
+    assert calls == []
+
+
 def test_sync_employee_trigger_bindings_from_yuangon(fresh_db):
     y = fresh_db / "yuangon" / "g" / "e"
     y.mkdir(parents=True)

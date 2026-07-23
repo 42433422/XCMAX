@@ -241,7 +241,10 @@ def assess_burn_in_eligibility(
     risk = str(contract.get("risk_level") or "").strip().lower()
     low_or_read_only_risk = risk in {"low", "read_only", "readonly"}
     prohibited_reason = _prohibited_contract_reason(
-        {**contract, "employee_id": str(employee_id or contract.get("employee_id") or "")}
+        {
+            **contract,
+            "employee_id": str(employee_id or contract.get("employee_id") or ""),
+        }
     )
     try:
         handlers = _extract_handlers(manifest)
@@ -388,6 +391,48 @@ def _recent_attempt_ids(cooldown_hours: int, now: datetime) -> set[str]:
     return {str(row[0]) for row in rows if str(row[0] or "").strip()}
 
 
+def _recent_attempt_manifest_shas(cooldown_hours: int, now: datetime) -> Dict[str, set[str]]:
+    """Return manifest identities attempted during the cooldown window.
+
+    A repaired capability must be eligible for immediate strict re-validation;
+    otherwise the learning loop discovers a gap, ships a new handler, and then
+    waits hours before it can prove the repair.  Missing or legacy audit
+    identity remains fail-closed in ``build_burn_in_plan``.
+    """
+
+    path = burn_in_audit_path()
+    if not path.is_file():
+        return {}
+    cutoff = now.astimezone(timezone.utc) - timedelta(hours=max(1, cooldown_hours))
+    result: Dict[str, set[str]] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()[-5000:]
+    except OSError:
+        return {}
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict) or row.get("record_type") == "run_summary":
+            continue
+        employee_id = str(row.get("employee_id") or "").strip()
+        manifest_sha = str(row.get("manifest_sha256") or "").strip().lower()
+        recorded_raw = str(row.get("recorded_at") or "").strip()
+        if not employee_id or len(manifest_sha) != 64 or not recorded_raw:
+            continue
+        try:
+            recorded_at = datetime.fromisoformat(recorded_raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if recorded_at.tzinfo is None:
+            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+        if recorded_at.astimezone(timezone.utc) < cutoff:
+            continue
+        result.setdefault(employee_id, set()).add(manifest_sha)
+    return result
+
+
 def _load_manifest(employee_id: str) -> Dict[str, Any]:
     return load_reviewed_duty_manifest(employee_id)
 
@@ -429,6 +474,7 @@ def build_burn_in_plan(
     _manifests: Optional[Dict[str, Dict[str, Any]]] = None,
     _proven_ids: Optional[Iterable[str]] = None,
     _recent_ids: Optional[Iterable[str]] = None,
+    _recent_manifest_shas: Optional[Dict[str, Iterable[str]]] = None,
 ) -> Dict[str, Any]:
     """Build a dry plan without invoking an employee or producing a receipt."""
 
@@ -449,6 +495,14 @@ def build_burn_in_plan(
         if _recent_ids is not None
         else _recent_attempt_ids(limits["cooldown_hours"], observed_at)
     )
+    recent_manifest_shas = (
+        {
+            str(employee_id): {str(value).strip().lower() for value in values if str(value).strip()}
+            for employee_id, values in _recent_manifest_shas.items()
+        }
+        if _recent_manifest_shas is not None
+        else _recent_attempt_manifest_shas(limits["cooldown_hours"], observed_at)
+    )
     manifests = _manifests or {}
     candidates: list[Dict[str, Any]] = []
     skipped: list[Dict[str, str]] = []
@@ -458,9 +512,6 @@ def build_burn_in_plan(
         contract.setdefault("employee_id", employee_id)
         if employee_id in proven:
             skipped.append({"employee_id": employee_id, "reason": "fresh_receipt_exists"})
-            continue
-        if employee_id in recent:
-            skipped.append({"employee_id": employee_id, "reason": "attempt_cooldown"})
             continue
         try:
             manifest = manifests.get(employee_id) or _load_manifest(employee_id)
@@ -472,10 +523,22 @@ def build_burn_in_plan(
                 }
             )
             continue
+        manifest_sha256 = _payload_sha256(manifest)
+        if employee_id in recent:
+            attempted_shas = recent_manifest_shas.get(employee_id) or set()
+            # A legacy attempt without a recorded manifest remains blocked.
+            # An exact repeat also remains blocked; only a different reviewed
+            # manifest proves that there is new code worth re-validating.
+            if not attempted_shas or manifest_sha256 in attempted_shas:
+                skipped.append({"employee_id": employee_id, "reason": "attempt_cooldown"})
+                continue
         eligibility = assess_burn_in_eligibility(employee_id, contract, manifest)
         if eligibility.get("eligible") is not True:
             skipped.append(
-                {"employee_id": employee_id, "reason": str(eligibility.get("reason") or "blocked")}
+                {
+                    "employee_id": employee_id,
+                    "reason": str(eligibility.get("reason") or "blocked"),
+                }
             )
             continue
         candidates.append(
@@ -488,7 +551,7 @@ def build_burn_in_plan(
                 "handlers": list(eligibility.get("handlers") or []),
                 "capability_handlers": list(eligibility.get("capability_handlers") or []),
                 "manifest_source": "reviewed_duty_ssot",
-                "manifest_sha256": _payload_sha256(manifest),
+                "manifest_sha256": manifest_sha256,
                 "contract_sha256": _payload_sha256(contract),
                 "forced_read_only": True,
                 "burn_in_fixture": dict(eligibility.get("burn_in_fixture") or {}),
@@ -797,7 +860,12 @@ def run_burn_in(
             "blocked_reason": "MODSTORE_EMPLOYEE_BURN_IN_ENABLED is not enabled",
         }
     if not _run_lock.acquire(blocking=False):
-        return {**plan, "dry_run": False, "executed": False, "reason": "already_running"}
+        return {
+            **plan,
+            "dry_run": False,
+            "executed": False,
+            "reason": "already_running",
+        }
 
     lingering = _lingering_execution_count()
     if lingering:
@@ -895,7 +963,11 @@ def run_burn_in(
         "accepted_receipt_count": accepted,
         "rejected_or_failed_count": len(results) - accepted,
         "results": sorted(results, key=lambda item: str(item.get("employee_id") or "")),
-        "limits": {**limits, "timeout_seconds": timeout, "max_concurrency": concurrency},
+        "limits": {
+            **limits,
+            "timeout_seconds": timeout,
+            "max_concurrency": concurrency,
+        },
         "audit_path": str(burn_in_audit_path()),
     }
     _append_audit(
