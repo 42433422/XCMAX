@@ -633,7 +633,8 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         emp = by_emp.get(eid) or {}
         mood = "alert" if str(met.get("last_status")) != "success" else "idle"
         occurred_at = _feed_occurred_at(raw=met.get("last_at"))
-        summary, detail = _publicize_feed_text(str(met.get("last_task") or ""))
+        raw_task = str(met.get("last_task") or "")
+        summary, detail = _publicize_feed_text(raw_task)
         feed.append(
             {
                 "ts": (occurred_at[11:16] if occurred_at else "—"),
@@ -649,6 +650,8 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 "status_label": "执行失败" if mood == "alert" else "最近执行",
                 "text": summary,
                 "detail": detail,
+                # 执行指标 task 列为 VARCHAR(128)，入库即截断；官网只能展示摘要
+                "detail_truncated": True,
                 "href": "",
                 "source": "execution_metric",
             }
