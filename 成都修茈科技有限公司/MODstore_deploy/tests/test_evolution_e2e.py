@@ -132,12 +132,16 @@ def test_e2e_full_loop_with_mock_llm(tmp_path, monkeypatch):
     catalog_path.write_text(json.dumps({"schema": 1, "packages": []}), encoding="utf-8")
     files_root = tmp_path / "catalog_data" / "files"
     files_root.mkdir(parents=True, exist_ok=True)
+    deployed_source_dir = files_root / pack_id
+    deployed_source_dir.mkdir()
+    for source in pack_src_dir.iterdir():
+        (deployed_source_dir / source.name).write_bytes(source.read_bytes())
     monkeypatch.setenv("MODSTORE_CATALOG_PACKAGES_PATH", str(catalog_path))
     monkeypatch.setenv("MODSTORE_CATALOG_FILES_ROOT", str(files_root))
 
     # ---- 7. mock git diff / read_pack_file / evaluate_employee_pack ----
     diff_files = [
-        f"成都修茈科技有限公司/MODstore_deploy/catalog_data/files/{pack_id}/{f.name}"
+        f"成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/{pack_id}/{f.name}"
         for f in pack_src_dir.iterdir()
     ]
 
@@ -169,7 +173,7 @@ def test_e2e_full_loop_with_mock_llm(tmp_path, monkeypatch):
     # catalog_data/packages.json 注册了新 pack
     catalog_data = json.loads(catalog_path.read_text(encoding="utf-8"))
     assert len(catalog_data["packages"]) == 1
-    assert catalog_data["packages"][0]["id"] == pack_id
+    assert catalog_data["packages"][0]["id"] == "intent-clerk"
 
     # ledger 末尾是 pack_built 事件
     all_events = list_events()
