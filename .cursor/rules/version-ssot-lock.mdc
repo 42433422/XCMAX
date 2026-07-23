@@ -1,0 +1,26 @@
+---
+description: 全产品线版本以 FHD/VERSION.md 为唯一 SSOT，按锚点动态同步与校验
+alwaysApply: true
+---
+
+# 版本 SSOT（动态锚点）
+
+唯一数字 SSOT：[`FHD/VERSION.md`](../../FHD/VERSION.md)。
+
+当前对外稳定产品版本、工具链三段映射，以及「必须同步的锚点」表，**一律以该文件为准动态读取**；规则、脚本、Agent 说明中不得再写死某一代版本号（如历史 `10.0.0` 或某一固定 `x.y.z.w`）当作现行口径。
+
+## 约束
+
+- 禁止只改单端 `package.json` / `pyproject.toml` / Gradle / OpenAPI 等版本字段。
+- 变更出口：先改 `FHD/VERSION.md`，再同步全部锚点。
+- 历史制品、CHANGELOG、证据目录中的旧版本事实不回写、不伪造为新发布。
+- 新制品版本必须等于 SSOT 中的稳定产品版本（或工具链等价三段映射），不得沿用已退役口径。
+
+## 发版前必跑
+
+```bash
+python3 FHD/scripts/dev/version_sync.py --apply
+python3 FHD/scripts/dev/verify_version_anchors.py
+```
+
+`verify_version_anchors.py` / `version_sync.py` 从 `VERSION.md` 解析 product / toolchain，再与锚点列表对齐；Agent 需要版本数字时也应读该文件或跑上述脚本，不要臆造。
