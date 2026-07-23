@@ -12,8 +12,12 @@ from modstore_server.integrations.ops_action_handlers import repo_root
 logger = logging.getLogger(__name__)
 
 _LAST_FAIL_SNAPSHOT: str | None = None
-_LAST_NGINX_TAIL_HASH: str | None = None
+_LAST_NGINX_FILE_ID: tuple[int, int] | None = None
+_LAST_NGINX_OFFSET: int | None = None
 _LAST_CURSOR_SNIP_HASH: str | None = None
+
+_NGINX_ERROR_LEVELS = ("[error]", "[crit]", "[alert]", "[emerg]")
+_NGINX_MAX_NEW_BYTES = 256 * 1024
 
 
 def collect_pytest_failures() -> bool:
@@ -41,30 +45,57 @@ def collect_pytest_failures() -> bool:
 
 
 def collect_nginx_error_tail() -> bool:
-    """Nginx error.log 尾部变化且含 error → ``on_error``。"""
-    global _LAST_NGINX_TAIL_HASH
+    """Nginx error.log 新增严重错误行 → ``on_error``。
+
+    首次启动以及日志轮转/截断后只记录当前位置，避免把历史错误重复派发为新事故。
+    """
+    global _LAST_NGINX_FILE_ID, _LAST_NGINX_OFFSET
     log_path = os.environ.get("OPS_NGINX_ERROR_LOG", "").strip() or "/var/log/nginx/error.log"
     p = Path(log_path)
     if not p.is_file():
         return False
     try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-        tail = "".join(text.splitlines(True)[-120:])
+        with p.open("rb") as fh:
+            stat = os.fstat(fh.fileno())
+            file_id = (int(stat.st_dev), int(stat.st_ino))
+            size = int(stat.st_size)
+
+            if (
+                _LAST_NGINX_FILE_ID is None
+                or _LAST_NGINX_OFFSET is None
+                or file_id != _LAST_NGINX_FILE_ID
+                or size < _LAST_NGINX_OFFSET
+            ):
+                _LAST_NGINX_FILE_ID = file_id
+                _LAST_NGINX_OFFSET = size
+                return False
+
+            if size == _LAST_NGINX_OFFSET:
+                return False
+
+            start = max(_LAST_NGINX_OFFSET, size - _NGINX_MAX_NEW_BYTES)
+            fh.seek(start)
+            new_bytes = fh.read(size - start)
     except OSError:
         return False
-    h = str(hash(tail))
-    if h == _LAST_NGINX_TAIL_HASH:
+
+    _LAST_NGINX_FILE_ID = file_id
+    _LAST_NGINX_OFFSET = size
+    new_text = new_bytes.decode("utf-8", errors="replace")
+    error_lines = [
+        line
+        for line in new_text.splitlines()
+        if any(level in line.lower() for level in _NGINX_ERROR_LEVELS)
+    ]
+    if not error_lines:
         return False
-    if "error" not in tail.lower():
-        _LAST_NGINX_TAIL_HASH = h
-        return False
-    _LAST_NGINX_TAIL_HASH = h
+    snippet = "\n".join(error_lines[-20:])[-2000:]
     return publish(
         "on_error",
         {
-            "summary": "nginx error.log 尾部含 error",
+            "summary": "nginx error.log 出现新增严重错误",
             "path": str(p),
-            "snippet": tail[:2000],
+            "snippet": snippet,
         },
         source="nginx_error_log",
     )
