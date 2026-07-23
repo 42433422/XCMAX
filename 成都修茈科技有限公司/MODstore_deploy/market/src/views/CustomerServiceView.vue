@@ -3,11 +3,11 @@
     <header class="cs-head">
       <div class="cs-head__main">
         <h1>AI 客服</h1>
-        <p>投诉退款、上架合规、账号权益 — 自动受理并生成工单与审计记录</p>
+        <p>先对话识别意图；退款/投诉等业务或你说「提交工单」时再自动建单</p>
       </div>
       <div class="cs-head__meta">
-        <span class="cs-pill">全自动</span>
-        <span class="cs-pill cs-pill--soft">高风险留痕审核</span>
+        <span class="cs-pill">意图识别</span>
+        <span class="cs-pill cs-pill--soft">按需建单</span>
       </div>
     </header>
 
@@ -35,7 +35,7 @@
           </article>
 
           <div v-if="messages.length === 0" class="cs-empty">
-            <p class="cs-empty__title">描述你的问题，AI 会识别场景并建工单</p>
+            <p class="cs-empty__title">先描述问题，AI 会识别意图；需要受理时再建工单</p>
             <div class="cs-chips">
               <button
                 v-for="chip in quickPrompts"
@@ -73,7 +73,7 @@
             <h3>最近工单</h3>
             <button type="button" class="cs-link" @click="loadTickets">刷新</button>
           </div>
-          <div v-if="tickets.length === 0" class="cs-side-empty">暂无工单，发送消息后会出现在这里</div>
+          <div v-if="tickets.length === 0" class="cs-side-empty">暂无工单；普通咨询不会自动建单</div>
           <div v-else class="cs-side-list">
             <button
               v-for="ticket in tickets"
@@ -130,6 +130,7 @@ const standards = ref<any[]>([])
 const messagesEl = ref<HTMLElement | null>(null)
 
 const quickPrompts = [
+  '你好，想了解一下会员怎么买',
   '订单号 RF123456 想退款，原因是重复购买',
   '商品 ID 12 疑似抄袭，需要投诉',
   '账号权益未到账，请核查开通状态',
@@ -154,6 +155,7 @@ function queryContext() {
   const q = route.query || {}
   return {
     channel: 'web',
+    scene: q.scene || undefined,
     order_no: q.order_no || undefined,
     catalog_id: q.catalog_id ? Number(q.catalog_id) : undefined,
     pkg_id: q.pkg_id || undefined,
@@ -210,7 +212,9 @@ async function send() {
       content: String(res?.message?.content || '已处理。'),
       cards: Array.isArray(res?.cards) ? res.cards : [],
     })
-    await loadTickets()
+    if (res?.ticket) {
+      await loadTickets()
+    }
     await scrollMessagesToEnd()
   } catch (e: any) {
     error.value = e?.message || 'AI 客服处理失败'
