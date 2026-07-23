@@ -1370,16 +1370,21 @@ export const legacyApi = {
       body: JSON.stringify(payload),
       timeoutMs: 30_000,
     }),
-  customerServiceSessions: () => req('/api/customer-service/sessions'),
+  customerServiceSessions: () => req('/api/customer-service/sessions', { timeoutMs: 15_000 }),
   customerServiceSessionDetail: (id: number | string) =>
-    req(`/api/customer-service/sessions/${encodeURIComponent(String(id))}`),
+    req(`/api/customer-service/sessions/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
   customerServiceTickets: (status = '') =>
-    req(`/api/customer-service/tickets${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    req(`/api/customer-service/tickets${status ? `?status=${encodeURIComponent(status)}` : ''}`, {
+      timeoutMs: 15_000,
+    }),
   customerServiceTicketDetail: (id: number | string) =>
-    req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`),
+    req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
   customerServiceActions: (ticketId?: number | string) =>
-    req(`/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`),
-  customerServiceStandards: () => req('/api/customer-service/standards'),
+    req(
+      `/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`,
+      { timeoutMs: 15_000 },
+    ),
+  customerServiceStandards: () => req('/api/customer-service/standards', { timeoutMs: 15_000 }),
   customerServiceCreateStandard: (payload: unknown) =>
     req('/api/customer-service/standards', { method: 'POST', body: JSON.stringify(payload || {}) }),
   customerServiceUpdateStandard: (id: number | string, payload: unknown) =>

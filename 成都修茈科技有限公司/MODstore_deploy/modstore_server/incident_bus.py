@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -185,10 +186,29 @@ def publish(
                 )
         except Exception:
             logger.exception("consistency_check.completed autofix trigger failed")
-    try:
-        _dispatch_incident(eid)
-    except Exception:  # noqa: BLE001
-        logger.exception("dispatch incident id=%s failed", eid)
+    # 默认异步派发：同步跑员工编排/LLM 会拖死 HTTP（如 AI 客服 /chat → 处理中卡住）。
+    # 测试或显式需要可设 MODSTORE_INCIDENT_SYNC_DISPATCH=1。
+    sync_dispatch = (os.environ.get("MODSTORE_INCIDENT_SYNC_DISPATCH") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    def _run_dispatch() -> None:
+        try:
+            _dispatch_incident(eid)
+        except Exception:  # noqa: BLE001
+            logger.exception("dispatch incident id=%s failed", eid)
+
+    if sync_dispatch:
+        _run_dispatch()
+    else:
+        threading.Thread(
+            target=_run_dispatch,
+            daemon=True,
+            name=f"incident-dispatch-{eid}",
+        ).start()
     return True
 
 

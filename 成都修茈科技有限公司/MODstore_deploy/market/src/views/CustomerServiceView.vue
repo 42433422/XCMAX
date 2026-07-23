@@ -216,13 +216,14 @@ async function send() {
       content: String(res?.message?.content || '已处理。'),
       cards,
     })
+    // 先结束「处理中」，侧栏刷新失败/慢不得挡住对话
+    loading.value = false
     if (res?.ticket) {
-      await loadTickets()
+      void loadTickets()
     }
     await scrollMessagesToEnd()
   } catch (e: any) {
     error.value = e?.message || 'AI 客服处理失败'
-  } finally {
     loading.value = false
   }
 }
