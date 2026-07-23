@@ -174,6 +174,53 @@ def test_infer_intent_order_no_alone_is_not_refund():
     assert should_create_ticket("refund", "我要退款") is True
 
 
+def test_infer_intent_balance_is_account_support():
+    from modstore_server.customer_service_orchestrator import (
+        _human_kb_tips,
+        _xiaoc_general_reply,
+        infer_intent,
+        should_create_ticket,
+    )
+
+    assert infer_intent("我的余额不对", {}) == "account_support"
+    assert should_create_ticket("account_support", "我的余额不对") is True
+
+    dirty = (
+        '1. (hybrid) {"fields": [{"name": "template_name", "value": "发货模板"}]}\n'
+        "2. 会员开通后权益一般几分钟内到账。\n"
+    )
+    tips = _human_kb_tips(dirty)
+    assert tips == ["会员开通后权益一般几分钟内到账。"]
+    # 无可用自然语言摘录时，不应把脏结构拼进回复
+    assert _human_kb_tips('(hybrid) {"fields": []}') == []
+    _ = _xiaoc_general_reply
+
+
+def test_customer_service_balance_creates_account_ticket(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_bal")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r = client.post(
+            "/api/customer-service/chat",
+            json={"message": "我的余额不对", "context": {}},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ticket"]["intent"] == "account_support"
+        content = data["message"]["content"]
+        assert "小C" in content
+        assert "hybrid" not in content
+        assert "fields" not in content
+        assert "发货模板" not in content
+        assert "工单" in content
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
 def test_admin_can_manage_customer_service_standard(client):
     from modstore_server import customer_service_api
     from modstore_server.app import app

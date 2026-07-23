@@ -67,7 +67,7 @@ intent 只能是：greeting|general|refund|catalog_complaint|catalog_review|acco
 规则：
 - 寒暄/闲聊 → greeting，need_ticket=false
 - 产品咨询、怎么用、报价 FAQ → general，need_ticket=false
-- 明确退款/投诉/上架审核/账号权益核查/模型扩展申请 → 对应 intent，need_ticket=true
+- 明确退款/投诉/上架审核/账号权益/余额钱包/模型扩展申请 → 对应 intent，need_ticket=true
 - 用户要转人工或提交工单 → need_ticket=true（intent 仍按内容选，不清则 general）
 confidence 为 0~1。"""
 
@@ -432,7 +432,25 @@ def infer_intent(
         return "catalog_complaint"
     if any(word in text for word in ("上架", "审核", "合规", "下架")):
         return "catalog_review"
-    if any(word in text for word in ("账号", "会员", "权益", "额度", "登录")):
+    if any(
+        word in text
+        for word in (
+            "账号",
+            "会员",
+            "权益",
+            "额度",
+            "登录",
+            "余额",
+            "钱包",
+            "充值",
+            "到账",
+            "扣费",
+            "账单",
+            "消费记录",
+            "余额不对",
+            "余额有误",
+        )
+    ):
         return "account_support"
     if any(
         x in text
@@ -866,18 +884,53 @@ def _maybe_dispatch_employee_followup(
         return action
 
 
-def _xiaoc_general_reply(
-    user_text: str,
+_RAW_STRUCTURE_RE = re.compile(
+    r"(\(hybrid\)|\[hybrid\]|template_name|template_scope|\"fields\"\s*:|\{[\"']fields)",
+    re.I,
+)
+
+
+def _looks_like_raw_kb_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s:
+        return True
+    if _RAW_STRUCTURE_RE.search(s):
+        return True
+    if s.count("{") + s.count("}") >= 2:
+        return True
+    if s.startswith("【") and "摘录" in s:
+        return True
+    return False
+
+
+def _human_kb_tips(kb: str, *, limit: int = 3) -> list[str]:
+    """从知识库块里只取可读自然语言行，过滤模板/JSON 脏数据。"""
+    tips: list[str] = []
+    for raw in (kb or "").splitlines():
+        ln = raw.strip()
+        if not ln or _looks_like_raw_kb_line(ln):
+            continue
+        if re.match(r"^\d+[\.、]\s*", ln):
+            ln = re.sub(r"^\d+[\.、]\s*", "", ln)
+        if ". " in ln[:5]:
+            ln = ln.split(". ", 1)[-1].strip()
+        if len(ln) < 8 or _looks_like_raw_kb_line(ln):
+            continue
+        tips.append(ln[:120])
+        if len(tips) >= limit:
+            break
+    return tips
+
+
+def _display_name_for_user(
+    user: Optional[User],
     *,
-    user: Optional[User] = None,
     db: Optional[Session] = None,
-    ticketed: bool = False,
-) -> str:
-    """general 意图走小C SSOT（管理端知识库摘录 + 模板兜底）。"""
+) -> tuple[str, str]:
     address = ""
     member_hint = ""
     try:
-        from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query, resolve_user_identity
+        from modstore_server.xiaoc_cs_ssot import resolve_user_identity
 
         if user is not None:
             ident = resolve_user_identity(user, db=db, source="market_cs")
@@ -886,39 +939,45 @@ def _xiaoc_general_reply(
                 member_hint = f"（{ident.membership}）"
             elif ident.account_role == "admin":
                 member_hint = "（管理员）"
-        kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
     except Exception:  # noqa: BLE001
-        try:
-            from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query
+        pass
+    return address, member_hint
 
-            kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
-        except Exception:  # noqa: BLE001
-            return ""
+
+def _xiaoc_general_reply(
+    user_text: str,
+    *,
+    user: Optional[User] = None,
+    db: Optional[Session] = None,
+    ticketed: bool = False,
+) -> str:
+    """general 意图走小C SSOT；只输出可读话术，绝不把知识库原始结构甩给客户。"""
+    address, member_hint = _display_name_for_user(user, db=db)
     hello = (
         f"{address}{member_hint}，"
         if address and address not in {"用户", "访客", "匿名访客"}
         else ""
     )
-    if not kb:
-        if ticketed:
-            return (
-                f"我是小C。{hello}已为你登记工单；"
-                "你也可以继续补充材料，或去 /contact.html 留言。"
-            )
+    kb = ""
+    try:
+        from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query
+
+        kb = knowledge_block_for_query(user_text, top_k=4, mode="market_cs")
+    except Exception:  # noqa: BLE001
+        kb = ""
+    tips = _human_kb_tips(kb)
+    if tips:
+        body = "；".join(tips)
+        return f"我是小C。{hello}{body} 若还要补充，直接说具体场景就行。"
+    if ticketed:
         return (
-            f"我是小C。{hello}可以先直接问产品/报价/怎么上手；"
-            "需要正式受理时再说「提交工单」，或去 /contact.html 留言。"
+            f"我是小C。{hello}已为你登记工单；"
+            "你可以继续补充材料，我们会尽快处理。"
         )
-    # 有知识库时给出基于摘录的简短答复（规则引擎阶段不做二次 LLM，避免阻塞）
-    excerpt = kb.splitlines()
-    tips = [ln for ln in excerpt[1:4] if ln.strip()]
-    body = "；".join(t.split(". ", 1)[-1][:120] for t in tips) if tips else ""
-    if body:
-        return (
-            f"我是小C。{hello}根据管理端知识库：{body} "
-            "若还要细聊，可以说具体场景；需要建单时说「提交工单」。"
-        )
-    return ""
+    return (
+        f"我是小C。{hello}可以先说说你的具体问题，"
+        "比如购买、会员权益、订单或余额；需要正式受理时我会帮你建工单。"
+    )
 
 
 def build_reply(
@@ -928,13 +987,29 @@ def build_reply(
     actions: list[Any],
     extracted: Dict[str, Any],
 ) -> tuple[str, list[Dict[str, Any]]]:
-    if decision.decision == "needs_more_info":
-        reply = f"我已创建工单 {ticket.ticket_no}，但还需要补充材料：{decision.rationale}"
+    intent = ticket.intent or "general"
+    if intent == "account_support":
+        reply = (
+            f"我是小C。已收到你的账户/余额问题，并创建工单 {ticket.ticket_no}。"
+            "请补充：最近一次充值或扣费的时间、金额，或钱包页截图，方便尽快核查。"
+        )
+    elif decision.decision == "needs_more_info":
+        reply = (
+            f"我是小C。已创建工单 {ticket.ticket_no}，"
+            f"还需要你补充：{decision.rationale}"
+        )
     elif actions:
-        done = "、".join(f"{a.action_type}:{a.status}" for a in actions)
-        reply = f"我已按审核标准自动处理工单 {ticket.ticket_no}。执行结果：{done}。"
+        done = "、".join(
+            f"{getattr(a, 'action_type', '')}"
+            for a in actions
+            if getattr(a, "status", "") in {"completed", "skipped"}
+        )
+        if done:
+            reply = f"我是小C。工单 {ticket.ticket_no} 已自动受理，已执行：{done}。"
+        else:
+            reply = f"我是小C。工单 {ticket.ticket_no} 已受理，正在处理中。"
     else:
-        reply = f"我已受理工单 {ticket.ticket_no}，当前结论：{decision.rationale}"
+        reply = f"我是小C。已受理工单 {ticket.ticket_no}。{decision.rationale}"
     cards = [
         {
             "type": "ticket",
