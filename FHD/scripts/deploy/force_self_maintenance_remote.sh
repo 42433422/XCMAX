@@ -3,10 +3,29 @@
 # Production MODstore listens on :9999/:9990 (not :8788).
 set -euo pipefail
 FHD_PORT="${1:?fhd_port}"
-REASON="${2:?reason}"
-TOKEN="${3:-}"
+REASON_FILE="${2:?reason_file}"
+TOKEN_FILE="${3:-}"
 ADMIN_USER="${4:-admin}"
 ADMIN_PASS="${5:-admin123}"
+
+# Secrets and workflow-dispatch input must never be embedded in the SSH command
+# line.  The workflow uploads mode-0600 files with constrained names; consume
+# and remove them before starting the long-running loop.
+if [[ ! -r "$REASON_FILE" || "$REASON_FILE" != /tmp/xcmax-force-loop-*.reason ]]; then
+  echo "Invalid or unreadable reason file" >&2
+  exit 2
+fi
+REASON="$(<"$REASON_FILE")"
+TOKEN=""
+if [ -n "$TOKEN_FILE" ]; then
+  if [[ ! -r "$TOKEN_FILE" || "$TOKEN_FILE" != /tmp/xcmax-force-loop-*.token ]]; then
+    echo "Invalid or unreadable token file" >&2
+    exit 2
+  fi
+  TOKEN="$(<"$TOKEN_FILE")"
+fi
+rm -f -- "$REASON_FILE"
+[ -z "$TOKEN_FILE" ] || rm -f -- "$TOKEN_FILE"
 
 try_bases=(
   "http://127.0.0.1:9999"
@@ -110,12 +129,8 @@ if isinstance(result, dict):
     status = str(result.get("status") or "")
 elif isinstance(d, dict):
     status = str(d.get("status") or "")
-fail = {
-    "skipped_active_lease",
-    "skipped_runtime_provenance_blocked",
-    "disabled",
-}
-print("0" if status in fail else "1")
+success = status == "completed" or status.startswith("completed_")
+print("1" if success else "0")
 PY
 )"
   [[ "${ok_run}" == "1" ]]
@@ -176,12 +191,8 @@ result = run_self_maintenance_loop(
 )
 print(json.dumps(result, ensure_ascii=False, default=str)[:4000])
 status = str(result.get("status") or "")
-fail_statuses = {
-    "skipped_runtime_provenance_blocked",
-    "skipped_active_lease",
-    "disabled",
-}
-raise SystemExit(0 if status not in fail_statuses else 3)
+success = status == "completed" or status.startswith("completed_")
+raise SystemExit(0 if success else 3)
 PY
 }
 
@@ -191,6 +202,16 @@ preferred_http_bases=(
   "http://127.0.0.1:9990"
 )
 
+# Run outside the API worker first.  Self-maintenance can deploy and restart
+# MODstore; an HTTP request hosted by that same service would be terminated in
+# the middle of its own deployment and then retried as a duplicate run.
+echo "Trying in-process loop with live production env first"
+if run_inprocess_with_live_env; then
+  echo "Loop force-run via in-process python succeeded"
+  exit 0
+fi
+
+echo "In-process force-run unavailable; trying authenticated HTTP fallbacks"
 if choose_base_via_http; then
   echo "Using base=${CHOSEN_BASE}"
   head -c 1200 /tmp/ms-status.json || true
@@ -210,12 +231,6 @@ for base in "${preferred_http_bases[@]}"; do
     exit 0
   fi
 done
-
-echo "HTTP /run unavailable; falling back to in-process with live env"
-if run_inprocess_with_live_env; then
-  echo "Loop force-run via in-process python succeeded"
-  exit 0
-fi
 
 echo "All force-run strategies failed; dumping listeners/containers"
 ss -lntp 2>/dev/null | head -60 || true
