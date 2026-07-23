@@ -20,6 +20,13 @@ function pageHintForPath(path: string): string {
   if (pageId === 'news') return '您正在新闻资讯页，可查看公司动态与行业观察。'
   if (pageId === 'honors') return '您正在资质与能力页，了解研发、交付与安全服务机制。'
   if (pageId === 'excel-to-ai') return '您正在 Excel 体验工具页，可上传表格试识别；完整能力见产品中心。'
+  if (pageId === 'developer') return '您正在开发者中心，可了解 API、集成与扩展入口。'
+  if (pageId === 'download' || pageId === 'download-releases' || pageId === 'download-breakpoints' || pageId === 'download-goals') {
+    return '您正在产品下载相关页，可问安装包、系统要求、进度看板或版本更新。'
+  }
+  if (pageId === 'world-will') return '您正在世界意志公司大厅，可查看 AI 员工编制与公开动态。'
+  if (pageId === 'visualization') return '您正在可视化展示页，可了解产品与场景能力图示。'
+  if (pageId === 'privacy') return '您正在隐私与服务协议页，可问数据处理或联系方式。'
   if (pageId === 'home') return '您正在官网首页，可了解 XCAGI 桌面与行业 Mod，并进入下载或预约沟通。'
   return `您正在「${page.title.replace(/\s*\|.*/, '')}」。${page.summary}`
 }
