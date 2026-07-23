@@ -409,13 +409,18 @@ def test_fulfilled_payment_reconciliation_creates_idempotent_value_loop(
     models._SessionFactory = None
 
 
-def test_plan_payment_never_impersonates_a_customer_delivery(tmp_path, monkeypatch) -> None:
+def test_unverified_plan_payment_never_impersonates_a_customer_delivery(
+    tmp_path, monkeypatch
+) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     order = _verified_payment(
         "customer_plan_001",
         fulfilled=True,
         order_kind="plan",
         plan_id="plan_pro",
+        fulfillment_verified=False,
+        fulfillment_artifact_id="",
+        fulfillment_artifact_sha256="",
     )
 
     result = reconcile_paid_customer_value(
@@ -430,12 +435,92 @@ def test_plan_payment_never_impersonates_a_customer_delivery(tmp_path, monkeypat
     )
 
     assert result["created"] == 0
-    assert result["skipped"] == {"non_deliverable_order_kind": 1}
+    assert result["skipped"] == {"fulfillment_unverified": 1}
     assert evidence["verified_paid_count"] == 1
     assert evidence["customer_goal_count"] == 0
     assert evidence["delivered_count"] == 0
     assert evidence["outcome_verified"] is False
 
+    models._engine = None
+    models._SessionFactory = None
+
+
+def test_verified_plan_activation_and_real_usage_close_customer_value_loop(
+    tmp_path, monkeypatch
+) -> None:
+    sf = _init_db(tmp_path, monkeypatch)
+    order = _verified_payment(
+        "customer_plan_used_001",
+        fulfilled=True,
+        order_kind="plan",
+        plan_id="plan_pro",
+        fulfillment_artifact_id="service-plan:plan_pro@0123456789abcdef",
+        fulfillment_artifact_sha256="c" * 64,
+        fulfillment_artifact_kind="service_plan_activation",
+        acceptance_verified=True,
+        acceptance_reason="verified_plan_usage",
+        accepted_at=NOW.isoformat(),
+    )
+
+    first = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
+    second = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
+    evidence = build_customer_value_evidence(orders=[order], session_factory=sf, now=NOW)
+
+    assert first["created"] == 3
+    assert first["existing"] == 0
+    assert first["skipped"] == {}
+    assert second["created"] == 0
+    assert second["existing"] == 3
+    assert evidence["customer_goal_count"] == 1
+    assert evidence["paid_delivery_count"] == 1
+    assert evidence["paid_acceptance_count"] == 1
+    assert evidence["outcome_verified"] is True
+    assert evidence["customer_acceptance_verified"] is True
+
+    models._engine = None
+    models._SessionFactory = None
+
+
+def test_plan_delivery_rejects_non_activation_artifact(tmp_path, monkeypatch) -> None:
+    sf = _init_db(tmp_path, monkeypatch)
+    order = _verified_payment(
+        "customer_plan_wrong_artifact_001",
+        fulfilled=True,
+        order_kind="plan",
+        plan_id="plan_pro",
+        fulfillment_artifact_kind="catalog_item",
+    )
+
+    result = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
+
+    assert result["created"] == 0
+    assert result["skipped"] == {"plan_artifact_kind_invalid": 1}
+    models._engine = None
+    models._SessionFactory = None
+
+
+def test_plan_usage_acceptance_requires_verified_usage_reason(tmp_path, monkeypatch) -> None:
+    sf = _init_db(tmp_path, monkeypatch)
+    order = _verified_payment(
+        "customer_plan_bad_acceptance_001",
+        fulfilled=True,
+        order_kind="plan",
+        plan_id="plan_pro",
+        fulfillment_artifact_id="service-plan:plan_pro@0123456789abcdef",
+        fulfillment_artifact_sha256="c" * 64,
+        fulfillment_artifact_kind="service_plan_activation",
+        acceptance_verified=True,
+        acceptance_reason="payment_received",
+        accepted_at=NOW.isoformat(),
+    )
+
+    result = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
+    evidence = build_customer_value_evidence(orders=[order], session_factory=sf, now=NOW)
+
+    assert result["created"] == 2
+    assert result["skipped"] == {"acceptance_evidence_invalid": 1}
+    assert evidence["paid_delivery_count"] == 1
+    assert evidence["paid_acceptance_count"] == 0
     models._engine = None
     models._SessionFactory = None
 
