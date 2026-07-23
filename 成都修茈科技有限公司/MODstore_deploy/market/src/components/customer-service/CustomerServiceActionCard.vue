@@ -9,13 +9,8 @@
     <div v-if="card.type === 'ticket'" class="cs-grid">
       <div><b>工单号</b><span>{{ card.ticket_no || '—' }}</span></div>
       <div><b>场景</b><span>{{ intentLabel }}</span></div>
-<<<<<<< Updated upstream
-      <div><b>对象</b><span>{{ card.subject_type || '—' }} {{ card.subject_id || '' }}</span></div>
-      <div><b>状态</b><span>{{ card.status || '—' }}</span></div>
-=======
       <div><b>对象</b><span>{{ subjectLabel }}</span></div>
       <div><b>状态</b><span>{{ statusText(card.status) }}</span></div>
->>>>>>> Stashed changes
     </div>
 
     <div v-else-if="card.type === 'decision'" class="cs-decision">
@@ -30,13 +25,9 @@
     <div v-else-if="card.type === 'actions'" class="cs-actions">
       <div v-for="item in card.items || []" :key="item.id || item.action_type" class="cs-action-row">
         <span>{{ actionLabel(item.action_type) }}</span>
-<<<<<<< Updated upstream
-        <span :class="['cs-card__status', `cs-card__status--${item.status}`]">{{ statusText(item.status) }}</span>
-=======
         <span :class="['cs-card__status', `cs-card__status--${String(item.status || '')}`]">
           {{ statusText(item.status) }}
         </span>
->>>>>>> Stashed changes
       </div>
     </div>
   </section>
@@ -73,8 +64,6 @@ const intentLabel = computed(() => {
   return map[String(props.card.intent || '')] || String(props.card.intent || '咨询')
 })
 
-<<<<<<< Updated upstream
-=======
 const subjectLabel = computed(() => {
   const typeMap: Record<string, string> = {
     order: '订单',
@@ -89,7 +78,6 @@ const subjectLabel = computed(() => {
   return id ? `${label} ${id}` : label
 })
 
->>>>>>> Stashed changes
 const decisionLabel = computed(() => {
   const map: Record<string, string> = {
     approved: '已受理',
@@ -105,10 +93,7 @@ const riskLabel = computed(() => {
 })
 
 const status = computed(() => String(props.card.status || props.card.decision || '').trim())
-<<<<<<< Updated upstream
-=======
 const statusKey = computed(() => status.value.toLowerCase().replace(/\s+/g, '_') || 'pending')
->>>>>>> Stashed changes
 const statusLabel = computed(() => statusText(status.value) || '处理中')
 const confidenceText = computed(() => {
   const n = Number(props.card.confidence || 0)
