@@ -24,16 +24,18 @@ describe('corpPageIntro', () => {
     expect(isCorpProactiveIntroEnabled()).toBe(true)
   })
 
-  it('builds short 小C intro for home', () => {
+  it('builds short 小C intro for home without page context', () => {
     const { pageId, text } = buildCorpPageIntroScript('/index.html')
     expect(pageId).toBe('home')
     expect(text).toContain('小C')
-    expect(text.length).toBeLessThanOrEqual(160)
+    expect(text).not.toMatch(/你现在在|这页重点/)
+    expect(text.length).toBeLessThanOrEqual(80)
   })
 
-  it('builds intro for services page', () => {
+  it('builds same style intro for services page without page dump', () => {
     const { pageId, text } = buildCorpPageIntroScript('/services.html')
     expect(pageId).toBe('services')
-    expect(text).toMatch(/产品|小C/)
+    expect(text).toContain('小C')
+    expect(text).not.toMatch(/你现在在|产品中心|这页重点/)
   })
 })
