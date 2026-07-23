@@ -80,8 +80,38 @@
     },
     "actions": {
       "handlers": [
-        "echo"
-      ]
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "quality_validator",
+        "action": "validate_pack",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["pack"],
+          "properties": {"pack": {"type": "object"}}
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "valid", "issues", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "pack": {
+            "manifest": {
+              "id": "fixture-employee",
+              "employee_config_v2": {"actions": {"handlers": ["direct_python"]}}
+            },
+            "files": ["manifest.json", "backend/employees/fixture_employee.py"]
+          }
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
+        }
+      }
     },
     "schedule": {
       "enabled": true,
