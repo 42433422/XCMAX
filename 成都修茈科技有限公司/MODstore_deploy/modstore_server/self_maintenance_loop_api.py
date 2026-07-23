@@ -142,6 +142,7 @@ async def record_self_maintenance_deployment_receipt(
         _append_governance_audit,
         _append_ledger,
         _read_ledger,
+        _record_verified_deploy_employee_metric,
     )
 
     observed_at = datetime.now(timezone.utc).isoformat()
@@ -155,6 +156,7 @@ async def record_self_maintenance_deployment_receipt(
                 "kind": str(event.get("event") or "deployment_receipt"),
             }
         )
+        _record_verified_deploy_employee_metric(event)
 
     try:
         result = record_completed_deployment_receipt(
