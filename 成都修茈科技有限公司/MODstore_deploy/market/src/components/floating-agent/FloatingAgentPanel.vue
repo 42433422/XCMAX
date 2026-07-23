@@ -830,6 +830,17 @@ function autoResize() {
   color: #0f172a;
 }
 
+.butler-panel--light :deep(.bubble-link) {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.butler-panel--light :deep(.bubble-link:hover) {
+  color: #1d4ed8;
+}
+
 .butler-panel--light :deep(.bubble--tool) {
   background: #eff6ff;
   border-color: rgba(37, 99, 235, 0.2);
