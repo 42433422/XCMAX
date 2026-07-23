@@ -46,6 +46,7 @@ import {
   hasIntroducedPageThisSession,
   isCorpProactiveIntroEnabled,
   markPageIntroduced,
+  prefersReducedMotion,
   speakCorpIntro,
   stopCorpIntroSpeech,
 } from './corpPageIntro'
@@ -57,11 +58,58 @@ import TtsSubtitleOverlay from '../components/TtsSubtitleOverlay.vue'
 
 const agentStore = useAgentStore()
 const { isOpen, showPermissionDialog, position } = storeToRefs(agentStore)
-const { handleInput, runIntakeTask } = useCorpAgentEngine()
+const { handleInput: engineHandleInput, runIntakeTask: engineRunIntakeTask } = useCorpAgentEngine()
 const pendingIntakeAction = ref<QuickAction | null>(null)
 const introSpeaking = ref(false)
 let introTimer: number | null = null
 let introSeq = 0
+
+function clipForSpeech(text: string, max = 480): string {
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, Math.max(0, max - 1))}…`
+}
+
+async function speakAssistantReply(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (prefersReducedMotion()) return
+  const last = agentStore.messages[agentStore.messages.length - 1]
+  if (!last || last.role !== 'assistant' || last.isLoading) return
+  const text = clipForSpeech(last.content || '')
+  if (!text || text === '…') return
+
+  stopCorpIntroSpeech()
+  const seq = ++introSeq
+  introSpeaking.value = true
+  agentStore.setMode('speaking')
+  try {
+    await speakCorpIntro(text)
+  } finally {
+    if (seq === introSeq) {
+      introSpeaking.value = false
+      if (agentStore.mode === 'speaking') agentStore.setMode('idle')
+    }
+  }
+}
+
+async function handleInput(
+  text: string,
+  opts?: { skipUserInsert?: boolean; withScreenshot?: boolean },
+): Promise<void> {
+  stopCorpIntroSpeech()
+  introSpeaking.value = false
+  await engineHandleInput(text, opts ? { skipUserInsert: opts.skipUserInsert } : undefined)
+  await speakAssistantReply()
+}
+
+async function runIntakeTask(action: QuickAction): Promise<void> {
+  stopCorpIntroSpeech()
+  introSpeaking.value = false
+  await engineRunIntakeTask(action)
+  await speakAssistantReply()
+}
 
 function flushPendingIntakeFill() {
   const action = pendingIntakeAction.value
