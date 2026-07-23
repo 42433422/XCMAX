@@ -933,9 +933,7 @@ def _stored_qa_target_ref_missing(memory: Dict[str, Any], item: Dict[str, Any]) 
     if str(decision.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
         return False
     structured_gate = (
-        decision.get("structured_gate")
-        if isinstance(decision.get("structured_gate"), dict)
-        else {}
+        decision.get("structured_gate") if isinstance(decision.get("structured_gate"), dict) else {}
     )
     qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
     if qa.get("target_branch_available") is not False:
