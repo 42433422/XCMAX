@@ -127,7 +127,10 @@ def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
         assert data["ticket"] is None
         assert data["intent"]["intent"] == "greeting"
         assert data["intent"]["need_ticket"] is False
+        assert data["cards"] == []
         assert "小C" in data["message"]["content"]
+        assert "intent" not in data["message"]["content"]
+        assert "{" not in data["message"]["content"]
 
         sf = get_session_factory()
         with sf() as session:

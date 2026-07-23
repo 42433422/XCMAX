@@ -206,11 +206,15 @@ async function send() {
       context: queryContext(),
     })
     activeSessionId.value = Number(res?.session?.id || activeSessionId.value || 0) || null
+    const rawCards = Array.isArray(res?.cards) ? res.cards : []
+    const cards = rawCards.filter((c: any) =>
+      ['ticket', 'decision', 'actions'].includes(String(c?.type || '')),
+    )
     messages.value.push({
       id: `a-${Date.now()}`,
       role: 'assistant',
       content: String(res?.message?.content || '已处理。'),
-      cards: Array.isArray(res?.cards) ? res.cards : [],
+      cards,
     })
     if (res?.ticket) {
       await loadTickets()
