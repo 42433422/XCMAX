@@ -119,13 +119,18 @@ jobs:
             set +a
           fi
           export FHD_API_BASE_URL="\${FHD_API_BASE_URL:-http://127.0.0.1:5100}"
+          PROBE_SCRIPT="${PROBE_DEPLOY_ROOT}/scripts/autonomy/corp_site_health_probe.py"
+          if [ ! -f "\$PROBE_SCRIPT" ]; then
+            PROBE_SCRIPT="/opt/xcmax/current/FHD/scripts/autonomy/corp_site_health_probe.py"
+          fi
+          test -f "\$PROBE_SCRIPT"
           GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
           GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
           FHD_API_BASE_URL="\$FHD_API_BASE_URL" \
           AUTONOMY_WEBHOOK_TOKEN="\${AUTONOMY_WEBHOOK_TOKEN:-}" \
           MODSTORE_OPS_INGEST_TOKEN="\${MODSTORE_OPS_INGEST_TOKEN:-}" \
           CORP_SITE_BASE_URL='${CORP_SITE_BASE_URL}' \
-          python3 "${PROBE_DEPLOY_ROOT}/scripts/autonomy/corp_site_health_probe.py" \
+          python3 "\$PROBE_SCRIPT" \
             --base-url '${CORP_SITE_BASE_URL}' \
             --audit-dir "${PROBE_AUDIT_DIR}" \
             ${DRY_FLAG}
