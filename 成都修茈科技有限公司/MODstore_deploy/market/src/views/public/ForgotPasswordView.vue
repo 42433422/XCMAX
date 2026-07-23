@@ -127,20 +127,23 @@ async function resetPw() {
   justify-content: center;
   min-height: 70vh;
   padding: 24px;
-  background: #0a0a0a;
-  color: #fff;
+  background: transparent;
+  color: var(--wb-text-primary, #1d1d1f);
 }
 .auth-card {
   width: 100%;
   max-width: 400px;
-  background: #141414;
+  background: var(--wb-surface-elevated, #ffffff);
   border-radius: 12px;
   padding: 28px;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--wb-border-default, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--wb-card-shadow, 0 8px 28px rgba(0, 0, 0, 0.06));
+  box-sizing: border-box;
 }
 h2 {
   margin-bottom: 20px;
   font-size: 1.35rem;
+  color: var(--wb-text-primary, #1d1d1f);
 }
 .form-group {
   margin-bottom: 16px;
@@ -149,15 +152,15 @@ h2 {
   display: block;
   margin-bottom: 6px;
   font-size: 0.9rem;
-  color: #a1a1aa;
+  color: var(--wb-text-muted, #86868b);
 }
 .input {
   width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
-  border: 1px solid #3f3f46;
-  background: #0a0a0a;
-  color: #fff;
+  border: 1px solid var(--wb-border-default, rgba(0, 0, 0, 0.12));
+  background: var(--wb-surface-sunken, #f5f5f7);
+  color: var(--wb-text-primary, #1d1d1f);
   box-sizing: border-box;
 }
 .btn-block {
@@ -168,7 +171,7 @@ h2 {
   padding: 12px;
   border: none;
   border-radius: 8px;
-  background: #6366f1;
+  background: var(--wb-accent-primary, #0071e3);
   color: #fff;
   font-weight: 600;
   cursor: pointer;
@@ -184,21 +187,21 @@ h2 {
   font-size: 0.9rem;
 }
 .flash-err {
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+  color: #dc2626;
 }
 .flash-ok {
-  background: rgba(34, 197, 94, 0.15);
-  color: #86efac;
+  background: rgba(52, 211, 153, 0.12);
+  color: #059669;
 }
 .auth-footer {
   margin-top: 20px;
   text-align: center;
   font-size: 0.9rem;
-  color: #71717a;
+  color: var(--wb-text-muted, #86868b);
 }
 .link {
-  color: #a5b4fc;
+  color: var(--wb-accent-primary, #0071e3);
   text-decoration: none;
 }
 .link:hover {

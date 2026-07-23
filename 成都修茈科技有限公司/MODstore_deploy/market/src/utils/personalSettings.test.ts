@@ -8,7 +8,7 @@ describe('personalSettings', () => {
 
   it('returns defaults when nothing saved', () => {
     const v = loadPersonalSettings()
-    expect(v.theme).toBe('dark')
+    expect(v.theme).toBe('light')
     expect(v.fontPx).toBe(15)
     expect(v.memory).toBe('')
     expect(v.suggestions.length).toBeGreaterThan(0)
