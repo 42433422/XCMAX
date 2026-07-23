@@ -35,7 +35,7 @@ from apscheduler.triggers.cron import CronTrigger
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .employee_executor import execute_employee_task
-from .models import EmployeeExecutionMetric, IncidentEvent, get_session_factory
+from .models import EmployeeExecutionMetric, IncidentEvent, User, get_session_factory
 from .platform_llm_scope import platform_llm_scoped
 from .runtime_provenance import collect_runtime_provenance
 from .self_evolution_knowledge import (
@@ -5282,6 +5282,68 @@ def _emit_deploy_callback(
         logger.debug("deploy_callback HTTP fallback failed", exc_info=True)
 
 
+def _record_verified_deploy_employee_metric(record: Dict[str, Any]) -> bool:
+    """Credit the release officer only for an exact verified production deploy.
+
+    Dispatch acceptance, staging success and uncorrelated health checks are not
+    employee evidence.  The deterministic task marker makes callback retries
+    idempotent.
+    """
+
+    if not (
+        str(record.get("event") or "") == "post_deploy_verified"
+        and str(record.get("environment") or "").strip().lower() == "production"
+        and record.get("ok") is True
+        and record.get("identity_verified") is True
+        and str(record.get("status") or "").strip().lower() == "verified"
+    ):
+        return False
+    run_id = str(record.get("run_id") or "").strip()
+    merge_sha = str(record.get("merge_sha") or "").strip().lower()
+    workflow_run_id = str(record.get("workflow_run_id") or "").strip()
+    if not run_id or not re.fullmatch(r"[0-9a-f]{40,64}", merge_sha) or not workflow_run_id:
+        return False
+    marker = f"[deploy-receipt:{run_id}:{merge_sha[:12]}:{workflow_run_id}]"[:128]
+    try:
+        sf = get_session_factory()
+        with sf() as session:
+            exists = (
+                session.query(EmployeeExecutionMetric.id)
+                .filter(
+                    EmployeeExecutionMetric.employee_id == "deploy-release-officer",
+                    EmployeeExecutionMetric.task == marker,
+                    EmployeeExecutionMetric.status == "success",
+                )
+                .first()
+            )
+            if exists:
+                return False
+            user = (
+                session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+                or session.query(User).order_by(User.id.asc()).first()
+            )
+            if user is None:
+                logger.warning("deploy receipt metric skipped: no user row")
+                return False
+            session.add(
+                EmployeeExecutionMetric(
+                    user_id=int(user.id),
+                    employee_id="deploy-release-officer",
+                    task=marker,
+                    status="success",
+                    duration_ms=0.0,
+                    llm_tokens=0,
+                    error="",
+                    failure_kind="",
+                )
+            )
+            session.commit()
+        return True
+    except Exception:
+        logger.exception("failed to record verified deploy release employee metric")
+        return False
+
+
 def _append_deploy_receipt_event(record: Dict[str, Any]) -> None:
     """Write the same deployment receipt to loop and governance ledgers."""
 
@@ -5292,6 +5354,7 @@ def _append_deploy_receipt_event(record: Dict[str, Any]) -> None:
             "kind": str(record.get("event") or "deployment_receipt"),
         }
     )
+    _record_verified_deploy_employee_metric(record)
 
 
 def _run_deploy_receipts_after_merge(
