@@ -203,6 +203,39 @@ class EntitlementServiceTest {
             assertThat(result.get("acceptance_reason")).isEqualTo("verified_plan_usage");
             assertThat(result.get("accepted_at")).isEqualTo(acceptedAt);
         }
+
+        @Test
+        void verifiesSupersededActivationWithoutBorrowingCurrentPlanUsage() {
+            LocalDateTime startedAt = LocalDateTime.of(2026, 7, 1, 9, 0);
+            PlanTemplate plan = new PlanTemplate();
+            plan.setId("basic");
+            plan.setQuotasJson("{\"ai_calls\":10}");
+            Entitlement entitlement = new Entitlement();
+            entitlement.setUser(user);
+            entitlement.setActive(true);
+            entitlement.setEntitlementType("plan");
+            entitlement.setGrantedAt(startedAt);
+            UserPlan supersededPlan = new UserPlan();
+            supersededPlan.setUser(user);
+            supersededPlan.setPlan(plan);
+            supersededPlan.setActive(false);
+            supersededPlan.setStartedAt(startedAt);
+
+            when(entitlementRepository.findBySourceOrderId("OT-BASIC-HISTORY"))
+                    .thenReturn(Optional.of(entitlement));
+            when(userPlanRepository.findByUserAndSourceOrderId(user, "OT-BASIC-HISTORY"))
+                    .thenReturn(Optional.of(supersededPlan));
+
+            var result = entitlementService.planFulfillmentEvidence(
+                    "OT-BASIC-HISTORY", "basic");
+
+            assertThat(result.get("verified")).isEqualTo(true);
+            assertThat(result.get("reason")).isEqualTo("verified_historical_activation");
+            assertThat(result.get("artifact_sha256").toString()).matches("[0-9a-f]{64}");
+            assertThat(result.get("acceptance_verified")).isEqualTo(false);
+            assertThat(result.get("acceptance_reason")).isEqualTo("historical_plan_superseded");
+            verify(quotaRepository, never()).findByUser(user);
+        }
     }
 
     @Nested
