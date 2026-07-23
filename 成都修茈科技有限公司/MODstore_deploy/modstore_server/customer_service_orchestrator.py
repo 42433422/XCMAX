@@ -463,10 +463,7 @@ def infer_intent(
             "LLM 扩展",
             "大模型扩展",
         )
-    ) or (
-        ("模型" in text or "model" in lowered)
-        and ("扩展" in text or "上架" in text or "审核" in text)
-    ):
+    ) or (("模型" in text or "model" in lowered) and ("扩展" in text or "上架" in text or "审核" in text)):
         return "llm_extension"
     return "general"
 
@@ -494,8 +491,10 @@ def classify_customer_intent(
         intent = str(llm.get("intent") or "general")
         if intent not in KNOWN_INTENTS:
             intent = "general"
-        need_ticket = bool(llm.get("need_ticket")) if "need_ticket" in llm else should_create_ticket(
-            intent, text
+        need_ticket = (
+            bool(llm.get("need_ticket"))
+            if "need_ticket" in llm
+            else should_create_ticket(intent, text)
         )
         if escalate:
             need_ticket = True
@@ -970,10 +969,7 @@ def _xiaoc_general_reply(
         body = "；".join(tips)
         return f"我是小C。{hello}{body} 若还要补充，直接说具体场景就行。"
     if ticketed:
-        return (
-            f"我是小C。{hello}已为你登记工单；"
-            "你可以继续补充材料，我们会尽快处理。"
-        )
+        return f"我是小C。{hello}已为你登记工单；" "你可以继续补充材料，我们会尽快处理。"
     return (
         f"我是小C。{hello}可以先说说你的具体问题，"
         "比如购买、会员权益、订单或余额；需要正式受理时我会帮你建工单。"
@@ -994,10 +990,7 @@ def build_reply(
             "请补充：最近一次充值或扣费的时间、金额，或钱包页截图，方便尽快核查。"
         )
     elif decision.decision == "needs_more_info":
-        reply = (
-            f"我是小C。已创建工单 {ticket.ticket_no}，"
-            f"还需要你补充：{decision.rationale}"
-        )
+        reply = f"我是小C。已创建工单 {ticket.ticket_no}，" f"还需要你补充：{decision.rationale}"
     elif actions:
         done = "、".join(
             f"{getattr(a, 'action_type', '')}"
