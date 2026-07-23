@@ -87,7 +87,7 @@ post_run_http() {
     auth_args+=(-H "Authorization: Bearer ${TOKEN}")
   fi
   local code ok_run
-  code="$(curl --noproxy '*' -sS --max-time 900 -o /tmp/loop-run.json -w '%{http_code}' \
+  code="$(curl --noproxy '*' -sS --max-time 2400 -o /tmp/loop-run.json -w '%{http_code}' \
     -X POST "${base}/api/ops/self-maintenance/run" \
     "${auth_args[@]}" \
     -H "Content-Type: application/json" \

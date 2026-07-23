@@ -20,8 +20,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,6 +194,117 @@ public class EntitlementService {
         result.put("fulfilled_at", entitlement.getGrantedAt());
         result.put("entitlement_type", entitlement.getEntitlementType());
         return result;
+    }
+
+    /**
+     * Return an immutable activation receipt for a paid service plan.
+     *
+     * The receipt hash binds the paid order, plan and persisted activation
+     * timestamps.  Customer acceptance is separate: it becomes verified only
+     * after a quota that belongs to the purchased plan has real usage.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> planFulfillmentEvidence(String sourceOrderId, String planId) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("verified", false);
+        if (sourceOrderId == null || sourceOrderId.isBlank()
+                || planId == null || planId.isBlank()) {
+            result.put("reason", "invalid_order_reference");
+            return result;
+        }
+        Optional<Entitlement> entitlementRow = entitlementRepository.findBySourceOrderId(sourceOrderId);
+        if (entitlementRow.isEmpty()) {
+            result.put("reason", "entitlement_missing");
+            return result;
+        }
+        Entitlement entitlement = entitlementRow.get();
+        if (!entitlement.isActive() || !"plan".equalsIgnoreCase(entitlement.getEntitlementType())
+                || entitlement.getUser() == null) {
+            result.put("reason", "plan_entitlement_inactive_or_mismatched");
+            return result;
+        }
+        Optional<UserPlan> userPlanRow = userPlanRepository.findByUserAndSourceOrderId(
+                entitlement.getUser(), sourceOrderId);
+        if (userPlanRow.isEmpty()) {
+            result.put("reason", "user_plan_missing");
+            return result;
+        }
+        UserPlan userPlan = userPlanRow.get();
+        PlanTemplate plan = userPlan.getPlan();
+        if (plan == null || plan.getId() == null
+                || !planId.trim().equals(plan.getId().trim())) {
+            result.put("reason", "user_plan_mismatched");
+            return result;
+        }
+        if (userPlan.getStartedAt() == null || entitlement.getGrantedAt() == null) {
+            result.put("reason", "plan_activation_timestamp_missing");
+            return result;
+        }
+
+        String orderDigest = sha256Hex(sourceOrderId.trim());
+        String normalizedPlanId = plan.getId().trim();
+        String artifactId = "service-plan:" + normalizedPlanId + "@" + orderDigest.substring(0, 16);
+        String artifactDescriptor = String.join("\n",
+                "service-plan-activation.v1",
+                normalizedPlanId,
+                sourceOrderId.trim(),
+                userPlan.getStartedAt().toString(),
+                entitlement.getGrantedAt().toString());
+
+        Map<String, Integer> contractedQuotas = parseContractedQuotas(plan.getQuotasJson());
+        // A later upgrade deactivates the previous UserPlan, but it does not erase
+        // the paid plan's historical activation.  Keep delivery verification tied
+        // to the immutable activation timestamps while refusing to attribute the
+        // current plan's quota usage to a superseded plan.
+        List<Quota> usedContractedQuotas = userPlan.isActive()
+                ? quotaRepository.findByUser(entitlement.getUser()).stream()
+                        .filter(quota -> quota.getQuotaType() != null)
+                        .filter(quota -> contractedQuotas.containsKey(quota.getQuotaType()))
+                        .filter(quota -> quota.getUsed() > 0)
+                        .toList()
+                : List.of();
+        int usageCount = usedContractedQuotas.stream().mapToInt(Quota::getUsed).sum();
+        LocalDateTime acceptedAt = usedContractedQuotas.stream()
+                .map(Quota::getUpdatedAt)
+                .filter(value -> value != null)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        boolean acceptanceVerified = usageCount > 0 && acceptedAt != null;
+
+        result.put("verified", true);
+        result.put("reason", userPlan.isActive() ? "verified" : "verified_historical_activation");
+        result.put("artifact_id", artifactId);
+        result.put("artifact_sha256", sha256Hex(artifactDescriptor));
+        result.put("artifact_kind", "service_plan_activation");
+        result.put("fulfilled_at", userPlan.getStartedAt());
+        result.put("acceptance_verified", acceptanceVerified);
+        result.put(
+                "acceptance_reason",
+                acceptanceVerified
+                        ? "verified_plan_usage"
+                        : (userPlan.isActive() ? "usage_not_observed" : "historical_plan_superseded")
+        );
+        result.put("accepted_at", acceptedAt);
+        return result;
+    }
+
+    private Map<String, Integer> parseContractedQuotas(String rawQuotas) {
+        try {
+            return objectMapper.readValue(rawQuotas == null ? "{}" : rawQuotas,
+                    new TypeReference<Map<String, Integer>>() {});
+        } catch (Exception exc) {
+            log.warn("Unable to parse plan quota contract for fulfillment evidence", exc);
+            return Map.of();
+        }
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exc) {
+            throw new IllegalStateException("SHA-256 unavailable", exc);
+        }
     }
 
     @Transactional(readOnly = true)

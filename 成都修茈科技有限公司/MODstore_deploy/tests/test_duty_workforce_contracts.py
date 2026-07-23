@@ -7,12 +7,15 @@ from pathlib import Path
 from modstore_server import employee_runtime, models, task_router, workflow_scheduler
 from modstore_server.duty_workforce_contracts import (
     contract_schedule,
+    duty_event_execution_input,
     load_reviewed_duty_manifest,
     load_workforce_contracts,
+    matching_duty_event_contract,
     resolve_reviewed_duty_employee_root,
     workforce_contract_map,
     workforce_event_bindings,
 )
+from modstore_server.employee_executor import _trusted_system_duty_contract_execution
 
 
 def test_work_contracts_cover_the_roster_exactly() -> None:
@@ -61,6 +64,87 @@ def test_reviewed_duty_employee_root_keeps_manifest_and_module_together() -> Non
         "security-secrets-guard"
     )
     assert (root / "backend/employees/security_secrets_guard.py").is_file()
+
+
+def _contract_payload(employee_id: str, *, trigger: str, event_type: str = "") -> dict:
+    contract = workforce_contract_map()[employee_id]
+    return {
+        "trigger": trigger,
+        "schedule_source": "duty_work_contract",
+        "event_type": event_type,
+        "work_contract": {
+            "schema": "xcagi.duty_employee_work_contracts/v1",
+            "mode": contract["mode"],
+            "risk_level": contract["risk_level"],
+            "acceptance": list(contract["acceptance"]),
+        },
+    }
+
+
+def test_trusted_schedule_uses_reviewed_agent_not_stale_catalog_shell() -> None:
+    for employee_id in ("flask-entry-keeper", "workbench-ux-stylist"):
+        contract, manifest = _trusted_system_duty_contract_execution(
+            employee_id,
+            _contract_payload(employee_id, trigger="schedule"),
+            user_id=0,
+        )
+
+        assert contract["risk_level"] == "medium"
+        assert manifest["employee_config_v2"]["actions"]["handlers"] == ["agent"]
+
+
+def test_trusted_event_requires_declared_event_and_rejects_forged_contract() -> None:
+    employee_id = "fhd-core-maintainer"
+    payload = _contract_payload(employee_id, trigger="event", event_type="on_error")
+
+    contract, manifest = _trusted_system_duty_contract_execution(employee_id, payload, user_id=0)
+
+    assert contract["mode"] == "event"
+    assert manifest["employee_config_v2"]["actions"]["handlers"] == ["agent"]
+
+    forged = {**payload, "work_contract": {**payload["work_contract"], "risk_level": "low"}}
+    assert _trusted_system_duty_contract_execution(employee_id, forged, user_id=0) == ({}, {})
+    assert _trusted_system_duty_contract_execution(
+        employee_id,
+        _contract_payload(employee_id, trigger="event", event_type="undeclared"),
+        user_id=0,
+    ) == ({}, {})
+    assert _trusted_system_duty_contract_execution(employee_id, payload, user_id=1) == ({}, {})
+
+
+def test_source_filtered_event_contract_builds_safe_system_input(monkeypatch) -> None:
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", "/opt/xcmax/current")
+    contract = matching_duty_event_contract(
+        "employee-planner",
+        "employee.task.done",
+        "intent-analyst",
+    )
+    assert contract["risk_level"] == "low"
+    assert not matching_duty_event_contract(
+        "employee-planner",
+        "employee.task.done",
+        "wrong-source",
+    )
+    assert not matching_duty_event_contract("deploy-release-officer", "ci.passed", "github")
+
+    payload = duty_event_execution_input(
+        "employee-planner",
+        event_type="employee.task.done",
+        source="intent-analyst",
+        incident={"summary": "analysis done"},
+    )
+    assert payload["trigger"] == "event"
+    assert payload["allow_high_risk_real_run"] is False
+    assert payload["non_blocking_human_questions"] is True
+    assert payload["project_root"] == "/opt/xcmax/current"
+
+    reviewed, manifest = _trusted_system_duty_contract_execution(
+        "employee-planner",
+        payload,
+        user_id=0,
+    )
+    assert reviewed["risk_level"] == "low"
+    assert manifest["id"] == "employee-planner"
 
 
 def test_employee_project_root_matches_yuangon_scope_base(monkeypatch, tmp_path) -> None:
