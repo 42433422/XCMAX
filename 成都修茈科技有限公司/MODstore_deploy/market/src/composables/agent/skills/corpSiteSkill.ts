@@ -109,12 +109,13 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
     )
   }
   if (/购买|怎么买|如何买|下单|开通|买会员|买套餐|授权/.test(q) || /价格|报价|费用|多少钱|收费|会员.*价/.test(q)) {
+    const plans = `${CORP_LINKS.market.replace(/\/$/, '')}/plans`
     return reply(
       `购买与开通路径：\n` +
-        `1. 注册/登录 AI 市场：${CORP_LINKS.market}\n` +
-        `2. 在会员方案页选择套餐并支付：${CORP_LINKS.market.replace(/\/$/, '')}/plans\n` +
-        `3. 企业定制或批量授权，请预约沟通：${CORP_LINKS.contact}\n\n` +
-        `桌面端/客户端授权也可从下载页了解：${CORP_LINKS.download}`,
+        `1. 注册/登录 AI 市场：[点我跳转](${CORP_LINKS.market})\n` +
+        `2. 会员方案选套餐并支付：[点我跳转](${plans})\n` +
+        `3. 企业定制或批量授权，预约沟通：[点我跳转](${CORP_LINKS.contact})\n` +
+        `4. 桌面端/客户端授权说明：[点我跳转](${CORP_LINKS.download})`,
     )
   }
   if (/公司|修茈|关于|是谁|介绍/.test(q)) {
