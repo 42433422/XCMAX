@@ -1,8 +1,8 @@
 import { isCorpMobileViewport } from './corpViewport'
 
-/** 官网悬浮球尺寸（与女版小 C 头像胶囊保持一致） */
-export const CORP_BALL_W = 146
-export const CORP_BALL_H = 64
+/** 官网悬浮球尺寸（竖排：头像上 + 名称下） */
+export const CORP_BALL_W = 72
+export const CORP_BALL_H = 88
 export const CORP_BALL_STORAGE = 'xc_butler_pos_corp'
 
 export function isContactPagePath(): boolean {
