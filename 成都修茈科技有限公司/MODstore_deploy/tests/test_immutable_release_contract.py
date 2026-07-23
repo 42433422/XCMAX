@@ -47,6 +47,14 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "verify_payment_identity" in script
     assert "/actuator/info" in script
     assert "MODSTORE_RELEASE_ARTIFACT_SHA256" in script
+    assert 'RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"' in script
+    assert '[[ "$RUNTIME_DIR" == /* ]]' in script
+    assert 'install -d -m 700 "$RUNTIME_DIR"' in script
+    assert "MODSTORE_RUNTIME_DIR=%s" in script
+    assert "MODSTORE_REPO_ROOT=%s" in script
+    assert "XCMAX_MONOREPO_ROOT=%s" in script
+    assert "JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080" in script
+    assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
     payment_restart = script.index(

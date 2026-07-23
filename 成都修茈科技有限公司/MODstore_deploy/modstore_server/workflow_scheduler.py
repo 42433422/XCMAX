@@ -101,6 +101,21 @@ def _require_customer_value_source_ready(result: dict[str, Any]) -> dict[str, An
     return result
 
 
+def _run_authoritative_customer_value_job(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """Track source validation inside the scheduler job transaction.
+
+    A reconciler function can return normally while reporting ``source_ready=false``.
+    Validate that result before ``track_job_run`` closes, otherwise the runtime
+    ledger records a false success and the immutable release gate can trust stale
+    health even though the Java/PostgreSQL authority is unreachable.
+    """
+
+    return _run_tracked_scheduler_job(
+        "customer_value_reconciler",
+        lambda: _require_customer_value_source_ready(fn()),
+    )
+
+
 def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> None:
     if not emitted or not _env_bool("MODSTORE_SELF_MAINTENANCE_EVENT_TRIGGER_ENABLED", True):
         return
@@ -231,8 +246,7 @@ def start_scheduler() -> None:
                 reconcile_paid_customer_value,
             )
 
-            result = _run_tracked_scheduler_job(
-                "customer_value_reconciler",
+            result = _run_authoritative_customer_value_job(
                 lambda: reconcile_paid_customer_value(
                     window_days=max(
                         1,
@@ -243,7 +257,6 @@ def start_scheduler() -> None:
                     )
                 ),
             )
-            _require_customer_value_source_ready(result)
             if result.get("created") or not result.get("source_ready"):
                 logger.info(
                     "customer-value reconciliation source=%s ready=%s checked=%s "
