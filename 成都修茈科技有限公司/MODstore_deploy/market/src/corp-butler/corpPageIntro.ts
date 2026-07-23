@@ -1,6 +1,6 @@
 /** 官网小C：同意后主动介绍当前页（TTS + 中文字幕）。软件工作台不挂字幕。 */
 
-import { getCorpPageKnowledge, resolveCorpPageId } from '../content/siteKnowledge'
+import { resolveCorpPageId } from '../content/siteKnowledge'
 import {
   beginTtsSubtitles,
   endTtsSubtitles,
@@ -53,21 +53,14 @@ function clip(text: string, max: number): string {
   return `${t.slice(0, Math.max(0, max - 1))}…`
 }
 
-/** 生成适合朗读的短介绍（控制在约 160 字内）。 */
+/** 生成适合朗读的短介绍（不注入页面上下文，避免字幕堆摘要）。 */
 export function buildCorpPageIntroScript(pathname: string): {
   pageId: string
   text: string
 } {
   const pageId = resolveCorpPageId(pathname)
-  const page = getCorpPageKnowledge(pageId)
-  const title = clip((page.title || '').split('|')[0] || page.pageId, 24)
-  const summary = clip(page.summary || page.description || '', 72)
-  const highlights = (page.highlights || []).slice(0, 2).join('、')
-  const hi = highlights ? clip(`这页重点：${highlights}。`, 40) : ''
-  const text = clip(
-    `嗨，我是小C。你现在在「${title}」。${summary}${hi ? ` ${hi}` : ''} 想细聊直接跟我说，或点快捷问题就行。`,
-    160,
-  )
+  // 字幕/朗读只要短问候；页面摘要留给用户主动提问，不在开场念「你现在在…」
+  const text = clip('嗨，我是小C。想了解产品、案例或预约沟通，直接跟我说，或点快捷问题就行。', 80)
   return { pageId, text }
 }
 
