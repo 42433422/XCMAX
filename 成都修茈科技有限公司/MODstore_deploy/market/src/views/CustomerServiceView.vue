@@ -1,30 +1,28 @@
 <template>
   <div class="cs-page">
-    <section class="cs-hero">
-      <div>
-        <p class="cs-kicker">XC AGI 独立 AI 客服平台</p>
-        <h1>自动受理、审核、执行与追踪</h1>
-        <p class="cs-subtitle">
-          面向投诉申诉、订单退款、上架合规、账号权益和后续网页 API 对接。每一次自动处理都会生成工单、审核标准和审计记录。
-        </p>
+    <header class="cs-head">
+      <div class="cs-head__main">
+        <h1>AI 客服</h1>
+        <p>投诉退款、上架合规、账号权益 — 自动受理并生成工单与审计记录</p>
       </div>
-      <div class="cs-hero__panel">
-        <b>全自动能力</b>
-        <span>低风险事项自动执行，高风险动作按审核标准和策略留痕处理。</span>
+      <div class="cs-head__meta">
+        <span class="cs-pill">全自动</span>
+        <span class="cs-pill cs-pill--soft">高风险留痕审核</span>
       </div>
-    </section>
+    </header>
 
     <section class="cs-layout">
       <main class="cs-chat">
         <div class="cs-toolbar">
-          <div>
-            <b>客服对话</b>
-            <span v-if="activeSessionId">会话 #{{ activeSessionId }}</span>
+          <div class="cs-toolbar__left">
+            <b>对话</b>
+            <span v-if="activeSessionId">#{{ activeSessionId }}</span>
+            <span v-else class="cs-muted">新会话</span>
           </div>
-          <button class="cs-btn cs-btn--ghost" @click="newSession">新会话</button>
+          <button type="button" class="cs-btn cs-btn--ghost" @click="newSession">新会话</button>
         </div>
 
-        <div class="cs-messages">
+        <div ref="messagesEl" class="cs-messages">
           <article v-for="msg in messages" :key="msg.id" :class="['cs-message', `cs-message--${msg.role}`]">
             <div class="cs-bubble">
               <p>{{ msg.content }}</p>
@@ -35,42 +33,72 @@
               />
             </div>
           </article>
-          <article v-if="messages.length === 0" class="cs-empty">
-            <h3>可以直接描述问题</h3>
-            <p>例如：“订单号 RF123456 想退款，原因是重复购买”，或“商品 ID 12 疑似抄袭，需要投诉”。</p>
-          </article>
+
+          <div v-if="messages.length === 0" class="cs-empty">
+            <p class="cs-empty__title">描述你的问题，AI 会识别场景并建工单</p>
+            <div class="cs-chips">
+              <button
+                v-for="chip in quickPrompts"
+                :key="chip"
+                type="button"
+                class="cs-chip"
+                @click="usePrompt(chip)"
+              >
+                {{ chip }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <form class="cs-composer" @submit.prevent="send">
-          <textarea v-model="draft" placeholder="请输入你要处理的客服问题，尽量包含订单号、商品 ID、证据或期望结果。" />
+          <textarea
+            v-model="draft"
+            rows="2"
+            placeholder="尽量带上订单号、商品 ID、证据或期望结果…"
+            @keydown.meta.enter.prevent="send"
+            @keydown.ctrl.enter.prevent="send"
+          />
           <div class="cs-composer__footer">
-            <span>{{ error || 'AI 客服会自动识别场景并生成工单' }}</span>
-            <button class="cs-btn" :disabled="loading || !draft.trim()">{{ loading ? '处理中...' : '发送给 AI 客服' }}</button>
+            <span :class="{ 'cs-error': !!error }">{{ error || 'Enter 换行 · ⌘/Ctrl+Enter 发送' }}</span>
+            <button type="submit" class="cs-btn" :disabled="loading || !draft.trim()">
+              {{ loading ? '处理中…' : '发送' }}
+            </button>
           </div>
         </form>
       </main>
 
       <aside class="cs-side">
         <section class="cs-side-card">
-          <h3>最近工单</h3>
-          <button class="cs-btn cs-btn--ghost cs-btn--wide" @click="loadTickets">刷新</button>
-          <div v-if="tickets.length === 0" class="cs-muted">暂无工单</div>
-          <button
-            v-for="ticket in tickets"
-            :key="ticket.id"
-            class="cs-ticket"
-            @click="openTicket(ticket)"
-          >
-            <b>{{ ticket.title || ticket.ticket_no }}</b>
-            <span>{{ ticket.status }} · {{ ticket.intent }}</span>
-          </button>
+          <div class="cs-side-card__head">
+            <h3>最近工单</h3>
+            <button type="button" class="cs-link" @click="loadTickets">刷新</button>
+          </div>
+          <div v-if="tickets.length === 0" class="cs-side-empty">暂无工单，发送消息后会出现在这里</div>
+          <div v-else class="cs-side-list">
+            <button
+              v-for="ticket in tickets"
+              :key="ticket.id"
+              type="button"
+              class="cs-ticket"
+              @click="openTicket(ticket)"
+            >
+              <b>{{ ticket.title || ticket.ticket_no }}</b>
+              <span>{{ statusLabel(ticket.status) }} · {{ ticket.intent || 'general' }}</span>
+            </button>
+          </div>
         </section>
 
-        <section class="cs-side-card">
-          <h3>审核标准</h3>
-          <div v-for="standard in standards" :key="standard.id" class="cs-standard">
-            <b>{{ standard.name }}</b>
-            <span>{{ standard.scenario }} · {{ standard.risk_level }}</span>
+        <section class="cs-side-card cs-side-card--grow">
+          <div class="cs-side-card__head">
+            <h3>审核标准</h3>
+            <span class="cs-muted">{{ standards.length }} 条</span>
+          </div>
+          <div v-if="standards.length === 0" class="cs-side-empty">尚未配置标准，管理员可在后台添加</div>
+          <div v-else class="cs-side-list">
+            <div v-for="standard in standards" :key="standard.id" class="cs-standard">
+              <b>{{ standard.name }}</b>
+              <span>{{ standard.scenario }} · {{ riskLabel(standard.risk_level) }}</span>
+            </div>
           </div>
         </section>
       </aside>
@@ -79,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api'
 import CustomerServiceActionCard from '../components/customer-service/CustomerServiceActionCard.vue'
@@ -99,6 +127,13 @@ const activeSessionId = ref<number | null>(null)
 const messages = ref<UiMessage[]>([])
 const tickets = ref<any[]>([])
 const standards = ref<any[]>([])
+const messagesEl = ref<HTMLElement | null>(null)
+
+const quickPrompts = [
+  '订单号 RF123456 想退款，原因是重复购买',
+  '商品 ID 12 疑似抄袭，需要投诉',
+  '账号权益未到账，请核查开通状态',
+]
 
 onMounted(() => {
   hydrateFromQuery()
@@ -127,6 +162,32 @@ function queryContext() {
   }
 }
 
+function usePrompt(text: string) {
+  draft.value = text
+}
+
+function statusLabel(status: unknown) {
+  const s = String(status || '').toLowerCase()
+  if (s === 'open' || s === 'pending') return '处理中'
+  if (s === 'resolved' || s === 'done' || s === 'closed') return '已完成'
+  if (s === 'rejected') return '已驳回'
+  return status ? String(status) : '待处理'
+}
+
+function riskLabel(level: unknown) {
+  const s = String(level || '').toLowerCase()
+  if (s === 'high') return '高风险'
+  if (s === 'medium' || s === 'mid') return '中风险'
+  if (s === 'low') return '低风险'
+  return level ? String(level) : '常规'
+}
+
+async function scrollMessagesToEnd() {
+  await nextTick()
+  const el = messagesEl.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
 async function send() {
   const text = draft.value.trim()
   if (!text || loading.value) return
@@ -135,6 +196,7 @@ async function send() {
   const userMsg: UiMessage = { id: `u-${Date.now()}`, role: 'user', content: text }
   messages.value.push(userMsg)
   draft.value = ''
+  await scrollMessagesToEnd()
   try {
     const res: any = await api.customerServiceChat({
       message: text,
@@ -149,6 +211,7 @@ async function send() {
       cards: Array.isArray(res?.cards) ? res.cards : [],
     })
     await loadTickets()
+    await scrollMessagesToEnd()
   } catch (e: any) {
     error.value = e?.message || 'AI 客服处理失败'
   } finally {
@@ -194,6 +257,7 @@ async function openTicket(ticket: any) {
       content: `已打开工单 ${ticket.ticket_no || ticket.id} 的最新处理记录。`,
       cards,
     })
+    await scrollMessagesToEnd()
   } catch (e: any) {
     error.value = e?.message || '打开工单失败'
   }
@@ -202,98 +266,133 @@ async function openTicket(ticket: any) {
 
 <style scoped>
 .cs-page {
-  min-height: calc(100vh - var(--nav-h, 64px));
-  padding: clamp(18px, 3vw, 42px);
-  color: #fff;
-  background:
-    radial-gradient(circle at 10% 10%, rgba(255, 198, 92, 0.2), transparent 32%),
-    radial-gradient(circle at 88% 18%, rgba(90, 170, 255, 0.18), transparent 36%),
-    #080a0f;
+  --cs-border: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 10%, transparent);
+  --cs-surface: var(--wb-surface-elevated, #fff);
+  --cs-muted: var(--wb-text-secondary, #6e6e73);
+  --cs-accent: var(--wb-accent-primary, #0071e3);
+  --cs-bg: var(--wb-bg, #f5f5f7);
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 18px;
+  color: var(--wb-text-primary, #1d1d1f);
+  background: var(--cs-bg);
 }
 
-.cs-hero,
-.cs-layout {
-  max-width: 1400px;
+.cs-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1280px;
+  width: 100%;
   margin: 0 auto;
 }
 
-.cs-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
-  align-items: end;
-  margin-bottom: 24px;
+.cs-head__main h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
-.cs-kicker {
-  color: #f6c86d;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+.cs-head__main p {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  color: var(--cs-muted);
+  line-height: 1.35;
 }
 
-.cs-hero h1 {
-  font-size: clamp(34px, 6vw, 74px);
-  line-height: 0.95;
-  margin: 10px 0;
+.cs-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
-.cs-subtitle,
-.cs-hero__panel span,
-.cs-muted,
-.cs-toolbar span,
-.cs-standard span,
-.cs-ticket span,
-.cs-composer__footer span {
-  color: rgba(255, 255, 255, 0.68);
+.cs-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--cs-accent) 14%, transparent);
+  color: var(--cs-accent);
 }
 
-.cs-hero__panel,
-.cs-chat,
-.cs-side-card {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 28px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
-}
-
-.cs-hero__panel {
-  padding: 22px;
-  display: grid;
-  gap: 8px;
+.cs-pill--soft {
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 6%, transparent);
+  color: var(--cs-muted);
 }
 
 .cs-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  gap: 14px;
+}
+
+.cs-chat,
+.cs-side-card {
+  border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+  border-radius: 14px;
 }
 
 .cs-chat {
-  min-height: 640px;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
 
 .cs-toolbar,
-.cs-composer__footer {
+.cs-composer__footer,
+.cs-side-card__head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
   align-items: center;
+  gap: 10px;
 }
 
 .cs-toolbar {
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--cs-border);
+}
+
+.cs-toolbar__left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cs-toolbar__left b {
+  font-size: 0.95rem;
+}
+
+.cs-muted {
+  color: var(--cs-muted);
+  font-size: 0.78rem;
 }
 
 .cs-messages {
-  padding: 20px;
+  min-height: 0;
+  padding: 14px;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .cs-message {
@@ -304,48 +403,112 @@ async function openTicket(ticket: any) {
   justify-content: flex-end;
 }
 
-.cs-bubble,
-.cs-empty {
-  max-width: min(760px, 92%);
-  padding: 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.cs-bubble {
+  max-width: min(640px, 92%);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 4%, transparent);
+  border: 1px solid var(--cs-border);
+}
+
+.cs-bubble p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .cs-message--user .cs-bubble {
-  background: linear-gradient(135deg, rgba(246, 200, 109, 0.28), rgba(86, 153, 255, 0.18));
+  background: color-mix(in srgb, var(--cs-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--cs-accent) 18%, transparent);
+}
+
+.cs-empty {
+  margin: auto 0;
+  padding: 8px 4px 18px;
+}
+
+.cs-empty__title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--wb-text-primary, #1d1d1f);
+}
+
+.cs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cs-chip {
+  border: 1px solid var(--cs-border);
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 3%, transparent);
+  color: var(--wb-text-primary, #1d1d1f);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.cs-chip:hover {
+  border-color: color-mix(in srgb, var(--cs-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--cs-accent) 8%, transparent);
 }
 
 .cs-composer {
-  padding: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--cs-border);
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 2%, transparent);
 }
 
 .cs-composer textarea {
   width: 100%;
-  min-height: 112px;
+  min-height: 64px;
+  max-height: 160px;
   resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 18px;
-  background: rgba(0, 0, 0, 0.26);
-  color: #fff;
-  padding: 14px;
+  border: 1px solid var(--cs-border);
+  border-radius: 12px;
+  background: var(--cs-surface);
+  color: var(--wb-text-primary, #1d1d1f);
+  padding: 10px 12px;
   outline: none;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.cs-composer textarea:focus {
+  border-color: color-mix(in srgb, var(--cs-accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cs-accent) 16%, transparent);
 }
 
 .cs-composer__footer {
-  margin-top: 12px;
+  margin-top: 8px;
+}
+
+.cs-composer__footer span {
+  font-size: 0.76rem;
+  color: var(--cs-muted);
+}
+
+.cs-error {
+  color: #c9342d !important;
 }
 
 .cs-btn {
   border: 0;
-  border-radius: 999px;
-  padding: 10px 16px;
-  background: #f6c86d;
-  color: #17130a;
-  font-weight: 800;
+  border-radius: 10px;
+  padding: 8px 14px;
+  background: var(--cs-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.86rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .cs-btn:disabled {
@@ -354,122 +517,149 @@ async function openTicket(ticket: any) {
 }
 
 .cs-btn--ghost {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--wb-text-primary, #1d1d1f);
+  border: 1px solid var(--cs-border);
 }
 
-.cs-btn--wide {
-  width: 100%;
-  margin: 10px 0;
+.cs-link {
+  border: 0;
+  background: transparent;
+  color: var(--cs-accent);
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0;
 }
 
 .cs-side {
+  min-height: 0;
   display: grid;
-  gap: 16px;
-  align-content: start;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
 }
 
 .cs-side-card {
-  padding: 18px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.cs-side-card__head h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.cs-side-list {
+  margin-top: 8px;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cs-side-empty {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 3%, transparent);
+  color: var(--cs-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .cs-ticket,
 .cs-standard {
   width: 100%;
   display: grid;
-  gap: 4px;
+  gap: 3px;
   text-align: left;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 12px;
-  margin-top: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  border: 1px solid var(--cs-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 2.5%, transparent);
+  color: inherit;
 }
 
 .cs-ticket {
   cursor: pointer;
 }
 
+.cs-ticket:hover {
+  border-color: color-mix(in srgb, var(--cs-accent) 35%, transparent);
+}
+
+.cs-ticket b,
+.cs-standard b {
+  font-size: 0.84rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-ticket span,
+.cs-standard span {
+  color: var(--cs-muted);
+  font-size: 0.74rem;
+}
+
 @media (max-width: 980px) {
-  .cs-hero,
+  .cs-page {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .cs-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .cs-layout {
     grid-template-columns: 1fr;
   }
+
+  .cs-chat {
+    min-height: min(62vh, 560px);
+  }
+
+  .cs-side {
+    grid-template-rows: auto;
+  }
+
+  .cs-side-card {
+    max-height: 260px;
+  }
 }
 
-html[data-workbench-theme='light'] .cs-page {
-  color: #1d1d1f;
-  background: #f5f5f7;
+/* 深色主题回落（未走 light token 时） */
+html:not([data-workbench-theme='light']) .cs-page {
+  --cs-bg: #0c0d12;
+  --cs-surface: rgba(255, 255, 255, 0.05);
+  --cs-border: rgba(255, 255, 255, 0.12);
+  --cs-muted: rgba(255, 255, 255, 0.62);
+  --cs-accent: #7aa7ff;
+  color: #f2f2f7;
 }
 
-html[data-workbench-theme='light'] .cs-kicker {
-  color: #0071e3;
+html:not([data-workbench-theme='light']) .cs-composer {
+  background: rgba(0, 0, 0, 0.18);
 }
 
-html[data-workbench-theme='light'] .cs-subtitle,
-html[data-workbench-theme='light'] .cs-hero__panel span,
-html[data-workbench-theme='light'] .cs-muted,
-html[data-workbench-theme='light'] .cs-toolbar span,
-html[data-workbench-theme='light'] .cs-standard span,
-html[data-workbench-theme='light'] .cs-ticket span,
-html[data-workbench-theme='light'] .cs-composer__footer span {
-  color: #86868b;
+html:not([data-workbench-theme='light']) .cs-composer textarea,
+html:not([data-workbench-theme='light']) .cs-chip,
+html:not([data-workbench-theme='light']) .cs-ticket,
+html:not([data-workbench-theme='light']) .cs-standard,
+html:not([data-workbench-theme='light']) .cs-side-empty {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f2f2f7;
 }
 
-html[data-workbench-theme='light'] .cs-hero__panel,
-html[data-workbench-theme='light'] .cs-chat,
-html[data-workbench-theme='light'] .cs-side-card {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: #ffffff;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
-}
-
-html[data-workbench-theme='light'] .cs-toolbar {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
-}
-
-html[data-workbench-theme='light'] .cs-bubble,
-html[data-workbench-theme='light'] .cs-empty {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.08);
-}
-
-html[data-workbench-theme='light'] .cs-message--user .cs-bubble {
-  background: rgba(0, 113, 227, 0.08);
-  border-color: rgba(0, 113, 227, 0.12);
-}
-
-html[data-workbench-theme='light'] .cs-composer {
-  border-top-color: rgba(0, 0, 0, 0.08);
-}
-
-html[data-workbench-theme='light'] .cs-composer textarea {
-  border-color: rgba(0, 0, 0, 0.1);
-  background: #ffffff;
-  color: #1d1d1f;
-}
-
-html[data-workbench-theme='light'] .cs-composer textarea::placeholder {
-  color: #86868b;
-}
-
-html[data-workbench-theme='light'] .cs-btn {
-  background: #0071e3;
-  color: #fff;
-}
-
-html[data-workbench-theme='light'] .cs-btn--ghost {
-  background: rgba(0, 0, 0, 0.04);
-  color: #1d1d1f;
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-html[data-workbench-theme='light'] .cs-ticket,
-html[data-workbench-theme='light'] .cs-standard {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.02);
-  color: #1d1d1f;
+html:not([data-workbench-theme='light']) .cs-btn--ghost {
+  color: #f2f2f7;
 }
 </style>
