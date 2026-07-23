@@ -4924,12 +4924,6 @@ def _auto_merge_low_risk_branch(
 
         branch_head_sha = _remote_branch_head(repo_url, branch)
         base_head_sha = _remote_branch_head(repo_url, base_branch)
-        if not branch_head_sha:
-            return {
-                "ok": False,
-                "reason": "remote_branch_head_unavailable",
-                "branch": branch,
-            }
         if base_head_sha and branch_head_sha == base_head_sha:
             return {
                 "ok": False,
@@ -4937,6 +4931,16 @@ def _auto_merge_low_risk_branch(
                 "branch": branch,
                 "branch_head_sha": branch_head_sha,
             }
+
+        # Production CVM deployments intentionally do not require direct GitHub
+        # reachability.  When ls-remote is unavailable, defer the remote-head
+        # check to the authenticated Para merge worker.  That worker creates or
+        # reuses the PR by the exact reviewed branch name and fails closed if
+        # the branch is absent; review/QA and the autonomy guard still run here
+        # before the merge request is emitted.
+        head_verification = (
+            "verified_on_cvm" if branch_head_sha else "delegated_to_para_merge_worker"
+        )
 
         from modstore_server.autonomy_guard_delegate import evaluate_risk
 
@@ -4964,9 +4968,10 @@ def _auto_merge_low_risk_branch(
             "base_branch": base_branch,
             "base_head_sha": base_head_sha or "",
             "branch": branch,
-            "branch_head_sha": branch_head_sha,
+            "branch_head_sha": branch_head_sha or "",
             "created_at": _iso(_utc_now()),
             "event": "merge_requested",
+            "head_verification": head_verification,
             "ok": True,
             "para_task_id": task_id,
             "phase": "merge",
@@ -4983,7 +4988,8 @@ def _auto_merge_low_risk_branch(
         return {
             "ok": True,
             "base_head_sha": base_head_sha or "",
-            "branch_head_sha": branch_head_sha,
+            "branch_head_sha": branch_head_sha or "",
+            "head_verification": head_verification,
             "merge_requested": True,
             "para_request": request_result,
             "reason": "merge_requested_after_loop_risk_gate",
