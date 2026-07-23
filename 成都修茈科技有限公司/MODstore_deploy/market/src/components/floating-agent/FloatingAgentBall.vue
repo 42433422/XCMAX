@@ -22,6 +22,7 @@
         class="butler-ball__logo"
         :src="brandLogoUrl"
         alt=""
+        draggable="false"
         :width="props.corpMode ? 46 : 38"
         :height="props.corpMode ? 46 : 38"
         decoding="async"
@@ -283,6 +284,9 @@ onBeforeUnmount(() => {
   object-position: 50% 37%;
   transform: scale(1.08);
   display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .butler-ball__label {
