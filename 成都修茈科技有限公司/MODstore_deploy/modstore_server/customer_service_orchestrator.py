@@ -1,11 +1,15 @@
 """独立 AI 客服编排层。
 
-第一版先用可审计的规则引擎做意图识别和动作计划，后续可以把 LLM function
-calling 接到本层，而不是让前端或提示词直接执行业务动作。
+对话优先：寒暄 / 一般咨询只回复不建单；规则 + LLM 识别意图后，
+仅在业务受理或用户明确升级时创建工单并执行动作。
 """
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
+import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -35,6 +39,37 @@ CATALOG_RE = re.compile(r"(?:商品\s*ID|catalog[_ -]?id|商品)[:：\s#]*([0-9]
 LLM_PROVIDER_RE = re.compile(r"(?:厂商|provider)\s*[:：]\s*([a-z0-9_-]+)", re.I)
 LLM_MODEL_RE = re.compile(r"(?:模型|model)\s*[:：]\s*(\S+)", re.I)
 LLM_SLASH_RE = re.compile(r"\b([a-z0-9_-]{2,32})\s*/\s*([^\s,，。]{1,120})", re.I)
+GREETING_RE = re.compile(
+    r"^(你好|您好|嗨|哈喽|hello|hi|hey|在吗|早上好|上午好|下午好|晚上好|你好呀|您好呀)"
+    r"[!！。.?？~\s]*$",
+    re.I,
+)
+ESCALATE_RE = re.compile(
+    r"转人工|人工客服|提交工单|创建工单|升级处理|要工单|找人工|处理不了|没解决",
+)
+TICKET_INTENTS = frozenset(
+    {"refund", "catalog_complaint", "catalog_review", "account_support", "llm_extension"}
+)
+KNOWN_INTENTS = frozenset(
+    {
+        "greeting",
+        "general",
+        "refund",
+        "catalog_complaint",
+        "catalog_review",
+        "account_support",
+        "llm_extension",
+    }
+)
+_INTENT_CLASSIFY_PROMPT = """你是 MODstore 客服意图分类器。只输出一行 JSON，不要其它文字。
+字段：intent, need_ticket, confidence, reason。
+intent 只能是：greeting|general|refund|catalog_complaint|catalog_review|account_support|llm_extension。
+规则：
+- 寒暄/闲聊 → greeting，need_ticket=false
+- 产品咨询、怎么用、报价 FAQ → general，need_ticket=false
+- 明确退款/投诉/上架审核/账号权益核查/模型扩展申请 → 对应 intent，need_ticket=true
+- 用户要转人工或提交工单 → need_ticket=true（intent 仍按内容选，不清则 general）
+confidence 为 0~1。"""
 
 
 def _enrich_cs_context(
@@ -136,9 +171,78 @@ def handle_customer_message(
     db.flush()
 
     extracted = extract_fields(text, context)
-    intent = infer_intent(text, extracted)
+    classified = classify_customer_intent(text, extracted, context=context)
+    intent = str(classified.get("intent") or "general")
+    need_ticket = bool(classified.get("need_ticket"))
     session.intent = intent
     standard = choose_standard(db, intent)
+
+    # 未结案工单：补材料 / 同意图跟进时继续走工单，不强制寒暄也建单
+    open_ticket = (
+        db.query(CustomerServiceTicket)
+        .filter(CustomerServiceTicket.session_id == session.id)
+        .filter(CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
+        .order_by(CustomerServiceTicket.id.desc())
+        .first()
+    )
+    if open_ticket:
+        if open_ticket.status == "waiting_user" and intent in {"general", "greeting"}:
+            intent = open_ticket.intent or intent
+            session.intent = intent
+            need_ticket = True
+        elif open_ticket.intent == intent and intent in TICKET_INTENTS:
+            need_ticket = True
+
+    if not need_ticket:
+        reply = _chat_only_reply(text, intent=intent, user=user, db=db)
+        cards: list[Dict[str, Any]] = [
+            {
+                "type": "intent",
+                "intent": intent,
+                "need_ticket": False,
+                "source": classified.get("source"),
+                "confidence": classified.get("confidence"),
+            }
+        ]
+        assistant_msg = CustomerServiceMessage(
+            session_id=session.id,
+            ticket_id=None,
+            user_id=user.id,
+            role="assistant",
+            content=reply,
+            payload_json=json_dumps(
+                {
+                    "ticket": None,
+                    "decision": None,
+                    "actions": [],
+                    "cards": cards,
+                    "intent": classified,
+                }
+            ),
+        )
+        db.add(assistant_msg)
+        audit(
+            db,
+            event_type="chat_only_reply",
+            session_id=session.id,
+            actor=user,
+            detail={"intent": intent, "classified": classified, "extracted": extracted},
+        )
+        return {
+            "ok": True,
+            "session": session_payload(session),
+            "ticket": None,
+            "message": {
+                "role": "assistant",
+                "content": reply,
+                "payload": json_loads(assistant_msg.payload_json, {}),
+            },
+            "decision": None,
+            "actions": [],
+            "cards": cards,
+            "intent": classified,
+        }
+
     ticket = ensure_ticket(db, user=user, session=session, intent=intent, extracted=extracted)
     user_msg.ticket_id = ticket.id
 
@@ -151,7 +255,7 @@ def handle_customer_message(
         ticket_id=ticket.id,
         decision_id=decision.id,
         user=user,
-        scenario=intent,
+        scenario=intent if intent != "greeting" else "general",
         payload={
             "ticket_id": ticket.id,
             "ticket_no": ticket.ticket_no,
@@ -177,8 +281,8 @@ def handle_customer_message(
     reply, cards = build_reply(
         ticket=ticket, decision=decision, actions=actions, extracted=extracted
     )
-    if intent == "general":
-        xiaoc_reply = _xiaoc_general_reply(text, user=user, db=db)
+    if intent in {"general", "greeting"}:
+        xiaoc_reply = _xiaoc_general_reply(text, user=user, db=db, ticketed=True)
         if xiaoc_reply:
             reply = xiaoc_reply
     assistant_msg = CustomerServiceMessage(
@@ -193,6 +297,7 @@ def handle_customer_message(
                 "decision": decision_payload(decision),
                 "actions": [action_payload(a) for a in actions],
                 "cards": cards,
+                "intent": classified,
             }
         ),
     )
@@ -204,7 +309,12 @@ def handle_customer_message(
         session_id=session.id,
         ticket_id=ticket.id,
         actor=user,
-        detail={"decision": decision.decision, "intent": intent, "extracted": extracted},
+        detail={
+            "decision": decision.decision,
+            "intent": intent,
+            "classified": classified,
+            "extracted": extracted,
+        },
     )
     enqueue_customer_service_event(
         db,
@@ -229,6 +339,7 @@ def handle_customer_message(
         "decision": decision_payload(decision),
         "actions": [action_payload(a) for a in actions],
         "cards": cards,
+        "intent": classified,
     }
 
 
@@ -272,15 +383,57 @@ def extract_fields(text: str, context: Dict[str, Any]) -> Dict[str, Any]:
     return data
 
 
-def infer_intent(text: str, extracted: Dict[str, Any]) -> str:
+def is_greeting(text: str) -> bool:
+    return bool(GREETING_RE.match((text or "").strip()))
+
+
+def wants_ticket_escalation(text: str) -> bool:
+    return bool(ESCALATE_RE.search(text or ""))
+
+
+def should_create_ticket(intent: str, text: str) -> bool:
+    if wants_ticket_escalation(text):
+        return True
+    return intent in TICKET_INTENTS
+
+
+def infer_intent(
+    text: str,
+    extracted: Dict[str, Any],
+    context: Optional[Dict[str, Any]] = None,
+) -> str:
+    """规则意图识别（明确关键词优先；订单号单独出现不再默认退款）。"""
+    ctx = context or {}
+    scene = str(ctx.get("scene") or "").strip().lower()
+    scene_map = {
+        "refund": "refund",
+        "complaint": "catalog_complaint",
+        "catalog_complaint": "catalog_complaint",
+        "review": "catalog_review",
+        "catalog_review": "catalog_review",
+        "account": "account_support",
+        "account_support": "account_support",
+        "llm_extension": "llm_extension",
+    }
+    if scene in scene_map:
+        return scene_map[scene]
+
+    complaint_type = str(extracted.get("complaint_type") or ctx.get("complaint_type") or "").lower()
+    if complaint_type in {"plagiarism", "license", "download", "侵权", "抄袭"}:
+        return "catalog_complaint"
+    if complaint_type in {"refund", "退款"}:
+        return "refund"
+
     lowered = text.lower()
+    if is_greeting(text):
+        return "greeting"
     if (
         extracted.get("provider")
         and extracted.get("model")
         and any(x in text for x in ("模型扩展", "开通模型", "模型上架", "不支持该模型", "申请模型"))
     ):
         return "llm_extension"
-    if "退款" in text or "refund" in lowered or extracted.get("order_no"):
+    if "退款" in text or "refund" in lowered:
         return "refund"
     if any(word in text for word in ("投诉", "抄袭", "侵权", "无法下载", "举报")):
         return "catalog_complaint"
@@ -299,9 +452,147 @@ def infer_intent(text: str, extracted: Dict[str, Any]) -> str:
             "LLM 扩展",
             "大模型扩展",
         )
-    ) or (("模型" in text or "model" in lowered) and ("扩展" in text or "上架" in text or "审核" in text)):
+    ) or (
+        ("模型" in text or "model" in lowered)
+        and ("扩展" in text or "上架" in text or "审核" in text)
+    ):
         return "llm_extension"
     return "general"
+
+
+def classify_customer_intent(
+    text: str,
+    extracted: Dict[str, Any],
+    *,
+    context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """规则优先；模糊 general 时可选 LLM 助判。"""
+    rule_intent = infer_intent(text, extracted, context=context)
+    escalate = wants_ticket_escalation(text)
+    if rule_intent != "general":
+        return {
+            "intent": rule_intent,
+            "need_ticket": should_create_ticket(rule_intent, text),
+            "confidence": 0.92 if rule_intent != "greeting" else 0.98,
+            "source": "rules",
+            "reason": "keyword_or_scene",
+        }
+
+    llm = _llm_classify_intent(text)
+    if llm:
+        intent = str(llm.get("intent") or "general")
+        if intent not in KNOWN_INTENTS:
+            intent = "general"
+        need_ticket = bool(llm.get("need_ticket")) if "need_ticket" in llm else should_create_ticket(
+            intent, text
+        )
+        if escalate:
+            need_ticket = True
+        return {
+            "intent": intent,
+            "need_ticket": need_ticket,
+            "confidence": float(llm.get("confidence") or 0.6),
+            "source": "llm",
+            "reason": str(llm.get("reason") or "")[:200],
+        }
+
+    return {
+        "intent": "general",
+        "need_ticket": escalate,
+        "confidence": 0.55,
+        "source": "rules",
+        "reason": "escalate" if escalate else "default_general",
+    }
+
+
+def _llm_classify_intent(text: str) -> Optional[Dict[str, Any]]:
+    """同步包装平台 LLM；失败或未配置时返回 None。"""
+    flag = (os.environ.get("MODSTORE_CS_LLM_INTENT") or "1").strip().lower()
+    if flag in {"0", "false", "off", "no"}:
+        return None
+    sample = (text or "").strip()
+    if not sample or len(sample) < 2:
+        return None
+
+    async def _inner() -> Optional[Dict[str, Any]]:
+        from modstore_server.services.llm import (
+            chat_dispatch_via_platform_only,
+            resolve_platform_bench_llm,
+        )
+
+        prov, mdl = resolve_platform_bench_llm()
+        if not prov or not mdl:
+            return None
+        out = await chat_dispatch_via_platform_only(
+            prov,
+            mdl,
+            [
+                {"role": "system", "content": _INTENT_CLASSIFY_PROMPT},
+                {"role": "user", "content": sample[:1500]},
+            ],
+            max_tokens=160,
+        )
+        if not isinstance(out, dict) or not out.get("ok"):
+            return None
+        content = ""
+        if isinstance(out.get("content"), str):
+            content = out["content"]
+        elif isinstance(out.get("text"), str):
+            content = out["text"]
+        elif isinstance(out.get("message"), dict):
+            content = str(out["message"].get("content") or "")
+        content = content.strip()
+        if not content:
+            return None
+        # 容忍模型包一层 ```json
+        if "```" in content:
+            parts = content.split("```")
+            content = parts[1] if len(parts) > 1 else content
+            content = content.lstrip("json").strip()
+        start = content.find("{")
+        end = content.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        data = json.loads(content[start : end + 1])
+        return data if isinstance(data, dict) else None
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, _inner()).result(timeout=6)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _chat_only_reply(
+    text: str,
+    *,
+    intent: str,
+    user: Optional[User] = None,
+    db: Optional[Session] = None,
+) -> str:
+    if intent == "greeting" or is_greeting(text):
+        name = ""
+        try:
+            from modstore_server.xiaoc_cs_ssot import resolve_user_identity
+
+            if user is not None:
+                ident = resolve_user_identity(user, db=db, source="market_cs")
+                if ident.display_name and ident.display_name not in {"用户", "访客", "匿名访客"}:
+                    name = ident.display_name
+        except Exception:  # noqa: BLE001
+            pass
+        hello = f"{name}，" if name else ""
+        return (
+            f"我是小C。{hello}你好！可以直接问产品、购买、会员权益，"
+            "或说明退款/投诉等需求；需要正式受理时再说「提交工单」。"
+        )
+    xiaoc = _xiaoc_general_reply(text, user=user, db=db, ticketed=False)
+    if xiaoc:
+        return xiaoc
+    return (
+        "我是小C。已收到你的问题。你可以继续补充细节；"
+        "若需要平台正式受理，直接说「提交工单」或说明退款/投诉诉求。"
+    )
 
 
 def choose_standard(db: Session, intent: str) -> Optional[CustomerServiceStandard]:
@@ -587,6 +878,7 @@ def _xiaoc_general_reply(
     *,
     user: Optional[User] = None,
     db: Optional[Session] = None,
+    ticketed: bool = False,
 ) -> str:
     """general 意图走小C SSOT（管理端知识库摘录 + 模板兜底）。"""
     address = ""
@@ -615,9 +907,14 @@ def _xiaoc_general_reply(
         else ""
     )
     if not kb:
+        if ticketed:
+            return (
+                f"我是小C。{hello}已为你登记工单；"
+                "你也可以继续补充材料，或去 /contact.html 留言。"
+            )
         return (
-            f"我是小C。{hello}这个问题我先记在工单里了；"
-            "你也可以直接问产品/报价/怎么上手，或去 /contact.html 留言。"
+            f"我是小C。{hello}可以先直接问产品/报价/怎么上手；"
+            "需要正式受理时再说「提交工单」，或去 /contact.html 留言。"
         )
     # 有知识库时给出基于摘录的简短答复（规则引擎阶段不做二次 LLM，避免阻塞）
     excerpt = kb.splitlines()
@@ -626,7 +923,7 @@ def _xiaoc_general_reply(
     if body:
         return (
             f"我是小C。{hello}根据管理端知识库：{body} "
-            "若还要细聊，可以说具体场景或留个联系方式。"
+            "若还要细聊，可以说具体场景；需要建单时说「提交工单」。"
         )
     return ""
 
@@ -677,6 +974,7 @@ def title_for_intent(intent: str, extracted: Dict[str, Any]) -> str:
         "account_support": "账号权益支持",
         "llm_extension": "大模型扩展申请",
         "general": "平台客服咨询",
+        "greeting": "平台客服咨询",
     }
     suffix = extracted.get("order_no") or extracted.get("catalog_id") or ""
     if intent == "llm_extension":
