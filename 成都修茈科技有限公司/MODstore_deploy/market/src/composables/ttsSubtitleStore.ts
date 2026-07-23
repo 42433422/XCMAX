@@ -68,22 +68,13 @@ export function endTtsSubtitles(gen?: number): void {
 }
 
 export function useTtsSubtitleStore() {
+  // 字幕只暴露当前句，不提供上一句/下一句（避免卡拉 OK 式上下文）
   const current = computed(() => lines.value[currentIndex.value] || null)
-  const prev = computed(() =>
-    currentIndex.value > 0 ? lines.value[currentIndex.value - 1] || null : null,
-  )
-  const next = computed(() =>
-    currentIndex.value < lines.value.length - 1
-      ? lines.value[currentIndex.value + 1] || null
-      : null,
-  )
   return {
     visible: readonly(visible),
     lines: readonly(lines),
     currentIndex: readonly(currentIndex),
     current,
-    prev,
-    next,
     dismiss: () => endTtsSubtitles(),
   }
 }
