@@ -20,6 +20,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _employee_result_ok,
     _existing_kb_schema_retry_item,
     _extract_failure_reason,
+    _failed_open_item_identity,
     _find_delivery_validation,
     _find_pr_number_for_branch,
     _focused_test_command,
@@ -2292,3 +2293,115 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
     result = _find_pr_number_for_branch("any-branch")
     assert result is None
+
+
+def _max_retry_memory(open_items, recent_runs=None):
+    return {
+        "closed_items": [],
+        "open_items": open_items,
+        "recent_runs": recent_runs or [],
+        "run_count": 0,
+    }
+
+
+def test_max_retry_non_code_enqueue_failure_keeps_item_without_escalated(monkeypatch):
+    """入队失败时不应提前标记 escalated，以便后续循环重试入队。"""
+    item = {
+        "branch": "devfleet/codex/review-stuck",
+        "created_at": "2026-07-24T00:00:00+00:00",
+        "kind": "failed_steps",
+        "para_task_id": "task-review-1",
+        "retry_count": 3,
+        "run_id": "run-review-1",
+        "steps": ["review"],
+    }
+    memory = _max_retry_memory([item])
+
+    def fake_enqueue(**kwargs):
+        return {"queued": False, "reason": "disabled"}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result is None
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0].get("escalated") is not True
+
+
+def test_max_retry_non_code_enqueue_success_removes_only_matching_identity(monkeypatch):
+    """run_id 重复时只移除真正入队成功的那一项。"""
+    shared_run_id = None
+    item_a = {
+        "branch": "devfleet/codex/review-a",
+        "created_at": "2026-07-24T00:00:00+00:00",
+        "kind": "failed_steps",
+        "para_task_id": "task-a",
+        "retry_count": 3,
+        "run_id": shared_run_id,
+        "steps": ["review"],
+    }
+    item_b = {
+        "branch": "devfleet/codex/review-b",
+        "created_at": "2026-07-24T01:00:00+00:00",
+        "kind": "failed_steps",
+        "para_task_id": "task-b",
+        "retry_count": 3,
+        "run_id": shared_run_id,
+        "steps": ["qa"],
+    }
+    memory = _max_retry_memory([item_a, item_b])
+    success_identity = _failed_open_item_identity(item_a)
+
+    def fake_enqueue(*, context, decision, reason, source="self_maintenance_loop"):
+        if context.get("para_task_id") == "task-a":
+            return {"queued": True}
+        return {"queued": False, "reason": "disabled"}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result is None
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["para_task_id"] == "task-b"
+    assert memory["open_items"][0].get("escalated") is not True
+    assert item_a.get("escalated") is True
+    assert _failed_open_item_identity(memory["open_items"][0]) != success_identity
+
+
+def test_max_retry_code_failure_does_not_set_escalated_or_enqueue(monkeypatch):
+    """code 类超重试项暂停自动化，但不标记 escalated 也不入人工队列。"""
+    item = {
+        "branch": "devfleet/codex/code-stuck",
+        "created_at": "2026-07-24T00:00:00+00:00",
+        "kind": "failed_steps",
+        "para_task_id": "task-code-1",
+        "retry_count": 3,
+        "run_id": "run-code-1",
+        "steps": ["code"],
+    }
+    memory = _max_retry_memory([item])
+    enqueue_calls = []
+
+    def fake_enqueue(**kwargs):
+        enqueue_calls.append(kwargs)
+        return {"queued": True}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result is None
+    assert enqueue_calls == []
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0].get("escalated") is not True

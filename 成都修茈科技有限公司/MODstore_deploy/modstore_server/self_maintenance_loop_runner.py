@@ -728,6 +728,21 @@ def _open_item_steps(item: Dict[str, Any]) -> List[str]:
     return [str(step) for step in steps if str(step)]
 
 
+def _failed_open_item_identity(item: Dict[str, Any]) -> str:
+    """Stable identity for max-retry open items; run_id alone is not unique enough."""
+
+    return "|".join(
+        [
+            str(item.get("kind") or ""),
+            str(item.get("run_id") or ""),
+            str(item.get("branch") or ""),
+            str(item.get("para_task_id") or item.get("task_id") or ""),
+            ",".join(_open_item_steps(item)),
+            str(item.get("created_at") or ""),
+        ]
+    )
+
+
 def _open_item_matches_resolution(
     item: Dict[str, Any],
     *,
@@ -952,30 +967,37 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         return None
     max_retries = int(os.environ.get("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES") or "3")
     open_items_raw = memory.get("open_items")
-    escalated_items = []
-    enqueue_success_ids = set()
+    terminal_hold = False
+    enqueue_success_keys: set[str] = set()
     if isinstance(open_items_raw, list):
+        human_review_candidates: List[Dict[str, Any]] = []
         for item in open_items_raw:
-            if (
+            if not (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
                 and int(item.get("retry_count") or 1) >= max_retries
             ):
-                item["escalated"] = True
-                escalated_items.append(item)
+                continue
+            steps = _open_item_steps(item)
+            item_identity = _failed_open_item_identity(item)
+            if "code" in steps:
+                terminal_hold = True
                 logger.warning(
-                    "open_item run_id=%s exceeded max_retries=%d, escalating to human review",
-                    item.get("run_id"),
+                    "open_item identity=%s exceeded max_retries=%d, pausing automated retries for code step",
+                    item_identity,
                     max_retries,
                 )
-        # Enqueue non-code escalated items to human uncertainty queue first, only remove from open_items on success
-        if escalated_items:
+                continue
+            human_review_candidates.append(item)
+            terminal_hold = True
+
+        if human_review_candidates:
             try:
                 from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
-                for item in escalated_items:
-                    steps = item.get("steps") or []
-                    if "code" in steps:
-                        continue  # Code failures are handled separately, keep in open_items for visibility
+
+                for item in human_review_candidates:
+                    item_identity = _failed_open_item_identity(item)
+                    steps = _open_item_steps(item)
                     try:
                         result = enqueue_uncertain_item(
                             context={
@@ -985,17 +1007,37 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                                 "branch": item.get("branch"),
                                 "para_task_id": item.get("para_task_id"),
                             },
-                            decision={"action": "await_human_strategy_approval", "reason": "max_retries_exceeded"},
-                            reason=f"self-maintenance step {steps} failed {item.get('retry_count')} times, exceeded max retries",
+                            decision={
+                                "action": "await_human_strategy_approval",
+                                "reason": "max_retries_exceeded",
+                            },
+                            reason=(
+                                f"self-maintenance step {steps} failed "
+                                f"{item.get('retry_count')} times, exceeded max retries"
+                            ),
                         )
-                        if result.get("queued"):
-                            enqueue_success_ids.add(item.get("run_id"))
-                            logger.info("successfully enqueued escalated item run_id=%s to human queue", item.get("run_id"))
+                        if result.get("queued") or result.get("reason") == "duplicate":
+                            item["escalated"] = True
+                            enqueue_success_keys.add(item_identity)
+                            logger.info(
+                                "successfully enqueued max-retry item identity=%s to human queue",
+                                item_identity,
+                            )
+                        else:
+                            logger.warning(
+                                "failed to enqueue max-retry item identity=%s to human queue: %s",
+                                item_identity,
+                                result.get("reason") or "unknown",
+                            )
                     except Exception as exc:
-                        logger.warning("failed to enqueue escalated item run_id=%s to human queue: %s", item.get("run_id"), exc)
+                        logger.warning(
+                            "failed to enqueue max-retry item identity=%s to human queue: %s",
+                            item_identity,
+                            exc,
+                        )
             except Exception as exc:
                 logger.warning("failed to import human uncertainty queue: %s", exc)
-        # Remove only successfully enqueued non-code escalated items from open_items; keep others for retry/visibility
+
         memory["open_items"] = [
             item
             for item in open_items_raw
@@ -1003,12 +1045,12 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
                 and int(item.get("retry_count") or 1) >= max_retries
-                and "code" not in (item.get("steps") or [])
-                and item.get("run_id") in enqueue_success_ids
+                and "code" not in _open_item_steps(item)
+                and _failed_open_item_identity(item) in enqueue_success_keys
             )
         ]
     # Max-retry exhaustion is an automatic terminal hold, not an approval request.
-    if escalated_items:
+    if terminal_hold:
         return None
 
     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
