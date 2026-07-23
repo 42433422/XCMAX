@@ -953,6 +953,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
     max_retries = int(os.environ.get("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES") or "3")
     open_items_raw = memory.get("open_items")
     escalated_items = []
+    enqueue_success_ids = set()
     if isinstance(open_items_raw, list):
         for item in open_items_raw:
             if (
@@ -963,12 +964,38 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 item["escalated"] = True
                 escalated_items.append(item)
                 logger.warning(
-                    "open_item run_id=%s exceeded max_retries=%d, pausing automated retries",
+                    "open_item run_id=%s exceeded max_retries=%d, escalating to human review",
                     item.get("run_id"),
                     max_retries,
                 )
-        # Keep escalated items in open_items but mark them as escalated so they are visible
-        # to operators instead of silently being dropped
+        # Enqueue non-code escalated items to human uncertainty queue first, only remove from open_items on success
+        if escalated_items:
+            try:
+                from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
+                for item in escalated_items:
+                    steps = item.get("steps") or []
+                    if "code" in steps:
+                        continue  # Code failures are handled separately, keep in open_items for visibility
+                    try:
+                        result = enqueue_uncertain_item(
+                            context={
+                                "run_id": item.get("run_id"),
+                                "failed_steps": steps,
+                                "retry_count": item.get("retry_count"),
+                                "branch": item.get("branch"),
+                                "para_task_id": item.get("para_task_id"),
+                            },
+                            decision={"action": "await_human_strategy_approval", "reason": "max_retries_exceeded"},
+                            reason=f"self-maintenance step {steps} failed {item.get('retry_count')} times, exceeded max retries",
+                        )
+                        if result.get("queued"):
+                            enqueue_success_ids.add(item.get("run_id"))
+                            logger.info("successfully enqueued escalated item run_id=%s to human queue", item.get("run_id"))
+                    except Exception as exc:
+                        logger.warning("failed to enqueue escalated item run_id=%s to human queue: %s", item.get("run_id"), exc)
+            except Exception as exc:
+                logger.warning("failed to import human uncertainty queue: %s", exc)
+        # Remove only successfully enqueued non-code escalated items from open_items; keep others for retry/visibility
         memory["open_items"] = [
             item
             for item in open_items_raw
@@ -977,6 +1004,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 and item.get("kind") == "failed_steps"
                 and int(item.get("retry_count") or 1) >= max_retries
                 and "code" not in (item.get("steps") or [])
+                and item.get("run_id") in enqueue_success_ids
             )
         ]
     # Max-retry exhaustion is an automatic terminal hold, not an approval request.
