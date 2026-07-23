@@ -70,6 +70,19 @@ describe('FloatingChatAssistant', () => {
     expect(wrapper.find('.floating-chat-toggle-label').text()).toBe('小C助理')
   })
 
+  it('renders the female avatar in the standalone round toggle by default', () => {
+    const wrapper = mountAssistant()
+    const avatar = wrapper.find('.floating-chat-toggle-avatar img')
+    expect(avatar.exists()).toBe(true)
+    expect(avatar.attributes('src')).toBe('/ai-butler-female-avatar-v1.png')
+  })
+
+  it('renders the male avatar in the standalone round toggle for administration', () => {
+    const wrapper = mountAssistant({ maleAvatar: true })
+    const avatar = wrapper.find('.floating-chat-toggle-avatar img')
+    expect(avatar.attributes('src')).toBe('/ai-butler-male-avatar-v1.jpg')
+  })
+
   it('toggle button has correct aria-label', () => {
     const wrapper = mountAssistant()
     expect(wrapper.find('.floating-chat-toggle').attributes('aria-label')).toBe(
