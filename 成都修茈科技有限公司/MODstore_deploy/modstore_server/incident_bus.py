@@ -456,15 +456,24 @@ def _dispatch_incident(event_id: int) -> None:
         if not eid_emp or eid_emp not in catalog_ids:
             continue
         try:
+            from modstore_server.duty_workforce_contracts import duty_event_execution_input
+
+            duty_input = duty_event_execution_input(
+                eid_emp,
+                event_type=event_type,
+                source=source,
+                incident=payload,
+            )
             execute_employee_task(
                 eid_emp,
                 brief,
-                _incident_employee_input(
+                duty_input
+                or _incident_employee_input(
                     incident_payload=payload,
                     event_type=event_type,
                     source=source,
                 ),
-                user_id=admin_id,
+                user_id=0 if duty_input else admin_id,
             )
             dispatched += 1
         except Exception as exc:  # noqa: BLE001

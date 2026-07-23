@@ -331,6 +331,24 @@ def test_system_read_only_burn_in_accepts_configured_monorepo_child(tmp_path, mo
     assert resolved == str(project.resolve())
 
 
+def test_trusted_read_only_duty_contract_accepts_configured_monorepo_child(tmp_path, monkeypatch):
+    from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+    repo = tmp_path / "repo"
+    project = repo / "FHD"
+    project.mkdir(parents=True)
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(repo))
+
+    resolved = _trusted_system_burn_in_project_root(
+        project,
+        cog_input={"_trusted_duty_contract_execution": True},
+        user_id=0,
+        read_only=True,
+    )
+
+    assert resolved == str(project.resolve())
+
+
 @pytest.mark.parametrize(
     ("user_id", "read_only", "burn_in_read_only"),
     [(1, True, True), (0, False, True), (0, True, False)],
