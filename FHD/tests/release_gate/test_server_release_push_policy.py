@@ -296,6 +296,10 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     assert 'TOKEN_FILE="${3:-}"' in script
     assert 'rm -f -- "$REASON_FILE"' in script
     assert 'rm -f -- "$TOKEN_FILE"' in script
+    assert script.count('status == "completed" or status.startswith("completed_")') == 2
+    assert "status not in fail_statuses" not in script
+    assert 'print("1" if success else "0")' in script
+    assert "raise SystemExit(0 if success else 3)" in script
 
 
 def test_forced_self_maintenance_does_not_put_secret_or_reason_in_ssh_argv() -> None:

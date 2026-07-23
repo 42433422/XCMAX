@@ -129,12 +129,8 @@ if isinstance(result, dict):
     status = str(result.get("status") or "")
 elif isinstance(d, dict):
     status = str(d.get("status") or "")
-fail = {
-    "skipped_active_lease",
-    "skipped_runtime_provenance_blocked",
-    "disabled",
-}
-print("0" if status in fail else "1")
+success = status == "completed" or status.startswith("completed_")
+print("1" if success else "0")
 PY
 )"
   [[ "${ok_run}" == "1" ]]
@@ -195,12 +191,8 @@ result = run_self_maintenance_loop(
 )
 print(json.dumps(result, ensure_ascii=False, default=str)[:4000])
 status = str(result.get("status") or "")
-fail_statuses = {
-    "skipped_runtime_provenance_blocked",
-    "skipped_active_lease",
-    "disabled",
-}
-raise SystemExit(0 if status not in fail_statuses else 3)
+success = status == "completed" or status.startswith("completed_")
+raise SystemExit(0 if success else 3)
 PY
 }
 
