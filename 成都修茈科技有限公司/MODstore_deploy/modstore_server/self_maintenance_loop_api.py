@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
+import secrets
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
 from modstore_server.api.deps import require_admin
 from modstore_server.models import User
@@ -16,6 +21,59 @@ from modstore_server.self_maintenance_loop_runner import (
 )
 
 router = APIRouter(prefix="/api/ops/self-maintenance", tags=["ops"])
+
+
+def _deployment_receipt_token_valid(
+    authorization: str | None,
+    x_autonomy_token: str | None,
+) -> bool:
+    expected = (
+        os.environ.get("AUTONOMY_WEBHOOK_TOKEN")
+        or os.environ.get("MODSTORE_OPS_INGEST_TOKEN")
+        or ""
+    ).strip()
+    bearer = str(authorization or "").strip()
+    if bearer.lower().startswith("bearer "):
+        bearer = bearer[7:].strip()
+    provided = bearer or str(x_autonomy_token or "").strip()
+    return bool(expected and provided and secrets.compare_digest(expected, provided))
+
+
+def _release_manifest_payload() -> Dict[str, Any]:
+    configured = str(os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
+    path = Path(configured) if configured else Path("/opt/xcmax/current/.xcmax-release.json")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(409, "release_manifest_unavailable") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(409, "release_manifest_invalid")
+    return payload
+
+
+def _git_is_ancestor(ancestor: str, descendant: str) -> bool:
+    repo_root = Path(
+        os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"
+    ).expanduser()
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "merge-base",
+                "--is-ancestor",
+                ancestor,
+                descendant,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 @router.get("/status", summary="Self-maintenance loop runtime status")
@@ -58,6 +116,72 @@ async def force_run_self_maintenance_loop(
         else:
             os.environ["MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC"] = prev_wait
     return {"ok": True, "result": result}
+
+
+@router.post(
+    "/deployment-receipt",
+    summary="Record an exact production workflow and runtime identity receipt",
+)
+async def record_self_maintenance_deployment_receipt(
+    body: Dict[str, Any] = Body(default_factory=dict),
+    authorization: str | None = Header(default=None),
+    x_autonomy_token: str | None = Header(default=None, alias="X-Autonomy-Token"),
+):
+    """Signed GitHub callback; unrelated deploys are an idempotent no-op."""
+
+    if not _deployment_receipt_token_valid(authorization, x_autonomy_token):
+        raise HTTPException(401, "invalid_deployment_receipt_token")
+
+    from modstore_server.deploy_context import health_payload
+    from modstore_server.self_maintenance_deploy_receipts import (
+        BuildIdentity,
+        DeploymentReceiptError,
+        record_completed_deployment_receipt,
+    )
+    from modstore_server.self_maintenance_loop_runner import (
+        _append_governance_audit,
+        _append_ledger,
+        _read_ledger,
+    )
+
+    observed_at = datetime.now(timezone.utc).isoformat()
+
+    def _record(event: Dict[str, Any]) -> None:
+        event = {**event, "created_at": str(event.get("created_at") or observed_at)}
+        _append_ledger(event)
+        _append_governance_audit(
+            {
+                **event,
+                "kind": str(event.get("event") or "deployment_receipt"),
+            }
+        )
+
+    try:
+        result = record_completed_deployment_receipt(
+            rows=_read_ledger(limit=5000),
+            record_event=_record,
+            merge_sha=str(body.get("merge_sha") or ""),
+            environment=str(body.get("environment") or "production"),
+            workflow_run_id=str(body.get("workflow_run_id") or ""),
+            workflow_status=str(body.get("workflow_status") or ""),
+            workflow_conclusion=str(body.get("workflow_conclusion") or ""),
+            release=BuildIdentity.from_payload(_release_manifest_payload()),
+            health=BuildIdentity.from_payload(health_payload()),
+            is_ancestor=_git_is_ancestor,
+            requested_run_id=str(body.get("run_id") or ""),
+            workflow_url=str(body.get("workflow_url") or ""),
+            action_id=str(body.get("action_id") or ""),
+            observed_at=observed_at,
+        )
+    except DeploymentReceiptError as exc:
+        if exc.reason == "pending_merge_not_found":
+            return {
+                "ok": True,
+                "recorded": False,
+                "reason": exc.reason,
+            }
+        raise HTTPException(409, exc.reason) from exc
+    return result
 
 
 @router.post("/governance-review", summary="Acknowledge self-maintenance governance audit")
