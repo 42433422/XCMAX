@@ -880,6 +880,71 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
     )
 
 
+_AUTOMATED_REMEDIATION_QA_ONLY_REASONS = frozenset(
+    {
+        "changed_files_match_forbidden_globs",
+        "changed_files_outside_dynamic_low_risk_scope",
+        "changed_files_outside_low_risk_globs",
+        "missing_report_only_evidence",
+        "max_retries_exceeded",
+        "structured_qa_focused_command_not_passed",
+        "structured_qa_target_branch_unavailable",
+    }
+)
+_AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
+    {
+        "structured_qa_blocking_findings",
+        "structured_qa_new_errors",
+        "structured_qa_new_failures",
+        "structured_qa_verdict_not_pass",
+        "structured_review_blocking_findings",
+        "structured_review_dimension_fail",
+        "structured_review_high_severity",
+    }
+)
+
+
+def _automated_remediation_resume_plan(reason: str) -> Optional[Tuple[List[str], bool]]:
+    """Map hold_for_automated_remediation reasons to resume steps and branch pinning."""
+
+    normalized = str(reason or "").strip()
+    if normalized in _AUTOMATED_REMEDIATION_QA_ONLY_REASONS:
+        return (["qa"], False)
+    if normalized in _AUTOMATED_REMEDIATION_CODE_REASONS:
+        return (["code"], True)
+    if normalized.startswith("structured_qa_new_"):
+        return (["code"], True)
+    return None
+
+
+def _stored_qa_target_ref_missing(memory: Dict[str, Any], item: Dict[str, Any]) -> bool:
+    """Recover the precise QA-only cause from legacy generic verdict memory."""
+
+    if str(item.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
+        return False
+    branch = str(item.get("branch") or "").strip()
+    if not branch:
+        return False
+    decision = (
+        memory.get("last_policy_decision")
+        if isinstance(memory.get("last_policy_decision"), dict)
+        else {}
+    )
+    if str(decision.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
+        return False
+    structured_gate = (
+        decision.get("structured_gate") if isinstance(decision.get("structured_gate"), dict) else {}
+    )
+    qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
+    if qa.get("target_branch_available") is not False:
+        return False
+    blocking = qa.get("blocking_findings")
+    return isinstance(blocking, list) and any(
+        "target_branch_unavailable" in str(finding) and branch in str(finding)
+        for finding in blocking
+    )
+
+
 def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_RESUME_REVIEW_QA", True):
         return None
@@ -1019,6 +1084,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         }:
             continue
         reason = str(item.get("reason") or "")
+        if _stored_qa_target_ref_missing(memory, item):
+            reason = "structured_qa_target_branch_unavailable"
         if reason in {
             "auto_merge_safety_score_v2_too_low",
             "auto_merge_safety_score_v3_too_low",
@@ -1037,26 +1104,24 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "reason": "resume_safety_score_remediation",
                 }
             continue
-        if reason not in {
-            "changed_files_match_forbidden_globs",
-            "changed_files_outside_dynamic_low_risk_scope",
-            "changed_files_outside_low_risk_globs",
-            "missing_report_only_evidence",
-            "max_retries_exceeded",
-            "structured_qa_focused_command_not_passed",
-        }:
+        resume_plan = _automated_remediation_resume_plan(reason)
+        if resume_plan is None:
             continue
+        failed_steps, continue_existing_code_task = resume_plan
         branch = str(item.get("branch") or "").strip()
         para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         run_id = str(item.get("run_id") or "").strip()
         if branch and para_task_id:
-            return {
+            candidate: Dict[str, Any] = {
                 "branch": branch,
                 "failed_run_id": run_id,
-                "failed_steps": ["qa"],
+                "failed_steps": list(failed_steps),
                 "para_task_id": para_task_id,
                 "reason": "resume_automated_remediation_candidate",
             }
+            if continue_existing_code_task:
+                candidate["continue_existing_code_task"] = True
+            return candidate
     return None
 
 
@@ -2642,17 +2707,17 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "review": review_json,
                 "qa": qa_json,
             }
+        if qa_json.get("target_branch_available") is not True:
+            return {
+                "ok": False,
+                "reason": "structured_qa_target_branch_unavailable",
+                "qa": qa_json,
+            }
         verdict = str(qa_json.get("verdict") or "").upper()
         if verdict != "PASS":
             return {
                 "ok": False,
                 "reason": "structured_qa_verdict_not_pass",
-                "qa": qa_json,
-            }
-        if qa_json.get("target_branch_available") is not True:
-            return {
-                "ok": False,
-                "reason": "structured_qa_target_branch_unavailable",
                 "qa": qa_json,
             }
         blocking = qa_json.get("blocking_findings")
