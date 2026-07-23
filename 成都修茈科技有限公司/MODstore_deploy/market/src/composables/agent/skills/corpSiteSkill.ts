@@ -55,7 +55,16 @@ export function matchCorpSiteIntent(ctx: AgentContext): SkillExecuteResult | nul
       `可在此体验 Excel 上传识别：${CORP_LINKS.excelToAi}\n\n完整产品线见：${CORP_LINKS.services}`,
     )
   }
-  if (/产品|服务|功能|单据|标签|打印|modstore|市场/.test(q) && !/案例/.test(q)) {
+  if (/下载|安装包|安装|xcagi|桌面端|macos|windows|android|安卓/.test(q)) {
+    const page = getCorpPageKnowledge('download')
+    return reply(
+      `${page.summary}\n\n` +
+        `打开产品下载页，按系统选择安装包：${CORP_LINKS.download}\n\n` +
+        `也可看更新日志：${CORP_LINKS.downloadReleases}\n` +
+        `需要授权或方案沟通：${CORP_LINKS.contact}`,
+    )
+  }
+  if (/产品|服务|功能|单据|标签|打印|modstore|市场/.test(q) && !/案例|下载/.test(q)) {
     const page = getCorpPageKnowledge('services')
     return reply(
       `${page.summary}\n\n详见产品中心：${CORP_LINKS.services}\n\n想深入某一场景可看解决方案：${CORP_LINKS.solutions}`,

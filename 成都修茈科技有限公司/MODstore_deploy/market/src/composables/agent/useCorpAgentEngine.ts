@@ -39,11 +39,12 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
 
 function fallbackReply(origin: string): string {
   return (
-    `我是小C（修茈科技官网客服），可以解答产品、案例与预约咨询。\n\n` +
+    `我暂时没法用大模型细答，但可以先按关键词帮您指路：\n\n` +
+    `• 下载 XCAGI → ${origin}${CORP_LINKS.download}\n` +
     `• 产品能力 → ${origin}${CORP_LINKS.services}\n` +
     `• 预约沟通 → ${origin}${CORP_LINKS.contact}\n` +
     `• 登录 AI 市场 → ${origin}${CORP_LINKS.market}\n\n` +
-    `您也可以直接问：「有哪些产品？」「怎么联系你们？」`
+    `您也可以直接问：「怎么下载 XCAGI？」「有哪些产品？」「怎么联系你们？」`
   )
 }
 
