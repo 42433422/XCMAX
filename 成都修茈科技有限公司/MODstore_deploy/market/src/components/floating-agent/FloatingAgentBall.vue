@@ -80,10 +80,10 @@ const brandLogoUrl = computed(() =>
 const ballRef = ref<HTMLButtonElement | null>(null)
 
 const DRAG_THRESHOLD_PX = 6
-const BALL_WIDTH_ESTIMATE = 132
-const CORP_BALL_WIDTH_ESTIMATE = 146
-const BALL_HEIGHT_ESTIMATE = 56
-const CORP_BALL_HEIGHT_ESTIMATE = 64
+const BALL_WIDTH_ESTIMATE = 64
+const CORP_BALL_WIDTH_ESTIMATE = 64
+const BALL_HEIGHT_ESTIMATE = 82
+const CORP_BALL_HEIGHT_ESTIMATE = 82
 let isDragging = false
 let dragStartX = 0
 let dragStartY = 0
@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 默认深色；浅色工作台加 .butler-ball--light（与「智能对话」胶囊一致） */
+/* 独立圆形头像，名称置于头像下方；不使用胶囊外框。 */
 .butler-ball {
   position: fixed;
   top: 0;
@@ -185,27 +185,24 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   touch-action: manipulation;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  min-height: 54px;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 64px;
+  min-width: 64px;
+  min-height: 82px;
   max-width: calc(100vw - 32px);
-  padding: 8px 14px 8px 9px;
+  padding: 0;
   margin: 0;
-  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 34%, transparent);
-  border-radius: 999px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--wb-surface-elevated, #12121a) 94%, transparent) 0%,
-    color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 98%, transparent) 100%
-  );
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--wb-text-primary, #f0f0f5);
-  box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.45),
-    var(--wb-glow-accent, 0 4px 14px rgba(99, 102, 241, 0.12)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: none;
   cursor: grab;
   touch-action: none;
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -219,30 +216,31 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball:hover {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 52%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--wb-card-hover-bg, rgba(240, 240, 245, 0.06)) 96%, #12121a) 0%,
-    color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 99%, transparent) 100%
-  );
+  background: transparent;
+}
+
+.butler-ball:hover .butler-ball__logo-wrap {
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 72%, transparent);
   box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.5),
-    var(--wb-glow-accent-strong, 0 6px 18px rgba(99, 102, 241, 0.18)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 0 0 3px color-mix(in srgb, var(--wb-accent-primary, #818cf8) 16%, transparent),
+    0 8px 18px rgba(0, 0, 0, 0.34);
 }
 
 .butler-ball:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 42%, transparent);
   outline-offset: 2px;
+  border-radius: 10px;
 }
 
 .butler-ball--open {
   z-index: 11020;
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 58%, transparent);
+}
+
+.butler-ball--open .butler-ball__logo-wrap {
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #818cf8) 78%, transparent);
   box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.52),
-    var(--wb-glow-accent-strong, 0 0 24px rgba(99, 102, 241, 0.2)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 0 0 4px color-mix(in srgb, var(--wb-accent-primary, #818cf8) 18%, transparent),
+    0 8px 18px rgba(0, 0, 0, 0.34);
 }
 
 .butler-ball--consent-pending {
@@ -264,15 +262,17 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball__logo-wrap {
-  width: 38px;
-  height: 38px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   display: inline-grid;
   place-items: center;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.94);
-  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 36%, transparent);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  border: 2px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 54%, #fff);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--wb-accent-primary, #818cf8) 20%, transparent),
+    0 6px 14px rgba(0, 0, 0, 0.28);
   flex: 0 0 auto;
 }
 
@@ -286,19 +286,21 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball__label {
-  font-size: 14px;
-  line-height: 1;
+  font-size: 13px;
+  line-height: 16px;
   font-weight: 800;
   letter-spacing: 0.01em;
   white-space: nowrap;
   color: var(--wb-text-primary, #f0f0f5);
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.34);
 }
 
 .butler-ball__badge {
   position: absolute;
-  top: -4px;
-  right: 6px;
+  top: 0;
+  right: 0;
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
@@ -328,42 +330,31 @@ onBeforeUnmount(() => {
   color: var(--wb-text-secondary, rgba(240, 240, 245, 0.82));
   white-space: nowrap;
   pointer-events: none;
-  background: color-mix(in srgb, var(--wb-dialog-bg, #0c0c12) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wb-accent-primary, #818cf8) 32%, transparent);
-  padding: 3px 8px;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .butler-ball.butler-ball--light {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 34%, transparent);
-  background: linear-gradient(
-    180deg,
-    var(--wb-surface-elevated, rgba(255, 255, 255, 0.96)),
-    color-mix(in srgb, var(--wb-accent-soft, rgba(0, 113, 227, 0.1)) 80%, #fff)
-  );
+  border-color: transparent;
+  background: transparent;
   color: var(--wb-text-primary, #1d1d1f);
-  box-shadow: var(--wb-card-shadow, 0 14px 30px rgba(0, 0, 0, 0.08));
+  box-shadow: none;
   backdrop-filter: none;
 }
 
 .butler-ball.butler-ball--light:hover {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 52%, transparent);
-  background: linear-gradient(
-    180deg,
-    #fff,
-    color-mix(in srgb, var(--wb-accent-soft, rgba(0, 113, 227, 0.12)) 70%, #fff)
-  );
-  box-shadow: var(--wb-card-shadow, 0 18px 36px rgba(0, 0, 0, 0.1));
+  background: transparent;
 }
 
-.butler-ball.butler-ball--light.butler-ball--open {
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 58%, transparent);
-  background: linear-gradient(
-    180deg,
-    #fff,
-    color-mix(in srgb, var(--wb-accent-soft, rgba(0, 113, 227, 0.14)) 75%, #fff)
-  );
+.butler-ball.butler-ball--light:hover .butler-ball__logo-wrap,
+.butler-ball.butler-ball--light.butler-ball--open .butler-ball__logo-wrap {
+  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 72%, #fff);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--wb-accent-primary, #0071e3) 16%, transparent),
+    0 8px 18px rgba(15, 76, 129, 0.2);
 }
 
 .butler-ball.butler-ball--light .butler-ball__logo-wrap {
@@ -374,6 +365,7 @@ onBeforeUnmount(() => {
 
 .butler-ball.butler-ball--light .butler-ball__label {
   color: var(--wb-text-primary, #1d1d1f);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
 }
 
 .butler-ball.butler-ball--light .butler-ball__badge {
@@ -382,9 +374,9 @@ onBeforeUnmount(() => {
 
 .butler-ball.butler-ball--light .butler-ball__hint {
   color: var(--wb-accent-primary, #0071e3);
-  background: rgba(255, 255, 255, 0.95);
-  border-color: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 32%, transparent);
-  box-shadow: var(--wb-card-shadow, 0 4px 12px rgba(0, 0, 0, 0.08));
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* 官网：默认 top/left 0，实际位置由 transform + xc_butler_pos_corp 决定，可拖动 */
@@ -397,29 +389,27 @@ onBeforeUnmount(() => {
   touch-action: none;
   /* 面板打开时仍须高于 .butler-panel(20002)，否则拖不动 */
   z-index: 20005;
-  min-width: 146px;
-  min-height: 64px;
-  height: 64px;
-  gap: 9px;
-  padding: 7px 16px 7px 8px;
-  border-color: rgba(119, 112, 255, 0.52);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(242, 246, 255, 0.98)),
-    linear-gradient(135deg, #796fff, #44b9ff);
-  box-shadow:
-    0 14px 30px rgba(28, 78, 148, 0.18),
-    0 0 0 4px rgba(130, 115, 255, 0.1);
+  width: 64px;
+  min-width: 64px;
+  min-height: 82px;
+  height: 82px;
+  gap: 6px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .butler-ball.butler-ball--corp-anchor .butler-ball__label {
-  display: inline;
+  display: block;
   color: #20274a;
   letter-spacing: 0.025em;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9);
 }
 
 .butler-ball.butler-ball--corp-anchor .butler-ball__logo-wrap {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border: 2px solid rgba(255, 255, 255, 0.96);
   box-shadow:
     0 0 0 2px rgba(119, 112, 255, 0.58),
@@ -427,11 +417,15 @@ onBeforeUnmount(() => {
 }
 
 .butler-ball.butler-ball--corp-anchor:hover {
+  background: transparent;
+}
+
+.butler-ball.butler-ball--corp-anchor:hover .butler-ball__logo-wrap,
+.butler-ball.butler-ball--corp-anchor.butler-ball--open .butler-ball__logo-wrap {
   border-color: rgba(104, 98, 245, 0.8);
-  background: linear-gradient(135deg, #fff, #edf5ff);
   box-shadow:
-    0 18px 36px rgba(28, 78, 148, 0.24),
-    0 0 0 5px rgba(130, 115, 255, 0.13);
+    0 0 0 4px rgba(130, 115, 255, 0.14),
+    0 8px 18px rgba(28, 78, 148, 0.24);
 }
 
 .butler-ball.butler-ball--corp-anchor.butler-ball--open {
