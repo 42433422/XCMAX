@@ -317,26 +317,35 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
     )
     if ownership_context:
         brief = f"{brief}\n{ownership_context}"[:1600]
+    from modstore_server.duty_workforce_contracts import duty_event_execution_input
+
+    duty_input = duty_event_execution_input(
+        employee_id,
+        event_type=event_type,
+        source=source,
+        incident=payload,
+    )
+    runtime_input = duty_input or {
+        "allow_high_risk_real_run": True,
+        "incident": payload,
+        "source": source,
+        "suppress_lifecycle_events": True,
+        "unified_incident_bus": True,
+    }
+    runtime_input["incident_market"] = {
+        "all_candidates": candidates[:8],
+        "claimed_by": employee_id,
+        "code_ownership": ranked.get("code_ownership"),
+        "event_id": int(event_id),
+        "priority": ranked.get("incident_priority"),
+        "scope": ranked.get("scope"),
+        "selection_score": chosen.get("score"),
+    }
     result = execute_employee_task(
         employee_id,
         brief,
-        {
-            "allow_high_risk_real_run": True,
-            "incident": payload,
-            "incident_market": {
-                "all_candidates": candidates[:8],
-                "claimed_by": employee_id,
-                "code_ownership": ranked.get("code_ownership"),
-                "event_id": int(event_id),
-                "priority": ranked.get("incident_priority"),
-                "scope": ranked.get("scope"),
-                "selection_score": chosen.get("score"),
-            },
-            "source": source,
-            "suppress_lifecycle_events": True,
-            "unified_incident_bus": True,
-        },
-        user_id=uid,
+        runtime_input,
+        user_id=0 if duty_input else uid,
     )
     with sf() as session:
         ev2 = session.get(IncidentEvent, int(event_id))
