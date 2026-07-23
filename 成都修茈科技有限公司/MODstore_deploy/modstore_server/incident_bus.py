@@ -38,6 +38,19 @@ _NON_DISPATCH_EVENT_TYPES = frozenset(
     }
 )
 
+# Successful lifecycle events are workflow signals, not incidents.  They may
+# still drive an explicit ``EmployeeTriggerBinding`` (for example
+# ``employee.task.done:intent-analyst`` -> ``employee-planner``), but must not
+# enter the generic incident team or task market.  Treating every successful
+# employee completion as an incident caused the recovery path to dispatch a
+# code-fix task for healthy work.
+_BINDING_ONLY_EVENT_TYPES = frozenset(
+    {
+        "employee.task.assigned",
+        "employee.task.done",
+    }
+)
+
 
 def _parse_binding_event_key(stored: str) -> tuple[str, str]:
     """binding.event_type 可为 ``on_error`` 或 ``employee.task.done:upstream-id``（首段 `:` 后为上事件源过滤）。"""
@@ -144,7 +157,9 @@ def publish(
     )
     if event_type == "employee.suggestion.created":
         try:
-            from modstore_server.employee_autonomy_service import ingest_suggestion_event_payload
+            from modstore_server.employee_autonomy_service import (
+                ingest_suggestion_event_payload,
+            )
 
             ingest_suggestion_event_payload(
                 source_employee_id=source,
@@ -291,14 +306,20 @@ def _dispatch_incident(event_id: int) -> None:
         )
         return
 
-    if (os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or "").strip().lower() in {
+    binding_only = event_type_pre in _BINDING_ONLY_EVENT_TYPES
+
+    if not binding_only and (
+        os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or ""
+    ).strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }:
         try:
-            from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
+            from modstore_server.unified_autonomy_orchestrator import (
+                orchestrate_incident,
+            )
 
             orchestration = orchestrate_incident(event_id)
             if not orchestration.get("should_dispatch", True):
@@ -310,17 +331,22 @@ def _dispatch_incident(event_id: int) -> None:
                 return
         except Exception:
             logger.exception(
-                "unified incident orchestrator failed event_id=%s; fallback dispatch", event_id
+                "unified incident orchestrator failed event_id=%s; fallback dispatch",
+                event_id,
             )
 
-    if (os.environ.get("MODSTORE_INCIDENT_TEAM_ENABLED", "1") or "").strip().lower() in {
+    if not binding_only and (
+        os.environ.get("MODSTORE_INCIDENT_TEAM_ENABLED", "1") or ""
+    ).strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }:
         try:
-            from modstore_server.incident_team_orchestrator import dispatch_incident_team
+            from modstore_server.incident_team_orchestrator import (
+                dispatch_incident_team,
+            )
 
             team = dispatch_incident_team(event_id)
             if team.get("claimed"):
@@ -343,14 +369,18 @@ def _dispatch_incident(event_id: int) -> None:
         except Exception:
             logger.exception("incident team failed event_id=%s; fallback market", event_id)
 
-    if (os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or "").strip().lower() in {
+    if not binding_only and (
+        os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or ""
+    ).strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }:
         try:
-            from modstore_server.employee_task_market import dispatch_incident_via_market
+            from modstore_server.employee_task_market import (
+                dispatch_incident_via_market,
+            )
 
             market = dispatch_incident_via_market(event_id)
             if market.get("ok") and market.get("claimed"):
@@ -372,7 +402,8 @@ def _dispatch_incident(event_id: int) -> None:
             )
         except Exception:
             logger.exception(
-                "incident task market failed event_id=%s; fallback binding dispatch", event_id
+                "incident task market failed event_id=%s; fallback binding dispatch",
+                event_id,
             )
 
     sf = get_session_factory()

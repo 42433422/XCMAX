@@ -12,13 +12,13 @@ from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner
 
 ROLE_ROOT = Path(__file__).resolve().parents[3] / "FHD" / "mods" / "_employees"
 AGENT_ROLES = {
+    "self-checker",
+}
+DIRECT_AUDIT_ROLES = {
     "ecosystem-investor-portal-officer",
     "ecosystem-joint-catalog-officer",
     "employee-planner",
     "enterprise-adoption-officer",
-    "self-checker",
-}
-DIRECT_AUDIT_ROLES = {
     "host-checker",
     "intent-analyst",
     "marketing-site-builder",

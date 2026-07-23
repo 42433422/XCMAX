@@ -1,7 +1,7 @@
 {
   "id": "employee-planner",
   "name": "规划设计员工",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "admin",
   "description": "根据结构化需求规划员工包架构，拆分员工职责、脚本工作流与 Skill 组；输出一站式员工蓝图",
   "artifact": "employee_pack",
@@ -22,7 +22,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "employee-planner",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "artifact": "employee_pack",
       "name": "规划设计员工",
       "description": "根据结构化需求规划员工包架构，拆分员工职责、脚本工作流与 Skill 组；输出一站式员工蓝图",
@@ -79,13 +79,33 @@
       ]
     },
     "actions": {
-      "handlers": [
-        "agent"
-      ],
-      "agent": {
-        "workspace": {
-          "requires_project_root": true,
-          "read_only": true
+      "handlers": ["direct_python"],
+      "direct_python": {
+        "module": "employee_planner",
+        "action": "plan_assignments",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": ["requirements", "employees"],
+          "properties": {
+            "requirements": {"type": "array"},
+            "employees": {"type": "array"}
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ok", "status", "summary", "plan", "blockers", "evidence", "read_only", "side_effects"]
+        },
+        "burn_in_fixture": {
+          "requirements": [{"id": "validate-release", "capabilities": ["qa"], "depends_on": []}],
+          "employees": [{"id": "test-qa-runner", "capabilities": ["qa", "test"], "available": true}]
+        },
+        "burn_in_policy": {
+          "reviewed": true,
+          "scope": "fixture_only",
+          "external_effects": false
         }
       }
     },

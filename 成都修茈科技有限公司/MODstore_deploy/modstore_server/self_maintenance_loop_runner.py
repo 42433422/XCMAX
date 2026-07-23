@@ -599,7 +599,7 @@ def _governance_audit_summary(
         "success_count": success_count,
         "failure_count": failure_count,
         "consecutive_failures": consecutive_failures,
-        "health": "bad" if consecutive_failures >= 2 else ("warn" if failure_count else "ok"),
+        "health": ("bad" if consecutive_failures >= 2 else ("warn" if failure_count else "ok")),
     }
 
 
@@ -611,7 +611,7 @@ def _governance_audit_gate() -> Dict[str, Any]:
         "ok": ok,
         "blocking": not ok,
         "action": "allow" if ok else "hold_for_governance_review",
-        "reason": "governance_audit_healthy" if ok else "governance_audit_consecutive_failures",
+        "reason": ("governance_audit_healthy" if ok else "governance_audit_consecutive_failures"),
         "summary": summary,
         "policy": "consecutive_governance_action_failures_pause_auto_continue_and_auto_merge",
     }
@@ -1286,7 +1286,19 @@ def _last_started_at() -> Optional[datetime]:
     return None
 
 
-def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
+def reconcile_stale_self_maintenance_runs(
+    *, exclusive_lease_reacquired: bool = False
+) -> Dict[str, Any]:
+    """Close interrupted runs without misreporting them as completed work.
+
+    When the caller has just acquired the process-wide loop lease, any older
+    start row without a terminal row is necessarily orphaned: an actually
+    running transaction would still own the same OS lock.  Reconcile that case
+    immediately instead of leaving the management console in ``running`` for
+    the full stale timeout after a deploy or process restart.  Callers that do
+    not hold the lease retain the conservative age-based behavior.
+    """
+
     rows = _read_ledger(limit=300)
     started: Dict[str, Dict[str, Any]] = {}
     terminal: Dict[str, Dict[str, Any]] = {}
@@ -1313,8 +1325,21 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
         if run_id in terminal:
             continue
         started_at = _parse_iso(start.get("started_at") or start.get("created_at"))
-        if started_at is None or started_at > cutoff:
+        if started_at is None:
             continue
+        if not exclusive_lease_reacquired and started_at > cutoff:
+            continue
+
+        interrupted = bool(exclusive_lease_reacquired)
+        terminal_status = "abandoned_interrupted" if interrupted else "abandoned_stale"
+        terminal_reason = (
+            "interrupted_run_after_lease_reacquired" if interrupted else "stale_interrupted_run"
+        )
+        terminal_error = (
+            "previous process lost the exclusive loop lease before writing a terminal record"
+            if interrupted
+            else "run did not write a terminal record before stale timeout"
+        )
 
         # 找该 run 最后一个 step 终态；如果只有 step_retry 没有 phase=step，
         # 说明某个 step 的内层重试还没收敛就超时了——补一条 step 终态记录，
@@ -1325,11 +1350,15 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
             last_step = run_steps[-1]
             step_terminal = {
                 "employee_id": last_step.get("employee_id"),
-                "error": "step abandoned during inner retry before stale timeout",
+                "error": (
+                    "step interrupted before the process released its loop lease"
+                    if interrupted
+                    else "step abandoned during inner retry before stale timeout"
+                ),
                 "ok": False,
                 "phase": "step",
                 "run_id": run_id,
-                "status": "abandoned_stale",
+                "status": terminal_status,
                 "step": last_step.get("step"),
                 "timestamp": _iso(_utc_now()),
             }
@@ -1337,21 +1366,26 @@ def reconcile_stale_self_maintenance_runs() -> Dict[str, Any]:
 
         final = {
             "completed_at": _iso(_utc_now()),
-            "error": "run did not write a terminal record before stale timeout",
+            "error": terminal_error,
             "phase": "complete",
             "policy_decision": {
                 "action": "stop",
-                "reason": "stale_interrupted_run",
+                "reason": terminal_reason,
+                "exclusive_lease_reacquired": interrupted,
                 "stale_minutes": stale_minutes,
             },
             "run_id": run_id,
             "started_at": _iso(started_at),
-            "status": "abandoned_stale",
+            "status": terminal_status,
             "triggered_by": start.get("triggered_by"),
         }
         _append_ledger(final)
         reconciled.append(run_id)
-    return {"reconciled": reconciled, "stale_minutes": stale_minutes}
+    return {
+        "exclusive_lease_reacquired": bool(exclusive_lease_reacquired),
+        "reconciled": reconciled,
+        "stale_minutes": stale_minutes,
+    }
 
 
 def should_run_self_maintenance_loop(
@@ -2308,7 +2342,9 @@ _REVIEW_SEVERITIES = frozenset({"none", "low", "medium", "high", "critical"})
 _REVIEW_RISK_CLASSES = frozenset({"low", "medium", "high"})
 
 
-def _validate_structured_review_protocol(obj: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
+def _validate_structured_review_protocol(
+    obj: Optional[Dict[str, Any]],
+) -> Tuple[bool, str]:
     """Strict protocol for review employee output. Incomplete → reject/rerun."""
     if not isinstance(obj, dict):
         return False, "missing_structured_review_object"
@@ -2751,7 +2787,10 @@ def _remote_branch_head(repo_url: str, branch: str) -> Optional[str]:
             continue
         if proc.returncode != 0:
             continue
-        line = next((item.strip() for item in (proc.stdout or "").splitlines() if item.strip()), "")
+        line = next(
+            (item.strip() for item in (proc.stdout or "").splitlines() if item.strip()),
+            "",
+        )
         sha = line.split(None, 1)[0] if line else ""
         if re.fullmatch(r"[0-9a-fA-F]{40,64}", sha):
             return sha.lower()
@@ -5691,12 +5730,12 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 "phase": "kb_salvage",
                 "run_id": final.get("run_id"),
                 "para_task_id": final.get("para_task_id"),
-                "salvaged_fixes": salvage_summary.get("salvaged_fixes") if salvage_summary else 0,
+                "salvaged_fixes": (salvage_summary.get("salvaged_fixes") if salvage_summary else 0),
                 "salvaged_patterns": (
                     salvage_summary.get("salvaged_patterns") if salvage_summary else 0
                 ),
                 "skipped": salvage_summary.get("skipped") if salvage_summary else 0,
-                "workspace": salvage_summary.get("workspace") if salvage_summary else None,
+                "workspace": (salvage_summary.get("workspace") if salvage_summary else None),
                 "timestamp": _iso(_utc_now()),
             }
         )
@@ -5797,7 +5836,10 @@ def _run_self_maintenance_loop_unlocked(
 ) -> Dict[str, Any]:
     """Run the real employee maintenance chain when gates allow it."""
 
-    reconcile_stale_self_maintenance_runs()
+    # This function is reached only after ``run_self_maintenance_loop`` has
+    # acquired the cross-process OS lease.  Any prior open row is therefore an
+    # interrupted process, not concurrent work.
+    reconcile_stale_self_maintenance_runs(exclusive_lease_reacquired=True)
     run_id = str(uuid.uuid4())
     started_at = _utc_now()
     gate = should_run_self_maintenance_loop(force=force, triggered_by=triggered_by)
@@ -6459,12 +6501,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "qa_verdict": str(qa.get("verdict") or "").strip() if qa else "",
             "qa_blocking_findings": qa.get("blocking_findings") if qa else [],
             "qa_tested_commands": qa.get("tested_commands") if qa else [],
-            "qa_target_branch_available": qa.get("target_branch_available") if qa else None,
+            "qa_target_branch_available": (qa.get("target_branch_available") if qa else None),
             "qa_risk_class": str(qa.get("risk_class") or "").strip() if qa else "",
-            "review_verdict": str(review.get("verdict") or "").strip() if review else "",
-            "review_max_severity": str(review.get("max_severity") or "").strip() if review else "",
+            "review_verdict": (str(review.get("verdict") or "").strip() if review else ""),
+            "review_max_severity": (
+                str(review.get("max_severity") or "").strip() if review else ""
+            ),
             "review_findings": review.get("findings") if review else [],
-            "review_blocking_findings": review.get("blocking_findings") if review else [],
+            "review_blocking_findings": (review.get("blocking_findings") if review else []),
             "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
         }
@@ -7175,19 +7219,23 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             ],
             "employee_space": {
                 "role": "execution_surface",
-                "title": title if primary_surface == "employee_space" else "员工空间只展示执行现场",
+                "title": (
+                    title if primary_surface == "employee_space" else "员工空间只展示执行现场"
+                ),
                 "detail": (
                     detail
                     if primary_surface == "employee_space"
                     else "补登记、隔离、数据源修复统一在编制图谱处理，避免工位页绕过上岗门禁。"
                 ),
-                "cta": "看执行现场" if primary_surface == "employee_space" else "去编制图谱处理",
+                "cta": ("看执行现场" if primary_surface == "employee_space" else "去编制图谱处理"),
             },
             "duty_roster_graph": {
                 "role": "governance_surface",
                 "title": title,
                 "detail": detail,
-                "cta": "执行治理动作" if primary_surface == "duty_roster_graph" else "查看编制准入",
+                "cta": (
+                    "执行治理动作" if primary_surface == "duty_roster_graph" else "查看编制准入"
+                ),
             },
         }
 
