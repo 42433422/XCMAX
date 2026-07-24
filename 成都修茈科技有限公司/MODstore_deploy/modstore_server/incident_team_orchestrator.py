@@ -327,13 +327,18 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 "model_route": route,
                 "release_recovery": recovery,
                 "role": role,
+                # 系统事故小组：允许 monorepo project_root（含写），勿落入租户 workspace 校验
+                "_trusted_incident_team_execution": True,
+                "unified_incident_bus": True,
+                "event_type": str(event_type or ""),
             }
         )
+        # 事故小组一律系统身份；用 admin uid 会把 monorepo 根误判为越权路径
         result = execute_employee_task(
             employee_id,
             task,
             runtime_input,
-            user_id=0 if duty_input else uid,
+            user_id=0,
             bench_llm_override=bench_override,
         )
         status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
