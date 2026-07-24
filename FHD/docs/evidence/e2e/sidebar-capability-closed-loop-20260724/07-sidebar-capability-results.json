@@ -1,0 +1,457 @@
+{
+  "summary": {
+    "auth_ok": true,
+    "csrf_present": true,
+    "total_pages": 14,
+    "ok_pages": 14,
+    "fail_pages": [],
+    "business_customer_loop": {
+      "create_ok": true,
+      "create_status": 200,
+      "create_preview": "{\"success\": true, \"data\": {\"id\": 3, \"customer_name\": \"闭环组织FIN92893\", \"contact_person\": \"\", \"contact_phone\": \"\", \"contact_address\": \"\", \"created_at\": \"2026-07-24T11:34:54\", \"updated_at\": \"2026-07-24T11",
+      "before": 1,
+      "after": 1,
+      "found": false
+    },
+    "product_add": {
+      "ok": true,
+      "status": 200,
+      "preview": "{\"success\": true, \"data\": {\"id\": null}, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\", \"handler_via\": \"products_service\"}"
+    },
+    "started_from": "智能对话"
+  },
+  "results": [
+    {
+      "label": "智能对话",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 4,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/auth/me",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"user\": {\"id\": 2, \"username\": \"wuxinghua1\", \"display_name\": \"wuxinghua1\", \"email\": \"wuxinghua1@auto.xiu-ci.com\", \"email_display\": \"无邮箱\", \"no_email\": true",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/conversations/mryoa6q0c10s25simkh",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"id\": \"mryoa6q0c10s25simkh\", \"title\": null, \"mod_id\": \"\", \"messages\": [], \"metadata\": {}}",
+          "error": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/conversations/mryoa6q0c10s25simkh/messages",
+          "status": 405,
+          "ok": false,
+          "preview": "{\"success\": false, \"error_code\": \"http_405\", \"message\": \"Method Not Allowed\", \"path\": \"/api/conversations/mryoa6q0c10s25simkh/messages\"}",
+          "error": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/chat/send",
+          "status": 405,
+          "ok": false,
+          "preview": "{\"success\": false, \"error_code\": \"http_405\", \"message\": \"Method Not Allowed\", \"path\": \"/api/chat/send\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "信息",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 2,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/im/conversations",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"user_id\": 2, \"conversations\": []}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/im/contacts",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"contacts\": [{\"id\": 3, \"display_name\": \"企业专属客服\", \"username\": \"enterprise-cs\", \"is_enterprise_dedicated_cs\": true}]}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "智能生态",
+      "ok": true,
+      "ok_calls": 3,
+      "total_calls": 3,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/platform-shell/capabilities",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"schema_version\": 1, \"edition\": \"full\", \"core_workflow_mod_id\": \"xcagi-workflow-visualization-bridge\", \"protected_client_mod_ids\": [\"attendance-industry\"",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mods/",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [{\"id\": \"xcagi-erp-domain-bridge\", \"name\": \"XCAGI 通用业务领域门面 Mod\", \"version\": \"1.0.0.0\", \"author\": \"成都修茈科技有限公司\", \"description\": \"通用业务 API 门面 + Repository 可插",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mods/routes",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [{\"mod_id\": \"xcagi-erp-domain-bridge\", \"routes_path\": \"frontend/routes\"}, {\"mod_id\": \"xcagi-planner-bridge\", \"routes_path\": \"frontend/routes\"}, {\"mod_id\":",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "知识库",
+      "ok": true,
+      "ok_calls": 1,
+      "total_calls": 4,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/persy/knowledge",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/persy/knowledge\"}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-office-employee-pack-bridge/status",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"success\": true, \"mod_id\": \"xcagi-office-employee-pack-bridge\", \"facade_prefix\": \"/api/mod/xcagi-office-employee-pack-bridge\", \"endpoints\": [\"GET /catalo",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/knowledge",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/knowledge\"}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/memory/list",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/memory/list\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "员工工作台",
+      "ok": true,
+      "ok_calls": 1,
+      "total_calls": 4,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-core-workflow-employees/status",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"mod_id\": \"xcagi-core-workflow-employees\", \"role\": \"core_workflow_house\", \"employees\": [{\"id\": \"label_print\", \"label\": \"标签打印 AI 员工\", \"stem\": \"label_print",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/workflow-employee-space/overview",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/workflow-employee-space/overview\"}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/workflow/employees",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/workflow/employees\"}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/core-workflow/employees",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/core-workflow/employees\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "业务对象",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 2,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-erp-domain-bridge/products/list",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [{\"model_number\": \"DEMO-001\", \"name\": \"XC 演示产品\", \"specification\": \"通用 首启样例 SKU\", \"price\": 99.0, \"quantity\": 10, \"description\": null, \"category\": \"通用\", \"br",
+          "error": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/mod/xcagi-erp-domain-bridge/products/add",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"id\": null}, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\", \"handler_via\": \"products_service\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "组织管理",
+      "ok": true,
+      "ok_calls": 4,
+      "total_calls": 4,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/customers",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [{\"id\": 1, \"customer_name\": \"XC 演示客户\", \"contact_person\": \"演示联系人\", \"contact_phone\": \"13800000000\", \"is_active\": 1}]}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-erp-domain-bridge/customers/list",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [], \"total\": 0, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\", \"repository_provider\": \"mod:xcagi-erp-domain-bridge\", \"st",
+          "error": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/customers",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"id\": 1, \"customer_name\": \"闭环组织92893\", \"contact_person\": \"\", \"contact_phone\": \"\", \"contact_address\": \"\", \"created_at\": \"2026-07-24T11:34:54\", \"updated_at",
+          "error": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/mod/xcagi-erp-domain-bridge/customers",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"id\": 2, \"customer_name\": \"闭环组织M92893\", \"contact_person\": \"\", \"contact_phone\": \"\", \"contact_address\": \"\", \"created_at\": \"2026-07-24T11:34:54\", \"updated_a",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "业务单据",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 2,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/orders",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [], \"count\": 0}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-erp-domain-bridge/orders",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"success\": true, \"data\": [], \"count\": 0}, \"count\": 3, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "业务记录",
+      "ok": true,
+      "ok_calls": 1,
+      "total_calls": 2,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/records",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [], \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\"}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/shipment-records",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/shipment-records\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "资源库",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 2,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/materials",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [], \"total\": 0, \"page\": 1, \"per_page\": 20, \"count\": 0}",
+          "error": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/materials",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"message\": \"原材料创建成功\", \"data\": {\"id\": 1, \"material_code\": \"M-e691828c4d\", \"name\": \"闭环物料92893\", \"category\": null, \"specification\": null, \"unit\": \"个\", \"quantity\": 0.",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "数据来源",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 3,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-erp-domain-bridge/status",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"success\": true, \"mod_id\": \"xcagi-erp-domain-bridge\", \"domain_count\": 4, \"domains\": [{\"domain_id\": \"products\", \"label\": \"产品\", \"host_prefixes\": [\"/api/pro",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-sources",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/data-sources\"}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mod/xcagi-erp-domain-bridge/wechat/contacts",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [], \"total\": 0, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "模板与打印",
+      "ok": true,
+      "ok_calls": 2,
+      "total_calls": 3,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/templates",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"templates\": []}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/excel/templates",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"templates\": []}",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/print/templates",
+          "status": 404,
+          "ok": false,
+          "preview": "{\"success\": false, \"message\": \"资源不存在：/api/print/templates\"}",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "打印机列表",
+      "ok": true,
+      "ok_calls": 1,
+      "total_calls": 1,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/print/printers",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"printers\": [{\"name\": \"Canon_TS3700_series\", \"status\": \"就绪\", \"is_default\": true}], \"count\": 1, \"classified\": {\"document_printer\": {\"name\": \"Canon_TS3700_series\", ",
+          "error": null
+        }
+      ]
+    },
+    {
+      "label": "系统设置",
+      "ok": true,
+      "ok_calls": 4,
+      "total_calls": 4,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/workspace/prefs",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"host_pack_acknowledged\": true, \"selected_industry_id\": \"通用\", \"industry_mod_id\": \"xcagi-planner-bridge\", \"product_flow_completed\": true}, \"owner_id\": \"te",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/system/industry",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": {\"id\": \"通用\", \"name\": \"通用行业\", \"code\": \"通用\", \"description\": \"通用行业\", \"config\": {\"units\": {\"primary\": \"件\", \"primary_label\": \"数量\"}, \"quantity_fields\": {}, \"pro",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/desktop/status",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"desktopMode\": true, \"dataDir\": \"/Users/a4243342/Library/Application Support/XCAGI\", \"database\": \"/Users/a4243342/Library/Application Support/XCAGI/data/xcagi.db\", \"modsDir\": \"/Us",
+          "error": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/mods/",
+          "status": 200,
+          "ok": true,
+          "preview": "{\"success\": true, \"data\": [{\"id\": \"xcagi-erp-domain-bridge\", \"name\": \"XCAGI 通用业务领域门面 Mod\", \"version\": \"1.0.0.0\", \"author\": \"成都修茈科技有限公司\", \"description\": \"通用业务 API 门面 + Repository 可插",
+          "error": null
+        }
+      ]
+    }
+  ]
+}
