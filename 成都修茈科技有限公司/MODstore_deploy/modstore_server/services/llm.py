@@ -286,9 +286,7 @@ async def chat_dispatch_via_platform_only(
         "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_ENABLED", "1"
     ).strip().lower() not in {"0", "false", "no", "off"}
     fallback_provider = (
-        os.environ.get(
-            "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_PROVIDER", "minimax"
-        ).strip()
+        os.environ.get("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_PROVIDER", "minimax").strip()
         or "minimax"
     )
     fallback_model = os.environ.get(
@@ -302,9 +300,7 @@ async def chat_dispatch_via_platform_only(
     if fallback_key:
         try:
             fallback_timeout = float(
-                os.environ.get(
-                    "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_TIMEOUT_SECONDS", "20"
-                )
+                os.environ.get("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_TIMEOUT_SECONDS", "20")
             )
         except ValueError:
             fallback_timeout = 20.0
