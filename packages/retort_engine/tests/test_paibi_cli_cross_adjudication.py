@@ -5,12 +5,16 @@ from pathlib import Path
 
 from retort_engine.cli import main
 from retort_engine.contracts import validate_contract
-from retort_engine.paibi_cli_cross_adjudication import build_paibi_cli_cross_adjudication
+from retort_engine.paibi_cli_cross_adjudication import (
+    build_paibi_cli_cross_adjudication,
+)
 from retort_engine.paibi_llm import PAIBI_SUPPORTED_TOOLS
 from retort_engine.service import RetortService
 
 
-def test_paibi_cli_cross_adjudication_runs_all_supported_cli_identities(tmp_path: Path) -> None:
+def test_paibi_cli_cross_adjudication_runs_all_supported_cli_identities(
+    tmp_path: Path,
+) -> None:
     _write_inputs(tmp_path)
 
     result = build_paibi_cli_cross_adjudication(tmp_path)
@@ -32,12 +36,19 @@ def test_paibi_cli_cross_adjudication_runs_all_supported_cli_identities(tmp_path
     assert result["summary"]["calibration_human_label_count"] == 50
     assert result["summary"]["calibration_pass_rate"] == 1.0
     assert result["summary"]["replaces_human_labels"] is False
-    assert {item["tool_name"] for item in result["tool_results"]} == set(PAIBI_SUPPORTED_TOOLS)
+    assert {item["tool_name"] for item in result["tool_results"]} == set(
+        PAIBI_SUPPORTED_TOOLS
+    )
     assert all(item["output_sha256"] for item in result["tool_results"])
-    assert validate_contract("paibi_cli_cross_adjudication_result", result)["valid"] is True
+    assert (
+        validate_contract("paibi_cli_cross_adjudication_result", result)["valid"]
+        is True
+    )
 
 
-def test_paibi_cli_cross_adjudication_rejects_non_accepted_blind_cases(tmp_path: Path) -> None:
+def test_paibi_cli_cross_adjudication_rejects_non_accepted_blind_cases(
+    tmp_path: Path,
+) -> None:
     _write_inputs(tmp_path)
     blind_path = tmp_path / "docs" / "retort_competitor_blind_adjudication.json"
     blind = json.loads(blind_path.read_text(encoding="utf-8"))
@@ -65,7 +76,16 @@ def test_cli_writes_paibi_cli_cross_adjudication_report(tmp_path: Path) -> None:
     _write_inputs(tmp_path)
     output = tmp_path / "docs" / "retort_paibi_cli_cross_adjudication.json"
 
-    code = main(["paibi-cli-cross-adjudication", "--project", str(tmp_path), "--output", str(output), "--json"])
+    code = main(
+        [
+            "paibi-cli-cross-adjudication",
+            "--project",
+            str(tmp_path),
+            "--output",
+            str(output),
+            "--json",
+        ]
+    )
 
     assert code == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
@@ -133,9 +153,21 @@ def _write_inputs(root: Path) -> None:
                     "behavior_assertion_count": 18,
                 },
                 "cases": [
-                    _behavior_case("mopemope-runtime-output-parser", "mopemope/pr-ai-review-bot", "typescript_patch_output_parsing"),
-                    _behavior_case("qodo-security-secret-review", "qodo-ai/pr-agent", "security_ranked_pr_review"),
-                    _behavior_case("reviewdog-ci-token-publisher", "reviewdog/reviewdog", "ci_review_publisher_safety"),
+                    _behavior_case(
+                        "mopemope-runtime-output-parser",
+                        "mopemope/pr-ai-review-bot",
+                        "typescript_patch_output_parsing",
+                    ),
+                    _behavior_case(
+                        "qodo-security-secret-review",
+                        "qodo-ai/pr-agent",
+                        "security_ranked_pr_review",
+                    ),
+                    _behavior_case(
+                        "reviewdog-ci-token-publisher",
+                        "reviewdog/reviewdog",
+                        "ci_review_publisher_safety",
+                    ),
                 ],
                 "evidence": {"runtime": "retort_engine.pr_review.review_diff"},
             },

@@ -45,5 +45,7 @@ def test_task_dispatch_plan_uses_latest_llm_tasks_and_enqueues(tmp_path: Path) -
     assert result["summary"]["queued_dispatch_count"] == 2
     assert result["summary"]["all_tasks_have_acceptance"] is True
     assert all(task["queue_id"] for task in result["tasks"])
-    assert (retort_dir / "employee_queue.jsonl").read_text(encoding="utf-8").count("retort_task_dispatch_plan") == 2
+    assert (retort_dir / "employee_queue.jsonl").read_text(encoding="utf-8").count(
+        "retort_task_dispatch_plan"
+    ) == 2
     assert validate_contract("task_dispatch_plan_result", result)["valid"] is True

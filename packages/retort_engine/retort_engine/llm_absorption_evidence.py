@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.absorption_state import closed_loop_proof, load_absorption_state
-from retort_engine.capability_audit import capability_absorption_audit, employee_result_files, pr_review_runtime_evidence
+from retort_engine.capability_audit import (
+    capability_absorption_audit,
+    employee_result_files,
+    pr_review_runtime_evidence,
+)
 from retort_engine.contracts import contract_names
 from retort_engine.core_refactor_execution import verify_core_refactor_execution
 
@@ -21,10 +25,14 @@ def llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"absorption_state_status={state.get('status', '')}")
     if state.get("external_path"):
         external_path = Path(str(state.get("external_path")))
-        evidence.append(f"external_materialized_path={state.get('external_path')}; exists={external_path.is_dir()}")
+        evidence.append(
+            f"external_materialized_path={state.get('external_path')}; exists={external_path.is_dir()}"
+        )
     if proof.get("verified"):
         evidence.append("closed_loop_five_proofs_verified=True")
-    evidence.append(f"absorption_state_closed_loop_completed_by_design={state.get('active') is False and state.get('status') == 'closed_loop_verified' and proof.get('verified') is True}")
+    evidence.append(
+        f"absorption_state_closed_loop_completed_by_design={state.get('active') is False and state.get('status') == 'closed_loop_verified' and proof.get('verified') is True}"
+    )
     evidence.extend(_latest_run_evidence(project))
     evidence.append(f"contract_schema_count={len(contract_names())}")
 
@@ -39,7 +47,9 @@ def llm_absorption_evidence(project: Path) -> list[str]:
     return evidence
 
 
-def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[str, Any], project: Path) -> list[str]:
+def _capability_audit_evidence(
+    audit: dict[str, Any], refactor_execution: dict[str, Any], project: Path
+) -> list[str]:
     evidence = [
         f"capability_absorption_local_score_removed={audit.get('local_score_removed', True)}",
         f"capability_absorption_status={audit.get('status')}",
@@ -54,7 +64,11 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
         f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}",
         f"test_to_source_ratio={audit.get('test_to_source_ratio', '')}",
     ]
-    hardening = audit.get("post_absorption_hardening") if isinstance(audit.get("post_absorption_hardening"), dict) else {}
+    hardening = (
+        audit.get("post_absorption_hardening")
+        if isinstance(audit.get("post_absorption_hardening"), dict)
+        else {}
+    )
     latest_source_count = len(audit.get("behavior_source_files") or [])
     latest_test_count = len(audit.get("behavior_test_files") or [])
     hardening_source_count = len(hardening.get("behavior_source_files") or [])
@@ -71,7 +85,9 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
     )
     behavior_test = project / "tests" / "test_absorbed_capabilities.py"
     if behavior_test.is_file():
-        behavior_test_count = len(re.findall(r"^\s*def\s+test_", read_text(behavior_test), re.M))
+        behavior_test_count = len(
+            re.findall(r"^\s*def\s+test_", read_text(behavior_test), re.M)
+        )
         evidence.append(f"behavior_test_function_count={behavior_test_count}")
     evidence.extend(
         [
@@ -79,7 +95,11 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
             f"employee_execution_mode={audit.get('employee_execution_mode', '')}",
         ]
     )
-    worker_review = audit.get("employee_worker_review") if isinstance(audit.get("employee_worker_review"), dict) else {}
+    worker_review = (
+        audit.get("employee_worker_review")
+        if isinstance(audit.get("employee_worker_review"), dict)
+        else {}
+    )
     evidence.extend(
         [
             f"employee_worker_review_status={worker_review.get('status', '')}",
@@ -180,90 +200,318 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
 
 def _report_evidence(project: Path) -> list[str]:
     publish_report = read_json(project / "docs" / "retort_pr_publish_dry_run.json")
-    publish_summary = publish_report.get("summary") if isinstance(publish_report.get("summary"), dict) else {}
+    publish_summary = (
+        publish_report.get("summary")
+        if isinstance(publish_report.get("summary"), dict)
+        else {}
+    )
     sandbox_report = read_json(project / "docs" / "retort_pr_publish_sandbox.json")
-    sandbox_summary = sandbox_report.get("summary") if isinstance(sandbox_report.get("summary"), dict) else {}
+    sandbox_summary = (
+        sandbox_report.get("summary")
+        if isinstance(sandbox_report.get("summary"), dict)
+        else {}
+    )
     live_probe = read_json(project / "docs" / "retort_pr_live_publish_probe.json")
-    live_summary = live_probe.get("summary") if isinstance(live_probe.get("summary"), dict) else {}
-    low_permission_probe = read_json(project / "docs" / "retort_pr_low_permission_probe.json")
-    low_permission_summary = low_permission_probe.get("summary") if isinstance(low_permission_probe.get("summary"), dict) else {}
-    readonly_probe = read_json(project / "docs" / "retort_pr_readonly_degradation_probe.json")
-    readonly_summary = readonly_probe.get("summary") if isinstance(readonly_probe.get("summary"), dict) else {}
+    live_summary = (
+        live_probe.get("summary") if isinstance(live_probe.get("summary"), dict) else {}
+    )
+    low_permission_probe = read_json(
+        project / "docs" / "retort_pr_low_permission_probe.json"
+    )
+    low_permission_summary = (
+        low_permission_probe.get("summary")
+        if isinstance(low_permission_probe.get("summary"), dict)
+        else {}
+    )
+    readonly_probe = read_json(
+        project / "docs" / "retort_pr_readonly_degradation_probe.json"
+    )
+    readonly_summary = (
+        readonly_probe.get("summary")
+        if isinstance(readonly_probe.get("summary"), dict)
+        else {}
+    )
     long_run_report = read_json(project / "docs" / "retort_pr_long_run_review.json")
-    long_run_summary = long_run_report.get("summary") if isinstance(long_run_report.get("summary"), dict) else {}
+    long_run_summary = (
+        long_run_report.get("summary")
+        if isinstance(long_run_report.get("summary"), dict)
+        else {}
+    )
     holdout_report = read_json(project / "docs" / "retort_pr_holdout_blind_eval.json")
-    holdout_summary = holdout_report.get("summary") if isinstance(holdout_report.get("summary"), dict) else {}
-    failure_rollback_report = read_json(project / "docs" / "retort_pr_failure_rollback_replay.json")
-    failure_rollback_summary = failure_rollback_report.get("summary") if isinstance(failure_rollback_report.get("summary"), dict) else {}
+    holdout_summary = (
+        holdout_report.get("summary")
+        if isinstance(holdout_report.get("summary"), dict)
+        else {}
+    )
+    failure_rollback_report = read_json(
+        project / "docs" / "retort_pr_failure_rollback_replay.json"
+    )
+    failure_rollback_summary = (
+        failure_rollback_report.get("summary")
+        if isinstance(failure_rollback_report.get("summary"), dict)
+        else {}
+    )
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
-    replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
-    replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
-    multi_absorption_report = read_json(project / "docs" / "retort_multi_project_absorption_replay.json")
-    multi_absorption_summary = multi_absorption_report.get("summary") if isinstance(multi_absorption_report.get("summary"), dict) else {}
-    continuity_report = read_json(project / "docs" / "retort_absorption_continuity_probe.json")
-    continuity_summary = continuity_report.get("summary") if isinstance(continuity_report.get("summary"), dict) else {}
+    replay_summary = (
+        replay_report.get("summary")
+        if isinstance(replay_report.get("summary"), dict)
+        else {}
+    )
+    replay_checks = [
+        item for item in replay_report.get("checks") or [] if isinstance(item, dict)
+    ]
+    multi_absorption_report = read_json(
+        project / "docs" / "retort_multi_project_absorption_replay.json"
+    )
+    multi_absorption_summary = (
+        multi_absorption_report.get("summary")
+        if isinstance(multi_absorption_report.get("summary"), dict)
+        else {}
+    )
+    continuity_report = read_json(
+        project / "docs" / "retort_absorption_continuity_probe.json"
+    )
+    continuity_summary = (
+        continuity_report.get("summary")
+        if isinstance(continuity_report.get("summary"), dict)
+        else {}
+    )
     complex_pr_report = read_json(project / "docs" / "retort_complex_pr_replay.json")
-    complex_pr_summary = complex_pr_report.get("summary") if isinstance(complex_pr_report.get("summary"), dict) else {}
-    pipeline_replay_report = read_json(project / "docs" / "retort_review_pipeline_diff_replay.json")
-    pipeline_replay_summary = pipeline_replay_report.get("summary") if isinstance(pipeline_replay_report.get("summary"), dict) else {}
+    complex_pr_summary = (
+        complex_pr_report.get("summary")
+        if isinstance(complex_pr_report.get("summary"), dict)
+        else {}
+    )
+    pipeline_replay_report = read_json(
+        project / "docs" / "retort_review_pipeline_diff_replay.json"
+    )
+    pipeline_replay_summary = (
+        pipeline_replay_report.get("summary")
+        if isinstance(pipeline_replay_report.get("summary"), dict)
+        else {}
+    )
     task_report = read_json(project / "docs" / "retort_task_prioritization_report.json")
-    task_summary = task_report.get("summary") if isinstance(task_report.get("summary"), dict) else {}
-    dispatch_report = read_json(project / "docs" / "retort_employee_task_dispatch_plan.json")
-    dispatch_summary = dispatch_report.get("summary") if isinstance(dispatch_report.get("summary"), dict) else {}
-    benchmark_report = read_json(project / "docs" / "retort_review_quality_benchmark.json")
-    benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
-    external_matrix = read_json(project / "docs" / "retort_external_advantage_matrix.json")
-    external_matrix_summary = external_matrix.get("summary") if isinstance(external_matrix.get("summary"), dict) else {}
-    external_ci = read_json(project / "docs" / "retort_external_advantage_ci_regression.json")
-    external_ci_summary = external_ci.get("summary") if isinstance(external_ci.get("summary"), dict) else {}
-    external_process = read_json(project / "docs" / "retort_external_process_adjudication.json")
-    external_process_summary = external_process.get("summary") if isinstance(external_process.get("summary"), dict) else {}
-    external_repeat = read_json(project / "docs" / "retort_external_advantage_repeat.json")
-    external_repeat_summary = external_repeat.get("summary") if isinstance(external_repeat.get("summary"), dict) else {}
+    task_summary = (
+        task_report.get("summary")
+        if isinstance(task_report.get("summary"), dict)
+        else {}
+    )
+    dispatch_report = read_json(
+        project / "docs" / "retort_employee_task_dispatch_plan.json"
+    )
+    dispatch_summary = (
+        dispatch_report.get("summary")
+        if isinstance(dispatch_report.get("summary"), dict)
+        else {}
+    )
+    benchmark_report = read_json(
+        project / "docs" / "retort_review_quality_benchmark.json"
+    )
+    benchmark_summary = (
+        benchmark_report.get("summary")
+        if isinstance(benchmark_report.get("summary"), dict)
+        else {}
+    )
+    external_matrix = read_json(
+        project / "docs" / "retort_external_advantage_matrix.json"
+    )
+    external_matrix_summary = (
+        external_matrix.get("summary")
+        if isinstance(external_matrix.get("summary"), dict)
+        else {}
+    )
+    external_ci = read_json(
+        project / "docs" / "retort_external_advantage_ci_regression.json"
+    )
+    external_ci_summary = (
+        external_ci.get("summary")
+        if isinstance(external_ci.get("summary"), dict)
+        else {}
+    )
+    external_process = read_json(
+        project / "docs" / "retort_external_process_adjudication.json"
+    )
+    external_process_summary = (
+        external_process.get("summary")
+        if isinstance(external_process.get("summary"), dict)
+        else {}
+    )
+    external_repeat = read_json(
+        project / "docs" / "retort_external_advantage_repeat.json"
+    )
+    external_repeat_summary = (
+        external_repeat.get("summary")
+        if isinstance(external_repeat.get("summary"), dict)
+        else {}
+    )
     upstream_pr_ci = read_json(project / "docs" / "retort_upstream_pr_ci_probe.json")
-    upstream_pr_ci_summary = upstream_pr_ci.get("summary") if isinstance(upstream_pr_ci.get("summary"), dict) else {}
-    competitor_runtime = read_json(project / "docs" / "retort_competitor_runtime_comparison.json")
-    competitor_runtime_summary = competitor_runtime.get("summary") if isinstance(competitor_runtime.get("summary"), dict) else {}
-    competitor_blind = read_json(project / "docs" / "retort_competitor_blind_adjudication.json")
-    competitor_blind_summary = competitor_blind.get("summary") if isinstance(competitor_blind.get("summary"), dict) else {}
-    competitor_behavior = read_json(project / "docs" / "retort_competitor_behavior_regression.json")
-    competitor_behavior_summary = competitor_behavior.get("summary") if isinstance(competitor_behavior.get("summary"), dict) else {}
-    paibi_cli_cross = read_json(project / "docs" / "retort_paibi_cli_cross_adjudication.json")
-    paibi_cli_cross_summary = paibi_cli_cross.get("summary") if isinstance(paibi_cli_cross.get("summary"), dict) else {}
-    heterogeneous_replay = read_json(project / "docs" / "retort_heterogeneous_absorption_replay.json")
-    heterogeneous_summary = heterogeneous_replay.get("summary") if isinstance(heterogeneous_replay.get("summary"), dict) else {}
-    cross_domain_replay = read_json(project / "docs" / "retort_cross_domain_absorption_replay.json")
-    cross_domain_summary = cross_domain_replay.get("summary") if isinstance(cross_domain_replay.get("summary"), dict) else {}
-    cross_domain_e2e = read_json(project / "docs" / "retort_cross_domain_end_to_end.json")
-    cross_domain_e2e_summary = cross_domain_e2e.get("summary") if isinstance(cross_domain_e2e.get("summary"), dict) else {}
-    cross_domain_ci = read_json(project / "docs" / "retort_cross_domain_ci_regression.json")
-    cross_domain_ci_summary = cross_domain_ci.get("summary") if isinstance(cross_domain_ci.get("summary"), dict) else {}
-    contract_runtime = read_json(project / "docs" / "retort_contract_runtime_rehearsal.json")
-    contract_runtime_summary = contract_runtime.get("summary") if isinstance(contract_runtime.get("summary"), dict) else {}
-    contract_stability = read_json(project / "docs" / "retort_contract_stability_stress.json")
-    contract_stability_summary = contract_stability.get("summary") if isinstance(contract_stability.get("summary"), dict) else {}
-    review_family = read_json(project / "docs" / "retort_review_family_behavior_replay.json")
-    review_family_summary = review_family.get("summary") if isinstance(review_family.get("summary"), dict) else {}
-    external_merge_landing = read_json(project / "docs" / "retort_external_merge_landing.json")
-    external_merge_summary = external_merge_landing.get("summary") if isinstance(external_merge_landing.get("summary"), dict) else {}
-    adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
-    adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
-    stress_report = read_json(project / "docs" / "retort_employee_scheduler_stress.json")
-    stress_summary = stress_report.get("summary") if isinstance(stress_report.get("summary"), dict) else {}
+    upstream_pr_ci_summary = (
+        upstream_pr_ci.get("summary")
+        if isinstance(upstream_pr_ci.get("summary"), dict)
+        else {}
+    )
+    competitor_runtime = read_json(
+        project / "docs" / "retort_competitor_runtime_comparison.json"
+    )
+    competitor_runtime_summary = (
+        competitor_runtime.get("summary")
+        if isinstance(competitor_runtime.get("summary"), dict)
+        else {}
+    )
+    competitor_blind = read_json(
+        project / "docs" / "retort_competitor_blind_adjudication.json"
+    )
+    competitor_blind_summary = (
+        competitor_blind.get("summary")
+        if isinstance(competitor_blind.get("summary"), dict)
+        else {}
+    )
+    competitor_behavior = read_json(
+        project / "docs" / "retort_competitor_behavior_regression.json"
+    )
+    competitor_behavior_summary = (
+        competitor_behavior.get("summary")
+        if isinstance(competitor_behavior.get("summary"), dict)
+        else {}
+    )
+    paibi_cli_cross = read_json(
+        project / "docs" / "retort_paibi_cli_cross_adjudication.json"
+    )
+    paibi_cli_cross_summary = (
+        paibi_cli_cross.get("summary")
+        if isinstance(paibi_cli_cross.get("summary"), dict)
+        else {}
+    )
+    heterogeneous_replay = read_json(
+        project / "docs" / "retort_heterogeneous_absorption_replay.json"
+    )
+    heterogeneous_summary = (
+        heterogeneous_replay.get("summary")
+        if isinstance(heterogeneous_replay.get("summary"), dict)
+        else {}
+    )
+    cross_domain_replay = read_json(
+        project / "docs" / "retort_cross_domain_absorption_replay.json"
+    )
+    cross_domain_summary = (
+        cross_domain_replay.get("summary")
+        if isinstance(cross_domain_replay.get("summary"), dict)
+        else {}
+    )
+    cross_domain_e2e = read_json(
+        project / "docs" / "retort_cross_domain_end_to_end.json"
+    )
+    cross_domain_e2e_summary = (
+        cross_domain_e2e.get("summary")
+        if isinstance(cross_domain_e2e.get("summary"), dict)
+        else {}
+    )
+    cross_domain_ci = read_json(
+        project / "docs" / "retort_cross_domain_ci_regression.json"
+    )
+    cross_domain_ci_summary = (
+        cross_domain_ci.get("summary")
+        if isinstance(cross_domain_ci.get("summary"), dict)
+        else {}
+    )
+    contract_runtime = read_json(
+        project / "docs" / "retort_contract_runtime_rehearsal.json"
+    )
+    contract_runtime_summary = (
+        contract_runtime.get("summary")
+        if isinstance(contract_runtime.get("summary"), dict)
+        else {}
+    )
+    contract_stability = read_json(
+        project / "docs" / "retort_contract_stability_stress.json"
+    )
+    contract_stability_summary = (
+        contract_stability.get("summary")
+        if isinstance(contract_stability.get("summary"), dict)
+        else {}
+    )
+    review_family = read_json(
+        project / "docs" / "retort_review_family_behavior_replay.json"
+    )
+    review_family_summary = (
+        review_family.get("summary")
+        if isinstance(review_family.get("summary"), dict)
+        else {}
+    )
+    external_merge_landing = read_json(
+        project / "docs" / "retort_external_merge_landing.json"
+    )
+    external_merge_summary = (
+        external_merge_landing.get("summary")
+        if isinstance(external_merge_landing.get("summary"), dict)
+        else {}
+    )
+    adjudication_report = read_json(
+        project / "docs" / "retort_review_adjudication_calibration.json"
+    )
+    adjudication_summary = (
+        adjudication_report.get("summary")
+        if isinstance(adjudication_report.get("summary"), dict)
+        else {}
+    )
+    stress_report = read_json(
+        project / "docs" / "retort_employee_scheduler_stress.json"
+    )
+    stress_summary = (
+        stress_report.get("summary")
+        if isinstance(stress_report.get("summary"), dict)
+        else {}
+    )
     patch_report = read_json(project / "docs" / "retort_employee_patch_closure.json")
-    patch_summary = patch_report.get("summary") if isinstance(patch_report.get("summary"), dict) else {}
+    patch_summary = (
+        patch_report.get("summary")
+        if isinstance(patch_report.get("summary"), dict)
+        else {}
+    )
     patch_stress = read_json(project / "docs" / "retort_employee_patch_stress.json")
-    patch_stress_summary = patch_stress.get("summary") if isinstance(patch_stress.get("summary"), dict) else {}
+    patch_stress_summary = (
+        patch_stress.get("summary")
+        if isinstance(patch_stress.get("summary"), dict)
+        else {}
+    )
     quality_report = read_json(project / "docs" / "retort_quality_gate_bundle.json")
-    quality_summary = quality_report.get("summary") if isinstance(quality_report.get("summary"), dict) else {}
-    recovery_report = read_json(project / "docs" / "retort_production_recovery_drill.json")
-    recovery_summary = recovery_report.get("summary") if isinstance(recovery_report.get("summary"), dict) else {}
-    mainline_proof = read_json(project / "docs" / "retort_product_mainline_absorption_proof.json")
-    mainline_summary = mainline_proof.get("summary") if isinstance(mainline_proof.get("summary"), dict) else {}
-    release_decision = read_json(project / "docs" / "retort_absorption_release_decision.json")
-    release_summary = release_decision.get("summary") if isinstance(release_decision.get("summary"), dict) else {}
-    operator_journey = read_json(project / "docs" / "retort_operator_journey_replay.json")
-    operator_summary = operator_journey.get("summary") if isinstance(operator_journey.get("summary"), dict) else {}
+    quality_summary = (
+        quality_report.get("summary")
+        if isinstance(quality_report.get("summary"), dict)
+        else {}
+    )
+    recovery_report = read_json(
+        project / "docs" / "retort_production_recovery_drill.json"
+    )
+    recovery_summary = (
+        recovery_report.get("summary")
+        if isinstance(recovery_report.get("summary"), dict)
+        else {}
+    )
+    mainline_proof = read_json(
+        project / "docs" / "retort_product_mainline_absorption_proof.json"
+    )
+    mainline_summary = (
+        mainline_proof.get("summary")
+        if isinstance(mainline_proof.get("summary"), dict)
+        else {}
+    )
+    release_decision = read_json(
+        project / "docs" / "retort_absorption_release_decision.json"
+    )
+    release_summary = (
+        release_decision.get("summary")
+        if isinstance(release_decision.get("summary"), dict)
+        else {}
+    )
+    operator_journey = read_json(
+        project / "docs" / "retort_operator_journey_replay.json"
+    )
+    operator_summary = (
+        operator_journey.get("summary")
+        if isinstance(operator_journey.get("summary"), dict)
+        else {}
+    )
     return [
         f"quality_gate_bundle_status={quality_report.get('status', '')}",
         f"quality_gate_bundle_all_passed={quality_summary.get('all_gates_passed', '')}",
@@ -806,8 +1054,16 @@ def _external_review_evidence(project: Path) -> list[str]:
     if not report.is_file():
         return []
     payload = read_json(report)
-    license_review = payload.get("license_review") if isinstance(payload.get("license_review"), dict) else {}
-    pipeline = payload.get("review_pipeline") if isinstance(payload.get("review_pipeline"), dict) else {}
+    license_review = (
+        payload.get("license_review")
+        if isinstance(payload.get("license_review"), dict)
+        else {}
+    )
+    pipeline = (
+        payload.get("review_pipeline")
+        if isinstance(payload.get("review_pipeline"), dict)
+        else {}
+    )
     return [
         f"external_review_report={report}",
         f"external_snapshot_revision={(payload.get('external_snapshot') or {}).get('git_revision', '') if isinstance(payload.get('external_snapshot'), dict) else ''}",
@@ -825,12 +1081,34 @@ def _employee_result_evidence(project: Path) -> list[str]:
     if not latest:
         return []
     payload = read_json(latest)
-    runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
-    review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
-    multi_worker = runtime.get("multi_worker") if isinstance(runtime.get("multi_worker"), dict) else {}
-    process_isolation = multi_worker.get("process_isolation") if isinstance(multi_worker.get("process_isolation"), dict) else {}
-    patch = runtime.get("employee_patch_closure") if isinstance(runtime.get("employee_patch_closure"), dict) else {}
-    patch_summary = patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+    runtime = (
+        payload.get("runtime_evidence")
+        if isinstance(payload.get("runtime_evidence"), dict)
+        else {}
+    )
+    review = (
+        runtime.get("worker_review")
+        if isinstance(runtime.get("worker_review"), dict)
+        else {}
+    )
+    multi_worker = (
+        runtime.get("multi_worker")
+        if isinstance(runtime.get("multi_worker"), dict)
+        else {}
+    )
+    process_isolation = (
+        multi_worker.get("process_isolation")
+        if isinstance(multi_worker.get("process_isolation"), dict)
+        else {}
+    )
+    patch = (
+        runtime.get("employee_patch_closure")
+        if isinstance(runtime.get("employee_patch_closure"), dict)
+        else {}
+    )
+    patch_summary = (
+        patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+    )
     return [
         f"employee_results_file={latest}",
         f"employee_result_count={len(payload.get('results') or [])}; execution_mode={payload.get('execution_mode', '')}",
@@ -869,9 +1147,17 @@ def _latest_run_evidence(project: Path) -> list[str]:
         payload = read_json(path)
         if payload:
             changed_files = [str(item) for item in payload.get("changed_files") or []]
-            source_files = [item for item in changed_files if "/retort_engine/" in item and "/tests/" not in item]
+            source_files = [
+                item
+                for item in changed_files
+                if "/retort_engine/" in item and "/tests/" not in item
+            ]
             test_files = [item for item in changed_files if "/tests/" in item]
-            summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+            summary = (
+                payload.get("summary")
+                if isinstance(payload.get("summary"), dict)
+                else {}
+            )
             return [
                 f"latest_absorption_run_id={payload.get('run_id', path.stem)}",
                 f"latest_absorption_source={payload.get('source', '')}",

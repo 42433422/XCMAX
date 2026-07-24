@@ -52,7 +52,9 @@ def test_contract_compatibility_accepts_exact_required_surface() -> None:
     assert report["removed_historical_fields"] == []
 
 
-def test_contract_compatibility_flags_new_required_fields_as_breaking_for_old_producers() -> None:
+def test_contract_compatibility_flags_new_required_fields_as_breaking_for_old_producers() -> (
+    None
+):
     previous = ("status", "project", "summary")
 
     report = contract_compatibility_report("quality_gate_bundle_result", previous)
@@ -88,7 +90,9 @@ def test_contract_compatibility_separates_append_only_from_payload_validation() 
         "evidence": {},
     }
 
-    compatibility = contract_compatibility_report("quality_gate_bundle_result", previous)
+    compatibility = contract_compatibility_report(
+        "quality_gate_bundle_result", previous
+    )
     validation = validate_contract("quality_gate_bundle_result", payload)
 
     assert compatibility["append_only"] is True

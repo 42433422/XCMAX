@@ -28,10 +28,22 @@ def build_contract_stability_stress(
         )
         for index in range(1, normalized_rounds + 1)
     ]
-    run_summaries = [run.get("summary") if isinstance(run.get("summary"), dict) else {} for run in runs]
-    total_faults = sum(int(summary.get("concurrency_fault_injection_count") or 0) for summary in run_summaries)
-    total_rejected = sum(int(summary.get("concurrent_violation_rejected_count") or 0) for summary in run_summaries)
-    total_rollbacks = sum(int(summary.get("concurrent_rollback_verified_count") or 0) for summary in run_summaries)
+    run_summaries = [
+        run.get("summary") if isinstance(run.get("summary"), dict) else {}
+        for run in runs
+    ]
+    total_faults = sum(
+        int(summary.get("concurrency_fault_injection_count") or 0)
+        for summary in run_summaries
+    )
+    total_rejected = sum(
+        int(summary.get("concurrent_violation_rejected_count") or 0)
+        for summary in run_summaries
+    )
+    total_rollbacks = sum(
+        int(summary.get("concurrent_rollback_verified_count") or 0)
+        for summary in run_summaries
+    )
     summary = {
         "round_count": len(runs),
         "ready_round_count": sum(1 for run in runs if run.get("status") == "ready"),
@@ -42,9 +54,18 @@ def build_contract_stability_stress(
         "total_concurrent_violation_rejected_count": total_rejected,
         "total_concurrent_rollback_verified_count": total_rollbacks,
         "state_leak_count": total_faults - min(total_rejected, total_rollbacks),
-        "all_rounds_rejected_violations": all(summary.get("all_concurrent_violations_rejected") is True for summary in run_summaries),
-        "all_rounds_verified_rollbacks": all(summary.get("all_concurrent_rollbacks_verified") is True for summary in run_summaries),
-        "all_rounds_valid_payloads_accepted": all(summary.get("all_valid_payloads_accepted") is True for summary in run_summaries),
+        "all_rounds_rejected_violations": all(
+            summary.get("all_concurrent_violations_rejected") is True
+            for summary in run_summaries
+        ),
+        "all_rounds_verified_rollbacks": all(
+            summary.get("all_concurrent_rollbacks_verified") is True
+            for summary in run_summaries
+        ),
+        "all_rounds_valid_payloads_accepted": all(
+            summary.get("all_valid_payloads_accepted") is True
+            for summary in run_summaries
+        ),
         "duration_sec": round(time.monotonic() - started, 3),
     }
     ready = (
@@ -79,5 +100,8 @@ def build_contract_stability_stress(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result

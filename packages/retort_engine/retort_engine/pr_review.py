@@ -5,21 +5,63 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
-from retort_engine.absorbed_review_policy import policy_context_rank_weight, policy_context_rank_weights, policy_summary
-from retort_engine.absorbed_review_rank_weights import capability_rank_boost, external_source_boost
+from retort_engine.absorbed_capabilities import (
+    ranked_capabilities,
+    review_strategy_for_file,
+)
+from retort_engine.absorbed_review_policy import (
+    policy_context_rank_weight,
+    policy_context_rank_weights,
+    policy_summary,
+)
+from retort_engine.absorbed_review_rank_weights import (
+    capability_rank_boost,
+    external_source_boost,
+)
 from retort_engine.cross_language_transfer import build_cross_language_transfer
-from retort_engine.diff_hunk_semantics import analyze_hunk_semantics, summarize_hunk_semantics
-from retort_engine.diff_extension_policy import extension_policy_for_path, extension_policy_summary, extension_review_context
+from retort_engine.diff_hunk_semantics import (
+    analyze_hunk_semantics,
+    summarize_hunk_semantics,
+)
+from retort_engine.diff_extension_policy import (
+    extension_policy_for_path,
+    extension_policy_summary,
+    extension_review_context,
+)
 from retort_engine.intent_alignment import assess_change_intent_alignment
-from retort_engine.review_calibration_policy import calibration_context_rank_weight, calibration_context_rank_weights, calibration_summary
-from retort_engine.review_context_bias import context_rank_weight, context_rank_weights, context_signal_strength, file_grouping_enabled, review_context_bias
+from retort_engine.review_calibration_policy import (
+    calibration_context_rank_weight,
+    calibration_context_rank_weights,
+    calibration_summary,
+)
+from retort_engine.review_context_bias import (
+    context_rank_weight,
+    context_rank_weights,
+    context_signal_strength,
+    file_grouping_enabled,
+    review_context_bias,
+)
 from retort_engine.static_analysis_gate import scan_static_analysis_findings
 
 
 SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private_key")
-REVIEW_STAGES = ("group_related_files", "localize_changed_hunks", "classify_risk", "reflect_before_publish", "dispatch_employee_task")
-REVIEW_CONTEXTS = ("security", "tests", "ci_config", "config", "frontend", "runtime", "docs", "other")
+REVIEW_STAGES = (
+    "group_related_files",
+    "localize_changed_hunks",
+    "classify_risk",
+    "reflect_before_publish",
+    "dispatch_employee_task",
+)
+REVIEW_CONTEXTS = (
+    "security",
+    "tests",
+    "ci_config",
+    "config",
+    "frontend",
+    "runtime",
+    "docs",
+    "other",
+)
 SEVERITIES = ("high", "medium", "low", "info")
 LARGE_DIFF_FILE_THRESHOLD = 8
 LARGE_DIFF_HUNK_THRESHOLD = 12
@@ -38,56 +80,109 @@ def review_diff(
 ) -> dict[str, Any]:
     """Review a unified diff with absorbed external review capabilities."""
     raw_files = parse_unified_diff(diff_text)
-    previous_files = parse_unified_diff(previous_diff_text) if previous_diff_text.strip() else []
-    files, incremental = _filter_incremental_files(raw_files, previous_files) if previous_files else (
-        raw_files,
-        {
-            "enabled": False,
-            "previous_diff_supplied": False,
-            "previous_added_change_count": 0,
-            "current_added_change_count": _added_change_count(raw_files),
-            "skipped_existing_change_count": 0,
-            "reviewed_new_change_count": _added_change_count(raw_files),
-        },
+    previous_files = (
+        parse_unified_diff(previous_diff_text) if previous_diff_text.strip() else []
+    )
+    files, incremental = (
+        _filter_incremental_files(raw_files, previous_files)
+        if previous_files
+        else (
+            raw_files,
+            {
+                "enabled": False,
+                "previous_diff_supplied": False,
+                "previous_added_change_count": 0,
+                "current_added_change_count": _added_change_count(raw_files),
+                "skipped_existing_change_count": 0,
+                "reviewed_new_change_count": _added_change_count(raw_files),
+            },
+        )
     )
     capabilities = [str(item.get("signal") or "") for item in ranked_capabilities()]
     context_bias = review_context_bias()
     context_groups = group_related_files_for_review(files)
     large_diff_chunking = _large_diff_review_needed(files, diff_text)
-    context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
-    extension_policy = extension_policy_summary([str(file_review["path"]) for file_review in files])
+    context_by_file = {
+        path: str(group["context"])
+        for group in context_groups
+        for path in group["files"]
+    }
+    extension_policy = extension_policy_summary(
+        [str(file_review["path"]) for file_review in files]
+    )
     static_analysis = scan_static_analysis_findings(files)
     cross_language_transfer = build_cross_language_transfer(files)
-    external_diagnostic_ingestion = _normalize_external_diagnostics(external_diagnostics or [], files)
-    intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)
+    external_diagnostic_ingestion = _normalize_external_diagnostics(
+        external_diagnostics or [], files
+    )
+    intent_alignment = assess_change_intent_alignment(
+        files, issue_context=issue_context, pr_body=pr_body
+    )
     feedback_context_weights = _feedback_context_weights(employee_feedback or [])
     static_findings_by_location = {
         (str(finding.get("file") or ""), int(finding.get("line") or 0)): finding
         for finding in static_analysis.get("findings") or []
         if isinstance(finding, dict)
     }
-    external_diagnostics_by_location = _external_diagnostics_by_location(external_diagnostic_ingestion["diagnostics"])
+    external_diagnostics_by_location = _external_diagnostics_by_location(
+        external_diagnostic_ingestion["diagnostics"]
+    )
     candidate_comments: list[dict[str, Any]] = []
     hunk_semantic_analyses: list[dict[str, Any]] = []
     hunk_count = 0
     for file_review in files:
         file_path = str(file_review["path"])
         strategy = review_strategy_for_file(file_path)
-        review_context = context_by_file.get(file_path, review_context_for_file(file_path))
+        review_context = context_by_file.get(
+            file_path, review_context_for_file(file_path)
+        )
         for hunk in file_review["hunks"]:
             hunk_count += 1
             hunk_semantics = analyze_hunk_semantics(file_path, hunk, review_context)
             hunk_semantic_analyses.append(hunk_semantics)
-            hunk_comments = _static_analysis_comments(file_path, hunk, strategy, capabilities, review_context, static_findings_by_location)
-            hunk_comments.extend(_cross_language_transfer_comments(file_path, hunk, strategy, capabilities, cross_language_transfer))
-            hunk_comments.extend(_external_diagnostic_comments(file_path, hunk, strategy, capabilities, external_diagnostics_by_location))
-            hunk_comments.extend(_hunk_semantic_comments(file_path, hunk, strategy, capabilities, hunk_semantics))
-            hunk_comments.extend(_review_hunk(file_path, hunk, strategy, capabilities, review_context))
+            hunk_comments = _static_analysis_comments(
+                file_path,
+                hunk,
+                strategy,
+                capabilities,
+                review_context,
+                static_findings_by_location,
+            )
+            hunk_comments.extend(
+                _cross_language_transfer_comments(
+                    file_path, hunk, strategy, capabilities, cross_language_transfer
+                )
+            )
+            hunk_comments.extend(
+                _external_diagnostic_comments(
+                    file_path,
+                    hunk,
+                    strategy,
+                    capabilities,
+                    external_diagnostics_by_location,
+                )
+            )
+            hunk_comments.extend(
+                _hunk_semantic_comments(
+                    file_path, hunk, strategy, capabilities, hunk_semantics
+                )
+            )
+            hunk_comments.extend(
+                _review_hunk(file_path, hunk, strategy, capabilities, review_context)
+            )
             if not hunk_comments:
-                hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities, review_context)]
+                hunk_comments = [
+                    _info_comment(
+                        file_path, hunk, strategy, capabilities, review_context
+                    )
+                ]
             candidate_comments.extend(hunk_comments)
     if intent_alignment.get("status") == "misaligned" and files:
-        candidate_comments.append(_intent_alignment_comment(files, capabilities, context_by_file, intent_alignment))
+        candidate_comments.append(
+            _intent_alignment_comment(
+                files, capabilities, context_by_file, intent_alignment
+            )
+        )
     comments = _rank_review_comments(
         candidate_comments,
         max_comments=max_comments,
@@ -103,8 +198,15 @@ def review_diff(
             str(file_review["path"]),
             review_strategy_for_file(str(file_review["path"])),
             file_review,
-            [comment for comment in comments if comment.get("file") == file_review["path"]],
-            context_by_file.get(str(file_review["path"]), review_context_for_file(str(file_review["path"]))),
+            [
+                comment
+                for comment in comments
+                if comment.get("file") == file_review["path"]
+            ],
+            context_by_file.get(
+                str(file_review["path"]),
+                review_context_for_file(str(file_review["path"])),
+            ),
         )
         for file_review in files
     ]
@@ -115,14 +217,22 @@ def review_diff(
         "comment_count": len(comments),
         "candidate_comment_count": len(candidate_comments),
         "suppressed_comment_count": max(0, len(candidate_comments) - len(comments)),
-        "publishable_comment_count": sum(1 for comment in comments if comment.get("publishable")),
+        "publishable_comment_count": sum(
+            1 for comment in comments if comment.get("publishable")
+        ),
         "task_group_count": len(task_groups),
-        "actionable_task_group_count": sum(1 for group in task_groups if int(group.get("publishable_comment_count") or 0) > 0),
+        "actionable_task_group_count": sum(
+            1
+            for group in task_groups
+            if int(group.get("publishable_comment_count") or 0) > 0
+        ),
         "capabilities": capabilities[:5],
         "stage_count": len(REVIEW_STAGES),
         "file_summary_count": len(file_summaries),
         "review_context_group_count": len(context_groups),
-        "primary_review_contexts": [str(group["context"]) for group in context_groups[:5]],
+        "primary_review_contexts": [
+            str(group["context"]) for group in context_groups[:5]
+        ],
         "extension_policy": extension_policy,
         "absorbed_file_grouping": file_grouping_enabled(),
         "absorbed_context_signal_strength": context_signal_strength(),
@@ -144,15 +254,25 @@ def review_diff(
         "deep_review_pipeline": True,
         "comment_ranking_model": "severity_context_transfer_publishability_v5_external_diagnostics",
         "large_diff_chunking": large_diff_chunking,
-        "large_diff_chunk_count": len(context_groups) if large_diff_chunking else (1 if files else 0),
+        "large_diff_chunk_count": len(context_groups)
+        if large_diff_chunking
+        else (1 if files else 0),
         "large_diff_context_balancing": large_diff_chunking,
         "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
         "ready_for_employee_tasking": bool(files and comments),
         "incremental": bool(incremental.get("enabled")),
-        "skipped_existing_change_count": int(incremental.get("skipped_existing_change_count") or 0),
-        "reviewed_new_change_count": int(incremental.get("reviewed_new_change_count") or 0),
+        "skipped_existing_change_count": int(
+            incremental.get("skipped_existing_change_count") or 0
+        ),
+        "reviewed_new_change_count": int(
+            incremental.get("reviewed_new_change_count") or 0
+        ),
     }
-    status = "reviewed" if files else ("no_new_changes" if raw_files and previous_files else "empty_diff")
+    status = (
+        "reviewed"
+        if files
+        else ("no_new_changes" if raw_files and previous_files else "empty_diff")
+    )
     return {
         "status": status,
         "summary": summary,
@@ -199,7 +319,13 @@ def parse_unified_diff(diff_text: str) -> list[dict[str, Any]]:
         elif raw.startswith("-") and not raw.startswith("---"):
             hunk["changes"].append({"type": "delete", "line": None, "text": raw[1:]})
         else:
-            hunk["changes"].append({"type": "context", "line": new_line, "text": raw[1:] if raw.startswith(" ") else raw})
+            hunk["changes"].append(
+                {
+                    "type": "context",
+                    "line": new_line,
+                    "text": raw[1:] if raw.startswith(" ") else raw,
+                }
+            )
             new_line += 1
     return [item for item in files if item["hunks"]]
 
@@ -209,25 +335,48 @@ def review_context_for_file(path: str) -> str:
     normalized = path.replace("\\", "/").lower()
     name = normalized.rsplit("/", 1)[-1]
     suffix = Path(name).suffix
-    if normalized.startswith(".github/workflows/") or "/workflows/" in normalized or name in {"dockerfile", "docker-compose.yml", "docker-compose.yaml"}:
+    if (
+        normalized.startswith(".github/workflows/")
+        or "/workflows/" in normalized
+        or name in {"dockerfile", "docker-compose.yml", "docker-compose.yaml"}
+    ):
         return "ci_config"
-    if normalized.startswith("tests/") or "/tests/" in normalized or name.startswith("test_") or name.endswith((".spec.ts", ".spec.tsx", ".test.ts", ".test.tsx")):
+    if (
+        normalized.startswith("tests/")
+        or "/tests/" in normalized
+        or name.startswith("test_")
+        or name.endswith((".spec.ts", ".spec.tsx", ".test.ts", ".test.tsx"))
+    ):
         return "tests"
     extension_context = extension_review_context(path)
     if normalized.startswith("docs/") or extension_context == "docs":
         return "docs"
-    if "auth" in normalized or "security" in normalized or any(marker in normalized for marker in SECRET_MARKERS):
+    if (
+        "auth" in normalized
+        or "security" in normalized
+        or any(marker in normalized for marker in SECRET_MARKERS)
+    ):
         return "security"
-    if normalized.startswith(("config/", "settings/")) or "/config/" in normalized or "/settings/" in normalized:
+    if (
+        normalized.startswith(("config/", "settings/"))
+        or "/config/" in normalized
+        or "/settings/" in normalized
+    ):
         return "config"
     if suffix in {".ini", ".env"} or name == ".env" or name.endswith(".env"):
         return "config"
-    if suffix in {".tsx", ".jsx", ".css", ".html"} or "/frontend/" in normalized or "/ui/" in normalized:
+    if (
+        suffix in {".tsx", ".jsx", ".css", ".html"}
+        or "/frontend/" in normalized
+        or "/ui/" in normalized
+    ):
         return "frontend"
     return extension_context
 
 
-def group_related_files_for_review(files: list[dict[str, Any]] | list[str]) -> list[dict[str, Any]]:
+def group_related_files_for_review(
+    files: list[dict[str, Any]] | list[str],
+) -> list[dict[str, Any]]:
     """Group changed files before deep review so reasoning stays focused."""
     buckets: dict[str, dict[str, Any]] = {}
     for item in files:
@@ -235,17 +384,46 @@ def group_related_files_for_review(files: list[dict[str, Any]] | list[str]) -> l
         if not file_path:
             continue
         context = review_context_for_file(file_path)
-        bucket = buckets.setdefault(context, {"context": context, "files": [], "file_count": 0, "hunk_count": 0, "added_change_count": 0, "review_focus": _review_focus_for_context(context)})
+        bucket = buckets.setdefault(
+            context,
+            {
+                "context": context,
+                "files": [],
+                "file_count": 0,
+                "hunk_count": 0,
+                "added_change_count": 0,
+                "review_focus": _review_focus_for_context(context),
+            },
+        )
         bucket["files"].append(file_path)
         bucket["file_count"] = int(bucket["file_count"]) + 1
         if isinstance(item, dict):
             hunks = list(item.get("hunks") or [])
             bucket["hunk_count"] = int(bucket["hunk_count"]) + len(hunks)
-            bucket["added_change_count"] = int(bucket["added_change_count"]) + sum(1 for hunk in hunks for change in hunk.get("changes") or [] if change.get("type") == "add")
-    return sorted(buckets.values(), key=lambda group: (REVIEW_CONTEXTS.index(str(group["context"])) if group["context"] in REVIEW_CONTEXTS else 99, str(group["context"])))
+            bucket["added_change_count"] = int(bucket["added_change_count"]) + sum(
+                1
+                for hunk in hunks
+                for change in hunk.get("changes") or []
+                if change.get("type") == "add"
+            )
+    return sorted(
+        buckets.values(),
+        key=lambda group: (
+            REVIEW_CONTEXTS.index(str(group["context"]))
+            if group["context"] in REVIEW_CONTEXTS
+            else 99,
+            str(group["context"]),
+        ),
+    )
 
 
-def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> list[dict[str, Any]]:
+def _review_hunk(
+    file_path: str,
+    hunk: dict[str, Any],
+    strategy: dict[str, Any],
+    capabilities: list[str],
+    review_context: str,
+) -> list[dict[str, Any]]:
     comments: list[dict[str, Any]] = []
     for change in hunk.get("changes") or []:
         if change.get("type") != "add":
@@ -254,13 +432,65 @@ def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any],
         lowered = text.lower()
         line = int(change.get("line") or 0)
         if _looks_like_secret_leak(text, lowered):
-            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk", _line_risk_context(review_context, lowered), hunk=hunk, line_text=text))
+            comments.append(
+                _comment(
+                    file_path,
+                    line,
+                    "high",
+                    "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。",
+                    strategy,
+                    capabilities,
+                    "classify_risk",
+                    _line_risk_context(review_context, lowered),
+                    hunk=hunk,
+                    line_text=text,
+                )
+            )
         elif "todo" in lowered or "fixme" in lowered:
-            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish", review_context, hunk=hunk, line_text=text))
+            comments.append(
+                _comment(
+                    file_path,
+                    line,
+                    "medium",
+                    "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。",
+                    strategy,
+                    capabilities,
+                    "reflect_before_publish",
+                    review_context,
+                    hunk=hunk,
+                    line_text=text,
+                )
+            )
         elif Path(file_path).suffix == ".py" and "print(" in lowered:
-            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities, "localize_changed_hunks", review_context, hunk=hunk, line_text=text))
+            comments.append(
+                _comment(
+                    file_path,
+                    line,
+                    "low",
+                    "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。",
+                    strategy,
+                    capabilities,
+                    "localize_changed_hunks",
+                    review_context,
+                    hunk=hunk,
+                    line_text=text,
+                )
+            )
         elif len(text) > 120:
-            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities, "localize_changed_hunks", review_context, hunk=hunk, line_text=text))
+            comments.append(
+                _comment(
+                    file_path,
+                    line,
+                    "low",
+                    "新增行过长，建议拆分为可审阅的局部表达式。",
+                    strategy,
+                    capabilities,
+                    "localize_changed_hunks",
+                    review_context,
+                    hunk=hunk,
+                    line_text=text,
+                )
+            )
     return comments
 
 
@@ -326,7 +556,9 @@ def _cross_language_transfer_comments(
                 strategy,
                 ["cross_language_transfer", *capabilities],
                 "classify_risk",
-                str(finding.get("review_context") or review_context_for_file(file_path)),
+                str(
+                    finding.get("review_context") or review_context_for_file(file_path)
+                ),
                 hunk=hunk,
                 line_text=str(change.get("text") or ""),
             )
@@ -355,13 +587,22 @@ def _external_diagnostic_comments(
                 strategy,
                 ["external_diagnostic_ingestion", *capabilities],
                 "localize_changed_hunks",
-                str(diagnostic.get("review_context") or review_context_for_file(file_path)),
+                str(
+                    diagnostic.get("review_context")
+                    or review_context_for_file(file_path)
+                ),
                 hunk=hunk,
                 line_text=str(change.get("text") or ""),
             )
-            comment["external_diagnostic_source"] = str(diagnostic.get("source_project") or "")
-            comment["external_diagnostic_rule_id"] = str(diagnostic.get("rule_id") or "")
-            comment["external_diagnostic_rank_weight"] = int(diagnostic.get("rank_weight") or 0)
+            comment["external_diagnostic_source"] = str(
+                diagnostic.get("source_project") or ""
+            )
+            comment["external_diagnostic_rule_id"] = str(
+                diagnostic.get("rule_id") or ""
+            )
+            comment["external_diagnostic_rank_weight"] = int(
+                diagnostic.get("rank_weight") or 0
+            )
             comments.append(comment)
     return comments
 
@@ -378,7 +619,9 @@ def _hunk_semantic_comments(
         if not isinstance(finding, dict):
             continue
         line = int(finding.get("line") or 0)
-        line_text = " | ".join(str(item) for item in finding.get("added_evidence") or [])[:160]
+        line_text = " | ".join(
+            str(item) for item in finding.get("added_evidence") or []
+        )[:160]
         comment = _comment(
             file_path,
             line,
@@ -387,20 +630,30 @@ def _hunk_semantic_comments(
             strategy,
             capabilities,
             "classify_risk",
-            str(finding.get("review_context") or hunk_semantics.get("review_context") or review_context_for_file(file_path)),
+            str(
+                finding.get("review_context")
+                or hunk_semantics.get("review_context")
+                or review_context_for_file(file_path)
+            ),
             hunk=hunk,
             line_text=line_text,
         )
         comment["capability"] = "hunk_semantic_review"
         comment["semantic_finding_type"] = str(finding.get("type") or "")
         comment["semantic_confidence"] = int(finding.get("confidence") or 0)
-        comment["semantic_removed_evidence"] = list(finding.get("removed_evidence") or [])[:3]
-        comment["semantic_added_evidence"] = list(finding.get("added_evidence") or [])[:3]
+        comment["semantic_removed_evidence"] = list(
+            finding.get("removed_evidence") or []
+        )[:3]
+        comment["semantic_added_evidence"] = list(finding.get("added_evidence") or [])[
+            :3
+        ]
         comments.append(comment)
     return comments
 
 
-def _normalize_external_diagnostics(diagnostics: list[dict[str, Any]], files: list[dict[str, Any]]) -> dict[str, Any]:
+def _normalize_external_diagnostics(
+    diagnostics: list[dict[str, Any]], files: list[dict[str, Any]]
+) -> dict[str, Any]:
     added_locations = _added_locations(files)
     normalized: list[dict[str, Any]] = []
     dropped = 0
@@ -408,7 +661,9 @@ def _normalize_external_diagnostics(diagnostics: list[dict[str, Any]], files: li
         if not isinstance(item, dict):
             dropped += 1
             continue
-        file_path = str(item.get("path") or item.get("file") or item.get("filename") or "")
+        file_path = str(
+            item.get("path") or item.get("file") or item.get("filename") or ""
+        )
         line = _int(item.get("line") or item.get("end_line") or item.get("position"))
         if not file_path:
             dropped += 1
@@ -419,23 +674,38 @@ def _normalize_external_diagnostics(diagnostics: list[dict[str, Any]], files: li
             dropped += 1
             continue
         source = str(item.get("source_project") or item.get("source") or "external")
-        rule_id = str(item.get("rule_id") or item.get("code") or item.get("rule") or "external-diagnostic")
-        severity = _external_severity(str(item.get("severity") or item.get("level") or "medium"))
+        rule_id = str(
+            item.get("rule_id")
+            or item.get("code")
+            or item.get("rule")
+            or "external-diagnostic"
+        )
+        severity = _external_severity(
+            str(item.get("severity") or item.get("level") or "medium")
+        )
         normalized.append(
             {
                 "file": file_path,
                 "line": line,
-                "message": str(item.get("message") or item.get("body") or "外部诊断命中变更行，需要转成 Retort 行级审查。")[:240],
+                "message": str(
+                    item.get("message")
+                    or item.get("body")
+                    or "外部诊断命中变更行，需要转成 Retort 行级审查。"
+                )[:240],
                 "rule_id": rule_id,
                 "severity": severity,
-                "review_context": str(item.get("review_context") or review_context_for_file(file_path)),
+                "review_context": str(
+                    item.get("review_context") or review_context_for_file(file_path)
+                ),
                 "source_project": source,
                 "rank_weight": _external_diagnostic_rank_weight(source, rule_id),
             }
         )
     source_projects = sorted({str(item["source_project"]) for item in normalized})
     return {
-        "status": "mapped" if normalized else ("dropped" if diagnostics else "not_requested"),
+        "status": "mapped"
+        if normalized
+        else ("dropped" if diagnostics else "not_requested"),
         "summary": {
             "requested_count": len(diagnostics),
             "accepted_count": len(normalized),
@@ -450,10 +720,14 @@ def _normalize_external_diagnostics(diagnostics: list[dict[str, Any]], files: li
     }
 
 
-def _external_diagnostics_by_location(diagnostics: list[dict[str, Any]]) -> dict[tuple[str, int], list[dict[str, Any]]]:
+def _external_diagnostics_by_location(
+    diagnostics: list[dict[str, Any]],
+) -> dict[tuple[str, int], list[dict[str, Any]]]:
     by_location: dict[tuple[str, int], list[dict[str, Any]]] = {}
     for item in diagnostics:
-        by_location.setdefault((str(item.get("file") or ""), int(item.get("line") or 0)), []).append(item)
+        by_location.setdefault(
+            (str(item.get("file") or ""), int(item.get("line") or 0)), []
+        ).append(item)
     return by_location
 
 
@@ -499,7 +773,9 @@ def _external_diagnostic_rank_weight(source: str, rule_id: str) -> int:
         weight += 55
     if "pr-agent" in source_lower or "qodo" in source_lower:
         weight += 45
-    if any(token in rule_lower for token in ("security", "permission", "token", "secret")):
+    if any(
+        token in rule_lower for token in ("security", "permission", "token", "secret")
+    ):
         weight += 30
     weight += external_source_boost(source, rule_id)
     return weight
@@ -521,8 +797,17 @@ def _intent_alignment_comment(
     first_file = files[0]
     file_path = str(first_file.get("path") or "")
     first_hunk = next(iter(first_file.get("hunks") or []), {})
-    first_add = next((change for change in first_hunk.get("changes") or [] if change.get("type") == "add"), {})
-    missing = ", ".join(str(item) for item in intent_alignment.get("missing_keywords", [])[:5])
+    first_add = next(
+        (
+            change
+            for change in first_hunk.get("changes") or []
+            if change.get("type") == "add"
+        ),
+        {},
+    )
+    missing = ", ".join(
+        str(item) for item in intent_alignment.get("missing_keywords", [])[:5]
+    )
     message = "PR 变更与 issue/目标上下文缺少关键词重合，需要先证明变更方向相关。"
     if missing:
         message += f" 未覆盖关键词：{missing}。"
@@ -541,15 +826,37 @@ def _intent_alignment_comment(
 
 
 def _line_risk_context(default_context: str, lowered_line: str) -> str:
-    if default_context in {"runtime", "other"} and any(marker in lowered_line for marker in SECRET_MARKERS):
+    if default_context in {"runtime", "other"} and any(
+        marker in lowered_line for marker in SECRET_MARKERS
+    ):
         return "security"
     return default_context
 
 
-def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> dict[str, Any]:
-    first_add = next((change for change in hunk.get("changes") or [] if change.get("type") == "add"), {})
+def _info_comment(
+    file_path: str,
+    hunk: dict[str, Any],
+    strategy: dict[str, Any],
+    capabilities: list[str],
+    review_context: str,
+) -> dict[str, Any]:
+    first_add = next(
+        (change for change in hunk.get("changes") or [] if change.get("type") == "add"),
+        {},
+    )
     line = int(first_add.get("line") or 1)
-    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities, "reflect_before_publish", review_context, hunk=hunk, line_text=str(first_add.get("text") or ""))
+    return _comment(
+        file_path,
+        line,
+        "info",
+        "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        strategy,
+        capabilities,
+        "reflect_before_publish",
+        review_context,
+        hunk=hunk,
+        line_text=str(first_add.get("text") or ""),
+    )
 
 
 def _looks_like_secret_leak(text: str, lowered: str) -> bool:
@@ -572,8 +879,13 @@ def _looks_like_secret_leak(text: str, lowered: str) -> bool:
     )
     if any(marker in lowered for marker in safe_markers):
         return False
-    assignment = re.search(r"(?i)\b[A-Z0-9_]*(api[_-]?key|apikey|secret|password|token|private_key)[A-Z0-9_]*\b[^=\n:]{0,40}[:=]\s*['\"][^'\"]{6,}", text)
-    authorization = re.search(r"(?i)\b(authorization|bearer)\b.{0,20}['\"]?[A-Za-z0-9_\-]{16,}", text)
+    assignment = re.search(
+        r"(?i)\b[A-Z0-9_]*(api[_-]?key|apikey|secret|password|token|private_key)[A-Z0-9_]*\b[^=\n:]{0,40}[:=]\s*['\"][^'\"]{6,}",
+        text,
+    )
+    authorization = re.search(
+        r"(?i)\b(authorization|bearer)\b.{0,20}['\"]?[A-Za-z0-9_\-]{16,}", text
+    )
     return bool(assignment or authorization)
 
 
@@ -602,8 +914,17 @@ def _comment(
         "review_stage": stage,
         "employee_actionable": severity in {"high", "medium"},
         "publishable": publishable,
-        "comment_anchor": {"path": file_path, "line": line, "side": "RIGHT"} if publishable else {"path": file_path, "side": "FILE"},
-        "publish_payload": {"path": file_path, "line": line, "side": "RIGHT", "body": message} if publishable else {"path": file_path, "body": message},
+        "comment_anchor": {"path": file_path, "line": line, "side": "RIGHT"}
+        if publishable
+        else {"path": file_path, "side": "FILE"},
+        "publish_payload": {
+            "path": file_path,
+            "line": line,
+            "side": "RIGHT",
+            "body": message,
+        }
+        if publishable
+        else {"path": file_path, "body": message},
         "hunk_header": str((hunk or {}).get("header") or ""),
         "line_text_excerpt": line_text[:160],
     }
@@ -632,16 +953,31 @@ def _rank_review_comments(
         seen.add(key)
         scored = dict(comment)
         scored["_original_order"] = index
-        scored["absorbed_context_rank_weight"] = context_rank_weight(str(scored.get("review_context") or "other"))
-        scored["absorbed_policy_rank_weight"] = policy_context_rank_weight(str(scored.get("review_context") or "other"))
-        scored["calibration_rank_weight"] = calibration_context_rank_weight(str(scored.get("review_context") or "other"))
-        scored["feedback_rank_weight"] = int((feedback_context_weights or {}).get(str(scored.get("review_context") or "other"), 0))
+        scored["absorbed_context_rank_weight"] = context_rank_weight(
+            str(scored.get("review_context") or "other")
+        )
+        scored["absorbed_policy_rank_weight"] = policy_context_rank_weight(
+            str(scored.get("review_context") or "other")
+        )
+        scored["calibration_rank_weight"] = calibration_context_rank_weight(
+            str(scored.get("review_context") or "other")
+        )
+        scored["feedback_rank_weight"] = int(
+            (feedback_context_weights or {}).get(
+                str(scored.get("review_context") or "other"), 0
+            )
+        )
         scored["rank_score"] = _comment_rank_score(scored)
         scored["rank_reason"] = _rank_reason(scored)
         deduped.append(scored)
-    ordered = sorted(deduped, key=lambda item: (-int(item["rank_score"]), int(item["_original_order"])))
+    ordered = sorted(
+        deduped,
+        key=lambda item: (-int(item["rank_score"]), int(item["_original_order"])),
+    )
     selected = (
-        _context_balanced_comment_selection(ordered, context_groups or [], max_comments=max_comments)
+        _context_balanced_comment_selection(
+            ordered, context_groups or [], max_comments=max_comments
+        )
         if large_diff_chunking and context_groups
         else ordered[: max(1, max_comments)]
     )
@@ -651,10 +987,19 @@ def _rank_review_comments(
     return selected
 
 
-def _context_balanced_comment_selection(ordered: list[dict[str, Any]], context_groups: list[dict[str, Any]], *, max_comments: int) -> list[dict[str, Any]]:
+def _context_balanced_comment_selection(
+    ordered: list[dict[str, Any]],
+    context_groups: list[dict[str, Any]],
+    *,
+    max_comments: int,
+) -> list[dict[str, Any]]:
     limit = max(1, max_comments)
     selected_indexes: list[int] = []
-    context_order = [str(group.get("context") or "") for group in context_groups if group.get("context")]
+    context_order = [
+        str(group.get("context") or "")
+        for group in context_groups
+        if group.get("context")
+    ]
     for context in context_order:
         if len(selected_indexes) >= limit:
             break
@@ -674,7 +1019,11 @@ def _context_balanced_comment_selection(ordered: list[dict[str, Any]], context_g
 
 def _large_diff_review_needed(files: list[dict[str, Any]], diff_text: str) -> bool:
     hunk_count = sum(len(item.get("hunks") or []) for item in files)
-    return len(files) > LARGE_DIFF_FILE_THRESHOLD or hunk_count > LARGE_DIFF_HUNK_THRESHOLD or len(diff_text) > LARGE_DIFF_CHAR_THRESHOLD
+    return (
+        len(files) > LARGE_DIFF_FILE_THRESHOLD
+        or hunk_count > LARGE_DIFF_HUNK_THRESHOLD
+        or len(diff_text) > LARGE_DIFF_CHAR_THRESHOLD
+    )
 
 
 def _feedback_context_weights(feedback: list[dict[str, Any]]) -> dict[str, int]:
@@ -683,7 +1032,13 @@ def _feedback_context_weights(feedback: list[dict[str, Any]]) -> dict[str, int]:
         task = item.get("task") if isinstance(item.get("task"), dict) else {}
         dimension = str(item.get("dimension") or task.get("dimension") or "")
         status = str(item.get("status") or item.get("result") or "").lower()
-        if status and status not in {"failed", "blocked", "needs_replay", "needs_attention", "missed"}:
+        if status and status not in {
+            "failed",
+            "blocked",
+            "needs_replay",
+            "needs_attention",
+            "missed",
+        }:
             continue
         for context, weight in _feedback_context_map(dimension).items():
             weights[context] = max(weights.get(context, 0), weight)
@@ -704,9 +1059,21 @@ def _feedback_context_map(dimension: str) -> dict[str, int]:
 
 def _core_review_score_summary(comments: list[dict[str, Any]]) -> dict[str, Any]:
     scores = [int(comment.get("rank_score") or 0) for comment in comments]
-    cross_language_comments = [comment for comment in comments if comment.get("capability") == "cross_language_transfer"]
-    external_diagnostic_comments = [comment for comment in comments if comment.get("capability") == "external_diagnostic_ingestion"]
-    semantic_comments = [comment for comment in comments if comment.get("capability") == "hunk_semantic_review"]
+    cross_language_comments = [
+        comment
+        for comment in comments
+        if comment.get("capability") == "cross_language_transfer"
+    ]
+    external_diagnostic_comments = [
+        comment
+        for comment in comments
+        if comment.get("capability") == "external_diagnostic_ingestion"
+    ]
+    semantic_comments = [
+        comment
+        for comment in comments
+        if comment.get("capability") == "hunk_semantic_review"
+    ]
     top_comment = comments[0] if comments else {}
     return {
         "model": "severity_context_transfer_publishability_v5_external_diagnostics",
@@ -714,22 +1081,42 @@ def _core_review_score_summary(comments: list[dict[str, Any]]) -> dict[str, Any]
         "min_rank_score": min(scores) if scores else 0,
         "ranked_comment_count": len(comments),
         "cross_language_ranked_comment_count": len(cross_language_comments),
-        "cross_language_max_rank_score": max([int(comment.get("rank_score") or 0) for comment in cross_language_comments] or [0]),
-        "cross_language_top_ranked": bool(top_comment.get("capability") == "cross_language_transfer"),
+        "cross_language_max_rank_score": max(
+            [int(comment.get("rank_score") or 0) for comment in cross_language_comments]
+            or [0]
+        ),
+        "cross_language_top_ranked": bool(
+            top_comment.get("capability") == "cross_language_transfer"
+        ),
         "cross_language_core_behavior_active": bool(cross_language_comments),
         "external_diagnostic_ranked_comment_count": len(external_diagnostic_comments),
-        "external_diagnostic_max_rank_score": max([int(comment.get("rank_score") or 0) for comment in external_diagnostic_comments] or [0]),
-        "external_diagnostic_top_ranked": bool(top_comment.get("capability") == "external_diagnostic_ingestion"),
+        "external_diagnostic_max_rank_score": max(
+            [
+                int(comment.get("rank_score") or 0)
+                for comment in external_diagnostic_comments
+            ]
+            or [0]
+        ),
+        "external_diagnostic_top_ranked": bool(
+            top_comment.get("capability") == "external_diagnostic_ingestion"
+        ),
         "external_diagnostic_core_behavior_active": bool(external_diagnostic_comments),
         "hunk_semantic_ranked_comment_count": len(semantic_comments),
-        "hunk_semantic_max_rank_score": max([int(comment.get("rank_score") or 0) for comment in semantic_comments] or [0]),
-        "hunk_semantic_top_ranked": bool(top_comment.get("capability") == "hunk_semantic_review"),
+        "hunk_semantic_max_rank_score": max(
+            [int(comment.get("rank_score") or 0) for comment in semantic_comments]
+            or [0]
+        ),
+        "hunk_semantic_top_ranked": bool(
+            top_comment.get("capability") == "hunk_semantic_review"
+        ),
         "hunk_semantic_core_behavior_active": bool(semantic_comments),
     }
 
 
 def _comment_rank_score(comment: dict[str, Any]) -> int:
-    severity_weight = {"high": 400, "medium": 300, "low": 200, "info": 100}.get(str(comment.get("severity") or ""), 0)
+    severity_weight = {"high": 400, "medium": 300, "low": 200, "info": 100}.get(
+        str(comment.get("severity") or ""), 0
+    )
     context_weight = {
         "security": 80,
         "ci_config": 60,
@@ -756,7 +1143,19 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
     feedback_weight = int(comment.get("feedback_rank_weight") or 0)
     action_weight = 20 if comment.get("employee_actionable") else 0
     publish_weight = 5 if comment.get("publishable") else -20
-    return severity_weight + context_weight + capability_weight + semantic_weight + external_weight + absorbed_context_weight + absorbed_policy_weight + calibration_weight + feedback_weight + action_weight + publish_weight
+    return (
+        severity_weight
+        + context_weight
+        + capability_weight
+        + semantic_weight
+        + external_weight
+        + absorbed_context_weight
+        + absorbed_policy_weight
+        + calibration_weight
+        + feedback_weight
+        + action_weight
+        + publish_weight
+    )
 
 
 def _rank_reason(comment: dict[str, Any]) -> str:
@@ -764,10 +1163,17 @@ def _rank_reason(comment: dict[str, Any]) -> str:
 
 
 def _risk_counts(comments: list[dict[str, Any]]) -> dict[str, int]:
-    return {severity: sum(1 for comment in comments if comment.get("severity") == severity) for severity in SEVERITIES}
+    return {
+        severity: sum(1 for comment in comments if comment.get("severity") == severity)
+        for severity in SEVERITIES
+    }
 
 
-def _build_task_groups(files: list[dict[str, Any]], comments: list[dict[str, Any]], context_by_file: dict[str, str]) -> list[dict[str, Any]]:
+def _build_task_groups(
+    files: list[dict[str, Any]],
+    comments: list[dict[str, Any]],
+    context_by_file: dict[str, str],
+) -> list[dict[str, Any]]:
     buckets: dict[str, dict[str, Any]] = {}
     for file_review in files:
         file_path = str(file_review.get("path") or "")
@@ -808,18 +1214,34 @@ def _build_task_groups(files: list[dict[str, Any]], comments: list[dict[str, Any
         if file_path and file_path not in bucket["files"]:
             bucket["files"].append(file_path)
         bucket["comment_count"] = int(bucket["comment_count"]) + 1
-        bucket["publishable_comment_count"] = int(bucket["publishable_comment_count"]) + (1 if comment.get("publishable") else 0)
+        bucket["publishable_comment_count"] = int(
+            bucket["publishable_comment_count"]
+        ) + (1 if comment.get("publishable") else 0)
         severity = str(comment.get("severity") or "info")
         if severity in bucket["risk_counts"]:
             bucket["risk_counts"][severity] = int(bucket["risk_counts"][severity]) + 1
     return sorted(
         [{"context": key, **value} for key, value in buckets.items()],
-        key=lambda group: (REVIEW_CONTEXTS.index(str(group["context"])) if group["context"] in REVIEW_CONTEXTS else 99, str(group["context"])),
+        key=lambda group: (
+            REVIEW_CONTEXTS.index(str(group["context"]))
+            if group["context"] in REVIEW_CONTEXTS
+            else 99,
+            str(group["context"]),
+        ),
     )
 
 
-def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[str, Any], comments: list[dict[str, Any]], review_context: str) -> dict[str, Any]:
-    severity_counts = {severity: sum(1 for item in comments if item.get("severity") == severity) for severity in SEVERITIES}
+def _file_summary(
+    file_path: str,
+    strategy: dict[str, Any],
+    file_review: dict[str, Any],
+    comments: list[dict[str, Any]],
+    review_context: str,
+) -> dict[str, Any]:
+    severity_counts = {
+        severity: sum(1 for item in comments if item.get("severity") == severity)
+        for severity in SEVERITIES
+    }
     extension_policy = extension_policy_for_path(file_path)
     return {
         "file": file_path,
@@ -830,7 +1252,9 @@ def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[st
         "comment_count": len(comments),
         "risk_counts": severity_counts,
         "stages": [{"name": stage, "status": "completed"} for stage in REVIEW_STAGES],
-        "ready_for_employee_task": bool(severity_counts["high"] or severity_counts["medium"]),
+        "ready_for_employee_task": bool(
+            severity_counts["high"] or severity_counts["medium"]
+        ),
     }
 
 
@@ -857,7 +1281,9 @@ def _remaining(max_comments: int, comments: list[dict[str, Any]]) -> bool:
     return len(comments) < max(1, max_comments)
 
 
-def _filter_incremental_files(files: list[dict[str, Any]], previous_files: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _filter_incremental_files(
+    files: list[dict[str, Any]], previous_files: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     previous_counts = Counter(_added_change_keys(previous_files))
     skipped = 0
     reviewed = 0

@@ -7,7 +7,9 @@ from retort_engine.contracts import validate_contract
 from retort_engine.task_prioritization import build_task_prioritization_report
 
 
-def test_build_task_prioritization_report_uses_queue_and_results(tmp_path: Path) -> None:
+def test_build_task_prioritization_report_uses_queue_and_results(
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     queue = project / ".retort" / "employee_queue.jsonl"
     results = project / ".retort" / "employee_results"
@@ -16,16 +18,34 @@ def test_build_task_prioritization_report_uses_queue_and_results(tmp_path: Path)
     queue.write_text(
         "\n".join(
             [
-                json.dumps({"task": {"dimension": "comparative_analysis_depth"}}, ensure_ascii=False),
-                json.dumps({"task": {"dimension": "comparative_analysis_depth"}}, ensure_ascii=False),
-                json.dumps({"task": {"dimension": "product_operability"}}, ensure_ascii=False),
+                json.dumps(
+                    {"task": {"dimension": "comparative_analysis_depth"}},
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    {"task": {"dimension": "comparative_analysis_depth"}},
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    {"task": {"dimension": "product_operability"}}, ensure_ascii=False
+                ),
             ]
         )
         + "\n",
         encoding="utf-8",
     )
     (results / "run.json").write_text(
-        json.dumps({"results": [{"status": "completed", "summary": "comparative_analysis_depth done"}]}, ensure_ascii=False),
+        json.dumps(
+            {
+                "results": [
+                    {
+                        "status": "completed",
+                        "summary": "comparative_analysis_depth done",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 
@@ -43,7 +63,9 @@ def test_build_task_prioritization_report_uses_queue_and_results(tmp_path: Path)
     assert validate_contract("task_prioritization_result", result)["valid"] is True
 
 
-def test_task_prioritization_lets_employee_feedback_raise_priority(tmp_path: Path) -> None:
+def test_task_prioritization_lets_employee_feedback_raise_priority(
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     queue = project / ".retort" / "employee_queue.jsonl"
     results = project / ".retort" / "employee_results"
@@ -52,9 +74,17 @@ def test_task_prioritization_lets_employee_feedback_raise_priority(tmp_path: Pat
     queue.write_text(
         "\n".join(
             [
-                json.dumps({"task": {"dimension": "comparative_analysis_depth"}}, ensure_ascii=False),
-                json.dumps({"task": {"dimension": "comparative_analysis_depth"}}, ensure_ascii=False),
-                json.dumps({"task": {"dimension": "feedback_loop_closure"}}, ensure_ascii=False),
+                json.dumps(
+                    {"task": {"dimension": "comparative_analysis_depth"}},
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    {"task": {"dimension": "comparative_analysis_depth"}},
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    {"task": {"dimension": "feedback_loop_closure"}}, ensure_ascii=False
+                ),
             ]
         )
         + "\n",
@@ -64,7 +94,10 @@ def test_task_prioritization_lets_employee_feedback_raise_priority(tmp_path: Pat
         json.dumps(
             {
                 "results": [
-                    {"status": "completed", "summary": "comparative_analysis_depth done"},
+                    {
+                        "status": "completed",
+                        "summary": "comparative_analysis_depth done",
+                    },
                     {
                         "status": "completed",
                         "task": {"dimension": "feedback_loop_closure"},
@@ -85,4 +118,7 @@ def test_task_prioritization_lets_employee_feedback_raise_priority(tmp_path: Pat
     assert result["priorities"][0]["priority"] == "P0"
     assert result["priorities"][0]["feedback_driven"] is True
     assert result["priorities"][0]["employee_feedback_count"] == 1
-    assert result["priorities"][0]["next_action"] == "feedback_driven_replay_and_verify_feedback_loop_closure"
+    assert (
+        result["priorities"][0]["next_action"]
+        == "feedback_driven_replay_and_verify_feedback_loop_closure"
+    )

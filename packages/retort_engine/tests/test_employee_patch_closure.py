@@ -59,10 +59,14 @@ def test_employee_patch_closure_rolls_back_when_gate_fails(tmp_path: Path) -> No
     assert target.read_text(encoding="utf-8") == original
 
 
-def test_employee_patch_closure_suite_records_success_and_rollback(tmp_path: Path) -> None:
+def test_employee_patch_closure_suite_records_success_and_rollback(
+    tmp_path: Path,
+) -> None:
     output = tmp_path / "docs" / "retort_employee_patch_closure.json"
 
-    result = run_employee_patch_closure_suite(tmp_path, output=output, run_id="suite-unit")
+    result = run_employee_patch_closure_suite(
+        tmp_path, output=output, run_id="suite-unit"
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["success_case_verified"] is True
@@ -95,8 +99,12 @@ def test_employee_patch_closure_suite_records_success_and_rollback(tmp_path: Pat
     assert validate_contract("employee_patch_closure_result", result)["valid"] is True
 
 
-def test_employee_patch_closure_multi_file_case_runs_gate_and_re_review(tmp_path: Path) -> None:
-    result = run_multi_file_employee_patch_closure_case(tmp_path, lab=tmp_path / ".retort" / "lab", run_id="multi-unit")
+def test_employee_patch_closure_multi_file_case_runs_gate_and_re_review(
+    tmp_path: Path,
+) -> None:
+    result = run_multi_file_employee_patch_closure_case(
+        tmp_path, lab=tmp_path / ".retort" / "lab", run_id="multi-unit"
+    )
 
     assert result["status"] == "patch_verified"
     assert result["summary"]["gates_passed"] is True
@@ -106,8 +114,12 @@ def test_employee_patch_closure_multi_file_case_runs_gate_and_re_review(tmp_path
     assert Path(result["evidence"]["patch_path"]).is_file()
 
 
-def test_employee_patch_closure_retry_case_rolls_back_then_repairs(tmp_path: Path) -> None:
-    result = run_retry_employee_patch_closure_case(tmp_path, lab=tmp_path / ".retort" / "lab", run_id="retry-unit")
+def test_employee_patch_closure_retry_case_rolls_back_then_repairs(
+    tmp_path: Path,
+) -> None:
+    result = run_retry_employee_patch_closure_case(
+        tmp_path, lab=tmp_path / ".retort" / "lab", run_id="retry-unit"
+    )
 
     assert result["status"] == "patch_verified_after_retry"
     assert result["summary"]["first_failure_rolled_back"] is True
@@ -161,11 +173,23 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert boundary["crash_isolation_probe"]["returncode"] == 73
     assert boundary["crash_isolation_probe"]["worker_survived"] is True
     assert "process_group_killed" in boundary["crash_isolation_probe"]
-    assert patch.get("process_safety", {}).get("runner") == "run_command_with_process_group"
+    assert (
+        patch.get("process_safety", {}).get("runner")
+        == "run_command_with_process_group"
+    )
     assert patch.get("process_safety", {}).get("process_group_killed") is True
-    assert any("runtime_boundary_verified=True" in item for item in result["results"][0]["evidence"])
-    assert any("crash_isolation_verified=True" in item for item in result["results"][0]["evidence"])
-    assert any("employee_patch_closure_status=ready" in item for item in result["results"][0]["evidence"])
+    assert any(
+        "runtime_boundary_verified=True" in item
+        for item in result["results"][0]["evidence"]
+    )
+    assert any(
+        "crash_isolation_verified=True" in item
+        for item in result["results"][0]["evidence"]
+    )
+    assert any(
+        "employee_patch_closure_status=ready" in item
+        for item in result["results"][0]["evidence"]
+    )
 
 
 def test_service_exposes_employee_patch_closure(tmp_path: Path) -> None:

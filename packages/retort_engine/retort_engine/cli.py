@@ -8,50 +8,89 @@ from pathlib import Path
 from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
-from retort_engine.architecture_contracts import evaluate_architecture_contracts, load_architecture_contracts
+from retort_engine.architecture_contracts import (
+    evaluate_architecture_contracts,
+    load_architecture_contracts,
+)
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
-from retort_engine.competitor_behavior_regression import build_competitor_behavior_regression
-from retort_engine.competitor_blind_adjudication import build_competitor_blind_adjudication
-from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
+from retort_engine.competitor_behavior_regression import (
+    build_competitor_behavior_regression,
+)
+from retort_engine.competitor_blind_adjudication import (
+    build_competitor_blind_adjudication,
+)
+from retort_engine.competitor_runtime_comparison import (
+    build_competitor_runtime_comparison,
+)
 from retort_engine.context_packager import build_context_pack
 from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
-from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
+from retort_engine.cross_domain_absorption_replay import (
+    build_cross_domain_absorption_replay,
+)
 from retort_engine.cross_domain_ci_regression import build_cross_domain_ci_regression
 from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_patch_stress import build_employee_patch_stress
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
-from retort_engine.external_advantage_ci_regression import build_external_advantage_ci_regression
+from retort_engine.external_advantage_ci_regression import (
+    build_external_advantage_ci_regression,
+)
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
-from retort_engine.external_process_adjudication import build_external_process_adjudication
+from retort_engine.external_process_adjudication import (
+    build_external_process_adjudication,
+)
 from retort_engine.external_merge_landing import build_external_merge_landing
-from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_absorption_replay
+from retort_engine.heterogeneous_absorption_replay import (
+    build_heterogeneous_absorption_replay,
+)
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
-from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_low_permission_pr_degradation_probe, write_readonly_pr_degradation_probe
+from retort_engine.pr_live_probe import (
+    write_live_pr_comment_probe,
+    write_low_permission_pr_degradation_probe,
+    write_readonly_pr_degradation_probe,
+)
 from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.production_recovery_drill import build_production_recovery_drill
-from retort_engine.product_mainline_absorption_proof import build_product_mainline_absorption_proof
-from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
+from retort_engine.product_mainline_absorption_proof import (
+    build_product_mainline_absorption_proof,
+)
+from retort_engine.multi_project_absorption_replay import (
+    build_multi_project_absorption_replay,
+)
 from retort_engine.operator_journey_replay import build_operator_journey_replay
-from retort_engine.paibi_cli_cross_adjudication import build_paibi_cli_cross_adjudication
+from retort_engine.paibi_cli_cross_adjudication import (
+    build_paibi_cli_cross_adjudication,
+)
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
-from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
+from retort_engine.review_adjudication_calibration import (
+    build_review_adjudication_calibration,
+)
 from retort_engine.review_blind_acceptance import build_review_blind_acceptance
-from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
+from retort_engine.review_family_behavior_replay import (
+    build_review_family_behavior_replay,
+)
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
-from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
+from retort_engine.self_bootstrap import (
+    build_self_bootstrap_plan,
+    build_self_depth_report,
+    external_improvement_gate,
+)
 from retort_engine.workspace_hygiene import clean_workspace
-from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
+from retort_engine.similar_project_loop import (
+    build_absorption_saturation_report,
+    build_similar_project_radar,
+    run_similar_project_loop,
+)
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.real_absorption import apply_real_absorption
@@ -433,11 +472,31 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--port", type=int, default=8790)
     args = parser.parse_args(argv)
     if args.command == "project-assess":
-        result = RetortService().assess({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": True})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_scores("Retort assessment", result["scores"]))
+        result = RetortService().assess(
+            {
+                "project": args.project,
+                "run_local_gates": args.run_local_gates,
+                "use_llm": True,
+                "wait_llm_sec": args.wait_llm_sec,
+                "require_deep_review": True,
+            }
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else _format_scores("Retort assessment", result["scores"])
+        )
         return 0
     if args.command == "self-evolve":
-        result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": True})
+        result = RetortService().self_evolve(
+            {
+                "project": args.project,
+                "run_local_gates": args.run_local_gates,
+                "use_llm": True,
+                "wait_llm_sec": args.wait_llm_sec,
+                "require_deep_review": True,
+            }
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -446,34 +505,111 @@ def main(argv: list[str] | None = None) -> int:
             print(_format_scores("Final scores", result["final_assessment"]["scores"]))
         return 0 if result["status"] == "converged" else 1
     if args.command == "absorb":
-        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm, "execute_absorption": not args.no_execute_absorption, "execution_timeout_sec": args.execution_timeout_sec, "keep_runtime_residue": args.keep_runtime_residue})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort absorption status: {result['status']}")
+        result = absorb(
+            {
+                "own_project": args.own_project,
+                "github_url": args.github,
+                "external_path": args.external_path,
+                "employee_queue": args.employee_queue,
+                "history_store": args.history_store,
+                "run_local_gates": args.run_local_gates,
+                "branch_workflow": args.branch_workflow,
+                "absorption_branch": args.absorption_branch,
+                "merge_after": args.merge_after,
+                "allow_dirty_branch": args.allow_dirty_branch,
+                "refresh": args.refresh,
+                "use_llm": args.use_llm,
+                "execute_absorption": not args.no_execute_absorption,
+                "execution_timeout_sec": args.execution_timeout_sec,
+                "keep_runtime_residue": args.keep_runtime_residue,
+            }
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort absorption status: {result['status']}"
+        )
         return 0
     if args.command == "apply-absorption":
         with open(args.payload_file, encoding="utf-8") as handle:
             payload = json.load(handle)
         result = apply_real_absorption(payload)
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort apply absorption status: {result['status']}")
-        return 0 if result["status"] in {"applied", "noop"} and result.get("gates_passed") else 1
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort apply absorption status: {result['status']}"
+        )
+        return (
+            0
+            if result["status"] in {"applied", "noop"} and result.get("gates_passed")
+            else 1
+        )
     if args.command == "llm-review":
-        result = RetortService().llm_review({"project": args.project, "mode": args.mode, "github_url": args.github, "external_path": args.external_path, "run_local_gates": args.run_local_gates})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort LLM review status: {result['status']}")
+        result = RetortService().llm_review(
+            {
+                "project": args.project,
+                "mode": args.mode,
+                "github_url": args.github,
+                "external_path": args.external_path,
+                "run_local_gates": args.run_local_gates,
+            }
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort LLM review status: {result['status']}"
+        )
         return 0
     if args.command == "llm-review-parallel":
-        result = RetortService().llm_parallel_review({"project": args.project, "mode": args.mode, "github_url": args.github, "external_path": args.external_path, "run_local_gates": args.run_local_gates, "max_parallel": args.max_parallel})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort parallel LLM review status: {result['status']}")
+        result = RetortService().llm_parallel_review(
+            {
+                "project": args.project,
+                "mode": args.mode,
+                "github_url": args.github,
+                "external_path": args.external_path,
+                "run_local_gates": args.run_local_gates,
+                "max_parallel": args.max_parallel,
+            }
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort parallel LLM review status: {result['status']}"
+        )
         return 0
     if args.command == "llm-review-status":
         result = RetortService().llm_review_status({"task_id": args.task_id})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort LLM task status: {result['status']}")
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort LLM task status: {result['status']}"
+        )
         return 0
     if args.command == "llm-review-group-status":
         result = RetortService().llm_parallel_status({"task_id": args.task_id})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort parallel LLM task status: {result['status']}")
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort parallel LLM task status: {result['status']}"
+        )
         return 0
     if args.command == "record-proof":
-        result = record_closed_loop_proof(args.project, {"branch_diff_verified": args.branch_diff_verified, "employee_execution_verified": args.employee_execution_verified, "post_absorption_tests_passed": args.post_absorption_tests_passed, "merge_verified": args.merge_verified, "external_advantage_reassessed": args.external_advantage_reassessed, "evidence": args.evidence})
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort proof status: {result['status']}")
+        result = record_closed_loop_proof(
+            args.project,
+            {
+                "branch_diff_verified": args.branch_diff_verified,
+                "employee_execution_verified": args.employee_execution_verified,
+                "post_absorption_tests_passed": args.post_absorption_tests_passed,
+                "merge_verified": args.merge_verified,
+                "external_advantage_reassessed": args.external_advantage_reassessed,
+                "evidence": args.evidence,
+            },
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort proof status: {result['status']}"
+        )
         return 0
     if args.command == "review-diff":
         with open(args.diff_file, encoding="utf-8") as handle:
@@ -502,7 +638,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort diff review status: {result['status']}")
             print(f"Comments: {result['summary']['comment_count']}")
-            print(f"Skipped existing changes: {result['summary']['skipped_existing_change_count']}")
+            print(
+                f"Skipped existing changes: {result['summary']['skipped_existing_change_count']}"
+            )
         return 0 if result["status"] in {"reviewed", "no_new_changes"} else 1
     if args.command == "review-pipeline-diff-replay":
         with open(args.diff_file, encoding="utf-8") as handle:
@@ -526,7 +664,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -540,11 +681,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.previous_diff_file:
             with open(args.previous_diff_file, encoding="utf-8") as handle:
                 previous_diff_text = handle.read()
-        result = review_pr_url(args.url, max_comments=args.max_comments, previous_diff_text=previous_diff_text, max_bytes=args.max_bytes)
+        result = review_pr_url(
+            args.url,
+            max_comments=args.max_comments,
+            previous_diff_text=previous_diff_text,
+            max_bytes=args.max_bytes,
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -558,7 +707,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -572,7 +724,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -591,7 +746,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Created: {result['summary']['created_comment_count']}")
             print(f"Rolled back: {result['summary']['rolled_back_comment_count']}")
             print(f"Output: {output}")
-        return 0 if result["status"] in {"live_rolled_back", "permission_denied_degraded"} else 1
+        return (
+            0
+            if result["status"] in {"live_rolled_back", "permission_denied_degraded"}
+            else 1
+        )
     if args.command == "publish-pr-readonly-probe":
         output = args.output or "retort_pr_readonly_degradation_probe.json"
         result = write_readonly_pr_degradation_probe(args.pr_url, output)
@@ -613,12 +772,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Output: {output}")
         return 0 if result["status"] == "permission_denied_degraded" else 1
     if args.command == "pr-long-run-review":
-        result = build_pr_long_run_review(args.project, min_prs=args.min_prs, output=args.output)
+        result = build_pr_long_run_review(
+            args.project, min_prs=args.min_prs, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PR long-run review status: {result['status']}")
-            print(f"Reviewed PRs: {result['summary']['reviewed_pr_count']}/{result['summary']['target_pr_count']}")
+            print(
+                f"Reviewed PRs: {result['summary']['reviewed_pr_count']}/{result['summary']['target_pr_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -635,7 +798,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PR holdout blind eval status: {result['status']}")
-            print(f"Accepted PRs: {result['summary']['accepted_pr_count']}/{result['summary']['target_pr_count']}")
+            print(
+                f"Accepted PRs: {result['summary']['accepted_pr_count']}/{result['summary']['target_pr_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -650,7 +815,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PR failure rollback status: {result['status']}")
-            print(f"Rolled back: {result['summary']['rollback_verified_count']}/{result['summary']['target_case_count']}")
+            print(
+                f"Rolled back: {result['summary']['rollback_verified_count']}/{result['summary']['target_case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -659,7 +826,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -669,41 +839,61 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "multi-project-absorption-replay":
-        result = build_multi_project_absorption_replay(args.project, min_projects=args.min_projects, output=args.output)
+        result = build_multi_project_absorption_replay(
+            args.project, min_projects=args.min_projects, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort multi-project absorption replay status: {result['status']}")
-            print(f"Ready projects: {result['summary']['ready_project_count']}/{result['summary']['min_project_count']}")
+            print(
+                f"Ready projects: {result['summary']['ready_project_count']}/{result['summary']['min_project_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "absorption-continuity-probe":
-        result = build_absorption_continuity_probe(args.project, min_runs=args.min_runs, output=args.output)
+        result = build_absorption_continuity_probe(
+            args.project, min_runs=args.min_runs, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort absorption continuity status: {result['status']}")
-            print(f"Ready runs: {result['summary']['ready_run_count']}/{result['summary']['min_run_count']}")
+            print(
+                f"Ready runs: {result['summary']['ready_run_count']}/{result['summary']['min_run_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "record-hardening-run":
-        result = record_post_absorption_hardening_run(args.project, output=args.output, worker_count=args.worker_count)
+        result = record_post_absorption_hardening_run(
+            args.project, output=args.output, worker_count=args.worker_count
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort hardening run status: {result['status']}")
-            print(f"Behavior files: {result['summary']['behavior_source_file_count']} source / {result['summary']['behavior_test_file_count']} tests")
+            print(
+                f"Behavior files: {result['summary']['behavior_source_file_count']} source / {result['summary']['behavior_test_file_count']} tests"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["gates_passed"] else 1
     if args.command == "complex-pr-replay":
-        result = build_complex_pr_replay_report(args.project, pr_urls=args.pr_url or None, max_comments=args.max_comments, max_bytes=args.max_bytes)
+        result = build_complex_pr_replay_report(
+            args.project,
+            pr_urls=args.pr_url or None,
+            max_comments=args.max_comments,
+            max_bytes=args.max_bytes,
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -717,12 +907,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort task prioritization status: {result['status']}")
-            print(f"Prioritized dimensions: {result['summary']['prioritized_dimension_count']}")
+            print(
+                f"Prioritized dimensions: {result['summary']['prioritized_dimension_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -731,7 +926,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -741,11 +939,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "quality-benchmark-report":
-        result = build_review_quality_benchmark(args.project, sample_count=args.sample_count, negative_sample_count=args.negative_sample_count)
+        result = build_review_quality_benchmark(
+            args.project,
+            sample_count=args.sample_count,
+            negative_sample_count=args.negative_sample_count,
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -755,53 +960,84 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "external-advantage-matrix":
-        result = build_external_advantage_matrix(args.project, min_cases=args.min_cases, output=args.output)
+        result = build_external_advantage_matrix(
+            args.project, min_cases=args.min_cases, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort external advantage matrix status: {result['status']}")
-            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "external-advantage-ci-regression":
-        result = build_external_advantage_ci_regression(args.project, min_cases=args.min_cases, min_blind_delta=args.min_blind_delta, output=args.output)
+        result = build_external_advantage_ci_regression(
+            args.project,
+            min_cases=args.min_cases,
+            min_blind_delta=args.min_blind_delta,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort external advantage CI regression status: {result['status']}")
-            print(f"CI cases: {result['summary']['passed_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"CI cases: {result['summary']['passed_case_count']}/{result['summary']['case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "external-process-adjudication":
-        result = build_external_process_adjudication(args.project, min_cases=args.min_cases, min_delta=args.min_delta, output=args.output)
+        result = build_external_process_adjudication(
+            args.project,
+            min_cases=args.min_cases,
+            min_delta=args.min_delta,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort external process adjudication status: {result['status']}")
-            print(f"Accepted: {result['summary']['external_accepted_case_count']}/{result['summary']['external_adjudicated_case_count']}")
+            print(
+                f"Accepted: {result['summary']['external_accepted_case_count']}/{result['summary']['external_adjudicated_case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "external-advantage-repeat":
-        result = build_external_advantage_repeat(args.project, repeat_count=args.repeats, min_cases=args.min_cases, output=args.output)
+        result = build_external_advantage_repeat(
+            args.project,
+            repeat_count=args.repeats,
+            min_cases=args.min_cases,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort external advantage repeat status: {result['status']}")
-            print(f"Repeats: {result['summary']['ready_repeat_count']}/{result['summary']['repeat_count']}")
+            print(
+                f"Repeats: {result['summary']['ready_repeat_count']}/{result['summary']['repeat_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "upstream-pr-ci-probe":
-        result = build_upstream_pr_ci_probe(args.project, repo=args.repo, pr_number=args.pr_number, output=args.output)
+        result = build_upstream_pr_ci_probe(
+            args.project, repo=args.repo, pr_number=args.pr_number, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort upstream PR CI probe status: {result['status']}")
-            print(f"Targets: {result['summary']['ready_target_count']}/{result['summary']['target_count']}")
-            print(f"Check runs: {result['summary']['total_successful_check_run_count']}/{result['summary']['total_check_run_count']}")
+            print(
+                f"Targets: {result['summary']['ready_target_count']}/{result['summary']['target_count']}"
+            )
+            print(
+                f"Check runs: {result['summary']['total_successful_check_run_count']}/{result['summary']['total_check_run_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -833,54 +1069,77 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort competitor blind adjudication status: {result['status']}")
-            print(f"Accepted: {result['summary']['accepted_competitor_count']}/{result['summary']['competitor_count']}")
+            print(
+                f"Accepted: {result['summary']['accepted_competitor_count']}/{result['summary']['competitor_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "competitor-behavior-regression":
-        result = build_competitor_behavior_regression(args.project, min_cases=args.min_cases, output=args.output)
+        result = build_competitor_behavior_regression(
+            args.project, min_cases=args.min_cases, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort competitor behavior regression status: {result['status']}")
-            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "paibi-cli-cross-adjudication":
-        result = build_paibi_cli_cross_adjudication(args.project, blind_path=args.blind_path, behavior_path=args.behavior_path, output=args.output)
+        result = build_paibi_cli_cross_adjudication(
+            args.project,
+            blind_path=args.blind_path,
+            behavior_path=args.behavior_path,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort PaiBi CLI cross adjudication status: {result['status']}")
-            print(f"Accepted tools: {result['summary']['accepted_tool_count']}/{result['summary']['tool_count']}")
+            print(
+                f"Accepted tools: {result['summary']['accepted_tool_count']}/{result['summary']['tool_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "heterogeneous-absorption-replay":
-        result = build_heterogeneous_absorption_replay(args.project, min_cases=args.min_cases, output=args.output)
+        result = build_heterogeneous_absorption_replay(
+            args.project, min_cases=args.min_cases, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort heterogeneous absorption replay status: {result['status']}")
-            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}"
+            )
             print(f"Language families: {result['summary']['language_family_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "cross-domain-absorption-replay":
-        result = build_cross_domain_absorption_replay(args.project, min_domains=args.min_domains, output=args.output)
+        result = build_cross_domain_absorption_replay(
+            args.project, min_domains=args.min_domains, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort cross-domain absorption replay status: {result['status']}")
-            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}"
+            )
             print(f"Non-PR domains: {result['summary']['non_pr_domain_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "cross-domain-end-to-end":
-        result = build_cross_domain_end_to_end(args.project, min_domains=args.min_domains, output=args.output)
+        result = build_cross_domain_end_to_end(
+            args.project, min_domains=args.min_domains, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -890,52 +1149,81 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "cross-domain-ci-regression":
-        result = build_cross_domain_ci_regression(args.project, rounds=args.rounds, min_domains=args.min_domains, output=args.output)
+        result = build_cross_domain_ci_regression(
+            args.project,
+            rounds=args.rounds,
+            min_domains=args.min_domains,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort cross-domain CI regression status: {result['status']}")
-            print(f"Ready rounds: {result['summary']['ready_round_count']}/{result['summary']['round_count']}")
+            print(
+                f"Ready rounds: {result['summary']['ready_round_count']}/{result['summary']['round_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "contract-runtime-rehearsal":
-        result = build_contract_runtime_rehearsal(args.project, output=args.output, run_id=args.run_id, concurrent_workers=args.concurrent_workers)
+        result = build_contract_runtime_rehearsal(
+            args.project,
+            output=args.output,
+            run_id=args.run_id,
+            concurrent_workers=args.concurrent_workers,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort contract runtime rehearsal status: {result['status']}")
-            print(f"Rejected violations: {result['summary']['violation_rejected_count']}/{result['summary']['case_count']}")
+            print(
+                f"Rejected violations: {result['summary']['violation_rejected_count']}/{result['summary']['case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "contract-stability-stress":
-        result = build_contract_stability_stress(args.project, rounds=args.rounds, concurrent_workers=args.concurrent_workers, output=args.output)
+        result = build_contract_stability_stress(
+            args.project,
+            rounds=args.rounds,
+            concurrent_workers=args.concurrent_workers,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort contract stability stress status: {result['status']}")
-            print(f"Fault injections: {result['summary']['total_fault_injection_count']}")
+            print(
+                f"Fault injections: {result['summary']['total_fault_injection_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "review-family-behavior-replay":
-        result = build_review_family_behavior_replay(args.project, min_cases=args.min_cases, output=args.output)
+        result = build_review_family_behavior_replay(
+            args.project, min_cases=args.min_cases, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort review family behavior replay status: {result['status']}")
-            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "external-merge-landing":
-        result = build_external_merge_landing(args.project, min_cases=args.min_cases, output=args.output)
+        result = build_external_merge_landing(
+            args.project, min_cases=args.min_cases, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort external merge landing status: {result['status']}")
-            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(
+                f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}"
+            )
             print(f"Merge commits: {result['summary']['merge_commit_count']}")
             if args.output:
                 print(f"Output: {args.output}")
@@ -952,11 +1240,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "employee-scheduler-stress":
-        result = run_employee_scheduler_stress(args.project, round_count=args.rounds, tasks_per_round=args.tasks_per_round, workers_per_round=args.workers_per_round)
+        result = run_employee_scheduler_stress(
+            args.project,
+            round_count=args.rounds,
+            tasks_per_round=args.tasks_per_round,
+            workers_per_round=args.workers_per_round,
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -977,12 +1273,16 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "employee-patch-stress":
-        result = build_employee_patch_stress(args.project, concurrent_workers=args.concurrent_workers, output=args.output)
+        result = build_employee_patch_stress(
+            args.project, concurrent_workers=args.concurrent_workers, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort employee patch stress status: {result['status']}")
-            print(f"Workers: {result['summary']['ready_worker_count']}/{result['summary']['worker_count']}")
+            print(
+                f"Workers: {result['summary']['ready_worker_count']}/{result['summary']['worker_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -992,16 +1292,22 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort production recovery status: {result['status']}")
-            print(f"Recovered: {result['summary']['recovered_count']}/{result['summary']['scenario_count']}")
+            print(
+                f"Recovered: {result['summary']['recovered_count']}/{result['summary']['scenario_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "product-mainline-absorption-proof":
-        result = build_product_mainline_absorption_proof(args.project, commit=args.commit, output=args.output)
+        result = build_product_mainline_absorption_proof(
+            args.project, commit=args.commit, output=args.output
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
-            print(f"Retort product mainline absorption proof status: {result['status']}")
+            print(
+                f"Retort product mainline absorption proof status: {result['status']}"
+            )
             print(f"Merge commit: {result['summary']['is_merge_commit']}")
             if args.output:
                 print(f"Output: {args.output}")
@@ -1012,7 +1318,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort absorption release decision status: {result['status']}")
-            print(f"Ready decisions: {result['summary']['ready_decision_count']}/{result['summary']['decision_count']}")
+            print(
+                f"Ready decisions: {result['summary']['ready_decision_count']}/{result['summary']['decision_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -1022,7 +1330,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort operator journey replay status: {result['status']}")
-            print(f"Ready stages: {result['summary']['ready_stage_count']}/{result['summary']['stage_count']}")
+            print(
+                f"Ready stages: {result['summary']['ready_stage_count']}/{result['summary']['stage_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -1032,16 +1342,23 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort quality gates status: {result['status']}")
-            print(f"Passed: {result['summary']['passed_count']}/{result['summary']['gate_count']}")
+            print(
+                f"Passed: {result['summary']['passed_count']}/{result['summary']['gate_count']}"
+            )
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "codebase-graph-report":
-        result = build_codebase_graph(args.project, include_tests=args.include_tests, max_files=args.max_files)
+        result = build_codebase_graph(
+            args.project, include_tests=args.include_tests, max_files=args.max_files
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -1061,7 +1378,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -1072,12 +1392,24 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "architecture-contract-report":
-        contracts = load_architecture_contracts(args.contract_file) if args.contract_file else None
-        result = evaluate_architecture_contracts(args.project, contracts=contracts, include_tests=args.include_tests, max_files=args.max_files)
+        contracts = (
+            load_architecture_contracts(args.contract_file)
+            if args.contract_file
+            else None
+        )
+        result = evaluate_architecture_contracts(
+            args.project,
+            contracts=contracts,
+            include_tests=args.include_tests,
+            max_files=args.max_files,
+        )
         if args.output:
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -1087,7 +1419,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "passed" else 1
     if args.command == "similar-project-radar":
-        result = build_similar_project_radar(args.project, query=args.query, limit=args.limit, min_score=args.min_score)
+        result = build_similar_project_radar(
+            args.project, query=args.query, limit=args.limit, min_score=args.min_score
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -1114,7 +1448,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Selected: {result['summary']['selected_count']}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "absorption-saturation":
-        result = build_absorption_saturation_report(args.project, recent_limit=args.recent_limit)
+        result = build_absorption_saturation_report(
+            args.project, recent_limit=args.recent_limit
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -1127,8 +1463,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort self-bootstrap status: {result['status']}")
-            print(f"Implemented sources: {result['summary']['implemented_source_count']}/{result['summary']['source_count']}")
-            print(f"Strict source records: {result['summary']['strictly_recorded_source_count']}/{result['summary']['source_count']}")
+            print(
+                f"Implemented sources: {result['summary']['implemented_source_count']}/{result['summary']['source_count']}"
+            )
+            print(
+                f"Strict source records: {result['summary']['strictly_recorded_source_count']}/{result['summary']['source_count']}"
+            )
         return 0
     if args.command == "self-depth-report":
         result = build_self_depth_report(args.project)
@@ -1136,14 +1476,22 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort self-depth status: {result['status']}")
-            print(f"External improvement allowed: {result['external_improvement_allowed']}")
+            print(
+                f"External improvement allowed: {result['external_improvement_allowed']}"
+            )
         return 0 if result["external_improvement_allowed"] else 1
     if args.command == "external-improvement-gate":
         result = external_improvement_gate(args.project, args.target)
-        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort external improvement gate: {result['status']}")
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Retort external improvement gate: {result['status']}"
+        )
         return 0 if result["status"] == "allowed" else 1
     if args.command == "clean-workspace":
-        result = clean_workspace(args.project, keep_durable_state=not args.drop_durable_state)
+        result = clean_workspace(
+            args.project, keep_durable_state=not args.drop_durable_state
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -1157,7 +1505,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort review blind acceptance: {result['status']}")
-            print(f"Pass rate: {result['summary']['pass_rate']} (floor {result['summary']['pass_rate_floor']})")
+            print(
+                f"Pass rate: {result['summary']['pass_rate']} (floor {result['summary']['pass_rate_floor']})"
+            )
         return 0 if result["status"] == "ready" else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
@@ -1169,7 +1519,9 @@ def _format_scores(title: str, scores: list[dict[str, object]]) -> str:
     lines = [title + ":"]
     for score in scores:
         value = float(score["value"])
-        lines.append(f"- {score['dimension']}: {value:.1f} ({'PASS' if value > 90 else 'NEEDS_WORK'})")
+        lines.append(
+            f"- {score['dimension']}: {value:.1f} ({'PASS' if value > 90 else 'NEEDS_WORK'})"
+        )
     return "\n".join(lines)
 
 

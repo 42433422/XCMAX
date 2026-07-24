@@ -11,7 +11,9 @@ from retort_engine.external_advantage_matrix import build_external_advantage_mat
 from retort_engine.service import RetortService
 
 
-def test_external_advantage_matrix_compares_baseline_to_current_behavior(tmp_path: Path) -> None:
+def test_external_advantage_matrix_compares_baseline_to_current_behavior(
+    tmp_path: Path,
+) -> None:
     result = build_external_advantage_matrix(tmp_path)
 
     assert result["status"] == "ready"
@@ -23,16 +25,25 @@ def test_external_advantage_matrix_compares_baseline_to_current_behavior(tmp_pat
     assert result["summary"]["per_case_before_after"] is True
     assert result["summary"]["all_advantages_improved"] is True
     assert result["summary"]["all_delta_regressions_verified"] is True
-    assert result["summary"]["passed_regression_case_count"] == result["summary"]["case_count"]
+    assert (
+        result["summary"]["passed_regression_case_count"]
+        == result["summary"]["case_count"]
+    )
     assert result["summary"]["independent_all_cases_accepted"] is True
     assert result["summary"]["independent_minimum_recomputed_delta"] > 0
     assert result["summary"]["blind_third_party_all_cases_accepted"] is True
     assert result["summary"]["blind_third_party_minimum_delta"] >= 65
     assert result["summary"]["blind_third_party_delta_floor_passed"] is True
     assert result["summary"]["blind_third_party_score_fields_consumed"] is False
-    assert all(row["retort"]["score"] > row["baseline"]["score"] for row in result["matrix"])
-    assert all(row["retort"]["publishable_comment_count"] > 0 for row in result["matrix"])
-    assert validate_contract("external_advantage_matrix_result", result)["valid"] is True
+    assert all(
+        row["retort"]["score"] > row["baseline"]["score"] for row in result["matrix"]
+    )
+    assert all(
+        row["retort"]["publishable_comment_count"] > 0 for row in result["matrix"]
+    )
+    assert (
+        validate_contract("external_advantage_matrix_result", result)["valid"] is True
+    )
 
 
 def test_external_advantage_matrix_writes_report(tmp_path: Path) -> None:
@@ -72,4 +83,6 @@ def test_external_advantage_matrix_cli_outputs_contract(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
 
     assert payload["status"] == "ready"
-    assert validate_contract("external_advantage_matrix_result", payload)["valid"] is True
+    assert (
+        validate_contract("external_advantage_matrix_result", payload)["valid"] is True
+    )

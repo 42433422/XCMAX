@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.paibi_prompting import RETORT_SCORE_DIMENSIONS, build_retort_paibi_panel_prompt, build_retort_paibi_prompt, prioritized_evidence, scoring_audit
+from retort_engine.paibi_prompting import (
+    RETORT_SCORE_DIMENSIONS,
+    build_retort_paibi_panel_prompt,
+    build_retort_paibi_prompt,
+    prioritized_evidence,
+    scoring_audit,
+)
 
 
 def test_prompting_keeps_local_audit_as_risk_signal_not_score(tmp_path: Path) -> None:
@@ -11,12 +17,26 @@ def test_prompting_keeps_local_audit_as_risk_signal_not_score(tmp_path: Path) ->
         project=tmp_path,
         mode="assess",
         evidence=["core_refactor_execution_status=implemented"],
-        metadata={"capability_absorption_audit": {"score": 96, "overall_cap": 97, "blockers": ["low_test_to_source_ratio"]}},
+        metadata={
+            "capability_absorption_audit": {
+                "score": 96,
+                "overall_cap": 97,
+                "blockers": ["low_test_to_source_ratio"],
+            }
+        },
     )
 
     assert "core_refactor_execution_status=implemented" in prompt
     assert "不得把本地能力吸收审计当作参考分" in prompt
-    audit = scoring_audit({"capability_absorption_audit": {"score": 96, "overall_cap": 97, "blockers": []}})
+    audit = scoring_audit(
+        {
+            "capability_absorption_audit": {
+                "score": 96,
+                "overall_cap": 97,
+                "blockers": [],
+            }
+        }
+    )
     assert "score" not in audit["capability_absorption_audit"]
     assert "overall_cap" not in audit["capability_absorption_audit"]
 
@@ -35,7 +55,9 @@ def test_panel_prompt_wraps_base_prompt_with_panel_contract(tmp_path: Path) -> N
     assert "只看核心行为和测试" in prompt
 
 
-def test_score_dimensions_include_calibrated_overall_and_capability_absorption() -> None:
+def test_score_dimensions_include_calibrated_overall_and_capability_absorption() -> (
+    None
+):
     assert "capability_absorption_score" in RETORT_SCORE_DIMENSIONS
     assert "calibrated_overall" in RETORT_SCORE_DIMENSIONS
 
@@ -133,7 +155,9 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
         "paibi_cli_cross_adjudication_human_calibrated=True",
     ]
 
-    prompt = build_retort_paibi_prompt(project=tmp_path, mode="assess", evidence=evidence)
+    prompt = build_retort_paibi_prompt(
+        project=tmp_path, mode="assess", evidence=evidence
+    )
 
     assert len(prompt) < 32000
     assert "operator_journey_replay_status=ready" in prompt
@@ -142,7 +166,10 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
     assert "cross_domain_absorption_replay_direct_execution=True" in prompt
     assert "contract_runtime_rehearsal_all_rejected=True" in prompt
     assert "employee_patch_stress_state_leaks=0" in prompt
-    assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in prompt
+    assert (
+        "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff"
+        in prompt
+    )
     assert "paibi_cli_cross_adjudication_status=ready" in prompt
     assert "paibi_cli_cross_adjudication_tools=4/4" in prompt
     assert "paibi_cli_cross_adjudication_no_human_model=True" in prompt

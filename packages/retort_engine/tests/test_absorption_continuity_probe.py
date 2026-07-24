@@ -8,7 +8,9 @@ from retort_engine.contracts import validate_contract
 from retort_engine.service import RetortService
 
 
-def test_absorption_continuity_probe_requires_repeated_proved_runs(tmp_path: Path) -> None:
+def test_absorption_continuity_probe_requires_repeated_proved_runs(
+    tmp_path: Path,
+) -> None:
     _write_run(tmp_path, "20260628010000-a", "github/a", code_graph=True)
     _write_employee_result(tmp_path, "20260628010000-a")
     _write_run(tmp_path, "20260628013000-b", "github/b", code_graph=True)
@@ -23,10 +25,14 @@ def test_absorption_continuity_probe_requires_repeated_proved_runs(tmp_path: Pat
     assert result["summary"]["all_have_per_run_code_graph_proof"] is True
     assert result["summary"]["latest_closed_loop_verified"] is True
     assert result["summary"]["counting_model_separated"] is True
-    assert validate_contract("absorption_continuity_probe_result", result)["valid"] is True
+    assert (
+        validate_contract("absorption_continuity_probe_result", result)["valid"] is True
+    )
 
 
-def test_absorption_continuity_probe_fails_missing_per_run_code_graph(tmp_path: Path) -> None:
+def test_absorption_continuity_probe_fails_missing_per_run_code_graph(
+    tmp_path: Path,
+) -> None:
     _write_run(tmp_path, "20260628010000-a", "github/a", code_graph=True)
     _write_employee_result(tmp_path, "20260628010000-a")
     _write_run(tmp_path, "20260628013000-b", "github/b", code_graph=False)
@@ -37,10 +43,14 @@ def test_absorption_continuity_probe_fails_missing_per_run_code_graph(tmp_path: 
 
     assert result["status"] == "needs_more_continuity"
     assert result["summary"]["all_have_per_run_code_graph_proof"] is False
-    assert result["runs"][0]["code_graph_proof_missing"] == ["missing_per_run_code_graph_proof"]
+    assert result["runs"][0]["code_graph_proof_missing"] == [
+        "missing_per_run_code_graph_proof"
+    ]
 
 
-def test_absorption_continuity_probe_accepts_post_absorption_hardening_run(tmp_path: Path) -> None:
+def test_absorption_continuity_probe_accepts_post_absorption_hardening_run(
+    tmp_path: Path,
+) -> None:
     _write_run(tmp_path, "20260628013000-b", "github/b", code_graph=True)
     _write_employee_result(tmp_path, "20260628013000-b")
     _write_run(
@@ -57,8 +67,15 @@ def test_absorption_continuity_probe_accepts_post_absorption_hardening_run(tmp_p
     assert result["status"] == "ready"
     assert result["latest_closed_loop"]["run_id"] == "20260628020000-hardening"
     assert result["latest_closed_loop"]["merge_commit"] == "abc1234"
-    assert result["latest_closed_loop"]["required_flags"]["latest_run_referenced"] is True
-    assert result["latest_closed_loop"]["required_flags"]["post_absorption_hardening_ready"] is True
+    assert (
+        result["latest_closed_loop"]["required_flags"]["latest_run_referenced"] is True
+    )
+    assert (
+        result["latest_closed_loop"]["required_flags"][
+            "post_absorption_hardening_ready"
+        ]
+        is True
+    )
 
 
 def test_service_exposes_absorption_continuity_probe(tmp_path: Path) -> None:
@@ -68,7 +85,9 @@ def test_service_exposes_absorption_continuity_probe(tmp_path: Path) -> None:
     _write_employee_result(tmp_path, "20260628013000-b")
     _write_closed_loop(tmp_path, "20260628013000-b")
 
-    result = RetortService().absorption_continuity_probe({"project": str(tmp_path), "min_runs": 2})
+    result = RetortService().absorption_continuity_probe(
+        {"project": str(tmp_path), "min_runs": 2}
+    )
 
     assert result["status"] == "ready"
 
@@ -86,7 +105,9 @@ def _write_run(root: Path, run_id: str, source: str, *, code_graph: bool) -> Non
             str(root / "retort_engine" / "review_context_bias.py"),
             str(root / "tests" / "test_review_context_bias.py"),
         ],
-        "employee_results_path": str(root / ".retort" / "employee_results" / f"{run_id}.json"),
+        "employee_results_path": str(
+            root / ".retort" / "employee_results" / f"{run_id}.json"
+        ),
     }
     if code_graph:
         payload["code_graph_proof"] = {
@@ -100,14 +121,19 @@ def _write_run(root: Path, run_id: str, source: str, *, code_graph: bool) -> Non
                 "scope": "per_real_absorption_run",
             },
         }
-    (run_dir / f"{run_id}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    (run_dir / f"{run_id}.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def _write_employee_result(root: Path, run_id: str) -> None:
     result_dir = root / ".retort" / "employee_results"
     result_dir.mkdir(parents=True, exist_ok=True)
     (result_dir / f"{run_id}.json").write_text(
-        json.dumps({"results": [{"task_id": "task", "status": "completed"}]}, ensure_ascii=False),
+        json.dumps(
+            {"results": [{"task_id": "task", "status": "completed"}]},
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 

@@ -1,4 +1,7 @@
-from retort_engine.issue_capability_benchmark import evaluate_issue_instances, synthesize_verified_issue_tasks
+from retort_engine.issue_capability_benchmark import (
+    evaluate_issue_instances,
+    synthesize_verified_issue_tasks,
+)
 
 
 def test_issue_evaluation_requires_patch_apply_and_fail_to_pass() -> None:
@@ -18,8 +21,20 @@ def test_issue_evaluation_requires_patch_apply_and_fail_to_pass() -> None:
 
 def test_task_synthesis_rejects_unverified_repairs() -> None:
     records = [
-        {"test_id": "test_good", "failing_output": "failed", "patch": "diff", "before_passed": False, "after_passed": True},
-        {"test_id": "test_bad", "failing_output": "failed", "patch": "diff", "before_passed": False, "after_passed": False},
+        {
+            "test_id": "test_good",
+            "failing_output": "failed",
+            "patch": "diff",
+            "before_passed": False,
+            "after_passed": True,
+        },
+        {
+            "test_id": "test_bad",
+            "failing_output": "failed",
+            "patch": "diff",
+            "before_passed": False,
+            "after_passed": False,
+        },
     ]
     tasks = synthesize_verified_issue_tasks(records)
     assert [task["test_id"] for task in tasks] == ["test_good"]

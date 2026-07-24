@@ -10,7 +10,9 @@ from retort_engine.contracts import validate_contract
 from retort_engine.service import RetortService
 
 
-def test_contract_stability_stress_runs_more_than_100_workers_without_state_leak(tmp_path: Path) -> None:
+def test_contract_stability_stress_runs_more_than_100_workers_without_state_leak(
+    tmp_path: Path,
+) -> None:
     result = build_contract_stability_stress(tmp_path, rounds=2, concurrent_workers=101)
 
     assert result["status"] == "ready"
@@ -21,11 +23,15 @@ def test_contract_stability_stress_runs_more_than_100_workers_without_state_leak
     assert result["summary"]["state_leak_count"] == 0
     assert result["summary"]["all_rounds_rejected_violations"] is True
     assert result["summary"]["all_rounds_verified_rollbacks"] is True
-    assert validate_contract("contract_stability_stress_result", result)["valid"] is True
+    assert (
+        validate_contract("contract_stability_stress_result", result)["valid"] is True
+    )
 
 
 def test_service_exposes_contract_stability_stress(tmp_path: Path) -> None:
-    result = RetortService().contract_stability_stress({"project": str(tmp_path), "rounds": 2, "concurrent_workers": 101})
+    result = RetortService().contract_stability_stress(
+        {"project": str(tmp_path), "rounds": 2, "concurrent_workers": 101}
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["state_leak_count"] == 0
@@ -54,5 +60,7 @@ def test_contract_stability_stress_cli_outputs_contract(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert validate_contract("contract_stability_stress_result", payload)["valid"] is True
+    assert (
+        validate_contract("contract_stability_stress_result", payload)["valid"] is True
+    )
     assert payload["summary"]["concurrency_floor_exceeded"] is True
