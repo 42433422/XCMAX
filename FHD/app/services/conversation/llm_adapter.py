@@ -170,13 +170,9 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         self._client: Optional[httpx.AsyncClient] = None
         self._stream_client: Optional[httpx.AsyncClient] = None
 
-        logger.info(
-            "初始化LLM适配器: %s/%s @ %s (Key长度: %s)",
-            self.provider,
-            self._model,
-            self._base_url,
-            len(self._api_key or ""),
-        )
+        # Provider/model/base URL and credential metadata can be tenant-private.
+        # Keep initialization logs free of values derived from credentials or requests.
+        logger.info("LLM adapter initialized")
 
     def _resolve_api_key(self, provider: str) -> Optional[str]:
         """从环境变量解析API Key"""
@@ -187,10 +183,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             if key:
                 if provider == "minimax" and key.lower().startswith("minimaxsk-cp-"):
                     key = key[len("minimax") :]
-                logger.debug("从环境变量 %s 读取到API Key", env_name)
+                logger.debug("LLM API key resolved")
                 return key
 
-        logger.warning("未找到 %s 的API Key (已检查: %s)", provider, env_names)
+        logger.warning("LLM API key is not configured for the requested provider")
         return None
 
     @property
@@ -237,9 +233,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         return self.provider == "minimax" and "sk-cp-" in (self._api_key or "").lower()
 
     def _minimax_anthropic_base_url(self) -> str:
-        url = (os.environ.get("MINIMAX_ANTHROPIC_BASE_URL") or self._base_url).rstrip(
-            "/"
-        )
+        url = (os.environ.get("MINIMAX_ANTHROPIC_BASE_URL") or self._base_url).rstrip("/")
         for suffix in ("/v1", "/v2", "/v3", "/v4"):
             if url.endswith(suffix):
                 url = url[: -len(suffix)].rstrip("/")

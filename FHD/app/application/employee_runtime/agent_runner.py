@@ -63,11 +63,9 @@ def _resolve_employee_llm_fallback_config(
         return None
     return {
         "provider": provider,
-        "model": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_MODEL") or "").strip()
-        or None,
+        "model": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_MODEL") or "").strip() or None,
         "api_key": None,
-        "base_url": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_BASE_URL") or "").strip()
-        or None,
+        "base_url": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_BASE_URL") or "").strip() or None,
     }
 
 
@@ -95,17 +93,13 @@ async def _chat_completion(
             base_url=cfg.get("base_url"),
         )
         if not adapter.is_configured:
-            primary_error = (
-                "未配置 LLM API Key，请在设置中配置模型服务后再使用 agent 员工。"
-            )
+            primary_error = "未配置 LLM API Key，请在设置中配置模型服务后再使用 agent 员工。"
             primary_model = adapter.model_name
         else:
             return await adapter.chat_completion(messages, max_tokens=max_tokens)
     except RECOVERABLE_ERRORS as exc:
         primary_error = str(exc)[:800]
-        logger.warning(
-            "employee primary LLM failed; trying configured fallback: %s", exc
-        )
+        logger.warning("employee primary LLM failed; trying configured fallback: %s", exc)
 
     fallback_cfg = _resolve_employee_llm_fallback_config(provider)
     if fallback_cfg:
@@ -128,9 +122,7 @@ async def _chat_completion(
                 return result
         except RECOVERABLE_ERRORS as exc:
             logger.exception("employee fallback LLM failed: %s", exc)
-            return {
-                "error": f"{primary_error}; fallback failed: {str(exc)[:400]}"[:800]
-            }
+            return {"error": f"{primary_error}; fallback failed: {str(exc)[:400]}"[:800]}
 
     if primary_error:
         logger.error("employee agent LLM failed: %s", primary_error)
