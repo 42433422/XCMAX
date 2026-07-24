@@ -342,14 +342,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
-        logger.debug(
-            "调用 [%s/%s] messages=%s, temp=%s, max_tokens=%s",
-            self.provider,
-            self._model,
-            len(messages),
-            temperature,
-            max_tokens,
-        )
+        # Provider, model, prompt metadata and token usage can all reveal
+        # tenant-private routing or workload details.  Keep operational logs
+        # value-free; request tracing belongs in the redacted audit layer.
+        logger.debug("LLM completion request started")
 
         client = await self._get_client()
         response = await client.post(url, headers=headers, json=payload)
@@ -357,12 +353,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         result = response.json()
 
-        logger.debug(
-            "[%s] 响应成功, choices=%s, usage=%s",
-            self.provider,
-            len(result.get("choices", [])),
-            result.get("usage", {}),
-        )
+        logger.debug("LLM completion request succeeded")
 
         return cast("dict[str, Any]", result)
 
@@ -397,7 +388,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
-        logger.info("启动流式请求 [%s/%s]", self.provider, self._model)
+        logger.info("LLM streaming request started")
 
         client = await self._get_stream_client()
         async with client.stream("POST", url, headers=headers, json=payload) as response:
