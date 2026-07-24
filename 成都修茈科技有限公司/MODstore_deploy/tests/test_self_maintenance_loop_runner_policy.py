@@ -2433,3 +2433,127 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
     result = _find_pr_number_for_branch("any-branch")
     assert result is None
+
+
+def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monkeypatch, caplog):
+    """入队失败的非code项不应被标记为escalated，应留在open_items等待下次重试。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    # Mock enqueue to fail
+    def fake_enqueue(*args, **kwargs):
+        return {"queued": False}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["review"],
+                "retry_count": 3,
+                "run_id": "failed-enqueue-run",
+                "branch": "devfleet/test/branch",
+                "para_task_id": "task-1",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = loop_runner._resume_review_qa_candidate(memory)
+
+    # 入队失败的项不应被标记为escalated
+    item = memory["open_items"][0]
+    assert item.get("escalated") is not True
+    # 项应保留在open_items中
+    assert len(memory["open_items"]) == 1
+    # 应打印重试日志
+    assert "will retry next loop" in caplog.text
+    # 没有成功入队的项，应返回None（hold）
+    assert result is None
+
+
+def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch):
+    """使用复合键（run_id+branch+task_id+steps）匹配成功入队项，run_id为None时也能正确删除。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    enqueue_calls = []
+
+    def fake_enqueue(context, **kwargs):
+        enqueue_calls.append(context)
+        return {"queued": True}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    # 两个项有相同的run_id=None，其他字段不同
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["qa"],
+                "retry_count": 3,
+                "run_id": None,
+                "branch": "devfleet/test/branch-1",
+                "para_task_id": "task-1",
+            },
+            {
+                "kind": "failed_steps",
+                "steps": ["qa"],
+                "retry_count": 3,
+                "run_id": None,
+                "branch": "devfleet/test/branch-2",
+                "para_task_id": "task-2",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    # 两个项都成功入队，应从open_items中移除
+    assert len(memory["open_items"]) == 0
+    assert len(enqueue_calls) == 2
+    assert result is None
+
+
+def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
+    """code类失败项应打印代码重试日志，而不是escalating to human review。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["code"],
+                "retry_count": 3,
+                "run_id": "code-failure-run",
+                "branch": "devfleet/test/branch",
+                "para_task_id": "task-code",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = loop_runner._resume_review_qa_candidate(memory)
+
+    # code项不应被escalated，也不应入队人工队列
+    item = memory["open_items"][0]
+    assert item.get("escalated") is not True
+    assert len(memory["open_items"]) == 1
+    # 应打印代码重试日志，而不是人工评审日志
+    assert "will retry code remediation" in caplog.text
+    assert "escalating to human review" not in caplog.text
+    assert result is None
