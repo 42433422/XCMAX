@@ -294,6 +294,14 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
   line-height: 1.45;
 }
 
+.office-docking-review__warnings {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #9a6700;
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.45;
+}
+
 .office-docking-review__icon-btn {
   border: 0;
   background: transparent;
