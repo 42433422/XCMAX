@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-from retort_engine.swe_bench_oracle import build_issue_patch_benchmark, evaluate_issue_patch_case, touched_files_from_patch
+from retort_engine.swe_bench_oracle import (
+    build_issue_patch_benchmark,
+    evaluate_issue_patch_case,
+    touched_files_from_patch,
+)
 
 
-def test_issue_patch_case_resolves_when_fail_to_pass_and_regression_tests_pass() -> None:
+def test_issue_patch_case_resolves_when_fail_to_pass_and_regression_tests_pass() -> (
+    None
+):
     case = {
         "instance_id": "retort__benchmark-1",
         "repo": "retort_engine",
-        "gold_patch": _patch("retort_engine/review_quality_benchmark.py", "return {'status': 'ready'}"),
-        "predicted_patch": _patch("retort_engine/review_quality_benchmark.py", "return {'status': 'ready'}"),
+        "gold_patch": _patch(
+            "retort_engine/review_quality_benchmark.py", "return {'status': 'ready'}"
+        ),
+        "predicted_patch": _patch(
+            "retort_engine/review_quality_benchmark.py", "return {'status': 'ready'}"
+        ),
         "fail_to_pass": ["tests/test_review_quality_benchmark.py::test_quality_gate"],
         "pass_to_pass": ["tests/test_pr_review.py::test_secret_detection"],
         "test_results": {
@@ -44,7 +54,9 @@ def test_issue_patch_case_blocks_regressions_before_counting_resolution() -> Non
 
     assert result["status"] == "regressed"
     assert result["resolved"] is False
-    assert result["pass_to_pass"]["regressed"] == ["tests/test_absorption_quality.py::test_existing_gate"]
+    assert result["pass_to_pass"]["regressed"] == [
+        "tests/test_absorption_quality.py::test_existing_gate"
+    ]
 
 
 def test_issue_patch_benchmark_aggregates_resolution_and_overlap() -> None:
@@ -52,9 +64,15 @@ def test_issue_patch_benchmark_aggregates_resolution_and_overlap() -> None:
         {
             "instance_id": "retort__benchmark-good",
             "repo": "retort_engine",
-            "gold_patch": _patch("retort_engine/review_quality_benchmark.py", "ok = True"),
-            "predicted_patch": _patch("retort_engine/review_quality_benchmark.py", "ok = True"),
-            "fail_to_pass": ["tests/test_review_quality_benchmark.py::test_quality_gate"],
+            "gold_patch": _patch(
+                "retort_engine/review_quality_benchmark.py", "ok = True"
+            ),
+            "predicted_patch": _patch(
+                "retort_engine/review_quality_benchmark.py", "ok = True"
+            ),
+            "fail_to_pass": [
+                "tests/test_review_quality_benchmark.py::test_quality_gate"
+            ],
             "pass_to_pass": ["tests/test_pr_review.py::test_secret_detection"],
             "test_results": {
                 "tests/test_review_quality_benchmark.py::test_quality_gate": "passed",

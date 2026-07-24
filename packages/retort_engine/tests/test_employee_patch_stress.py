@@ -10,8 +10,12 @@ from retort_engine.employee_patch_stress import build_employee_patch_stress
 from retort_engine.service import RetortService
 
 
-def test_employee_patch_stress_rolls_back_more_than_100_failed_patches(tmp_path: Path) -> None:
-    result = build_employee_patch_stress(tmp_path, concurrent_workers=101, run_id="unit-patch-stress")
+def test_employee_patch_stress_rolls_back_more_than_100_failed_patches(
+    tmp_path: Path,
+) -> None:
+    result = build_employee_patch_stress(
+        tmp_path, concurrent_workers=101, run_id="unit-patch-stress"
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["worker_count"] == 101
@@ -25,7 +29,9 @@ def test_employee_patch_stress_rolls_back_more_than_100_failed_patches(tmp_path:
 
 
 def test_service_exposes_employee_patch_stress(tmp_path: Path) -> None:
-    result = RetortService().employee_patch_stress({"project": str(tmp_path), "concurrent_workers": 101})
+    result = RetortService().employee_patch_stress(
+        {"project": str(tmp_path), "concurrent_workers": 101}
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["all_post_rollback_gates_passed"] is True

@@ -25,30 +25,56 @@ def build_devour_session(
     return {
         "status": devour_session_status(execution, own_assessment),
         "source": source,
-        "stage_order": ["pre_dual_review", "overlap_comparison", "absorption_execution", "improvement_proof", "final_self_review"],
+        "stage_order": [
+            "pre_dual_review",
+            "overlap_comparison",
+            "absorption_execution",
+            "improvement_proof",
+            "final_self_review",
+        ],
         "pre_dual_review": {
             "status": "ready",
             "context_policy": "isolated_before_absorption",
             "panels": [
-                assessment_panel("own_before", "主项目吞噬前深评", pre_assessment, source=str(pre_assessment.get("project") or "")),
-                assessment_panel("external", "外部项目深评", external_assessment, source=source),
+                assessment_panel(
+                    "own_before",
+                    "主项目吞噬前深评",
+                    pre_assessment,
+                    source=str(pre_assessment.get("project") or ""),
+                ),
+                assessment_panel(
+                    "external", "外部项目深评", external_assessment, source=source
+                ),
             ],
         },
-        "overlap_comparison": overlap_comparison(source, external_path, tasks, external_project_profile=external_project_profile),
+        "overlap_comparison": overlap_comparison(
+            source,
+            external_path,
+            tasks,
+            external_project_profile=external_project_profile,
+        ),
         "absorption_execution": {
             "status": str(execution.get("status") or "not_run"),
             "summary": str(execution.get("summary") or ""),
-            "changed_files": [str(item) for item in execution.get("changed_files") or []],
-            "gates": [item for item in execution.get("gates") or [] if isinstance(item, dict)],
+            "changed_files": [
+                str(item) for item in execution.get("changed_files") or []
+            ],
+            "gates": [
+                item for item in execution.get("gates") or [] if isinstance(item, dict)
+            ],
             "branch": branch_state,
             "tasks": tasks,
         },
-        "improvement_proof": improvement_proof(pre_assessment, own_assessment, execution, absorption_state),
+        "improvement_proof": improvement_proof(
+            pre_assessment, own_assessment, execution, absorption_state
+        ),
         "final_self_review": final_self_review(own_assessment, llm_review),
     }
 
 
-def devour_session_status(execution: dict[str, Any], own_assessment: dict[str, Any]) -> str:
+def devour_session_status(
+    execution: dict[str, Any], own_assessment: dict[str, Any]
+) -> str:
     if assessment_score(own_assessment) is not None:
         return "final_deep_review_scored"
     if execution.get("status") in {"applied", "noop"}:
@@ -58,8 +84,14 @@ def devour_session_status(execution: dict[str, Any], own_assessment: dict[str, A
     return "pre_review_ready"
 
 
-def assessment_panel(role: str, title: str, assessment: dict[str, Any], *, source: str) -> dict[str, Any]:
-    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
+def assessment_panel(
+    role: str, title: str, assessment: dict[str, Any], *, source: str
+) -> dict[str, Any]:
+    metadata = (
+        assessment.get("metadata")
+        if isinstance(assessment.get("metadata"), dict)
+        else {}
+    )
     scores = [item for item in assessment.get("scores") or [] if isinstance(item, dict)]
     return {
         "role": role,
@@ -68,17 +100,29 @@ def assessment_panel(role: str, title: str, assessment: dict[str, Any], *, sourc
         "project": str(assessment.get("project") or source),
         "score": assessment_score(assessment),
         "score_status": assessment_score_status(assessment),
-        "score_source": str(metadata.get("score_source") or metadata.get("score_authority") or "unknown"),
+        "score_source": str(
+            metadata.get("score_source") or metadata.get("score_authority") or "unknown"
+        ),
         "score_count": len(scores),
         "file_count": assessment_file_count(assessment),
         "evidence_highlights": evidence_highlights(assessment),
         "feature_highlights": feature_highlights(metadata),
-        "llm_task_id": str(metadata.get("llm_task_id") or ((assessment.get("llm_review") or {}).get("dispatch") or {}).get("task_id") or ""),
+        "llm_task_id": str(
+            metadata.get("llm_task_id")
+            or ((assessment.get("llm_review") or {}).get("dispatch") or {}).get(
+                "task_id"
+            )
+            or ""
+        ),
     }
 
 
 def assessment_score_status(assessment: dict[str, Any]) -> str:
-    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
+    metadata = (
+        assessment.get("metadata")
+        if isinstance(assessment.get("metadata"), dict)
+        else {}
+    )
     source = str(metadata.get("score_source") or "")
     if assessment_score(assessment) is not None and source == "paibi_llm":
         return "paibi_llm_completed"
@@ -111,17 +155,27 @@ def evidence_highlights(assessment: dict[str, Any], *, limit: int = 8) -> list[s
     )
     picked: list[str] = []
     for prefix in priority_prefixes:
-        picked.extend(item for item in evidence if item.startswith(prefix) and item not in picked)
+        picked.extend(
+            item for item in evidence if item.startswith(prefix) and item not in picked
+        )
     picked.extend(item for item in evidence if item not in picked)
     return picked[:limit]
 
 
 def feature_highlights(metadata: dict[str, Any], *, limit: int = 6) -> list[str]:
-    features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
+    features = (
+        metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
+    )
     return [str(key) for key, value in features.items() if value][:limit]
 
 
-def overlap_comparison(source: str, external_path: Path | None, tasks: list[dict[str, str]], *, external_project_profile: ExternalProjectProfile) -> dict[str, Any]:
+def overlap_comparison(
+    source: str,
+    external_path: Path | None,
+    tasks: list[dict[str, str]],
+    *,
+    external_project_profile: ExternalProjectProfile,
+) -> dict[str, Any]:
     profile = external_project_profile(external_path)
     signals = [
         label
@@ -133,7 +187,9 @@ def overlap_comparison(source: str, external_path: Path | None, tasks: list[dict
         )
         if profile.get(key)
     ]
-    dimensions = sorted({str(task.get("dimension") or "") for task in tasks if task.get("dimension")})
+    dimensions = sorted(
+        {str(task.get("dimension") or "") for task in tasks if task.get("dimension")}
+    )
     return {
         "status": "depth_overlap_found" if tasks else "no_overlap_depth_found",
         "source": source,
@@ -149,41 +205,73 @@ def overlap_comparison(source: str, external_path: Path | None, tasks: list[dict
             }
             for task in tasks
         ],
-        "deferred_breadth": ["非重合方向暂不进入 Retort 主线", "可上架为未来 AI 员工或市场候选"],
+        "deferred_breadth": [
+            "非重合方向暂不进入 Retort 主线",
+            "可上架为未来 AI 员工或市场候选",
+        ],
     }
 
 
-def improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str, Any], execution: dict[str, Any], absorption_state: dict[str, Any]) -> dict[str, Any]:
+def improvement_proof(
+    pre_assessment: dict[str, Any],
+    own_assessment: dict[str, Any],
+    execution: dict[str, Any],
+    absorption_state: dict[str, Any],
+) -> dict[str, Any]:
     before_score = assessment_score(pre_assessment)
     after_score = assessment_score(own_assessment)
     changed_files = [str(item) for item in execution.get("changed_files") or []]
     gates = [item for item in execution.get("gates") or [] if isinstance(item, dict)]
-    proof = absorption_state.get("closed_loop_proof") if isinstance(absorption_state.get("closed_loop_proof"), dict) else {}
+    proof = (
+        absorption_state.get("closed_loop_proof")
+        if isinstance(absorption_state.get("closed_loop_proof"), dict)
+        else {}
+    )
     flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
-    audit = (own_assessment.get("metadata") or {}).get("capability_absorption_audit") if isinstance(own_assessment.get("metadata"), dict) else {}
+    audit = (
+        (own_assessment.get("metadata") or {}).get("capability_absorption_audit")
+        if isinstance(own_assessment.get("metadata"), dict)
+        else {}
+    )
     if not isinstance(audit, dict):
         audit = {}
     return {
         "status": improvement_proof_status(execution, flags),
         "before_score": before_score,
         "after_score": after_score,
-        "score_delta": round(after_score - before_score, 1) if before_score is not None and after_score is not None else None,
+        "score_delta": round(after_score - before_score, 1)
+        if before_score is not None and after_score is not None
+        else None,
         "changed_file_count": len(changed_files),
         "changed_files": changed_files,
         "gate_passed_count": sum(1 for gate in gates if gate.get("ok")),
         "gate_count": len(gates),
         "closed_loop_flags": flags,
         "missing_closed_loop": [str(item) for item in proof.get("missing") or []],
-        "behavior_source_files": [str(item) for item in audit.get("behavior_source_files") or []],
-        "behavior_test_files": [str(item) for item in audit.get("behavior_test_files") or []],
-        "support_behavior_source_files": [str(item) for item in audit.get("support_behavior_source_files") or []],
-        "support_behavior_test_files": [str(item) for item in audit.get("support_behavior_test_files") or []],
-        "generated_evidence_files": [str(item) for item in audit.get("generated_evidence_files") or []],
+        "behavior_source_files": [
+            str(item) for item in audit.get("behavior_source_files") or []
+        ],
+        "behavior_test_files": [
+            str(item) for item in audit.get("behavior_test_files") or []
+        ],
+        "support_behavior_source_files": [
+            str(item) for item in audit.get("support_behavior_source_files") or []
+        ],
+        "support_behavior_test_files": [
+            str(item) for item in audit.get("support_behavior_test_files") or []
+        ],
+        "generated_evidence_files": [
+            str(item) for item in audit.get("generated_evidence_files") or []
+        ],
         "generated_only": bool(audit.get("generated_only")),
-        "capability_absorption_local_score_removed": bool(audit.get("local_score_removed", True)),
+        "capability_absorption_local_score_removed": bool(
+            audit.get("local_score_removed", True)
+        ),
         "capability_absorption_status": audit.get("status"),
         "capability_absorption_risk_level": audit.get("risk_level"),
-        "capability_absorption_blockers": [str(item) for item in audit.get("blockers") or []],
+        "capability_absorption_blockers": [
+            str(item) for item in audit.get("blockers") or []
+        ],
         "test_to_source_ratio": audit.get("test_to_source_ratio"),
         "reason": str(audit.get("reason") or ""),
     }
@@ -194,23 +282,43 @@ def improvement_proof_status(execution: dict[str, Any], flags: dict[str, Any]) -
         return "failed"
     if flags and all(bool(value) for value in flags.values()):
         return "five_proofs_verified"
-    if execution.get("status") in {"applied", "noop"} and bool(execution.get("gates_passed")):
+    if execution.get("status") in {"applied", "noop"} and bool(
+        execution.get("gates_passed")
+    ):
         return "execution_and_gates_verified"
     if execution.get("status") in {"applied", "noop"}:
         return "execution_verified_needs_gates_or_merge"
     return "pending_execution"
 
 
-def final_self_review(own_assessment: dict[str, Any], llm_review: dict[str, Any]) -> dict[str, Any]:
-    metadata = own_assessment.get("metadata") if isinstance(own_assessment.get("metadata"), dict) else {}
-    dispatch = llm_review.get("dispatch") if isinstance(llm_review.get("dispatch"), dict) else {}
+def final_self_review(
+    own_assessment: dict[str, Any], llm_review: dict[str, Any]
+) -> dict[str, Any]:
+    metadata = (
+        own_assessment.get("metadata")
+        if isinstance(own_assessment.get("metadata"), dict)
+        else {}
+    )
+    dispatch = (
+        llm_review.get("dispatch")
+        if isinstance(llm_review.get("dispatch"), dict)
+        else {}
+    )
     return {
         "status": assessment_score_status(own_assessment),
         "score": assessment_score(own_assessment),
         "score_source": str(metadata.get("score_source") or "paibi_llm_pending"),
-        "scores": [item for item in own_assessment.get("scores") or [] if isinstance(item, dict)],
-        "llm_task_id": str(metadata.get("llm_task_id") or dispatch.get("task_id") or ""),
-        "llm_dispatch_status": str(dispatch.get("status") or llm_review.get("status") or ""),
+        "scores": [
+            item
+            for item in own_assessment.get("scores") or []
+            if isinstance(item, dict)
+        ],
+        "llm_task_id": str(
+            metadata.get("llm_task_id") or dispatch.get("task_id") or ""
+        ),
+        "llm_dispatch_status": str(
+            dispatch.get("status") or llm_review.get("status") or ""
+        ),
         "record_policy": "只有排比 LLM 返回结构化分数时，最终评分才保留。",
     }
 

@@ -5,12 +5,23 @@ from pathlib import Path
 
 import pytest
 
-from retort_engine.branching import BranchWorkflowError, begin_absorption_branch, merge_absorption_branch
+from retort_engine.branching import (
+    BranchWorkflowError,
+    begin_absorption_branch,
+    merge_absorption_branch,
+)
 from retort_engine.git_status import blocking_git_status
 
 
 def git(cwd: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=cwd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.strip()
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout.strip()
 
 
 def init_repo(root: Path) -> None:
@@ -23,7 +34,9 @@ def init_repo(root: Path) -> None:
     git(root, "commit", "-m", "init")
 
 
-def test_blocking_git_status_ignores_runtime_cache_and_generated_outputs(tmp_path: Path) -> None:
+def test_blocking_git_status_ignores_runtime_cache_and_generated_outputs(
+    tmp_path: Path,
+) -> None:
     repo = tmp_path / "repo"
     init_repo(repo)
     generated = [
@@ -56,13 +69,19 @@ def test_blocking_git_status_ignores_runtime_cache_and_generated_outputs(tmp_pat
     assert "__pycache__" not in blocking
 
 
-def test_begin_absorption_branch_blocks_real_dirty_changes_not_runtime_state(tmp_path: Path) -> None:
+def test_begin_absorption_branch_blocks_real_dirty_changes_not_runtime_state(
+    tmp_path: Path,
+) -> None:
     repo = tmp_path / "repo"
     init_repo(repo)
     (repo / ".retort").mkdir()
     (repo / ".retort" / "absorption_state.json").write_text("{}\n", encoding="utf-8")
 
-    state = begin_absorption_branch(repo, source="https://github.com/example/reviewer", branch_name="retort/absorb-runtime-ok")
+    state = begin_absorption_branch(
+        repo,
+        source="https://github.com/example/reviewer",
+        branch_name="retort/absorb-runtime-ok",
+    )
 
     assert state.status == "branch_created"
     assert state.base_branch == "main"
@@ -74,10 +93,16 @@ def test_begin_absorption_branch_blocks_real_dirty_changes_not_runtime_state(tmp
         begin_absorption_branch(repo, source="dirty", branch_name="retort/absorb-dirty")
 
 
-def test_merge_absorption_branch_ignores_runtime_cache_and_creates_merge_commit(tmp_path: Path) -> None:
+def test_merge_absorption_branch_ignores_runtime_cache_and_creates_merge_commit(
+    tmp_path: Path,
+) -> None:
     repo = tmp_path / "repo"
     init_repo(repo)
-    state = begin_absorption_branch(repo, source="https://github.com/example/reviewer", branch_name="retort/absorb-feature")
+    state = begin_absorption_branch(
+        repo,
+        source="https://github.com/example/reviewer",
+        branch_name="retort/absorb-feature",
+    )
     (repo / "feature.py").write_text("VALUE = 1\n", encoding="utf-8")
     git(repo, "add", "feature.py")
     git(repo, "commit", "-m", "absorb feature")

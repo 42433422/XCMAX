@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from retort_engine.repository_intelligence import build_ranked_repository_map, compare_repository_gaps, task_targets_from_map
+from retort_engine.repository_intelligence import (
+    build_ranked_repository_map,
+    compare_repository_gaps,
+    task_targets_from_map,
+)
 
 
 def synthesize_behavior_absorption(
@@ -53,7 +57,12 @@ def synthesize_behavior_absorption(
         "rules": rules,
         "focus_targets": focus_targets,
         "gap_summary": gap["summary"],
-        "target_files": ["retort_engine/pr_review.py", "retort_engine/diff_hunk_semantics.py", module_rel, rules_rel],
+        "target_files": [
+            "retort_engine/pr_review.py",
+            "retort_engine/diff_hunk_semantics.py",
+            module_rel,
+            rules_rel,
+        ],
     }
     return {
         "status": "synthesized",
@@ -63,19 +72,40 @@ def synthesize_behavior_absorption(
         "focus_targets": focus_targets,
         "gap": gap,
         "dimensions": ["diff_hunk_review", "review_pipeline"],
-        "digest": hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest(),
+        "digest": hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode("utf-8")
+        ).hexdigest(),
         "payload": payload,
     }
 
 
 def _external_review_signals(external: Path, source: str) -> dict[str, Any]:
-    text_hits = {"reviewdog": 0, "pr-agent": 0, "qodo": 0, "security": 0, "permission": 0, "eval": 0}
+    text_hits = {
+        "reviewdog": 0,
+        "pr-agent": 0,
+        "qodo": 0,
+        "security": 0,
+        "permission": 0,
+        "eval": 0,
+    }
     files_scanned = 0
     if external.is_dir():
         for path in sorted(external.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in {".py", ".md", ".yml", ".yaml", ".json", ".ts", ".js", ".go"}:
+            if not path.is_file() or path.suffix.lower() not in {
+                ".py",
+                ".md",
+                ".yml",
+                ".yaml",
+                ".json",
+                ".ts",
+                ".js",
+                ".go",
+            }:
                 continue
-            if any(part in {".git", "node_modules", ".venv", "__pycache__"} for part in path.parts):
+            if any(
+                part in {".git", "node_modules", ".venv", "__pycache__"}
+                for part in path.parts
+            ):
                 continue
             files_scanned += 1
             if files_scanned > 80:
@@ -93,12 +123,22 @@ def _external_review_signals(external: Path, source: str) -> dict[str, Any]:
     return {"text_hits": text_hits, "files_scanned": files_scanned, "source": source}
 
 
-def _weights_from_signals(signals: dict[str, Any], *, source: str, run_id: str) -> dict[str, Any]:
-    hits = signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+def _weights_from_signals(
+    signals: dict[str, Any], *, source: str, run_id: str
+) -> dict[str, Any]:
+    hits = (
+        signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+    )
     reviewdog = 20 + min(40, int(hits.get("reviewdog") or 0) * 2)
-    pr_agent = 15 + min(35, int(hits.get("pr-agent") or 0) * 2 + int(hits.get("qodo") or 0) * 2)
-    security = 10 + min(20, int(hits.get("security") or 0) + int(hits.get("permission") or 0))
-    hunk_boost = 15 + min(25, int(hits.get("eval") or 0) + int(hits.get("permission") or 0))
+    pr_agent = 15 + min(
+        35, int(hits.get("pr-agent") or 0) * 2 + int(hits.get("qodo") or 0) * 2
+    )
+    security = 10 + min(
+        20, int(hits.get("security") or 0) + int(hits.get("permission") or 0)
+    )
+    hunk_boost = 15 + min(
+        25, int(hits.get("eval") or 0) + int(hits.get("permission") or 0)
+    )
     return {
         "schema_version": 1,
         "source": source,
@@ -122,8 +162,12 @@ def _weights_from_signals(signals: dict[str, Any], *, source: str, run_id: str) 
     }
 
 
-def _rules_from_signals(signals: dict[str, Any], *, source: str, run_id: str) -> dict[str, Any]:
-    hits = signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+def _rules_from_signals(
+    signals: dict[str, Any], *, source: str, run_id: str
+) -> dict[str, Any]:
+    hits = (
+        signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+    )
     rules = [
         {
             "token": "eval(",
@@ -150,7 +194,12 @@ def _rules_from_signals(signals: dict[str, Any], *, source: str, run_id: str) ->
             "review_context": "security",
         },
     ]
-    return {"schema_version": 1, "source": source, "run_id": run_id, "token_rules": rules}
+    return {
+        "schema_version": 1,
+        "source": source,
+        "run_id": run_id,
+        "token_rules": rules,
+    }
 
 
 def _weights_module_content(weights: dict[str, Any]) -> str:
@@ -194,7 +243,9 @@ def capability_rank_boost(capability: str) -> int:
 
 
 def _weights_test_content(weights: dict[str, Any]) -> str:
-    reviewdog_boost = int((weights.get("external_source_boosts") or {}).get("reviewdog") or 0)
+    reviewdog_boost = int(
+        (weights.get("external_source_boosts") or {}).get("reviewdog") or 0
+    )
     return f'''from retort_engine.absorbed_review_rank_weights import capability_rank_boost, external_source_boost, absorbed_rank_weights
 from retort_engine.pr_review import review_diff
 
@@ -288,9 +339,15 @@ def match_absorbed_hunk_findings(added_lines: list[str], *, review_context: str 
 
 
 def _rules_test_content(rules: dict[str, Any]) -> str:
-    tokens = [str(item.get("token") or "") for item in rules.get("token_rules") or [] if isinstance(item, dict)]
+    tokens = [
+        str(item.get("token") or "")
+        for item in rules.get("token_rules") or []
+        if isinstance(item, dict)
+    ]
     assert_token = tokens[0] if tokens else "eval("
-    sample_line = "eval(payload)" if assert_token.startswith("eval") else f"{assert_token}payload"
+    sample_line = (
+        "eval(payload)" if assert_token.startswith("eval") else f"{assert_token}payload"
+    )
     return f'''from retort_engine.absorbed_hunk_semantic_rules import absorbed_hunk_rules, match_absorbed_hunk_findings
 from retort_engine.pr_review import review_diff
 

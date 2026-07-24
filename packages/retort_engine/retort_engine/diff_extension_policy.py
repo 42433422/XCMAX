@@ -5,37 +5,161 @@ from typing import Any
 
 
 EXTENSION_POLICIES: dict[str, dict[str, Any]] = {
-    ".py": {"family": "python", "review_context": "runtime", "risk_tags": ["runtime_logic", "typing"]},
-    ".pyi": {"family": "python", "review_context": "runtime", "risk_tags": ["typing_contract"]},
-    ".rs": {"family": "rust", "review_context": "runtime", "risk_tags": ["ownership", "error_handling"]},
-    ".go": {"family": "go", "review_context": "runtime", "risk_tags": ["error_handling", "concurrency"]},
-    ".ts": {"family": "typescript", "review_context": "runtime", "risk_tags": ["type_contract", "async_flow"]},
-    ".tsx": {"family": "typescript", "review_context": "frontend", "risk_tags": ["state_flow", "type_contract"]},
-    ".js": {"family": "javascript", "review_context": "runtime", "risk_tags": ["async_flow", "runtime_contract"]},
-    ".jsx": {"family": "javascript", "review_context": "frontend", "risk_tags": ["state_flow"]},
-    ".java": {"family": "jvm", "review_context": "runtime", "risk_tags": ["api_contract", "threading"]},
-    ".kt": {"family": "jvm", "review_context": "runtime", "risk_tags": ["nullability", "api_contract"]},
-    ".cpp": {"family": "cpp", "review_context": "runtime", "risk_tags": ["memory_safety", "build_flags"]},
-    ".cc": {"family": "cpp", "review_context": "runtime", "risk_tags": ["memory_safety", "build_flags"]},
-    ".cxx": {"family": "cpp", "review_context": "runtime", "risk_tags": ["memory_safety", "build_flags"]},
-    ".h": {"family": "cpp", "review_context": "runtime", "risk_tags": ["header_contract"]},
-    ".hpp": {"family": "cpp", "review_context": "runtime", "risk_tags": ["header_contract"]},
-    ".cs": {"family": "dotnet", "review_context": "runtime", "risk_tags": ["nullable_contract", "async_flow"]},
-    ".csproj": {"family": "dotnet", "review_context": "ci_config", "risk_tags": ["dependency_graph", "build_contract"]},
-    ".php": {"family": "php", "review_context": "runtime", "risk_tags": ["runtime_contract", "input_validation"]},
-    ".rb": {"family": "ruby", "review_context": "runtime", "risk_tags": ["runtime_contract", "dependency_graph"]},
-    ".mod": {"family": "go", "review_context": "config", "risk_tags": ["dependency_graph"]},
-    ".sum": {"family": "go", "review_context": "config", "risk_tags": ["dependency_integrity"]},
-    ".json": {"family": "data", "review_context": "config", "risk_tags": ["schema_drift"]},
-    ".jsonc": {"family": "data", "review_context": "config", "risk_tags": ["schema_drift"]},
-    ".yaml": {"family": "config", "review_context": "ci_config", "risk_tags": ["workflow_gate"]},
-    ".yml": {"family": "config", "review_context": "ci_config", "risk_tags": ["workflow_gate"]},
-    ".toml": {"family": "config", "review_context": "config", "risk_tags": ["dependency_graph"]},
-    ".html": {"family": "frontend", "review_context": "frontend", "risk_tags": ["dom_state"]},
-    ".css": {"family": "frontend", "review_context": "frontend", "risk_tags": ["responsive_layout"]},
-    ".md": {"family": "docs", "review_context": "docs", "risk_tags": ["operator_contract"]},
-    ".rst": {"family": "docs", "review_context": "docs", "risk_tags": ["operator_contract"]},
-    ".adoc": {"family": "docs", "review_context": "docs", "risk_tags": ["operator_contract"]},
+    ".py": {
+        "family": "python",
+        "review_context": "runtime",
+        "risk_tags": ["runtime_logic", "typing"],
+    },
+    ".pyi": {
+        "family": "python",
+        "review_context": "runtime",
+        "risk_tags": ["typing_contract"],
+    },
+    ".rs": {
+        "family": "rust",
+        "review_context": "runtime",
+        "risk_tags": ["ownership", "error_handling"],
+    },
+    ".go": {
+        "family": "go",
+        "review_context": "runtime",
+        "risk_tags": ["error_handling", "concurrency"],
+    },
+    ".ts": {
+        "family": "typescript",
+        "review_context": "runtime",
+        "risk_tags": ["type_contract", "async_flow"],
+    },
+    ".tsx": {
+        "family": "typescript",
+        "review_context": "frontend",
+        "risk_tags": ["state_flow", "type_contract"],
+    },
+    ".js": {
+        "family": "javascript",
+        "review_context": "runtime",
+        "risk_tags": ["async_flow", "runtime_contract"],
+    },
+    ".jsx": {
+        "family": "javascript",
+        "review_context": "frontend",
+        "risk_tags": ["state_flow"],
+    },
+    ".java": {
+        "family": "jvm",
+        "review_context": "runtime",
+        "risk_tags": ["api_contract", "threading"],
+    },
+    ".kt": {
+        "family": "jvm",
+        "review_context": "runtime",
+        "risk_tags": ["nullability", "api_contract"],
+    },
+    ".cpp": {
+        "family": "cpp",
+        "review_context": "runtime",
+        "risk_tags": ["memory_safety", "build_flags"],
+    },
+    ".cc": {
+        "family": "cpp",
+        "review_context": "runtime",
+        "risk_tags": ["memory_safety", "build_flags"],
+    },
+    ".cxx": {
+        "family": "cpp",
+        "review_context": "runtime",
+        "risk_tags": ["memory_safety", "build_flags"],
+    },
+    ".h": {
+        "family": "cpp",
+        "review_context": "runtime",
+        "risk_tags": ["header_contract"],
+    },
+    ".hpp": {
+        "family": "cpp",
+        "review_context": "runtime",
+        "risk_tags": ["header_contract"],
+    },
+    ".cs": {
+        "family": "dotnet",
+        "review_context": "runtime",
+        "risk_tags": ["nullable_contract", "async_flow"],
+    },
+    ".csproj": {
+        "family": "dotnet",
+        "review_context": "ci_config",
+        "risk_tags": ["dependency_graph", "build_contract"],
+    },
+    ".php": {
+        "family": "php",
+        "review_context": "runtime",
+        "risk_tags": ["runtime_contract", "input_validation"],
+    },
+    ".rb": {
+        "family": "ruby",
+        "review_context": "runtime",
+        "risk_tags": ["runtime_contract", "dependency_graph"],
+    },
+    ".mod": {
+        "family": "go",
+        "review_context": "config",
+        "risk_tags": ["dependency_graph"],
+    },
+    ".sum": {
+        "family": "go",
+        "review_context": "config",
+        "risk_tags": ["dependency_integrity"],
+    },
+    ".json": {
+        "family": "data",
+        "review_context": "config",
+        "risk_tags": ["schema_drift"],
+    },
+    ".jsonc": {
+        "family": "data",
+        "review_context": "config",
+        "risk_tags": ["schema_drift"],
+    },
+    ".yaml": {
+        "family": "config",
+        "review_context": "ci_config",
+        "risk_tags": ["workflow_gate"],
+    },
+    ".yml": {
+        "family": "config",
+        "review_context": "ci_config",
+        "risk_tags": ["workflow_gate"],
+    },
+    ".toml": {
+        "family": "config",
+        "review_context": "config",
+        "risk_tags": ["dependency_graph"],
+    },
+    ".html": {
+        "family": "frontend",
+        "review_context": "frontend",
+        "risk_tags": ["dom_state"],
+    },
+    ".css": {
+        "family": "frontend",
+        "review_context": "frontend",
+        "risk_tags": ["responsive_layout"],
+    },
+    ".md": {
+        "family": "docs",
+        "review_context": "docs",
+        "risk_tags": ["operator_contract"],
+    },
+    ".rst": {
+        "family": "docs",
+        "review_context": "docs",
+        "risk_tags": ["operator_contract"],
+    },
+    ".adoc": {
+        "family": "docs",
+        "review_context": "docs",
+        "risk_tags": ["operator_contract"],
+    },
 }
 
 
@@ -60,8 +184,12 @@ def extension_policy_summary(paths: list[str]) -> dict[str, Any]:
     policies = [extension_policy_for_path(path) for path in paths]
     known = [item for item in policies if item["known"]]
     families = sorted({str(item["family"]) for item in known if item.get("family")})
-    contexts = sorted({str(item["review_context"]) for item in known if item.get("review_context")})
-    risk_tags = sorted({str(tag) for item in known for tag in item.get("risk_tags", [])})
+    contexts = sorted(
+        {str(item["review_context"]) for item in known if item.get("review_context")}
+    )
+    risk_tags = sorted(
+        {str(tag) for item in known for tag in item.get("risk_tags", [])}
+    )
     return {
         "file_count": len(paths),
         "known_extension_count": len(known),

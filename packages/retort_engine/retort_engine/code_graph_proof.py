@@ -21,7 +21,9 @@ def has_graph_parseable_code(root: Path, path: Path) -> bool:
     return bool(text.strip())
 
 
-def build_code_graph_proof(root: Path, run_id: str, source: str, external_path: Path, changed_files: list[Path]) -> dict[str, Any]:
+def build_code_graph_proof(
+    root: Path, run_id: str, source: str, external_path: Path, changed_files: list[Path]
+) -> dict[str, Any]:
     node_map: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
     seen_nodes: set[str] = set()
@@ -31,7 +33,12 @@ def build_code_graph_proof(root: Path, run_id: str, source: str, external_path: 
             continue
         node_path = _project_relative(root, source_path)
         if node_path not in node_map:
-            node_map[node_path] = {"path": node_path, "language": _file_language(source_path), "line_count": _line_count(source_path), "imports": []}
+            node_map[node_path] = {
+                "path": node_path,
+                "language": _file_language(source_path),
+                "line_count": _line_count(source_path),
+                "imports": [],
+            }
             seen_nodes.add(node_path)
         source_node = node_map[node_path]
         for edge in _extract_import_edges(root, source_path):
@@ -51,11 +58,17 @@ def build_code_graph_proof(root: Path, run_id: str, source: str, external_path: 
             if edge["target_is_local"]:
                 target_path = edge["target"]
                 if target_path not in seen_nodes:
-                    target_file = (root / target_path).resolve() if not Path(target_path).is_absolute() else Path(target_path)
+                    target_file = (
+                        (root / target_path).resolve()
+                        if not Path(target_path).is_absolute()
+                        else Path(target_path)
+                    )
                     node_map[target_path] = {
                         "path": target_path,
                         "language": _file_language(target_file),
-                        "line_count": _line_count(target_file) if target_file.is_file() else 0,
+                        "line_count": _line_count(target_file)
+                        if target_file.is_file()
+                        else 0,
                         "imports": [],
                     }
                     seen_nodes.add(target_path)
@@ -111,7 +124,9 @@ def _extract_import_edges(root: Path, path: Path) -> list[dict[str, Any]]:
     return []
 
 
-def _extract_python_import_edges(root: Path, source_path: Path, text: str) -> list[dict[str, Any]]:
+def _extract_python_import_edges(
+    root: Path, source_path: Path, text: str
+) -> list[dict[str, Any]]:
     edges: list[dict[str, Any]] = []
     try:
         tree = ast.parse(text)
@@ -120,27 +135,62 @@ def _extract_python_import_edges(root: Path, source_path: Path, text: str) -> li
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for item in node.names:
-                edges.extend(_normalize_python_import(root, source_path, item.name, item.asname, 0, raw=f"import {item.name}"))
+                edges.extend(
+                    _normalize_python_import(
+                        root,
+                        source_path,
+                        item.name,
+                        item.asname,
+                        0,
+                        raw=f"import {item.name}",
+                    )
+                )
         elif isinstance(node, ast.ImportFrom):
             if node.module is None and node.level <= 0:
                 continue
             module_name = node.module or ""
             if node.level == 0:
-                edges.extend(_normalize_python_import(root, source_path, module_name, None, node.level, raw=f"from {module_name or '*'} import ..."))
+                edges.extend(
+                    _normalize_python_import(
+                        root,
+                        source_path,
+                        module_name,
+                        None,
+                        node.level,
+                        raw=f"from {module_name or '*'} import ...",
+                    )
+                )
             else:
                 for alias in node.names:
                     alias_name = alias.name
                     if node.module:
-                        target_name = f"{node.module}.{alias_name}" if alias_name != "*" else node.module
+                        target_name = (
+                            f"{node.module}.{alias_name}"
+                            if alias_name != "*"
+                            else node.module
+                        )
                     else:
                         target_name = alias_name
-                    edges.extend(_normalize_python_import(root, source_path, target_name, alias.asname, node.level, raw=f"from {('.' * node.level)}{node.module or ''} import {alias_name}"))
+                    edges.extend(
+                        _normalize_python_import(
+                            root,
+                            source_path,
+                            target_name,
+                            alias.asname,
+                            node.level,
+                            raw=f"from {('.' * node.level)}{node.module or ''} import {alias_name}",
+                        )
+                    )
     return edges
 
 
-def _extract_node_import_edges(root: Path, source_path: Path, text: str) -> list[dict[str, Any]]:
+def _extract_node_import_edges(
+    root: Path, source_path: Path, text: str
+) -> list[dict[str, Any]]:
     patterns = [
-        re.compile(r"""(?mx)^\s*import\s+(?:[^'";]*?from\s+)?['\"](?P<spec>[^'"]+)['\"]"""),
+        re.compile(
+            r"""(?mx)^\s*import\s+(?:[^'";]*?from\s+)?['\"](?P<spec>[^'"]+)['\"]"""
+        ),
         re.compile(r"""\brequire\s*\(\s*['"](?P<spec>[^'"]+)['"]\s*\)"""),
         re.compile(r"""(?mx)^\s*import\s*\(\s*['"](?P<spec>[^'"]+)['"]\s*\)"""),
     ]
@@ -148,33 +198,78 @@ def _extract_node_import_edges(root: Path, source_path: Path, text: str) -> list
     for pattern in patterns:
         for match in pattern.finditer(text):
             spec = str(match.group("spec") or "")
-            edges.extend(_normalize_node_import(root, source_path, spec, raw=match.group(0)))
+            edges.extend(
+                _normalize_node_import(root, source_path, spec, raw=match.group(0))
+            )
     return edges
 
 
-def _normalize_python_import(root: Path, source_file: Path, module_name: str, alias: str | None, level: int, raw: str) -> list[dict[str, Any]]:
+def _normalize_python_import(
+    root: Path,
+    source_file: Path,
+    module_name: str,
+    alias: str | None,
+    level: int,
+    raw: str,
+) -> list[dict[str, Any]]:
     if not module_name and not alias:
         return []
     target = _resolve_python_import_target(root, source_file, module_name, level)
     if target:
-        return [{"target": target, "target_kind": "local_python", "target_is_local": True, "edge_type": "import", "raw": raw}]
+        return [
+            {
+                "target": target,
+                "target_kind": "local_python",
+                "target_is_local": True,
+                "edge_type": "import",
+                "raw": raw,
+            }
+        ]
     cleaned = module_name or ""
     if alias:
         cleaned = f"{cleaned} as {alias}" if alias else cleaned
-    return [{"target": cleaned, "target_kind": "external_or_unresolved", "target_is_local": False, "edge_type": "import", "raw": raw}]
+    return [
+        {
+            "target": cleaned,
+            "target_kind": "external_or_unresolved",
+            "target_is_local": False,
+            "edge_type": "import",
+            "raw": raw,
+        }
+    ]
 
 
-def _normalize_node_import(root: Path, source_file: Path, spec: str, raw: str) -> list[dict[str, Any]]:
+def _normalize_node_import(
+    root: Path, source_file: Path, spec: str, raw: str
+) -> list[dict[str, Any]]:
     spec = spec.strip()
     if not spec or spec in {"react", "react-dom"}:
         return []
     target = _resolve_node_import_target(root, source_file, spec)
     if target:
-        return [{"target": target, "target_kind": "local_node", "target_is_local": True, "edge_type": "import", "raw": raw}]
-    return [{"target": spec, "target_kind": "external_or_unresolved", "target_is_local": False, "edge_type": "import", "raw": raw}]
+        return [
+            {
+                "target": target,
+                "target_kind": "local_node",
+                "target_is_local": True,
+                "edge_type": "import",
+                "raw": raw,
+            }
+        ]
+    return [
+        {
+            "target": spec,
+            "target_kind": "external_or_unresolved",
+            "target_is_local": False,
+            "edge_type": "import",
+            "raw": raw,
+        }
+    ]
 
 
-def _resolve_python_import_target(root: Path, source_file: Path, module_name: str, level: int) -> str:
+def _resolve_python_import_target(
+    root: Path, source_file: Path, module_name: str, level: int
+) -> str:
     module_name = module_name.strip()
     if not module_name and level <= 0:
         return ""

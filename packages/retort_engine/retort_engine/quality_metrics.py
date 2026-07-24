@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from retort_engine.quality_policy import TEST_TO_SOURCE_HEALTHY_RATIO, test_source_ratio_status
+from retort_engine.quality_policy import (
+    TEST_TO_SOURCE_HEALTHY_RATIO,
+    test_source_ratio_status,
+)
 
 
 GENERATED_ABSORPTION_NAMES = {
@@ -19,8 +22,21 @@ GENERATED_ABSORPTION_NAMES = {
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 
 
-def test_code_health(root: Path, *, latest: dict[str, Any] | None = None) -> dict[str, Any]:
-    files = project_files(root, {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"})
+def test_code_health(
+    root: Path, *, latest: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    files = project_files(
+        root,
+        {
+            ".git",
+            ".retort",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            ".pytest_cache",
+            ".ruff_cache",
+        },
+    )
     source_lines = 0
     test_lines = 0
     source_files = 0
@@ -46,19 +62,33 @@ def test_code_health(root: Path, *, latest: dict[str, Any] | None = None) -> dic
         "test_to_source_ratio_target": TEST_TO_SOURCE_HEALTHY_RATIO,
         "test_to_source_ratio_status": test_source_ratio_status(ratio),
         "latest_changed_file_count": latest_health["latest_changed_file_count"],
-        "latest_changed_source_file_count": latest_health["latest_changed_source_file_count"],
-        "latest_changed_test_file_count": latest_health["latest_changed_test_file_count"],
-        "latest_changed_other_file_count": latest_health["latest_changed_other_file_count"],
-        "latest_changed_source_line_count": latest_health["latest_changed_source_line_count"],
-        "latest_changed_test_line_count": latest_health["latest_changed_test_line_count"],
+        "latest_changed_source_file_count": latest_health[
+            "latest_changed_source_file_count"
+        ],
+        "latest_changed_test_file_count": latest_health[
+            "latest_changed_test_file_count"
+        ],
+        "latest_changed_other_file_count": latest_health[
+            "latest_changed_other_file_count"
+        ],
+        "latest_changed_source_line_count": latest_health[
+            "latest_changed_source_line_count"
+        ],
+        "latest_changed_test_line_count": latest_health[
+            "latest_changed_test_line_count"
+        ],
         "latest_test_to_source_ratio": latest_health["latest_test_to_source_ratio"],
         "latest_test_to_source_ratio_target": TEST_TO_SOURCE_HEALTHY_RATIO,
-        "latest_test_to_source_ratio_status": test_source_ratio_status(latest_health["latest_test_to_source_ratio"]),
+        "latest_test_to_source_ratio_status": test_source_ratio_status(
+            latest_health["latest_test_to_source_ratio"]
+        ),
         "latest_code_graph_proof_path": latest_health["latest_code_graph_proof_path"],
     }
 
 
-def latest_absorption_change_health(root: Path, latest: dict[str, Any]) -> dict[str, Any]:
+def latest_absorption_change_health(
+    root: Path, latest: dict[str, Any]
+) -> dict[str, Any]:
     changed_files = [str(item) for item in latest.get("changed_files") or []]
     source_files: list[str] = []
     test_files: list[str] = []
@@ -128,12 +158,18 @@ def is_generated_absorption_file(rel: str) -> bool:
 
 def is_behavior_test_file(rel: str) -> bool:
     path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
+    return path.suffix.lower() in BEHAVIOR_SUFFIXES and (
+        "tests" in path.parts or path.name.startswith("test_")
+    )
 
 
 def is_project_behavior_source_file(rel: str) -> bool:
     path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and not is_generated_absorption_file(rel) and not is_behavior_test_file(rel)
+    return (
+        path.suffix.lower() in BEHAVIOR_SUFFIXES
+        and not is_generated_absorption_file(rel)
+        and not is_behavior_test_file(rel)
+    )
 
 
 def code_line_count(path: Path) -> int:

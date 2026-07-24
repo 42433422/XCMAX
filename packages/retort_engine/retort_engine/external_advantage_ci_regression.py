@@ -21,9 +21,17 @@ def build_external_advantage_ci_regression(
     matrix = build_external_advantage_matrix(root, min_cases=min_cases)
     summary = matrix.get("summary") if isinstance(matrix.get("summary"), dict) else {}
     rows = [row for row in matrix.get("matrix") or [] if isinstance(row, dict)]
-    regression_cases = [_case_regression(row, min_blind_delta=min_blind_delta) for row in rows]
+    regression_cases = [
+        _case_regression(row, min_blind_delta=min_blind_delta) for row in rows
+    ]
     passed_cases = [case for case in regression_cases if case["passed"]]
-    source_projects = sorted({str(row.get("source_project") or "") for row in rows if row.get("source_project")})
+    source_projects = sorted(
+        {
+            str(row.get("source_project") or "")
+            for row in rows
+            if row.get("source_project")
+        }
+    )
     result_summary = {
         "case_count": len(regression_cases),
         "min_case_count": min_cases,
@@ -34,12 +42,23 @@ def build_external_advantage_ci_regression(
         "matrix_ready_cases": summary.get("ready_case_count", 0),
         "matrix_case_count": summary.get("case_count", 0),
         "matrix_score_delta": summary.get("score_delta", 0),
-        "blind_third_party_minimum_delta": summary.get("blind_third_party_minimum_delta", 0),
+        "blind_third_party_minimum_delta": summary.get(
+            "blind_third_party_minimum_delta", 0
+        ),
         "blind_delta_floor": min_blind_delta,
-        "blind_delta_floor_met": int(summary.get("blind_third_party_minimum_delta") or 0) >= min_blind_delta,
-        "blind_score_fields_consumed": summary.get("blind_third_party_score_fields_consumed", True),
-        "all_direct_review_regressions_verified": summary.get("all_delta_regressions_verified") is True,
-        "all_cases_have_ci_acceptance": bool(regression_cases) and len(passed_cases) == len(regression_cases),
+        "blind_delta_floor_met": int(
+            summary.get("blind_third_party_minimum_delta") or 0
+        )
+        >= min_blind_delta,
+        "blind_score_fields_consumed": summary.get(
+            "blind_third_party_score_fields_consumed", True
+        ),
+        "all_direct_review_regressions_verified": summary.get(
+            "all_delta_regressions_verified"
+        )
+        is True,
+        "all_cases_have_ci_acceptance": bool(regression_cases)
+        and len(passed_cases) == len(regression_cases),
         "ci_command": "retort external-advantage-ci-regression --project <project>",
         "duration_sec": round(time.monotonic() - started, 3),
     }
@@ -68,7 +87,10 @@ def build_external_advantage_ci_regression(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -81,7 +103,8 @@ def _case_regression(row: dict[str, Any], *, min_blind_delta: int) -> dict[str, 
         "direct_severity_matched": retort.get("severity_matched") is True,
         "publishable_comment": int(retort.get("publishable_comment_count") or 0) > 0,
         "task_group_materialized": int(retort.get("task_group_count") or 0) > 0,
-        "extension_policy_applied": int(retort.get("extension_policy_known_count") or 0) > 0,
+        "extension_policy_applied": int(retort.get("extension_policy_known_count") or 0)
+        > 0,
     }
     return {
         "case_id": str(row.get("case_id") or ""),

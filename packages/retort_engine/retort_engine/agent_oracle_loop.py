@@ -28,7 +28,10 @@ def run_agent_oracle_loop(
 
     def planner(_objective: str, trajectory: list[dict[str, Any]]) -> dict[str, Any]:
         if not trajectory:
-            return {"phase": "process_probe", "command": [sys.executable, "-c", "print('retort-oracle-probe')"]}
+            return {
+                "phase": "process_probe",
+                "command": [sys.executable, "-c", "print('retort-oracle-probe')"],
+            }
         if len(trajectory) == 1:
             return {"phase": "heldout_oracle", "command": ["heldout_oracle"]}
         return {"phase": "done", "command": ["done"]}
@@ -38,9 +41,14 @@ def run_agent_oracle_loop(
         if phase == "process_probe":
             command = action.get("command")
             if isinstance(command, list):
-                probe = run_command_with_process_group([str(item) for item in command], timeout_sec=10.0)
+                probe = run_command_with_process_group(
+                    [str(item) for item in command], timeout_sec=10.0
+                )
             else:
-                probe = run_command_with_process_group([sys.executable, "-c", "print('retort-oracle-probe')"], timeout_sec=10.0)
+                probe = run_command_with_process_group(
+                    [sys.executable, "-c", "print('retort-oracle-probe')"],
+                    timeout_sec=10.0,
+                )
             state["probe"] = probe
             return {
                 "ok": int(probe.get("returncode") or 1) == 0,
@@ -62,8 +70,13 @@ def run_agent_oracle_loop(
         return {"ok": True, "returncode": 0, "phase": phase}
 
     def judge(_objective: str, trajectory: list[dict[str, Any]]) -> dict[str, Any]:
-        resolved = bool((state.get("oracle") or {}).get("summary", {}).get("all_resolved"))
-        probed = any(row.get("observation", {}).get("phase") == "process_probe" for row in trajectory)
+        resolved = bool(
+            (state.get("oracle") or {}).get("summary", {}).get("all_resolved")
+        )
+        probed = any(
+            row.get("observation", {}).get("phase") == "process_probe"
+            for row in trajectory
+        )
         return {
             "complete": resolved and probed,
             "score": 100.0 if resolved and probed else 0.0,
@@ -85,9 +98,13 @@ def run_agent_oracle_loop(
         "summary": {
             "completed": loop.get("status") == "complete",
             "loop_status": loop.get("status"),
-            "oracle_all_resolved": bool((state.get("oracle") or {}).get("summary", {}).get("all_resolved")),
+            "oracle_all_resolved": bool(
+                (state.get("oracle") or {}).get("summary", {}).get("all_resolved")
+            ),
             "process_group_runner": True,
-            "process_group_killed": bool((state.get("probe") or {}).get("process_group_killed")),
+            "process_group_killed": bool(
+                (state.get("probe") or {}).get("process_group_killed")
+            ),
             "step_count": (loop.get("summary") or {}).get("step_count"),
         },
         "oracle": state.get("oracle") or {},

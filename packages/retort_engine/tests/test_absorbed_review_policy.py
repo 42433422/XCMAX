@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from retort_engine.absorbed_review_policy import absorbed_review_policy, policy_context_rank_weight, policy_context_rank_weights, policy_summary
+from retort_engine.absorbed_review_policy import (
+    absorbed_review_policy,
+    policy_context_rank_weight,
+    policy_context_rank_weights,
+    policy_summary,
+)
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/alibaba/open-code-review'
+EXPECTED_ABSORPTION_SOURCE = "https://github.com/alibaba/open-code-review"
 
 
 def test_absorbed_review_policy_changes_ranking_weights() -> None:

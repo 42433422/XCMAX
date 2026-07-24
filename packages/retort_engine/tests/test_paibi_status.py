@@ -25,7 +25,20 @@ def test_summarize_task_extracts_scores_from_subtask_logs() -> None:
                     "progress": 100,
                     "logs": [
                         {"content": "starting"},
-                        {"content": json.dumps({"score_suggestion": 83, "scores": [{"dimension": "calibrated_overall", "value": 83, "reason": "ok"}]})},
+                        {
+                            "content": json.dumps(
+                                {
+                                    "score_suggestion": 83,
+                                    "scores": [
+                                        {
+                                            "dimension": "calibrated_overall",
+                                            "value": 83,
+                                            "reason": "ok",
+                                        }
+                                    ],
+                                }
+                            )
+                        },
                     ],
                 }
             ],
@@ -54,7 +67,9 @@ def test_extract_last_json_object_keeps_last_scored_candidate() -> None:
     middle = {"other": "ignored unless no scored payload"}
     last = {"score_suggestion": 91}
 
-    result = _extract_last_json_object(f"{json.dumps(first)}\n{json.dumps(middle)}\n{json.dumps(last)}")
+    result = _extract_last_json_object(
+        f"{json.dumps(first)}\n{json.dumps(middle)}\n{json.dumps(last)}"
+    )
 
     assert result == last
 
@@ -66,7 +81,9 @@ def test_extract_last_json_object_falls_back_to_last_plain_object() -> None:
 
 
 def test_extract_last_json_object_ignores_incomplete_json() -> None:
-    result = _extract_last_json_object('{"score_suggestion": 70\n{"score_suggestion": 82}')
+    result = _extract_last_json_object(
+        '{"score_suggestion": 70\n{"score_suggestion": 82}'
+    )
 
     assert result == {"score_suggestion": 82}
 
@@ -75,7 +92,12 @@ def test_normalize_scores_clamps_values_and_filters_dimensions() -> None:
     scores = normalize_llm_scores(
         {
             "scores": [
-                {"dimension": "calibrated_overall", "value": 111, "reason": "too high", "evidence": ["x"]},
+                {
+                    "dimension": "calibrated_overall",
+                    "value": 111,
+                    "reason": "too high",
+                    "evidence": ["x"],
+                },
                 {"dimension": "unknown", "value": 50},
                 {"dimension": "product_level", "value": -5},
                 {"dimension": "architecture_depth", "value": "bad"},
@@ -84,8 +106,18 @@ def test_normalize_scores_clamps_values_and_filters_dimensions() -> None:
     )
 
     assert scores == [
-        {"dimension": "calibrated_overall", "value": 100.0, "reason": "too high", "evidence": ["x"]},
-        {"dimension": "product_level", "value": 0.0, "reason": "LLM score from Retort scoring prompt.", "evidence": []},
+        {
+            "dimension": "calibrated_overall",
+            "value": 100.0,
+            "reason": "too high",
+            "evidence": ["x"],
+        },
+        {
+            "dimension": "product_level",
+            "value": 0.0,
+            "reason": "LLM score from Retort scoring prompt.",
+            "evidence": [],
+        },
     ]
 
 
@@ -133,7 +165,11 @@ def test_summarize_task_marks_zero_progress_dispatch_wait_as_stale() -> None:
                         "title": "Retort scoring",
                         "status": "running",
                         "progress": 0,
-                        "logs": [{"content": "依赖已满足，等待派发。 未提供远程仓库，将使用工作设备本地目录"}],
+                        "logs": [
+                            {
+                                "content": "依赖已满足，等待派发。 未提供远程仓库，将使用工作设备本地目录"
+                            }
+                        ],
                     }
                 ],
             }
@@ -152,7 +188,14 @@ def test_blocker_detection_classifies_executor_missing() -> None:
         {
             "status": "running",
             "logs_excerpt": "",
-            "subtasks": [{"id": "sub-1", "status": "failed", "blocked": True, "last_error": "缺少自动改码执行器"}],
+            "subtasks": [
+                {
+                    "id": "sub-1",
+                    "status": "failed",
+                    "blocked": True,
+                    "last_error": "缺少自动改码执行器",
+                }
+            ],
         }
     )
 
@@ -209,9 +252,18 @@ def test_blocker_detection_classifies_timeout() -> None:
 
 
 def test_blocker_detection_adds_task_level_failure() -> None:
-    blockers = analyze_task_blockers({"task_id": "task-1", "status": "failed", "subtasks": []})
+    blockers = analyze_task_blockers(
+        {"task_id": "task-1", "status": "failed", "subtasks": []}
+    )
 
-    assert blockers == [{"kind": "task_blocked", "action": "inspect_task_logs_and_retry", "task_id": "task-1", "status": "failed"}]
+    assert blockers == [
+        {
+            "kind": "task_blocked",
+            "action": "inspect_task_logs_and_retry",
+            "task_id": "task-1",
+            "status": "failed",
+        }
+    ]
 
 
 def test_parallel_summary_counts_statuses_and_devices() -> None:
@@ -245,7 +297,9 @@ def test_unblock_tasks_generate_targeted_acceptance() -> None:
 
     tasks = unblock_tasks_from_blockers(blockers)
 
-    assert [task["task_id"] for task in tasks] == [f"para-unblock-{index:02d}" for index in range(1, 8)]
+    assert [task["task_id"] for task in tasks] == [
+        f"para-unblock-{index:02d}" for index in range(1, 8)
+    ]
     assert {task["owner_hint"] for task in tasks} == {"runtime", "scheduler"}
     assert "离线" in tasks[0]["title"]
     assert "执行器" in tasks[1]["title"]

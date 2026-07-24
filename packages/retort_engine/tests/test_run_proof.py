@@ -3,15 +3,38 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from retort_engine.run_proof import build_absorption_run_proof, write_absorption_run_proof
+from retort_engine.run_proof import (
+    build_absorption_run_proof,
+    write_absorption_run_proof,
+)
 
 
-def test_absorption_run_proof_binds_scores_core_graph_tests_and_llm(tmp_path: Path) -> None:
+def test_absorption_run_proof_binds_scores_core_graph_tests_and_llm(
+    tmp_path: Path,
+) -> None:
     graph_path = tmp_path / "docs" / "retort_code_graph_proof_run-1.json"
     graph_path.parent.mkdir(parents=True)
-    graph_path.write_text(json.dumps({"run_id": "run-1", "node_count": 3, "edge_count": 2, "changed_file_count": 2}), encoding="utf-8")
-    pre = {"project": str(tmp_path), "scores": [{"dimension": "calibrated_overall", "value": 70}], "metadata": {"score_source": "paibi_llm"}}
-    external = {"project": "upstream", "scores": [{"dimension": "calibrated_overall", "value": 91}], "metadata": {"score_source": "paibi_llm"}}
+    graph_path.write_text(
+        json.dumps(
+            {
+                "run_id": "run-1",
+                "node_count": 3,
+                "edge_count": 2,
+                "changed_file_count": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    pre = {
+        "project": str(tmp_path),
+        "scores": [{"dimension": "calibrated_overall", "value": 70}],
+        "metadata": {"score_source": "paibi_llm"},
+    }
+    external = {
+        "project": "upstream",
+        "scores": [{"dimension": "calibrated_overall", "value": 91}],
+        "metadata": {"score_source": "paibi_llm"},
+    }
     own = {
         "project": str(tmp_path),
         "scores": [{"dimension": "calibrated_overall", "value": 84}],
@@ -36,7 +59,11 @@ def test_absorption_run_proof_binds_scores_core_graph_tests_and_llm(tmp_path: Pa
         "run_id": "run-1",
         "status": "applied",
         "gates_passed": True,
-        "changed_files": [str(tmp_path / "retort_engine" / "core.py"), str(tmp_path / "tests" / "test_core.py"), str(tmp_path / "docs" / "retort_external_review_report.json")],
+        "changed_files": [
+            str(tmp_path / "retort_engine" / "core.py"),
+            str(tmp_path / "tests" / "test_core.py"),
+            str(tmp_path / "docs" / "retort_external_review_report.json"),
+        ],
         "gates": [{"ok": True}, {"ok": True}],
         "code_graph_proof_path": str(graph_path),
     }
@@ -51,7 +78,13 @@ def test_absorption_run_proof_binds_scores_core_graph_tests_and_llm(tmp_path: Pa
         tasks=[{"task_id": "task-a", "dimension": "architecture_depth"}],
         execution=execution,
         branch_state={"status": "merged"},
-        absorption_state={"closed_loop_proof": {"verified": True, "flags": {"merge_verified": True}, "missing": []}},
+        absorption_state={
+            "closed_loop_proof": {
+                "verified": True,
+                "flags": {"merge_verified": True},
+                "missing": [],
+            }
+        },
         llm_review={"dispatch": {"task_id": "task-1", "status": "accepted"}},
     )
     path = write_absorption_run_proof(tmp_path, proof)

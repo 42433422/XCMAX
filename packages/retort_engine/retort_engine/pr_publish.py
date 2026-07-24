@@ -8,17 +8,26 @@ from typing import Any
 from retort_engine.review_calibration_policy import calibration_summary
 
 
-def build_publish_dry_run(review_report_path: str | Path, *, max_comments: int = 50) -> dict[str, Any]:
+def build_publish_dry_run(
+    review_report_path: str | Path, *, max_comments: int = 50
+) -> dict[str, Any]:
     report_path = Path(review_report_path)
     report = json.loads(report_path.read_text(encoding="utf-8"))
     review = report.get("review") if isinstance(report.get("review"), dict) else {}
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     calibration = calibration_summary()
-    publishable = [item for item in comments if item.get("publishable", True) is not False and str(item.get("file") or item.get("path") or "")]
+    publishable = [
+        item
+        for item in comments
+        if item.get("publishable", True) is not False
+        and str(item.get("file") or item.get("path") or "")
+    ]
     ranked = _rank_publish_candidates(publishable)
     selected = _dedupe_comments(ranked)[: max(1, max_comments)]
     payload_comments = [_publish_comment(comment) for comment in selected]
-    idempotency_key = _idempotency_key(str(report.get("pr_url") or ""), payload_comments)
+    idempotency_key = _idempotency_key(
+        str(report.get("pr_url") or ""), payload_comments
+    )
     return {
         "status": "dry_run_ready",
         "pr_url": str(report.get("pr_url") or ""),
@@ -56,7 +65,9 @@ def run_publish_sandbox(
 ) -> dict[str, Any]:
     dry_run_path = Path(publish_dry_run_path)
     dry_run = json.loads(dry_run_path.read_text(encoding="utf-8"))
-    comments = [item for item in dry_run.get("comments") or [] if isinstance(item, dict)]
+    comments = [
+        item for item in dry_run.get("comments") or [] if isinstance(item, dict)
+    ]
     idempotency_key = str((dry_run.get("summary") or {}).get("idempotency_key") or "")
     permission_state = permissions or {"pull_request_write": True}
     if not permission_state.get("pull_request_write", False):
@@ -73,19 +84,41 @@ def run_publish_sandbox(
             },
             "created_receipts": [],
             "rollback_receipts": [],
-            "evidence": {"degraded_without_write": True, "required_permission": "pull_request_write"},
+            "evidence": {
+                "degraded_without_write": True,
+                "required_permission": "pull_request_write",
+            },
         }
-    created = [_sandbox_receipt(str(dry_run.get("pr_url") or ""), idempotency_key, comment) for comment in comments]
+    created = [
+        _sandbox_receipt(str(dry_run.get("pr_url") or ""), idempotency_key, comment)
+        for comment in comments
+    ]
     failed = fail_rollback_ids or set()
-    rolled_back = [{**item, "deleted": item["comment_id"] not in failed, "rollback_error": "simulated_delete_failed" if item["comment_id"] in failed else ""} for item in created]
-    rollback_verified = bool(len(created) == len(rolled_back) and all(item.get("deleted") for item in rolled_back))
+    rolled_back = [
+        {
+            **item,
+            "deleted": item["comment_id"] not in failed,
+            "rollback_error": "simulated_delete_failed"
+            if item["comment_id"] in failed
+            else "",
+        }
+        for item in created
+    ]
+    rollback_verified = bool(
+        len(created) == len(rolled_back)
+        and all(item.get("deleted") for item in rolled_back)
+    )
     return {
-        "status": "sandbox_rolled_back" if rollback_verified else "sandbox_rollback_failed",
+        "status": "sandbox_rolled_back"
+        if rollback_verified
+        else "sandbox_rollback_failed",
         "pr_url": str(dry_run.get("pr_url") or ""),
         "source_dry_run": str(dry_run_path),
         "summary": {
             "created_comment_count": len(created),
-            "rolled_back_comment_count": sum(1 for item in rolled_back if item.get("deleted")),
+            "rolled_back_comment_count": sum(
+                1 for item in rolled_back if item.get("deleted")
+            ),
             "rollback_verified": rollback_verified,
             "permission_denied": False,
             "idempotency_key": idempotency_key,
@@ -96,24 +129,40 @@ def run_publish_sandbox(
 
 
 def _publish_comment(comment: dict[str, Any]) -> dict[str, Any]:
-    payload = comment.get("publish_payload") if isinstance(comment.get("publish_payload"), dict) else {}
+    payload = (
+        comment.get("publish_payload")
+        if isinstance(comment.get("publish_payload"), dict)
+        else {}
+    )
     return {
-        "path": str(payload.get("path") or comment.get("file") or comment.get("path") or ""),
+        "path": str(
+            payload.get("path") or comment.get("file") or comment.get("path") or ""
+        ),
         "line": int(payload.get("line") or comment.get("line") or 1),
         "side": str(payload.get("side") or "RIGHT"),
-        "body": str(payload.get("body") or comment.get("message") or comment.get("body") or ""),
+        "body": str(
+            payload.get("body") or comment.get("message") or comment.get("body") or ""
+        ),
         "severity": str(comment.get("severity") or "info"),
         "strategy": str(comment.get("strategy") or "semantic_review"),
     }
 
 
 def _idempotency_key(pr_url: str, comments: list[dict[str, Any]]) -> str:
-    payload = json.dumps({"pr_url": pr_url, "comments": comments}, ensure_ascii=False, sort_keys=True)
+    payload = json.dumps(
+        {"pr_url": pr_url, "comments": comments}, ensure_ascii=False, sort_keys=True
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _sandbox_receipt(pr_url: str, idempotency_key: str, comment: dict[str, Any]) -> dict[str, Any]:
-    payload = json.dumps({"pr_url": pr_url, "key": idempotency_key, "comment": comment}, ensure_ascii=False, sort_keys=True)
+def _sandbox_receipt(
+    pr_url: str, idempotency_key: str, comment: dict[str, Any]
+) -> dict[str, Any]:
+    payload = json.dumps(
+        {"pr_url": pr_url, "key": idempotency_key, "comment": comment},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
     return {
         "comment_id": hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12],
         "path": str(comment.get("path") or ""),
@@ -128,7 +177,11 @@ def _dedupe_comments(comments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[tuple[str, int, str]] = set()
     for comment in comments:
         payload = _publish_comment(comment)
-        key = (str(payload.get("path") or ""), int(payload.get("line") or 0), str(payload.get("body") or ""))
+        key = (
+            str(payload.get("path") or ""),
+            int(payload.get("line") or 0),
+            str(payload.get("body") or ""),
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -141,7 +194,9 @@ def _rank_publish_candidates(comments: list[dict[str, Any]]) -> list[dict[str, A
         comments,
         key=lambda comment: (
             -int(comment.get("rank_score") or 0),
-            {"high": 0, "medium": 1, "low": 2, "info": 3}.get(str(comment.get("severity") or "info"), 4),
+            {"high": 0, "medium": 1, "low": 2, "info": 3}.get(
+                str(comment.get("severity") or "info"), 4
+            ),
             str(comment.get("file") or comment.get("path") or ""),
             int(comment.get("line") or 0),
         ),

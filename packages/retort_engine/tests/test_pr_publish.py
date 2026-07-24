@@ -16,10 +16,33 @@ def test_build_publish_dry_run_converts_review_comments(tmp_path: Path) -> None:
                 "diff_url": "https://github.com/acme/repo/pull/1.diff",
                 "review": {
                     "comments": [
-                        {"file": "app.py", "line": 3, "message": "Fix token handling.", "severity": "high", "strategy": "security"},
-                        {"file": "app.py", "line": 5, "message": "Remove debug print.", "severity": "low", "strategy": "noise"},
-                        {"file": "app.py", "line": 5, "message": "Remove debug print.", "severity": "low", "strategy": "noise"},
-                        {"file": "", "line": 1, "message": "file summary", "publishable": False},
+                        {
+                            "file": "app.py",
+                            "line": 3,
+                            "message": "Fix token handling.",
+                            "severity": "high",
+                            "strategy": "security",
+                        },
+                        {
+                            "file": "app.py",
+                            "line": 5,
+                            "message": "Remove debug print.",
+                            "severity": "low",
+                            "strategy": "noise",
+                        },
+                        {
+                            "file": "app.py",
+                            "line": 5,
+                            "message": "Remove debug print.",
+                            "severity": "low",
+                            "strategy": "noise",
+                        },
+                        {
+                            "file": "",
+                            "line": 1,
+                            "message": "file summary",
+                            "publishable": False,
+                        },
                     ]
                 },
             },
@@ -43,7 +66,9 @@ def test_build_publish_dry_run_converts_review_comments(tmp_path: Path) -> None:
     assert validate_contract("pr_publish_dry_run_result", result)["valid"] is True
 
 
-def test_build_publish_dry_run_uses_rank_score_before_original_order(tmp_path: Path) -> None:
+def test_build_publish_dry_run_uses_rank_score_before_original_order(
+    tmp_path: Path,
+) -> None:
     review_file = tmp_path / "review.json"
     review_file.write_text(
         json.dumps(
@@ -52,8 +77,20 @@ def test_build_publish_dry_run_uses_rank_score_before_original_order(tmp_path: P
                 "diff_url": "https://github.com/acme/repo/pull/2.diff",
                 "review": {
                     "comments": [
-                        {"file": "app.py", "line": 1, "message": "Low priority.", "severity": "low", "rank_score": 10},
-                        {"file": "app.py", "line": 2, "message": "High calibrated priority.", "severity": "medium", "rank_score": 900},
+                        {
+                            "file": "app.py",
+                            "line": 1,
+                            "message": "Low priority.",
+                            "severity": "low",
+                            "rank_score": 10,
+                        },
+                        {
+                            "file": "app.py",
+                            "line": 2,
+                            "message": "High calibrated priority.",
+                            "severity": "medium",
+                            "rank_score": 900,
+                        },
                     ]
                 },
             },
@@ -75,7 +112,9 @@ def test_run_publish_sandbox_creates_and_rolls_back_receipts(tmp_path: Path) -> 
             {
                 "pr_url": "https://github.com/acme/repo/pull/1",
                 "summary": {"idempotency_key": "key-1"},
-                "comments": [{"path": "app.py", "line": 3, "body": "Fix token handling."}],
+                "comments": [
+                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
+                ],
             },
             ensure_ascii=False,
         ),
@@ -98,14 +137,18 @@ def test_run_publish_sandbox_degrades_without_write_permission(tmp_path: Path) -
             {
                 "pr_url": "https://github.com/acme/repo/pull/1",
                 "summary": {"idempotency_key": "key-1"},
-                "comments": [{"path": "app.py", "line": 3, "body": "Fix token handling."}],
+                "comments": [
+                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
+                ],
             },
             ensure_ascii=False,
         ),
         encoding="utf-8",
     )
 
-    result = run_publish_sandbox(dry_run_file, permissions={"pull_request_write": False})
+    result = run_publish_sandbox(
+        dry_run_file, permissions={"pull_request_write": False}
+    )
 
     assert result["status"] == "sandbox_permission_denied"
     assert result["summary"]["created_comment_count"] == 0
@@ -120,7 +163,9 @@ def test_run_publish_sandbox_records_rollback_failure(tmp_path: Path) -> None:
             {
                 "pr_url": "https://github.com/acme/repo/pull/1",
                 "summary": {"idempotency_key": "key-1"},
-                "comments": [{"path": "app.py", "line": 3, "body": "Fix token handling."}],
+                "comments": [
+                    {"path": "app.py", "line": 3, "body": "Fix token handling."}
+                ],
             },
             ensure_ascii=False,
         ),

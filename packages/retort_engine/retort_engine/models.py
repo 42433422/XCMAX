@@ -15,7 +15,12 @@ class Score:
         return self.value > threshold
 
     def to_dict(self) -> dict[str, Any]:
-        return {"dimension": self.dimension, "value": self.value, "reason": self.reason, "evidence": list(self.evidence)}
+        return {
+            "dimension": self.dimension,
+            "value": self.value,
+            "reason": self.reason,
+            "evidence": list(self.evidence),
+        }
 
 
 @dataclass(frozen=True)
@@ -36,10 +41,14 @@ class ProjectAssessment:
         return tuple(score for score in self.scores if not score.passes(threshold))
 
     def all_scores_over(self, threshold: float) -> bool:
-        return bool(self.scores) and all(score.passes(threshold) for score in self.scores)
+        return bool(self.scores) and all(
+            score.passes(threshold) for score in self.scores
+        )
 
     def score_signature(self) -> tuple[tuple[str, float], ...]:
-        return tuple(sorted((score.dimension, round(score.value, 4)) for score in self.scores))
+        return tuple(
+            sorted((score.dimension, round(score.value, 4)) for score in self.scores)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -61,7 +70,11 @@ class RetortQuestion:
     rationale: str
 
     def to_dict(self) -> dict[str, str]:
-        return {"dimension": self.dimension, "question": self.question, "rationale": self.rationale}
+        return {
+            "dimension": self.dimension,
+            "question": self.question,
+            "rationale": self.rationale,
+        }
 
 
 @dataclass(frozen=True)
@@ -124,7 +137,9 @@ class SelfEvolutionResult:
             "threshold": self.threshold,
             "max_rounds": self.max_rounds,
             "stop_reason": self.stop_reason,
-            "final_assessment": None if self.final_assessment is None else self.final_assessment.to_dict(),
+            "final_assessment": None
+            if self.final_assessment is None
+            else self.final_assessment.to_dict(),
             "rounds": [round_.to_dict() for round_ in self.rounds],
         }
 
@@ -137,7 +152,12 @@ class ExternalProjectRef:
     ref: str = ""
 
     def to_dict(self) -> dict[str, str]:
-        return {"source": self.source, "source_type": self.source_type, "local_path": self.local_path, "ref": self.ref}
+        return {
+            "source": self.source,
+            "source_type": self.source_type,
+            "local_path": self.local_path,
+            "ref": self.ref,
+        }
 
 
 @dataclass(frozen=True)
@@ -179,7 +199,13 @@ class EmployeeTaskRecord:
     created_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"queue_id": self.queue_id, "task": self.task.to_dict(), "source": self.source, "status": self.status, "created_at": self.created_at}
+        return {
+            "queue_id": self.queue_id,
+            "task": self.task.to_dict(),
+            "source": self.source,
+            "status": self.status,
+            "created_at": self.created_at,
+        }
 
 
 @dataclass(frozen=True)
@@ -191,4 +217,10 @@ class EmployeeTaskResult:
     score_after: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"task_id": self.task_id, "status": self.status, "summary": self.summary, "evidence": list(self.evidence), "score_after": dict(self.score_after)}
+        return {
+            "task_id": self.task_id,
+            "status": self.status,
+            "summary": self.summary,
+            "evidence": list(self.evidence),
+            "score_after": dict(self.score_after),
+        }

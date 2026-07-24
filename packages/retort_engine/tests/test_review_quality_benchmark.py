@@ -7,7 +7,9 @@ from retort_engine.review_quality_benchmark import build_review_quality_benchmar
 
 
 def test_review_quality_benchmark_runs_curated_golden_set(tmp_path: Path) -> None:
-    result = build_review_quality_benchmark(tmp_path, sample_count=30, negative_sample_count=4)
+    result = build_review_quality_benchmark(
+        tmp_path, sample_count=30, negative_sample_count=4
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["sample_count"] == 34
@@ -19,9 +21,15 @@ def test_review_quality_benchmark_runs_curated_golden_set(tmp_path: Path) -> Non
     assert result["summary"]["negative_blocker_false_positive_count"] == 0
     assert result["summary"]["incremental_skip_verified_count"] == 5
     assert result["summary"]["aggregate_score"] == 100
-    assert result["summary"]["baseline_aggregate_score"] < result["summary"]["aggregate_score"]
+    assert (
+        result["summary"]["baseline_aggregate_score"]
+        < result["summary"]["aggregate_score"]
+    )
     assert result["summary"]["post_absorption_score_delta"] > 0
-    assert result["summary"]["publishable_comment_count"] >= result["summary"]["sample_count"]
+    assert (
+        result["summary"]["publishable_comment_count"]
+        >= result["summary"]["sample_count"]
+    )
     assert result["summary"]["cross_project_case_count"] == 6
     assert result["summary"]["cross_project_family_count"] == 6
     assert result["summary"]["cross_project_pass_rate"] == 1.0
@@ -29,11 +37,26 @@ def test_review_quality_benchmark_runs_curated_golden_set(tmp_path: Path) -> Non
     assert result["baseline_comparison"]["status"] == "improved"
     assert result["baseline_comparison"]["same_pr_set_replayed"] is True
     assert result["summary"]["macro_category_pass_rate"] == 1.0
-    assert result["evidence"]["aggregation"] == "lm_eval_style_task_category_macro_average"
-    assert result["evidence"]["cross_project_regression"] == "absorbed_project_families_replayed_against_same_review_path"
+    assert (
+        result["evidence"]["aggregation"] == "lm_eval_style_task_category_macro_average"
+    )
+    assert (
+        result["evidence"]["cross_project_regression"]
+        == "absorbed_project_families_replayed_against_same_review_path"
+    )
     assert result["category_summary"]["secret_detection"]["recall"] == 1.0
-    assert result["category_summary"]["incremental_review_detection"]["incremental_skip_verified_count"] == 5
-    assert result["category_summary"]["fake_fixture_key_no_blocker"]["false_positive_count"] == 0
+    assert (
+        result["category_summary"]["incremental_review_detection"][
+            "incremental_skip_verified_count"
+        ]
+        == 5
+    )
+    assert (
+        result["category_summary"]["fake_fixture_key_no_blocker"][
+            "false_positive_count"
+        ]
+        == 0
+    )
     assert result["cross_project_regression"]["status"] == "ready"
     assert set(result["cross_project_regression"]["family_summary"]) >= {
         "ai_pr_reviewer",
@@ -47,11 +70,16 @@ def test_review_quality_benchmark_runs_curated_golden_set(tmp_path: Path) -> Non
     assert validate_contract("review_quality_benchmark_result", result)["valid"] is True
 
 
-def test_review_quality_benchmark_defaults_to_eighty_sample_baseline(tmp_path: Path) -> None:
+def test_review_quality_benchmark_defaults_to_eighty_sample_baseline(
+    tmp_path: Path,
+) -> None:
     result = build_review_quality_benchmark(tmp_path, negative_sample_count=4)
 
     assert result["summary"]["sample_count"] == 84
     assert result["summary"]["target_positive_sample_count"] == 80
-    assert result["summary"]["baseline_aggregate_score"] < result["summary"]["aggregate_score"]
+    assert (
+        result["summary"]["baseline_aggregate_score"]
+        < result["summary"]["aggregate_score"]
+    )
     assert result["summary"]["post_absorption_score_delta"] > 0
     assert result["evidence"]["minimum_expected_samples"] == 80
