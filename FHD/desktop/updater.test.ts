@@ -161,6 +161,19 @@ describe('updater — same-version rebuild ordering', () => {
       }),
     ).toBe(false)
   })
+
+  it('rejects identical buildSha even when remote releaseDate is newer', async () => {
+    const { isSameVersionRebuildNewer } = await import('./updater.js')
+    const sha = 'c'.repeat(40)
+    expect(
+      isSameVersionRebuildNewer({
+        remoteSha: sha,
+        localSha: sha,
+        remoteReleaseDate: '2026-07-24T09:31:21.167Z',
+        localBuildTimeMs: Date.parse('2026-07-24T09:26:33.083Z'),
+      }),
+    ).toBe(false)
+  })
 })
 
 describe('updater — parseYamlField', () => {

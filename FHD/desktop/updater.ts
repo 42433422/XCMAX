@@ -176,27 +176,34 @@ function installSameVersionRebuildHook(): void {
   }
   rebuildHookInstalled = true
   // electron-updater 将 isUpdateAvailable 标为 private；经 unknown 注入同版本 buildSha 比对。
+  // 注意：新版 electron-updater 的 isUpdateAvailable 是 async，必须 await。
+  // 若把 Promise 对象当布尔值，Promise 恒为 truthy → 同版本也会永远「可更新」。
   const updater = autoUpdater as unknown as {
-    isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean
+    isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean | Promise<boolean>
   }
   const original = updater.isUpdateAvailable?.bind(autoUpdater)
-  updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
+  updater.isUpdateAvailable = async (updateInfo: UpdateInfo) => {
     // macOS auto-update must use a ZIP artifact; DMG-only feeds are not installable.
     if (process.platform === 'darwin' && !updateInfoHasMacZip(updateInfo)) {
       return false
     }
-    if (original?.(updateInfo)) {
-      return true
-    }
     const remoteSha = String(
       (updateInfo as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
     ).trim()
+    const localSha = readLocalBuildSha()
+    // 同一 Git 构建已装在本机：绝不再提示自更新。
+    if (remoteSha && localSha && remoteSha === localSha) {
+      return false
+    }
+    if (original && (await original(updateInfo))) {
+      return true
+    }
     const releaseDate = String(
       (updateInfo as UpdateInfo & { releaseDate?: string }).releaseDate || remoteReleaseDate || ''
     ).trim()
     return isSameVersionRebuildNewer({
       remoteSha,
-      localSha: readLocalBuildSha(),
+      localSha,
       remoteReleaseDate: releaseDate,
       localBuildTimeMs: readLocalBuildTimeMs(),
     })
