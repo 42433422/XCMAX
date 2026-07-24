@@ -55,6 +55,7 @@ export type KellaiConversationMessage = {
   direction: 'inbound' | 'outbound' | string
   content: string
   content_type?: string
+  metadata?: Record<string, unknown> | null
   read?: boolean
   created_at?: string
   stage?: string

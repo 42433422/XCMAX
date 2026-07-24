@@ -97,7 +97,18 @@
             >
               <div class="kellai-inbox__message">
                 <span>{{ message.direction === 'outbound' ? '我方' : message.contact_name || activeCustomer.display_name }}</span>
-                <p>{{ message.content }}</p>
+                <img
+                  v-if="messageImageSrc(message)"
+                  class="kellai-inbox__message-image"
+                  :src="messageImageSrc(message)"
+                  :alt="message.content || '客户图片'"
+                  loading="lazy"
+                  referrerpolicy="no-referrer"
+                />
+                <p v-else-if="isImagePlaceholder(message.content)" class="kellai-inbox__image-fallback">
+                  [图片]（暂无预览地址）
+                </p>
+                <p v-else>{{ message.content }}</p>
                 <footer>
                   <small>{{ message.channel_type || '客户渠道' }}</small>
                   <time>{{ formatTime(message.created_at) }}</time>
@@ -241,6 +252,10 @@ import kellaiBindingApi, {
   type KellaiFollowUpTask,
   type KellaiFollowUpMetrics,
 } from '@/api/kellaiBinding'
+import {
+  isKellaiImagePlaceholder,
+  resolveKellaiMessageImageSrc,
+} from '@/utils/kellaiMessageMedia'
 
 const binding = ref<KellaiBindingStatus>({ state: 'not_connected' })
 const dataStatus = ref<KellaiDataStatus | null>(null)
@@ -310,6 +325,14 @@ function formatTime(value?: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function messageImageSrc(message: KellaiConversationMessage): string {
+  return resolveKellaiMessageImageSrc(message)
+}
+
+function isImagePlaceholder(content?: string): boolean {
+  return isKellaiImagePlaceholder(String(content || ''))
 }
 
 function riskLabel(value: string): string {
@@ -629,6 +652,8 @@ onBeforeUnmount(() => {
 .kellai-inbox__message { max-width: min(72%, 620px); padding: 10px 12px; border: 1px solid #e6e9ef; border-radius: 10px; background: #fff; }
 .kellai-inbox__message-row.mine .kellai-inbox__message { border-color: #cfe1ff; background: #eaf2ff; }
 .kellai-inbox__message > span { color: #667085; font-size: 11px; }
+.kellai-inbox__message-image { display: block; margin: 6px 0; max-width: min(100%, 320px); max-height: 360px; border-radius: 8px; object-fit: contain; background: #f2f4f7; }
+.kellai-inbox__image-fallback { margin: 5px 0; color: #667085; font-size: 13px; }
 .kellai-inbox__message p { margin: 5px 0; color: #1f2329; line-height: 1.55; white-space: pre-wrap; }
 .kellai-inbox__message footer { display: flex; justify-content: space-between; gap: 16px; color: #98a2b3; font-size: 11px; }
 .kellai-inbox__ai-note { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px dashed #d9dfe8; color: #475467; font-size: 11px; }

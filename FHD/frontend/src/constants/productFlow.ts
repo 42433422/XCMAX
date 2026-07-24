@@ -28,6 +28,7 @@ export function readOnboardingReturnPath(raw: unknown): string {
   return '/'
 }
 
+/** 宿主入门仅三步；seed/first-ai 仅为旧 URL 兼容别名，会映射回 host-pack。 */
 export type ProductFlowStepId =
   | 'welcome'
   | 'host-pack'
@@ -37,12 +38,13 @@ export type ProductFlowStepId =
   | 'done'
 
 export interface ProductFlowStepMeta {
-  id: ProductFlowStepId
+  id: Exclude<ProductFlowStepId, 'seed-demo' | 'first-ai-task'>
   index: number
   title: string
   subtitle: string
 }
 
+/** 宿主入门步骤轨：1 认识 → 2 行业 → 3 准备菜单（随后进入对话） */
 export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   {
     id: 'welcome',
@@ -63,20 +65,8 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
   },
   {
-    id: 'seed-demo',
-    index: 4,
-    title: '首笔业务数据',
-    subtitle: '写入 1 个演示客户与 1 个演示产品，便于工作台验收',
-  },
-  {
-    id: 'first-ai-task',
-    index: 5,
-    title: 'AI 读写验收',
-    subtitle: '让 AI 列出刚创建的演示客户并总结，验证读写闭环',
-  },
-  {
     id: 'done',
-    index: 6,
+    index: 4,
     title: '开始使用',
     subtitle: '进入智能对话与日常操作',
   },
@@ -221,8 +211,10 @@ export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
   const s = String(raw || '').trim().toLowerCase()
   if (s === 'host-pack' || s === 'host') return 'host-pack'
   if (s === 'industry' || s === 'mod') return 'industry'
-  if (s === 'seed-demo' || s === 'seed') return 'seed-demo'
-  if (s === 'first-ai-task' || s === 'ai-demo') return 'first-ai-task'
+  // 旧四/五步链接：种子与 AI 验收已移出宿主入门，落到第 3 步
+  if (s === 'seed-demo' || s === 'seed' || s === 'first-ai-task' || s === 'ai-demo') {
+    return 'host-pack'
+  }
   if (s === 'done' || s === 'finish') return 'done'
   return 'welcome'
 }

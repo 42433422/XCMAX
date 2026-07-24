@@ -264,4 +264,25 @@ describe('KellaiCustomerInbox', () => {
     expect(wrapper.text()).toContain('连接客来来客户 IM')
     wrapper.unmount()
   })
+
+  it('renders image messages from content_type/media_url', async () => {
+    kellaiMocks.conversations.mockResolvedValue([
+      {
+        id: 'img-1',
+        customer_id: 7,
+        direction: 'inbound',
+        content: '[图片]',
+        content_type: 'image',
+        metadata: { media_url: 'https://cdn.example.com/demo.png' },
+        created_at: '2026-07-15T10:01:00Z',
+        channel_type: 'wechat',
+      },
+    ])
+    const wrapper = mount(KellaiCustomerInbox)
+    await flushPromises()
+    const img = wrapper.find('img.kellai-inbox__message-image')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toBe('https://cdn.example.com/demo.png')
+    wrapper.unmount()
+  })
 })

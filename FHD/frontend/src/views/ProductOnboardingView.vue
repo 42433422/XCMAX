@@ -157,8 +157,8 @@
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
               {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
             </button>
-            <button v-else type="button" class="btn primary" @click="goStep('seed-demo')">
-              下一步
+            <button v-else type="button" class="btn primary" @click="finishOnboardingComplete">
+              完成并进入对话
             </button>
             <button type="button" class="btn link" @click="finishToChat">先进入对话</button>
           </div>
@@ -223,30 +223,6 @@
           </details>
         </template>
 
-        <template v-else-if="currentStep === 'seed-demo'">
-          <h1>首笔业务数据</h1>
-          <p class="lead">{{ seedDemoLead }}</p>
-          <p v-if="seedSummary" class="hint">{{ seedSummary }}</p>
-          <div class="actions">
-            <button type="button" class="btn primary" :disabled="seedBusy" @click="runSeedDemo">
-              {{ seedBusy ? '写入中…' : '写入演示数据' }}
-            </button>
-            <button type="button" class="btn ghost" @click="goStep('first-ai-task')">下一步：AI 验收</button>
-          </div>
-        </template>
-
-        <template v-else-if="currentStep === 'first-ai-task'">
-          <h1>AI 读写验收</h1>
-          <p class="lead">{{ aiDemoLead }}</p>
-          <p v-if="aiDemoReply" class="hint">{{ aiDemoReply }}</p>
-          <div class="actions">
-            <button type="button" class="btn primary" :disabled="aiDemoBusy" @click="runFirstAiTask">
-              {{ aiDemoBusy ? '请求中…' : '运行 AI 演示任务' }}
-            </button>
-            <button type="button" class="btn primary" @click="finishOnboardingComplete">完成引导</button>
-          </div>
-        </template>
-
         <template v-else-if="currentStep === 'done'">
           <h1>可以开始使用</h1>
           <p class="lead">可从智能对话或扩展市场开始。</p>
@@ -272,7 +248,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
-import { apiFetch } from '@/utils/apiBase'
 import { queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
@@ -417,14 +392,6 @@ const steps = PRODUCT_FLOW_STEPS.filter((s) => s.id !== 'done')
 const currentStep = ref(parseFlowStepQuery(route.query.step))
 const loading = ref(false)
 const bootstrapBusy = ref(false)
-const seedBusy = ref(false)
-const seedSummary = ref('')
-const seedDemoLead = ref('为空企业写入演示客户与演示产品，便于工作台与 AI 验收。')
-const aiDemoLead = ref('请确认 AI 能读取刚创建的演示数据并给出摘要。')
-const aiDemoPrompt = ref('请列出当前租户下的演示客户「XC 演示客户」并一句话总结。')
-const demoCustomerMarker = ref('XC 演示客户')
-const aiDemoBusy = ref(false)
-const aiDemoReply = ref('')
 const baselinePlan = ref(null)
 
 function startupAsset(fileName) {
@@ -775,70 +742,10 @@ function finishToChat() {
   finishHostPackFlow()
 }
 
-async function runSeedDemo() {
-  seedBusy.value = true
-  seedSummary.value = ''
-  try {
-    const industry = pickedIndustryId.value || '通用'
-    const res = await apiFetch('/api/platform-shell/onboarding/seed-demo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ industry_id: industry }),
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok || body?.success === false) {
-      throw new Error(body?.message || body?.detail || `HTTP ${res.status}`)
-    }
-    const customer = body?.data?.customer?.name || '演示客户'
-    const product = body?.data?.product?.name || '演示产品'
-    const customerEntity = body?.data?.customer?.entity || '客户'
-    const productEntity = body?.data?.product?.entity || '产品'
-    seedSummary.value = `已写入：${customer}、${product}`
-    seedDemoLead.value = `为空企业写入 1 个演示${customerEntity}与 1 个演示${productEntity}，便于工作台与 AI 验收。`
-    demoCustomerMarker.value = customer
-    const queries = body?.data?.demo_queries || {}
-    aiDemoPrompt.value = queries.ai_prompt || `请列出当前租户下的演示${customerEntity}「${customer}」并一句话总结。`
-    aiDemoLead.value = `请确认 AI 能读取刚创建的「${customer}」并给出摘要。`
-    queueWorkspacePrefsSync({ onboarding_seed_done: true })
-    goStep('first-ai-task')
-  } catch (e) {
-    seedSummary.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    seedBusy.value = false
-  }
-}
-
-async function runFirstAiTask() {
-  aiDemoBusy.value = true
-  aiDemoReply.value = ''
-  try {
-    const res = await apiFetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: aiDemoPrompt.value,
-        session_id: `onboarding-${Date.now()}`,
-      }),
-    })
-    const body = await res.json().catch(() => ({}))
-    const text = String(body?.response || body?.message || body?.data?.response || '').trim()
-    aiDemoReply.value = text || 'AI 已响应（请进入对话查看完整内容）'
-    if (text.includes(demoCustomerMarker.value) || text.includes('演示客户') || text.includes('演示')) {
-      queueWorkspacePrefsSync({ onboarding_ai_demo_done: true })
-    }
-  } catch (e) {
-    aiDemoReply.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    aiDemoBusy.value = false
-  }
-}
-
 function finishOnboardingComplete() {
   queueWorkspacePrefsSync({
     product_flow_completed: true,
     onboarding_completed_at: new Date().toISOString(),
-    onboarding_seed_done: true,
-    onboarding_ai_demo_done: true,
   })
   flow.markProductFlowCompleted()
   flow.markHostPackAcknowledged()
