@@ -12,4 +12,5 @@
 
 - [x] New ZIP staged under `releases/stable/xcagi-v1.0.0.0/enterprise/`
 - [x] Stable feed restored to last known-good signed `656db7b7` after unsigned upload incident
-- [ ] CI-signed `latest-mac.yml` for `7e6ce2689` published to stable (blocked on workflow merge)
+- [x] CI-signed `latest-mac.yml` for `7e6ce2689` published to stable
+- [x] Old app against production feed → `isUpdateAvailable` + `buildSha 7e6ce2689`
