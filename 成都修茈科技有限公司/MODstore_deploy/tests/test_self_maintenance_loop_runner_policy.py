@@ -306,11 +306,11 @@ def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
     public_origin = "https://github.com/example/XCMAX.git"
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
     monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
-    clone_sources = []
+    clone_commands = []
 
     def fake_run_cmd(args, cwd=None, timeout=120):
         if args[:3] == ["git", "clone", "--no-tags"]:
-            clone_sources.append(args[3])
+            clone_commands.append(args)
             workspace.mkdir(parents=True)
             return ""
         if "diff" in args and "--name-only" in args:
@@ -332,7 +332,9 @@ def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
     )
 
     assert files == ["FHD/app/example.py"]
-    assert clone_sources == [para_transport]
+    assert [item[-2] for item in clone_commands] == [para_transport]
+    assert "--filter=blob:none" in clone_commands[0]
+    assert "--no-checkout" in clone_commands[0]
 
 
 def test_changed_files_falls_back_after_configured_transport_clone_failure(monkeypatch, tmp_path):
@@ -342,13 +344,13 @@ def test_changed_files_falls_back_after_configured_transport_clone_failure(monke
     public_origin = "https://github.com/example/XCMAX.git"
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
     monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
-    clone_sources = []
+    clone_commands = []
 
     def fake_run_cmd(args, cwd=None, timeout=120):
         if args[:3] == ["git", "clone", "--no-tags"]:
-            clone_sources.append(args[3])
+            clone_commands.append(args)
             workspace.mkdir(parents=True, exist_ok=True)
-            if args[3] == para_transport:
+            if args[-2] == para_transport:
                 (workspace / "partial").write_text("partial", encoding="utf-8")
                 raise RuntimeError("ssh unavailable")
             assert not (workspace / "partial").exists()
@@ -372,7 +374,7 @@ def test_changed_files_falls_back_after_configured_transport_clone_failure(monke
     )
 
     assert files == ["FHD/app/fallback.py"]
-    assert clone_sources == [para_transport, public_origin]
+    assert [item[-2] for item in clone_commands] == [para_transport, public_origin]
 
 
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
