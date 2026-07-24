@@ -20,7 +20,7 @@
     {"employee_id":"log-monitor-incident","mission":"聚合错误日志并创建去重故障信号","mode":"event","risk_level":"medium","trigger":{"events":["log.anomaly","on_error"]},"acceptance":["故障指纹去重","关联责任员工与原始证据"]},
     {"employee_id":"retention-officer","mission":"审计文件保留策略、容量与可回收空间","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"0 3 * * *"},"acceptance":["先 dry-run 清单","删除动作受恢复与审批约束"]},
     {"employee_id":"dbops-engineer","mission":"巡检数据库连接、迁移漂移、备份与慢查询","mode":"observe_and_propose","risk_level":"high","trigger":{"cron":"15 3 * * *"},"acceptance":["只读巡检","迁移和写操作必须审批"]},
-    {"employee_id":"llm-ops-engineer","mission":"巡检模型可用性、配额、延迟、成本与降级链","mode":"execute","risk_level":"low","trigger":{"cron":"30 3 * * *"},"acceptance":["输出 provider/model 健康矩阵","不泄露 API 密钥"]},
+    {"employee_id":"llm-ops-engineer","mission":"巡检模型可用性、配额、延迟、成本与降级链，并盘点聊天/生图/生视频/CLI 等可用 AI 资产接口","mode":"execute","risk_level":"low","trigger":{"cron":"30 3 * * *"},"acceptance":["输出 provider/model 健康矩阵","输出 list_available_ai_routes.assets 摘要","不泄露 API 密钥"]},
     {"employee_id":"legacy-archive-curator","mission":"识别遗留入口、重复资产与可归档候选","mode":"observe_and_propose","risk_level":"medium","trigger":{"cron":"45 3 * * 1"},"acceptance":["给出引用证据","归档前保留恢复路径"]},
 
     {"employee_id":"modstore-backend-api","mission":"维护 MODstore API 契约、路由和数据库交互","mode":"event","risk_level":"medium","trigger":{"events":["on_error","change_request.created"]},"acceptance":["契约测试通过","不绕过迁移与权限门禁"]},

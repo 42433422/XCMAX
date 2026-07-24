@@ -164,7 +164,7 @@ LLM_OPS_TOOLS_APPEND = """
 【LLM 运维工程师专属工具】
   list_platform_llm_models params: provider(str, 可选), refresh(bool, 默认 false)          — 查询平台统一模型与动态能力目录
   list_llm_cli_status      params: live_probe(bool, 默认 false)                            — 检查 Codex/Cursor/Claude/Trae CLI 安装与真实可用性
-  list_available_ai_routes params: refresh(bool), live_cli_probe(bool), live_quota_probe(bool)    — 合并平台模型、额度与 CLI 兜底路由
+  list_available_ai_routes params: refresh(bool), live_cli_probe(bool), live_quota_probe(bool)    — 合并平台模型、额度、CLI 与完整 AI 资产接口目录（assets）
   get_platform_llm_quota params: live_probe(bool, 默认 false)                             — 查询真实额度、24h 用量与可信度分级
   get_platform_llm_route   params: {}                                                   — 查询当前平台 AI 员工运行时路由
   get_llm_route_autopilot  params: {}                                                   — 查询后台主动巡检最近一次决策
@@ -172,13 +172,22 @@ LLM_OPS_TOOLS_APPEND = """
   switch_platform_llm_route params: provider(str), model(str), reason(str)              — 探活后立即切换下一次平台 AI 员工调用
   rollback_platform_llm_route params: reason(str, 可选)                            — 探活后回滚到上一个运行时路由
 
+被问到「有哪些可用 AI / 接口 / 资产」时，必须先调用 list_available_ai_routes，
+并以返回的 assets 为准汇报：interfaces（HTTP/runtime/CLI）、by_category
+（llm/vlm/image/video/audio/embedding/rerank）、providers、cli_assets。
+不得凭记忆编造未出现在 assets 中的接口。
+
 切换约束：只能选择平台模型目录中存在、已配置平台密钥且探活成功的模型；
 禁止传入 force 绕过目录或健康检查。所有切换都写入审计历史。
 模型选型：先检查 models_detailed[].capabilities，按 input_modalities、
 output_modalities 和 operations 匹配任务。capability_source=provider_metadata 最可靠；
 hybrid/model_id_inference 包含规则推断，对 TTS、视频等非对话能力不得当成员工主聊天路由切换。
+媒体接口：生图走 /api/llm/image，生视频走 /api/llm/video；均要求 OpenAI-compat
+provider + 目录中对应 category 模型；audio/embedding/rerank 目前以目录发现为主。
 CLI 兜底只在平台 API 调用失败时启用，按 Codex、Claude、Cursor、Trae 顺序尝试；
 它们在隔离临时目录中以只读/无 YOLO 方式运行，不传递平台 API key。
+CLI 仅接线文本对话；Codex 产品侧 image_generation 未接入平台兜底，须在 assets.cli_assets
+的 product_capabilities_not_wired 中如实说明。
 后台自动驾驶仅在生产显式开启时每 5 分钟检查当前路由；普通 429 只记录不切换，
 连续 3 次真实错误且路由已驻留 15 分钟才允许切换，精确额度耗尽可立即切换。
 所有切换使用 revision 比较交换，管理员并发操作优先；精确额度优先，其次真实调用探测，再其次本地用量账本。
@@ -877,6 +886,7 @@ class EmployeeAgentRunner:
                 )
 
             if name == "list_available_ai_routes":
+                from modstore_server.llm_ai_assets import build_ai_asset_inventory
                 from modstore_server.llm_cli_fallback import cli_status_catalog
                 from modstore_server.llm_quota_monitor import platform_quota_snapshot
                 from modstore_server.llm_runtime_route import platform_model_catalog
@@ -896,11 +906,18 @@ class EmployeeAgentRunner:
                     and not bool(self.ctx.get("read_only")),
                     catalog=platform,
                 )
+                assets = build_ai_asset_inventory(platform, cli, quota)
                 return {
-                    "ok": bool(platform.get("ok") and cli.get("ok") and quota.get("ok")),
+                    "ok": bool(
+                        platform.get("ok")
+                        and cli.get("ok")
+                        and quota.get("ok")
+                        and assets.get("ok")
+                    ),
                     "platform": platform,
                     "quota": quota,
                     "cli_fallback": cli,
+                    "assets": assets,
                     "policy": "platform_api_first_then_local_cli",
                 }
 
