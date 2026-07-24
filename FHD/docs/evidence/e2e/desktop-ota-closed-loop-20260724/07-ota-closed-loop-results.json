@@ -1,0 +1,34 @@
+{
+  "date": "2026-07-24",
+  "scenario": "local_signed_feed_ota_closed_loop",
+  "from_app": {
+    "path": "/tmp/xcagi-ota-old/XCAGI.app",
+    "buildSha": "656db7b7506a0bd0a63ad68acf1a82dc486f365f",
+    "version": "1.0.0.0"
+  },
+  "feed": {
+    "url": "http://127.0.0.1:18765/enterprise/",
+    "signing": "ephemeral_ed25519",
+    "buildSha": "7e6ce26890f2694b2788ca5f98cf163c3b2af16b",
+    "zip": "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip",
+    "zip_size": 263972147
+  },
+  "results": {
+    "checkForUpdates": {
+      "isUpdateAvailable": true,
+      "remoteBuildSha": "7e6ce26890f2694b2788ca5f98cf163c3b2af16b",
+      "signature_verified": true
+    },
+    "downloadUpdate": {
+      "shipit_cache_app": "/Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.W3K3BPV/XCAGI.app",
+      "extracted_buildSha": "7e6ce26890f2694b2788ca5f98cf163c3b2af16b",
+      "ok": true
+    },
+    "quitAndInstall": "not_executed_keep_user_apps"
+  },
+  "production_cdn": {
+    "status_at_test": "restored_to_previous_signed_feed_656db7b7_pending_ci_signed_publish_of_7e6ce2689",
+    "stable_feed": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+    "new_artifacts_staged": "/var/www/update/releases/stable/xcagi-v1.0.0.0/enterprise/"
+  }
+}
