@@ -1,0 +1,11 @@
+# 大体积录屏/片段不入库；索引与截图清单可入库
+*.mov
+*.mp4
+*.m4v
+*.webm
+*.gif
+rec/
+clips/
+_preview/
+frames/
+frames-*/
