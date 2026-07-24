@@ -5,12 +5,14 @@
     "dev": {
       "fhd_api_listen_port": 42422,
       "host": "127.0.0.1",
+      "modstore_listen_port": 8765,
       "scheme": "http"
     }
   },
   "host": "xiu-ci.com",
   "must_run_processes": [
     "web",
+    "modstore-api",
     "modstore-scheduler"
   ],
   "nginx_routes": [
@@ -21,7 +23,8 @@
     },
     {
       "path": "/market",
-      "service": "modstore"
+      "service": "modstore",
+      "upstream_port": 9999
     },
     {
       "path": "/v1",
@@ -34,18 +37,25 @@
   ],
   "processes": [
     {
-      "detect": "gunicorn",
+      "detect": "uvicorn app.fastapi_app",
       "must_run": true,
       "name": "web",
-      "note": "FastAPI 主进程",
+      "note": "FHD FastAPI 主进程（亦可能匹配 gunicorn）",
       "service": "fhd-api"
     },
     {
-      "detect": "modstore-scheduler",
+      "detect": "uvicorn modstore_server.app:app --host 127.0.0.1 --port 9999",
+      "must_run": true,
+      "name": "modstore-api",
+      "note": "MODstore API :9999",
+      "service": "modstore"
+    },
+    {
+      "detect": "uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990",
       "must_run": true,
       "name": "modstore-scheduler",
-      "note": "loops/定时任务真正执行者（独立进程，易被忘开）",
-      "service": "modstore"
+      "note": "loops/定时任务真正执行者 :9990",
+      "service": "modstore-scheduler"
     },
     {
       "detect": "mobile_relay_desktop_client",
@@ -68,7 +78,7 @@
       "listen_port": 5000,
       "must_run": true,
       "nginx_upstream_port": 5100,
-      "runner": "gunicorn (web)"
+      "runner": "uvicorn/gunicorn (web)"
     },
     "im-ws": {
       "listen_port": null,
@@ -83,11 +93,39 @@
       "runner": "vite-proxy"
     },
     "modstore": {
-      "listen_port": 8765,
+      "health": "/api/health",
+      "listen_port": 9999,
       "must_run": true,
-      "runner": "modstore_server"
+      "nginx_upstream_port": 9999,
+      "runner": "uvicorn modstore_server.app:app"
+    },
+    "modstore-scheduler": {
+      "health": "/api/health",
+      "listen_port": 9990,
+      "must_run": true,
+      "runner": "uvicorn modstore_server.app:app (scheduler)"
     }
   },
+  "systemd_units": [
+    {
+      "must_run": true,
+      "name": "fhd-full.service",
+      "note": "生产 FHD API",
+      "service": "fhd-api"
+    },
+    {
+      "must_run": true,
+      "name": "modstore.service",
+      "note": "MODstore API :9999",
+      "service": "modstore"
+    },
+    {
+      "must_run": true,
+      "name": "modstore-scheduler.service",
+      "note": "MODstore scheduler :9990",
+      "service": "modstore-scheduler"
+    }
+  ],
   "urls": {
     "FHD_API_BASE_URL": "https://xiu-ci.com/fhd-api",
     "IM_WS_URL": "wss://xiu-ci.com/ws/im",

@@ -96,6 +96,7 @@ def compute_model(src: dict[str, Any]) -> dict[str, Any]:
         "services": services,
         "nginx_routes": src.get("nginx_routes") or [],
         "processes": src.get("processes") or [],
+        "systemd_units": src.get("systemd_units") or [],
         "env_overrides": src.get("env_overrides") or {},
     }
 
@@ -167,6 +168,7 @@ def render_json(m: dict[str, Any]) -> str:
         "services": m["services"],
         "nginx_routes": m["nginx_routes"],
         "processes": m["processes"],
+        "systemd_units": m["systemd_units"],
         "must_run_processes": m["must_run"],
         "env_overrides": m["env_overrides"],
     }

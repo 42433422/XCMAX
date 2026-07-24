@@ -8,5 +8,6 @@ from .base import ROOT, run_command
 
 def run(action: str, domain: dict[str, Any], *, dry_run: bool = True) -> int:
     if action == "check":
-        return run_command(["python", "scripts/dev/docs_ssot_lint.py"], cwd=ROOT)
+        # gate / ssot_cli check 与 ci-cd docs-ssot 步骤对齐：告警即失败。
+        return run_command(["python", "scripts/dev/docs_ssot_lint.py", "--strict"], cwd=ROOT)
     return 2

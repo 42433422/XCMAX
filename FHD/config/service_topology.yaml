@@ -10,7 +10,8 @@
 #   - mobile-flutter-poc/lib/src/data/service_topology_ssot.dart    (Dart)
 #   - config/topology.generated.json                         (机器可读，健康探针消费)
 #
-# 边界: nginx / compose / systemd 不自动生成，仅由 check 做 verify-only 校验。
+# 边界: nginx / compose 不自动生成，仅由 check 做 verify-only 校验。
+# systemd_units 由 runtime_inventory 探针消费（不生成 unit 文件）。
 
 schema_version: 1
 
@@ -30,17 +31,25 @@ public_urls:
 
 # 进程/服务清单：listen_port = 进程 bind 端口；nginx_upstream_port = nginx proxy_pass 端口
 # （两者可不同——这正是过去各写各、要收敛的歧义）。
+# 生产 CVM 真值：fhd-full :5100（容器内 :5000）；modstore API :9999；scheduler :9990。
 services:
   fhd-api:
     listen_port: 5000
     nginx_upstream_port: 5100
-    runner: "gunicorn (web)"
+    runner: "uvicorn/gunicorn (web)"
     health: /health
     must_run: true
     hosts_relay_queue: true
   modstore:
-    listen_port: 8765
-    runner: modstore_server
+    listen_port: 9999
+    nginx_upstream_port: 9999
+    runner: "uvicorn modstore_server.app:app"
+    health: /api/health
+    must_run: true
+  modstore-scheduler:
+    listen_port: 9990
+    runner: "uvicorn modstore_server.app:app (scheduler)"
+    health: /api/health
     must_run: true
   llm-gateway:
     listen_port: null            # 外部/上游网关，无本地监听端口
@@ -59,16 +68,23 @@ services:
 # nginx path → service 映射（部署侧 verify-only 校验锚点；不生成 nginx 配置）
 nginx_routes:
   - { path: /fhd-api, service: fhd-api, upstream_port: 5100 }
-  - { path: /market,  service: modstore }
+  - { path: /market,  service: modstore, upstream_port: 9999 }
   - { path: /v1,      service: llm-gateway }
   - { path: /ws/im,   service: im-ws }
 
-# 「必须同时活着」清单（健康探针消费）——少起一个就静默坏的那些进程
+# 「必须同时活着」清单（健康探针 / runtime_inventory 消费）
 # detect = pgrep -f 模式（best-effort；按生产命令行写，dev 可能不匹配，仅作启发式）
 processes:
-  - { name: web,                  must_run: true, service: fhd-api,  detect: "gunicorn", note: "FastAPI 主进程" }
-  - { name: modstore-scheduler,   must_run: true, service: modstore, detect: "modstore-scheduler", note: "loops/定时任务真正执行者（独立进程，易被忘开）" }
-  - { name: desktop-relay-poller, must_run: false, service: desktop-fhd, detect: "mobile_relay_desktop_client", note: "桌面端 4s 轮询中继" }
+  - { name: web,                  must_run: true,  service: fhd-api,            detect: "uvicorn app.fastapi_app", note: "FHD FastAPI 主进程（亦可能匹配 gunicorn）" }
+  - { name: modstore-api,         must_run: true,  service: modstore,           detect: "uvicorn modstore_server.app:app --host 127.0.0.1 --port 9999", note: "MODstore API :9999" }
+  - { name: modstore-scheduler,   must_run: true,  service: modstore-scheduler, detect: "uvicorn modstore_server.app:app --host 127.0.0.1 --port 9990", note: "loops/定时任务真正执行者 :9990" }
+  - { name: desktop-relay-poller, must_run: false, service: desktop-fhd,        detect: "mobile_relay_desktop_client", note: "桌面端 4s 轮询中继" }
+
+# systemd 单元（生产 CVM；runtime_inventory probe 消费；无 systemctl 时 actual=unknown 不阻断）
+systemd_units:
+  - { name: fhd-full.service,           must_run: true,  service: fhd-api,            note: "生产 FHD API" }
+  - { name: modstore.service,           must_run: true,  service: modstore,           note: "MODstore API :9999" }
+  - { name: modstore-scheduler.service, must_run: true,  service: modstore-scheduler, note: "MODstore scheduler :9990" }
 
 # 环境覆盖：dev 与 prod 不同，不假装统一。生成的常量默认取 prod。
 env_overrides:
@@ -76,3 +92,4 @@ env_overrides:
     scheme: http
     host: 127.0.0.1
     fhd_api_listen_port: 42422
+    modstore_listen_port: 8765
