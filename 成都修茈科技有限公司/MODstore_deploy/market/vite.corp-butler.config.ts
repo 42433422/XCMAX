@@ -7,21 +7,28 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const corpOutDir = path.resolve(__dirname, '../../corp-butler')
 
-function copyBrandLogo() {
+function copyCorpStaticAssets() {
   return {
-    name: 'copy-corp-butler-brand',
+    name: 'copy-corp-butler-static',
     closeBundle() {
-      const src = path.resolve(__dirname, 'public/brand-xc-logo.jpg')
-      const dest = path.join(corpOutDir, 'brand-xc-logo.jpg')
-      if (!existsSync(src)) return
       mkdirSync(corpOutDir, { recursive: true })
-      copyFileSync(src, dest)
+      // emptyOutDir 会清掉产物目录；官网悬浮球头像必须随包落盘（/corp-butler/*.png）
+      const files = [
+        'brand-xc-logo.jpg',
+        'ai-butler-female-avatar-v1.png',
+        'ai-butler-male-avatar-v1.jpg',
+      ]
+      for (const name of files) {
+        const src = path.resolve(__dirname, 'public', name)
+        if (!existsSync(src)) continue
+        copyFileSync(src, path.join(corpOutDir, name))
+      }
     },
   }
 }
 
 export default defineConfig({
-  plugins: [vue(), copyBrandLogo()],
+  plugins: [vue(), copyCorpStaticAssets()],
   base: '/corp-butler/',
   resolve: {
     alias: {

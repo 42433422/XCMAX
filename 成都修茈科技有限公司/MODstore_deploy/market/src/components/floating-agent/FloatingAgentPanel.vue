@@ -124,6 +124,22 @@
 
     <!-- 输入区：官网模式单行（麦+输入+发送），避免输入条挤在标题下 -->
     <footer class="panel-foot" :class="{ 'panel-foot--corp': corpMode }">
+      <input
+        ref="imageInputRef"
+        type="file"
+        accept="image/*"
+        class="panel-image-input"
+        tabindex="-1"
+        aria-hidden="true"
+        @change="onImagePicked"
+      />
+      <div v-if="pendingImageDataUrl" class="panel-attach-preview" :class="{ 'panel-attach-preview--light': isLightTheme || corpMode }">
+        <img :src="pendingImageDataUrl" alt="待发送图片" class="panel-attach-preview__img" />
+        <button type="button" class="panel-attach-preview__clear" aria-label="移除图片" title="移除图片" @click="clearPendingImage">
+          ×
+        </button>
+      </div>
+      <p v-if="imagePickError" class="panel-attach-error" role="alert">{{ imagePickError }}</p>
       <template v-if="corpMode">
         <div class="panel-composer panel-composer--corp">
           <AgentVoiceInput
@@ -138,13 +154,14 @@
             type="button"
             class="panel-shot-btn"
             :class="{
-              'panel-shot-btn--active': withScreenshot,
-              'panel-shot-btn--light': isLightTheme,
+              'panel-shot-btn--active': !!pendingImageDataUrl,
+              'panel-shot-btn--light': isLightTheme || corpMode,
             }"
-            :aria-pressed="withScreenshot"
-            aria-label="附带截图"
-            :title="withScreenshot ? '已开启：发送时附带页面截图' : '点击附带截图发给 AI（需 vision 模型）'"
-            @click="withScreenshot = !withScreenshot"
+            :aria-pressed="!!pendingImageDataUrl"
+            aria-label="上传图片"
+            :title="pendingImageDataUrl ? '已选图：再次点击可更换' : '点击上传图片发给 AI（需 vision 模型）'"
+            :disabled="imagePicking"
+            @click="openImagePicker"
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
@@ -165,7 +182,7 @@
           <button
             type="button"
             class="panel-send"
-            :disabled="!draft.trim() || agentStore.isLoading"
+            :disabled="(!draft.trim() && !pendingImageDataUrl) || agentStore.isLoading || imagePicking"
             aria-label="发送"
             @click="sendText"
           >
@@ -189,13 +206,14 @@
             type="button"
             class="panel-shot-btn"
             :class="{
-              'panel-shot-btn--active': withScreenshot,
+              'panel-shot-btn--active': !!pendingImageDataUrl,
               'panel-shot-btn--light': isLightTheme,
             }"
-            :aria-pressed="withScreenshot"
-            aria-label="附带截图"
-            :title="withScreenshot ? '已开启：发送时附带页面截图' : '点击附带截图发给 AI（需 vision 模型）'"
-            @click="withScreenshot = !withScreenshot"
+            :aria-pressed="!!pendingImageDataUrl"
+            aria-label="上传图片"
+            :title="pendingImageDataUrl ? '已选图：再次点击可更换' : '点击上传图片发给 AI（需 vision 模型）'"
+            :disabled="imagePicking"
+            @click="openImagePicker"
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
@@ -218,7 +236,7 @@
           <button
             type="button"
             class="panel-send"
-            :disabled="!draft.trim() || agentStore.isLoading"
+            :disabled="(!draft.trim() && !pendingImageDataUrl) || agentStore.isLoading || imagePicking"
             aria-label="发送"
             @click="sendText"
           >
@@ -252,6 +270,10 @@ import ButlerFilesDrawer from './ButlerFilesDrawer.vue'
 import { useButlerWorkbenchTrayStore } from '../../stores/butlerWorkbenchTray'
 import { useButlerDownloadHistoryStore } from '../../stores/butlerDownloadHistory'
 import AgentVoiceInput from './AgentVoiceInput.vue'
+import {
+  compressImageFileToDataUrl,
+  isImageFileForVision,
+} from '../../utils/visionMultimodal'
 
 import type { QuickAction } from '../../content/siteKnowledge'
 
@@ -305,10 +327,52 @@ const brandLogoUrl = computed(() =>
 const handleInput = props.handleInput
 
 const draft = ref('')
-const withScreenshot = ref(false)
+const pendingImageDataUrl = ref<string | null>(null)
+const imagePickError = ref('')
+const imagePicking = ref(false)
+const imageInputRef = ref<HTMLInputElement | null>(null)
 const showLog = ref(false)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const panelRef = ref<HTMLDivElement | null>(null)
+
+function openImagePicker() {
+  imagePickError.value = ''
+  const input = imageInputRef.value
+  if (!input) return
+  input.value = ''
+  input.click()
+}
+
+function clearPendingImage() {
+  pendingImageDataUrl.value = null
+  imagePickError.value = ''
+  if (imageInputRef.value) imageInputRef.value.value = ''
+}
+
+async function onImagePicked(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  imagePickError.value = ''
+  if (!isImageFileForVision(file)) {
+    imagePickError.value = '请选择图片文件（png/jpg/webp 等）'
+    input.value = ''
+    return
+  }
+  imagePicking.value = true
+  try {
+    pendingImageDataUrl.value = await compressImageFileToDataUrl(file, {
+      maxEdge: 1600,
+      maxBytes: 2.5 * 1024 * 1024,
+    })
+  } catch (e: unknown) {
+    pendingImageDataUrl.value = null
+    imagePickError.value = e instanceof Error ? e.message : '图片处理失败'
+  } finally {
+    imagePicking.value = false
+    input.value = ''
+  }
+}
 
 const actionLog = computed(() => getActionLog().slice().reverse())
 
@@ -407,15 +471,18 @@ function toggleVoice() {
 
 async function sendText() {
   const text = draft.value.trim()
-  if (!text) return
+  const imageDataUrl = pendingImageDataUrl.value
+  if (!text && !imageDataUrl) return
   draft.value = ''
+  pendingImageDataUrl.value = null
+  imagePickError.value = ''
   await nextTick()
   autoResize()
-  await sendMessage(text)
+  await sendMessage(text, imageDataUrl)
 }
 
-async function sendMessage(text: string) {
-  await handleInput(text, { withScreenshot: withScreenshot.value })
+async function sendMessage(text: string, imageDataUrl?: string | null) {
+  await handleInput(text, { imageDataUrl: imageDataUrl || null })
 }
 
 async function handleQuick(text: string) {
@@ -637,6 +704,7 @@ function autoResize() {
 
 /* 底部输入区 */
 .panel-foot {
+  position: relative;
   padding: 8px 10px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
@@ -742,6 +810,57 @@ function autoResize() {
   background: rgba(37, 99, 235, 0.12);
   border-color: rgba(37, 99, 235, 0.5);
   color: #2563eb;
+}
+
+.panel-image-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel-attach-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.panel-attach-preview--light {
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.panel-attach-preview__img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.panel-attach-preview__clear {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.08);
+  color: #334155;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.panel-attach-error {
+  margin: 0 12px 6px;
+  font-size: 12px;
+  color: #dc2626;
 }
 
 /* 浅色工作台：与「智能对话」悬浮窗一致 */

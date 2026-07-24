@@ -5,9 +5,11 @@ set -euo pipefail
 
 SOURCE_ROOT="${XCMAX_SOURCE_ROOT:-/root/XCMAX}"
 RELEASE_BASE="${XCMAX_RELEASE_BASE:-/opt/xcmax}"
+RELEASES_DIR="${RELEASE_BASE%/}/releases"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
+PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
 ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
 ENV_FILE="${MODSTORE_ENV_FILE:-${ENV_DIR}/modstore.env}"
 SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler.env}"
@@ -18,6 +20,7 @@ LOCK_FILE="${XCMAX_RELEASE_LOCK:-/run/lock/xcmax-immutable-release.lock}"
 HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:9999/api/health}"
 SCHEDULER_HEALTH_URL="${MODSTORE_SCHEDULER_HEALTH_URL:-http://127.0.0.1:9990/api/health}"
 PUBLIC_HEALTH_URL="${MODSTORE_PUBLIC_HEALTH_URL:-https://xiu-ci.com/api/health}"
+RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"
 
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
@@ -62,13 +65,144 @@ resolve_java_home() {
 [[ -d "$SOURCE_ROOT/.git" ]] || fail "source Git mirror not found: $SOURCE_ROOT"
 [[ "$RELEASE_BASE" == /opt/xcmax || "${XCMAX_ALLOW_CUSTOM_RELEASE_BASE:-0}" == 1 ]] \
   || fail "custom release base requires XCMAX_ALLOW_CUSTOM_RELEASE_BASE=1"
+[[ "$RELEASE_BASE" == /* ]] || fail "XCMAX_RELEASE_BASE must be an absolute path"
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
+[[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
+  || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
 
-install -d -m 755 "$RELEASE_BASE/releases"
+install -d -m 755 "$RELEASES_DIR"
 install -d -m 700 "$RUNTIME_DIR"
 install -d -m 700 "$ENV_DIR"
+install -d -m 755 "$PUBLIC_SITE_STATE_DIR"
 exec 9>"$LOCK_FILE"
 flock -n 9 || fail "another immutable release is active"
+
+canonical_path() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+
+print(os.path.realpath(sys.argv[1]))
+PY
+}
+
+release_manifest_matches_directory() {
+  local release_root="$1"
+  local expected_sha="$2"
+  python3 - "$release_root/.xcmax-release.json" "$expected_sha" <<'PY'
+import json
+import sys
+
+path, expected_sha = sys.argv[1:]
+try:
+    with open(path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+except (OSError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(0 if payload.get("git_sha") == expected_sha else 1)
+PY
+}
+
+prune_releases() {
+  local releases_root=""
+  local candidate=""
+  local candidate_root=""
+  local candidate_sha=""
+  local protected_root=""
+  local is_protected=0
+  local kept=0
+  local removed=0
+  local -a ordered_releases=()
+  local -a protected_releases=("$@")
+
+  releases_root="$(canonical_path "$RELEASES_DIR")"
+  while IFS= read -r -d '' candidate; do
+    ordered_releases+=("$candidate")
+  done < <(
+    python3 - "$RELEASES_DIR" <<'PY'
+import os
+import re
+import sys
+
+root = sys.argv[1]
+items = []
+for name in os.listdir(root):
+    if not re.fullmatch(r"[0-9a-f]{40}", name):
+        continue
+    path = os.path.join(root, name)
+    if os.path.isdir(path) and not os.path.islink(path):
+        items.append((os.stat(path).st_mtime_ns, path))
+for _, path in sorted(items, reverse=True):
+    sys.stdout.buffer.write(os.fsencode(path) + b"\0")
+PY
+  )
+
+  # Reserve retention slots for rollback-critical releases before choosing the
+  # newest unprotected releases. This keeps the configured limit meaningful
+  # even when the current or target release is older than recent candidates.
+  for candidate in "${ordered_releases[@]}"; do
+    candidate_sha="${candidate##*/}"
+    candidate_root="$(canonical_path "$candidate")"
+    if [[ "${candidate_root%/*}" != "$releases_root" ]] \
+        || [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] \
+        || [[ -L "$candidate" ]] \
+        || ! release_manifest_matches_directory "$candidate_root" "$candidate_sha"; then
+      continue
+    fi
+    for protected_root in "${protected_releases[@]}"; do
+      [[ -n "$protected_root" ]] || continue
+      if [[ "$candidate_root" == "$(canonical_path "$protected_root")" ]]; then
+        (( kept += 1 ))
+        break
+      fi
+    done
+  done
+
+  for candidate in "${ordered_releases[@]}"; do
+    candidate_sha="${candidate##*/}"
+    candidate_root="$(canonical_path "$candidate")"
+    if [[ "${candidate_root%/*}" != "$releases_root" ]] \
+        || [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] \
+        || [[ -L "$candidate" ]] \
+        || ! release_manifest_matches_directory "$candidate_root" "$candidate_sha"; then
+      log "skipping unverified release directory $candidate_sha"
+      continue
+    fi
+
+    is_protected=0
+    for protected_root in "${protected_releases[@]}"; do
+      [[ -n "$protected_root" ]] || continue
+      if [[ "$candidate_root" == "$(canonical_path "$protected_root")" ]]; then
+        is_protected=1
+        break
+      fi
+    done
+    if [[ "$is_protected" == 1 ]]; then
+      continue
+    fi
+    if (( kept < RELEASES_TO_KEEP )); then
+      (( kept += 1 ))
+      continue
+    fi
+
+    chmod -R u+w "$candidate_root"
+    rm -rf -- "$candidate_root"
+    [[ ! -e "$candidate_root" ]] || fail "failed to prune old release $candidate_sha"
+    (( removed += 1 ))
+    log "pruned old verified release $candidate_sha"
+  done
+  log "release retention complete kept=$kept removed=$removed limit=$RELEASES_TO_KEEP"
+}
+
+CURRENT_ROOT_BEFORE_BUILD=""
+if [[ -L "$CURRENT_LINK" ]]; then
+  CURRENT_ROOT_BEFORE_BUILD="$(canonical_path "$CURRENT_LINK")"
+fi
+prune_releases "$CURRENT_ROOT_BEFORE_BUILD" "$RELEASES_DIR/$TARGET_SHA"
+if [[ "${XCMAX_RELEASE_PRUNE_ONLY:-0}" == 1 ]]; then
+  log "release prune-only maintenance completed"
+  exit 0
+fi
 
 git -C "$SOURCE_ROOT" fetch --quiet origin main
 git -C "$SOURCE_ROOT" cat-file -e "${TARGET_SHA}^{commit}" \
@@ -137,14 +271,14 @@ if systemctl cat modstore-payment.service >/dev/null 2>&1; then
   PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"
 fi
 
-FINAL_ROOT="${RELEASE_BASE}/releases/${TARGET_SHA}"
+FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"
 if [[ -f "$FINAL_ROOT/.xcmax-release.json" ]]; then
   EXISTING_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$FINAL_ROOT/.xcmax-release.json")"
   [[ "$EXISTING_SHA" == "$TARGET_SHA" ]] || fail "existing release identity mismatch"
   log "reusing prepared release $TARGET_SHA"
 else
-  BUILD_ROOT="$(mktemp -d "${RELEASE_BASE}/releases/.${TARGET_SHA}.build.XXXXXX")"
-  SOURCE_ARCHIVE="$(mktemp "${RELEASE_BASE}/releases/.${TARGET_SHA}.source.XXXXXX.tar")"
+  BUILD_ROOT="$(mktemp -d "${RELEASES_DIR}/.${TARGET_SHA}.build.XXXXXX")"
+  SOURCE_ARCHIVE="$(mktemp "${RELEASES_DIR}/.${TARGET_SHA}.source.XXXXXX.tar")"
   cleanup_build() { rm -rf -- "$BUILD_ROOT"; rm -f -- "$SOURCE_ARCHIVE"; }
   trap cleanup_build EXIT
   log "extracting exact Git archive $TARGET_SHA"
@@ -264,6 +398,22 @@ if [[ ! -L "$CURRENT_LINK" ]]; then
 fi
 PREVIOUS_ROOT="$(readlink -f "$CURRENT_LINK")"
 [[ -d "$PREVIOUS_ROOT" ]] || fail "current release target is invalid: $PREVIOUS_ROOT"
+
+# Public runtime projections must survive immutable release promotion.  Seed
+# the persistent nginx root once from the previous release when available;
+# subsequent authenticated founder snapshots update this same external file.
+PUBLIC_PROJECTION_PATH="${PUBLIC_SITE_STATE_DIR}/download-founder-autonomy.json"
+if [[ ! -f "$PUBLIC_PROJECTION_PATH" ]]; then
+  for candidate in \
+    "${PREVIOUS_ROOT}/${SITE_SUBDIR}/download-founder-autonomy.json" \
+    "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/market/public/download-founder-autonomy.json"; do
+    if [[ -f "$candidate" ]]; then
+      install -m 644 "$candidate" "$PUBLIC_PROJECTION_PATH"
+      log "seeded persistent public founder projection"
+      break
+    fi
+  done
+fi
 
 if [[ -e "$SITE_LINK" && ! -L "$SITE_LINK" ]]; then
   fail "$SITE_LINK must be a symlink for atomic public-site promotion"
@@ -532,3 +682,4 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]] \
   fail "exact-SHA public health verification failed"
 fi
 log "release promoted and verified git_sha=$TARGET_SHA root=$FINAL_ROOT"
+prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT" "$(canonical_path "$CURRENT_LINK")"

@@ -757,8 +757,17 @@ def last_user_text(messages: Optional[List[Any]]) -> str:
         if role is None and isinstance(item, dict):
             role = item.get("role")
             content = item.get("content")
-        if str(role or "") == "user":
-            return str(content or "").strip()
+        if str(role or "") != "user":
+            continue
+        if isinstance(content, list):
+            parts: List[str] = []
+            for part in content:
+                if isinstance(part, dict) and str(part.get("type") or "") == "text":
+                    parts.append(str(part.get("text") or ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            return " ".join(p for p in parts if p).strip()
+        return str(content or "").strip()
     return ""
 
 

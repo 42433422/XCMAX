@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -30,6 +32,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _load_loop_memory,
     _matches_focused_test_command,
     _qa_task_text,
+    _reconcile_requested_merge_feedback,
     _reject_and_retry_kb_schema_failure,
     _resume_dispatch_context,
     _resume_review_qa_candidate,
@@ -166,7 +169,7 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     assert result["reason"] == "autonomy_guard_blocked"
 
 
-def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
+def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
@@ -174,10 +177,21 @@ def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
     monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, _branch: None)
     monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda *args, **kwargs: SimpleNamespace(
+            allowed=True,
+            to_dict=lambda: {"decision": "allow"},
+        ),
+    )
+    merge_calls = []
+    monkeypatch.setattr(
         loop_runner,
         "_request_para_task_merge",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("unresolved branch was queued")),
+        lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
     )
+    ledger_rows = []
+    monkeypatch.setattr(loop_runner, "_append_ledger", ledger_rows.append)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda _row: None)
 
     result = loop_runner._auto_merge_low_risk_branch(
         run_id="remote-missing-head",
@@ -186,8 +200,12 @@ def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
         steps=[],
     )
 
-    assert result["ok"] is False
-    assert result["reason"] == "remote_branch_head_unavailable"
+    assert result["ok"] is True
+    assert result["merge_requested"] is True
+    assert result["branch_head_sha"] == ""
+    assert result["head_verification"] == "delegated_to_para_merge_worker"
+    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
+    assert ledger_rows[0]["head_verification"] == "delegated_to_para_merge_worker"
 
 
 def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_path):
@@ -280,6 +298,83 @@ def test_merge_workspace_cleanup_refuses_outside_runtime_root(monkeypatch, tmp_p
 
     assert loop_runner._cleanup_merge_workspace(outside) is False
     assert outside.exists()
+
+
+def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
+    workspace = tmp_path / "runtime" / "merge"
+    para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
+    public_origin = "https://github.com/example/XCMAX.git"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
+    clone_commands = []
+
+    def fake_run_cmd(args, cwd=None, timeout=120):
+        if args[:3] == ["git", "clone", "--no-tags"]:
+            clone_commands.append(args)
+            workspace.mkdir(parents=True)
+            return ""
+        if "diff" in args and "--name-only" in args:
+            return "FHD/app/example.py"
+        return ""
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    files = loop_runner._changed_files_for_branch(
+        repo_url=public_origin,
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+        workspace=workspace,
+    )
+
+    assert files == ["FHD/app/example.py"]
+    assert [item[-2] for item in clone_commands] == [para_transport]
+    assert "--filter=blob:none" in clone_commands[0]
+    assert "--no-checkout" in clone_commands[0]
+
+
+def test_changed_files_falls_back_after_configured_transport_clone_failure(monkeypatch, tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    workspace = runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "fallback"
+    para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
+    public_origin = "https://github.com/example/XCMAX.git"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
+    clone_commands = []
+
+    def fake_run_cmd(args, cwd=None, timeout=120):
+        if args[:3] == ["git", "clone", "--no-tags"]:
+            clone_commands.append(args)
+            workspace.mkdir(parents=True, exist_ok=True)
+            if args[-2] == para_transport:
+                (workspace / "partial").write_text("partial", encoding="utf-8")
+                raise RuntimeError("ssh unavailable")
+            assert not (workspace / "partial").exists()
+            return ""
+        if "diff" in args and "--name-only" in args:
+            return "FHD/app/fallback.py"
+        return ""
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    files = loop_runner._changed_files_for_branch(
+        repo_url=public_origin,
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+        workspace=workspace,
+    )
+
+    assert files == ["FHD/app/fallback.py"]
+    assert [item[-2] for item in clone_commands] == [para_transport, public_origin]
 
 
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
@@ -835,6 +930,111 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
     }
 
 
+def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-target-ref",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_target_branch_unavailable",
+                "run_id": "r-target-ref",
+                "task_id": "task-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-target-ref",
+        "failed_run_id": "r-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_only():
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-legacy-target-ref",
+                "task_id": "task-legacy-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": branch,
+        "failed_run_id": "r-legacy-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-legacy-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_qa_verdict_not_pass",
+        "structured_qa_blocking_findings",
+    ],
+)
+def test_resume_review_qa_candidate_retries_structured_findings_on_existing_branch(
+    hold_reason: str,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-structured",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "r-structured",
+                "task_id": "task-structured",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/codex/sub-1-structured",
+        "continue_existing_code_task": True,
+        "failed_run_id": "r-structured",
+        "failed_steps": ["code"],
+        "para_task_id": "task-structured",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_steps(result) == {"code", "review", "qa"}
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (
+        None,
+        "devfleet/codex/sub-1-structured",
+    )
+
+
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
     memory = {
         "open_items": [
@@ -949,6 +1149,12 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Target branch to verify: `devfleet/codex/sub-1`" in qa
     assert "Do not inspect your own report-only task branch" in review
     assert "Do not inspect your own report-only task branch" in qa
+    assert "bootstrap has already fetched" in review
+    assert "bootstrap has already fetched" in qa
+    assert "Do not run git fetch, clone" in review
+    assert "Do not run git fetch, clone" in qa
+    assert "Verify both refs with `git cat-file -e`" in review
+    assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
     assert "platform-equivalent local `python -m pytest` command" in qa
@@ -1033,6 +1239,30 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_prioritizes_missing_target_ref(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["target_branch_unavailable"],'
+                '"tested_commands":[],"target_branch_available":false,'
+                '"test_delta":{"new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"high","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["reason"] == "structured_qa_target_branch_unavailable"
+    assert result["qa"]["target_branch_available"] is False
 
 
 def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
@@ -1256,6 +1486,146 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+def test_merge_request_does_not_close_open_remediation(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/codex/fix-1",
+                        "kind": "failed_steps",
+                        "run_id": "failed-run",
+                        "steps": ["qa"],
+                        "para_task_id": "task-1",
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/codex/fix-1",
+            "completed_at": "2026-07-23T00:00:00+00:00",
+            "para_task_id": "task-1",
+            "policy_decision": {
+                "action": "auto_merge_requested_low_risk",
+                "reason": "low_risk_merge_requested",
+            },
+            "run_id": "new-run",
+            "status": "completed_merge_requested",
+            "steps": [{"ok": True, "step": "qa"}],
+        },
+        {"reason": "force"},
+    )
+    memory = _load_loop_memory()
+
+    assert len(memory["open_items"]) == 1
+    assert memory["closed_items"] == []
+    assert memory["last_resolution_record"]["closed_count"] == 0
+
+
+def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "para_task_id": "task-1",
+                "run_id": "run-1",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "REJECT: only mark escalated after enqueue succeeds"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-1",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["review_feedback"] == feedback
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate == {
+        "branch": "devfleet/codex/fix-1",
+        "continue_existing_code_task": True,
+        "failed_run_id": "run-1",
+        "failed_steps": ["code"],
+        "para_task_id": "task-1",
+        "reason": "resume_para_ai_review_rejection",
+        "review_feedback": feedback,
+    }
+    prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
+    assert "EXTERNAL MERGE REVIEW REMEDIATION" in prompt
+    assert feedback in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-1",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_real_para_merge_sha_closes_matching_open_item():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "kind": "automated_remediation",
+                "para_task_id": "task-1",
+                "reason": "para_ai_review_rejected",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "para_task_id": "task-1",
+                "run_id": "run-1",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merged",
+            "merge_commit_sha": "a" * 40,
+        },
+    )
+
+    assert result["merged"] == 1
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
 
 
 # ---------------------------------------------------------------------------
@@ -2139,4 +2509,128 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
     monkeypatch.setenv("GITHUB_REPO", "test/repo")
 
     result = _find_pr_number_for_branch("any-branch")
+    assert result is None
+
+
+def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monkeypatch, caplog):
+    """入队失败的非code项不应被标记为escalated，应留在open_items等待下次重试。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    # Mock enqueue to fail
+    def fake_enqueue(*args, **kwargs):
+        return {"queued": False}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["review"],
+                "retry_count": 3,
+                "run_id": "failed-enqueue-run",
+                "branch": "devfleet/test/branch",
+                "para_task_id": "task-1",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = loop_runner._resume_review_qa_candidate(memory)
+
+    # 入队失败的项不应被标记为escalated
+    item = memory["open_items"][0]
+    assert item.get("escalated") is not True
+    # 项应保留在open_items中
+    assert len(memory["open_items"]) == 1
+    # 应打印重试日志
+    assert "will retry next loop" in caplog.text
+    # 没有成功入队的项，应返回None（hold）
+    assert result is None
+
+
+def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch):
+    """使用复合键（run_id+branch+task_id+steps）匹配成功入队项，run_id为None时也能正确删除。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    enqueue_calls = []
+
+    def fake_enqueue(context, **kwargs):
+        enqueue_calls.append(context)
+        return {"queued": True}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    # 两个项有相同的run_id=None，其他字段不同
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["qa"],
+                "retry_count": 3,
+                "run_id": None,
+                "branch": "devfleet/test/branch-1",
+                "para_task_id": "task-1",
+            },
+            {
+                "kind": "failed_steps",
+                "steps": ["qa"],
+                "retry_count": 3,
+                "run_id": None,
+                "branch": "devfleet/test/branch-2",
+                "para_task_id": "task-2",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    # 两个项都成功入队，应从open_items中移除
+    assert len(memory["open_items"]) == 0
+    assert len(enqueue_calls) == 2
+    assert result is None
+
+
+def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
+    """code类失败项应打印代码重试日志，而不是escalating to human review。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["code"],
+                "retry_count": 3,
+                "run_id": "code-failure-run",
+                "branch": "devfleet/test/branch",
+                "para_task_id": "task-code",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = loop_runner._resume_review_qa_candidate(memory)
+
+    # code项不应被escalated，也不应入队人工队列
+    item = memory["open_items"][0]
+    assert item.get("escalated") is not True
+    assert len(memory["open_items"]) == 1
+    # 应打印代码重试日志，而不是人工评审日志
+    assert "will retry code remediation" in caplog.text
+    assert "escalating to human review" not in caplog.text
     assert result is None

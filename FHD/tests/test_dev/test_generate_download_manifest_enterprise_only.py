@@ -172,11 +172,11 @@ def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: P
     )
 
     assert passed.stdout.strip() == git_sha
-    assert json.loads(output.read_text()) == {
-        "schema_version": 1,
-        "gitSha": git_sha,
-        "version": "1.0.0.0",
-    }
+    payload = json.loads(output.read_text())
+    assert payload["schema_version"] == 1
+    assert payload["gitSha"] == git_sha
+    assert payload["version"] == "1.0.0.0"
+    assert isinstance(payload.get("builtAt"), str) and payload["builtAt"].endswith("Z")
 
     rejected = subprocess.run(
         [

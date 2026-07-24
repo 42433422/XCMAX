@@ -257,6 +257,28 @@ def extract_errors(log_text: str) -> list[ErrorEntry]:
     return out
 
 
+def select_actionable_errors(errors: list[ErrorEntry]) -> list[ErrorEntry]:
+    """Prefer terminal failed-step evidence over advisory output from other jobs.
+
+    A workflow log archive contains every job, including successful jobs that
+    emit mypy/ruff diagnostics as advisory output.  When GitHub provides an
+    explicit ``##[error]`` or non-zero exit/status marker, that marker is the
+    authoritative incident signal.  Keeping unrelated advisory paths caused a
+    single CVM timeout to be estimated as a 20+ file repair.
+    """
+
+    action_errors = [entry for entry in errors if entry.tool == "github-actions"]
+    if not action_errors:
+        return errors
+    specific = [
+        entry
+        for entry in action_errors
+        if not _ACTION_EXIT_RE.search(entry.message)
+        and not entry.message.lower().startswith("process completed")
+    ]
+    return specific or action_errors
+
+
 def select_incident_log_excerpt(log_text: str, *, max_chars: int = 12000) -> str:
     """Prefer failing-step evidence over an arbitrary tail from another job."""
 
@@ -845,11 +867,15 @@ def main(argv: list[str] | None = None) -> int:
     if not log_text:
         log_text = "workflow log download returned no content"
 
-    errors = extract_errors(log_text)
+    extracted_errors = extract_errors(log_text)
+    errors = select_actionable_errors(extracted_errors)
     if not errors:
         print("::warning::[heal] no extractable errors; routing raw evidence to incident")
 
-    print(f"[heal] extracted {len(errors)} error(s)")
+    print(
+        f"[heal] extracted {len(extracted_errors)} error(s); "
+        f"selected {len(errors)} actionable error(s)"
+    )
     fixes = match_rules(errors)
     needs_human_count = sum(1 for f in fixes if f.needs_human)
     print(f"[heal] rules matched: {len(fixes)} fix(es), {needs_human_count} need human")

@@ -26,8 +26,23 @@ const BOT_MERGE_WORKFLOW = String(
 const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
 const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
+const AI_REVIEW_TIMEOUT_MS = Math.max(
+  30_000,
+  Number.parseInt(process.env.MERGE_WORKER_AI_REVIEW_TIMEOUT_MS || '180000', 10),
+);
+const MINIMAX_REVIEW_TIMEOUT_MS = Math.max(
+  15_000,
+  Number.parseInt(process.env.MERGE_WORKER_MINIMAX_REVIEW_TIMEOUT_MS || '90000', 10),
+);
+const MINIMAX_REVIEW_MODEL = String(
+  process.env.MERGE_WORKER_MINIMAX_REVIEW_MODEL || process.env.MINIMAX_MODEL || 'MiniMax-M2.7',
+).trim();
+const MINIMAX_KEYCHAIN_SERVICE = String(
+  process.env.MERGE_WORKER_MINIMAX_KEYCHAIN_SERVICE || 'xcmax-minimax-api-key',
+).trim();
 const TOKEN_TTL_MS = 5 * 60 * 1000; // Para guest 限 15min/30 次，复用 5 分钟避免耗尽
 export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
+export const INITIAL_PR_LABELS = Object.freeze(['hold-merge']);
 
 // CI 等待策略（写进代码，不做隐式默认）：
 // - 等哪些 check：`gh pr checks --required`（branch protection 上标记为 required 的全部）
@@ -136,11 +151,17 @@ async function postJson(token, path, body) {
   return { ok: resp.ok, status: resp.status, body: parsed, text };
 }
 
-async function reportMergeConflict(token, task, reason) {
-  const conflict = {
-    branch: task.subTasks?.[0]?.branch_name || '',
-    reason: String(reason).slice(0, 1000),
+export function buildMergeConflictPayload(task, reason, source = 'merge-worker') {
+  return {
+    branch_name: task.subTasks?.[0]?.branch_name || '',
+    detail: String(reason).slice(0, 1000),
+    source,
+    workspace_path: String(task.workspace_path || ''),
   };
+}
+
+async function reportMergeConflict(token, task, reason, source = 'merge-worker') {
+  const conflict = buildMergeConflictPayload(task, reason, source);
   return postJson(token, `/api/tasks/${task.id}/merge-conflict`, conflict);
 }
 
@@ -282,8 +303,8 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     ``,
     `本 PR 由 merge-worker 自动创建，源任务由 Trae CLI 执行。`,
     ``,
-    `**风险分级**：标 \`risk:r0\`（loop 已过 review/QA/autonomy_guard 三层 gate）。`,
-    `AI review APPROVE → 触发 GitHub Actions bot 三重门禁合并；AI review REJECT → 打 \`hold-merge\` 强制 veto。`,
+    `**初始状态**：标 \`hold-merge\`，在独立 AI review 完成前禁止合并。`,
+    `AI review APPROVE → 添加 \`risk:r0\`、移除 \`hold-merge\`，再触发 GitHub Actions bot 三重门禁合并。`,
     `合并身份固定为 \`github-actions[bot]\`，且仍受 required checks 和 branch protection 约束。`,
   ].join('\n');
   const args = [
@@ -292,10 +313,9 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
     '--base', baseBranch,
     '--title', title,
     '--body', body,
-    // Do not add ai-generated here: that label intentionally enters the
-    // 12-hour SLA lane.  Loop-approved PRs use the immediate regular-PR
-    // three-gate lane and are still merged only by github-actions[bot].
-    '--label', AUTO_PR_LABELS.join(','),
+    // A PR must be visibly blocked before the independent merge review starts.
+    // risk:r0 is added only after that review approves the exact diff.
+    '--label', INITIAL_PR_LABELS.join(','),
   ];
   if (repoFull) args.push('--repo', repoFull);
   const cwd = workspace || process.env.HOME;
@@ -311,16 +331,59 @@ async function createPullRequest(workspace, branch, baseBranch, task, repoFull) 
   return { url: urlMatch ? urlMatch[0] : out, number: numMatch ? numMatch[1] : '' };
 }
 
+export function githubIssueLabelsEndpoint(repoFull, prNumber) {
+  return `repos/${repoFull}/issues/${prNumber}/labels`;
+}
+
+export function githubIssueLabelEndpoint(repoFull, prNumber, label) {
+  return `${githubIssueLabelsEndpoint(repoFull, prNumber)}/${encodeURIComponent(label)}`;
+}
+
 async function addPrLabels(workspace, prNumber, repoFull, labels) {
-  // Best-effort 打标签（gh pr edit --add-label）；失败不阻塞主流程
-  if (!prNumber) return;
-  const args = ['pr', 'edit', prNumber, '--add-label', labels.join(',')];
-  if (repoFull) args.push('--repo', repoFull);
+  // Best-effort 打标签。优先走 issues REST API，避免 `gh pr edit`
+  // 查询已下线 Projects Classic 字段时连带失败，导致 veto 标签丢失。
+  if (!prNumber) return false;
+  const args = repoFull
+    ? [
+      'api',
+      '--method', 'POST',
+      githubIssueLabelsEndpoint(repoFull, prNumber),
+      ...labels.flatMap((label) => ['-f', `labels[]=${label}`]),
+    ]
+    : ['pr', 'edit', prNumber, '--add-label', labels.join(',')];
   const cwd = workspace || process.env.HOME;
   try {
     await execFileAsync('gh', args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 });
+    return true;
   } catch (err) {
     log(`  ⚠️ addPrLabels(${labels.join(',')}) 失败 PR #${prNumber}: ${String(err).slice(0, 200)}`);
+    return false;
+  }
+}
+
+async function removePrLabels(workspace, prNumber, repoFull, labels) {
+  if (!prNumber) return false;
+  const cwd = workspace || process.env.HOME;
+  try {
+    if (repoFull) {
+      for (const label of labels) {
+        await execFileAsync(
+          'gh',
+          ['api', '--method', 'DELETE', githubIssueLabelEndpoint(repoFull, prNumber, label)],
+          { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 },
+        );
+      }
+    } else {
+      await execFileAsync(
+        'gh',
+        ['pr', 'edit', prNumber, '--remove-label', labels.join(',')],
+        { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 },
+      );
+    }
+    return true;
+  } catch (err) {
+    log(`  ⚠️ removePrLabels(${labels.join(',')}) 失败 PR #${prNumber}: ${String(err).slice(0, 200)}`);
+    return false;
   }
 }
 
@@ -375,6 +438,132 @@ async function waitForRequiredChecks(workspace, prNumber, repoFull) {
       );
     }
     throw new Error(`required checks failed or unavailable: ${message.slice(0, 1000)}`);
+  }
+}
+
+export function parseReviewVerdict(output) {
+  const text = String(output || '').trim();
+  if (!text) return null;
+  try {
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || text;
+    const candidate = fenced.match(/\{[\s\S]*\}/)?.[0];
+    if (candidate) {
+      const parsed = JSON.parse(candidate);
+      const verdict = String(parsed?.verdict || '').trim().toLowerCase();
+      const reason = String(parsed?.reason || parsed?.finding || '').trim();
+      if (verdict === 'approve') return { verdict: 'approve', raw: text };
+      if (verdict === 'reject') {
+        return { verdict: 'reject', reason: `REJECT: ${reason || 'blocking finding'}`, raw: text };
+      }
+    }
+  } catch {
+    // Fall through to the strict one-line protocol.
+  }
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (/^(?:VERDICT\s*:\s*)?APPROVE$/i.test(line)) return { verdict: 'approve', raw: text };
+    const reject = line.match(/^(?:VERDICT\s*:\s*)?REJECT\s*:\s*(.+)$/i);
+    if (reject) return { verdict: 'reject', reason: `REJECT: ${reject[1].trim()}`, raw: text };
+  }
+  return null;
+}
+
+export async function resolveReviewWithFallback({ primary, fallback }) {
+  let primaryRaw = '';
+  let primaryError = '';
+  try {
+    primaryRaw = String(await primary() || '');
+    const verdict = parseReviewVerdict(primaryRaw);
+    if (verdict) return { ...verdict, provider: 'trae' };
+  } catch (err) {
+    primaryError = String(err?.message || err).slice(0, 300);
+  }
+
+  let fallbackRaw = '';
+  let fallbackError = '';
+  try {
+    fallbackRaw = String(await fallback() || '');
+    const verdict = parseReviewVerdict(fallbackRaw);
+    if (verdict) return { ...verdict, provider: 'minimax' };
+  } catch (err) {
+    fallbackError = String(err?.message || err).slice(0, 300);
+  }
+
+  return {
+    verdict: 'reject',
+    reason: 'indeterminate-review',
+    raw: fallbackRaw || primaryRaw,
+    diagnostics: {
+      primary: primaryError || (primaryRaw ? 'unparseable' : 'empty'),
+      fallback: fallbackError || (fallbackRaw ? 'unparseable' : 'empty'),
+    },
+  };
+}
+
+function normalizeMiniMaxAnthropicBaseUrl() {
+  let base = String(
+    process.env.MINIMAX_ANTHROPIC_BASE_URL
+      || process.env.MINIMAX_BASE_URL
+      || 'https://api.minimaxi.com',
+  ).trim().replace(/\/$/, '');
+  base = base.replace(/\/(?:v1|v2|v3|v4)$/i, '');
+  if (!base.endsWith('/anthropic')) base = `${base}/anthropic`;
+  return base;
+}
+
+async function resolveMiniMaxApiKey() {
+  const fromEnv = String(
+    process.env.MINIMAX_TOKEN_PLAN_API_KEY
+      || process.env.MINIMAX_CODING_PLAN_API_KEY
+      || process.env.MINIMAX_API_KEY
+      || '',
+  ).trim();
+  if (fromEnv) return fromEnv.replace(/^minimax(?=sk-cp-)/i, '');
+  if (!MINIMAX_KEYCHAIN_SERVICE) return '';
+  try {
+    const { stdout } = await execFileAsync('security', [
+      'find-generic-password', '-a', process.env.USER || '', '-s', MINIMAX_KEYCHAIN_SERVICE, '-w',
+    ], {
+      maxBuffer: 1024 * 1024,
+      timeout: 10_000,
+    });
+    return String(stdout || '').trim().replace(/^minimax(?=sk-cp-)/i, '');
+  } catch {
+    return '';
+  }
+}
+
+export async function runMiniMaxReview(prompt) {
+  const apiKey = await resolveMiniMaxApiKey();
+  if (!apiKey) throw new Error('minimax-key-unavailable');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MINIMAX_REVIEW_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${normalizeMiniMaxAnthropicBaseUrl()}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        model: MINIMAX_REVIEW_MODEL,
+        max_tokens: 1024,
+        system: 'You are an independent merge safety reviewer. Follow the verdict protocol exactly.',
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`minimax-http-${response.status}`);
+    const payload = await response.json();
+    return (Array.isArray(payload?.content) ? payload.content : [])
+      .filter((item) => item && item.type === 'text')
+      .map((item) => String(item.text || ''))
+      .join('\n')
+      .trim();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -437,30 +626,38 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
     `任一维度有阻断问题则 REJECT。`,
     `如果代码可以合并，输出一行：APPROVE`,
     `如果有问题需要修改，输出一行：REJECT: <dimension>=<简要原因>`,
+    `也可输出 JSON：{"verdict":"approve|reject","reason":"..."}，不要输出其他 JSON。`,
     `不要修改任何文件，只做审查。`,
   ].join('\n');
   log(`  AI review 开始 (trae-cli plan mode, diff=${diffSource}, ${diff.length} chars)...`);
-  const { stdout } = await execFileAsync('trae-cli', [
-    '--print',
-    '--output-format', 'text',
-    '--permission-mode', 'plan',
-    prompt,
-  ], {
-    cwd: workspace || process.env.HOME,
-    maxBuffer: 10 * 1024 * 1024,
-    timeout: 180_000,
-    env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` },
+  const review = await resolveReviewWithFallback({
+    primary: async () => {
+      const { stdout } = await execFileAsync('trae-cli', [
+        '--print',
+        '--output-format', 'text',
+        '--permission-mode', 'plan',
+        prompt,
+      ], {
+        cwd: workspace || process.env.HOME,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: AI_REVIEW_TIMEOUT_MS,
+        env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` },
+      });
+      return stdout;
+    },
+    fallback: async () => {
+      log(`  Trae review 无明确结论，切换 MiniMax ${MINIMAX_REVIEW_MODEL} 复审...`);
+      return runMiniMaxReview(prompt);
+    },
   });
-  const out = (stdout || '').trim();
-  // 取最后几行找 APPROVE/REJECT
-  const lines = out.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (/^APPROVE$/i.test(line)) return { verdict: 'approve', raw: out };
-    if (/^REJECT\s*:/i.test(line)) return { verdict: 'reject', reason: line, raw: out };
+  if (review.verdict === 'approve') {
+    log(`  AI review APPROVE provider=${review.provider}`);
+    return review;
   }
-  log(`  AI review 未输出明确结论，fail-closed REJECT`);
-  return { verdict: 'reject', reason: 'indeterminate-review', raw: out };
+  if (review.reason === 'indeterminate-review') {
+    log(`  AI review 未输出明确结论，fail-closed REJECT ${JSON.stringify(review.diagnostics)}`);
+  }
+  return review;
 }
 
 async function mergePR(workspace, prNumber, repoFull) {
@@ -567,6 +764,45 @@ async function checkExistingPR(workspace, branch, baseBranch, repoFull) {
   }
 }
 
+function isExternalReviewRemediationTask(task) {
+  return String(task?.description || '').includes('=== EXTERNAL MERGE REVIEW REMEDIATION ===');
+}
+
+export function selectTaskMergeBase(task, parentBaseBranch = '') {
+  const configuredBase = String(task?.branch || 'main').trim() || 'main';
+  if (!isExternalReviewRemediationTask(task)) return configuredBase;
+  const parentBase = String(parentBaseBranch || '').trim();
+  if (!parentBase || parentBase === configuredBase) {
+    throw new Error(`remediation-parent-base-unavailable:${configuredBase}`);
+  }
+  return parentBase;
+}
+
+async function findParentPullRequestBase(workspace, branch, repoFull) {
+  const args = [
+    'pr', 'list',
+    '--head', branch,
+    '--state', 'all',
+    '--json', 'number,state,headRefName,baseRefName,createdAt',
+    '--limit', '20',
+  ];
+  if (repoFull) args.push('--repo', repoFull);
+  try {
+    const { stdout } = await execFileAsync('gh', args, {
+      cwd: workspace || process.env.HOME,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    const pullRequests = JSON.parse(stdout || '[]');
+    const parent = pullRequests.find(
+      (pr) => String(pr?.headRefName || '') === branch && String(pr?.baseRefName || '').trim(),
+    );
+    return String(parent?.baseRefName || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 async function fallbackDirectMerge(workspace, branches, baseBranch) {
   // 非 GitHub 仓库（如 file:// 本地测试）：走直接 merge
   const localBase = await gitMaybe(workspace, ['rev-parse', '--verify', baseBranch]);
@@ -616,8 +852,29 @@ async function processTask(token, task, state) {
     log(`task ${task.id} 跳过：无 branch_name`);
     return;
   }
-  const baseBranch = String(task.branch || 'main').trim() || 'main';
+  let baseBranch = String(task.branch || 'main').trim() || 'main';
   const isGithub = await isGitHubOrigin(workspaceExists ? workspace : '', repoUrl);
+  if (isGithub && isExternalReviewRemediationTask(task)) {
+    const parentBaseBranch = await findParentPullRequestBase(
+      workspaceExists ? workspace : '', baseBranch, repoFull,
+    );
+    try {
+      baseBranch = selectTaskMergeBase(task, parentBaseBranch);
+      log(`task ${task.id} 修复分支提升：parent=${task.branch} → canonical base=${baseBranch}`);
+    } catch (err) {
+      const reason = String(err?.message || err);
+      await reportMergeConflict(token, task, reason);
+      state[task.id] = {
+        status: 'conflict',
+        at: new Date().toISOString(),
+        reason,
+        attempts: Number(state[task.id]?.attempts || 0),
+      };
+      saveProcessed(state);
+      log(`task ${task.id} 阻断：${reason}`);
+      return;
+    }
+  }
   if (!isGithub) {
     if (!workspaceExists) {
       log(`task ${task.id} 跳过：非 GitHub 仓库 且 workspace 已被回收，无法直接 merge`);
@@ -682,6 +939,13 @@ async function processTask(token, task, state) {
             log(`  ✓ ${branch} → PR #${prNumber}: ${prUrl}`);
           }
 
+          // Existing PRs from older workers may already carry risk:r0.  Apply
+          // the veto before updating or reviewing so no bot-merge race exists.
+          const heldBeforeReview = await addPrLabels(
+            workspaceExists ? workspace : '', prNumber, repoFull, INITIAL_PR_LABELS,
+          );
+          if (!heldBeforeReview) throw new Error('hold-merge-label-failed-before-review');
+
           // Bring the proposed branch onto the current base before reviewing.
           // A real conflict fails below and is never silently merged.
           await updatePullRequestBranch(workspaceExists ? workspace : '', prNumber, repoFull);
@@ -709,6 +973,14 @@ async function processTask(token, task, state) {
           const review = await aiReviewPR(workspaceExists ? workspace : '', branch, baseBranch, prNumber, repoFull);
           if (review.verdict === 'approve') {
             log(`  ✓ AI review: APPROVE → 启用 auto-merge for PR #${prNumber}`);
+            const riskLabelAdded = await addPrLabels(
+              workspaceExists ? workspace : '', prNumber, repoFull, AUTO_PR_LABELS,
+            );
+            if (!riskLabelAdded) throw new Error('risk-label-failed-after-review');
+            const holdRemoved = await removePrLabels(
+              workspaceExists ? workspace : '', prNumber, repoFull, INITIAL_PR_LABELS,
+            );
+            if (!holdRemoved) throw new Error('hold-merge-label-remove-failed-after-review');
             const mergeSha = await mergePR(workspaceExists ? workspace : '', prNumber, repoFull);
             results.push({ branch, prUrl, prNumber, merged: true, sha: mergeSha });
             log(`  ✓ merged (${mergeSha.slice(0, 10)})`);
@@ -760,7 +1032,10 @@ async function processTask(token, task, state) {
           }
           terminalAttempts = retry.attempts;
         }
-        await reportMergeConflict(token, task, reason);
+        const conflictSource = failed.some((result) => result.vetoed)
+          ? 'ai-review-veto'
+          : 'merge-worker';
+        await reportMergeConflict(token, task, reason, conflictSource);
         state[task.id] = {
           status: retryable ? 'conflict' : 'ai_rejected',
           at: new Date().toISOString(),

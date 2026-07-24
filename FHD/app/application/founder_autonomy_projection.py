@@ -98,7 +98,7 @@ def _public_projection_targets(repo_root: Path | None = None) -> list[Path]:
         if item.strip()
     ]
     if not configured_live_roots:
-        configured_live_roots = ["/root/成都修茈科技有限公司"]
+        configured_live_roots = ["/var/lib/xcmax-public"]
     for raw in configured_live_roots:
         try:
             live_root = Path(raw).expanduser().resolve()

@@ -96,11 +96,11 @@ async function speakAssistantReply(): Promise<void> {
 
 async function handleInput(
   text: string,
-  opts?: { skipUserInsert?: boolean; withScreenshot?: boolean },
+  opts?: { skipUserInsert?: boolean; withScreenshot?: boolean; imageDataUrl?: string | null },
 ): Promise<void> {
   stopCorpIntroSpeech()
   introSpeaking.value = false
-  await engineHandleInput(text, opts ? { skipUserInsert: opts.skipUserInsert } : undefined)
+  await engineHandleInput(text, opts)
   await speakAssistantReply()
 }
 
