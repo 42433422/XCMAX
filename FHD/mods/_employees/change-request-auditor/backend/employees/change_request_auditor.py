@@ -11,7 +11,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     if action in {"help", "status"}:
         return {
             "ok": True,
-            "summary": "Persy + Para + Retort 战略变更评审门已就绪",
+            "summary": "Persy + Para + Retort 战略变更评审门已就绪（含 Retort 澄清门）",
             "items": [],
             "warnings": [],
             "error": "",

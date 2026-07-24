@@ -177,7 +177,7 @@ export const YUANGON_PKG_ROLE_LABELS: Record<string, string> = {
  */
 export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {
   'artifact-generator': '根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式',
-  'change-request-auditor': '以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。',
+  'change-request-auditor': '以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问（澄清门+TTL 防堆积）审查能力变更；任何 veto、缺证据、澄清未完成或意图错位都失败关闭。',
   'code-validator': '对员工包体进行轻量校验，包括 manifest 合规性、Python 编译检查、包体一致性、独立可执行验证',
   'daily-orchestrator': '每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。',
   'dbops-engineer': '负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。',

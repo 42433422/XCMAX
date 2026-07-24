@@ -2,6 +2,11 @@
 
 Retort is a blackhole-style external evolution engine.
 
+Product clarification landing (Modstore): when strategy intent is missing or
+misaligned, `retort_clarification_gate` opens blocking questions, accepts human
+answers, re-assesses intent, and sweeps TTL / max-open sessions so queues never
+pile up. APIs live under `/api/xcmax/strategic/council/clarifications*`.
+
 - Main project: local folder.
 - Absorption source: GitHub URL or local folder.
 - Workflow: collect evidence, ask PaiBi LLM to score with the Retort prompt, clone/read the external project, generate absorption tasks, run the real `retort apply-absorption` CLI to change project code, then require another completed PaiBi LLM deep review before any score is shown.
