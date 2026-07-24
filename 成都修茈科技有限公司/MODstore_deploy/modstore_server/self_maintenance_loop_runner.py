@@ -4434,19 +4434,37 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
+            diff_includes_modstore_server_production_path,
+            is_auxiliary_self_maintenance_evidence_path,
             is_marker_status_path,
             loop_memory_requires_executable_change,
         )
 
-        if all(is_marker_status_path(file_name) for file_name in normalized_files):
-            requirement = loop_memory_requires_executable_change(memory)
-            if requirement.get("required"):
+        requirement = loop_memory_requires_executable_change(memory)
+        if requirement.get("required"):
+            if all(is_marker_status_path(file_name) for file_name in normalized_files):
                 return _decision(
                     {
                         "allowed_globs": allowed,
                         "changed_files": normalized_files,
                         "ok": False,
                         "reason": "marker_only_diff_requires_executable_change",
+                        "self_maintenance_requirement": requirement,
+                    }
+                )
+            if (
+                all(
+                    is_auxiliary_self_maintenance_evidence_path(file_name)
+                    for file_name in normalized_files
+                )
+                and not diff_includes_modstore_server_production_path(normalized_files)
+            ):
+                return _decision(
+                    {
+                        "allowed_globs": allowed,
+                        "changed_files": normalized_files,
+                        "ok": False,
+                        "reason": "auxiliary_only_diff_requires_executable_change",
                         "self_maintenance_requirement": requirement,
                     }
                 )

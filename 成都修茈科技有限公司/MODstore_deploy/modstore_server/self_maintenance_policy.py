@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_MODSTORE_SERVER_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 _STAT_FOOTER_RE = re.compile(
     r"^\s*\d+\s+files?\s+changed\b|^\s*\d+\s+insertions?\b|^\s*\d+\s+deletions?\b",
     re.IGNORECASE,
@@ -26,6 +28,51 @@ def default_loop_memory_path() -> Path:
         Path.home()
         / "Library/Application Support/XCMAX/modstore-daily/runtime/self_maintenance_loop_memory.json"
     )
+
+
+def _normalize_repo_path(path: str) -> str:
+    return (path or "").replace("\\", "/").strip().strip('"').strip("'")
+
+
+def _item_indeterminate_merge_review_veto(item: Dict[str, Any]) -> bool:
+    veto = str(item.get("review_veto_code") or "").strip().lower()
+    if veto in _INDETERMINATE_MERGE_REVIEW_CODES:
+        return True
+    detail = str(item.get("review_feedback") or item.get("detail") or "").strip()
+    if not detail:
+        return False
+    if ":" in detail:
+        _, _, right = detail.partition(":")
+        if right.strip().lower() in _INDETERMINATE_MERGE_REVIEW_CODES:
+            return True
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _INDETERMINATE_MERGE_REVIEW_CODES)
+
+
+def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
+    normalized = _normalize_repo_path(path)
+    if not normalized:
+        return False
+    if is_marker_status_path(normalized):
+        return True
+    if "/tests/" in normalized or normalized.startswith("tests/"):
+        return True
+    if normalized.startswith("FHD/XCAGI/kb/"):
+        return True
+    return False
+
+
+def diff_includes_modstore_server_production_path(paths: List[str]) -> bool:
+    for path in paths:
+        normalized = _normalize_repo_path(path)
+        if not normalized.startswith(_MODSTORE_SERVER_PREFIX):
+            continue
+        if is_marker_status_path(normalized):
+            continue
+        if "/tests/" in normalized:
+            continue
+        return True
+    return False
 
 
 def load_loop_memory(path: Optional[Path] = None) -> Dict[str, Any]:
@@ -94,6 +141,18 @@ def loop_memory_requires_executable_change(
         for item in open_items:
             if not isinstance(item, dict):
                 continue
+            if (
+                item.get("kind") == "automated_remediation"
+                and item.get("reason") == "para_ai_review_rejected"
+                and _item_indeterminate_merge_review_veto(item)
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "indeterminate merge-review veto requires executable "
+                        "modstore_server production change"
+                    ),
+                }
             text = json.dumps(item, ensure_ascii=False).lower()
             if any(
                 marker in text
@@ -170,6 +229,8 @@ def should_block_marker_only_diff_summary(
 
 __all__ = [
     "default_loop_memory_path",
+    "diff_includes_modstore_server_production_path",
+    "is_auxiliary_self_maintenance_evidence_path",
     "is_marker_status_path",
     "load_loop_memory",
     "loop_memory_requires_executable_change",

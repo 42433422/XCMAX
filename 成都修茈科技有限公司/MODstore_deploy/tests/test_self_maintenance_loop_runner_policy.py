@@ -1606,6 +1606,36 @@ def test_classify_indeterminate_merge_review_detail():
     assert meta["branch_hint"] == "devfleet/codex/sub-1-46107b"
     assert meta["actionable_code_findings"] is False
 
+    cursor_meta = _classify_para_merge_review_detail(
+        "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+    )
+    assert cursor_meta["veto_code"] == "indeterminate-review"
+    assert cursor_meta["branch_hint"] == "devfleet/cursor/sub-1-d0a091"
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_indeterminate_veto_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "kind": "automated_remediation",
+                "para_task_id": "task-cursor-indeterminate",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/20260724T123000Z-fix-indeterminate-merge-review-veto-classification.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
 
 def test_reconcile_indeterminate_merge_review_veto_prompts_executable_remediation():
     memory = {

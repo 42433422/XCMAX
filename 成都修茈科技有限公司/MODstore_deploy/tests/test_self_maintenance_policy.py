@@ -40,3 +40,21 @@ def test_malformed_loop_memory_fails_closed():
     requirement = loop_memory_requires_executable_change({"_parse_error": "bad json"})
 
     assert requirement["required"] is True
+
+
+def test_indeterminate_merge_review_veto_requires_executable_change():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is True
+    assert "indeterminate merge-review" in requirement["reason"]
