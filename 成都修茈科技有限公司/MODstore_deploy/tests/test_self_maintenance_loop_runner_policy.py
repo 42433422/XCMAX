@@ -300,6 +300,81 @@ def test_merge_workspace_cleanup_refuses_outside_runtime_root(monkeypatch, tmp_p
     assert outside.exists()
 
 
+def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
+    workspace = tmp_path / "runtime" / "merge"
+    para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
+    public_origin = "https://github.com/example/XCMAX.git"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
+    clone_sources = []
+
+    def fake_run_cmd(args, cwd=None, timeout=120):
+        if args[:3] == ["git", "clone", "--no-tags"]:
+            clone_sources.append(args[3])
+            workspace.mkdir(parents=True)
+            return ""
+        if "diff" in args and "--name-only" in args:
+            return "FHD/app/example.py"
+        return ""
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    files = loop_runner._changed_files_for_branch(
+        repo_url=public_origin,
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+        workspace=workspace,
+    )
+
+    assert files == ["FHD/app/example.py"]
+    assert clone_sources == [para_transport]
+
+
+def test_changed_files_falls_back_after_configured_transport_clone_failure(monkeypatch, tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    workspace = runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "fallback"
+    para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
+    public_origin = "https://github.com/example/XCMAX.git"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
+    clone_sources = []
+
+    def fake_run_cmd(args, cwd=None, timeout=120):
+        if args[:3] == ["git", "clone", "--no-tags"]:
+            clone_sources.append(args[3])
+            workspace.mkdir(parents=True, exist_ok=True)
+            if args[3] == para_transport:
+                (workspace / "partial").write_text("partial", encoding="utf-8")
+                raise RuntimeError("ssh unavailable")
+            assert not (workspace / "partial").exists()
+            return ""
+        if "diff" in args and "--name-only" in args:
+            return "FHD/app/fallback.py"
+        return ""
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    files = loop_runner._changed_files_for_branch(
+        repo_url=public_origin,
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+        workspace=workspace,
+    )
+
+    assert files == ["FHD/app/fallback.py"]
+    assert clone_sources == [para_transport, public_origin]
+
+
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
