@@ -118,9 +118,7 @@ def test_tool_candidates_skip_excluded(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
     monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
     monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
-    out = h._tool_candidates(
-        {"raw_input": {"_para_exclude_tools": ["codex"]}}
-    )
+    out = h._tool_candidates({"raw_input": {"_para_exclude_tools": ["codex"]}})
     assert out[0] == "cursor"
     assert "codex" not in out
 
@@ -582,7 +580,9 @@ def test_post_para_api_retries_next_cli_after_spawn_enoent(monkeypatch):
     )
     monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
 
-    out = h.dispatch_para_delegate(task="修复首页", input_data={}, employee_id="vibe-coding-maintainer")
+    out = h.dispatch_para_delegate(
+        task="修复首页", input_data={}, employee_id="vibe-coding-maintainer"
+    )
 
     assert out["ok"] is True
     assert out.get("tool_fallback_used") is True

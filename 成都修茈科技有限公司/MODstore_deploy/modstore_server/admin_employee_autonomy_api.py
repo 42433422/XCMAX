@@ -653,7 +653,9 @@ def list_pending_human_questions(
                     "subject": row.get("subject"),
                     "change_request_id": row.get("change_request_id"),
                 },
-                "status": "pending" if row.get("status") == "open" else str(row.get("status") or ""),
+                "status": (
+                    "pending" if row.get("status") == "open" else str(row.get("status") or "")
+                ),
                 "answer": "",
                 "asked_at": row.get("created_at"),
                 "answered_at": row.get("answered_at"),
@@ -662,6 +664,7 @@ def list_pending_human_questions(
             }
         )
         seen_sessions.add(sid)
+
     # Pending Retort first, then soon-to-expire.
     def _sort_key(item: Dict[str, Any]) -> tuple:
         is_retort = 0 if str(item.get("employee_id") or "") == "retort-clarification" else 1
@@ -732,7 +735,9 @@ def answer_human_question(
         matched = next(
             (
                 item
-                for item in list_pending_questions(user_id=_admin_user.id, include_expired=True, limit=200)
+                for item in list_pending_questions(
+                    user_id=_admin_user.id, include_expired=True, limit=200
+                )
                 if int(item.get("id") or 0) == numeric_id
             ),
             None,

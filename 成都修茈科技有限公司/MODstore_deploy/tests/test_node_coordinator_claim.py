@@ -17,18 +17,14 @@ def test_parse_claim_owner_accepts_legacy_string():
 def test_can_steal_dead_same_host_pid(monkeypatch):
     monkeypatch.setattr(nc, "_node_id", lambda: "host-a")
     monkeypatch.setattr(nc, "_pid_alive", lambda _pid: False)
-    assert nc._can_steal_claim(
-        {"node_id": "host-a", "pid": 999999, "claimed_at": time.time()}
-    )
+    assert nc._can_steal_claim({"node_id": "host-a", "pid": 999999, "claimed_at": time.time()})
 
 
 def test_cannot_steal_fresh_live_same_host_pid(monkeypatch):
     monkeypatch.setattr(nc, "_node_id", lambda: "host-a")
     monkeypatch.setattr(nc, "_pid_alive", lambda _pid: True)
     monkeypatch.setattr(nc, "_claim_steal_after_seconds", lambda: 180)
-    assert not nc._can_steal_claim(
-        {"node_id": "host-a", "pid": 1, "claimed_at": time.time()}
-    )
+    assert not nc._can_steal_claim({"node_id": "host-a", "pid": 1, "claimed_at": time.time()})
 
 
 def test_file_claim_rejects_other_live_pid(tmp_path, monkeypatch):

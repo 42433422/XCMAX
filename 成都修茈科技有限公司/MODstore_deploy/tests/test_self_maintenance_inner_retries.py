@@ -169,9 +169,7 @@ def test_code_step_accepted_para_timeout_does_not_start_duplicate_retry(
     assert mod._is_transient_employee_dispatch_failure(timeout) is False
 
 
-def test_para_success_nested_delivery_validation_marks_completion(
-    monkeypatch, captured_ledger
-):
+def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, captured_ledger):
     """Mock Para success + nested delivery_validation(all exit 0) → validate/writeback ok."""
     dv = {
         "commands": [

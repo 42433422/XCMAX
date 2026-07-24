@@ -51,13 +51,17 @@ def _normalize_requests(payload: dict[str, Any]) -> list[dict[str, Any]]:
         summary = str(raw.get("body") or raw.get("title") or "").strip()
     source = str(payload.get("source") or incident.get("source") or "").strip().lower()
     event_type = str(payload.get("event_type") or "").strip()
-    if ticket_no or summary or source == "customer_ticket" or event_type.endswith(
-        "customer_ticket"
+    if (
+        ticket_no
+        or summary
+        or source == "customer_ticket"
+        or event_type.endswith("customer_ticket")
     ):
         text = summary or f"客服工单 {ticket_no or '?'} 待归一化"
         return [
             {
-                "id": ticket_no or f"intake-{hashlib.sha256(text.encode()).hexdigest()[:12]}",
+                "id": ticket_no
+                or f"intake-{hashlib.sha256(text.encode()).hexdigest()[:12]}",
                 "text": text[:2000],
                 "route_hint": "user-customer-service-officer",
             }
@@ -80,14 +84,20 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         text = " ".join(str(item.get("text") or "").split())[:2000]
         owner = str(item.get("route_hint") or "task-router-officer").strip()[:160]
         if not request_id or not text:
-            issues.append({"code": "missing_request_context", "path": f"requests[{index}]"})
+            issues.append(
+                {"code": "missing_request_context", "path": f"requests[{index}]"}
+            )
             continue
         fingerprint = hashlib.sha256(text.lower().encode("utf-8")).hexdigest()[:16]
         if fingerprint in seen:
             continue
         seen.add(fingerprint)
         planned.append(
-            {"request_id": request_id, "fingerprint": fingerprint, "proposed_owner": owner}
+            {
+                "request_id": request_id,
+                "fingerprint": fingerprint,
+                "proposed_owner": owner,
+            }
         )
 
     burn_in = _is_burn_in(body)
@@ -120,9 +130,11 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "routing_plan": planned,
         "duplicate_count": max(0, len(requests[:200]) - len(planned) - len(issues)),
         "issues": issues,
-        "evidence": ["input.requests"]
-        if isinstance(body.get("requests"), list)
-        else ["input.incident_or_customer_ticket"],
+        "evidence": (
+            ["input.requests"]
+            if isinstance(body.get("requests"), list)
+            else ["input.incident_or_customer_ticket"]
+        ),
         "read_only": read_only,
         "side_effects": side_effects,
     }

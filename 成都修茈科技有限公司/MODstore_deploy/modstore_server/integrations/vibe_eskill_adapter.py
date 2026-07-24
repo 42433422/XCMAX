@@ -96,7 +96,6 @@ def execute_vibe_code_kind(
     try:
         from modstore_server.integrations.vibe_adapter import (
             VibeIntegrationError,
-            VibePathError,
             get_vibe_coder,
         )
     except ImportError as exc:  # pragma: no cover

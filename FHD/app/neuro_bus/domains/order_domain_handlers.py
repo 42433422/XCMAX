@@ -105,10 +105,16 @@ def register_order_domain_handlers(domain):
         bump_domain_handler_metric("order.created")
         # Sample durable side-effect (not metrics-only): persist to neuro_event_log.
         try:
-            from app.neuro_bus.domains.application_event_consumers import _persist_event_log
+            from app.neuro_bus.domains.application_event_consumers import (
+                _persist_event_log,
+            )
 
             row_id = _persist_event_log(event, side_effect="order.created.sample_loop")
-            logger.info("Order created persisted neuro_event_log#%s order_id=%s", row_id, order_id)
+            logger.info(
+                "Order created persisted neuro_event_log#%s order_id=%s",
+                row_id,
+                order_id,
+            )
         except Exception:  # noqa: BLE001
             logger.debug("order.created persist skipped", exc_info=True)
         # 样板闭环副作用（非全域）：可查询 EventStore + 投影

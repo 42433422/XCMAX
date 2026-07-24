@@ -147,7 +147,11 @@ def vibe_edit_handler(
             user_id=int(user_id or 0),
             read_only=False,
         )
-        root = Path(trusted) if trusted else ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        root = (
+            Path(trusted)
+            if trusted
+            else ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        )
     except VibePathError as exc:
         return {"handler": "vibe_edit", "ok": False, "error": str(exc)}
 
@@ -267,7 +271,11 @@ def vibe_heal_handler(
             user_id=int(user_id or 0),
             read_only=False,
         )
-        root = Path(trusted) if trusted else ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        root = (
+            Path(trusted)
+            if trusted
+            else ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        )
     except VibePathError as exc:
         return {"handler": "vibe_heal", "ok": False, "error": str(exc)}
 

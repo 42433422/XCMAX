@@ -92,9 +92,7 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     published: list[dict] = []
 
     def _capture_publish(event_type, payload, source="unit", fingerprint=None):
-        published.append(
-            {"event_type": event_type, "payload": dict(payload), "source": source}
-        )
+        published.append({"event_type": event_type, "payload": dict(payload), "source": source})
         return True
 
     monkeypatch.setattr(
@@ -243,10 +241,6 @@ def test_case_a_progress_writeback_lifecycle(client, monkeypatch, case_ticket_pa
         db.commit()
         assert out.get("ok") is True
         assert int(out.get("lifecycle_stage") or 0) >= 3
-        row = (
-            db.query(CustomerServiceTicket)
-            .filter(CustomerServiceTicket.id == ticket_id)
-            .first()
-        )
+        row = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id).first()
         assert row is not None
         assert ticket_lifecycle_stage(row.status, row.decision_status) >= 3

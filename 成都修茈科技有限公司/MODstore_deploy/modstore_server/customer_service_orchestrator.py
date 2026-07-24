@@ -102,9 +102,14 @@ def _parse_domain_clarify_reply(text: str) -> str:
         return "custom"
     if any(x in t for x in ("是平台", "平台问题", "宿主问题")) and len(t) <= 24:
         return "platform"
-    if any(x in t for x in ("是软件", "软件问题", "商品问题", "这个Mod", "这个mod")) and len(t) <= 24:
+    if (
+        any(x in t for x in ("是软件", "软件问题", "商品问题", "这个Mod", "这个mod"))
+        and len(t) <= 24
+    ):
         return "software"
     return ""
+
+
 _INTENT_CLASSIFY_PROMPT = """你是 MODstore 客服意图分类器。只根据语义判断，不要死磕关键词。
 只输出一行 JSON，不要其它文字、不要解释、不要思考过程。
 字段：intent, need_ticket, confidence, reason, issue_domain。
@@ -219,9 +224,7 @@ def handle_customer_message(
     session.last_message = text
     session.updated_at = datetime.now(timezone.utc)
 
-    ctx_for_store = {
-        k: v for k, v in (context or {}).items() if k not in {"image_data_url"}
-    }
+    ctx_for_store = {k: v for k, v in (context or {}).items() if k not in {"image_data_url"}}
     if image_data_url:
         ctx_for_store["has_image"] = True
     user_payload: Dict[str, Any] = {"context": ctx_for_store}
@@ -890,7 +893,12 @@ def _parse_intent_json(content: str) -> Optional[Dict[str, Any]]:
         m = re.search(r'"intent"\s*:\s*"([a-z_]+)"', raw, re.I)
         if not m:
             return None
-        return {"intent": m.group(1).lower(), "need_ticket": False, "confidence": 0.55, "reason": "partial"}
+        return {
+            "intent": m.group(1).lower(),
+            "need_ticket": False,
+            "confidence": 0.55,
+            "reason": "partial",
+        }
     chunk = raw[start:]
     end = chunk.rfind("}")
     if end > 0:
@@ -938,10 +946,7 @@ def _llm_classify_intent(text: str) -> Optional[Dict[str, Any]]:
                 {"role": "system", "content": _INTENT_CLASSIFY_PROMPT},
                 {
                     "role": "user",
-                    "content": (
-                        "请分类下面这句话，只输出 JSON：\n"
-                        f"{sample[:1500]}"
-                    ),
+                    "content": ("请分类下面这句话，只输出 JSON：\n" f"{sample[:1500]}"),
                 },
             ],
             # MiniMax 等会先耗 thinking token，160 极易截断 JSON
@@ -1023,15 +1028,14 @@ def _chat_only_reply(
     if xiaoc:
         return xiaoc
     return (
-        "我是小C。已收到你的问题。你可以继续补充细节；"
-        "若需要平台正式受理，点击「提交工单」即可。"
+        "我是小C。已收到你的问题。你可以继续补充细节；" "若需要平台正式受理，点击「提交工单」即可。"
     )
 
 
 def choose_standard(db: Session, intent: str) -> Optional[CustomerServiceStandard]:
     return (
         db.query(CustomerServiceStandard)
-        .filter(CustomerServiceStandard.auto_enabled == True)
+        .filter(CustomerServiceStandard.auto_enabled.is_(True))
         .filter(CustomerServiceStandard.scenario.in_([intent, "general"]))
         .order_by(CustomerServiceStandard.scenario.desc(), CustomerServiceStandard.priority.asc())
         .first()
@@ -1800,7 +1804,9 @@ def title_for_intent(intent: str, extracted: Dict[str, Any]) -> str:
         "general": "平台客服咨询",
         "greeting": "平台客服咨询",
     }
-    suffix = extracted.get("order_no") or extracted.get("catalog_id") or extracted.get("pkg_id") or ""
+    suffix = (
+        extracted.get("order_no") or extracted.get("catalog_id") or extracted.get("pkg_id") or ""
+    )
     if intent == "llm_extension":
         suffix = f"{extracted.get('provider') or ''}/{extracted.get('model') or ''}".strip("/")
     if intent in {"general", "greeting"}:
@@ -2141,7 +2147,11 @@ def ticket_lifecycle_payload(
         "lifecycle_stage": stage,
         "lifecycle_label": label,
         "lifecycle_steps": [
-            {"stage": num, "label": name, "state": ("done" if num < stage else "current" if num == stage else "todo")}
+            {
+                "stage": num,
+                "label": name,
+                "state": ("done" if num < stage else "current" if num == stage else "todo"),
+            }
             for num, name in TICKET_LIFECYCLE_STEPS
         ],
     }

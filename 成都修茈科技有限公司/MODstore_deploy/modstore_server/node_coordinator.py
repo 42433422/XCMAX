@@ -324,8 +324,7 @@ def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[st
         except Exception:
             owner = {}
         same_owner = (
-            str(owner.get("node_id") or "") == node_id
-            and int(owner.get("pid") or 0) == os.getpid()
+            str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) == os.getpid()
         )
         if same_owner:
             return {
@@ -391,8 +390,7 @@ def release_incident_claim(event_id: int) -> Dict[str, Any]:
         except Exception:
             owner = {}
         if (
-            str(owner.get("node_id") or "") == node_id
-            and int(owner.get("pid") or 0) in {0, pid}
+            str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) in {0, pid}
         ) or not owner:
             try:
                 claim_path.unlink()

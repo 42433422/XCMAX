@@ -61,9 +61,11 @@ def _normalize_ticket(payload: dict) -> Optional[Dict[str, Any]]:
                 "text": issue[:500],
             }
         ]
-    severity = str(
-        payload.get("severity") or incident.get("severity") or "normal"
-    ).strip().lower()
+    severity = (
+        str(payload.get("severity") or incident.get("severity") or "normal")
+        .strip()
+        .lower()
+    )
     return {
         "id": ticket_id or "CS-unknown",
         "issue": issue or f"客服工单 {ticket_id}",
@@ -88,7 +90,9 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     if not ticket_id or not issue:
         issues.append({"code": "missing_ticket_context", "path": "ticket"})
     if not sources:
-        issues.append({"code": "missing_grounding_sources", "path": "ticket.knowledge_sources"})
+        issues.append(
+            {"code": "missing_grounding_sources", "path": "ticket.knowledge_sources"}
+        )
     severity = str(ticket.get("severity") or "normal").strip().lower()
     if severity not in {"low", "normal", "high", "critical"}:
         issues.append({"code": "invalid_severity", "path": "ticket.severity"})
@@ -104,9 +108,11 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "grounded_source_count": len(sources),
         "issues": issues,
         "ready_for_response_draft": not issues,
-        "evidence": ["input.ticket.issue", "input.ticket.knowledge_sources"]
-        if isinstance((payload or {}).get("ticket"), dict)
-        else ["input.incident_or_customer_ticket"],
+        "evidence": (
+            ["input.ticket.issue", "input.ticket.knowledge_sources"]
+            if isinstance((payload or {}).get("ticket"), dict)
+            else ["input.incident_or_customer_ticket"]
+        ),
         "read_only": True,
         "side_effects": [],
     }

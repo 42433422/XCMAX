@@ -349,7 +349,9 @@ def answer_pending_question(
                     answers=answer,
                     answered_by=f"user:{answered_by_user_id}",
                 )
-            except Exception as exc:  # noqa: BLE001 - answering inbox must not fail closed on bridge
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - answering inbox must not fail closed on bridge
                 retort_bridge = {"ok": False, "error": type(exc).__name__}
 
     return {

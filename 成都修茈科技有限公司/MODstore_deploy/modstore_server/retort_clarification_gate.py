@@ -69,7 +69,9 @@ def max_open_sessions() -> int:
 
 def expire_fallback() -> str:
     """fail_closed | cancel | degrade_intent"""
-    raw = _text(os.environ.get("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK") or "fail_closed", 32)
+    raw = _text(
+        os.environ.get("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK") or "fail_closed", 32
+    )
     return raw if raw in {"fail_closed", "cancel", "degrade_intent"} else "fail_closed"
 
 
@@ -129,7 +131,9 @@ def _save_store_unlocked(store: Mapping[str, Any]) -> None:
         "updated_at": _now_iso(),
         "sessions": dict(store.get("sessions") or {}),
     }
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+    )
     tmp.replace(path)
 
 
@@ -219,7 +223,9 @@ def _normalize_changed_for_alignment(changed_files: Sequence[Any] | None) -> lis
     return rows
 
 
-def _public_session(session_id: str, row: Mapping[str, Any], *, now: Optional[datetime] = None) -> dict[str, Any]:
+def _public_session(
+    session_id: str, row: Mapping[str, Any], *, now: Optional[datetime] = None
+) -> dict[str, Any]:
     moment = now or _now()
     expires_at = _parse_iso(str(row.get("expires_at") or ""))
     seconds_remaining = None
@@ -262,7 +268,8 @@ def _expire_boss_inbox_for_sessions(session_ids: Sequence[str]) -> int:
     except Exception:
         return 0
     fingerprints = [
-        hashlib.sha256(f"retort-clarification:{sid}".encode("utf-8")).hexdigest()[:32] for sid in ids
+        hashlib.sha256(f"retort-clarification:{sid}".encode("utf-8")).hexdigest()[:32]
+        for sid in ids
     ]
     expired = 0
     try:
@@ -384,9 +391,11 @@ def list_clarifications(
     rows.sort(
         key=lambda item: (
             0 if item.get("status") == _STATUS_OPEN else 1,
-            item.get("seconds_remaining")
-            if isinstance(item.get("seconds_remaining"), int)
-            else 10**9,
+            (
+                item.get("seconds_remaining")
+                if isinstance(item.get("seconds_remaining"), int)
+                else 10**9
+            ),
             str(item.get("created_at") or ""),
         )
     )
@@ -546,7 +555,12 @@ def mark_clarification_resolved(session_id: str) -> dict[str, Any]:
             return {"ok": False, "error": "session_not_found"}
         if row.get("status") not in {_STATUS_ANSWERED, _STATUS_RESOLVED}:
             return {"ok": False, "error": f"session_not_answerable:{row.get('status')}"}
-        row = {**row, "status": _STATUS_RESOLVED, "resolved_at": _now_iso(), "updated_at": _now_iso()}
+        row = {
+            **row,
+            "status": _STATUS_RESOLVED,
+            "resolved_at": _now_iso(),
+            "updated_at": _now_iso(),
+        }
         sessions[sid] = row
         _save_store_unlocked({"schema": _SCHEMA, "sessions": sessions})
     return {"ok": True, "session": {"session_id": sid, **row}}
@@ -827,7 +841,9 @@ def _latest_session_for_subject(subject: str) -> Optional[dict[str, Any]]:
     ]
     if not rows:
         return None
-    rows.sort(key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
+    rows.sort(
+        key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True
+    )
     return rows[0]
 
 
@@ -920,7 +936,9 @@ def evaluate_retort_clarification_gate(
             mark_clarification_resolved(str(session.get("session_id")))
             session = get_clarification(str(session.get("session_id"))) or session
 
-    aligned = assessment.get("status") == "aligned" and "retort_clarification_pending" not in blockers
+    aligned = (
+        assessment.get("status") == "aligned" and "retort_clarification_pending" not in blockers
+    )
     if assessment.get("status") == "misaligned" and "retort_clarification_pending" not in blockers:
         blockers.append("retort_intent_misaligned")
 

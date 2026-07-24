@@ -129,9 +129,7 @@ async def customer_service_chat(
     if t:
         evidence = t.get("evidence") if isinstance(t.get("evidence"), dict) else {}
         followups = evidence.get("followups") if isinstance(evidence, dict) else None
-        last_followup = (
-            followups[-1] if isinstance(followups, list) and followups else None
-        )
+        last_followup = followups[-1] if isinstance(followups, list) and followups else None
         issue_domain = str(t.get("issue_domain") or "")[:32]
         summary_text = str(t.get("summary") or "")[:2000]
         title_text = str(t.get("title") or "")[:500]
@@ -165,14 +163,10 @@ async def customer_service_chat(
                 "issue_domain": issue_domain,
                 "issue_domain_label": str(t.get("issue_domain_label") or "")[:32],
                 "user_confirmed_domain": str(
-                    (evidence or {}).get("user_confirmed_domain")
-                    or t.get("issue_domain")
-                    or ""
+                    (evidence or {}).get("user_confirmed_domain") or t.get("issue_domain") or ""
                 )[:32],
                 "user_followup": str(
-                    (last_followup or {}).get("text")
-                    if isinstance(last_followup, dict)
-                    else ""
+                    (last_followup or {}).get("text") if isinstance(last_followup, dict) else ""
                 )[:200],
                 "status": str(t.get("status") or "")[:32],
                 "summary": summary_text,

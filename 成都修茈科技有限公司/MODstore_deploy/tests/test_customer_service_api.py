@@ -112,7 +112,7 @@ def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeyp
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
-def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
+def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
 
@@ -319,9 +319,10 @@ def test_resolve_issue_domain_three_way():
     assert custom["domain"] == "custom"
     assert custom["label"] == "客户定制"
     assert _parse_domain_clarify_reply("是平台") == "platform"
-    assert resolve_issue_domain(
-        intent="greeting", text="是平台", extracted={}, context={}
-    )["domain"] == "platform"
+    assert (
+        resolve_issue_domain(intent="greeting", text="是平台", extracted={}, context={})["domain"]
+        == "platform"
+    )
 
 
 def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
@@ -509,7 +510,9 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         db.commit()
         assert out.get("ok") is True
         assert out.get("lifecycle_stage") == 3
-        ticket = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id).first()
+        ticket = (
+            db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id).first()
+        )
         assert ticket is not None
         assert ticket.status == "processing"
         assert ticket.decision_status == "approved"
@@ -533,11 +536,14 @@ def test_infer_intent_order_no_alone_is_not_refund():
     assert intent == "general"
     assert should_create_ticket(intent, "订单号：ABC123456789") is False
     assert should_create_ticket("refund", "我要退款") is False
-    assert should_create_ticket(
-        "refund",
-        "订单号 ABC 想退款",
-        {"order_no": "ABC", "reason": "重复购买"},
-    ) is True
+    assert (
+        should_create_ticket(
+            "refund",
+            "订单号 ABC 想退款",
+            {"order_no": "ABC", "reason": "重复购买"},
+        )
+        is True
+    )
     assert should_create_ticket("refund", "请提交工单帮我退款") is True
 
 

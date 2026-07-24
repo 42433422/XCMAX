@@ -65,7 +65,9 @@ class OrderNeuroDomain(NeuroDomain):
             },
         )
 
-    def emit_order_paid(self, order_id: str, amount: Decimal, payment_method: str) -> bool:
+    def emit_order_paid(
+        self, order_id: str, amount: Decimal, payment_method: str
+    ) -> bool:
         return self.emit(
             "order.paid",
             priority=EventPriority.HIGH,

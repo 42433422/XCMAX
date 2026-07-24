@@ -98,7 +98,9 @@ async def autonomy_audit_log(
         "count": len(items),
         "summary": summary,
         "evaluation": (
-            evaluate_autonomy_window(days, summary=summary) if days in {30, 90} else None
+            evaluate_autonomy_window(days, summary=summary)
+            if days in {30, 90}
+            else None
         ),
     }
 
@@ -137,7 +139,10 @@ async def admin_resume_autonomy_action(action_id: str, request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import ApprovalStateError, resume_action
+    from app.application.autonomy.approval_resume import (
+        ApprovalStateError,
+        resume_action,
+    )
 
     try:
         body = await request.json()
@@ -166,7 +171,10 @@ async def admin_reject_autonomy_action(action_id: str, request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import ApprovalStateError, reject_action
+    from app.application.autonomy.approval_resume import (
+        ApprovalStateError,
+        reject_action,
+    )
 
     try:
         body = await request.json()
@@ -248,7 +256,11 @@ async def admin_autonomy_overview(request: Request):
         "ok": True,
         "health": {"ok": True, "service": "ops-autonomy-approval"},
         "pending": {"count": len(pending), "items": pending[:20]},
-        "audit": {"items": audit_items, "count": len(audit_items), "summary": audit_summary},
+        "audit": {
+            "items": audit_items,
+            "count": len(audit_items),
+            "summary": audit_summary,
+        },
         "loop": extract_loop_run_summary(runtime if isinstance(runtime, dict) else {}),
         "runtime": runtime,
         "closure": {
@@ -303,7 +315,9 @@ async def admin_autonomy_cross_tier_gate(request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.admin_overview import evaluate_cross_tier_gate_snapshot
+    from app.application.autonomy.admin_overview import (
+        evaluate_cross_tier_gate_snapshot,
+    )
 
     return {"ok": True, **evaluate_cross_tier_gate_snapshot(None)}
 
@@ -337,7 +351,8 @@ async def admin_force_self_maintenance_run(request: Request):
     if not isinstance(body, dict):
         body = {}
     reason = (
-        str(body.get("reason") or "admin_console_force_run").strip() or "admin_console_force_run"
+        str(body.get("reason") or "admin_console_force_run").strip()
+        or "admin_console_force_run"
     )
     try:
         result = await sm_svc.force_run_local(reason=reason)
@@ -375,7 +390,9 @@ def _release_train_snapshot() -> dict[str, Any]:
 
     mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if mono:
-        path = Path(mono).expanduser().resolve() / "FHD" / "config" / "release_train.json"
+        path = (
+            Path(mono).expanduser().resolve() / "FHD" / "config" / "release_train.json"
+        )
         return _from_file(path)
 
     try:
@@ -507,14 +524,20 @@ async def _fetch_remote_xcmax_daily_digests(path: str) -> dict[str, Any] | None:
 
     from app.application.modstore_local_client import internal_auth_headers
 
-    base = (os.environ.get("XCAGI_MARKET_BASE_URL") or "https://xiu-ci.com").strip().rstrip("/")
+    base = (
+        (os.environ.get("XCAGI_MARKET_BASE_URL") or "https://xiu-ci.com")
+        .strip()
+        .rstrip("/")
+    )
     # 避免误打到 SPA /market 前缀
     if base.endswith("/market"):
         base = base[: -len("/market")]
     # 统一改走 xcmax 管理端读接口（butler 路径需管理员 JWT，管理端常拿不到）
     bare, _, query = path.partition("?")
     if bare.startswith("/api/agent/butler/daily-digests"):
-        bare = bare.replace("/api/agent/butler/daily-digests", "/api/xcmax/admin/daily-digests", 1)
+        bare = bare.replace(
+            "/api/agent/butler/daily-digests", "/api/xcmax/admin/daily-digests", 1
+        )
     elif not bare.startswith("/api/xcmax/admin/daily-digests"):
         return None
     url = f"{base}{bare}"
@@ -525,7 +548,9 @@ async def _fetch_remote_xcmax_daily_digests(path: str) -> dict[str, Any] | None:
         async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code >= 400:
-                logger.warning("remote xcmax daily-digests HTTP %s path=%s", resp.status_code, bare)
+                logger.warning(
+                    "remote xcmax daily-digests HTTP %s path=%s", resp.status_code, bare
+                )
                 return None
             data = resp.json()
             return data if isinstance(data, dict) else {"success": True, "data": data}
@@ -607,12 +632,16 @@ async def _digest_local_or_proxy(
                 if local_payload is not None:
                     return local_payload
         except RECOVERABLE_ERRORS as exc:
-            logger.warning("local digest/action-items read failed path=%s: %s", path, exc)
+            logger.warning(
+                "local digest/action-items read failed path=%s: %s", path, exc
+            )
             if _is_daily_digest_list_path(path) or _is_daily_digest_detail_path(path):
                 remote = await _fetch_remote_xcmax_daily_digests(path)
                 if remote is not None:
                     return remote
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=502)
+            return JSONResponse(
+                {"success": False, "message": str(exc)}, status_code=502
+            )
 
     proxied = await _market_admin_proxy(
         request,
@@ -663,7 +692,10 @@ async def _self_maintenance_local_or_proxy(
                 limit=limit,
                 authorization=authorization,
             )
-        if path == "/api/ops/self-maintenance/governance-review" and method.upper() == "POST":
+        if (
+            path == "/api/ops/self-maintenance/governance-review"
+            and method.upper() == "POST"
+        ):
             note = str((json_body or {}).get("note") or "")
             return await sm_svc.governance_review_local(
                 note=note,
@@ -710,12 +742,17 @@ async def _self_maintenance_local_or_proxy(
 
 
 async def _remote_duty_health(request: Request) -> dict[str, Any]:
-    health_payload = await _market_admin_proxy(request, "GET", "/api/admin/duty-graph/health")
+    health_payload = await _market_admin_proxy(
+        request, "GET", "/api/admin/duty-graph/health"
+    )
     if isinstance(health_payload, dict):
         return health_payload
     if hasattr(health_payload, "body"):
         try:
-            return cast("dict[str, Any]", json.loads(getattr(health_payload, "body", b"") or b"{}"))
+            return cast(
+                "dict[str, Any]",
+                json.loads(getattr(health_payload, "body", b"") or b"{}"),
+            )
         except RECOVERABLE_ERRORS:
             return {}
     return {}
@@ -996,7 +1033,9 @@ async def admin_create_market_user(
     username = str(payload.get("username") or "").strip()
     password = str(payload.get("password") or "")
     email = str(payload.get("email") or "").strip()
-    verification_code = str(payload.get("verification_code") or payload.get("code") or "").strip()
+    verification_code = str(
+        payload.get("verification_code") or payload.get("code") or ""
+    ).strip()
     if not username or not password:
         return JSONResponse(
             {"success": False, "message": "username、password 必填"},
@@ -1041,7 +1080,9 @@ async def admin_create_market_user(
 
 @router.get("/admin/market/assignable-mods", response_model=None)
 async def admin_list_assignable_mods(request: Request):
-    return await _market_admin_proxy(request, "GET", "/api/admin/enterprise/assignable-mods")
+    return await _market_admin_proxy(
+        request, "GET", "/api/admin/enterprise/assignable-mods"
+    )
 
 
 @router.get("/admin/market/wallets", response_model=None)
@@ -1099,7 +1140,9 @@ async def admin_list_user_mods(request: Request, user_id: int):
 async def admin_bind_user_mod(request: Request, user_id: int, mod_id: str):
     from app.application.session_account_meta import audit_admin_action
 
-    out = await _market_admin_proxy(request, "POST", f"/api/admin/users/{user_id}/mods/{mod_id}")
+    out = await _market_admin_proxy(
+        request, "POST", f"/api/admin/users/{user_id}/mods/{mod_id}"
+    )
     audit_admin_action(request, "bind_user_mod", target_user_id=user_id, mod_id=mod_id)
     return out
 
@@ -1108,8 +1151,12 @@ async def admin_bind_user_mod(request: Request, user_id: int, mod_id: str):
 async def admin_unbind_user_mod(request: Request, user_id: int, mod_id: str):
     from app.application.session_account_meta import audit_admin_action
 
-    out = await _market_admin_proxy(request, "DELETE", f"/api/admin/users/{user_id}/mods/{mod_id}")
-    audit_admin_action(request, "unbind_user_mod", target_user_id=user_id, mod_id=mod_id)
+    out = await _market_admin_proxy(
+        request, "DELETE", f"/api/admin/users/{user_id}/mods/{mod_id}"
+    )
+    audit_admin_action(
+        request, "unbind_user_mod", target_user_id=user_id, mod_id=mod_id
+    )
     return out
 
 
@@ -1208,7 +1255,9 @@ async def admin_set_user_profile(
     )
 
     if not username:
-        return JSONResponse({"success": False, "message": "username 必填"}, status_code=422)
+        return JSONResponse(
+            {"success": False, "message": "username 必填"}, status_code=422
+        )
     if tier and tier not in _VALID_TIERS:
         return JSONResponse(
             {"success": False, "message": f"tier 必须是 {sorted(_VALID_TIERS)} 之一"},
@@ -1237,18 +1286,27 @@ async def admin_set_user_profile(
                 db.flush()
 
             final_tier = (
-                (tier or str(getattr(user, "tier", "") or "") or "personal").strip().lower()
+                (tier or str(getattr(user, "tier", "") or "") or "personal")
+                .strip()
+                .lower()
             )
             # account_tier 仅企业可设
-            if norm_account_tier is not None and not should_have_account_tier(final_tier):
+            if norm_account_tier is not None and not should_have_account_tier(
+                final_tier
+            ):
                 return JSONResponse(
-                    {"success": False, "message": "账号等级（account_tier）仅企业用户可设置"},
+                    {
+                        "success": False,
+                        "message": "账号等级（account_tier）仅企业用户可设置",
+                    },
                     status_code=422,
                 )
 
             # 计算最终 entitled 集合 + industry_id 校验
             current_entitled = list(getattr(user, "entitled_industries", None) or [])
-            final_entitled = entitled_in if entitled_in is not None else current_entitled
+            final_entitled = (
+                entitled_in if entitled_in is not None else current_entitled
+            )
             if industry_id:
                 if entitled_provided:
                     if not validate_industry_in_entitled(industry_id, final_entitled):
@@ -1284,7 +1342,9 @@ async def admin_set_user_profile(
                 "industry_id": user.industry_id,
                 "account_tier": user.account_tier,
                 "budget_range": user.budget_range,
-                "entitled_industries": list(getattr(user, "entitled_industries", None) or []),
+                "entitled_industries": list(
+                    getattr(user, "entitled_industries", None) or []
+                ),
             }
         return {"success": True, "data": result}
     except RECOVERABLE_ERRORS as exc:
@@ -1348,12 +1408,18 @@ async def admin_force_push_user_entitlements(
         return gate
 
     user_data = payload.get("user") if isinstance(payload.get("user"), dict) else {}
-    profile_data = payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
-    wallet_data = payload.get("wallet") if isinstance(payload.get("wallet"), dict) else None
+    profile_data = (
+        payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
+    )
+    wallet_data = (
+        payload.get("wallet") if isinstance(payload.get("wallet"), dict) else None
+    )
 
     username = str(user_data.get("username") or payload.get("username") or "").strip()
     if not username:
-        return JSONResponse({"success": False, "message": "username 必填"}, status_code=422)
+        return JSONResponse(
+            {"success": False, "message": "username 必填"}, status_code=422
+        )
 
     tier = str(profile_data.get("tier") or user_data.get("tier") or "").strip().lower()
     if tier not in _VALID_TIERS:
@@ -1370,7 +1436,8 @@ async def admin_force_push_user_entitlements(
         "username": username,
         "email": str(user_data.get("email") or payload.get("email") or "").strip(),
         "is_admin": _truthy(user_data.get("is_admin")),
-        "is_enterprise": _truthy(user_data.get("is_enterprise")) or tier == "enterprise",
+        "is_enterprise": _truthy(user_data.get("is_enterprise"))
+        or tier == "enterprise",
         "profile": {
             "username": username,
             "tier": tier,
@@ -1381,12 +1448,16 @@ async def admin_force_push_user_entitlements(
         },
         "mod_ids": _clean_string_list(payload.get("mod_ids")),
         "wallet": wallet_data,
-        "workflow_employees": payload.get("workflow_employees")
-        if isinstance(payload.get("workflow_employees"), list)
-        else [],
-        "installed_mods": payload.get("installed_mods")
-        if isinstance(payload.get("installed_mods"), list)
-        else [],
+        "workflow_employees": (
+            payload.get("workflow_employees")
+            if isinstance(payload.get("workflow_employees"), list)
+            else []
+        ),
+        "installed_mods": (
+            payload.get("installed_mods")
+            if isinstance(payload.get("installed_mods"), list)
+            else []
+        ),
         "source": "admin_entitlements_force_push",
         "meta": {
             "updated_at_ms": int(time.time() * 1000),
@@ -1409,7 +1480,10 @@ async def admin_force_push_user_entitlements(
         )
 
     push_result = push_outbox(remote_host=REMOTE_HOST, remote_port=REMOTE_PORT)
-    if int(push_result.get("failed") or 0) > 0 or int(push_result.get("sent") or 0) <= 0:
+    if (
+        int(push_result.get("failed") or 0) > 0
+        or int(push_result.get("sent") or 0) <= 0
+    ):
         return JSONResponse(
             {
                 "success": False,
@@ -1517,11 +1591,15 @@ async def admin_start_impersonate(
     target_name = str(body.get("username") or "").strip()
     target_company = str(body.get("company") or body.get("company_brand") or "").strip()
     if target_id is None:
-        return JSONResponse({"success": False, "message": "market_user_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "market_user_id 必填"}, status_code=400
+        )
     try:
         target_id = int(target_id)
     except (TypeError, ValueError):
-        return JSONResponse({"success": False, "message": "market_user_id 无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "market_user_id 无效"}, status_code=400
+        )
 
     meta = load_session_account_meta(sid) or {}
     persist_session_account_meta(
@@ -1570,7 +1648,9 @@ async def admin_activate_enterprise_impersonation(
 
     token = str(body.get("bridge_token") or body.get("token") or "").strip()
     if not token:
-        return JSONResponse({"success": False, "message": "bridge_token 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "bridge_token 必填"}, status_code=400
+        )
     admin_sid = consume_impersonation_bridge_token(token)
     if not admin_sid:
         return JSONResponse(
@@ -1582,7 +1662,9 @@ async def admin_activate_enterprise_impersonation(
         or ""
     ).strip()
     try:
-        sid = mirror_admin_impersonation_to_enterprise_session(admin_sid, enterprise_sid or None)
+        sid = mirror_admin_impersonation_to_enterprise_session(
+            admin_sid, enterprise_sid or None
+        )
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
     return {"success": True, "session_id": sid}
@@ -1725,7 +1807,9 @@ async def local_self_maintenance_governance_review(
             {"success": False, "message": "请先登录"},
             status_code=401,
         )
-    authorization = _authorization_from_request(request, body if isinstance(body, dict) else {})
+    authorization = _authorization_from_request(
+        request, body if isinstance(body, dict) else {}
+    )
     try:
         return await sm_svc.governance_review_local(
             note=str(body.get("note") or ""),
@@ -1783,7 +1867,9 @@ async def local_employee_cron_job_run(
         session_id=str(body.get("session_id") or sid),
         source="manual",
     )
-    if not result.get("success") and "unknown employee cron job" in str(result.get("error") or ""):
+    if not result.get("success") and "unknown employee cron job" in str(
+        result.get("error") or ""
+    ):
         return JSONResponse(result, status_code=404)
     return result
 
@@ -1801,7 +1887,9 @@ async def local_employee_status(request: Request, employee_id: str):
         )
     pid = str(employee_id or "").strip()
     if not pid:
-        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "employee_id 必填"}, status_code=400
+        )
     return build_local_employee_status(pid)
 
 
@@ -1814,7 +1902,9 @@ async def local_employee_execute(
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
     from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
-    from app.application.employee_runtime.result_verifier import verify_employee_run_result
+    from app.application.employee_runtime.result_verifier import (
+        verify_employee_run_result,
+    )
     from app.application.employee_runtime.run_ledger import (
         create_employee_run_log,
         finish_employee_run_log,
@@ -1841,13 +1931,17 @@ async def local_employee_execute(
     )
     pid = str(employee_id or "").strip()
     if not pid:
-        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "employee_id 必填"}, status_code=400
+        )
     task = str(body.get("task") or "").strip()
     if not task:
         return JSONResponse({"success": False, "message": "task 必填"}, status_code=400)
     raw_input = body.get("input_data")
     if raw_input is not None and not isinstance(raw_input, dict):
-        return JSONResponse({"success": False, "message": "input_data 必须是对象"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "input_data 必须是对象"}, status_code=400
+        )
     payload = dict(raw_input or {})
     for key in ("approved_write", "allow_write", "write_token", "approval_token"):
         if key in body and key not in payload:
@@ -1877,7 +1971,9 @@ async def local_employee_execute(
             workspace_root=str(body.get("workspace_root") or "").strip() or None,
             session_id=str(body.get("session_id") or sid),
         )
-        ok, reason = verify_employee_run_result(pid, result if isinstance(result, dict) else {})
+        ok, reason = verify_employee_run_result(
+            pid, result if isinstance(result, dict) else {}
+        )
         if ok and result.get("success") is not False:
             finish_employee_run_log(
                 run_id,
@@ -1893,7 +1989,9 @@ async def local_employee_execute(
                 "attempts": attempt,
                 "data": result,
             }
-        last_error = reason or str(result.get("message") or result.get("error") or "执行失败")
+        last_error = reason or str(
+            result.get("message") or result.get("error") or "执行失败"
+        )
     finish_employee_run_log(
         run_id,
         status="failed",
@@ -1921,7 +2019,9 @@ async def local_employee_runs(request: Request, employee_id: str, limit: int = 5
         return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
     pid = str(employee_id or "").strip()
     if not pid:
-        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "employee_id 必填"}, status_code=400
+        )
     return {"success": True, "data": list_employee_run_logs(pid, limit=limit)}
 
 
@@ -1938,7 +2038,9 @@ async def local_employee_manifest(request: Request, employee_id: str):
         )
     pid = str(employee_id or "").strip()
     if not pid:
-        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "employee_id 必填"}, status_code=400
+        )
     row = read_local_employee_manifest(pid)
     if not row:
         return JSONResponse(
@@ -2004,7 +2106,9 @@ async def list_action_items(
     if day:
         q.append(f"day={day}")
     query = ("?" + "&".join(q)) if q else ""
-    return await _digest_local_or_proxy(request, "GET", f"/api/admin/action-items{query}")
+    return await _digest_local_or_proxy(
+        request, "GET", f"/api/admin/action-items{query}"
+    )
 
 
 @router.get("/admin/action-items/stats", response_model=None)
@@ -2020,7 +2124,9 @@ async def action_items_stats(
     if day:
         q.append(f"day={day}")
     query = ("?" + "&".join(q)) if q else ""
-    return await _digest_local_or_proxy(request, "GET", f"/api/admin/action-items/stats{query}")
+    return await _digest_local_or_proxy(
+        request, "GET", f"/api/admin/action-items/stats{query}"
+    )
 
 
 @router.post("/admin/daily-digests/{record_id}/vibe-prep/sessions", response_model=None)
@@ -2058,7 +2164,9 @@ async def get_digest_vibe_prep_session(request: Request, session_id: str):
     """轮询 Vibe 预备文档生成会话（复用 workbench session 存储）。"""
     sid = "".join(ch for ch in str(session_id or "") if ch.isalnum())[:64]
     if not sid:
-        return JSONResponse({"success": False, "message": "session_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "session_id 必填"}, status_code=400
+        )
     return await _market_admin_proxy(
         request,
         "GET",
@@ -2085,7 +2193,9 @@ async def get_all_hands_report_session(request: Request, session_id: str):
     """轮询服务器员工大会后台会话。"""
     sid = "".join(ch for ch in str(session_id or "") if ch.isalnum())[:64]
     if not sid:
-        return JSONResponse({"success": False, "message": "session_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "session_id 必填"}, status_code=400
+        )
     return await _market_admin_proxy(
         request,
         "GET",
@@ -2154,13 +2264,19 @@ async def admin_deploy_check(request: Request, channel: str = Query("stable")):
 
 
 @router.post("/admin/deploy/push", response_model=None)
-async def admin_deploy_push(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+async def admin_deploy_push(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
     """管理端推送更新包到 update 中转站；企业端自行拉取。"""
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
     payload = dict(body or {})
-    channel = "staging" if str(payload.get("channel") or "").strip() == "staging" else "stable"
+    channel = (
+        "staging"
+        if str(payload.get("channel") or "").strip() == "staging"
+        else "stable"
+    )
     options = {
         "include_backend": bool(payload.get("include_backend", True)),
         "include_frontend": bool(payload.get("include_frontend", True)),
@@ -2186,14 +2302,20 @@ async def admin_deploy_job(request: Request, job_id: str):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    normalized_job_id = "".join(ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_")[:128]
+    normalized_job_id = "".join(
+        ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_"
+    )[:128]
     if not normalized_job_id:
-        return JSONResponse({"success": False, "message": "job_id 无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "job_id 无效"}, status_code=400
+        )
     from app.application.admin_deploy_push import get_deploy_job
 
     job = get_deploy_job(normalized_job_id)
     if job is None:
-        return JSONResponse({"success": False, "message": "推送任务不存在"}, status_code=404)
+        return JSONResponse(
+            {"success": False, "message": "推送任务不存在"}, status_code=404
+        )
     return {"success": True, "data": job.to_dict()}
 
 
@@ -2213,16 +2335,25 @@ async def ops_duty_health(request: Request):
             "success": False,
             "staffing": closure.get("staffing") or {},
         }
-    merged = {**remote, "staffing": closure.get("staffing") or remote.get("staffing") or {}}
+    merged = {
+        **remote,
+        "staffing": closure.get("staffing") or remote.get("staffing") or {},
+    }
     merged["planned_employee_ids"] = closure.get("planned_employee_ids")
     merged["registered_employee_ids"] = closure.get("registered_employee_ids")
-    merged["planned_local_installed_count"] = closure.get("planned_local_installed_count")
-    merged["extra_local_employee_pack_ids"] = closure.get("extra_local_employee_pack_ids")
+    merged["planned_local_installed_count"] = closure.get(
+        "planned_local_installed_count"
+    )
+    merged["extra_local_employee_pack_ids"] = closure.get(
+        "extra_local_employee_pack_ids"
+    )
     return merged
 
 
 @router.post("/ops/dispatch", response_model=None)
-async def ops_dispatch(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+async def ops_dispatch(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
     payload = dict(body or {})
     payload.setdefault("dispatch_source", "desktop")
     return await _market_admin_proxy(
@@ -2246,12 +2377,16 @@ async def ops_jobs(request: Request, limit: int = Query(20, ge=1, le=100)):
 async def ops_job_detail(request: Request, job_id: str):
     jid = "".join(ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_")[:128]
     if not jid:
-        return JSONResponse({"success": False, "message": "job_id 无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "job_id 无效"}, status_code=400
+        )
     return await _market_admin_proxy(request, "GET", f"/api/ops/orchestrate/jobs/{jid}")
 
 
 @router.post("/ops/duty-runs", response_model=None)
-async def ops_duty_runs(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+async def ops_duty_runs(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
     return await _market_admin_proxy(
         request,
         "POST",
@@ -2263,8 +2398,12 @@ async def ops_duty_runs(request: Request, body: dict[str, Any] = Body(default_fa
 @router.get("/ops/duty-runs/{run_id}", response_model=None)
 async def ops_duty_run_detail(request: Request, run_id: int):
     if run_id <= 0:
-        return JSONResponse({"success": False, "message": "run_id 无效"}, status_code=400)
-    return await _market_admin_proxy(request, "GET", f"/api/admin/duty-graph/runs/{run_id}")
+        return JSONResponse(
+            {"success": False, "message": "run_id 无效"}, status_code=400
+        )
+    return await _market_admin_proxy(
+        request, "GET", f"/api/admin/duty-graph/runs/{run_id}"
+    )
 
 
 @router.get("/ops/closure-status", response_model=None)
@@ -2326,7 +2465,9 @@ async def ops_founder_autonomy(request: Request):
         try:
             payload = await _market_admin_proxy(request, "GET", path)
         except RECOVERABLE_ERRORS as exc:
-            logger.warning("founder autonomy evidence unavailable path=%s: %s", path, exc)
+            logger.warning(
+                "founder autonomy evidence unavailable path=%s: %s", path, exc
+            )
             return {}
         return payload if isinstance(payload, dict) else {}
 
@@ -2355,7 +2496,9 @@ async def ops_founder_autonomy(request: Request):
     )
 
     action_board_data = (
-        action_board.get("data") if isinstance(action_board.get("data"), dict) else action_board
+        action_board.get("data")
+        if isinstance(action_board.get("data"), dict)
+        else action_board
     )
     action_board_goal_section = action_board_data.get("goals")
     action_board_goal_summary = (
@@ -2412,7 +2555,9 @@ async def ops_founder_autonomy(request: Request):
 
 
 @router.post("/ops/staffing/onboard", response_model=None)
-async def ops_staffing_onboard(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+async def ops_staffing_onboard(
+    request: Request, body: dict[str, Any] = Body(default_factory=dict)
+):
     """将编制缺岗员工登记到 MODstore Catalog（代理 yuangon-onboard/run）。"""
     payload: dict[str, Any] = {
         "dry_run": bool(body.get("dry_run", False)),
@@ -2441,7 +2586,9 @@ async def ops_staffing_install_local(
         return gate
     pkg_id = str(body.get("employee_id") or body.get("pkg_id") or "").strip()
     if not pkg_id:
-        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "employee_id 必填"}, status_code=400
+        )
     try:
         from app.fastapi_routes.mod_store_routes import _install_from_catalog
 
@@ -2566,7 +2713,9 @@ async def sync_push():
 
 
 @router.get("/sync/changes", response_model=None)
-async def sync_changes(since_cursor: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000)):
+async def sync_changes(
+    since_cursor: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000)
+):
     """获取变更日志（支持断线补拉）。"""
     try:
         from app.db.xcmax_sync import SyncDb
@@ -2651,7 +2800,9 @@ async def sync_current_entitlements(request: Request):
                 },
             }
 
-        market_user_id = meta.get("impersonating_market_user_id") or meta.get("market_user_id")
+        market_user_id = meta.get("impersonating_market_user_id") or meta.get(
+            "market_user_id"
+        )
         username_candidates = [
             str(meta.get("impersonating_username") or "").strip(),
             str(meta.get("company_brand") or "").strip(),
@@ -2661,8 +2812,12 @@ async def sync_current_entitlements(request: Request):
 
             user = resolve_session_user(request)
             if user is not None:
-                username_candidates.append(str(getattr(user, "username", "") or "").strip())
-                username_candidates.append(str(getattr(user, "display_name", "") or "").strip())
+                username_candidates.append(
+                    str(getattr(user, "username", "") or "").strip()
+                )
+                username_candidates.append(
+                    str(getattr(user, "display_name", "") or "").strip()
+                )
         except RECOVERABLE_ERRORS:
             pass
 
@@ -2679,7 +2834,9 @@ async def sync_current_entitlements(request: Request):
                 snapshots.append(snap)
 
         def _snap_updated_at_ms(snapshot: dict[str, Any]) -> int:
-            meta_obj = snapshot.get("meta") if isinstance(snapshot.get("meta"), dict) else {}
+            meta_obj = (
+                snapshot.get("meta") if isinstance(snapshot.get("meta"), dict) else {}
+            )
             try:
                 return int(meta_obj.get("updated_at_ms") or 0)
             except (TypeError, ValueError):
@@ -2719,7 +2876,9 @@ async def _sync_sse_generator(request: Request, since_cursor: int):
     import json as _json
 
     cursor = since_cursor
-    connected = _json.dumps({"type": "connected", "cursor": since_cursor}, ensure_ascii=False)
+    connected = _json.dumps(
+        {"type": "connected", "cursor": since_cursor}, ensure_ascii=False
+    )
     yield f"data: {connected}\n\n"
     while True:
         if await request.is_disconnected():
@@ -2744,7 +2903,9 @@ async def _sync_sse_generator(request: Request, since_cursor: int):
                 )
                 yield f"data: {heartbeat}\n\n"
         except RECOVERABLE_ERRORS as exc:
-            err = _json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False)
+            err = _json.dumps(
+                {"type": "error", "message": str(exc)}, ensure_ascii=False
+            )
             yield f"data: {err}\n\n"
         await asyncio.sleep(SYNC_POLL_INTERVAL_S)
 
@@ -2934,7 +3095,8 @@ def _collect_cursor_usage() -> dict[str, Any]:
     for a in aggs:
         m = a.get("modelIntent", "unknown")
         slot = by_model.setdefault(
-            m, {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0}
+            m,
+            {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0},
         )
         slot["input"] += _to_int(a.get("inputTokens"))
         slot["output"] += _to_int(a.get("outputTokens"))
@@ -2949,7 +3111,10 @@ def _collect_cursor_usage() -> dict[str, Any]:
         "completion_tokens": total_output,
         "cache_read_tokens": total_cache_read,
         "cache_write_tokens": total_cache_write,
-        "total_tokens": total_input + total_output + total_cache_read + total_cache_write,
+        "total_tokens": total_input
+        + total_output
+        + total_cache_read
+        + total_cache_write,
         "cost_cents": total_cents,
         "by_model": dict(
             sorted(
@@ -2966,7 +3131,9 @@ def _collect_codex_usage() -> dict[str, Any]:
     if not os.path.isdir(archived):
         return {"available": False, "reason": f"目录不存在: {archived}"}
     jsonl_files = sorted(
-        f for f in (os.path.join(archived, x) for x in os.listdir(archived)) if f.endswith(".jsonl")
+        f
+        for f in (os.path.join(archived, x) for x in os.listdir(archived))
+        if f.endswith(".jsonl")
     )
     total_input = total_cached = total_output = total_reasoning = total_total = 0
     by_model: dict[str, dict[str, Any]] = {}
@@ -2984,7 +3151,9 @@ def _collect_codex_usage() -> dict[str, Any]:
                     if evt.get("type") == "session_meta":
                         payload = evt.get("payload") or {}
                         session_model = (
-                            payload.get("model") or payload.get("model_provider") or "unknown"
+                            payload.get("model")
+                            or payload.get("model_provider")
+                            or "unknown"
                         )
                     if (
                         evt.get("type") == "event_msg"
@@ -3070,7 +3239,9 @@ def _collect_trae_usage() -> dict[str, Any]:
                 current_models = json.loads(row[0])
             except RECOVERABLE_ERRORS:
                 current_models = None
-        cur.execute("SELECT value FROM ItemTable WHERE key LIKE '%model_list_map%' LIMIT 1")
+        cur.execute(
+            "SELECT value FROM ItemTable WHERE key LIKE '%model_list_map%' LIMIT 1"
+        )
         row = cur.fetchone()
         if row:
             try:
@@ -3169,14 +3340,24 @@ def _build_token_usage_summary() -> dict[str, Any]:
     codex = _collect_codex_usage()
     trae = _collect_trae_usage()
     mimo = _collect_mimo_usage()
-    sources = {"local": local, "cursor": cursor, "codex": codex, "trae": trae, "mimo": mimo}
+    sources = {
+        "local": local,
+        "cursor": cursor,
+        "codex": codex,
+        "trae": trae,
+        "mimo": mimo,
+    }
     # 给每个来源加费用估算
     for key, src in sources.items():
         src["estimated_cost_usd"] = round(_estimate_cost_usd(key, src), 2)
     grand_total = sum(_to_int(s.get("total_tokens")) for s in sources.values())
     grand_prompt = sum(_to_int(s.get("prompt_tokens")) for s in sources.values())
-    grand_completion = sum(_to_int(s.get("completion_tokens")) for s in sources.values())
-    grand_cost = round(sum(s.get("estimated_cost_usd", 0.0) for s in sources.values()), 2)
+    grand_completion = sum(
+        _to_int(s.get("completion_tokens")) for s in sources.values()
+    )
+    grand_cost = round(
+        sum(s.get("estimated_cost_usd", 0.0) for s in sources.values()), 2
+    )
     summary = {
         "success": True,
         "grand_total_tokens": grand_total,
@@ -3187,7 +3368,9 @@ def _build_token_usage_summary() -> dict[str, Any]:
         "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     try:
-        from app.infrastructure.billing.platform_made_tokens import write_public_snapshot
+        from app.infrastructure.billing.platform_made_tokens import (
+            write_public_snapshot,
+        )
 
         snapshot_path = write_public_snapshot(summary)
         summary["public_snapshot_path"] = str(snapshot_path)

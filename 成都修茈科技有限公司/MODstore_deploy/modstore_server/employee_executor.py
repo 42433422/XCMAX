@@ -1730,7 +1730,9 @@ def _action_direct_python(
                 "output": out,
             }
             if not ok:
-                err = str(out.get("error") or out.get("error_code") or out.get("summary") or "").strip()
+                err = str(
+                    out.get("error") or out.get("error_code") or out.get("summary") or ""
+                ).strip()
                 if err:
                     detail["error"] = err[:1000]
             return detail

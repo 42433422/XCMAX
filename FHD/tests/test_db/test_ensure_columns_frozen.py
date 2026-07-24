@@ -84,7 +84,9 @@ FROZEN_ADD_COLUMN_FUNCS = frozenset(
 # captures the column. SQL keywords are filtered so the ``{name}``-interpolated
 # PostgreSQL f-strings (column is a runtime value, absent from the literal) do not
 # capture "IF" as a phantom column.
-_ADD_COLUMN_COL_RE = re.compile(r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
+_ADD_COLUMN_COL_RE = re.compile(
+    r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE
+)
 _SQL_KEYWORDS = {"if", "not", "exists"}
 
 # The frozen set of column names the runtime ``ensure_*``/``init_*`` layer may mint.
