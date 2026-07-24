@@ -61,8 +61,8 @@ def _ready_customer_value(**overrides) -> dict:
     return evidence
 
 
-def _ready_council() -> dict:
-    return {
+def _ready_council(**overrides) -> dict:
+    payload = {
         "ready": True,
         "verified_receipt_count": 1,
         "roles": {
@@ -76,7 +76,15 @@ def _ready_council() -> dict:
             "loop_run_id": "loop-1",
             "para_task_id": "para-1",
         },
+        "retort_clarifications": {
+            "ok": True,
+            "open_count": 0,
+            "critical_count": 0,
+            "healthy": True,
+        },
     }
+    payload.update(overrides)
+    return payload
 
 
 def test_missing_evidence_is_not_reported_as_finished() -> None:
@@ -227,6 +235,27 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     assert snapshot["truth_domains"]["production_value"]["available"] is True
     assert snapshot["live_summary"]["employee_workforce_ready"] is True
     assert snapshot["live_summary"]["dead_letters_healthy"] is True
+    assert snapshot["live_summary"]["retort_clarifications_healthy"] is True
+
+
+def test_retort_clarification_backlog_surfaces_in_attention() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        strategic_council=_ready_council(
+            retort_clarifications={
+                "ok": True,
+                "open_count": 2,
+                "critical_count": 1,
+                "healthy": False,
+            }
+        ),
+        generated_at=NOW,
+    )
+    kinds = {item["kind"] for item in snapshot["attention"]["items"]}
+    assert "retort_clarification" in kinds
+    assert snapshot["live_summary"]["retort_clarifications_open"] == 2
+    assert snapshot["live_summary"]["retort_clarifications_critical"] == 1
+    assert snapshot["live_summary"]["retort_clarifications_healthy"] is False
+    assert snapshot["attention"]["human_intervention_rare"] is False
 
 
 def test_runtime_holds_apply_hard_caps_and_surface_attention() -> None:

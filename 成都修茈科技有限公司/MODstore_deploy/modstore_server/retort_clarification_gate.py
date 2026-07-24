@@ -219,6 +219,74 @@ def _normalize_changed_for_alignment(changed_files: Sequence[Any] | None) -> lis
     return rows
 
 
+def _public_session(session_id: str, row: Mapping[str, Any], *, now: Optional[datetime] = None) -> dict[str, Any]:
+    moment = now or _now()
+    expires_at = _parse_iso(str(row.get("expires_at") or ""))
+    seconds_remaining = None
+    urgency = "none"
+    if row.get("status") == _STATUS_OPEN and expires_at is not None:
+        seconds_remaining = max(0, int((expires_at - moment).total_seconds()))
+        if seconds_remaining <= 0:
+            urgency = "expired"
+        elif seconds_remaining <= 300:
+            urgency = "critical"
+        elif seconds_remaining <= 900:
+            urgency = "soon"
+        else:
+            urgency = "normal"
+    questions = row.get("questions") if isinstance(row.get("questions"), list) else []
+    return {
+        "session_id": session_id,
+        **dict(row),
+        "questions": questions,
+        "seconds_remaining": seconds_remaining,
+        "urgency": urgency,
+        "blocking_question_ids": [
+            _text(item.get("id"), 64)
+            for item in questions
+            if isinstance(item, Mapping)
+            and item.get("blocking") is not False
+            and _text(item.get("id"), 64)
+        ],
+    }
+
+
+def _expire_boss_inbox_for_sessions(session_ids: Sequence[str]) -> int:
+    """Mark mirrored Phase-D questions expired when clarification sessions expire."""
+
+    ids = [str(sid).strip() for sid in session_ids if str(sid).strip()]
+    if not ids:
+        return 0
+    try:
+        from modstore_server.models import PendingHumanQuestion, get_session_factory
+    except Exception:
+        return 0
+    fingerprints = [
+        hashlib.sha256(f"retort-clarification:{sid}".encode("utf-8")).hexdigest()[:32] for sid in ids
+    ]
+    expired = 0
+    try:
+        sf = get_session_factory()
+        with sf() as session:
+            rows = (
+                session.query(PendingHumanQuestion)
+                .filter(PendingHumanQuestion.status == "pending")
+                .filter(PendingHumanQuestion.fingerprint.in_(fingerprints))
+                .all()
+            )
+            now = _now()
+            for row in rows:
+                row.status = "expired"
+                if not row.answered_at:
+                    row.answered_at = now
+                expired += 1
+            if expired:
+                session.commit()
+    except Exception:
+        return 0
+    return expired
+
+
 def sweep_expired_clarifications(*, now: Optional[datetime] = None) -> dict[str, Any]:
     """Expire open sessions past TTL and prune terminal backlog beyond cap."""
 
@@ -278,12 +346,14 @@ def sweep_expired_clarifications(*, now: Optional[datetime] = None) -> dict[str,
 
         store = {"schema": _SCHEMA, "sessions": sessions}
         _save_store_unlocked(store)
+    inbox_expired = _expire_boss_inbox_for_sessions(expired_ids)
     return {
         "ok": True,
         "expired_count": len(expired_ids),
         "expired_ids": expired_ids,
         "pruned_count": len(pruned_ids),
         "pruned_ids": pruned_ids,
+        "boss_inbox_expired_count": inbox_expired,
         "open_count": sum(
             1
             for row in (_load_store_unlocked().get("sessions") or {}).values()
@@ -302,6 +372,7 @@ def list_clarifications(
     with _LOCK:
         sessions = _load_store_unlocked().get("sessions") or {}
     rows = []
+    moment = _now()
     for sid, row in sessions.items():
         if not isinstance(row, dict):
             continue
@@ -309,14 +380,25 @@ def list_clarifications(
             continue
         if not include_terminal and row.get("status") != _STATUS_OPEN:
             continue
-        rows.append({"session_id": sid, **row})
-    rows.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        rows.append(_public_session(sid, row, now=moment))
+    rows.sort(
+        key=lambda item: (
+            0 if item.get("status") == _STATUS_OPEN else 1,
+            item.get("seconds_remaining")
+            if isinstance(item.get("seconds_remaining"), int)
+            else 10**9,
+            str(item.get("created_at") or ""),
+        )
+    )
     bounded = max(1, min(int(limit or 50), 200))
     open_count = sum(1 for row in rows if row.get("status") == _STATUS_OPEN)
+    critical_count = sum(1 for row in rows if row.get("urgency") == "critical")
     return {
         "ok": True,
         "count": min(len(rows), bounded),
         "open_count": open_count,
+        "critical_count": critical_count,
+        "healthy": open_count == 0,
         "items": rows[:bounded],
         "ttl_seconds": ttl_seconds(),
         "max_open": max_open_sessions(),
@@ -326,11 +408,12 @@ def list_clarifications(
 
 def get_clarification(session_id: str) -> Optional[dict[str, Any]]:
     sweep_expired_clarifications()
+    sid = _text(session_id, 128)
     with _LOCK:
-        row = (_load_store_unlocked().get("sessions") or {}).get(_text(session_id, 128))
+        row = (_load_store_unlocked().get("sessions") or {}).get(sid)
     if not isinstance(row, dict):
         return None
-    return {"session_id": _text(session_id, 128), **row}
+    return _public_session(sid, row)
 
 
 def answer_clarification(
@@ -345,11 +428,14 @@ def answer_clarification(
         return {"ok": False, "error": "session_id_missing"}
 
     if isinstance(answers, str):
-        answer_map: dict[str, Any] = {"freeform": answers.strip()}
+        freeform = answers.strip()
+        answer_map: dict[str, Any] = {"freeform": freeform} if freeform else {}
     elif isinstance(answers, Mapping):
-        answer_map = {str(k): v for k, v in answers.items() if str(v or "").strip()}
+        answer_map = {str(k): str(v).strip() for k, v in answers.items() if str(v or "").strip()}
+        freeform = str(answer_map.get("freeform") or "").strip()
     else:
         answer_map = {}
+        freeform = ""
         for index, item in enumerate(answers or [], start=1):
             if isinstance(item, Mapping):
                 key = _text(item.get("id") or item.get("question_id") or f"q{index}", 64)
@@ -359,6 +445,7 @@ def answer_clarification(
                 value = _text(item, 2000)
             if value:
                 answer_map[key] = value
+        freeform = str(answer_map.get("freeform") or "").strip()
     if not answer_map:
         return {"ok": False, "error": "answers_empty"}
 
@@ -373,7 +460,24 @@ def answer_clarification(
             return {
                 "ok": False,
                 "error": f"session_not_open:{row.get('status')}",
-                "session": {"session_id": sid, **row},
+                "session": _public_session(sid, row),
+            }
+        question_ids = [
+            _text(item.get("id"), 64)
+            for item in (row.get("questions") or [])
+            if isinstance(item, Mapping) and _text(item.get("id"), 64)
+        ]
+        # Expand a single freeform answer onto every blocking question id.
+        if freeform:
+            for qid in question_ids:
+                answer_map.setdefault(qid, freeform)
+        missing = [qid for qid in question_ids if not str(answer_map.get(qid) or "").strip()]
+        if missing and not freeform:
+            return {
+                "ok": False,
+                "error": "answers_incomplete",
+                "missing_question_ids": missing,
+                "session": _public_session(sid, row),
             }
         enriched = enrich(str(row.get("strategy_intent") or ""), answer_map)
         row = {
@@ -387,7 +491,26 @@ def answer_clarification(
         }
         sessions[sid] = row
         _save_store_unlocked({"schema": _SCHEMA, "sessions": sessions})
-    return {"ok": True, "session": {"session_id": sid, **row}}
+    # Close mirrored inbox item if present.
+    try:
+        boss_qid = int(row.get("boss_question_id") or 0)
+    except (TypeError, ValueError):
+        boss_qid = 0
+    if boss_qid > 0:
+        try:
+            from modstore_server.models import PendingHumanQuestion, get_session_factory
+
+            sf = get_session_factory()
+            with sf() as session:
+                pending = session.get(PendingHumanQuestion, boss_qid)
+                if pending and pending.status == "pending":
+                    pending.status = "answered"
+                    pending.answer = freeform or json.dumps(answer_map, ensure_ascii=False)[:4000]
+                    pending.answered_at = _now()
+                    session.commit()
+        except Exception:
+            pass
+    return {"ok": True, "session": _public_session(sid, row)}
 
 
 def cancel_clarification(session_id: str, *, reason: str = "cancelled") -> dict[str, Any]:
