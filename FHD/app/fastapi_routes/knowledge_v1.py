@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge/v1", tags=["knowledge-v1"])
 
-_DATASET_UPLOAD_EXTENSIONS = frozenset({".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".log"})
+_DATASET_UPLOAD_EXTENSIONS = frozenset(
+    {".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}
+)
 _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000
 _DATASET_METADATA_MAX_BYTES = 64 * 1024
