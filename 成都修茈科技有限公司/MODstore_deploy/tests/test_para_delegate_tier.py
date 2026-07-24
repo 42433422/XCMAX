@@ -77,6 +77,54 @@ def test_eligible_online_with_capability():
     )
 
 
+def test_eligible_cursor_agent_cli_capability_alias():
+    assert h._device_eligible(
+        {
+            "id": "d1",
+            "status": "online",
+            "capabilities": {"cursor_agent_cli": True},
+        },
+        "cursor",
+    )
+
+
+def test_eligible_claude_cli_capability_alias_for_claude_code():
+    assert h._device_eligible(
+        {"id": "d1", "status": "online", "capabilities": {"claude_cli": True}},
+        "claude_code",
+    )
+
+
+def test_device_tool_entry_accepts_claude_alias():
+    item = {
+        "tools": [
+            {"toolName": "claude", "status": "idle"},
+            {"toolName": "codex", "status": "running", "currentTask": "x"},
+        ]
+    }
+    entry = h._device_tool_entry(item, "claude_code")
+    assert entry is not None
+    assert entry["toolName"] == "claude"
+
+
+def test_is_cli_runtime_failure_detects_spawn_enoent():
+    assert h._is_cli_runtime_failure(
+        error="[e2e-agent] Codex CLI 失败: spawn codex ENOENT",
+        status="para_task_failed",
+    )
+
+
+def test_tool_candidates_skip_excluded(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    out = h._tool_candidates(
+        {"raw_input": {"_para_exclude_tools": ["codex"]}}
+    )
+    assert out[0] == "cursor"
+    assert "codex" not in out
+
+
 def test_ineligible_offline():
     assert not h._device_eligible({"id": "d1", "status": "offline"}, "codex")
 
@@ -423,3 +471,85 @@ def test_post_para_api_routes_busy_codex_to_idle_same_device_tool(monkeypatch):
     assert client.posted_tasks[0]["device_id"] == "fixed-dev"
     assert client.posted_tasks[0]["tool_name"] == "claude_code"
     assert out["devices"][0]["tool_name"] == "claude_code"
+
+
+class _CliFallbackClient(_IntegClient):
+    """First created task fails with spawn ENOENT; retry with next tool succeeds."""
+
+    def __init__(self, devices):
+        super().__init__(devices, task_status="completed")
+        self._task_by_id = {}
+        self._seq = 0
+
+    def post(self, url, headers=None, json=None):
+        if url.endswith("/api/auth/guest"):
+            return _IntegResp({"token": "guest-token"})
+        if url.endswith("/api/tasks"):
+            self.posted_tasks.append(json)
+            self._seq += 1
+            task_id = f"task-{self._seq}"
+            tool = str((json or {}).get("tool_name") or "codex")
+            status = "failed" if tool == "codex" else "completed"
+            self._task_by_id[task_id] = {
+                "id": task_id,
+                "status": status,
+                "subTasks": [
+                    {
+                        "id": f"sub-{self._seq}",
+                        "toolName": tool,
+                        "last_error": (
+                            "Codex CLI 失败: spawn codex ENOENT" if tool == "codex" else ""
+                        ),
+                    }
+                ],
+            }
+            return _IntegResp(
+                {
+                    "task": {"id": task_id, "status": "running"},
+                    "subtask": {"id": f"sub-{self._seq}", "device_name": "mac"},
+                }
+            )
+        return _IntegResp({}, status_code=404)
+
+    def get(self, url, headers=None):
+        if url.endswith("/api/devices"):
+            return _IntegResp({"devices": self._devices})
+        if "/api/tasks/" in url:
+            task_id = url.rstrip("/").split("/")[-1]
+            task = self._task_by_id.get(task_id) or {
+                "id": task_id,
+                "status": "failed",
+                "subTasks": [],
+            }
+            return _IntegResp({"task": task})
+        return _IntegResp({}, status_code=404)
+
+
+def test_post_para_api_retries_next_cli_after_spawn_enoent(monkeypatch):
+    _integ_env(monkeypatch)
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "mac-1")
+    client = _CliFallbackClient(
+        [
+            {
+                "id": "mac-1",
+                "status": "online",
+                "capabilities": {
+                    "codex_cli": True,
+                    "cursor_agent_cli": True,
+                    "trae_cli": True,
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
+
+    out = h.dispatch_para_delegate(task="修复首页", input_data={}, employee_id="vibe-coding-maintainer")
+
+    assert out["ok"] is True
+    assert out.get("tool_fallback_used") is True
+    assert [p.get("tool_name") for p in client.posted_tasks] == ["codex", "cursor"]
+    assert out["devices"][0]["tool_name"] == "cursor"
+    assert out["tool_fallback_attempts"][0]["tool_name"] == "codex"
