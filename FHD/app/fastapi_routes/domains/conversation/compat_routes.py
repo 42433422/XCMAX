@@ -78,6 +78,8 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
 @router.post("/ai/chat")
 @router.post("/ai/chat/v2")
 @router.post("/ai/unified_chat")
+@router.post("/chat/send")
+@router.post("/planner/chat")
 async def ai_chat_unified_compat(request: Request, body: XcagiCompatChatBody) -> dict:
     return await execute_compat_chat(request, body)
 

@@ -216,7 +216,13 @@ def customers_all(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=500),
 ) -> dict | JSONResponse:
-    return {"success": True, "data": _load_customers_rows()}
+    # 与 POST /customers、GET /customers/list 同源，避免「创建成功、列表看不到」
+    return customers_list(
+        request=request,
+        page=page,
+        per_page=per_page,
+        keyword=keyword,
+    )
 
 
 @router.get("/customers/match")
