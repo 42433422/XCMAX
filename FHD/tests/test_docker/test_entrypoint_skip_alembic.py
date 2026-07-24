@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-ENTRYPOINT = (
-    Path(__file__).resolve().parents[2] / "docker" / "docker-entrypoint-fhd-api.sh"
-)
+ENTRYPOINT = Path(__file__).resolve().parents[2] / "docker" / "docker-entrypoint-fhd-api.sh"
 
 
 def test_entrypoint_blocks_skip_alembic_without_emergency() -> None:

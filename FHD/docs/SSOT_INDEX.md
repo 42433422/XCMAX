@@ -38,6 +38,7 @@
 | mobile-android（Flutter 渠道） | [guides/MOBILE_ANDROID.md](guides/MOBILE_ANDROID.md) | Flutter Android Runner、本地验证、签名和发布指南 |
 | local-data（本地数据安全） | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | 桌面/Web 本地数据分类、purge CLI、诊断包与上传鉴权策略 |
 | neuro-bus-events（事件契约） | [../config/neuro_bus_events.yaml](../config/neuro_bus_events.yaml) | NeuroBus 三流事件契约统一 SSOT（NeuroBus 域事件 + AgentRun 事件 + 应用桥接），点号命名规范化，派生 Python 常量 + TS 类型 + OpenAPI schema |
+| customer-ticket-bus（客服工单闭环） | [architecture/CUSTOMER_TICKET_BUS_SSOT.md](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 客服工单总线/告警闭环的唯一事实源：MODstore incident_bus + incident_team 与入场边界 |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
 
