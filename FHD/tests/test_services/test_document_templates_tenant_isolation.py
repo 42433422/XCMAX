@@ -8,8 +8,8 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
 from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
+from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
 from app.services.document_templates.tenant_scope import (
     templates_tenant_id_for_insert,
     templates_tenant_where_sql,

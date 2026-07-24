@@ -40,4 +40,4 @@ def test_sanitize_ignores_http_all_proxy(monkeypatch):
 
     assert cleared == []
     assert os.environ["ALL_PROXY"] == "http://127.0.0.1:7890"
-    assert os.environ["all_proxy"] == "http://127.0.0.1:7890"
+    assert os.environ["all_proxy"] == "http://127.0.0.1:7890"  # noqa: SIM112

@@ -20,7 +20,7 @@ def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
         roots.append(Path(get_app_data_dir()).resolve())
         roots.append(Path(get_data_dir()).resolve())
         roots.append((Path(get_app_data_dir()) / "temp_excel").resolve())
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
@@ -99,7 +99,7 @@ def tenant_key_for_etl() -> str:
         tid = current_tenant_id()
         if tid is not None:
             return f"tenant:{int(tid)}"
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     return "tenant:local"
 
