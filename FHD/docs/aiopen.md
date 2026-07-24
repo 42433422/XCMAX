@@ -100,15 +100,22 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 
 | 工具 | 说明 |
 |---|---|
-| `api_catalog` | 列出白名单内可调用的业务 API 路由 |
-| `api_call` | 调用白名单内业务 API（GET/POST；白名单在面板可视化开关） |
+| `api_catalog` | 列出白名单内可调用的业务 API 路由（精确 + 前缀子路径） |
+| `api_call` | 调用白名单业务 API（GET/POST/PUT/PATCH/DELETE） |
 | `chat` | 发消息给 XCAGI AI 助手（unified_chat，source=`aiopen`） |
+| `capability_loop` | 全调用闭环自检：catalog → 抽样 api_call → chat → ui_sessions |
 | `ui_sessions` | 列出在线虚拟光标 screen 会话 |
 | `ui_snapshot` | 页面快照：URL / 标题 / 可交互元素（selector / 文本 / 位置） |
 | `ui_navigate` | 前端路由跳转（router.push） |
 | `ui_click` | 虚拟光标移动并真实点击（selector 或按可见文本匹配） |
 | `ui_type` | 输入框写值（原型 setter + input/change 事件，兼容 v-model） |
 | `ui_scroll` | 滚动页面或将元素滚动到可见区域 |
+
+面板还可：`POST /api/aiopen/whitelist/seed` 一键开启侧栏全业务白名单；
+`POST /api/aiopen/loop/verify` 跑与 `capability_loop` 相同的闭环自检。
+
+默认白名单覆盖对话 / IM / 群聊 / 知识库 / 员工台 / 产品组织订单 / 出货打印 / Mod 等前缀；
+`api_call` 对已启用前缀的子路径自动放行（例如启用 `/api/products` 即可调 `/api/products/list`）。
 
 ## 虚拟光标（AI 模拟操作）
 
