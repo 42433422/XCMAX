@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -30,6 +31,9 @@ ROLE_FALLBACKS = {
 _HANDLER_FAILED_FOLLOWUP_ENV = "MODSTORE_INCIDENT_TEAM_HANDLER_FAILED_FOLLOWUP"
 # transient 失败自动重试上限（防止限流抖动导致死亡螺旋）
 _TRANSIENT_RETRY_LIMIT_ENV = "MODSTORE_INCIDENT_TEAM_TRANSIENT_RETRY_LIMIT"
+# 单角色执行超时（秒）。超时记 handler_failed，避免 Para/LLM 挂死整单 dispatched_count=0。
+_ROLE_TIMEOUT_ENV = "MODSTORE_INCIDENT_TEAM_ROLE_TIMEOUT_SECONDS"
+_ROLE_TIMEOUT_DEFAULT = 120
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -45,6 +49,61 @@ def _payload(row: IncidentEvent) -> Dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except json.JSONDecodeError:
         return {}
+
+
+def _role_timeout_seconds() -> int:
+    raw = (os.environ.get(_ROLE_TIMEOUT_ENV) or "").strip()
+    if not raw:
+        return _ROLE_TIMEOUT_DEFAULT
+    try:
+        return max(15, int(raw))
+    except ValueError:
+        return _ROLE_TIMEOUT_DEFAULT
+
+
+def _execute_employee_task_with_timeout(
+    employee_id: str,
+    task: str,
+    runtime_input: Dict[str, Any],
+    *,
+    user_id: int,
+    bench_llm_override: Any,
+    timeout_seconds: int,
+) -> Dict[str, Any]:
+    """Run execute_employee_task with a hard timeout so team dispatch can finish.
+
+    Important: do not use ``with ThreadPoolExecutor`` here — its shutdown(wait=True)
+    would block on the hung worker and defeat the timeout.
+    """
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    fut = pool.submit(
+        execute_employee_task,
+        employee_id,
+        task,
+        runtime_input,
+        user_id,
+        bench_llm_override=bench_llm_override,
+    )
+    try:
+        result = fut.result(timeout=max(15, int(timeout_seconds)))
+        return result if isinstance(result, dict) else {"ok": False, "error": "invalid_result"}
+    except FuturesTimeoutError:
+        logger.warning(
+            "incident_team: role timeout employee_id=%s timeout=%ss",
+            employee_id,
+            timeout_seconds,
+        )
+        return {
+            "ok": False,
+            "handler_failed": True,
+            "status": "handler_failed",
+            "execution_status": "handler_failed",
+            "error": f"incident_team_role_timeout:{int(timeout_seconds)}s",
+            "failure_kind": FAILURE_KIND_TRANSIENT,
+        }
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _admin_user_id(session) -> int:
@@ -238,17 +297,34 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         ev = session.get(IncidentEvent, int(event_id))
         if ev is None:
             return {"claimed": False, "ok": False, "reason": "incident_not_found"}
-        if int(ev.dispatched_count or 0) > 0 and not _env_bool(
-            "MODSTORE_INCIDENT_TEAM_REDISPATCH", False
-        ):
-            return {
-                "claimed": False,
-                "ok": True,
-                "reason": "incident_already_dispatched",
-            }
         payload = _payload(ev)
         event_type = str(ev.event_type or "")
         source = str(ev.source or "")
+        if int(ev.dispatched_count or 0) > 0 and not _env_bool(
+            "MODSTORE_INCIDENT_TEAM_REDISPATCH", False
+        ):
+            # website_runner 等可能先自增 dispatched_count；客服工单在尚无
+            # _team_claim 时仍应跑事故小组，否则用户侧永远「没人去」。
+            has_team_claim = isinstance(payload.get("_team_claim"), dict)
+            try:
+                ticket_id_hint = int(payload.get("ticket_id") or 0)
+            except (TypeError, ValueError):
+                ticket_id_hint = 0
+            customer_ticket = (
+                ticket_id_hint > 0
+                and (
+                    str(payload.get("source") or source or "").strip().lower()
+                    == "customer_ticket"
+                    or event_type == "ops.intake.customer_ticket"
+                    or str(payload.get("ticket_no") or "").startswith("CS")
+                )
+            )
+            if has_team_claim or not customer_ticket:
+                return {
+                    "claimed": False,
+                    "ok": True,
+                    "reason": "incident_already_dispatched",
+                }
         uid = _admin_user_id(session)
 
     recovery: Dict[str, Any] = {}
@@ -334,12 +410,13 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             }
         )
         # 事故小组一律系统身份；用 admin uid 会把 monorepo 根误判为越权路径
-        result = execute_employee_task(
+        result = _execute_employee_task_with_timeout(
             employee_id,
             task,
             runtime_input,
             user_id=0,
             bench_llm_override=bench_override,
+            timeout_seconds=_role_timeout_seconds(),
         )
         status = str(result.get("status") or result.get("execution_status") or "").strip().lower()
         risk_blocked = (

@@ -303,6 +303,7 @@ def _incident_employee_input(
 
 @platform_llm_scoped
 def _dispatch_incident(event_id: int) -> None:
+    claimed_here = False
     try:
         from modstore_server.node_coordinator import claim_incident_for_node
 
@@ -314,9 +315,27 @@ def _dispatch_incident(event_id: int) -> None:
                 claim.get("owner"),
             )
             return
+        claimed_here = True
     except Exception:
         logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
 
+    try:
+        _dispatch_incident_body(event_id)
+    finally:
+        if claimed_here:
+            try:
+                from modstore_server.node_coordinator import release_incident_claim
+
+                release_incident_claim(event_id)
+            except Exception:
+                logger.debug(
+                    "incident cluster claim release failed event_id=%s",
+                    event_id,
+                    exc_info=True,
+                )
+
+
+def _dispatch_incident_body(event_id: int) -> None:
     event_type_pre = _incident_event_type(event_id)
     if event_type_pre in _NON_DISPATCH_EVENT_TYPES:
         logger.info(

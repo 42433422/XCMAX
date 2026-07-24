@@ -127,14 +127,37 @@ async def customer_service_chat(
         last_followup = (
             followups[-1] if isinstance(followups, list) and followups else None
         )
+        issue_domain = str(t.get("issue_domain") or "")[:32]
+        summary_text = str(t.get("summary") or "")[:2000]
+        title_text = str(t.get("title") or "")[:500]
+        # 官网/首页类问题走 website scope，便于 unified orchestrator / website_runner 接单
+        blob = f"{issue_domain} {title_text} {summary_text}".lower()
+        if any(
+            token in blob
+            for token in (
+                "website",
+                "官网",
+                "首页",
+                "landing",
+                "xiu-ci",
+                "xiuci",
+            )
+        ):
+            scope = "website"
+        elif issue_domain in {"website", "官网"}:
+            scope = "website"
+        elif issue_domain in {"desktop", "android", "fhd", "modstore"}:
+            scope = issue_domain
+        else:
+            scope = "global"
         _schedule_customer_ticket_incident(
             {
                 "subject_id": str(t.get("ticket_no") or t.get("id") or ""),
                 "ticket_id": int(t.get("id") or 0),
                 "ticket_no": str(t.get("ticket_no") or "")[:128],
-                "title": str(t.get("title") or "")[:500],
+                "title": title_text,
                 "intent": str(t.get("intent") or "")[:64],
-                "issue_domain": str(t.get("issue_domain") or "")[:32],
+                "issue_domain": issue_domain,
                 "issue_domain_label": str(t.get("issue_domain_label") or "")[:32],
                 "user_confirmed_domain": str(
                     (evidence or {}).get("user_confirmed_domain")
@@ -147,15 +170,16 @@ async def customer_service_chat(
                     else ""
                 )[:200],
                 "status": str(t.get("status") or "")[:32],
-                "summary": str(t.get("summary") or "")[:2000],
+                "summary": summary_text,
                 "user_id": int(user.id or 0),
                 "session_id": int((result.get("session") or {}).get("id") or 0),
+                "scope": scope,
                 # 供 intake-dispatcher skill-intake-normalize 识别为客服工单
                 "source": "customer_ticket",
                 "raw": {
-                    "title": str(t.get("title") or "")[:500],
-                    "body": str(t.get("summary") or "")[:2000],
-                    "issue_domain": str(t.get("issue_domain") or "")[:32],
+                    "title": title_text,
+                    "body": summary_text,
+                    "issue_domain": issue_domain,
                     "ticket_no": str(t.get("ticket_no") or "")[:128],
                 },
             }
