@@ -18,7 +18,7 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
     {
       idSuffix: 'input',
       title: '智能对话 · 输入与副窗',
-      description: '底部工具栏：新对话、历史、分析 Excel、星标微信自动刷新等',
+      description: '底部工具栏：新对话、历史、分析 Excel、主动意识启用等',
       targetSelector: '#view-chat .input-area',
     },
   ],

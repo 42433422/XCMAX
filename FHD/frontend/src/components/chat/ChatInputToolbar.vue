@@ -52,6 +52,7 @@
     </label>
     <label
       data-tutorial-id="star-auto-refresh-toggle"
+      :title="$t('chat.starAutoRefreshTitle')"
       style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
     >
       <input

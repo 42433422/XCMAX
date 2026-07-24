@@ -10,7 +10,7 @@
 ## 1. label_print（标签打印 AI 员工）
 
 1. 副窗打开 **标签打印 AI 员工** 开关（`xcagi_workflow_ai_employees.label_print = true`）。
-2. 智能对话勾选 **星标聊天自动刷新**。
+2. 智能对话勾选 **主动意识启用**。
 3. 用星标联系人发送含「打印」「标签」类话术；或等待轮询命中意图。
 4. **期望**：派发 `xcagi:workflow-label-print-signal`；工作流条目推进；对话中可补充型号/张数走打印链路。
 5. **API（可选）**：`POST /api/mod/xcagi-core-workflow-employees/employees/label_print/run` body `{"action":"status"}` 返回 `ok: true` 与 `employee_id: label_print`。
@@ -30,7 +30,7 @@
 ## 3. receipt_confirm（收货确认 AI 员工）
 
 1. 副窗打开 **收货确认 AI 员工**。
-2. 保持星标自动刷新；星标联系人发送收货/到货/签收/对账类消息。
+2. 保持「主动意识启用」；星标联系人发送收货/到货/签收/对账类消息。
 3. **期望**：命中后派发 `xcagi:workflow-receipt-feedback-signal`；工作流面板展示客户业务进程摘要。
 4. 仅开收货、未开微信时：仍跑星标意图，但不写入「微信消息处理」列表项（与 [workflow-employee-docs.json](E:\XCMAX\FHD\frontend\src\data\workflow-employee-docs.json) 一致）。
 
@@ -39,7 +39,7 @@
 ## 4. wechat_msg（微信消息处理 AI 员工）
 
 1. 副窗打开 **微信消息处理 AI 员工**。
-2. 勾选星标自动刷新；等待约 1 分钟轮询。
+2. 勾选「主动意识启用」；等待约 1 分钟轮询。
 3. **期望**：有新消息时副窗推送；意图预处理（专业模式可走 `/api/ai/intent/test`，否则本地规则）；派发 `xcagi:wechat-ai-task-enqueue`，右侧出现「微信消息处理 · 联系人」任务。
 4. **API（可选）**：`POST .../employees/wechat_msg/run` body `{"action":"status"}`。
 

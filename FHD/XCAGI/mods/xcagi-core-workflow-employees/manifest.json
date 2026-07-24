@@ -67,7 +67,7 @@
       "id": "wechat_msg",
       "label": "微信消息处理 AI 员工",
       "panel_title": "工作流 · 微信消息处理 AI 员工",
-      "panel_summary": "星标自动刷新 → 新消息 → 意图 API 或本地规则 → 任务列表。",
+      "panel_summary": "主动意识启用 → 新消息 → 意图 API 或本地规则 → 任务列表。",
       "api_base_path": "employees/wechat_msg"
     }
   ]
