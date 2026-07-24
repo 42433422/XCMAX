@@ -1,0 +1,24 @@
+desktop-init-cards-settings-20260724 素材索引
+========================================
+说明：下列路径在录完后由人工补全「文件名 / 时长 / 备注」。
+视频在 rec/ 与 clips/，默认 gitignore，不入库。
+
+[完整录屏 rec/]
+- (待录) 00-full-walkthrough
+- (待录) 01-welcome
+- (待录) 02-industry
+- (待录) 03-host-pack
+- (待录) 04-seed-demo
+- (待录) 05-first-ai-task
+- (待录) 06-system-settings
+
+[短片段 clips/]
+- (待录) settings-basic
+- (待录) settings-appearance
+- (待录) settings-data
+- (待录) settings-ai
+- (待录) settings-update
+- (待录) settings-misc
+
+[截图 shots/]
+- (待补) 关键后按步骤编号放入
