@@ -1066,6 +1066,16 @@ def _registered_router_template_preview(
         template_key = (
             f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
         )
+        from app.infrastructure.tenant_scope import TenantScopeError
+        from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
+
+        try:
+            tenant_id = templates_tenant_id_for_insert()
+        except TenantScopeError:
+            return {
+                "success": False,
+                "message": "缺少租户上下文，无法创建模板",
+            }
         with get_db() as db:
             result = db.execute(
                 text(
@@ -1074,12 +1084,12 @@ def _registered_router_template_preview(
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,
                         zone_config, merged_cells_config, style_config,
-                        business_rules, is_active
+                        business_rules, is_active, tenant_id
                     ) VALUES (
                         :template_key, :template_name, :template_type,
                         :original_file_path, :analyzed_data, :editable_config,
                         :zone_config, :merged_cells_config, :style_config,
-                        :business_rules, :is_active
+                        :business_rules, :is_active, :tenant_id
                     )
                 """
                 ),
@@ -1095,6 +1105,7 @@ def _registered_router_template_preview(
                     "style_config": json.dumps({}, ensure_ascii=False),
                     "business_rules": json.dumps(business_rules, ensure_ascii=False),
                     "is_active": 1,
+                    "tenant_id": tenant_id,
                 },
             )
             template_id = result.lastrowid

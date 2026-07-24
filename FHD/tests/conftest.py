@@ -62,7 +62,10 @@ def _default_enterprise_tenant_scope_for_tests(request):
     生产代码仍然 fail-closed；这里补的是单测环境缺少 HTTP request/session 中间件时的
     租户上下文。专门验证无租户 fail-closed 的测试文件必须保持 None。
     """
-    if request.node.fspath.basename == "test_tenant_scope.py":
+    if request.node.fspath.basename in {
+        "test_tenant_scope.py",
+        "test_document_templates_tenant_isolation.py",
+    }:
         yield
         return
     if request.node.get_closest_marker("release_gate"):
