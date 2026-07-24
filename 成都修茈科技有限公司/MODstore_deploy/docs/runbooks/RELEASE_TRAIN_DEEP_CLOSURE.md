@@ -32,6 +32,8 @@
 | `MODSTORE_SMTP_*` | QQ 邮箱 + 授权码 | 发 08:00 摘要 |
 | `MODSTORE_APPROVAL_AUTHORIZED_FROM` | 与 SMTP 发件一致 | 回信白名单 |
 | `MODSTORE_EMPLOYEE_BENCH_PROVIDER` / `MODEL` | 如 xiaomi/deepseek | 员工大会 + Vibe |
+| `MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_*` | `minimax` / `MiniMax-M2.7` / `20` | 平台 AI 员工主路由超时或错误时自动降级，不消耗用户 BYOK |
+| `FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER` / `MODEL` | `minimax` / `MiniMax-M2.7` | FHD 员工认知主模型限额或故障时切换平台 MiniMax |
 | `MODSTORE_GITHUB_TOKEN` | `repo` 权限 PAT | auto/daily 分支 + PR |
 | `MODSTORE_AUTO_PR_ENABLED` | `1` | 日更 PR |
 | `MODSTORE_CR_GIT_AUTO_PR` | `1`（可选） | CR 自动开 PR |
