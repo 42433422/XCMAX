@@ -423,8 +423,9 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
 async def shipment_etl_preview(
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
+    include_ledger: str = Form("1"),
 ):
-    """预览：按内容指纹识别送货单并抽取抬头+明细（不写库）。"""
+    """预览：按内容指纹识别送货单/出货流水并抽取抬头+明细（不写库）。"""
     try:
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
@@ -444,7 +445,11 @@ async def shipment_etl_preview(
                 {"success": False, "message": "请上传文件或提供 file_path"},
                 status_code=400,
             )
-        result = get_shipment_excel_etl_app_service().preview(path)
+        truthy = {"1", "true", "yes", "on"}
+        result = get_shipment_excel_etl_app_service().preview(
+            path,
+            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+        )
         if tmp_path:
             result["uploaded_temp_path"] = tmp_path
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
@@ -459,8 +464,10 @@ async def shipment_etl_execute(
     file_path: str = Form(""),
     import_products: str = Form("1"),
     import_shipments: str = Form("1"),
+    idempotent: str = Form("1"),
+    include_ledger: str = Form("1"),
 ):
-    """执行闭环：送货单 → 客户/产品/发货单。"""
+    """执行闭环：送货单/出货流水 → 客户/产品/发货单（默认幂等）。"""
     try:
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
@@ -485,10 +492,153 @@ async def shipment_etl_execute(
             path,
             import_products=str(import_products or "1").strip().lower() in truthy,
             import_shipments=str(import_shipments or "1").strip().lower() in truthy,
+            idempotent=str(idempotent or "1").strip().lower() in truthy,
+            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.error("shipment etl execute failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.post("/shipment-etl/batch-preview")
+async def shipment_etl_batch_preview(
+    directory: str = Form(""),
+    include_ledger: str = Form("1"),
+):
+    """批量预览目录内 xlsx 送货单/出货流水。"""
+    try:
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        truthy = {"1", "true", "yes", "on"}
+        root = str(directory or "").strip()
+        if not root:
+            return JSONResponse({"success": False, "message": "缺少 directory"}, status_code=400)
+        result = get_shipment_excel_etl_app_service().batch_preview(
+            root,
+            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+        )
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl batch preview failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.post("/shipment-etl/batch-execute")
+async def shipment_etl_batch_execute(
+    directory: str = Form(""),
+    include_ledger: str = Form("1"),
+    idempotent: str = Form("1"),
+    import_products: str = Form("1"),
+    import_shipments: str = Form("1"),
+):
+    """批量执行目录内 xlsx 闭环入库。"""
+    try:
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        truthy = {"1", "true", "yes", "on"}
+        root = str(directory or "").strip()
+        if not root:
+            return JSONResponse({"success": False, "message": "缺少 directory"}, status_code=400)
+        result = get_shipment_excel_etl_app_service().batch_execute(
+            root,
+            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+            idempotent=str(idempotent or "1").strip().lower() in truthy,
+            import_products=str(import_products or "1").strip().lower() in truthy,
+            import_shipments=str(import_shipments or "1").strip().lower() in truthy,
+        )
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl batch execute failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.post("/shipment-etl/generate-template")
+async def shipment_etl_generate_template(
+    kind: str = Form("delivery"),
+    output_path: str = Form(""),
+    unit_name: str = Form("闭环测试客户"),
+):
+    """生成测试用送货单或出货流水模板。"""
+    try:
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        svc = get_shipment_excel_etl_app_service()
+        out = str(output_path or "").strip()
+        if not out:
+            out = os.path.join(
+                TEMP_EXCEL_DIR,
+                f"etl_tpl_{kind}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
+            )
+        kind_norm = str(kind or "delivery").strip().lower()
+        if kind_norm in {"ledger", "shipment_ledger", "出货流水"}:
+            result = svc.write_ledger_template([], out, unit_name=str(unit_name or "流水测试客户"))
+        else:
+            result = svc.write_delivery_template(
+                [
+                    {
+                        "unit_name": str(unit_name or "闭环测试客户"),
+                        "contact_person": "测试联系人",
+                        "order_date": "2026年07月24日",
+                        "order_number": "LOOP-0001",
+                        "sheet": "送货单",
+                        "items": [
+                            {
+                                "model_number": "RX-LOOP",
+                                "product_name": "PU哑光清漆",
+                                "quantity_tins": 2,
+                                "tin_spec": 25,
+                                "quantity_kg": 50,
+                                "unit_price": 18,
+                                "amount": 900,
+                            }
+                        ],
+                    }
+                ],
+                out,
+            )
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl generate template failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.post("/shipment-etl/regenerate")
+async def shipment_etl_regenerate(
+    file_path: str = Form(""),
+    output_path: str = Form(""),
+    include_ledger: str = Form("1"),
+):
+    """解析已有单据并按标准送货单版式反推再出单。"""
+    try:
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        src = str(file_path or "").strip()
+        if not src:
+            return JSONResponse({"success": False, "message": "缺少 file_path"}, status_code=400)
+        out = str(output_path or "").strip()
+        if not out:
+            out = os.path.join(
+                TEMP_EXCEL_DIR,
+                f"etl_regen_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
+            )
+        truthy = {"1", "true", "yes", "on"}
+        result = get_shipment_excel_etl_app_service().regenerate(
+            src,
+            out,
+            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+        )
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl regenerate failed: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
