@@ -68,7 +68,7 @@ CAPABILITY_ROUTE_PREFIXES: tuple[str, ...] = (
 
 
 def _default_capability_whitelist() -> dict[str, bool]:
-    return {path: True for path in CAPABILITY_ROUTE_PREFIXES}
+    return dict.fromkeys(CAPABILITY_ROUTE_PREFIXES, True)
 
 
 AIOPEN_STATE: dict[str, Any] = {

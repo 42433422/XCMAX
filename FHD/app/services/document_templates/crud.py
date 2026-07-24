@@ -390,7 +390,7 @@ def _update_template_with_payload_inner(payload: dict):
                     return _j({"success": False, "message": f"无效的更新字段: {field_name}"}, 400)
             db.execute(
                 text(
-                    f"UPDATE templates SET "
+                    "UPDATE templates SET "
                     + ", ".join(updates)
                     + f" WHERE id = :id AND ({tenant_sql})"
                 ),
