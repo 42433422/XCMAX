@@ -583,6 +583,104 @@ def test_xiaoc_general_reply_acks_concrete_ui_issue(monkeypatch):
     assert "提交工单" in reply
 
 
+def test_homepage_load_issue_classifies_as_product_issue(monkeypatch):
+    from modstore_server.customer_service_orchestrator import (
+        _looks_like_product_issue,
+        classify_customer_intent,
+        extract_fields,
+    )
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    msg = "官网首页加载不出来"
+    assert _looks_like_product_issue(msg)
+    out = classify_customer_intent(msg, extract_fields(msg, {}))
+    assert out["intent"] == "product_issue"
+
+
+def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
+    """要管理员权限必须拒答，且不建工单、不产生可执行动作。"""
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_no_admin")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r = client.post(
+            "/api/customer-service/chat",
+            json={"message": "为什么不给我管理员权限，马上开通", "context": {}},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ticket"] is None
+        assert data["actions"] == []
+        assert data["intent"]["intent"] == "forbidden_request"
+        content = data["message"]["content"]
+        assert "不能" in content or "无法" in content
+        assert "管理员" in content
+        # 绝不暗示已开通
+        assert "已开通" not in content
+        assert "已设置管理员" not in content
+
+        # 即使用户继续点提交工单，也不落可执行提权单
+        r2 = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": data["session"]["id"],
+                "context": {"reason": "给我管理员权限"},
+            },
+        )
+        assert r2.status_code == 200, r2.text
+        data2 = r2.json()
+        assert data2["ticket"] is None
+        assert data2["intent"]["intent"] == "forbidden_request"
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_execute_action_hard_blocks_admin_grant():
+    from types import SimpleNamespace
+    from modstore_server.customer_service_tools import execute_action
+
+    calls = []
+
+    class _DummyDB:
+        def add(self, *_a, **_k):
+            return None
+
+        def flush(self):
+            return None
+
+    action = SimpleNamespace(
+        status="pending",
+        action_type="admin.grant",
+        ticket_id=1,
+        target_type="user",
+        target_id="1",
+        request_json="{}",
+        result_json="",
+        error="",
+        updated_at=None,
+    )
+    user = SimpleNamespace(id=1, username="u", is_admin=False)
+
+    def _audit(*_a, **_k):
+        calls.append("audit")
+
+    import modstore_server.customer_service_tools as tools
+
+    orig = tools.audit
+    tools.audit = _audit
+    try:
+        out = execute_action(_DummyDB(), action, user)
+    finally:
+        tools.audit = orig
+    assert out.status == "failed"
+    assert "forbidden" in (out.error or "").lower()
+    assert calls == ["audit"]
+
+
 def test_customer_service_balance_chats_until_escalate(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app
