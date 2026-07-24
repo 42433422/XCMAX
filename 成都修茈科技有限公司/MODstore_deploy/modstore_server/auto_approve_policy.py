@@ -183,7 +183,11 @@ def classify_change_risk(
 # --------------------------------------------------------------------------- #
 
 
-def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
+def maybe_auto_approve(
+    change_request_id: int,
+    *,
+    skip_retort_block_check: bool = False,
+) -> Dict[str, Any]:
     """检查并尝试自动审批。
 
     返回 {"auto_approved": bool, "reason": str, "result": ...}
@@ -212,13 +216,16 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                     clarification_blocks_auto_approve,
                 )
 
-                clar_block = clarification_blocks_auto_approve(int(change_request_id))
-                if clar_block.get("blocked"):
-                    return {
-                        "auto_approved": False,
-                        "reason": str(clar_block.get("reason") or "retort_clarification_pending"),
-                        "retort_clarification": clar_block,
-                    }
+                if not skip_retort_block_check:
+                    clar_block = clarification_blocks_auto_approve(int(change_request_id))
+                    if clar_block.get("blocked"):
+                        return {
+                            "auto_approved": False,
+                            "reason": str(
+                                clar_block.get("reason") or "retort_clarification_pending"
+                            ),
+                            "retort_clarification": clar_block,
+                        }
             except Exception:
                 logger.exception(
                     "retort clarification gate check failed for CR %s", change_request_id
