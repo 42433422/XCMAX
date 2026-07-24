@@ -233,6 +233,79 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         return f"{url}/v1"
 
+    def _is_minimax_token_plan(self) -> bool:
+        return self.provider == "minimax" and "sk-cp-" in (self._api_key or "").lower()
+
+    def _minimax_anthropic_base_url(self) -> str:
+        url = (os.environ.get("MINIMAX_ANTHROPIC_BASE_URL") or self._base_url).rstrip(
+            "/"
+        )
+        for suffix in ("/v1", "/v2", "/v3", "/v4"):
+            if url.endswith(suffix):
+                url = url[: -len(suffix)].rstrip("/")
+                break
+        return url if url.endswith("/anthropic") else f"{url}/anthropic"
+
+    async def _chat_minimax_token_plan(
+        self,
+        messages: List[Dict[str, str]],
+        *,
+        max_tokens: int,
+    ) -> Dict[str, Any]:
+        system_parts: List[str] = []
+        converted: List[Dict[str, str]] = []
+        for message in messages:
+            role = str(message.get("role") or "user").strip()
+            content = str(message.get("content") or "")
+            if role == "system":
+                system_parts.append(content)
+                continue
+            converted.append(
+                {
+                    "role": role if role in {"user", "assistant"} else "user",
+                    "content": content,
+                }
+            )
+
+        payload: Dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "messages": converted,
+        }
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+
+        client = await self._get_client()
+        response = await client.post(
+            f"{self._minimax_anthropic_base_url()}/v1/messages",
+            headers={
+                "x-api-key": self._api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = "\n".join(
+            str(block.get("text") or "")
+            for block in data.get("content") or []
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        return {
+            "id": data.get("id"),
+            "model": data.get("model") or self._model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": content},
+                    "finish_reason": data.get("stop_reason") or "stop",
+                }
+            ],
+            "usage": data.get("usage") or {},
+            "_provider_protocol": "minimax_anthropic_compatible",
+        }
+
     async def chat_completion(
         self,
         messages: List[Dict[str, str]],
@@ -258,6 +331,9 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         """
         if not self._api_key:
             raise ValueError(f"[{self.provider}] API Key未配置")
+
+        if self._is_minimax_token_plan():
+            return await self._chat_minimax_token_plan(messages, max_tokens=max_tokens)
 
         base_url = self._normalize_base_url()
         url = f"{base_url}/chat/completions"
