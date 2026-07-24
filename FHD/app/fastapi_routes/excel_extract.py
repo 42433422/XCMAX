@@ -501,15 +501,31 @@ async def shipment_etl_execute(
             get_shipment_excel_etl_app_service,
         )
 
-        # 软权限：有会话用户时尽量校验 shipment.create；桌面无 RBAC 时不阻断
+        # 生产/预发默认强校验 shipment.create；桌面开发可用 FHD_SHIPMENT_ETL_REQUIRE_RBAC=0 关闭
         try:
             from app.application.facades.session_facade import get_auth_service
             from app.infrastructure.auth.dependencies import resolve_session_user
+            from app.utils.deployment import deployment_is_production, deployment_is_staging
 
+            require_rbac = os.environ.get("FHD_SHIPMENT_ETL_REQUIRE_RBAC", "").strip().lower()
+            if require_rbac == "":
+                require_rbac_flag = deployment_is_production() or deployment_is_staging()
+            else:
+                require_rbac_flag = require_rbac in {"1", "true", "yes", "on"}
             sess_user = resolve_session_user(request)
-            if sess_user is not None and hasattr(get_auth_service(), "has_permission"):
+            if require_rbac_flag:
+                if sess_user is None:
+                    return JSONResponse(
+                        {"success": False, "message": "请先登录", "error_code": "unauthorized"},
+                        status_code=401,
+                    )
                 if not get_auth_service().has_permission(sess_user, "shipment.create"):
-                    # 仅当明确拒绝时拦截；部分桌面账号可能无权限表
+                    return JSONResponse(
+                        {"success": False, "message": "缺少 shipment.create 权限", "error_code": "forbidden"},
+                        status_code=403,
+                    )
+            elif sess_user is not None and hasattr(get_auth_service(), "has_permission"):
+                if not get_auth_service().has_permission(sess_user, "shipment.create"):
                     if os.environ.get("FHD_SHIPMENT_ETL_REQUIRE_RBAC", "").strip().lower() in {
                         "1",
                         "true",

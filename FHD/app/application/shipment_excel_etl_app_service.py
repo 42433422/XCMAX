@@ -664,12 +664,14 @@ def execute_shipment_excel_etl(
     include_ledger: bool | str = False,
     confirm_ledger: bool = False,
     dry_run: bool = False,
+    compensate_on_failure: bool = True,
     unit_name_hint: str | None = None,
     workspace_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """执行闭环：客户+产品+发货单（可幂等 / dry-run）。
+    """执行闭环：客户+产品+发货单（可幂等 / dry-run / 失败补偿）。
 
     生产默认 include_ledger=False；若要导入流水须 confirm_ledger=True。
+    任一建单失败且 compensate_on_failure=True 时，取消本批已新建发货单并删除指纹。
     """
     from app.application.shipment_excel_etl_security import (
         ShipmentEtlPathError,
@@ -749,8 +751,7 @@ def execute_shipment_excel_etl(
             "success": True,
             "dry_run": True,
             "message": (
-                f"预演：将新建 {len(to_import)} 张，跳过重复 {len(skipped_duplicates)} 张"
-                + ("；不会写库" )
+                f"预演：将新建 {len(to_import)} 张，跳过重复 {len(skipped_duplicates)} 张；不会写库"
             ),
             "file_name": file_name,
             "note_count": len(notes),
@@ -768,13 +769,24 @@ def execute_shipment_excel_etl(
         from app.services.tools_workflow_registered import _execute_excel_import_records
 
         product_result = _execute_excel_import_records(_notes_to_product_records(to_import))
+        if not bool(product_result.get("success", True)):
+            return {
+                "success": False,
+                "message": f"客户/产品导入失败，已中止发货单写入：{product_result.get('message') or product_result}",
+                "error_code": "product_import_failed",
+                "product_result": product_result,
+                "note_count": len(notes),
+                "closed_loop": False,
+            }
 
     shipment_created = 0
     shipment_failed = 0
     shipment_skipped = len(skipped_duplicates)
     shipment_ids: list[Any] = []
+    created_pairs: list[tuple[Any, str]] = []  # (shipment_id, fingerprint)
     errors: list[str] = []
-    partial = False
+    compensated: list[Any] = []
+    compensate_errors: list[str] = []
 
     if import_shipments and to_import:
         try:
@@ -794,7 +806,7 @@ def execute_shipment_excel_etl(
             if not unit or not items:
                 shipment_failed += 1
                 errors.append(f"缺少客户或明细: {note.get('order_number') or note.get('sheet')}")
-                continue
+                break
             result = svc.create_shipment(
                 unit_name=unit,
                 items_data=items,
@@ -808,9 +820,10 @@ def execute_shipment_excel_etl(
                 shipment_created += 1
                 shipment = result.get("shipment") or {}
                 sid = shipment.get("id") if isinstance(shipment, dict) else None
+                fp = str(note.get("fingerprint") or "")
                 if sid is not None:
                     shipment_ids.append(sid)
-                fp = str(note.get("fingerprint") or "")
+                    created_pairs.append((sid, fp))
                 if idempotent and fp:
                     try:
                         _record_fingerprint_now(
@@ -825,23 +838,63 @@ def execute_shipment_excel_etl(
                         logger.warning("failed to persist etl fingerprint immediately", exc_info=True)
             else:
                 shipment_failed += 1
-                partial = True
                 errors.append(str(result.get("message") or "create_shipment failed"))
+                break
+
+        # 未处理完的剩余 notes 计为未执行失败（避免静默漏导）
+        processed = shipment_created + shipment_failed
+        if processed < len(to_import) and shipment_failed:
+            remaining = len(to_import) - processed
+            errors.append(f"因失败中止，另有 {remaining} 张未执行")
+            shipment_failed += remaining
+
+        if shipment_failed and created_pairs and compensate_on_failure:
+            from app.application.shipment_excel_etl_fingerprint_store import delete_fingerprint
+
+            for sid, fp in created_pairs:
+                try:
+                    cancel = svc.cancel_shipment(int(sid))
+                    if cancel.get("success"):
+                        compensated.append(sid)
+                    else:
+                        # 取消失败则尝试删除
+                        deleted = svc.delete_shipment(int(sid))
+                        if deleted.get("success"):
+                            compensated.append(sid)
+                        else:
+                            compensate_errors.append(
+                                f"补偿失败 shipment_id={sid}: {cancel.get('message') or deleted.get('message')}"
+                            )
+                except RECOVERABLE_ERRORS as exc:
+                    compensate_errors.append(f"补偿异常 shipment_id={sid}: {exc}")
+                if fp:
+                    try:
+                        delete_fingerprint(tenant_key, fp)
+                    except RECOVERABLE_ERRORS:
+                        logger.warning("failed to delete etl fingerprint on compensate", exc_info=True)
+            shipment_created = max(0, shipment_created - len(compensated))
+            shipment_ids = [sid for sid in shipment_ids if sid not in set(compensated)]
 
     ok = shipment_failed == 0 and bool(product_result.get("success", True))
     if not to_import and skipped_duplicates:
         ok = True
-    if shipment_created and shipment_failed:
-        partial = True
+    compensated_ok = bool(shipment_failed and compensate_on_failure and created_pairs and not compensate_errors)
+    if shipment_failed and compensate_on_failure:
+        # 补偿成功后视为「未留下脏发货单」，success=False 但仍可安全重试
         ok = False
     return {
         "success": ok,
-        "partial_success": partial or (shipment_created > 0 and shipment_failed > 0),
+        "partial_success": bool(shipment_failed and shipment_ids and not compensate_on_failure),
+        "compensated": compensated,
+        "compensate_on_failure": compensate_on_failure,
+        "compensate_errors": compensate_errors[:8],
+        "safe_to_retry": (not shipment_ids) or compensated_ok or ok,
         "message": (
             f"送货单闭环完成：新建 {shipment_created}，跳过重复 {shipment_skipped}"
             + (f"，失败 {shipment_failed}" if shipment_failed else "")
+            + (f"，已补偿撤销 {len(compensated)}" if compensated else "")
             + ("；客户/产品已同步" if import_products and to_import else "")
-            + ("（部分成功，已成功单据不会自动回滚）" if (shipment_created and shipment_failed) else "")
+            + ("（部分成功，未启用补偿）" if (shipment_ids and shipment_failed and not compensate_on_failure) else "")
         ),
         "file_name": file_name,
         "note_count": len(notes),
@@ -856,6 +909,14 @@ def execute_shipment_excel_etl(
         "idempotent": idempotent,
         "dry_run": False,
         "kind": "shipment_delivery_etl",
+        "audit": {
+            "tenant_key": tenant_key,
+            "file_name": file_name,
+            "created": shipment_created,
+            "failed": shipment_failed,
+            "skipped": shipment_skipped,
+            "compensated": len(compensated),
+        },
     }
 
 

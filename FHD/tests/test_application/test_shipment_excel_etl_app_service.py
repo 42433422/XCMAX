@@ -211,6 +211,11 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported": len(records)},
     )
     fp_db = tmp_path / "fps.sqlite3"
+    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
+    monkeypatch.setattr(
+        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        lambda: fp_db,
+    )
     monkeypatch.setattr(
         "app.application.shipment_excel_etl_fingerprint_store._db_path",
         lambda: fp_db,
@@ -329,9 +334,14 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setattr(
+        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        lambda: tmp_path / "batch_fps.sqlite3",
+    )
+    monkeypatch.setattr(
         "app.application.shipment_excel_etl_fingerprint_store._db_path",
         lambda: tmp_path / "batch_fps.sqlite3",
     )
+    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
     monkeypatch.setenv("FHD_SHIPMENT_ETL_ALLOW_BATCH", "1")
 
     executed = batch_execute_shipment_excel_etl(
@@ -397,9 +407,14 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported_count": len(records)},
     )
     monkeypatch.setattr(
+        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        lambda: tmp_path / "exec_fps.sqlite3",
+    )
+    monkeypatch.setattr(
         "app.application.shipment_excel_etl_fingerprint_store._db_path",
         lambda: tmp_path / "exec_fps.sqlite3",
     )
+    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
 
     result = execute_shipment_excel_etl(path, idempotent=False, workspace_root=tmp_path)
     assert result["success"] is True
