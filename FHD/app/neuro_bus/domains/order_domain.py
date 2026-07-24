@@ -52,6 +52,7 @@ class OrderNeuroDomain(NeuroDomain):
         items: list,
         total_amount: Decimal,
     ) -> bool:
+        # 样板路径入口：由 OrderAppService.create_order 成功后调用；非全域覆盖声明
         return self.emit(
             "order.created",
             priority=EventPriority.HIGH,

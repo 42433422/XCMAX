@@ -1,4 +1,10 @@
-"""Deterministic, read-only intake deduplication and routing planner."""
+"""Deterministic intake deduplication and routing planner.
+
+Live ``ops.intake.customer_ticket`` runs return a ``routing_plan`` plus
+``side_effects`` describing downstream employee dispatch. The MODstore
+``incident_bus`` consumes that plan and executes the proposed owners.
+Burn-in probes keep ``read_only=True`` / ``side_effects=[]`` for duty acceptance.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +15,10 @@ from typing import Any
 def _incident_blob(payload: dict[str, Any]) -> dict[str, Any]:
     incident = payload.get("incident")
     return incident if isinstance(incident, dict) else {}
+
+
+def _is_burn_in(payload: dict[str, Any]) -> bool:
+    return bool(payload.get("burn_in")) or bool(payload.get("burn_in_read_only"))
 
 
 def _normalize_requests(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -56,8 +66,9 @@ def _normalize_requests(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
-    del ctx  # deterministic; no host side effects
-    requests = _normalize_requests(dict(payload or {}))
+    del ctx  # host side effects are applied by incident_bus from routing_plan
+    body = dict(payload or {})
+    requests = _normalize_requests(body)
     if not requests:
         return _failed("requests must be a non-empty list", "missing_requests")
     planned: list[dict[str, str]] = []
@@ -78,21 +89,42 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         planned.append(
             {"request_id": request_id, "fingerprint": fingerprint, "proposed_owner": owner}
         )
+
+    burn_in = _is_burn_in(body)
+    if burn_in:
+        side_effects: list[dict[str, str]] = []
+        read_only = True
+        summary = (
+            f"需求入口已只读核对：{len(requests[:200])} 条输入归并为 {len(planned)} 条唯一需求，"
+            f"{len(issues)} 个缺口；未派发或回复。"
+        )
+    else:
+        side_effects = [
+            {
+                "action": "dispatch_employee",
+                "employee_id": row["proposed_owner"],
+                "request_id": row["request_id"],
+            }
+            for row in planned
+        ]
+        read_only = False
+        summary = (
+            f"需求入口已规划派发：{len(requests[:200])} 条输入归并为 {len(planned)} 条唯一需求，"
+            f"{len(issues)} 个缺口；side_effects={len(side_effects)}（由 incident_bus 执行）。"
+        )
+
     return {
         "ok": True,
         "status": "approved" if not issues else "rejected",
-        "summary": (
-            f"需求入口已只读核对：{len(requests[:200])} 条输入归并为 {len(planned)} 条唯一需求，"
-            f"{len(issues)} 个缺口；未派发或回复。"
-        ),
+        "summary": summary,
         "routing_plan": planned,
         "duplicate_count": max(0, len(requests[:200]) - len(planned) - len(issues)),
         "issues": issues,
         "evidence": ["input.requests"]
-        if isinstance((payload or {}).get("requests"), list)
+        if isinstance(body.get("requests"), list)
         else ["input.incident_or_customer_ticket"],
-        "read_only": True,
-        "side_effects": [],
+        "read_only": read_only,
+        "side_effects": side_effects,
     }
 
 

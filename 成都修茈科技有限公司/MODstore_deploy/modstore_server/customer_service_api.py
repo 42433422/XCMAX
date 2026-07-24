@@ -42,11 +42,16 @@ _require_admin = require_admin
 def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
     """Fire-and-forget：工单事件派发可能跑员工编排/LLM，绝不能阻塞 /chat 响应。"""
     try:
+        from modstore_server.duty_workforce_contracts import (
+            enrich_customer_ticket_publish_payload,
+        )
         from modstore_server.incident_bus import publish as publish_incident
 
+        # Publish boundary: never send bare ticket_id/summary into bindings.
+        enriched = enrich_customer_ticket_publish_payload(dict(payload or {}))
         publish_incident(
             "ops.intake.customer_ticket",
-            payload,
+            enriched,
             source="customer-service-api",
             fingerprint=None,
         )

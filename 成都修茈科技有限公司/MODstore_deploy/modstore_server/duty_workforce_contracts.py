@@ -210,6 +210,19 @@ def matching_duty_event_contract(
     return {}
 
 
+def enrich_customer_ticket_publish_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize publish-boundary payload for ``ops.intake.customer_ticket``.
+
+    Guarantees ``requests`` / ``ticket`` shapes before the event hits incident_bus
+    bindings, so no consumer depends on a later enrich path that might be skipped.
+    """
+
+    body = dict(payload or {})
+    _enrich_customer_ticket_duty_input("intake-dispatcher", body, body)
+    _enrich_customer_ticket_duty_input("user-customer-service-officer", body, body)
+    return body
+
+
 def _enrich_customer_ticket_duty_input(
     employee_id: str,
     payload: Dict[str, Any],
@@ -310,6 +323,7 @@ def duty_event_execution_input(
 __all__ = [
     "contract_schedule",
     "duty_event_execution_input",
+    "enrich_customer_ticket_publish_payload",
     "load_workforce_contracts",
     "load_reviewed_duty_manifest",
     "matching_duty_event_contract",
