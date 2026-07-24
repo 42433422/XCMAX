@@ -496,10 +496,26 @@ def _first_para_error(snapshot: Dict[str, Any]) -> str:
 _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
 
 
+def _fallback_order_tools() -> list[str]:
+    configured = os.environ.get(
+        "MODSTORE_PARA_TOOL_FALLBACK_ORDER",
+        "cursor,claude_code,trae",
+    )
+    out: list[str] = []
+    for value in configured.split(","):
+        tool = _normalize_tool_name(value)
+        if tool in _VALID_DEV_TOOLS and tool not in out:
+            out.append(tool)
+    return out
+
+
 def _dev_tool() -> str:
     """loops 桥默认派给的设备工具(DevFleet devTool)，用于设备过滤。"""
-    normalized = _normalize_tool_name(os.environ.get("MODSTORE_PARA_DEV_TOOL") or "codex")
-    return normalized if normalized in _VALID_DEV_TOOLS else "codex"
+    normalized = _normalize_tool_name(os.environ.get("MODSTORE_PARA_DEV_TOOL") or "")
+    if normalized in _VALID_DEV_TOOLS:
+        return normalized
+    order = _fallback_order_tools()
+    return order[0] if order else "cursor"
 
 
 _VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae")
@@ -535,16 +551,18 @@ def _normalize_tool_name(name: str) -> str:
 
 
 def _tool_fallback_allowed(req: Dict[str, Any]) -> bool:
+    """Whether CLI runtime failure may retry another tool.
+
+    ``allow_tool_fallback=0`` pins the requested tool.  Otherwise the env master
+    switch wins — an explicit ``tool_name`` no longer silently disables recovery
+    (that previously left ``spawn codex ENOENT`` storms with no fallback).
+    """
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
-    explicit = _normalize_tool_name(
-        str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "")
-    )
     raw_fallback = raw.get("allow_tool_fallback")
-    if explicit and raw_fallback is None:
-        return False
-    if raw_fallback is None:
+    if raw_fallback is None and "allow_tool_fallback" not in req:
         return _env_bool("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
-    return str(raw_fallback).strip().lower() in ("1", "true", "yes", "on")
+    value = raw_fallback if raw_fallback is not None else req.get("allow_tool_fallback")
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _excluded_tools(req: Dict[str, Any]) -> set[str]:
@@ -563,28 +581,26 @@ def _excluded_tools(req: Dict[str, Any]) -> set[str]:
 def _tool_candidates(req: Dict[str, Any]) -> list[str]:
     """Return the preferred executor followed by allowed same-device fallbacks.
 
-    An explicitly requested tool remains strict unless the caller also opts in
-    with ``allow_tool_fallback``.  Normal loop dispatches may use an idle tool on
-    the same authorized device instead of waiting behind a busy Codex slot.
+    With fallback enabled, an explicit tool stays first but other tools from
+    ``MODSTORE_PARA_TOOL_FALLBACK_ORDER`` remain eligible.  Without an explicit
+    tool, the fallback order itself is the preference list (no silent codex
+    prepend).  Pin with ``allow_tool_fallback=0`` for strict single-tool mode.
     """
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
     explicit = _normalize_tool_name(
         str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "")
     )
     preferred = explicit if explicit in _VALID_DEV_TOOLS else _dev_tool()
+    order = _fallback_order_tools()
 
     if not _tool_fallback_allowed(req):
         candidates = [preferred]
+    elif explicit:
+        candidates = [explicit] + [tool for tool in order if tool != explicit]
     else:
-        configured = os.environ.get(
-            "MODSTORE_PARA_TOOL_FALLBACK_ORDER",
-            "claude_code,cursor,trae",
-        )
-        candidates = [preferred]
-        for value in configured.split(","):
-            tool = _normalize_tool_name(value)
-            if tool in _VALID_DEV_TOOLS and tool not in candidates:
-                candidates.append(tool)
+        candidates = list(order) if order else [preferred]
+        if preferred not in candidates:
+            candidates.insert(0, preferred)
 
     excluded = _excluded_tools(req)
     return [tool for tool in candidates if tool not in excluded]

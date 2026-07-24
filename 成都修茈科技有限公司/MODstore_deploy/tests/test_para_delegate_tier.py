@@ -155,7 +155,10 @@ def test_ineligible_non_dict():
     assert not h._device_eligible("nope", "codex")
 
 
-def test_selects_idle_same_device_fallback_when_codex_is_busy():
+def test_selects_idle_same_device_fallback_when_codex_is_busy(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_DEV_TOOL", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "claude_code,cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
     item = {
         "id": "d1",
         "status": "online",
@@ -168,7 +171,7 @@ def test_selects_idle_same_device_fallback_when_codex_is_busy():
     assert h._selected_tool_for_device(item, {"raw_input": {}}) == "claude_code"
 
 
-def test_explicit_tool_is_strict_without_fallback_opt_in():
+def test_explicit_tool_is_strict_when_fallback_opted_out():
     item = {
         "id": "d1",
         "status": "online",
@@ -177,7 +180,34 @@ def test_explicit_tool_is_strict_without_fallback_opt_in():
             {"toolName": "cursor", "status": "idle"},
         ],
     }
-    assert h._selected_tool_for_device(item, {"tool_name": "codex", "raw_input": {}}) == ""
+    assert (
+        h._selected_tool_for_device(
+            item,
+            {"tool_name": "codex", "raw_input": {"allow_tool_fallback": False}},
+        )
+        == ""
+    )
+
+
+def test_explicit_tool_can_fallback_when_env_enabled(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": "other"},
+            {"toolName": "cursor", "status": "idle"},
+        ],
+    }
+    assert h._selected_tool_for_device(item, {"tool_name": "codex", "raw_input": {}}) == "cursor"
+
+
+def test_default_candidates_follow_fallback_order_not_codex(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_DEV_TOOL", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,claude_code,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    assert h._tool_candidates({"raw_input": {}}) == ["cursor", "claude_code", "trae"]
 
 
 # ─────────────── _select_local_device ───────────────
@@ -280,6 +310,8 @@ def test_explicit_device_uses_idle_tool_fallback():
 
 def test_discovery_tier_one_picks_local(monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "codex,cursor,claude_code,trae")
     fleet = [_online_codex("p1", isPrimary=True), _online_codex("w1")]
     req = {"task": "修复", "raw_input": {}}
     tier, devices, reason = h._resolve_dispatch_devices(_FakeClient(fleet), "http://p", "tok", req)
@@ -382,6 +414,10 @@ def _integ_env(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://example.com/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_DISABLE_AUTO_RETRY", "0")  # 跳过 sqlite 写
     monkeypatch.setenv("MODSTORE_PARA_SKIP_GIT_PREFLIGHT", "1")
+    # Fixtures use _online_codex (codex_cli only); pin preferred tool for these tests.
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "codex,cursor,claude_code,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
     monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
 
