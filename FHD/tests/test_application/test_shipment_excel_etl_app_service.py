@@ -71,6 +71,45 @@ def test_score_rejects_non_business_sheet_without_ledger(tmp_path):
     assert result["note_count"] == 0
 
 
+def test_auto_skips_ledger_when_delivery_present(tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "mixed.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "送货"
+    ws["A1"] = "测试工厂送货单"
+    ws["A2"] = "购货单位：混合客户     联系人：张总       2026年07月24日         订单编号：M-1"
+    ws["A3"] = "产品型号"
+    ws["D3"] = "产品名称"
+    ws["E3"] = "数量/件"
+    ws["F3"] = "规格/KG"
+    ws["G3"] = "数量/KG"
+    ws["H3"] = "单价/元"
+    ws["I3"] = "金额/元"
+    ws["A4"] = "M01"
+    ws["D4"] = "面漆"
+    ws["E4"] = 1
+    ws["F4"] = 20
+    ws["G4"] = 20
+    ws["H4"] = 10
+    ws["I4"] = 200
+    ledger = wb.create_sheet("25出货")
+    ledger.append(["日期", "单号", "产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+    ledger.append(["2026-07-01", "L-9", "X1", "", "", "旧货", 1, 10, 10, 5, 50])
+    wb.save(path)
+
+    auto = parse_delivery_notes(path, include_ledger="auto")
+    assert auto["note_count"] == 1
+    assert auto["delivery_note_count"] == 1
+    assert auto["ledger_note_count"] == 0
+    assert auto["ledger_available_count"] >= 1
+
+    forced = parse_delivery_notes(path, include_ledger=True)
+    assert forced["note_count"] >= 2
+    assert forced["ledger_note_count"] >= 1
+
+
 def test_parse_generated_ledger_groups_by_order(tmp_path):
     path = tmp_path / "闭环流水客户.xlsx"
     written = write_ledger_workbook([], path, unit_name="闭环流水客户")

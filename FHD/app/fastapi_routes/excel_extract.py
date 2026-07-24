@@ -22,6 +22,24 @@ TEMP_EXCEL_DIR = os.path.join(get_app_data_dir(), "temp_excel")
 os.makedirs(TEMP_EXCEL_DIR, exist_ok=True)
 
 
+def _form_truthy(value: str, default: bool = True) -> bool:
+    text = str(value if value is not None else "").strip().lower()
+    if not text:
+        return default
+    return text in {"1", "true", "yes", "on"}
+
+
+def _form_include_ledger(value: str, default: str = "auto") -> bool | str:
+    text = str(value if value is not None else "").strip().lower()
+    if not text:
+        return default
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return "auto"
+
+
 def _get_ai_product_parser():
     from app.application.facades.excel_facade import get_ai_product_parser
 
@@ -423,7 +441,7 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
 async def shipment_etl_preview(
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
-    include_ledger: str = Form("1"),
+    include_ledger: str = Form("auto"),
 ):
     """预览：按内容指纹识别送货单/出货流水并抽取抬头+明细（不写库）。"""
     try:
@@ -445,10 +463,9 @@ async def shipment_etl_preview(
                 {"success": False, "message": "请上传文件或提供 file_path"},
                 status_code=400,
             )
-        truthy = {"1", "true", "yes", "on"}
         result = get_shipment_excel_etl_app_service().preview(
             path,
-            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+            include_ledger=_form_include_ledger(include_ledger),
         )
         if tmp_path:
             result["uploaded_temp_path"] = tmp_path
@@ -465,7 +482,7 @@ async def shipment_etl_execute(
     import_products: str = Form("1"),
     import_shipments: str = Form("1"),
     idempotent: str = Form("1"),
-    include_ledger: str = Form("1"),
+    include_ledger: str = Form("auto"),
 ):
     """执行闭环：送货单/出货流水 → 客户/产品/发货单（默认幂等）。"""
     try:
@@ -487,13 +504,12 @@ async def shipment_etl_execute(
                 {"success": False, "message": "请上传文件或提供 file_path"},
                 status_code=400,
             )
-        truthy = {"1", "true", "yes", "on"}
         result = get_shipment_excel_etl_app_service().execute(
             path,
-            import_products=str(import_products or "1").strip().lower() in truthy,
-            import_shipments=str(import_shipments or "1").strip().lower() in truthy,
-            idempotent=str(idempotent or "1").strip().lower() in truthy,
-            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+            import_products=_form_truthy(import_products, True),
+            import_shipments=_form_truthy(import_shipments, True),
+            idempotent=_form_truthy(idempotent, True),
+            include_ledger=_form_include_ledger(include_ledger),
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
@@ -504,7 +520,7 @@ async def shipment_etl_execute(
 @router.post("/shipment-etl/batch-preview")
 async def shipment_etl_batch_preview(
     directory: str = Form(""),
-    include_ledger: str = Form("1"),
+    include_ledger: str = Form("auto"),
 ):
     """批量预览目录内 xlsx 送货单/出货流水。"""
     try:
@@ -512,13 +528,12 @@ async def shipment_etl_batch_preview(
             get_shipment_excel_etl_app_service,
         )
 
-        truthy = {"1", "true", "yes", "on"}
         root = str(directory or "").strip()
         if not root:
             return JSONResponse({"success": False, "message": "缺少 directory"}, status_code=400)
         result = get_shipment_excel_etl_app_service().batch_preview(
             root,
-            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+            include_ledger=_form_include_ledger(include_ledger),
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
@@ -529,7 +544,7 @@ async def shipment_etl_batch_preview(
 @router.post("/shipment-etl/batch-execute")
 async def shipment_etl_batch_execute(
     directory: str = Form(""),
-    include_ledger: str = Form("1"),
+    include_ledger: str = Form("auto"),
     idempotent: str = Form("1"),
     import_products: str = Form("1"),
     import_shipments: str = Form("1"),
@@ -540,16 +555,15 @@ async def shipment_etl_batch_execute(
             get_shipment_excel_etl_app_service,
         )
 
-        truthy = {"1", "true", "yes", "on"}
         root = str(directory or "").strip()
         if not root:
             return JSONResponse({"success": False, "message": "缺少 directory"}, status_code=400)
         result = get_shipment_excel_etl_app_service().batch_execute(
             root,
-            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
-            idempotent=str(idempotent or "1").strip().lower() in truthy,
-            import_products=str(import_products or "1").strip().lower() in truthy,
-            import_shipments=str(import_shipments or "1").strip().lower() in truthy,
+            include_ledger=_form_include_ledger(include_ledger),
+            idempotent=_form_truthy(idempotent, True),
+            import_products=_form_truthy(import_products, True),
+            import_shipments=_form_truthy(import_shipments, True),
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
@@ -613,7 +627,7 @@ async def shipment_etl_generate_template(
 async def shipment_etl_regenerate(
     file_path: str = Form(""),
     output_path: str = Form(""),
-    include_ledger: str = Form("1"),
+    include_ledger: str = Form("auto"),
 ):
     """解析已有单据并按标准送货单版式反推再出单。"""
     try:
@@ -630,11 +644,10 @@ async def shipment_etl_regenerate(
                 TEMP_EXCEL_DIR,
                 f"etl_regen_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
             )
-        truthy = {"1", "true", "yes", "on"}
         result = get_shipment_excel_etl_app_service().regenerate(
             src,
             out,
-            include_ledger=str(include_ledger or "1").strip().lower() in truthy,
+            include_ledger=_form_include_ledger(include_ledger),
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
