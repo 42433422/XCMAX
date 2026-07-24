@@ -102,6 +102,7 @@ const hostKeysFromPath = new Set([
   'materials',
   'traditional-mode',
   'data-sources',
+  'print',
   'printer-list',
   'template-preview',
   'tools',
