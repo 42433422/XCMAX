@@ -429,6 +429,85 @@ def mark_clarification_resolved(session_id: str) -> dict[str, Any]:
     return {"ok": True, "session": {"session_id": sid, **row}}
 
 
+def _mirror_to_boss_inbox(session_id: str, row: Mapping[str, Any]) -> dict[str, Any]:
+    """Surface Retort clarification in the existing Phase-D boss Q&A inbox."""
+
+    try:
+        from modstore_server.incident_bus import _admin_user_id
+        from modstore_server.models import PendingHumanQuestion, get_session_factory
+        from modstore_server.notification_service import notify_human_question
+
+        admin_id = int(_admin_user_id() or 0)
+        if admin_id <= 0:
+            return {"mirrored": False, "reason": "no_admin_user"}
+
+        questions = row.get("questions") if isinstance(row.get("questions"), list) else []
+        primary = ""
+        for item in questions:
+            if isinstance(item, Mapping) and _text(item.get("question"), 500):
+                primary = _text(item.get("question"), 500)
+                break
+        if not primary:
+            primary = "Retort 需要你确认本次变更的战略意图与风险边界。"
+
+        fp = hashlib.sha256(f"retort-clarification:{session_id}".encode("utf-8")).hexdigest()[:32]
+        now = _now()
+        expires = _parse_iso(str(row.get("expires_at") or "")) or (
+            now + timedelta(seconds=ttl_seconds())
+        )
+        context = {
+            "kind": "retort_clarification",
+            "session_id": session_id,
+            "subject": row.get("subject"),
+            "change_request_id": row.get("change_request_id"),
+            "proposal_id": row.get("proposal_id"),
+            "run_id": row.get("run_id"),
+            "question_ids": [
+                _text(item.get("id"), 64)
+                for item in questions
+                if isinstance(item, Mapping) and _text(item.get("id"), 64)
+            ],
+        }
+        sf = get_session_factory()
+        with sf() as session:
+            existing = (
+                session.query(PendingHumanQuestion)
+                .filter(PendingHumanQuestion.fingerprint == fp)
+                .filter(PendingHumanQuestion.status == "pending")
+                .first()
+            )
+            if existing:
+                return {"mirrored": True, "reused": True, "question_id": int(existing.id)}
+            record = PendingHumanQuestion(
+                user_id=admin_id,
+                employee_id="retort-clarification",
+                task=_text(row.get("source") or "retort_clarification", 256),
+                question=primary,
+                context_json=json.dumps(context, ensure_ascii=False),
+                status="pending",
+                asked_at=now,
+                expires_at=expires,
+                fingerprint=fp,
+            )
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+            question_id = int(record.id)
+        try:
+            notify_human_question(
+                user_id=admin_id,
+                question_id=question_id,
+                employee_id="retort-clarification",
+                question=primary,
+                task=str(context.get("subject") or "retort_clarification"),
+            )
+        except Exception:
+            pass
+        return {"mirrored": True, "reused": False, "question_id": question_id}
+    except Exception as exc:  # noqa: BLE001 - inbox mirror must never break gate open
+        return {"mirrored": False, "reason": type(exc).__name__}
+
+
 def open_clarification_session(
     *,
     strategy_intent: str,
@@ -438,6 +517,7 @@ def open_clarification_session(
     run_id: str = "",
     package_id: str = "",
     source: str = "retort_gate",
+    risk_level: str = "",
     force: bool = False,
 ) -> dict[str, Any]:
     """Open or reuse a clarification session. Always sweeps first."""
@@ -457,7 +537,12 @@ def open_clarification_session(
     assess = _load_alignment()
     assessment = assess(_normalize_changed_for_alignment(changed_files), issue_context=intent)
     build_questions, needed, _enrich = _load_clarification_builder()
-    if not force and not needed(assessment, intent):
+    if not force and not needed(
+        assessment,
+        intent,
+        changed_files=changed_files,
+        risk_level=risk_level,
+    ):
         return {
             "ok": True,
             "opened": False,
@@ -471,6 +556,7 @@ def open_clarification_session(
         strategy_intent=intent,
         changed_files=changed_files,
         max_questions=3,
+        risk_level=risk_level,
     )
     if not questions:
         questions = [
@@ -533,6 +619,7 @@ def open_clarification_session(
             "package_id": _text(package_id, 128),
             "assessment_status": assessment.get("status"),
             "missing_keywords": list(assessment.get("missing_keywords") or [])[:12],
+            "risk_level": _text(risk_level, 32),
             "questions": questions,
             "answers": {},
             "created_at": _now_iso(),
@@ -542,6 +629,18 @@ def open_clarification_session(
         }
         sessions[sid] = row
         _save_store_unlocked({"schema": _SCHEMA, "sessions": sessions})
+
+    mirror = _mirror_to_boss_inbox(sid, row)
+    if mirror.get("question_id"):
+        with _LOCK:
+            store = _load_store_unlocked()
+            sessions = dict(store.get("sessions") or {})
+            current = dict(sessions.get(sid) or row)
+            current["boss_question_id"] = int(mirror["question_id"])
+            current["updated_at"] = _now_iso()
+            sessions[sid] = current
+            _save_store_unlocked({"schema": _SCHEMA, "sessions": sessions})
+            row = current
 
     # Soft notify via uncertainty queue (non-blocking, deduped).
     try:
@@ -566,6 +665,7 @@ def open_clarification_session(
         "opened": True,
         "reused": False,
         "session": {"session_id": sid, **row},
+        "boss_inbox": mirror,
         "sweep": sweep,
     }
 
@@ -576,6 +676,7 @@ def open_clarification_for_change_request(
     strategy_intent: str = "",
     changed_files: Sequence[Any] | None = None,
     source_employee_id: str = "",
+    risk_level: str = "",
 ) -> dict[str, Any]:
     intent = _text(strategy_intent, 4000)
     if not intent:
@@ -588,6 +689,7 @@ def open_clarification_for_change_request(
         change_request_id=int(change_request_id),
         package_id="change-request",
         source="change_request.created",
+        risk_level=risk_level,
         force=False,
     )
 
@@ -672,7 +774,7 @@ def evaluate_retort_clarification_gate(
         and "retort_clarification_pending" not in blockers
         and "retort_clarification_expired" not in blockers
         and "retort_clarification_cancelled" not in blockers
-        and needed(assessment, intent)
+        and needed(assessment, intent, changed_files=changed_files)
         and not (session and session.get("status") == _STATUS_ANSWERED)
     ):
         opened = open_clarification_session(

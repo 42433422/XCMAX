@@ -155,6 +155,7 @@ def defer_write_as_change_request(
             strategy_intent=summary,
             changed_files=[path],
             source_employee_id=source_employee_id,
+            risk_level=risk_level,
         )
     except Exception:
         logger.exception("retort clarification open failed for CR %d", cid)
