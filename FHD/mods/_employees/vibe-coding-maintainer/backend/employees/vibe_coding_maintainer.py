@@ -216,6 +216,15 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
                     meta={'employee_id': EMPLOYEE_ID})
     requested = str(payload.get('handler') or '').strip() if isinstance(payload, dict) else ''
     chosen = requested if requested in handlers else handlers[0]
+    # 目录包常把 executor 层 handler 写成 direct_python；本模块无该分支时回退 llm_md/agent，
+    # 避免事故 fix 整单 handler_failed。
+    if chosen not in _DISPATCH:
+        if 'agent' in handlers and chosen != 'agent':
+            chosen = 'agent'
+        elif 'llm_md' in _DISPATCH:
+            chosen = 'llm_md'
+        elif 'echo' in _DISPATCH:
+            chosen = 'echo'
     fn = _DISPATCH.get(chosen)
     if fn is None:
         return _err(f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
