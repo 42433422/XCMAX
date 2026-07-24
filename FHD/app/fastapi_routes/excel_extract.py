@@ -8,9 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.infrastructure.auth.dependencies import require_identified_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
 
@@ -32,7 +33,7 @@ def _form_truthy(value: str, default: bool = True) -> bool:
 def _form_include_ledger(value: str, default: str = "auto") -> bool | str:
     text = str(value if value is not None else "").strip().lower()
     if not text:
-        return default
+        text = str(default or "auto").strip().lower()
     if text in {"1", "true", "yes", "on"}:
         return True
     if text in {"0", "false", "no", "off"}:
@@ -441,6 +442,7 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
 async def shipment_etl_preview(
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
+    workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
 ):
     """预览：按内容指纹识别送货单/出货流水并抽取抬头+明细（不写库）。"""
@@ -466,6 +468,7 @@ async def shipment_etl_preview(
         result = get_shipment_excel_etl_app_service().preview(
             path,
             include_ledger=_form_include_ledger(include_ledger),
+            workspace_root=str(workspace_root or "").strip() or None,
         )
         if tmp_path:
             result["uploaded_temp_path"] = tmp_path
@@ -477,18 +480,48 @@ async def shipment_etl_preview(
 
 @router.post("/shipment-etl/execute")
 async def shipment_etl_execute(
+    request: Request,
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    notes_json: str = Form(""),
     import_products: str = Form("1"),
     import_shipments: str = Form("1"),
     idempotent: str = Form("1"),
-    include_ledger: str = Form("auto"),
+    include_ledger: str = Form("0"),
+    confirm_ledger: str = Form("0"),
+    dry_run: str = Form("0"),
+    _user: Any = Depends(require_identified_user),
 ):
-    """执行闭环：送货单/出货流水 → 客户/产品/发货单（默认幂等）。"""
+    """执行闭环：送货单 → 客户/产品/发货单（默认幂等；流水需 confirm_ledger）。"""
     try:
+        import json
+
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
         )
+
+        # 软权限：有会话用户时尽量校验 shipment.create；桌面无 RBAC 时不阻断
+        try:
+            from app.application.facades.session_facade import get_auth_service
+            from app.infrastructure.auth.dependencies import resolve_session_user
+
+            sess_user = resolve_session_user(request)
+            if sess_user is not None and hasattr(get_auth_service(), "has_permission"):
+                if not get_auth_service().has_permission(sess_user, "shipment.create"):
+                    # 仅当明确拒绝时拦截；部分桌面账号可能无权限表
+                    if os.environ.get("FHD_SHIPMENT_ETL_REQUIRE_RBAC", "").strip().lower() in {
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    }:
+                        return JSONResponse(
+                            {"success": False, "message": "缺少 shipment.create 权限", "error_code": "forbidden"},
+                            status_code=403,
+                        )
+        except RECOVERABLE_ERRORS:
+            pass
 
         path = str(file_path or "").strip()
         if file is not None and (file.filename or "").strip():
@@ -499,19 +532,44 @@ async def shipment_etl_execute(
             )
             with open(path, "wb") as fh:
                 fh.write(raw)
-        if not path:
+
+        notes = None
+        raw_notes = str(notes_json or "").strip()
+        if raw_notes:
+            try:
+                loaded = json.loads(raw_notes)
+                if isinstance(loaded, list):
+                    notes = loaded
+                elif isinstance(loaded, dict) and isinstance(loaded.get("notes"), list):
+                    notes = loaded.get("notes")
+            except json.JSONDecodeError:
+                return JSONResponse(
+                    {"success": False, "message": "notes_json 不是合法 JSON", "error_code": "bad_notes"},
+                    status_code=400,
+                )
+
+        if not path and notes is None:
             return JSONResponse(
-                {"success": False, "message": "请上传文件或提供 file_path"},
+                {"success": False, "message": "请上传文件、提供 file_path，或提交 notes_json"},
                 status_code=400,
             )
         result = get_shipment_excel_etl_app_service().execute(
-            path,
+            path or "",
             import_products=_form_truthy(import_products, True),
             import_shipments=_form_truthy(import_shipments, True),
             idempotent=_form_truthy(idempotent, True),
-            include_ledger=_form_include_ledger(include_ledger),
+            include_ledger=_form_include_ledger(include_ledger, default="0"),
+            confirm_ledger=_form_truthy(confirm_ledger, False),
+            dry_run=_form_truthy(dry_run, False),
+            notes=notes,
+            workspace_root=str(workspace_root or "").strip() or None,
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+        status = 200 if result.get("success") or result.get("dry_run") else 400
+        if result.get("error_code") == "unsafe_path":
+            status = 400
+        if result.get("error_code") == "ledger_confirm_required":
+            status = 409
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("shipment etl execute failed: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -520,7 +578,9 @@ async def shipment_etl_execute(
 @router.post("/shipment-etl/batch-preview")
 async def shipment_etl_batch_preview(
     directory: str = Form(""),
+    workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
 ):
     """批量预览目录内 xlsx 送货单/出货流水。"""
     try:
@@ -534,6 +594,7 @@ async def shipment_etl_batch_preview(
         result = get_shipment_excel_etl_app_service().batch_preview(
             root,
             include_ledger=_form_include_ledger(include_ledger),
+            workspace_root=str(workspace_root or "").strip() or None,
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
@@ -544,12 +605,16 @@ async def shipment_etl_batch_preview(
 @router.post("/shipment-etl/batch-execute")
 async def shipment_etl_batch_execute(
     directory: str = Form(""),
-    include_ledger: str = Form("auto"),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("0"),
+    confirm_ledger: str = Form("0"),
     idempotent: str = Form("1"),
     import_products: str = Form("1"),
     import_shipments: str = Form("1"),
+    dry_run: str = Form("0"),
+    _user: Any = Depends(require_identified_user),
 ):
-    """批量执行目录内 xlsx 闭环入库。"""
+    """批量执行目录内 xlsx 闭环入库（默认关闭，需 FHD_SHIPMENT_ETL_ALLOW_BATCH=1）。"""
     try:
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
@@ -560,12 +625,18 @@ async def shipment_etl_batch_execute(
             return JSONResponse({"success": False, "message": "缺少 directory"}, status_code=400)
         result = get_shipment_excel_etl_app_service().batch_execute(
             root,
-            include_ledger=_form_include_ledger(include_ledger),
+            include_ledger=_form_include_ledger(include_ledger, default="0"),
+            confirm_ledger=_form_truthy(confirm_ledger, False),
             idempotent=_form_truthy(idempotent, True),
             import_products=_form_truthy(import_products, True),
             import_shipments=_form_truthy(import_shipments, True),
+            dry_run=_form_truthy(dry_run, False),
+            workspace_root=str(workspace_root or "").strip() or None,
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+        status = 200 if result.get("success") or result.get("dry_run") else 400
+        if result.get("error_code") == "batch_disabled":
+            status = 403
+        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("shipment etl batch execute failed: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -576,11 +647,16 @@ async def shipment_etl_generate_template(
     kind: str = Form("delivery"),
     output_path: str = Form(""),
     unit_name: str = Form("闭环测试客户"),
+    _user: Any = Depends(require_identified_user),
 ):
-    """生成测试用送货单或出货流水模板。"""
+    """生成测试用送货单或出货流水模板（输出限沙箱）。"""
     try:
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
+        )
+        from app.application.shipment_excel_etl_security import (
+            ShipmentEtlPathError,
+            resolve_etl_output_path,
         )
 
         svc = get_shipment_excel_etl_app_service()
@@ -589,6 +665,13 @@ async def shipment_etl_generate_template(
             out = os.path.join(
                 TEMP_EXCEL_DIR,
                 f"etl_tpl_{kind}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
+            )
+        try:
+            out = str(resolve_etl_output_path(out))
+        except ShipmentEtlPathError as exc:
+            return JSONResponse(
+                {"success": False, "message": f"非法输出路径: {exc}", "error_code": "unsafe_path"},
+                status_code=400,
             )
         kind_norm = str(kind or "delivery").strip().lower()
         if kind_norm in {"ledger", "shipment_ledger", "出货流水"}:
@@ -627,25 +710,47 @@ async def shipment_etl_generate_template(
 async def shipment_etl_regenerate(
     file_path: str = Form(""),
     output_path: str = Form(""),
+    workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
 ):
     """解析已有单据并按标准送货单版式反推再出单。"""
     try:
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
         )
+        from app.application.shipment_excel_etl_security import (
+            ShipmentEtlPathError,
+            resolve_etl_output_path,
+            resolve_etl_path,
+        )
 
         src = str(file_path or "").strip()
         if not src:
             return JSONResponse({"success": False, "message": "缺少 file_path"}, status_code=400)
+        wr = str(workspace_root or "").strip() or None
+        try:
+            src_resolved = str(resolve_etl_path(src, workspace_root=wr, must_exist=True))
+        except ShipmentEtlPathError as exc:
+            return JSONResponse(
+                {"success": False, "message": f"非法文件路径: {exc}", "error_code": "unsafe_path"},
+                status_code=400,
+            )
         out = str(output_path or "").strip()
         if not out:
             out = os.path.join(
                 TEMP_EXCEL_DIR,
                 f"etl_regen_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
             )
+        try:
+            out = str(resolve_etl_output_path(out, workspace_root=wr))
+        except ShipmentEtlPathError as exc:
+            return JSONResponse(
+                {"success": False, "message": f"非法输出路径: {exc}", "error_code": "unsafe_path"},
+                status_code=400,
+            )
         result = get_shipment_excel_etl_app_service().regenerate(
-            src,
+            src_resolved,
             out,
             include_ledger=_form_include_ledger(include_ledger),
         )

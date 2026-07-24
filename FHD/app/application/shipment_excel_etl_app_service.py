@@ -306,6 +306,7 @@ def note_fingerprint(note: dict[str, Any]) -> str:
 
 
 def _fingerprint_store_path() -> Path:
+    """兼容旧测试 monkeypatch；真实幂等改走 SQLite。"""
     try:
         from app.utils.path_utils import get_data_dir
 
@@ -314,6 +315,48 @@ def _fingerprint_store_path() -> Path:
         root = Path.cwd() / "data"
     root.mkdir(parents=True, exist_ok=True)
     return root / "shipment_etl_fingerprints.json"
+
+
+def _legacy_json_has_fingerprint(fingerprint: str) -> bool:
+    path = _fingerprint_store_path()
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        entries = data.get("entries") if isinstance(data, dict) else None
+        return bool(isinstance(entries, dict) and fingerprint in entries)
+    except RECOVERABLE_ERRORS:
+        return False
+
+
+def _is_fingerprint_imported(tenant_key: str, fingerprint: str) -> bool:
+    from app.application.shipment_excel_etl_fingerprint_store import has_fingerprint
+
+    if has_fingerprint(tenant_key, fingerprint):
+        return True
+    # 兼容历史 JSON 指纹（无租户）
+    return _legacy_json_has_fingerprint(fingerprint)
+
+
+def _record_fingerprint_now(
+    tenant_key: str,
+    fingerprint: str,
+    *,
+    shipment_id: Any = None,
+    unit_name: str = "",
+    order_number: str = "",
+    file_name: str = "",
+) -> None:
+    from app.application.shipment_excel_etl_fingerprint_store import record_fingerprint
+
+    record_fingerprint(
+        tenant_key,
+        fingerprint,
+        shipment_id=shipment_id,
+        unit_name=unit_name,
+        order_number=order_number,
+        file_name=file_name,
+    )
 
 
 def _load_fingerprints() -> dict[str, Any]:
@@ -549,26 +592,40 @@ def preview_shipment_excel_etl(
     *,
     include_ledger: bool | str = "auto",
     unit_name_hint: str | None = None,
+    workspace_root: str | Path | None = None,
 ) -> dict[str, Any]:
+    from app.application.shipment_excel_etl_security import (
+        ShipmentEtlPathError,
+        resolve_etl_path,
+        tenant_key_for_etl,
+    )
+
+    try:
+        path = resolve_etl_path(file_path, workspace_root=workspace_root, must_exist=True)
+    except ShipmentEtlPathError as exc:
+        return {"success": False, "message": f"非法文件路径: {exc}", "error_code": "unsafe_path", "notes": []}
+
     parsed = parse_delivery_notes(
-        file_path,
+        path,
         include_ledger=include_ledger,
         unit_name_hint=unit_name_hint,
     )
     if not parsed.get("success"):
         return parsed
     notes = parsed.get("notes") or []
-    store = _load_fingerprints()
-    entries = store.get("entries") or {}
+    tenant_key = tenant_key_for_etl()
     for note in notes:
         fp = str(note.get("fingerprint") or "")
-        note["already_imported"] = bool(fp and fp in entries)
+        note["already_imported"] = bool(fp and _is_fingerprint_imported(tenant_key, fp))
+    ledger_available = int(parsed.get("ledger_available_count") or 0)
     return {
         **parsed,
         "preview": True,
         "product_records": _notes_to_product_records(notes),
         "confirm_required": True,
         "duplicate_note_count": sum(1 for n in notes if n.get("already_imported")),
+        "ledger_risk": ledger_available > 0 and int(parsed.get("ledger_note_count") or 0) == 0,
+        "ledger_available_count": ledger_available,
         "message": parsed.get("message")
         + ("。确认后将写入客户、产品与发货单。" if notes else ""),
     }
@@ -604,24 +661,64 @@ def execute_shipment_excel_etl(
     import_shipments: bool = True,
     notes: list[dict[str, Any]] | None = None,
     idempotent: bool = True,
-    include_ledger: bool | str = "auto",
+    include_ledger: bool | str = False,
+    confirm_ledger: bool = False,
+    dry_run: bool = False,
     unit_name_hint: str | None = None,
+    workspace_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """执行闭环：客户+产品+发货单（可幂等）。"""
+    """执行闭环：客户+产品+发货单（可幂等 / dry-run）。
+
+    生产默认 include_ledger=False；若要导入流水须 confirm_ledger=True。
+    """
+    from app.application.shipment_excel_etl_security import (
+        ShipmentEtlPathError,
+        resolve_etl_path,
+        tenant_key_for_etl,
+    )
+
+    path: Path | None = None
+    file_name = "shipment.xlsx"
+    if file_path:
+        try:
+            path = resolve_etl_path(file_path, workspace_root=workspace_root, must_exist=notes is None)
+            file_name = path.name
+        except ShipmentEtlPathError as exc:
+            return {
+                "success": False,
+                "message": f"非法文件路径: {exc}",
+                "error_code": "unsafe_path",
+            }
+
     if notes is None:
+        if path is None:
+            return {"success": False, "message": "缺少 file_path", "error_code": "missing_path"}
         parsed = parse_delivery_notes(
-            file_path,
+            path,
             include_ledger=include_ledger,
             unit_name_hint=unit_name_hint,
         )
         if not parsed.get("success"):
             return parsed
         notes = [_enrich_note(n) for n in (parsed.get("notes") or [])]
-        file_name = str(parsed.get("file_name") or Path(file_path).name)
+        file_name = str(parsed.get("file_name") or file_name)
+        ledger_available = int(parsed.get("ledger_available_count") or 0)
     else:
-        file_name = Path(file_path).name if file_path else "shipment.xlsx"
         notes = [_enrich_note(n) for n in notes]
-        parsed = {"success": True, "file_name": file_name, "notes": notes}
+        ledger_available = sum(1 for n in notes if n.get("source_kind") == "shipment_ledger")
+
+    ledger_notes = [n for n in notes if n.get("source_kind") == "shipment_ledger"]
+    if ledger_notes and not confirm_ledger:
+        return {
+            "success": False,
+            "message": (
+                f"检测到 {len(ledger_notes)} 张出货流水分组，生产默认禁止直接入库。"
+                "请传 confirm_ledger=1 并确认客户归属后再执行。"
+            ),
+            "error_code": "ledger_confirm_required",
+            "ledger_note_count": len(ledger_notes),
+            "note_count": len(notes),
+        }
 
     if not notes:
         return {
@@ -630,25 +727,41 @@ def execute_shipment_excel_etl(
             "error_code": "no_delivery_notes",
         }
 
-    store = _load_fingerprints() if idempotent else {"entries": {}}
-    entries: dict[str, Any] = dict(store.get("entries") or {})
-
+    tenant_key = tenant_key_for_etl()
     to_import: list[dict[str, Any]] = []
     skipped_duplicates: list[dict[str, Any]] = []
     for note in notes:
         fp = str(note.get("fingerprint") or note_fingerprint(note))
         note["fingerprint"] = fp
-        if idempotent and fp in entries:
+        if idempotent and _is_fingerprint_imported(tenant_key, fp):
             skipped_duplicates.append(
                 {
                     "fingerprint": fp,
                     "unit_name": note.get("unit_name"),
                     "order_number": note.get("order_number"),
-                    "prior_shipment_id": (entries.get(fp) or {}).get("shipment_id"),
                 }
             )
             continue
         to_import.append(note)
+
+    if dry_run:
+        return {
+            "success": True,
+            "dry_run": True,
+            "message": (
+                f"预演：将新建 {len(to_import)} 张，跳过重复 {len(skipped_duplicates)} 张"
+                + ("；不会写库" )
+            ),
+            "file_name": file_name,
+            "note_count": len(notes),
+            "would_create": len(to_import),
+            "would_skip": len(skipped_duplicates),
+            "notes": to_import,
+            "skipped_duplicates": skipped_duplicates,
+            "ledger_available_count": ledger_available,
+            "closed_loop": False,
+            "kind": "shipment_delivery_etl",
+        }
 
     product_result: dict[str, Any] = {"success": True, "skipped": True}
     if import_products and to_import:
@@ -661,6 +774,7 @@ def execute_shipment_excel_etl(
     shipment_skipped = len(skipped_duplicates)
     shipment_ids: list[Any] = []
     errors: list[str] = []
+    partial = False
 
     if import_shipments and to_import:
         try:
@@ -679,11 +793,16 @@ def execute_shipment_excel_etl(
             items = list(note.get("items") or [])
             if not unit or not items:
                 shipment_failed += 1
+                errors.append(f"缺少客户或明细: {note.get('order_number') or note.get('sheet')}")
                 continue
             result = svc.create_shipment(
                 unit_name=unit,
                 items_data=items,
                 contact_person=str(note.get("contact_person") or ""),
+                external_order_number=str(note.get("order_number") or ""),
+                order_date=str(note.get("order_date") or ""),
+                source_fingerprint=str(note.get("fingerprint") or ""),
+                source_kind=str(note.get("source_kind") or ""),
             )
             if result.get("success"):
                 shipment_created += 1
@@ -692,34 +811,37 @@ def execute_shipment_excel_etl(
                 if sid is not None:
                     shipment_ids.append(sid)
                 fp = str(note.get("fingerprint") or "")
-                if fp:
-                    entries[fp] = {
-                        "shipment_id": sid,
-                        "unit_name": unit,
-                        "order_number": note.get("order_number"),
-                        "imported_at": datetime.now().isoformat(timespec="seconds"),
-                        "file_name": file_name,
-                    }
+                if idempotent and fp:
+                    try:
+                        _record_fingerprint_now(
+                            tenant_key,
+                            fp,
+                            shipment_id=sid,
+                            unit_name=unit,
+                            order_number=str(note.get("order_number") or ""),
+                            file_name=file_name,
+                        )
+                    except RECOVERABLE_ERRORS:
+                        logger.warning("failed to persist etl fingerprint immediately", exc_info=True)
             else:
                 shipment_failed += 1
+                partial = True
                 errors.append(str(result.get("message") or "create_shipment failed"))
-
-        if idempotent:
-            store["entries"] = entries
-            try:
-                _save_fingerprints(store)
-            except RECOVERABLE_ERRORS:
-                logger.warning("failed to persist shipment etl fingerprints", exc_info=True)
 
     ok = shipment_failed == 0 and bool(product_result.get("success", True))
     if not to_import and skipped_duplicates:
         ok = True
+    if shipment_created and shipment_failed:
+        partial = True
+        ok = False
     return {
         "success": ok,
+        "partial_success": partial or (shipment_created > 0 and shipment_failed > 0),
         "message": (
             f"送货单闭环完成：新建 {shipment_created}，跳过重复 {shipment_skipped}"
             + (f"，失败 {shipment_failed}" if shipment_failed else "")
             + ("；客户/产品已同步" if import_products and to_import else "")
+            + ("（部分成功，已成功单据不会自动回滚）" if (shipment_created and shipment_failed) else "")
         ),
         "file_name": file_name,
         "note_count": len(notes),
@@ -729,9 +851,10 @@ def execute_shipment_excel_etl(
         "shipment_ids": shipment_ids,
         "skipped_duplicates": skipped_duplicates,
         "product_result": product_result,
-        "errors": errors[:8],
+        "errors": errors[:20],
         "closed_loop": True,
         "idempotent": idempotent,
+        "dry_run": False,
         "kind": "shipment_delivery_etl",
     }
 
@@ -929,8 +1052,17 @@ def batch_preview_shipment_excel_etl(
     *,
     include_ledger: bool | str = "auto",
     pattern: str = "*.xlsx",
+    workspace_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    root = Path(directory).expanduser().resolve()
+    from app.application.shipment_excel_etl_security import (
+        ShipmentEtlPathError,
+        resolve_etl_path,
+    )
+
+    try:
+        root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
+    except ShipmentEtlPathError as exc:
+        return {"success": False, "message": f"非法目录: {exc}", "error_code": "unsafe_path", "files": []}
     if not root.is_dir():
         return {"success": False, "message": f"目录不存在: {root}", "files": []}
     files = sorted(root.glob(pattern))
@@ -943,6 +1075,7 @@ def batch_preview_shipment_excel_etl(
             path,
             include_ledger=include_ledger,
             unit_name_hint=path.stem,
+            workspace_root=workspace_root or root,
         )
         note_count = int(preview.get("note_count") or 0)
         total_notes += note_count
@@ -970,16 +1103,42 @@ def batch_preview_shipment_excel_etl(
 def batch_execute_shipment_excel_etl(
     directory: str | Path,
     *,
-    include_ledger: bool | str = "auto",
+    include_ledger: bool | str = False,
     pattern: str = "*.xlsx",
     idempotent: bool = True,
     import_products: bool = True,
     import_shipments: bool = True,
+    confirm_ledger: bool = False,
+    dry_run: bool = False,
+    workspace_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    root = Path(directory).expanduser().resolve()
+    from app.application.shipment_excel_etl_security import (
+        ShipmentEtlPathError,
+        batch_execute_allowed,
+        resolve_etl_path,
+    )
+
+    if not dry_run and not batch_execute_allowed():
+        return {
+            "success": False,
+            "message": "批量入库默认关闭。需设置环境变量 FHD_SHIPMENT_ETL_ALLOW_BATCH=1",
+            "error_code": "batch_disabled",
+            "files": [],
+        }
+    try:
+        root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
+    except ShipmentEtlPathError as exc:
+        return {"success": False, "message": f"非法目录: {exc}", "error_code": "unsafe_path", "files": []}
     if not root.is_dir():
         return {"success": False, "message": f"目录不存在: {root}", "files": []}
     files = sorted(root.glob(pattern))
+    if len(files) > 50:
+        return {
+            "success": False,
+            "message": f"批量文件过多（{len(files)}），上限 50，请缩小范围",
+            "error_code": "batch_too_large",
+            "files": [],
+        }
     results = []
     created = skipped = failed = 0
     for path in files:
@@ -992,19 +1151,23 @@ def batch_execute_shipment_excel_etl(
             idempotent=idempotent,
             import_products=import_products,
             import_shipments=import_shipments,
+            confirm_ledger=confirm_ledger,
+            dry_run=dry_run,
+            workspace_root=workspace_root or root,
         )
-        created += int(result.get("shipment_created") or 0)
-        skipped += int(result.get("shipment_skipped") or 0)
+        created += int(result.get("shipment_created") or result.get("would_create") or 0)
+        skipped += int(result.get("shipment_skipped") or result.get("would_skip") or 0)
         failed += int(result.get("shipment_failed") or 0)
         results.append(
             {
                 "file_path": str(path),
                 "file_name": path.name,
                 "success": bool(result.get("success")),
-                "shipment_created": result.get("shipment_created", 0),
-                "shipment_skipped": result.get("shipment_skipped", 0),
+                "shipment_created": result.get("shipment_created", result.get("would_create", 0)),
+                "shipment_skipped": result.get("shipment_skipped", result.get("would_skip", 0)),
                 "shipment_failed": result.get("shipment_failed", 0),
                 "message": result.get("message"),
+                "error_code": result.get("error_code"),
             }
         )
     return {
@@ -1015,8 +1178,9 @@ def batch_execute_shipment_excel_etl(
         "shipment_skipped": skipped,
         "shipment_failed": failed,
         "files": results,
-        "closed_loop": True,
-        "message": f"批量入库完成：新建 {created}，跳过 {skipped}，失败 {failed}",
+        "closed_loop": not dry_run,
+        "dry_run": dry_run,
+        "message": f"{'批量预演' if dry_run else '批量入库'}完成：新建/将建 {created}，跳过 {skipped}，失败 {failed}",
     }
 
 

@@ -52,6 +52,9 @@ export type ShipmentEtlPreview = {
   notes?: ShipmentEtlNotePreview[]
   message?: string
   product_records?: Record<string, unknown>[]
+  duplicate_note_count?: number
+  ledger_risk?: boolean
+  ledger_available_count?: number
   [key: string]: unknown
 }
 
@@ -296,7 +299,18 @@ function applyShipmentEtlIntent(
   item.databaseTargetLabel = '客户/产品/发货单'
   item.databaseAction = 'shipment_etl_execute'
   item.databaseDisabledReason = ''
-  item.selectedDatabase = true
+  // 写库需用户确认勾选；重复导入时默认不勾
+  const dup = Number(preview.duplicate_note_count || 0)
+  item.selectedDatabase = dup < noteCount
+  if (dup > 0) {
+    item.warnings = [...item.warnings, `其中 ${dup} 张疑似已导入（幂等将跳过）`]
+  }
+  if (preview.ledger_risk) {
+    item.warnings = [
+      ...item.warnings,
+      `同文件另有约 ${Number(preview.ledger_available_count || 0)} 组历史流水未纳入本次导入`,
+    ]
+  }
   if (units.length) {
     item.fieldNames = [...new Set(['购货单位', '型号', '品名', '数量', ...item.fieldNames])].slice(0, 80)
   }
@@ -311,12 +325,17 @@ function applyShipmentEtlIntent(
   if (itemCount > 0) item.rowCount = Math.max(item.rowCount, itemCount)
 }
 
-async function previewShipmentExcelEtl(filePath: string): Promise<ShipmentEtlPreview | null> {
+async function previewShipmentExcelEtl(
+  filePath: string,
+  workspaceRoot?: string,
+): Promise<ShipmentEtlPreview | null> {
   const path = asString(filePath).trim()
   if (!path) return null
   await primeCsrfCookie()
   const fd = new FormData()
   fd.append('file_path', path)
+  if (workspaceRoot) fd.append('workspace_root', workspaceRoot)
+  fd.append('include_ledger', 'auto')
   const res = await apiFetch('/api/excel/data/shipment-etl/preview', { method: 'POST', body: fd })
   const body = await res.json().catch(() => ({}))
   const data = asRecord(body)
@@ -331,8 +350,15 @@ async function executeShipmentExcelEtl(item: ChatOfficeDockingReviewItem): Promi
   await primeCsrfCookie()
   const fd = new FormData()
   fd.append('file_path', item.upload.file_path)
+  if (item.upload.workspace_root) fd.append('workspace_root', item.upload.workspace_root)
   fd.append('import_products', '1')
   fd.append('import_shipments', '1')
+  fd.append('idempotent', '1')
+  fd.append('include_ledger', '0')
+  fd.append('confirm_ledger', '0')
+  if (item.shipmentEtlPreview?.notes?.length) {
+    fd.append('notes_json', JSON.stringify(item.shipmentEtlPreview.notes))
+  }
   const res = await apiFetch('/api/excel/data/shipment-etl/execute', { method: 'POST', body: fd })
   const body = await res.json().catch(() => ({}))
   const data = asRecord(body)
@@ -639,7 +665,10 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       )
       if (canRunShipmentEtl) {
         try {
-          const shipmentPreview = await previewShipmentExcelEtl(item.upload!.file_path)
+          const shipmentPreview = await previewShipmentExcelEtl(
+            item.upload!.file_path,
+            item.upload!.workspace_root,
+          )
           if (shipmentPreview) applyShipmentEtlIntent(item, shipmentPreview)
         } catch {
           // 预览失败不阻断办公对接；仍保留字段启发式意图

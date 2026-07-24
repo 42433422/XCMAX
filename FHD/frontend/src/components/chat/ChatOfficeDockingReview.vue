@@ -30,6 +30,15 @@
           意图：{{ item.intentLabel }}{{ item.databaseTargetLabel ? ` · ${item.databaseTargetLabel}` : '' }}，{{ item.intentSummary }}
         </p>
         <ul
+          v-if="item.warnings.length"
+          class="office-docking-review__warnings"
+          aria-label="风险提示"
+        >
+          <li v-for="(warn, idx) in item.warnings.slice(0, 4)" :key="`${item.id}-warn-${idx}`">
+            {{ warn }}
+          </li>
+        </ul>
+        <ul
           v-if="shipmentNotes(item).length"
           class="office-docking-review__shipment-notes"
           aria-label="送货单预览"
