@@ -3211,7 +3211,22 @@ def _changed_files_for_branch(
         if workspace.exists() and not _cleanup_merge_workspace(workspace):
             raise RuntimeError(f"failed clone workspace cleanup: {workspace}")
         try:
-            _run_cmd(["git", "clone", "--no-tags", repository, str(workspace)], timeout=300)
+            # This workspace is used only for ref diffs and targeted ``git
+            # show`` calls.  Avoid materializing the multi-GB working tree;
+            # partial-clone support lazily fetches only a KB blob when schema
+            # validation actually needs it.
+            _run_cmd(
+                [
+                    "git",
+                    "clone",
+                    "--no-tags",
+                    "--filter=blob:none",
+                    "--no-checkout",
+                    repository,
+                    str(workspace),
+                ],
+                timeout=300,
+            )
         except Exception as exc:
             clone_errors.append(f"{type(exc).__name__}:{str(exc)[:300]}")
             continue
@@ -3265,7 +3280,6 @@ def _changed_files_for_branch(
                     branch,
                     bare_repo,
                 )
-    _run_cmd(["git", "checkout", "-B", base_branch, f"origin/{base_branch}"], cwd=workspace)
     if not branch_ref:
         logger.warning(
             "auto_merge: branch %s not on remote or bareRepo — Para may not have pushed it",
