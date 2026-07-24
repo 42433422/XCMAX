@@ -157,20 +157,30 @@ def run_archive_template_delete(
 
         from app.db.init_db import init_template_tables
         from app.db.session import get_db
+        from app.services.document_templates.tenant_scope import (
+            ensure_templates_tenant_column,
+            templates_tenant_where_sql,
+        )
 
         try:
             init_template_tables()
+            ensure_templates_tenant_column()
         except RECOVERABLE_ERRORS:
             pass
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             row = db.execute(
-                text("SELECT id FROM templates WHERE id = :id"), {"id": db_id}
+                text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
+                {"id": db_id, **tenant_bind},
             ).fetchone()
             if not row:
                 return {"success": False, "message": "模板不存在"}, 404
             db.execute(
-                text("UPDATE templates SET is_active = 0, updated_at = :updated_at WHERE id = :id"),
-                {"id": db_id, "updated_at": datetime.now()},
+                text(
+                    f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
+                    f"WHERE id = :id AND ({tenant_sql})"
+                ),
+                {"id": db_id, "updated_at": datetime.now(), **tenant_bind},
             )
             db.commit()
         return {

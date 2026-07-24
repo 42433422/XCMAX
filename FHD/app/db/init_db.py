@@ -520,6 +520,7 @@ def init_template_tables(db_path: str | None = None) -> None:
                 style_config TEXT,
                 business_rules TEXT,
                 is_active INTEGER DEFAULT 1,
+                tenant_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -568,6 +569,7 @@ def init_template_tables(db_path: str | None = None) -> None:
             "is_active": "ALTER TABLE templates ADD COLUMN is_active INTEGER DEFAULT 1",
             "created_at": "ALTER TABLE templates ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
             "updated_at": "ALTER TABLE templates ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            "tenant_id": "ALTER TABLE templates ADD COLUMN tenant_id INTEGER",
         }
         for column_name, sql in required_templates_columns.items():
             if column_name not in templates_columns:
@@ -619,6 +621,7 @@ def init_template_tables_for_engine(engine: Engine) -> None:
                         style_config TEXT,
                         business_rules TEXT,
                         is_active INTEGER DEFAULT 1,
+                        tenant_id INTEGER,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -1732,6 +1735,7 @@ def ensure_business_tenant_id_columns(
         "storage_locations",
         "inventory_ledger",
         "inventory_transactions",
+        "templates",
     )
     try:
         insp = inspect(real_engine)
