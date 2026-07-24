@@ -208,6 +208,23 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                 return {"auto_approved": False, "reason": f"status={row.status}"}
 
             try:
+                from modstore_server.retort_clarification_gate import (
+                    clarification_blocks_auto_approve,
+                )
+
+                clar_block = clarification_blocks_auto_approve(int(change_request_id))
+                if clar_block.get("blocked"):
+                    return {
+                        "auto_approved": False,
+                        "reason": str(clar_block.get("reason") or "retort_clarification_pending"),
+                        "retort_clarification": clar_block,
+                    }
+            except Exception:
+                logger.exception(
+                    "retort clarification gate check failed for CR %s", change_request_id
+                )
+
+            try:
                 data = json.loads(row.diff_blob or "{}")
             except json.JSONDecodeError:
                 return {"auto_approved": False, "reason": "invalid diff_blob"}

@@ -146,6 +146,19 @@ def defer_write_as_change_request(
     except Exception:
         logger.exception("publish change_request.created failed")
     try:
+        from modstore_server.retort_clarification_gate import (
+            open_clarification_for_change_request,
+        )
+
+        open_clarification_for_change_request(
+            cid,
+            strategy_intent=summary,
+            changed_files=[path],
+            source_employee_id=source_employee_id,
+        )
+    except Exception:
+        logger.exception("retort clarification open failed for CR %d", cid)
+    try:
         publish(
             "ops.change_request.submitted",
             {
