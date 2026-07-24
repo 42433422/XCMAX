@@ -1,0 +1,49 @@
+{
+  "stamp": "2026-07-24T12:51:08.260562+00:00",
+  "base": "http://127.0.0.1:17500",
+  "tools": [
+    "api_catalog",
+    "api_call",
+    "chat",
+    "capability_loop",
+    "ui_sessions",
+    "ui_snapshot",
+    "ui_navigate",
+    "ui_click",
+    "ui_type",
+    "ui_scroll"
+  ],
+  "seed_enabled_count": 26,
+  "closed_loop": true,
+  "ui_loop_ready": false,
+  "hint": "API/对话闭环已通；UI 闭环需面板开启「本页待命」",
+  "steps": [
+    {
+      "step": "api_catalog",
+      "ok": true,
+      "enabled_count": 26,
+      "total_count": 26
+    },
+    {
+      "step": "api_call",
+      "ok": true,
+      "path": "/api/products/list",
+      "status_code": 200,
+      "message": null
+    },
+    {
+      "step": "chat",
+      "ok": true,
+      "status_code": 200,
+      "message": null
+    },
+    {
+      "step": "ui_sessions",
+      "ok": true,
+      "remote_control_enabled": true,
+      "session_count": 0,
+      "ui_ready": false
+    }
+  ],
+  "mcp_tool_count": 10
+}
