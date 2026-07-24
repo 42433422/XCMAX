@@ -231,4 +231,37 @@ describe('mergeSidebarMenuItems', () => {
     const merged = mergeSidebarMenuItems(core, mod, [], [], [])
     expect(merged.map((m) => m.key)).toEqual(['approval-hub'])
   })
+
+  it('dedupes mod-erp-print against host 模板与打印 slot', () => {
+    const core = [
+      { key: 'print', name: '模板与打印', iconClass: 'fa-print' },
+      { key: 'printer-list', name: '打印机列表', iconClass: 'fa-print' },
+      { key: 'template-preview', name: '模板库', iconClass: 'fa-file-o' },
+    ]
+    const mod = [
+      {
+        key: 'mod-erp-print',
+        name: '模板与打印',
+        iconClass: 'fa-print',
+        modId: 'xcagi-erp-domain-bridge',
+        path: '/mod/xcagi-erp-domain-bridge/print',
+      },
+      {
+        key: 'mod-erp-printer-list',
+        name: '打印机列表',
+        iconClass: 'fa-print',
+        modId: 'xcagi-erp-domain-bridge',
+        path: '/mod/xcagi-erp-domain-bridge/printer-list',
+      },
+      {
+        key: 'mod-erp-template-preview',
+        name: '模板库',
+        iconClass: 'fa-file-o',
+        modId: 'xcagi-erp-domain-bridge',
+        path: '/mod/xcagi-erp-domain-bridge/template-preview',
+      },
+    ]
+    const merged = mergeSidebarMenuItems(core, mod, [], [], ['xcagi-erp-domain-bridge'])
+    expect(merged.map((m) => m.key)).toEqual(['print', 'printer-list', 'template-preview'])
+  })
 })
