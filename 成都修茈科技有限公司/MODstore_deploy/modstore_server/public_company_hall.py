@@ -600,9 +600,21 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         published = _load_published_action_board()
         if published:
             board = published
+            cal = board.get("calendar_day") or board.get("day")
+            # 公开板可能粘旧日：抬升 day_stale，顶层 day 仍暴露事实并附 calendar_day
+            if not board.get("calendar_day"):
+                try:
+                    from modstore_server.public_action_board import _calendar_today
+
+                    board["calendar_day"] = _calendar_today()
+                except Exception:  # noqa: BLE001
+                    board["calendar_day"] = cal
+            if board.get("day") and board.get("calendar_day") and board["day"] != board["calendar_day"]:
+                board["day_stale"] = True
             logger.info(
-                "company_hall: DB action board empty; using published download-action-board.json day=%s",
+                "company_hall: DB action board empty; using published download-action-board.json day=%s stale=%s",
                 board.get("day"),
+                board.get("day_stale"),
             )
 
     # DB 无行动信号时，用公开板条目推导 working/alert（与轨迹同源，不造假心跳）
@@ -753,10 +765,25 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     bp_items = list(((board.get("breakpoints") or {}).get("items") or [])[:12])
     goal_items = list(((board.get("goals") or {}).get("items") or [])[:12])
 
+    try:
+        from modstore_server.runtime_inventory import runtime_inventory_summary
+
+        runtime = runtime_inventory_summary()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("company_hall: runtime inventory unavailable: %s", exc)
+        runtime = {
+            "schema": "xcagi.runtime_inventory/v1",
+            "ok": False,
+            "failed_must_run": -1,
+            "note": f"runtime inventory unavailable: {exc}",
+        }
+
     return {
         "schema": "xcagi.public_company_hall/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "day": board.get("day"),
+        "calendar_day": board.get("calendar_day"),
+        "day_stale": bool(board.get("day_stale")),
         "readonly": True,
         "note": "公司大厅公开投影：编制为 SSOT；状态由行动条目与执行度量推导，无虚构心跳在线。",
         "cadence": {
@@ -773,6 +800,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         "departments": departments,
         "employees": employees,
         "ai_driver": _public_ai_driver_snapshot(),
+        "runtime": runtime,
         "feed": feed,
         "last_activity": last_activity,
         "board": {

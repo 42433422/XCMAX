@@ -100,7 +100,7 @@ domains:
     check: python scripts/dev/ssot_plugins/account_system.py check
     sync: null
 
-  # ===== 已启用域（lint/verify，advisory gate 不阻断）=====
+  # ===== 已启用域（lint/verify；ssot_cli gate 全量阻断）=====
   - name: test-files
     owner: qa
     enabled: true
@@ -139,6 +139,17 @@ domains:
     check: python scripts/dev/ssot_plugins/error_codes.py check
     sync: null
 
+  - name: registry-crosscheck
+    owner: platform-governance
+    enabled: true
+    # L1：ssot.yaml ↔ SSOT_INDEX.md 机器注册表互校验，防止双脑漂移。
+    ssot: FHD/docs/SSOT_INDEX.md
+    derived:
+      - FHD/config/ssot.yaml
+    mode: verify
+    check: python scripts/dev/ssot_registry_crosscheck.py check
+    sync: null
+
   # k8s-manifests 域已随假 k8s 路径整体退役（2026-07-01 运维根治）：清单从未指向
   # 真实集群，生产 = 单 CVM（FHD/scripts/deploy 发布链 + 仓库根 ops/）。恢复看 git 历史。
 
@@ -164,10 +175,10 @@ domains:
   - name: db-schema
     owner: backend
     enabled: true
-    # DB schema 收敛中：alembic 正成为唯一真相源（取代 create_all + ensure_*）。
-    # 此处 check = 纯 stdlib 结构守卫（单 head / 无悬挂 down_revision），无重依赖、随处可跑。
-    # 完整 ORM-parity（alembic upgrade head == models）由 fhd-alembic-ssot.yml 的
-    # ssot-parity job 单独把关（advisory，待一次 PG 绿后转 blocking）。
+    # DB schema：alembic 为唯一演进真相源；ensure_* 仅允许回填 ORM 已声明列（冻结守卫）。
+    # 此处 check = 纯 stdlib 结构守卫（单 head / 无悬挂 down_revision）。
+    # ORM-parity（alembic upgrade head == models）由 fhd-alembic-ssot.yml 的
+    # ssot-parity-sqlite job 阻断；PG parity 见 SCHEMA_DIALECT_NOTES（方言假阳性）。
     ssot: FHD/alembic/versions/
     derived:
       - FHD/app/db/
@@ -238,7 +249,7 @@ domains:
 
   - name: neuro-bus-events
     owner: neuro-platform
-    enabled: false  # Phase A: advisory only. Flip to true in Phase B (CI gate activation).
+    enabled: true
     # NeuroBus 事件契约 SSOT:统一三流(NeuroBus 域事件 + AgentRun 事件 + 应用桥接)。
     # canonical 命名 = code 中实际 emit 的字符串(dataclass 默认值即 canonical);
     # 派生 Python 常量(非 Enum,字节级零破坏 string-equality 调用) + TS 类型 + OpenAPI schema。
@@ -251,3 +262,16 @@ domains:
     mode: generate+verify
     check: python scripts/dev/neuro_bus_events_ssot.py check
     sync: python scripts/dev/neuro_bus_events_ssot.py generate --apply
+
+  - name: runtime-inventory
+    owner: devops
+    enabled: true
+    # 运行时真相 SSOT：desired（拓扑）× actual（端口/进程/systemd/health）→ 单一可消费清单。
+    # check 校验拓扑声明完整 + 派生 schema；live 探针由 scripts/ops/runtime_inventory.py probe。
+    ssot: FHD/config/service_topology.yaml
+    derived:
+      - FHD/config/topology.generated.json
+      - FHD/scripts/ops/runtime_inventory.py
+    mode: verify
+    check: python scripts/ops/runtime_inventory.py check
+    sync: null

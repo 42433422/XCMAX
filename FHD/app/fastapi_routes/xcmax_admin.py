@@ -2278,6 +2278,29 @@ async def ops_closure_status(request: Request):
     return {"success": True, "data": data}
 
 
+@router.get("/ops/runtime-inventory", response_model=None)
+async def ops_runtime_inventory(request: Request):
+    """Desired×actual 运行时真相清单（拓扑 SSOT + 本机探针），并刷新公开投影。"""
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+
+    from app.application.runtime_inventory import write_runtime_inventory_projection
+
+    try:
+        result = write_runtime_inventory_projection(host="127.0.0.1")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("runtime inventory probe failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+    snapshot = result.get("snapshot") or {}
+    return {
+        "success": True,
+        "data": snapshot,
+        "publication": result.get("publication") or {},
+    }
+
+
 @router.get("/ops/founder-autonomy", response_model=None)
 async def ops_founder_autonomy(request: Request):
     """Aggregate the seven founder-autonomy dimensions from live evidence.
