@@ -12,9 +12,7 @@ SCRIPT = FHD / "scripts" / "ops" / "runtime_inventory.py"
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location(
-        "runtime_inventory_under_test", SCRIPT
-    )
+    spec = importlib.util.spec_from_file_location("runtime_inventory_under_test", SCRIPT)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

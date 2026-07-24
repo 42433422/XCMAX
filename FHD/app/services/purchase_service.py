@@ -166,13 +166,9 @@ class PurchaseService(NeuroEventPublisherMixin):
             result = []
             for order in orders:
                 order_dict = self._model_to_dict(order)
-                order_dict["supplier_name"] = (
-                    order.supplier.name if order.supplier else None
-                )
+                order_dict["supplier_name"] = order.supplier.name if order.supplier else None
                 order_dict["items"] = (
-                    [self._model_to_dict(item) for item in order.items]
-                    if order.items
-                    else []
+                    [self._model_to_dict(item) for item in order.items] if order.items else []
                 )
                 result.append(order_dict)
 
@@ -191,12 +187,8 @@ class PurchaseService(NeuroEventPublisherMixin):
                 return {"success": False, "message": "采购订单不存在"}
 
             order_dict = self._model_to_dict(order)
-            order_dict["supplier_name"] = (
-                order.supplier.name if order.supplier else None
-            )
-            order_dict["warehouse_name"] = (
-                order.warehouse.name if order.warehouse else None
-            )
+            order_dict["supplier_name"] = order.supplier.name if order.supplier else None
+            order_dict["warehouse_name"] = order.warehouse.name if order.warehouse else None
             order_dict["items"] = []
             for item in order.items:
                 item_dict = self._model_to_dict(item)
@@ -229,9 +221,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                 items_data = data.get("items", [])
                 for item_data in items_data:
                     product = (
-                        db.query(Product)
-                        .filter(Product.id == item_data.get("product_id"))
-                        .first()
+                        db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
                     quantity = float(item_data.get("quantity", 0))
                     unit_price = float(item_data.get("unit_price", 0))
@@ -241,9 +231,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                     item = PurchaseOrderItem(
                         order_id=order.id,
                         product_id=item_data.get("product_id"),
-                        product_name=(
-                            product.name if product else item_data.get("product_name")
-                        ),
+                        product_name=(product.name if product else item_data.get("product_name")),
                         specification=item_data.get("specification"),
                         quantity=quantity,
                         unit=item_data.get("unit", "个"),
@@ -286,14 +274,10 @@ class PurchaseService(NeuroEventPublisherMixin):
                 logger.error("创建采购订单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
-    def update_purchase_order(
-        self, order_id: int, data: dict[str, Any]
-    ) -> dict[str, Any]:
+    def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
         with get_db() as db:
             try:
-                order = (
-                    db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
-                )
+                order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
@@ -328,9 +312,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                             order_id=order.id,
                             product_id=item_data.get("product_id"),
                             product_name=(
-                                product.name
-                                if product
-                                else item_data.get("product_name")
+                                product.name if product else item_data.get("product_name")
                             ),
                             specification=item_data.get("specification"),
                             quantity=quantity,
@@ -358,9 +340,7 @@ class PurchaseService(NeuroEventPublisherMixin):
     def approve_purchase_order(self, order_id: int, approver: str) -> dict[str, Any]:
         with get_db() as db:
             try:
-                order = (
-                    db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
-                )
+                order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
@@ -385,9 +365,7 @@ class PurchaseService(NeuroEventPublisherMixin):
     def cancel_purchase_order(self, order_id: int) -> dict[str, Any]:
         with get_db() as db:
             try:
-                order = (
-                    db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
-                )
+                order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
                 if not order:
                     return {"success": False, "message": "采购订单不存在"}
 
@@ -433,9 +411,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                 items_data = data.get("items", [])
                 for item_data in items_data:
                     product = (
-                        db.query(Product)
-                        .filter(Product.id == item_data.get("product_id"))
-                        .first()
+                        db.query(Product).filter(Product.id == item_data.get("product_id")).first()
                     )
                     quantity = float(item_data.get("quantity", 0))
                     unit_price = float(item_data.get("unit_price", 0))
@@ -446,9 +422,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         inbound_id=inbound.id,
                         product_id=item_data.get("product_id"),
                         order_item_id=item_data.get("order_item_id"),
-                        product_name=(
-                            product.name if product else item_data.get("product_name")
-                        ),
+                        product_name=(product.name if product else item_data.get("product_name")),
                         batch_no=item_data.get("batch_no"),
                         quantity=quantity,
                         unit=item_data.get("unit", "个"),
@@ -524,8 +498,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                 item.status = "partial"
 
         all_completed = all(
-            float(item.quantity) <= float(item.received_quantity)
-            for item in order.items
+            float(item.quantity) <= float(item.received_quantity) for item in order.items
         )
         any_received = any(float(item.received_quantity) > 0 for item in order.items)
 
@@ -566,16 +539,12 @@ class PurchaseService(NeuroEventPublisherMixin):
             result = []
             for inbound in inbounds:
                 inbound_dict = self._model_to_dict(inbound)
-                inbound_dict["supplier_name"] = (
-                    inbound.supplier.name if inbound.supplier else None
-                )
+                inbound_dict["supplier_name"] = inbound.supplier.name if inbound.supplier else None
                 inbound_dict["warehouse_name"] = (
                     inbound.warehouse.name if inbound.warehouse else None
                 )
                 inbound_dict["items"] = (
-                    [self._model_to_dict(item) for item in inbound.items]
-                    if inbound.items
-                    else []
+                    [self._model_to_dict(item) for item in inbound.items] if inbound.items else []
                 )
                 result.append(inbound_dict)
 

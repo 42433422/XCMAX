@@ -9,9 +9,7 @@ from typing import Any
 
 
 def _load_ops_module():
-    script = (
-        Path(__file__).resolve().parents[2] / "scripts" / "ops" / "runtime_inventory.py"
-    )
+    script = Path(__file__).resolve().parents[2] / "scripts" / "ops" / "runtime_inventory.py"
     spec = importlib.util.spec_from_file_location("fhd_ops_runtime_inventory", script)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load runtime_inventory script: {script}")

@@ -62,12 +62,8 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
 
     # 4/5. Order、Customer 领域的 *_domain_handlers 需要 NeuroDomain 实例；
     # register_all_neuro_domains() 已经通过 DomainRegistry 完成注册，这里只注册 bus-style handlers。
-    logger.info(
-        "[NeuroDomainRegistration] Order 领域处理器由 DomainRegistry 管理，跳过重复注册"
-    )
-    logger.info(
-        "[NeuroDomainRegistration] Customer 领域处理器由 DomainRegistry 管理，跳过重复注册"
-    )
+    logger.info("[NeuroDomainRegistration] Order 领域处理器由 DomainRegistry 管理，跳过重复注册")
+    logger.info("[NeuroDomainRegistration] Customer 领域处理器由 DomainRegistry 管理，跳过重复注册")
 
     # 6. Inventory 领域
     try:
@@ -83,9 +79,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
         logger.error("[NeuroDomainRegistration] Inventory 领域注册失败: %s", e)
 
     # 7. Payment 领域同样由 DomainRegistry 管理。
-    logger.info(
-        "[NeuroDomainRegistration] Payment 领域处理器由 DomainRegistry 管理，跳过重复注册"
-    )
+    logger.info("[NeuroDomainRegistration] Payment 领域处理器由 DomainRegistry 管理，跳过重复注册")
 
     # 8. OCR 领域
     try:
@@ -101,9 +95,7 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
         logger.error("[NeuroDomainRegistration] OCR 领域注册失败: %s", e)
 
     # 9. WeChat 领域同样由 DomainRegistry 管理。
-    logger.info(
-        "[NeuroDomainRegistration] WeChat 领域处理器由 DomainRegistry 管理，跳过重复注册"
-    )
+    logger.info("[NeuroDomainRegistration] WeChat 领域处理器由 DomainRegistry 管理，跳过重复注册")
 
     # 10. Print 领域
     try:
@@ -179,9 +171,7 @@ async def register_all_domains_complete(bus: NeuroBus | None = None) -> None:
     if bus is None:
         bus = get_neuro_bus()
 
-    logger.info(
-        "[NeuroDomainRegistration] 开始注册所有 12 个领域处理器（含 NeuroDomain）"
-    )
+    logger.info("[NeuroDomainRegistration] 开始注册所有 12 个领域处理器（含 NeuroDomain）")
     try:
         from app.neuro_bus.register_all_neuro_domains import register_all_neuro_domains
 

@@ -177,7 +177,7 @@ export const YUANGON_PKG_ROLE_LABELS: Record<string, string> = {
  */
 export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {
   'artifact-generator': '根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式',
-  'change-request-auditor': '以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问（澄清门+TTL 防堆积）审查能力变更；任何 veto、缺证据、澄清未完成或意图错位都失败关闭。',
+  'change-request-auditor': '以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。',
   'code-validator': '对员工包体进行轻量校验，包括 manifest 合规性、Python 编译检查、包体一致性、独立可执行验证',
   'daily-orchestrator': '每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。',
   'dbops-engineer': '负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。',
@@ -203,7 +203,7 @@ export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {
   'intent-analyst': '解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限',
   'java-payment-bridge-officer': 'P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。',
   'legacy-archive-curator': 'S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。',
-  'llm-ops-engineer': '负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点（聊天/生图/生视频/音频/嵌入/CLI），并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。',
+  'llm-ops-engineer': '负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。',
   'log-monitor-incident': '归并和分析 xiu-ci.com 所有运行日志、测试报告与覆盖率数据；生成告警摘要并推动事故处置；不修改源码。',
   'market-frontend-dev': '维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。',
   'marketing-site-builder': '维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。',

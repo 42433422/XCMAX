@@ -283,13 +283,13 @@ flowchart TB
 | 桌面/网页差异 | `FHD/docs/ARCHITECTURE.md` §1.4 |
 | 六线员工映射 | `six_line_employee_map.json`（仓库根） |
 | 员工辐射图 | `docs/xcagi-dashboard/emp-wf-radial-graph.js` |
-| 客服工单总线 SSOT | `FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md` |
+| 客服工单总线 | `FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md` |
 
 ---
 
 ## 八、客服工单 duty 触发（incident_bus，非 NeuroBus）
 
-> SSOT 短注：[`FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md`](../../FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md)
+> 说明：[`FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md`](../../FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md)
 
 客服闭环与「Mod 加载时的 NeuroBus 钩子订阅」是两条轨：
 

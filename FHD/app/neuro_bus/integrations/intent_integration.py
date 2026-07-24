@@ -131,9 +131,7 @@ class NeuroIntentRecognizer:
         cognitive_decision, trace_id = cognitive_router.route(
             text,
             extra={
-                "intent_confidence": (
-                    reflex_result.confidence if reflex_result.triggered else 0.0
-                ),
+                "intent_confidence": (reflex_result.confidence if reflex_result.triggered else 0.0),
             },
         )
 
@@ -145,9 +143,7 @@ class NeuroIntentRecognizer:
             used_processor = cognitive_decision.processor_type
             if cognitive_decision.processor_type == ProcessorType.REFLEX:
                 if reflex_result.triggered:
-                    result = self._build_reflex_result(
-                        reflex_result, start_time, user_id
-                    )
+                    result = self._build_reflex_result(reflex_result, start_time, user_id)
                 else:
                     # MLP 说 reflex 但没命中 → 降级到 conscious
                     result = self._build_conscious_result(
@@ -331,14 +327,10 @@ class NeuroIntentRecognizer:
                 recognizer_result=None,
             )
         except RECOVERABLE_ERRORS:
-            logger.debug(
-                "conscious processor path failed; fallback unified", exc_info=True
-            )
+            logger.debug("conscious processor path failed; fallback unified", exc_info=True)
             return None
         except Exception:  # noqa: BLE001
-            logger.debug(
-                "conscious processor path failed; fallback unified", exc_info=True
-            )
+            logger.debug("conscious processor path failed; fallback unified", exc_info=True)
             return None
 
     def _build_conscious_result(
@@ -359,9 +351,7 @@ class NeuroIntentRecognizer:
         if processed is not None:
             return processed
 
-        base_result = self._base.recognize(
-            text, context=context, context_data=context_data
-        )
+        base_result = self._base.recognize(text, context=context, context_data=context_data)
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         if isinstance(base_result, RecognizerResult):
@@ -426,9 +416,7 @@ class NeuroIntentRecognizer:
 
 
 def integrate_with_intent_system() -> NeuroIntentRecognizer:
-    logger.info(
-        "Integrating Neuro stack with app.services unified intent recognizer..."
-    )
+    logger.info("Integrating Neuro stack with app.services unified intent recognizer...")
     try:
         get_reflex_arc()
         logger.info("ReflexArc ready")
