@@ -1501,7 +1501,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
     const items = wrapper.findAll('.step-rail-item')
-    expect(items.length).toBe(5)
+    expect(items.length).toBe(3)
   })
 
   it('step-rail：当前步骤标记 active', async () => {
