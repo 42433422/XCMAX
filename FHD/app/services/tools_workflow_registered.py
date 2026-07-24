@@ -2220,6 +2220,39 @@ def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
 def _registered_router_excel_import(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action in {"import_delivery_notes", "execute_delivery_etl"}:
+        file_path = str(params.get("file_path") or "").strip()
+        notes = params.get("notes")
+        if not file_path and not isinstance(notes, list):
+            return {"success": False, "message": "缺少 file_path 或 notes"}
+        try:
+            from app.application.shipment_excel_etl_app_service import (
+                get_shipment_excel_etl_app_service,
+            )
+
+            return get_shipment_excel_etl_app_service().execute(
+                file_path or "",
+                import_products=bool(params.get("import_products", True)),
+                import_shipments=bool(params.get("import_shipments", True)),
+                notes=notes if isinstance(notes, list) else None,
+            )
+        except RECOVERABLE_ERRORS as err:
+            logger.error("shipment delivery etl failed: %s", err, exc_info=True)
+            return {"success": False, "message": f"送货单闭环失败：{err}"}
+
+    if action == "preview_delivery_notes":
+        file_path = str(params.get("file_path") or "").strip()
+        if not file_path:
+            return {"success": False, "message": "缺少 file_path"}
+        try:
+            from app.application.shipment_excel_etl_app_service import (
+                get_shipment_excel_etl_app_service,
+            )
+
+            return get_shipment_excel_etl_app_service().preview(file_path)
+        except RECOVERABLE_ERRORS as err:
+            return {"success": False, "message": str(err)}
+
     if action == "execute_import":
         pending_import_id = str(params.get("pending_import_id") or "").strip()
         if not pending_import_id:
@@ -2233,6 +2266,24 @@ def _registered_router_excel_import(
 
         if not import_data:
             return {"success": False, "message": "未找到待处理的导入数据或已过期"}
+
+        if str(import_data.get("kind") or "") == "shipment_delivery_etl":
+            try:
+                from app.application.shipment_excel_etl_app_service import (
+                    get_shipment_excel_etl_app_service,
+                )
+
+                result = get_shipment_excel_etl_app_service().execute(
+                    str(import_data.get("file_path") or ""),
+                    notes=import_data.get("notes")
+                    if isinstance(import_data.get("notes"), list)
+                    else None,
+                )
+                if result.get("success"):
+                    pending_imports.pop(pending_import_id, None)
+                return result
+            except RECOVERABLE_ERRORS as err:
+                return {"success": False, "message": f"送货单闭环失败：{err}"}
 
         records = import_data.get("records", [])
         if not isinstance(records, list):

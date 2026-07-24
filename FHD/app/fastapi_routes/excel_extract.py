@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
@@ -416,6 +417,79 @@ def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
     except RECOVERABLE_ERRORS as e:
         logger.error("导入客户数据失败：%s", e)
         return JSONResponse({"success": False, "message": f"导入失败：{str(e)}"}, status_code=500)
+
+
+@router.post("/shipment-etl/preview")
+async def shipment_etl_preview(
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+):
+    """预览：按内容指纹识别送货单并抽取抬头+明细（不写库）。"""
+    try:
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        path = str(file_path or "").strip()
+        tmp_path = ""
+        if file is not None and (file.filename or "").strip():
+            raw = await file.read()
+            name = Path(str(file.filename or "shipment.xlsx")).name
+            tmp_path = os.path.join(TEMP_EXCEL_DIR, f"etl_{datetime.now().strftime('%Y%m%d%H%M%S')}_{name}")
+            with open(tmp_path, "wb") as fh:
+                fh.write(raw)
+            path = tmp_path
+        if not path:
+            return JSONResponse(
+                {"success": False, "message": "请上传文件或提供 file_path"},
+                status_code=400,
+            )
+        result = get_shipment_excel_etl_app_service().preview(path)
+        if tmp_path:
+            result["uploaded_temp_path"] = tmp_path
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl preview failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.post("/shipment-etl/execute")
+async def shipment_etl_execute(
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    import_products: str = Form("1"),
+    import_shipments: str = Form("1"),
+):
+    """执行闭环：送货单 → 客户/产品/发货单。"""
+    try:
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        path = str(file_path or "").strip()
+        if file is not None and (file.filename or "").strip():
+            raw = await file.read()
+            name = Path(str(file.filename or "shipment.xlsx")).name
+            path = os.path.join(
+                TEMP_EXCEL_DIR, f"etl_exec_{datetime.now().strftime('%Y%m%d%H%M%S')}_{name}"
+            )
+            with open(path, "wb") as fh:
+                fh.write(raw)
+        if not path:
+            return JSONResponse(
+                {"success": False, "message": "请上传文件或提供 file_path"},
+                status_code=400,
+            )
+        truthy = {"1", "true", "yes", "on"}
+        result = get_shipment_excel_etl_app_service().execute(
+            path,
+            import_products=str(import_products or "1").strip().lower() in truthy,
+            import_shipments=str(import_shipments or "1").strip().lower() in truthy,
+        )
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl execute failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
 @router.get("/logs")
