@@ -246,9 +246,9 @@ def conversations_post_message(
 ) -> dict:
     """会话消息写入（兼容探测/旧客户端 POST …/messages，避免仅 GET 导致 405）。"""
     payload = dict(body or {})
-    payload["session_id"] = str(conversation_id or "").strip() or str(
-        payload.get("session_id") or ""
-    ).strip()
+    payload["session_id"] = (
+        str(conversation_id or "").strip() or str(payload.get("session_id") or "").strip()
+    )
     if not str(payload.get("content") or "").strip():
         # 兼容 message / text 字段
         for key in ("message", "text", "query"):

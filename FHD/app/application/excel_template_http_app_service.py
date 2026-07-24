@@ -542,9 +542,7 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
             updates.append("updated_at = :updated_at")
             params["updated_at"] = datetime.now()
             sql = (
-                "UPDATE templates SET "
-                + ", ".join(updates)
-                + f" WHERE id = :id AND ({tenant_sql})"
+                "UPDATE templates SET " + ", ".join(updates) + f" WHERE id = :id AND ({tenant_sql})"
             )
             db.execute(text(sql), params)
             db.commit()

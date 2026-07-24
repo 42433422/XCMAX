@@ -456,7 +456,9 @@ async def shipment_etl_preview(
         if file is not None and (file.filename or "").strip():
             raw = await file.read()
             name = Path(str(file.filename or "shipment.xlsx")).name
-            tmp_path = os.path.join(TEMP_EXCEL_DIR, f"etl_{datetime.now().strftime('%Y%m%d%H%M%S')}_{name}")
+            tmp_path = os.path.join(
+                TEMP_EXCEL_DIR, f"etl_{datetime.now().strftime('%Y%m%d%H%M%S')}_{name}"
+            )
             with open(tmp_path, "wb") as fh:
                 fh.write(raw)
             path = tmp_path
@@ -521,7 +523,11 @@ async def shipment_etl_execute(
                     )
                 if not get_auth_service().has_permission(sess_user, "shipment.create"):
                     return JSONResponse(
-                        {"success": False, "message": "缺少 shipment.create 权限", "error_code": "forbidden"},
+                        {
+                            "success": False,
+                            "message": "缺少 shipment.create 权限",
+                            "error_code": "forbidden",
+                        },
                         status_code=403,
                     )
             elif sess_user is not None and hasattr(get_auth_service(), "has_permission"):
@@ -533,7 +539,11 @@ async def shipment_etl_execute(
                         "on",
                     }:
                         return JSONResponse(
-                            {"success": False, "message": "缺少 shipment.create 权限", "error_code": "forbidden"},
+                            {
+                                "success": False,
+                                "message": "缺少 shipment.create 权限",
+                                "error_code": "forbidden",
+                            },
                             status_code=403,
                         )
         except RECOVERABLE_ERRORS:
@@ -560,7 +570,11 @@ async def shipment_etl_execute(
                     notes = loaded.get("notes")
             except json.JSONDecodeError:
                 return JSONResponse(
-                    {"success": False, "message": "notes_json 不是合法 JSON", "error_code": "bad_notes"},
+                    {
+                        "success": False,
+                        "message": "notes_json 不是合法 JSON",
+                        "error_code": "bad_notes",
+                    },
                     status_code=400,
                 )
 
