@@ -134,11 +134,13 @@ def enqueue(
         attempts=0,
         last_error="",
     )
-    session.add(row)
+    # 必须用 SAVEPOINT：IntegrityError 后 session.rollback() 会把调用方
+    # （如客服工单跟进）尚未提交的业务写入一并清掉。
     try:
-        session.flush()
+        with session.begin_nested():
+            session.add(row)
+            session.flush()
     except IntegrityError:
-        session.rollback()
         existing = session.query(OutboxEvent).filter(OutboxEvent.event_id == eid).first()
         if existing is None:
             raise

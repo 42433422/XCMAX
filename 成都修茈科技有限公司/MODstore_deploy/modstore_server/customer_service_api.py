@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,16 +31,44 @@ from modstore_server.models_cs import (
     CustomerServiceTicket,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/customer-service", tags=["customer-service"])
 
 _get_current_user = get_current_user
 _require_admin = require_admin
 
 
+def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
+    """Fire-and-forget：工单事件派发可能跑员工编排/LLM，绝不能阻塞 /chat 响应。"""
+    try:
+        from modstore_server.incident_bus import publish as publish_incident
+
+        publish_incident(
+            "ops.intake.customer_ticket",
+            payload,
+            source="customer-service-api",
+            fingerprint=None,
+        )
+    except Exception:
+        logger.exception("customer-service ticket incident publish failed")
+
+
+def _schedule_customer_ticket_incident(payload: Dict[str, Any]) -> None:
+    threading.Thread(
+        target=_publish_customer_ticket_incident,
+        args=(payload,),
+        daemon=True,
+        name="cs-ticket-incident",
+    ).start()
+
+
 class CustomerServiceChatBody(BaseModel):
-    message: str = Field(..., min_length=1, max_length=8000)
+    message: str = Field(default="", max_length=8000)
     session_id: Optional[int] = None
     context: Dict[str, Any] = Field(default_factory=dict)
+    # data:image/...;base64,... 压缩后截图，用于补充材料
+    image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
 
 
 class StandardBody(BaseModel):
@@ -68,38 +98,68 @@ async def customer_service_chat(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
+    message = str(body.message or "").strip()
+    image = str(body.image_data_url or "").strip()
+    if not image:
+        image = str((body.context or {}).get("image_data_url") or "").strip()
+    if not message and not image:
+        raise HTTPException(status_code=400, detail="请输入文字或上传图片")
+    if image and not image.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等")
+    if len(image) > 4_500_000:
+        raise HTTPException(status_code=400, detail="图片过大，请压缩后再传")
+    ctx = dict(body.context or {})
+    if image:
+        ctx["image_data_url"] = image
+        ctx["has_image"] = True
     result = handle_customer_message(
         db,
         user=user,
-        message=body.message,
+        message=message or "[用户补充了图片资料]",
         session_id=body.session_id,
-        context=body.context,
+        context=ctx,
     )
     db.commit()
-    try:
-        from modstore_server.incident_bus import publish as publish_incident
-
-        t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
-        if t:
-            payload = {
+    t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
+    if t:
+        evidence = t.get("evidence") if isinstance(t.get("evidence"), dict) else {}
+        followups = evidence.get("followups") if isinstance(evidence, dict) else None
+        last_followup = (
+            followups[-1] if isinstance(followups, list) and followups else None
+        )
+        _schedule_customer_ticket_incident(
+            {
                 "subject_id": str(t.get("ticket_no") or t.get("id") or ""),
                 "ticket_id": int(t.get("id") or 0),
                 "ticket_no": str(t.get("ticket_no") or "")[:128],
                 "title": str(t.get("title") or "")[:500],
                 "intent": str(t.get("intent") or "")[:64],
+                "issue_domain": str(t.get("issue_domain") or "")[:32],
+                "issue_domain_label": str(t.get("issue_domain_label") or "")[:32],
+                "user_confirmed_domain": str(
+                    (evidence or {}).get("user_confirmed_domain")
+                    or t.get("issue_domain")
+                    or ""
+                )[:32],
+                "user_followup": str(
+                    (last_followup or {}).get("text")
+                    if isinstance(last_followup, dict)
+                    else ""
+                )[:200],
                 "status": str(t.get("status") or "")[:32],
                 "summary": str(t.get("summary") or "")[:2000],
                 "user_id": int(user.id or 0),
                 "session_id": int((result.get("session") or {}).get("id") or 0),
+                # 供 intake-dispatcher skill-intake-normalize 识别为客服工单
+                "source": "customer_ticket",
+                "raw": {
+                    "title": str(t.get("title") or "")[:500],
+                    "body": str(t.get("summary") or "")[:2000],
+                    "issue_domain": str(t.get("issue_domain") or "")[:32],
+                    "ticket_no": str(t.get("ticket_no") or "")[:128],
+                },
             }
-            publish_incident(
-                "ops.intake.customer_ticket",
-                payload,
-                source="customer-service-api",
-                fingerprint=None,
-            )
-    except Exception:
-        pass
+        )
     return result
 
 

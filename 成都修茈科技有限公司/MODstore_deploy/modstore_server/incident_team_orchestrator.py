@@ -307,6 +307,16 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             "suppress_lifecycle_events": True,
             "unified_incident_bus": True,
         }
+        # agent/直接分析岗需要仓库根；复用现有 env，避免「缺 project_root」空转失败
+        if not str(runtime_input.get("project_root") or "").strip():
+            root = str(
+                os.environ.get("MODSTORE_DUTY_PROJECT_ROOT")
+                or os.environ.get("XCMAX_MONOREPO_ROOT")
+                or os.environ.get("MODSTORE_REPO_ROOT")
+                or ""
+            ).strip()
+            if root:
+                runtime_input["project_root"] = root
         runtime_input.update(
             {
                 "incident_team": team_plan,
@@ -365,6 +375,8 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
             uid=uid,
         )
 
+    slim_rows = [{k: v for k, v in row.items() if k != "result"} for row in results]
+    cs_progress: Dict[str, Any] = {}
     with sf() as session:
         ev2 = session.get(IncidentEvent, int(event_id))
         if ev2 is not None:
@@ -373,9 +385,51 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 "claimed_at": datetime.now(timezone.utc).isoformat(),
                 "ok": ok,
                 "recovery": recovery,
-                "team": [{k: v for k, v in row.items() if k != "result"} for row in results],
+                "team": slim_rows,
                 "follow_ups": follow_ups,
             }
+            # 客服工单：复用现有 CS 消息/action，把员工进展回写到用户可见工单
+            try:
+                ticket_id = int(payload.get("ticket_id") or 0)
+            except (TypeError, ValueError):
+                ticket_id = 0
+            source_hint = str(payload.get("source") or source or "").strip().lower()
+            if ticket_id > 0 and (
+                source_hint == "customer_ticket"
+                or event_type == "ops.intake.customer_ticket"
+                or str(payload.get("ticket_no") or "").startswith("CS")
+            ):
+                try:
+                    from modstore_server.customer_service_orchestrator import (
+                        apply_customer_ticket_incident_progress,
+                    )
+
+                    cs_progress = apply_customer_ticket_incident_progress(
+                        session,
+                        ticket_id=ticket_id,
+                        event_id=int(event_id),
+                        team_ok=bool(ok),
+                        team_rows=slim_rows,
+                        summary_hint=str(payload.get("summary") or "")[:200],
+                    )
+                    updated["_cs_progress"] = {
+                        k: cs_progress.get(k)
+                        for k in (
+                            "ok",
+                            "lifecycle_stage",
+                            "lifecycle_label",
+                            "message_id",
+                            "team_ok",
+                        )
+                    }
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception(
+                        "incident_team: CS ticket progress writeback failed event_id=%s ticket_id=%s",
+                        event_id,
+                        ticket_id,
+                    )
+                    cs_progress = {"ok": False, "error": str(exc)[:300]}
+                    updated["_cs_progress"] = cs_progress
             ev2.payload_json = json.dumps(updated, ensure_ascii=False)[:8000]
             ev2.dispatched_count = int(ev2.dispatched_count or 0) + 1
             session.commit()
@@ -387,6 +441,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         "results": results,
         "team": team_plan,
         "follow_ups": follow_ups,
+        "cs_progress": cs_progress,
     }
 
 

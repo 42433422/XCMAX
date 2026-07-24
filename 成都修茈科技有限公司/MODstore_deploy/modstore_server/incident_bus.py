@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -185,10 +186,29 @@ def publish(
                 )
         except Exception:
             logger.exception("consistency_check.completed autofix trigger failed")
-    try:
-        _dispatch_incident(eid)
-    except Exception:  # noqa: BLE001
-        logger.exception("dispatch incident id=%s failed", eid)
+    # 默认异步派发：同步跑员工编排/LLM 会拖死 HTTP（如 AI 客服 /chat → 处理中卡住）。
+    # 测试或显式需要可设 MODSTORE_INCIDENT_SYNC_DISPATCH=1。
+    sync_dispatch = (os.environ.get("MODSTORE_INCIDENT_SYNC_DISPATCH") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    def _run_dispatch() -> None:
+        try:
+            _dispatch_incident(eid)
+        except Exception:  # noqa: BLE001
+            logger.exception("dispatch incident id=%s failed", eid)
+
+    if sync_dispatch:
+        _run_dispatch()
+    else:
+        threading.Thread(
+            target=_run_dispatch,
+            daemon=True,
+            name=f"incident-dispatch-{eid}",
+        ).start()
     return True
 
 
@@ -360,12 +380,18 @@ def _dispatch_incident(event_id: int) -> None:
                         else None
                     ),
                 )
-                return
-            logger.info(
-                "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
-                event_id,
-                team.get("reason"),
-            )
+                # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
+                # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
+                if event_type_pre == "ops.intake.customer_ticket":
+                    binding_only = True
+                else:
+                    return
+            else:
+                logger.info(
+                    "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
+                    event_id,
+                    team.get("reason"),
+                )
         except Exception:
             logger.exception("incident team failed event_id=%s; fallback market", event_id)
 
@@ -482,7 +508,8 @@ def _dispatch_incident(event_id: int) -> None:
     with sf() as session:
         ev2 = session.query(IncidentEvent).filter(IncidentEvent.id == event_id).first()
         if ev2:
-            ev2.dispatched_count = int(dispatched)
+            # team/market 可能已写过 dispatched_count；binding 追加而非覆盖
+            ev2.dispatched_count = int(ev2.dispatched_count or 0) + int(dispatched)
             session.commit()
 
 
