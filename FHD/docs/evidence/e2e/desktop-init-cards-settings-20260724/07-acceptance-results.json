@@ -1,0 +1,242 @@
+[
+  {
+    "step": "01-welcome",
+    "ok": true,
+    "note": "XCAGI 宿主 发行版：企业版 enterprise 1 认识XC 2 行业定型 3 准备菜单 4 首笔业务数据 5 AI 读写验收 认识 XC 专属于您的数字公司 · 默认干净，行业业务按需加载 日常界面默认有智能对话（找小C办事）、信息（联系AI同事）、智能生态和员工工作台；行业业务菜单、定制 AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。 干净起步：侧栏默认只有对话、信息、生态、员工工作台，不堆满行业菜单 先定行业：选好方向后，再告诉您还要补哪些侧栏能力卡片 AI 员工：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装 价格预期：99 元试用 30 天；满意",
+    "frames": [
+      "01-welcome",
+      "01-welcome-next"
+    ],
+    "at": "2026-07-24T08:26:24.517Z"
+  },
+  {
+    "step": "02-industry",
+    "ok": true,
+    "note": "XCAGI 宿主 先定行业方向；日常默认只有智能对话与智能生态 发行版：企业版 enterprise 1 认识XC 2 行业定型 3 准备菜单 4 首笔业务数据 5 AI 读写验收 先定行业 当前开放 通用 与 考勤 与 涂料 与 批发 与 电商 与 餐饮 与 物流 7 套行业方向；选好后下一步会列出要补的基础线。 请选择您的行业方向 通用 通用基础行业包 多行业本地工作台 考勤/排班 考勤行业包 考勤排班 涂料/油漆 涂料行业包 涂料化工批发 批发/分销 批发分销基础行业包 批发分销 电商/零售 电商客服基础行业包 电商零售 餐饮 餐饮门店基础行业包 餐饮门店 物流 物流运单基础行业包 物流",
+    "frames": [
+      "02-industry",
+      "02-industry-selected",
+      "02-industry-after"
+    ],
+    "at": "2026-07-24T08:26:28.279Z"
+  },
+  {
+    "step": "03-host-pack",
+    "ok": true,
+    "note": "preview=业务对象,组织管理,业务单据,业务记录,资源库,数据来源,模板与打印,打印机列表,模板库; XCAGI 宿主 一键装齐本行业侧栏菜单，即可进入对话 发行版：企业版 enterprise 1 认识XC 2 行业定型 3 准备菜单 4 首笔业务数据 5 AI 读写验收 准备侧栏菜单 已选 通用。点一下装齐推荐菜单，就可以进对话。 AI 员工以后需要再装，不挡这一步。 行业 Mod 含在授权内，不单独收费；定制 AI 员工按需另行评估。 菜单已齐，可以进入智能对话。 装好后侧栏会出现 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 下一步 先进入对话 查看明细（可选） 保持干净页面：对话与智能生态即可起步，其它能力按需再补。 当前账号未绑定定制能力；AI 员工可稍后在扩展市场安装。 侧栏对话底座 通用基础行业包 智能生态事件总线 行业包 通用基础行业包 可选增强 Planner 表格与文档工具 ERP 业务菜单与 API 门面 重新检测 跳过引导（高级用户） 完整流程见 docs/g",
+    "frames": [
+      "03-host-pack",
+      "03-host-pack-details",
+      "03-host-pack-action",
+      "03-host-pack-after"
+    ],
+    "at": "2026-07-24T08:26:34.431Z"
+  },
+  {
+    "step": "04-seed-demo",
+    "ok": true,
+    "note": "action=/写入演示/; XCAGI 宿主 让 AI 列出刚创建的演示客户并总结，验证读写闭环 发行版：企业版 enterprise 1 认识XC 2 行业定型 3 准备菜单 4 首笔业务数据 5 AI 读写验收 AI 读写验收 请确认 AI 能读取刚创建的「XC 演示客户」并给出摘要。 运行 AI 演示任务 完成引导 跳过引导（高级用户） 完整流程见 docs/guides/PRODUCT_USER_FLOW.md",
+    "frames": [
+      "04-seed-demo",
+      "04-seed-demo-after",
+      "04-seed-demo-next"
+    ],
+    "at": "2026-07-24T08:26:42.221Z"
+  },
+  {
+    "step": "05-first-ai-task",
+    "ok": false,
+    "note": "FAIL Method Not Allowed; action=/运行 AI 演示任务/; XCAGI 宿主 让 AI 列出刚创建的演示客户并总结，验证读写闭环 发行版：企业版 enterprise 1 认识XC 2 行业定型 3 准备菜单 4 首笔业务数据 5 AI 读写验收 AI 读写验收 请确认 AI 能读取刚创建的演示数据并给出摘要。 Method Not Allowed 运行 AI 演示任务 完成引导 跳过引导（高级用户） 完整流程见 docs/guides/PRODUCT_USER_FLOW.md",
+    "frames": [
+      "05-first-ai-task",
+      "05-first-ai-task-action",
+      "05-first-ai-task-done"
+    ],
+    "at": "2026-07-24T08:26:54.453Z"
+  },
+  {
+    "step": "00-main-shell",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 员工空间 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 WUXINGHUA1 审批中心 wuxinghua1 副窗 工作台 流程管理 流程规则 审批工作台 处理待审批事项，跟踪审批进度 0 待审批 0 我发起的 0 已通过 0 已拒绝 待我审批 查看全部 暂无待审批事项 我发起的 清理 查看全部 暂无发起的审批 小C助理",
+    "frames": [
+      "00-main-shell",
+      "00-sidebar-智能对话",
+      "00-sidebar-智能生态",
+      "00-sidebar-员工工作台",
+      "00-sidebar-业务对象",
+      "00-sidebar-审批中心"
+    ],
+    "at": "2026-07-24T08:27:07.281Z"
+  },
+  {
+    "step": "B1",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wuxin",
+    "frames": [
+      "06-settings-basic"
+    ],
+    "at": "2026-07-24T08:27:17.592Z"
+  },
+  {
+    "step": "B2",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-appearance"
+    ],
+    "at": "2026-07-24T08:27:27.661Z"
+  },
+  {
+    "step": "B3",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-data"
+    ],
+    "at": "2026-07-24T08:27:46.794Z"
+  },
+  {
+    "step": "B4",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-ai"
+    ],
+    "at": "2026-07-24T08:28:02.940Z"
+  },
+  {
+    "step": "B4b",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-ai-intent"
+    ],
+    "at": "2026-07-24T08:28:19.685Z"
+  },
+  {
+    "step": "B5",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-about"
+    ],
+    "at": "2026-07-24T08:28:30.404Z"
+  },
+  {
+    "step": "B6a",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-audit"
+    ],
+    "at": "2026-07-24T08:28:48.090Z"
+  },
+  {
+    "step": "B6b",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-memory"
+    ],
+    "at": "2026-07-24T08:29:06.680Z"
+  },
+  {
+    "step": "B6c",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-mobile"
+    ],
+    "at": "2026-07-24T08:29:20.418Z"
+  },
+  {
+    "step": "B6d",
+    "ok": true,
+    "note": "通用助手 wuxinghua1 智能对话 信息 智能生态 知识库 员工工作台 业务对象 组织管理 业务单据 业务记录 资源库 数据来源 模板与打印 打印机列表 模板库 表格模式 模板与打印 工具 审批中心 系统设置 系统正常 可更新 1.0.0 × XCAGI 通… v1.0.0.0 ▶ WUXINGHUA1 系统设置 wuxinghua1 副窗 W 更换 wuxinghua1 wuxinghua1 退出登录 系统设置 个人主页 wux",
+    "frames": [
+      "06-settings-extensions"
+    ],
+    "at": "2026-07-24T08:29:32.770Z"
+  },
+  {
+    "step": "settings-card-0",
+    "ok": true,
+    "note": "个人主页",
+    "frames": [
+      "06-settings-all-00-个人主页"
+    ],
+    "at": "2026-07-24T08:29:33.466Z"
+  },
+  {
+    "step": "settings-card-1",
+    "ok": true,
+    "note": "模型服务",
+    "frames": [
+      "06-settings-all-01-模型服务"
+    ],
+    "at": "2026-07-24T08:29:34.166Z"
+  },
+  {
+    "step": "settings-card-2",
+    "ok": true,
+    "note": "AI 意图能力",
+    "frames": [
+      "06-settings-all-02-AI_意图能力"
+    ],
+    "at": "2026-07-24T08:29:34.885Z"
+  },
+  {
+    "step": "settings-card-3",
+    "ok": true,
+    "note": "拟人 Persy 系统",
+    "frames": [
+      "06-settings-all-03-拟人_Persy_系统"
+    ],
+    "at": "2026-07-24T08:29:35.587Z"
+  },
+  {
+    "step": "settings-card-4",
+    "ok": true,
+    "note": "基本设置",
+    "frames": [
+      "06-settings-all-04-基本设置"
+    ],
+    "at": "2026-07-24T08:29:36.298Z"
+  },
+  {
+    "step": "settings-card-5",
+    "ok": true,
+    "note": "移动端连接",
+    "frames": [
+      "06-settings-all-05-移动端连接"
+    ],
+    "at": "2026-07-24T08:29:37.065Z"
+  },
+  {
+    "step": "settings-card-6",
+    "ok": true,
+    "note": "扩展与 Mod",
+    "frames": [
+      "06-settings-all-06-扩展与_Mod"
+    ],
+    "at": "2026-07-24T08:29:37.862Z"
+  },
+  {
+    "step": "settings-card-7",
+    "ok": true,
+    "note": "蒸馏模型版本",
+    "frames": [
+      "06-settings-all-07-蒸馏模型版本"
+    ],
+    "at": "2026-07-24T08:29:38.832Z"
+  },
+  {
+    "step": "settings-card-8",
+    "ok": true,
+    "note": "关于",
+    "frames": [
+      "06-settings-all-08-关于"
+    ],
+    "at": "2026-07-24T08:29:39.653Z"
+  }
+]
