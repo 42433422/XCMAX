@@ -27,8 +27,16 @@
     "quitAndInstall": "not_executed_keep_user_apps"
   },
   "production_cdn": {
-    "status_at_test": "restored_to_previous_signed_feed_656db7b7_pending_ci_signed_publish_of_7e6ce2689",
+    "status": "live_signed",
     "stable_feed": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
-    "new_artifacts_staged": "/var/www/update/releases/stable/xcagi-v1.0.0.0/enterprise/"
+    "buildSha": "7e6ce26890f2694b2788ca5f98cf163c3b2af16b",
+    "signature_prefix": "ed25519:lyiYd6gqlWvy9Z+hiz2eGHZ0Kr9A4nPlk6HX",
+    "workflow_run": "https://github.com/42433422/XCMAX/actions/runs/30085475273",
+    "pr": "https://github.com/42433422/XCMAX/pull/583",
+    "prod_check_from_old_app": {
+      "ok": true,
+      "available": true,
+      "buildSha": "7e6ce26890f2694b2788ca5f98cf163c3b2af16b"
+    }
   }
 }
