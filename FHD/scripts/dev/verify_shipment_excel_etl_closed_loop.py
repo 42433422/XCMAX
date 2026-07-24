@@ -136,7 +136,9 @@ def main() -> int:
 
         import app.application.shipment_excel_etl_fingerprint_store as fp_store
 
+        fp_store._legacy_db_path = lambda: td_path / "fps.sqlite3"  # type: ignore
         fp_store._db_path = lambda: td_path / "fps.sqlite3"  # type: ignore
+        os.environ["FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND"] = "legacy"
 
         class _FakeShipmentSvc:
             def __init__(self):
