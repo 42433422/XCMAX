@@ -43,7 +43,7 @@ def test_open_answer_resolve_happy_path() -> None:
 
     answered = gate.answer_clarification(
         sid,
-        answers={"intent_misaligned": "本次只改 docs，意图改为文档修订验收"},
+        answers="本次只改 docs，意图改为文档修订验收，范围与非目标已确认",
         answered_by="boss",
     )
     assert answered["ok"] is True
@@ -202,9 +202,7 @@ def test_council_receipt_passes_after_answer_enriches_intent() -> None:
     sid = opened["session"]["session_id"]
     gate.answer_clarification(
         sid,
-        answers={
-            "intent_misaligned": "改为文档修订 unrelated markdown docs/unrelated.md 验收通过即可"
-        },
+        answers="改为文档修订 unrelated markdown docs/unrelated.md 验收通过即可",
     )
     payload = {
         "proposal_id": "decision-clarification-2",
@@ -303,6 +301,119 @@ def test_boss_inbox_context_bridge_answers_retort_session() -> None:
     assert row is not None
     assert row["status"] == "answered"
     assert "unrelated" in str(row.get("enriched_strategy_intent") or "")
+
+
+def test_public_session_exposes_urgency_and_seconds_remaining() -> None:
+    opened = gate.open_clarification_session(
+        strategy_intent="需要澄清的紧迫意图",
+        changed_files=["a.py"],
+        proposal_id="urgent-p",
+        run_id="urgent-r",
+        package_id="pkg",
+        force=True,
+    )
+    sid = opened["session"]["session_id"]
+    soon = (datetime.now(timezone.utc) + timedelta(seconds=120)).isoformat()
+    store = gate._load_store_unlocked()
+    store["sessions"][sid]["expires_at"] = soon
+    gate._save_store_unlocked(store)
+
+    row = gate.get_clarification(sid)
+    assert row is not None
+    assert row["urgency"] == "critical"
+    assert isinstance(row["seconds_remaining"], int)
+    assert 0 < row["seconds_remaining"] <= 120
+
+    listed = gate.list_clarifications(include_terminal=False, limit=10)
+    assert listed["critical_count"] >= 1
+    assert listed["healthy"] is False
+
+
+def test_answers_incomplete_rejected_without_freeform() -> None:
+    opened = gate.open_clarification_session(
+        strategy_intent="密码重置安全加固",
+        changed_files=["docs/unrelated.md", "app/secrets.py"],
+        proposal_id="incomplete-p",
+        run_id="incomplete-r",
+        package_id="pkg",
+        force=True,
+    )
+    sid = opened["session"]["session_id"]
+    questions = opened["session"]["questions"]
+    assert len(questions) >= 1
+    qid = str(questions[0]["id"])
+    # Provide a non-matching key only → incomplete (unless freeform).
+    out = gate.answer_clarification(sid, answers={"not_a_real_question": "noop"})
+    assert out["ok"] is False
+    assert out["error"] == "answers_incomplete"
+    assert qid in (out.get("missing_question_ids") or [])
+    still = gate.get_clarification(sid)
+    assert still is not None
+    assert still["status"] == "open"
+
+
+def test_expire_marks_mirrored_boss_inbox(monkeypatch) -> None:
+    class _Col:
+        def __eq__(self, _other):
+            return self
+
+        def in_(self, _values):
+            return self
+
+    class _PendingHumanQuestion:
+        status = _Col()
+        fingerprint = _Col()
+
+        def __init__(self) -> None:
+            self.status = "pending"
+            self.answered_at = None
+
+    class _Query:
+        def filter(self, *_a, **_k):
+            return self
+
+        def all(self):
+            return [row]
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+        def query(self, *_a, **_k):
+            return _Query()
+
+        def commit(self):
+            committed["ok"] = True
+
+    row = _PendingHumanQuestion()
+    committed = {"ok": False}
+    import modstore_server.models as models
+
+    monkeypatch.setattr(models, "PendingHumanQuestion", _PendingHumanQuestion)
+    monkeypatch.setattr(models, "get_session_factory", lambda: (lambda: _Session()))
+
+    opened = gate.open_clarification_session(
+        strategy_intent="过期同步收件箱",
+        changed_files=["x.py"],
+        proposal_id="inbox-expire",
+        run_id="inbox-run",
+        package_id="pkg",
+        force=True,
+    )
+    sid = opened["session"]["session_id"]
+    past = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    store = gate._load_store_unlocked()
+    store["sessions"][sid]["expires_at"] = past
+    gate._save_store_unlocked(store)
+
+    swept = gate.sweep_expired_clarifications()
+    assert sid in swept["expired_ids"]
+    assert swept["boss_inbox_expired_count"] >= 1
+    assert row.status == "expired"
+    assert committed["ok"] is True
 
 
 def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path) -> None:
