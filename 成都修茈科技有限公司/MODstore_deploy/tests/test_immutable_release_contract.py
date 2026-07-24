@@ -220,7 +220,10 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         receipt = workflow["jobs"]["receipt"]
         assert "workflow_run.conclusion == 'success'" in receipt["if"]
         rendered = str(receipt)
+        assert workflow["permissions"]["pull-requests"] == "read"
         assert "actions/download-artifact@v4" in rendered
+        assert "/commits/${merge_sha}/pulls" in rendered
+        assert "attested_branch_head_sha" in rendered
         assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
         assert "/api/ops/self-maintenance/deployment-receipt" in rendered
         assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
