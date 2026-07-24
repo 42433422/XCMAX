@@ -324,7 +324,12 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
 
 
 def test_fixtures_roundtrip_still_ok():
-    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "shipment_etl" / "闭环测试_送货单模板.xlsx"
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "shipment_etl"
+        / "闭环测试_送货单模板.xlsx"
+    )
     if not fixture.is_file():
         pytest.skip("fixture missing")
     from app.application.shipment_excel_etl_app_service import parse_delivery_notes

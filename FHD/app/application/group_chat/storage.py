@@ -291,9 +291,7 @@ class AiGroupChatStorageMixin:
         )
         if not secret:
             data_dir = (
-                os.environ.get("XCAGI_DATA_DIR")
-                or os.environ.get("XCAGI_DESKTOP_DATA_DIR")
-                or ""
+                os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
             ).strip()
             desktop = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
                 "1",

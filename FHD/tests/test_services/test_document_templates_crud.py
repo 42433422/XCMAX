@@ -23,6 +23,7 @@ def tenant_ctx():
     with tenant_scope(1):
         yield
 
+
 # ========================= _normalize_db_template_id =====================
 
 

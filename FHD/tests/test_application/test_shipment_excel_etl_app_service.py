@@ -99,7 +99,21 @@ def test_auto_skips_ledger_when_delivery_present(tmp_path):
     ws["H4"] = 10
     ws["I4"] = 200
     ledger = wb.create_sheet("25出货")
-    ledger.append(["日期", "单号", "产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+    ledger.append(
+        [
+            "日期",
+            "单号",
+            "产品型号",
+            "",
+            "",
+            "产品名称",
+            "数量/件",
+            "规格/KG",
+            "数量/KG",
+            "单价/元",
+            "金额/元",
+        ]
+    )
     ledger.append(["2026-07-01", "L-9", "X1", "", "", "旧货", 1, 10, 10, 5, 50])
     wb.save(path)
 

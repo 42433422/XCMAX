@@ -517,7 +517,9 @@ def aiopen_whitelist_seed(body: dict = Body(default_factory=dict)):
 @router.post("/api/aiopen/loop/verify")
 async def aiopen_loop_verify(request: Request, body: dict = Body(default_factory=dict)):
     """全调用闭环自检（等同 MCP capability_loop 工具）。"""
-    result = await invoke_tool("capability_loop", body if isinstance(body, dict) else {}, request.app)
+    result = await invoke_tool(
+        "capability_loop", body if isinstance(body, dict) else {}, request.app
+    )
     return result
 
 

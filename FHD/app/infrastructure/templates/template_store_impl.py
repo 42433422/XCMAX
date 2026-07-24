@@ -91,9 +91,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         tid = current_tenant_id()
         if tid is not None:
             candidates.append(os.path.join(runtime_root, "tenants", str(tid), "templates"))
-            candidates.append(
-                os.path.join(runtime_root, "tenants", str(tid), "document_templates")
-            )
+            candidates.append(os.path.join(runtime_root, "tenants", str(tid), "document_templates"))
         deduped: list[str] = []
         seen: set[str] = set()
         for folder in candidates:

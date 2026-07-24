@@ -72,6 +72,7 @@ def test_knowledge_and_employee_aliases(compat_app_client: TestClient) -> None:
         "app.fastapi_routes.system_routes.get_workflow_employee_catalog",
         new=MagicMock(return_value={"success": True, "data": {"catalog": []}}),
     ) as mock_cat:
+
         async def _cat():
             return {"success": True, "data": {"catalog": []}}
 

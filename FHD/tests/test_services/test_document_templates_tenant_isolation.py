@@ -98,18 +98,14 @@ class TestTemplatesTenantWhereSql:
 class TestTemplatesTenantIdForInsert:
     def test_requires_tenant(self):
         with (
-            patch(
-                "app.services.document_templates.tenant_scope.ensure_templates_tenant_column"
-            ),
+            patch("app.services.document_templates.tenant_scope.ensure_templates_tenant_column"),
             pytest.raises(TenantScopeError),
         ):
             templates_tenant_id_for_insert()
 
     def test_returns_current(self):
         with (
-            patch(
-                "app.services.document_templates.tenant_scope.ensure_templates_tenant_column"
-            ),
+            patch("app.services.document_templates.tenant_scope.ensure_templates_tenant_column"),
             tenant_scope(3),
         ):
             assert templates_tenant_id_for_insert() == 3

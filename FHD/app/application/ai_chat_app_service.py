@@ -909,7 +909,11 @@ class AIChatApplicationService(
             ]
             file_path = str(
                 excel_analysis.get("file_path")
-                or ((excel_analysis.get("preview_data") or {}) if isinstance(excel_analysis.get("preview_data"), dict) else {}).get("file_path")
+                or (
+                    (excel_analysis.get("preview_data") or {})
+                    if isinstance(excel_analysis.get("preview_data"), dict)
+                    else {}
+                ).get("file_path")
                 or ""
             ).strip()
             delivery_notes: list = []

@@ -30,7 +30,9 @@ _BUYER_RE = re.compile(
     re.UNICODE,
 )
 _CONTACT_RE = re.compile(r"联系人[：:\s]*([^\s日期订单编号购货]*)")
-_DATE_RE = re.compile(r"((?:20)?\d{2}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\d{4}[-/]\d{1,2}[-/]\d{1,2})")
+_DATE_RE = re.compile(
+    r"((?:20)?\d{2}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\d{4}[-/]\d{1,2}[-/]\d{1,2})"
+)
 _ORDER_NO_RE = re.compile(r"订单编号[：:\s]*([A-Za-z0-9\-]+)")
 _STOP_ROW_RE = re.compile(r"大\s*写|销售协议|销售单位|销售负责人|一式四联")
 _LEDGER_SHEET_RE = re.compile(r"出货|流水|明细")
@@ -151,7 +153,9 @@ def _map_headers(ws, header_row: int) -> dict[str, int]:
         key = _norm_header(ws.cell(header_row, col).value)
         if not key:
             continue
-        if ("型号" in key or ("编号" in key and "订单" not in key and "单号" not in key)) and "model_number" not in mapping:
+        if (
+            "型号" in key or ("编号" in key and "订单" not in key and "单号" not in key)
+        ) and "model_number" not in mapping:
             mapping["model_number"] = col
         elif ("名称" in key or "品名" in key) and "product_name" not in mapping:
             mapping["product_name"] = col
@@ -161,7 +165,11 @@ def _map_headers(ws, header_row: int) -> dict[str, int]:
             mapping["tin_spec"] = col
         elif ("数量" in key and ("kg" in key or "公斤" in key)) and "quantity_kg" not in mapping:
             mapping["quantity_kg"] = col
-        elif key in {"数量", "数量/"} and "quantity_tins" not in mapping and "quantity_kg" not in mapping:
+        elif (
+            key in {"数量", "数量/"}
+            and "quantity_tins" not in mapping
+            and "quantity_kg" not in mapping
+        ):
             mapping["quantity_tins"] = col
         elif ("单价" in key or "价格" in key) and "unit_price" not in mapping:
             mapping["unit_price"] = col
@@ -226,19 +234,15 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
         name, model = model, ""
     if not name and not model:
         return None
-    tins = _to_int(ws.cell(row, mapping["quantity_tins"]).value) if "quantity_tins" in mapping else 0
-    tin_spec = (
-        _to_float(ws.cell(row, mapping["tin_spec"]).value) if "tin_spec" in mapping else 0.0
+    tins = (
+        _to_int(ws.cell(row, mapping["quantity_tins"]).value) if "quantity_tins" in mapping else 0
     )
+    tin_spec = _to_float(ws.cell(row, mapping["tin_spec"]).value) if "tin_spec" in mapping else 0.0
     qty_kg = (
-        _to_float(ws.cell(row, mapping["quantity_kg"]).value)
-        if "quantity_kg" in mapping
-        else 0.0
+        _to_float(ws.cell(row, mapping["quantity_kg"]).value) if "quantity_kg" in mapping else 0.0
     )
     unit_price = (
-        _to_float(ws.cell(row, mapping["unit_price"]).value)
-        if "unit_price" in mapping
-        else 0.0
+        _to_float(ws.cell(row, mapping["unit_price"]).value) if "unit_price" in mapping else 0.0
     )
     amount = _to_float(ws.cell(row, mapping["amount"]).value) if "amount" in mapping else 0.0
     if tins <= 0 and qty_kg <= 0 and unit_price <= 0 and amount <= 0:
@@ -430,7 +434,7 @@ def _excel_date_to_str(value: Any) -> str:
             return str(value)
     text = str(value).strip()
     date_m = _DATE_RE.search(text)
-    return (date_m.group(1).replace(" ", "") if date_m else text)
+    return date_m.group(1).replace(" ", "") if date_m else text
 
 
 def _parse_ledger_sheet(ws, *, fallback_unit: str) -> list[dict[str, Any]]:
@@ -519,7 +523,9 @@ def parse_delivery_notes(
                 if note:
                     delivery_notes.append(note)
                 else:
-                    skipped.append({"sheet": ws.title, "score": d_score, "reason": "delivery_parse_failed"})
+                    skipped.append(
+                        {"sheet": ws.title, "score": d_score, "reason": "delivery_parse_failed"}
+                    )
                 continue
 
             l_score = _score_ledger_sheet(ws)
@@ -530,7 +536,13 @@ def parse_delivery_notes(
                 else:
                     skipped.append({"sheet": ws.title, "score": l_score, "reason": "ledger_empty"})
             else:
-                skipped.append({"sheet": ws.title, "score": max(d_score, l_score), "reason": "not_delivery_or_ledger"})
+                skipped.append(
+                    {
+                        "sheet": ws.title,
+                        "score": max(d_score, l_score),
+                        "reason": "not_delivery_or_ledger",
+                    }
+                )
     finally:
         wb.close()
 
@@ -549,7 +561,9 @@ def parse_delivery_notes(
     elif mode is False:
         notes = delivery_notes
         for n in ledger_notes:
-            skipped.append({"sheet": n.get("sheet"), "score": n.get("score"), "reason": "ledger_disabled"})
+            skipped.append(
+                {"sheet": n.get("sheet"), "score": n.get("score"), "reason": "ledger_disabled"}
+            )
     else:
         # auto
         if delivery_notes:
@@ -603,7 +617,12 @@ def preview_shipment_excel_etl(
     try:
         path = resolve_etl_path(file_path, workspace_root=workspace_root, must_exist=True)
     except ShipmentEtlPathError as exc:
-        return {"success": False, "message": f"非法文件路径: {exc}", "error_code": "unsafe_path", "notes": []}
+        return {
+            "success": False,
+            "message": f"非法文件路径: {exc}",
+            "error_code": "unsafe_path",
+            "notes": [],
+        }
 
     parsed = parse_delivery_notes(
         path,
@@ -626,8 +645,7 @@ def preview_shipment_excel_etl(
         "duplicate_note_count": sum(1 for n in notes if n.get("already_imported")),
         "ledger_risk": ledger_available > 0 and int(parsed.get("ledger_note_count") or 0) == 0,
         "ledger_available_count": ledger_available,
-        "message": parsed.get("message")
-        + ("。确认后将写入客户、产品与发货单。" if notes else ""),
+        "message": parsed.get("message") + ("。确认后将写入客户、产品与发货单。" if notes else ""),
     }
 
 
@@ -683,7 +701,9 @@ def execute_shipment_excel_etl(
     file_name = "shipment.xlsx"
     if file_path:
         try:
-            path = resolve_etl_path(file_path, workspace_root=workspace_root, must_exist=notes is None)
+            path = resolve_etl_path(
+                file_path, workspace_root=workspace_root, must_exist=notes is None
+            )
             file_name = path.name
         except ShipmentEtlPathError as exc:
             return {
@@ -835,7 +855,9 @@ def execute_shipment_excel_etl(
                             file_name=file_name,
                         )
                     except RECOVERABLE_ERRORS:
-                        logger.warning("failed to persist etl fingerprint immediately", exc_info=True)
+                        logger.warning(
+                            "failed to persist etl fingerprint immediately", exc_info=True
+                        )
             else:
                 shipment_failed += 1
                 errors.append(str(result.get("message") or "create_shipment failed"))
@@ -871,14 +893,18 @@ def execute_shipment_excel_etl(
                     try:
                         delete_fingerprint(tenant_key, fp)
                     except RECOVERABLE_ERRORS:
-                        logger.warning("failed to delete etl fingerprint on compensate", exc_info=True)
+                        logger.warning(
+                            "failed to delete etl fingerprint on compensate", exc_info=True
+                        )
             shipment_created = max(0, shipment_created - len(compensated))
             shipment_ids = [sid for sid in shipment_ids if sid not in set(compensated)]
 
     ok = shipment_failed == 0 and bool(product_result.get("success", True))
     if not to_import and skipped_duplicates:
         ok = True
-    compensated_ok = bool(shipment_failed and compensate_on_failure and created_pairs and not compensate_errors)
+    compensated_ok = bool(
+        shipment_failed and compensate_on_failure and created_pairs and not compensate_errors
+    )
     if shipment_failed and compensate_on_failure:
         # 补偿成功后视为「未留下脏发货单」，success=False 但仍可安全重试
         ok = False
@@ -894,7 +920,11 @@ def execute_shipment_excel_etl(
             + (f"，失败 {shipment_failed}" if shipment_failed else "")
             + (f"，已补偿撤销 {len(compensated)}" if compensated else "")
             + ("；客户/产品已同步" if import_products and to_import else "")
-            + ("（部分成功，未启用补偿）" if (shipment_ids and shipment_failed and not compensate_on_failure) else "")
+            + (
+                "（部分成功，未启用补偿）"
+                if (shipment_ids and shipment_failed and not compensate_on_failure)
+                else ""
+            )
         ),
         "file_name": file_name,
         "note_count": len(notes),
@@ -963,7 +993,17 @@ def write_delivery_note_workbook(
             f"购货单位（乙方）：{unit}     联系人：{contact}        "
             f"日期：{order_date}         订单编号：{order_no}"
         )
-        headers = ["产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"]
+        headers = [
+            "产品型号",
+            "",
+            "",
+            "产品名称",
+            "数量/件",
+            "规格/KG",
+            "数量/KG",
+            "单价/元",
+            "金额/元",
+        ]
         for col, h in enumerate(headers, start=1):
             ws.cell(3, col, h)
         last_row = 3
@@ -983,7 +1023,9 @@ def write_delivery_note_workbook(
         ws = default
         ws.title = "送货单"
         ws["A1"] = seller_title
-        ws["A2"] = "购货单位（乙方）：示例客户     联系人：测试        日期：2026年07月24日         订单编号：DEMO-0001"
+        ws["A2"] = (
+            "购货单位（乙方）：示例客户     联系人：测试        日期：2026年07月24日         订单编号：DEMO-0001"
+        )
         for col, h in enumerate(
             ["产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"],
             start=1,
@@ -1026,7 +1068,19 @@ def write_ledger_workbook(
     wb = Workbook()
     ws = wb.active
     ws.title = sheet_name[:31] or "25出货"
-    headers = ["日期", "单号", "产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"]
+    headers = [
+        "日期",
+        "单号",
+        "产品型号",
+        "",
+        "",
+        "产品名称",
+        "数量/件",
+        "规格/KG",
+        "数量/KG",
+        "单价/元",
+        "金额/元",
+    ]
     for col, h in enumerate(headers, start=1):
         ws.cell(1, col, h)
     sample_rows = rows or [
@@ -1123,7 +1177,12 @@ def batch_preview_shipment_excel_etl(
     try:
         root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
     except ShipmentEtlPathError as exc:
-        return {"success": False, "message": f"非法目录: {exc}", "error_code": "unsafe_path", "files": []}
+        return {
+            "success": False,
+            "message": f"非法目录: {exc}",
+            "error_code": "unsafe_path",
+            "files": [],
+        }
     if not root.is_dir():
         return {"success": False, "message": f"目录不存在: {root}", "files": []}
     files = sorted(root.glob(pattern))
@@ -1189,7 +1248,12 @@ def batch_execute_shipment_excel_etl(
     try:
         root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
     except ShipmentEtlPathError as exc:
-        return {"success": False, "message": f"非法目录: {exc}", "error_code": "unsafe_path", "files": []}
+        return {
+            "success": False,
+            "message": f"非法目录: {exc}",
+            "error_code": "unsafe_path",
+            "files": [],
+        }
     if not root.is_dir():
         return {"success": False, "message": f"目录不存在: {root}", "files": []}
     files = sorted(root.glob(pattern))
@@ -1258,13 +1322,19 @@ class ShipmentExcelEtlApplicationService:
     def batch_execute(self, directory: str | Path, **kwargs: Any) -> dict[str, Any]:
         return batch_execute_shipment_excel_etl(directory, **kwargs)
 
-    def write_delivery_template(self, notes: list[dict[str, Any]], output_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    def write_delivery_template(
+        self, notes: list[dict[str, Any]], output_path: str | Path, **kwargs: Any
+    ) -> dict[str, Any]:
         return write_delivery_note_workbook(notes, output_path, **kwargs)
 
-    def write_ledger_template(self, rows: list[dict[str, Any]], output_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    def write_ledger_template(
+        self, rows: list[dict[str, Any]], output_path: str | Path, **kwargs: Any
+    ) -> dict[str, Any]:
         return write_ledger_workbook(rows, output_path, **kwargs)
 
-    def regenerate(self, file_path: str | Path, output_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    def regenerate(
+        self, file_path: str | Path, output_path: str | Path, **kwargs: Any
+    ) -> dict[str, Any]:
         return regenerate_delivery_notes_from_file(file_path, output_path, **kwargs)
 
 
