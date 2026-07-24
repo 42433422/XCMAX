@@ -211,6 +211,79 @@ async def test_chat_dispatch_via_platform_only_calls_dispatch_without_byok():
     assert result["ok"] is True
     call_kwargs = mock_dispatch.call_args
     assert call_kwargs.kwargs.get("api_key") == "sk-platform"
+    assert call_kwargs.kwargs.get("fallback_provider") == "minimax"
+    assert call_kwargs.kwargs.get("fallback_model") == "MiniMax-M2.7"
+    assert call_kwargs.kwargs.get("fallback_api_key") == "sk-platform"
+
+
+@pytest.mark.asyncio
+async def test_chat_dispatch_via_platform_only_skips_fallback_without_fallback_key():
+    def _platform_key(provider: str):
+        return "sk-primary" if provider == "xiaomi" else None
+
+    with (
+        patch(
+            "modstore_server.llm_key_resolver.platform_api_key",
+            side_effect=_platform_key,
+        ),
+        patch("modstore_server.llm_key_resolver.platform_base_url", return_value=None),
+        patch(
+            "modstore_server.llm_chat_proxy.chat_dispatch",
+            new=AsyncMock(return_value={"ok": True, "content": "hello"}),
+        ) as mock_dispatch,
+    ):
+        from modstore_server.services.llm import chat_dispatch_via_platform_only
+
+        result = await chat_dispatch_via_platform_only("xiaomi", "mimo-v2.5-pro", [])
+
+    assert result["ok"] is True
+    assert "fallback_provider" not in mock_dispatch.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_chat_dispatch_via_platform_only_does_not_fallback_to_same_provider():
+    with (
+        patch(
+            "modstore_server.llm_key_resolver.platform_api_key",
+            return_value="sk-minimax",
+        ),
+        patch("modstore_server.llm_key_resolver.platform_base_url", return_value=None),
+        patch(
+            "modstore_server.llm_chat_proxy.chat_dispatch",
+            new=AsyncMock(return_value={"ok": True, "content": "hello"}),
+        ) as mock_dispatch,
+    ):
+        from modstore_server.services.llm import chat_dispatch_via_platform_only
+
+        result = await chat_dispatch_via_platform_only("minimax", "MiniMax-M2.7", [])
+
+    assert result["ok"] is True
+    assert "fallback_provider" not in mock_dispatch.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_chat_dispatch_via_platform_only_reports_used_fallback(monkeypatch):
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_TIMEOUT_SECONDS", "999")
+    fallback_result = {"ok": True, "content": "from fallback", "_fallback_used": True}
+
+    with (
+        patch(
+            "modstore_server.llm_key_resolver.platform_api_key",
+            return_value="sk-platform",
+        ),
+        patch("modstore_server.llm_key_resolver.platform_base_url", return_value=None),
+        patch(
+            "modstore_server.llm_chat_proxy.chat_dispatch",
+            new=AsyncMock(return_value=fallback_result),
+        ) as mock_dispatch,
+    ):
+        from modstore_server.services.llm import chat_dispatch_via_platform_only
+
+        result = await chat_dispatch_via_platform_only("xiaomi", "mimo-v2.5-pro", [])
+
+    assert mock_dispatch.call_args.kwargs["timeout_fallback_s"] == 35.0
+    assert result["_fallback_provider"] == "minimax"
+    assert result["_fallback_model"] == "MiniMax-M2.7"
 
 
 # ---------------------------------------------------------------------------

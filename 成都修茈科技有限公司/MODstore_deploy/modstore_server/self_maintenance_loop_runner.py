@@ -3172,15 +3172,30 @@ def _cleanup_merge_workspace(workspace: Path) -> bool:
     return True
 
 
+def _para_repository_candidates(repo_url: str) -> List[str]:
+    """Return authenticated Para transport first, then the public origin.
+
+    Production Para branches are created by devices that do not share the
+    scheduler's interactive HTTPS credentials.  ``MODSTORE_PARA_BARE_REPO``
+    is therefore the durable transport contract and may be either a local
+    bare path or an SSH URL.  The public origin remains a fail-soft fallback.
+    """
+
+    repositories: List[str] = []
+    for candidate in (
+        os.environ.get("MODSTORE_PARA_BARE_REPO", "").strip(),
+        str(repo_url or "").strip(),
+    ):
+        if candidate and candidate not in repositories:
+            repositories.append(candidate)
+    return repositories
+
+
 def _remote_branch_head(repo_url: str, branch: str) -> Optional[str]:
     """Resolve a Para branch head without mutating a workspace."""
     if not repo_url or not branch:
         return None
-    repositories = [repo_url]
-    para_bare_repo = os.environ.get("MODSTORE_PARA_BARE_REPO", "").strip()
-    if para_bare_repo and para_bare_repo not in repositories:
-        repositories.append(para_bare_repo)
-    for repository in repositories:
+    for repository in _para_repository_candidates(repo_url):
         try:
             proc = subprocess.run(
                 ["git", "ls-remote", "--heads", repository, f"refs/heads/{branch}"],
@@ -3254,7 +3269,38 @@ def _changed_files_for_branch(
     workspace.parent.mkdir(parents=True, exist_ok=True)
     if workspace.exists() and not _cleanup_merge_workspace(workspace):
         raise RuntimeError(f"stale merge workspace cleanup failed: {workspace}")
-    _run_cmd(["git", "clone", "--no-tags", repo_url, str(workspace)], timeout=300)
+    clone_errors: List[str] = []
+    cloned_from = ""
+    for repository in _para_repository_candidates(repo_url):
+        if workspace.exists() and not _cleanup_merge_workspace(workspace):
+            raise RuntimeError(f"failed clone workspace cleanup: {workspace}")
+        try:
+            # This workspace is used only for ref diffs and targeted ``git
+            # show`` calls.  Avoid materializing the multi-GB working tree;
+            # partial-clone support lazily fetches only a KB blob when schema
+            # validation actually needs it.
+            _run_cmd(
+                [
+                    "git",
+                    "clone",
+                    "--no-tags",
+                    "--filter=blob:none",
+                    "--no-checkout",
+                    repository,
+                    str(workspace),
+                ],
+                timeout=300,
+            )
+        except Exception as exc:
+            clone_errors.append(f"{type(exc).__name__}:{str(exc)[:300]}")
+            continue
+        cloned_from = repository
+        break
+    if not cloned_from:
+        raise RuntimeError(
+            "unable to clone Para repository through configured transports: "
+            + "; ".join(clone_errors)
+        )
     # Para 创建的分支可能只存在于 Para 本地工作区，尚未 push 到 origin。
     # 先 fetch base_branch（一定在远程），再 best-effort fetch branch。
     _run_cmd(["git", "fetch", "origin", base_branch], cwd=workspace, timeout=180)
@@ -3273,7 +3319,7 @@ def _changed_files_for_branch(
         bare_repo = os.environ.get(
             "MODSTORE_PARA_BARE_REPO", "/Users/a4243342/XCMAX-runtime/devfleet-bare.git"
         ).strip()
-        if bare_repo and Path(bare_repo).exists():
+        if bare_repo:
             _sp_run = subprocess.run(
                 ["git", "fetch", bare_repo, branch],
                 cwd=workspace,
@@ -3298,7 +3344,6 @@ def _changed_files_for_branch(
                     branch,
                     bare_repo,
                 )
-    _run_cmd(["git", "checkout", "-B", base_branch, f"origin/{base_branch}"], cwd=workspace)
     if not branch_ref:
         logger.warning(
             "auto_merge: branch %s not on remote or bareRepo — Para may not have pushed it",
