@@ -1,0 +1,50 @@
+{
+  "cards": [
+    {
+      "i": 0,
+      "id": "settings-profile-home",
+      "label": "个人主页"
+    },
+    {
+      "i": 1,
+      "id": "settings-model-payment",
+      "label": "模型服务"
+    },
+    {
+      "i": 2,
+      "id": "settings-intent",
+      "label": "AI 意图能力"
+    },
+    {
+      "i": 3,
+      "id": "settings-memory-v2",
+      "label": "拟人 Persy 系统"
+    },
+    {
+      "i": 4,
+      "id": "settings-basic",
+      "label": "基本设置"
+    },
+    {
+      "i": 5,
+      "id": "settings-mobile-pairing",
+      "label": "移动端连接"
+    },
+    {
+      "i": 6,
+      "id": "settings-extensions",
+      "label": "扩展与 Mod"
+    },
+    {
+      "i": 7,
+      "id": "",
+      "label": "蒸馏模型版本"
+    },
+    {
+      "i": 8,
+      "id": "",
+      "label": "关于"
+    }
+  ],
+  "at": "2026-07-24T08:27:09.483Z"
+}
