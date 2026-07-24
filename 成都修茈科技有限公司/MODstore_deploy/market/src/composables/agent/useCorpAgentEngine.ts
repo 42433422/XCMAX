@@ -23,6 +23,8 @@ import {
   setCorpVisitorLabel,
 } from '../../corp-butler/corpVisitorId'
 import { intakeFormPlacementHint } from '../../corp-butler/corpViewport'
+import { buildUserMultimodalContent } from '../../utils/visionMultimodal'
+import type { AgentHandleInputFn } from './agentEngineInjection'
 
 let _msgId = 0
 function nextId() {
@@ -58,14 +60,16 @@ export function useCorpAgentEngine() {
     agentStore.isLoading = false
   }
 
-  async function handleInput(userText: string, opts?: { skipUserInsert?: boolean }): Promise<void> {
+  const handleInput: AgentHandleInputFn = async (userText, opts) => {
     const text = userText.trim()
-    if (!text) return
+    const imageDataUrl = typeof opts?.imageDataUrl === 'string' ? opts.imageDataUrl.trim() : ''
+    if (!text && !imageDataUrl) return
 
+    const displayText = text || (imageDataUrl ? '[图片]' : '')
     agentStore.isLoading = true
     agentStore.setMode('thinking')
     if (!opts?.skipUserInsert) {
-      agentStore.addMessage(makeUserMsg(text))
+      agentStore.addMessage(makeUserMsg(displayText))
       agentStore.addMessage(makeAssistantMsg('…', true))
     }
 
@@ -78,34 +82,43 @@ export function useCorpAgentEngine() {
         route: `${location.pathname}${location.search}`,
         pageTitle: document.title,
         pageSummary: getStructuredPageSummary({ corpPathname: pathname, domExcerpt }),
-        userMessage: text,
+        userMessage: text || displayText,
         history: agentStore.messages.slice(-12),
       }
 
-      const intakeMatch = matchCorpIntakeIntent(context)
-      if (intakeMatch) {
-        const intakeResult = await executeCorpIntakeMatch(intakeMatch, context)
-        if (intakeResult?.assistantReply) {
-          await finishWithReply('', intakeResult.assistantReply)
+      // 有附图时跳过本地关键词/问卷技能，直接走多模态 LLM
+      if (!imageDataUrl) {
+        const intakeMatch = matchCorpIntakeIntent(context)
+        if (intakeMatch) {
+          const intakeResult = await executeCorpIntakeMatch(intakeMatch, context)
+          if (intakeResult?.assistantReply) {
+            await finishWithReply('', intakeResult.assistantReply)
+            return
+          }
+        }
+
+        const matched = matchCorpSiteIntent(context)
+        if (matched?.assistantReply) {
+          await finishWithReply('', matched.assistantReply)
           return
+        }
+
+        if (pageId === 'contact' && /填|问卷|预填|跟单|录入|单据|excel/i.test(text)) {
+          const fillResult = await runIntakeFillFromMessage(text, context.pageSummary || '')
+          if (fillResult?.assistantReply) {
+            await finishWithReply('', fillResult.assistantReply)
+            return
+          }
         }
       }
 
-      const matched = matchCorpSiteIntent(context)
-      if (matched?.assistantReply) {
-        await finishWithReply('', matched.assistantReply)
-        return
-      }
-
-      if (pageId === 'contact' && /填|问卷|预填|跟单|录入|单据|excel/i.test(text)) {
-        const fillResult = await runIntakeFillFromMessage(text, context.pageSummary || '')
-        if (fillResult?.assistantReply) {
-          await finishWithReply('', fillResult.assistantReply)
-          return
-        }
-      }
-
-      const llmReply = await tryCorpLlmChat(text, pageId, context.pageSummary, context.history)
+      const llmReply = await tryCorpLlmChat(
+        text || '请根据我附带的图片说明一下',
+        pageId,
+        context.pageSummary,
+        context.history,
+        imageDataUrl || null,
+      )
       const reply = llmReply || fallbackReply(location.origin)
       await finishWithReply('', reply)
     } catch (e: unknown) {
@@ -158,6 +171,7 @@ async function tryCorpLlmChat(
   pageId: string,
   pageContext: string,
   history: AgentMessage[],
+  imageDataUrl?: string | null,
 ): Promise<string | null> {
   try {
     const page = getCorpPageKnowledge(pageId)
@@ -174,9 +188,13 @@ async function tryCorpLlmChat(
       // ignore
     }
     const visitorLabel = getCorpVisitorLabel()
+    const userContent = buildUserMultimodalContent(
+      userText,
+      imageDataUrl ? [imageDataUrl] : [],
+    )
 
     const res = (await api.agentCorpChat({
-      messages: [...historyMsgs, { role: 'user', content: userText }],
+      messages: [...historyMsgs, { role: 'user', content: userContent }],
       page_id: pageId,
       page_context: `${page.title}\n${page.summary}\n\n${pageContext}`.slice(0, 3500),
       visitor_id: visitorId,

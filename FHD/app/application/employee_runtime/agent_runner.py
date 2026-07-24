@@ -55,6 +55,20 @@ def _resolve_employee_llm_config() -> dict[str, str | None]:
     }
 
 
+def _resolve_employee_llm_fallback_config(
+    primary_provider: str,
+) -> dict[str, str | None] | None:
+    provider = (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER") or "").strip()
+    if not provider or provider.lower() == primary_provider.lower():
+        return None
+    return {
+        "provider": provider,
+        "model": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_MODEL") or "").strip() or None,
+        "api_key": None,
+        "base_url": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_BASE_URL") or "").strip() or None,
+    }
+
+
 async def _chat_completion(
     messages: list[dict[str, Any]], max_tokens: int = 4000
 ) -> dict[str, Any]:
@@ -67,25 +81,61 @@ async def _chat_completion(
     cfg = _resolve_employee_llm_config()
     provider = str(cfg.get("provider") or "").strip() or "xcauto"
     model = cfg.get("model")
-    try:
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+    from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
+    primary_error = ""
+    primary_model = str(model) if model else None
+    try:
         adapter = OpenAICompatibleAdapter(
             provider=provider,
-            model=str(model) if model else None,
+            model=primary_model,
             api_key=cfg.get("api_key"),
             base_url=cfg.get("base_url"),
         )
         if not adapter.is_configured:
-            return {
-                "error": "未配置 LLM API Key，请在设置中配置模型服务后再使用 agent 员工。",
-                "provider": provider,
-                "model": adapter.model_name,
-            }
-        return await adapter.chat_completion(messages, max_tokens=max_tokens)
+            primary_error = "未配置 LLM API Key，请在设置中配置模型服务后再使用 agent 员工。"
+            primary_model = adapter.model_name
+        else:
+            return await adapter.chat_completion(messages, max_tokens=max_tokens)
     except RECOVERABLE_ERRORS as exc:
-        logger.exception("employee agent LLM failed: %s", exc)
-        return {"error": str(exc)[:800]}
+        primary_error = str(exc)[:800]
+        logger.warning("employee primary LLM failed; trying configured fallback")
+
+    fallback_cfg = _resolve_employee_llm_fallback_config(provider)
+    if fallback_cfg:
+        fallback_provider = str(fallback_cfg.get("provider") or "").strip()
+        fallback_model = fallback_cfg.get("model")
+        try:
+            fallback = OpenAICompatibleAdapter(
+                provider=fallback_provider,
+                model=str(fallback_model) if fallback_model else None,
+                api_key=fallback_cfg.get("api_key"),
+                base_url=fallback_cfg.get("base_url"),
+            )
+            if fallback.is_configured:
+                result = await fallback.chat_completion(messages, max_tokens=max_tokens)
+                result["_fallback_used"] = True
+                result["_primary_provider"] = provider
+                result["_primary_error"] = primary_error
+                result["_fallback_provider"] = fallback_provider
+                result["_fallback_model"] = fallback.model_name
+                return result
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception("employee fallback LLM failed")
+            return {"error": f"{primary_error}; fallback failed: {str(exc)[:400]}"[:800]}
+
+    if primary_error:
+        logger.error("employee agent LLM failed")
+        return {
+            "error": primary_error,
+            "provider": provider,
+            "model": primary_model,
+        }
+    return {
+        "error": "employee LLM unavailable",
+        "provider": provider,
+        "model": primary_model,
+    }
 
 
 def run_agent_handler(

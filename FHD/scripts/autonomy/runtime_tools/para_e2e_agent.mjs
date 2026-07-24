@@ -600,32 +600,83 @@ function isReportOnlyTask(task) {
 
 function reportOnlyTargetBranch(task) {
   if (!isReportOnlyTask(task)) return '';
-  const text = `${task?.title || ''}\n${task?.description || ''}`;
-  const match = text.match(/target branch (?:to inspect|to verify)\s*:\s*`([^`]+)`/i)
-    || text.match(/\bTARGET_BRANCH=([^\s]+)/i);
-  const branch = (match?.[1] || '').trim();
-  if (!branch || branch.startsWith('-') || branch.includes('..') || /[\s~^:?*[\\]/.test(branch)) return '';
-  return branch;
+  const texts = [
+    String(task?.description || ''),
+    String(task?.title || ''),
+  ];
+  for (const text of texts) {
+    const match = text.match(/target branch (?:to inspect|to verify)\s*:\s*`([^`\r\n]+)`/i)
+      || text.match(/\bTARGET_BRANCH=([^\s\r\n]+)/i);
+    const branch = (match?.[1] || '').trim();
+    if (!branch || branch.startsWith('-') || branch.includes('..') || /[\s~^:?*[\\]/.test(branch)) {
+      continue;
+    }
+    return branch;
+  }
+  return '';
 }
 
 async function prepareReportOnlyTargetBranch(taskDir, task) {
   const targetBranch = reportOnlyTargetBranch(task);
-  if (!targetBranch) return;
+  if (!targetBranch) return null;
   const baseBranch = (task?.base_branch || 'main').trim() || 'main';
   const baseRef = `refs/remotes/origin/${baseBranch}`;
   const targetRef = `refs/remotes/origin/${targetBranch}`;
-  const refspecs = [
-    `${baseBranch}:${baseRef}`,
-    ...(targetBranch === baseBranch ? [] : [`${targetBranch}:${targetRef}`]),
-  ];
   await git(taskDir, [
     'fetch',
     '--no-tags',
     'origin',
-    ...refspecs,
+    `+refs/heads/${baseBranch}:${baseRef}`,
   ]);
+  let targetSource = 'origin';
+  if (targetBranch !== baseBranch) {
+    try {
+      await git(taskDir, [
+        'fetch',
+        '--no-tags',
+        'origin',
+        `+refs/heads/${targetBranch}:${targetRef}`,
+      ]);
+    } catch (originError) {
+      if (!existsSync(bareRepo)) throw originError;
+      await git(taskDir, [
+        'fetch',
+        '--no-tags',
+        bareRepo,
+        `+refs/heads/${targetBranch}:${targetRef}`,
+      ]);
+      targetSource = 'bareRepo';
+    }
+  }
   await git(taskDir, ['cat-file', '-e', `${baseRef}^{commit}`]);
   await git(taskDir, ['cat-file', '-e', `${targetRef}^{commit}`]);
+  const baseSha = await git(taskDir, ['rev-parse', '--verify', `${baseRef}^{commit}`]);
+  const targetSha = await git(taskDir, ['rev-parse', '--verify', `${targetRef}^{commit}`]);
+  const evidence = {
+    verified_at: new Date().toISOString(),
+    base_branch: baseBranch,
+    base_ref: baseRef,
+    base_sha: baseSha,
+    target_branch: targetBranch,
+    target_ref: targetRef,
+    target_sha: targetSha,
+    target_source: targetSource,
+  };
+  console.log(
+    `[e2e-agent] report-only refs verified base=${baseSha.slice(0, 12)} target=${targetSha.slice(0, 12)} source=${targetSource}`,
+  );
+  return evidence;
+}
+
+function reportOnlyRefEvidencePrompt(evidence) {
+  if (!evidence) return '';
+  return [
+    '',
+    'E2E_REPORT_ONLY_REF_EVIDENCE_JSON:',
+    JSON.stringify(evidence),
+    'The e2e-agent fetched and verified both refs with git cat-file immediately before invoking you.',
+    'Use the exact base_ref and target_ref above. If a lookup disagrees, retry the exact refs once before reporting target_branch_unavailable.',
+  ].join('\n');
 }
 
 function buildReportOnlyContent(task, output) {
@@ -928,11 +979,20 @@ async function handleTask(ws, task) {
   });
   taskDir = await prepareWorkspace(task);
   const reportOnly = isReportOnlyTask(task);
-  if (reportOnly) await prepareReportOnlyTargetBranch(taskDir, task);
+  const reportOnlyRefEvidence = reportOnly
+    ? await prepareReportOnlyTargetBranch(taskDir, task)
+    : null;
   mkdirSync(join(taskDir, '.devfleet'), { recursive: true });
+  if (reportOnlyRefEvidence) {
+    writeFileSync(
+      join(taskDir, '.devfleet', 'REPORT_ONLY_REFS.json'),
+      `${JSON.stringify(reportOnlyRefEvidence, null, 2)}\n`,
+    );
+  }
+  const executionPrompt = `${task.description}${reportOnlyRefEvidencePrompt(reportOnlyRefEvidence)}`;
   writeFileSync(
     join(taskDir, '.devfleet', 'TASK.md'),
-    `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${task.description}\n\n## 工作分支\n${task.work_branch}\n`,
+    `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${executionPrompt}\n\n## 工作分支\n${task.work_branch}\n`,
   );
   excludeAgentMetadata(taskDir);
   // 任务基线 HEAD：工具自行 commit 时靠它识别变更（工作区会是干净的）。
@@ -987,7 +1047,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runTraeAgent(taskDir, task.description);
+      const output = await runTraeAgent(taskDir, executionPrompt);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1024,7 +1084,7 @@ async function handleTask(ws, task) {
           level: 'warn',
         });
         try {
-          const output = await runCodexAgent(taskDir, task.description);
+          const output = await runCodexAgent(taskDir, executionPrompt);
           const codexNonZero = String(output || '').startsWith('[codex exit=');
           if (output) toolOutput = `${toolOutput}\n${output}`.trim();
           if (output) {
@@ -1063,7 +1123,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runClaudeAgent(taskDir, task.description);
+      const output = await runClaudeAgent(taskDir, executionPrompt);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1095,7 +1155,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runCursorAgent(taskDir, task.description);
+      const output = await runCursorAgent(taskDir, executionPrompt);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1127,7 +1187,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      let output = await runCodexAgent(taskDir, task.description);
+      let output = await runCodexAgent(taskDir, executionPrompt);
       let codexNonZero = String(output || '').startsWith('[codex exit=');
       if (output) {
         send(ws, {
@@ -1154,7 +1214,7 @@ async function handleTask(ws, task) {
             level: 'warn',
           });
           try {
-            output = await runTraeAgent(taskDir, task.description);
+            output = await runTraeAgent(taskDir, executionPrompt);
             codexNonZero = false;
             toolError = '';
             if (output) {

@@ -5625,7 +5625,7 @@ requires-dist = [
     { name = "redis", marker = "extra == 'server-api'", specifier = "==5.0.1" },
     { name = "reportlab", marker = "extra == 'server-api'", specifier = ">=5,<6" },
     { name = "requests", marker = "extra == 'server-api'", specifier = ">=2.33.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8,<0.16" },
     { name = "safety", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.3.0" },
     { name = "scikit-learn", marker = "extra == 'server-api'", specifier = ">=1.3.0" },

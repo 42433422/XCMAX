@@ -34,6 +34,8 @@ _AI_REVIEW_TOOLING_FILES = {
     "FHD/scripts/ci/ai_review.py",
     "FHD/tests/test_ci/test_ai_review.py",
 }
+_KB_EVIDENCE_JSON = re.compile(r"^FHD/XCAGI/kb/(?:fixes|patterns)/.+\.json$")
+_KB_EVIDENCE_SECRET_RULES = {"hardcoded-aws-secret", "js-hardcoded-third-party-key"}
 
 
 # =====================================================================
@@ -418,6 +420,7 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     seen: set[tuple[str, int, str]] = set()
     for hunk in hunks:
         is_tooling_file = hunk.file_path in _AI_REVIEW_TOOLING_FILES
+        is_kb_evidence_json = bool(_KB_EVIDENCE_JSON.match(hunk.file_path))
         for line_no, prefix, content in hunk.lines:
             if prefix != "+" or line_no == 0:
                 continue
@@ -425,6 +428,11 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                 if is_tooling_file and severity in {"high", "medium"}:
                     # 规则定义与自测样例会携带关键字触发高/中危误报；
                     # 自研 CI 文件与对应测试文件不做这些 severity 的行级阻断扫描。
+                    continue
+                if is_kb_evidence_json and rule_name not in _KB_EVIDENCE_SECRET_RULES:
+                    # KB fix/pattern JSON stores historical unified diffs as inert evidence.
+                    # Execution/control-flow regexes inside those JSON strings are not live
+                    # code, but secret scanners still apply because repository disclosure is real.
                     continue
                 if pattern.search(content):
                     key = (hunk.file_path, line_no, rule_name)

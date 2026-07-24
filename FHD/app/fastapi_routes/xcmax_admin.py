@@ -2292,7 +2292,10 @@ async def ops_founder_autonomy(request: Request):
         return gate
 
     from app.application.autonomy.approval_resume import list_pending_actions
-    from app.application.founder_autonomy_status import build_founder_autonomy_snapshot
+    from app.application.founder_autonomy_status import (
+        build_founder_autonomy_snapshot,
+        write_public_founder_autonomy_projection,
+    )
     from app.application.ops_closure_status import build_ops_closure_status
     from app.fastapi_routes.knowledge_v1 import _knowledge_runtime_snapshot
 
@@ -2375,6 +2378,13 @@ async def ops_founder_autonomy(request: Request):
             "loops": True,
         },
     )
+    publication = write_public_founder_autonomy_projection(snapshot)
+    if not publication.get("ok"):
+        logger.warning(
+            "founder autonomy public projection not fully published written=%s errors=%s",
+            publication.get("written"),
+            publication.get("errors"),
+        )
     return {"success": True, "data": snapshot}
 
 

@@ -1288,6 +1288,10 @@ class TestOpsFounderAutonomy:
                 "app.application.founder_autonomy_status.build_founder_autonomy_snapshot",
                 return_value=snapshot,
             ) as build_snapshot,
+            patch(
+                "app.application.founder_autonomy_status.write_public_founder_autonomy_projection",
+                return_value={"ok": True, "written": ["public.json"], "errors": []},
+            ) as publish_projection,
         ):
             resp = client.get("/api/xcmax/ops/founder-autonomy")
 
@@ -1306,6 +1310,7 @@ class TestOpsFounderAutonomy:
         }
         assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is True
         assert build_snapshot.call_args.kwargs["strategic_council"]["data"]["ready"] is True
+        publish_projection.assert_called_once_with(snapshot)
 
 
 class TestOpsStaffingOnboard:

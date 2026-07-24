@@ -23,6 +23,9 @@ def _clear_llm_env(monkeypatch) -> None:
         "DP_MODEL",
         "FHD_EMPLOYEE_LLM_PROVIDER",
         "FHD_EMPLOYEE_LLM_MODEL",
+        "FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER",
+        "FHD_EMPLOYEE_LLM_FALLBACK_MODEL",
+        "FHD_EMPLOYEE_LLM_FALLBACK_BASE_URL",
         "XCAGI_EMPLOYEE_LLM_MODEL",
     ):
         monkeypatch.delenv(key, raising=False)

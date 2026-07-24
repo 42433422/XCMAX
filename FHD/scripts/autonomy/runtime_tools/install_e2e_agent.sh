@@ -10,6 +10,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST_DIR="${E2E_AGENT_DEST_DIR:-/Users/a4243342/XCMAX-runtime/para-main-agent}"
 
+node --test "$ROOT/report_only_target_branch.test.mjs"
+
 for name in e2e-agent.mjs trae_failover.mjs; do
   src="$ROOT/$name"
   dest="$DEST_DIR/$name"

@@ -19,6 +19,15 @@ def test_normal_cvm_release_skips_optional_image_archive() -> None:
     assert 'deploy_emit push skipped "artifact=fhd-api-image.tar.gz reason=optional"' in script
 
 
+def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+
+    assert "rsync --archive --partial --append-verify --timeout=180" in script
+    assert 'transfer_mode="rsync"' in script
+    assert "partial retained" in script
+    assert "RSYNC_SHELL" in script
+
+
 def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> None:
     out_dir = tmp_path / "dist"
     out_dir.mkdir()
@@ -44,6 +53,7 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
     mock_bin.mkdir()
     for name, body in {
         "scp": '#!/usr/bin/env bash\nprintf "scp %s\\n" "$*" >> "$CALLS_LOG"\n',
+        "rsync": '#!/usr/bin/env bash\nprintf "rsync %s\\n" "$*" >> "$CALLS_LOG"\n',
         "ssh": (
             '#!/usr/bin/env bash\nprintf "ssh %s\\n" "$*" >> "$CALLS_LOG"\nprintf \'OK_MOVED\\n\'\n'
         ),
@@ -122,6 +132,9 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
     scp = mock_bin / "scp"
     scp.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     scp.chmod(0o755)
+    rsync = mock_bin / "rsync"
+    rsync.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    rsync.chmod(0o755)
     ssh = mock_bin / "ssh"
     ssh.write_text(
         "#!/usr/bin/env bash\n"
@@ -222,10 +235,8 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '1' || '0' }}"
         ) in workflow
-        assert (
-            "FHD_CVM_PUSH_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' "
-            "&& inputs.push_image_tar && '55m' || '15m' }}"
-        ) in workflow
+        assert 'FHD_CVM_PUSH_TIMEOUT: "55m"' in workflow
+        assert "timeout-minutes: 65" in workflow
 
 
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
@@ -269,3 +280,44 @@ def test_autonomy_deploy_has_no_human_environment_approval() -> None:
     assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
     assert "Resume approved autonomy action" not in deploy
     assert "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" in deploy
+
+
+def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
+    script = (FHD_ROOT / "scripts/deploy/force_self_maintenance_remote.sh").read_text(
+        encoding="utf-8"
+    )
+    workflow = (REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml").read_text(
+        encoding="utf-8"
+    )
+
+    inprocess_call = script.index("if run_inprocess_with_live_env; then")
+    http_call = script.index("if choose_base_via_http; then")
+    assert inprocess_call < http_call
+    assert 'REASON_FILE="${2:?reason_file}"' in script
+    assert 'TOKEN_FILE="${3:-}"' in script
+    assert 'rm -f -- "$REASON_FILE"' in script
+    assert 'rm -f -- "$TOKEN_FILE"' in script
+    assert script.count('status == "completed" or status.startswith("completed_")') == 2
+    assert "status not in fail_statuses" not in script
+    assert 'print("1" if success else "0")' in script
+    assert "raise SystemExit(0 if success else 3)" in script
+    assert "timeout-minutes: 120" in workflow
+    assert 'SSH_OPTS=(-i "$KEY_FILE"' in workflow
+    assert 'SCP_OPTS=(-i "$KEY_FILE"' in workflow
+    assert workflow.count("-o ServerAliveInterval=30") == 2
+    assert workflow.count("-o ServerAliveCountMax=120") == 2
+    assert workflow.count("-o TCPKeepAlive=yes") == 2
+    assert 'ssh "${SSH_OPTS[@]}"' in workflow
+    assert workflow.count('scp "${SCP_OPTS[@]}"') == 3
+
+
+def test_forced_self_maintenance_does_not_put_secret_or_reason_in_ssh_argv() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/fhd-force-self-maintenance.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'printf \'%s\' "$LOOP_REASON" > "$LOCAL_REASON_FILE"' in workflow
+    assert 'printf \'%s\' "$OPS_TOKEN" > "$LOCAL_TOKEN_FILE"' in workflow
+    assert "'${LOOP_REASON}'" not in workflow
+    assert "'${OPS_TOKEN}'" not in workflow
+    assert "'${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'" in workflow
