@@ -313,7 +313,7 @@ def test_dispatch_incident_team_writes_followups_to_payload(fresh_db, admin_user
         event_id = ev.id
 
     # 关键：让 execute_employee_task 返回 handler_failed + transient error
-    def fake_execute(employee_id, task, env, **kwargs):
+    def fake_execute(employee_id, task, env=None, user_id=0, **kwargs):
         if employee_id == "verify-1":
             return {
                 "status": "handler_failed",
