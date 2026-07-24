@@ -192,7 +192,7 @@ describe('coreWorkflowMonitor', () => {
     withStarRefresh(false, () => {
       const state = computeCoreWorkflowProgressState('receipt_confirm', [], {})
       expect(state.workflowProgressStarted).toBe(false)
-      expect(state.progressLabel).toContain('星标自动刷新')
+      expect(state.progressLabel).toContain('主动意识')
     })
   })
 
@@ -207,7 +207,7 @@ describe('coreWorkflowMonitor', () => {
     withStarRefresh(false, () => {
       const state = computeCoreWorkflowProgressState('label_print', [], {})
       expect(state.workflowProgressStarted).toBe(false)
-      expect(state.progressLabel).toContain('星标自动刷新')
+      expect(state.progressLabel).toContain('主动意识')
     })
   })
 
@@ -228,7 +228,7 @@ describe('coreWorkflowMonitor', () => {
     withStarRefresh(false, () => {
       const state = computeCoreWorkflowProgressState('wechat_msg', [], {})
       expect(state.workflowProgressStarted).toBe(false)
-      expect(state.progressLabel).toContain('星标自动刷新')
+      expect(state.progressLabel).toContain('主动意识')
     })
   })
 
@@ -312,7 +312,7 @@ describe('coreWorkflowMonitor', () => {
   it('computeCoreWorkflowCurrentHint receipt_confirm requires star refresh', () => {
     withStarRefresh(false, () => {
       const hint = computeCoreWorkflowCurrentHint('receipt_confirm', {})
-      expect(hint).toContain('星标聊天自动刷新')
+      expect(hint).toContain('主动意识启用')
     })
   })
 
