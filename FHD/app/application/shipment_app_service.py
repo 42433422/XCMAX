@@ -43,9 +43,16 @@ class ShipmentApplicationService:
         items_data: list[dict[str, Any]],
         contact_person: str = "",
         contact_phone: str = "",
+        external_order_number: str = "",
+        order_date: str = "",
+        source_fingerprint: str = "",
+        source_kind: str = "",
     ) -> dict[str, Any]:
         """
-        创建发货单用例
+        创建发货单用例。
+
+        external_order_number / order_date 写入 raw_text 元数据，便于 ETL 追溯；
+        系统主键仍由仓储分配（历史兼容）。
         """
         try:
             contact_info = ContactInfo(person=contact_person, phone=contact_phone)
@@ -62,6 +69,17 @@ class ShipmentApplicationService:
             if not shipment.is_valid():
                 return {"success": False, "message": "发货单无效：缺少购买单位或产品"}
 
+            meta_parts = ["source=shipment_excel_etl"]
+            if str(external_order_number or "").strip():
+                meta_parts.append(f"external_order_number={str(external_order_number).strip()}")
+            if str(order_date or "").strip():
+                meta_parts.append(f"order_date={str(order_date).strip()}")
+            if str(source_fingerprint or "").strip():
+                meta_parts.append(f"fingerprint={str(source_fingerprint).strip()}")
+            if str(source_kind or "").strip():
+                meta_parts.append(f"source_kind={str(source_kind).strip()}")
+            shipment.raw_text = "|".join(meta_parts)
+
             saved_shipment = self._repository.save(shipment)
 
             try:
@@ -71,10 +89,16 @@ class ShipmentApplicationService:
             except RECOVERABLE_ERRORS as hook_err:
                 logger.warning("Hook trigger failed: %s", hook_err)
 
+            payload = saved_shipment.to_dict()
+            if str(external_order_number or "").strip():
+                payload["external_order_number"] = str(external_order_number).strip()
+            if str(order_date or "").strip():
+                payload["order_date"] = str(order_date).strip()
+
             return {
                 "success": True,
                 "message": "发货单创建成功",
-                "shipment": saved_shipment.to_dict(),
+                "shipment": payload,
             }
 
         except RECOVERABLE_ERRORS as e:

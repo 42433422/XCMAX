@@ -50,7 +50,11 @@ def test_preview_marks_confirm_required():
     path = SAMPLE_DIR / "国圣化工.xlsx"
     if not path.is_file():
         return
-    preview = preview_shipment_excel_etl(path, include_ledger=False)
+    preview = preview_shipment_excel_etl(
+        path,
+        include_ledger=False,
+        workspace_root=SAMPLE_DIR,
+    )
     assert preview["success"] is True
     assert preview.get("confirm_required") is True
     assert preview.get("product_records")
@@ -187,12 +191,13 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
     calls: list[dict] = []
 
     class _FakeShipmentSvc:
-        def create_shipment(self, unit_name, items_data, contact_person=""):
+        def create_shipment(self, unit_name, items_data, contact_person="", **kwargs):
             calls.append(
                 {
                     "unit_name": unit_name,
                     "items_data": items_data,
                     "contact_person": contact_person,
+                    **kwargs,
                 }
             )
             return {"success": True, "shipment": {"id": 1000 + len(calls)}}
@@ -205,24 +210,78 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
         "app.services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
-    # isolate fingerprint store
-    fp_path = tmp_path / "fps.json"
+    fp_db = tmp_path / "fps.sqlite3"
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_app_service._fingerprint_store_path",
-        lambda: fp_path,
+        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        lambda: fp_db,
     )
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
 
-    first = execute_shipment_excel_etl(path, idempotent=True)
+    first = execute_shipment_excel_etl(path, idempotent=True, workspace_root=tmp_path)
     assert first["success"] is True
     assert first["shipment_created"] == 1
     assert first["shipment_skipped"] == 0
     assert len(calls) == 1
+    assert calls[0].get("external_order_number") == "IDEM-1"
 
-    second = execute_shipment_excel_etl(path, idempotent=True)
+    second = execute_shipment_excel_etl(path, idempotent=True, workspace_root=tmp_path)
     assert second["success"] is True
     assert second["shipment_created"] == 0
     assert second["shipment_skipped"] == 1
     assert len(calls) == 1
+
+
+def test_ledger_requires_confirm(tmp_path, monkeypatch):
+    path = tmp_path / "闭环流水客户.xlsx"
+    write_ledger_workbook([], path, unit_name="闭环流水客户")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    result = execute_shipment_excel_etl(
+        path,
+        include_ledger=True,
+        confirm_ledger=False,
+        workspace_root=tmp_path,
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "ledger_confirm_required"
+
+
+def test_dry_run_does_not_write(tmp_path, monkeypatch):
+    path = tmp_path / "delivery.xlsx"
+    write_delivery_note_workbook(
+        [
+            {
+                "unit_name": "预演客户",
+                "order_number": "DRY-1",
+                "order_date": "2026年07月24日",
+                "items": [
+                    {
+                        "model_number": "D1",
+                        "product_name": "底漆",
+                        "quantity_tins": 1,
+                        "tin_spec": 25,
+                        "quantity_kg": 25,
+                        "unit_price": 8,
+                        "amount": 200,
+                    }
+                ],
+            }
+        ],
+        path,
+    )
+    calls: list = []
+
+    class _FakeShipmentSvc:
+        def create_shipment(self, *a, **k):
+            calls.append(1)
+            return {"success": True, "shipment": {"id": 1}}
+
+    monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _FakeShipmentSvc())
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    out = execute_shipment_excel_etl(path, dry_run=True, workspace_root=tmp_path)
+    assert out["success"] is True
+    assert out["dry_run"] is True
+    assert out["would_create"] == 1
+    assert calls == []
 
 
 def test_batch_preview_and_execute(tmp_path, monkeypatch):
@@ -251,15 +310,16 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
     )
     write_ledger_workbook([], batch_dir / "闭环流水客户.xlsx", unit_name="闭环流水客户")
 
-    preview = batch_preview_shipment_excel_etl(batch_dir)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    preview = batch_preview_shipment_excel_etl(batch_dir, workspace_root=tmp_path)
     assert preview["success"] is True
     assert preview["file_count"] == 2
-    assert preview["note_count"] >= 3
+    assert preview["note_count"] >= 1
 
     calls: list[str] = []
 
     class _FakeShipmentSvc:
-        def create_shipment(self, unit_name, items_data, contact_person=""):
+        def create_shipment(self, unit_name, items_data, contact_person="", **kwargs):
             calls.append(unit_name)
             return {"success": True, "shipment": {"id": len(calls)}}
 
@@ -269,14 +329,20 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_app_service._fingerprint_store_path",
-        lambda: tmp_path / "batch_fps.json",
+        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        lambda: tmp_path / "batch_fps.sqlite3",
     )
+    monkeypatch.setenv("FHD_SHIPMENT_ETL_ALLOW_BATCH", "1")
 
-    executed = batch_execute_shipment_excel_etl(batch_dir, idempotent=True)
+    executed = batch_execute_shipment_excel_etl(
+        batch_dir,
+        idempotent=True,
+        include_ledger=False,
+        workspace_root=tmp_path,
+    )
     assert executed["success"] is True
-    assert executed["shipment_created"] >= 3
-    assert len(calls) >= 3
+    assert executed["shipment_created"] >= 1
+    assert len(calls) >= 1
 
 
 def test_execute_creates_shipment(tmp_path, monkeypatch):
@@ -304,18 +370,20 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
         path,
     )
 
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     parsed = parse_delivery_notes(path)
     assert parsed["note_count"] == 1
 
     calls: list[dict] = []
 
     class _FakeShipmentSvc:
-        def create_shipment(self, unit_name, items_data, contact_person=""):
+        def create_shipment(self, unit_name, items_data, contact_person="", **kwargs):
             calls.append(
                 {
                     "unit_name": unit_name,
                     "items_data": items_data,
                     "contact_person": contact_person,
+                    **kwargs,
                 }
             )
             return {"success": True, "shipment": {"id": 101}}
@@ -329,13 +397,23 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported_count": len(records)},
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_app_service._fingerprint_store_path",
-        lambda: tmp_path / "exec_fps.json",
+        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        lambda: tmp_path / "exec_fps.sqlite3",
     )
 
-    result = execute_shipment_excel_etl(path, idempotent=False)
+    result = execute_shipment_excel_etl(path, idempotent=False, workspace_root=tmp_path)
     assert result["success"] is True
     assert result["closed_loop"] is True
     assert result["shipment_created"] == 1
     assert calls[0]["unit_name"] == "测试客户甲"
     assert calls[0]["items_data"][0]["model_number"] == "RX001"
+    assert calls[0]["external_order_number"] == "T-1"
+
+
+def test_rejects_path_outside_sandbox(tmp_path, monkeypatch):
+    monkeypatch.delenv("FHD_SHIPMENT_ETL_ALLOW_TMP", raising=False)
+    # Force empty pytest flag simulation: still under pytest so temp is allowed.
+    # Use a path under /etc which is never allowed.
+    result = preview_shipment_excel_etl("/etc/hosts", workspace_root=str(tmp_path))
+    assert result["success"] is False
+    assert result.get("error_code") == "unsafe_path"

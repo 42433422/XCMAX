@@ -86,9 +86,22 @@ class ShipmentApplicationServiceEventPrimary:
         items_data: list[dict[str, Any]],
         contact_person: str = "",
         contact_phone: str = "",
+        external_order_number: str = "",
+        order_date: str = "",
+        source_fingerprint: str = "",
+        source_kind: str = "",
     ) -> dict[str, Any]:
         if not self._use_bus("shipment.create"):
-            return self._core.create_shipment(unit_name, items_data, contact_person, contact_phone)
+            return self._core.create_shipment(
+                unit_name,
+                items_data,
+                contact_person,
+                contact_phone,
+                external_order_number=external_order_number,
+                order_date=order_date,
+                source_fingerprint=source_fingerprint,
+                source_kind=source_kind,
+            )
         payload = {
             "shipment_id": f"PENDING-{uuid.uuid4().hex[:12]}",
             "unit_name": unit_name,
@@ -96,6 +109,10 @@ class ShipmentApplicationServiceEventPrimary:
             "contact_person": contact_person,
             "contact_phone": contact_phone,
             "deduct_inventory": True,
+            "external_order_number": external_order_number,
+            "order_date": order_date,
+            "source_fingerprint": source_fingerprint,
+            "source_kind": source_kind,
         }
         return cast(
             dict[str, Any], self._run_cmd(self._dispatch_command("shipment.created", payload))

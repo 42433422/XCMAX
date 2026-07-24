@@ -50,16 +50,22 @@
     {
       "step": "batch_execute_first",
       "success": true,
-      "shipment_created": 4,
+      "shipment_created": 2,
       "shipment_skipped": 0,
-      "fake_created": 4
+      "fake_created": 2
     },
     {
       "step": "batch_execute_second_idempotent",
       "success": true,
       "shipment_created": 0,
-      "shipment_skipped": 4,
-      "fake_created": 4
+      "shipment_skipped": 2,
+      "fake_created": 2
+    },
+    {
+      "step": "dry_run",
+      "success": true,
+      "dry_run": true,
+      "would_create": 0
     },
     {
       "step": "single_execute_after_batch",

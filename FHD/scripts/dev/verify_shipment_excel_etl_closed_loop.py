@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -133,18 +134,24 @@ def main() -> int:
         (batch_dir / delivery_path.name).write_bytes(delivery_path.read_bytes())
         (batch_dir / ledger_path.name).write_bytes(ledger_path.read_bytes())
 
-        import app.application.shipment_excel_etl_app_service as etl
+        import app.application.shipment_excel_etl_fingerprint_store as fp_store
 
-        etl._fingerprint_store_path = lambda: td_path / "fps.json"  # type: ignore
+        fp_store._db_path = lambda: td_path / "fps.sqlite3"  # type: ignore
 
         class _FakeShipmentSvc:
             def __init__(self):
                 self.created = []
 
-            def create_shipment(self, unit_name, items_data, contact_person=""):
+            def create_shipment(self, unit_name, items_data, contact_person="", **kwargs):
                 sid = len(self.created) + 1
                 self.created.append(
-                    {"id": sid, "unit_name": unit_name, "items": items_data, "contact": contact_person}
+                    {
+                        "id": sid,
+                        "unit_name": unit_name,
+                        "items": items_data,
+                        "contact": contact_person,
+                        **kwargs,
+                    }
                 )
                 return {"success": True, "shipment": {"id": sid}}
 
@@ -160,10 +167,34 @@ def main() -> int:
             "imported": len(records),
         }
 
-        preview = batch_preview_shipment_excel_etl(batch_dir)
-        first = batch_execute_shipment_excel_etl(batch_dir, idempotent=True)
-        second = batch_execute_shipment_excel_etl(batch_dir, idempotent=True)
-        single = execute_shipment_excel_etl(delivery_path, idempotent=True)
+        os.environ["WORKSPACE_ROOT"] = str(td_path)
+        os.environ["FHD_SHIPMENT_ETL_ALLOW_BATCH"] = "1"
+        os.environ["FHD_SHIPMENT_ETL_ALLOW_TMP"] = "1"
+
+        preview = batch_preview_shipment_excel_etl(batch_dir, workspace_root=td_path)
+        # 默认不入库流水；仅送货单
+        first = batch_execute_shipment_excel_etl(
+            batch_dir,
+            idempotent=True,
+            include_ledger=False,
+            workspace_root=td_path,
+        )
+        second = batch_execute_shipment_excel_etl(
+            batch_dir,
+            idempotent=True,
+            include_ledger=False,
+            workspace_root=td_path,
+        )
+        dry = execute_shipment_excel_etl(
+            delivery_path,
+            dry_run=True,
+            workspace_root=ROOT,
+        )
+        single = execute_shipment_excel_etl(
+            delivery_path,
+            idempotent=True,
+            workspace_root=ROOT,
+        )
 
         steps.append(
             {
@@ -193,6 +224,14 @@ def main() -> int:
         )
         steps.append(
             {
+                "step": "dry_run",
+                "success": dry.get("success"),
+                "dry_run": dry.get("dry_run"),
+                "would_create": dry.get("would_create"),
+            }
+        )
+        steps.append(
+            {
                 "step": "single_execute_after_batch",
                 "success": single.get("success"),
                 "shipment_created": single.get("shipment_created"),
@@ -207,10 +246,11 @@ def main() -> int:
             parsed.get("note_count", 0) >= 2,
             ledger_parsed.get("note_count", 0) >= 2,
             regen.get("fingerprint_match"),
-            preview.get("note_count", 0) >= 4,
-            first.get("shipment_created", 0) >= 4,
+            preview.get("note_count", 0) >= 2,
+            first.get("shipment_created", 0) >= 2,
             second.get("shipment_created", 0) == 0,
-            second.get("shipment_skipped", 0) >= 4,
+            second.get("shipment_skipped", 0) >= 2,
+            dry.get("dry_run") is True,
         ]
     )
     report = {
