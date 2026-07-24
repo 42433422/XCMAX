@@ -1723,11 +1723,17 @@ def _action_direct_python(
         if asyncio.iscoroutine(out):
             out = _run_coro_sync(out)
         if isinstance(out, dict):
-            return {
+            ok = bool(out.get("ok", out.get("success", True)))
+            detail = {
                 "handler": "direct_python",
-                "ok": bool(out.get("ok", out.get("success", True))),
+                "ok": ok,
                 "output": out,
             }
+            if not ok:
+                err = str(out.get("error") or out.get("error_code") or out.get("summary") or "").strip()
+                if err:
+                    detail["error"] = err[:1000]
+            return detail
         return {"handler": "direct_python", "ok": True, "output": out}
     except Exception as exc:  # noqa: BLE001
         logger.exception("direct_python handler failed employee_id=%s", employee_id)
@@ -1781,6 +1787,12 @@ def _filter_handlers_vibe_coding_maintainer(
 
         def para_delegate_ready_for_dispatch() -> bool:
             return False
+
+    # 目录包常落后于 SSOT：只剩 direct_python 时，事故 fix 会卡在模块不支持的 handler。
+    normalized = [str(h or "").strip() for h in handlers if str(h or "").strip()]
+    if normalized and set(normalized) <= {"direct_python"}:
+        expanded = ["vibe_edit", "agent", "llm_md", "direct_python"]
+        return _prefer_para_with_local_fallback(expanded, expanded)
 
     requested = str(inp.get("handler") or "").strip()
     if requested and requested in handlers:
@@ -2268,6 +2280,13 @@ def _handler_failure_detail(result: Dict[str, Any]) -> str:
             value = str(out.get(key) or "").strip()
             if value:
                 parts.append(f"{key}={value}")
+        nested = out.get("output") if isinstance(out.get("output"), dict) else {}
+        if nested:
+            for key in ("error_code", "error", "summary"):
+                value = str(nested.get(key) or "").strip()
+                if value:
+                    parts.append(f"{key}={value[:240]}")
+                    break
         return "handler failed: " + " ".join(parts) if parts else "handler returned ok=False"
     return "one or more handlers returned ok=False"
 
