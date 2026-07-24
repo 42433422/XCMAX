@@ -2160,6 +2160,13 @@ def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
 
 
 _INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
+
+
+def _normalize_para_merge_review_veto_code(veto_code: str) -> str:
+    from modstore_server.self_maintenance_policy import normalize_merge_review_veto_code
+
+    return normalize_merge_review_veto_code(veto_code)
 
 
 def _classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
@@ -2175,15 +2182,20 @@ def _classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
         right = right.strip().lower()
         if "/" in left and right:
             branch_hint = left
-            veto_code = right
+            veto_code = _normalize_para_merge_review_veto_code(right)
     if not veto_code:
         for marker in _INDETERMINATE_MERGE_REVIEW_CODES:
             if marker in lowered:
                 veto_code = marker
                 break
+        if not veto_code and _DIFF_TOO_LARGE_MERGE_REVIEW_CODE in lowered:
+            veto_code = _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    else:
+        veto_code = _normalize_para_merge_review_veto_code(veto_code)
     actionable_code_findings = bool(
         text
         and veto_code not in _INDETERMINATE_MERGE_REVIEW_CODES
+        and veto_code != _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
         and re.search(r"\bREJECT\s*:", text, re.IGNORECASE)
     )
     return {
@@ -2206,6 +2218,20 @@ def _indeterminate_merge_review_remediation_hint() -> str:
         "make indeterminate vetoes classifiable in loop memory (this branch).\n"
         "3) Keep the diff small and free of marker-only or status-only files so the "
         "independent merge reviewer can emit a strict verdict."
+    )
+
+
+def _diff_too_large_merge_review_remediation_hint() -> str:
+    return (
+        "\n\n=== DIFF TOO LARGE MERGE REVIEW VETO ===\n"
+        "The merge-worker reported diff-too-large: the PR git diff exceeded the Para "
+        "merge-review character budget (default 30000, same as merge_worker.mjs). "
+        "Remediation must shrink the branch before re-requesting merge:\n"
+        "1) Rebase onto the current integration base and drop unrelated merge commits "
+        "(for example generated workflow or desktop feed deltas not part of this fix).\n"
+        "2) Keep modstore_server production changes plus focused tests; avoid landing "
+        "bulky KB fix_diff blobs in the same PR when they push the diff over budget.\n"
+        "3) Confirm git diff character count stays under the budget before merge request."
     )
 
 
@@ -2486,11 +2512,13 @@ def _code_task_text(
         and resume_candidate.get("reason") == "resume_para_ai_review_rejection"
     ):
         feedback = str(resume_candidate.get("review_feedback") or "").strip()[:4000]
-        veto_code = str(
-            resume_candidate.get("review_veto_code")
-            or _classify_para_merge_review_detail(feedback).get("veto_code")
-            or ""
-        ).strip()
+        veto_code = _normalize_para_merge_review_veto_code(
+            str(
+                resume_candidate.get("review_veto_code")
+                or _classify_para_merge_review_detail(feedback).get("veto_code")
+                or ""
+            )
+        )
         external_review_remediation = (
             "\n\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\n"
             "The independent Para merge reviewer vetoed the previous candidate. "
@@ -2502,6 +2530,8 @@ def _code_task_text(
         )
         if veto_code in _INDETERMINATE_MERGE_REVIEW_CODES:
             external_review_remediation += _indeterminate_merge_review_remediation_hint()
+        elif veto_code == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE:
+            external_review_remediation += _diff_too_large_merge_review_remediation_hint()
     score_remediation = ""
     if isinstance(selected_remediation, dict):
         merge_result = (
@@ -4438,6 +4468,7 @@ def _assess_branch_auto_merge_policy(
             is_auxiliary_self_maintenance_evidence_path,
             is_marker_status_path,
             loop_memory_requires_executable_change,
+            para_merge_review_max_diff_chars,
         )
 
         requirement = loop_memory_requires_executable_change(memory)
@@ -4476,6 +4507,21 @@ def _assess_branch_auto_merge_policy(
                 "error": str(exc),
                 "ok": False,
                 "reason": "self_maintenance_policy_check_failed",
+            }
+        )
+
+    max_review_chars = para_merge_review_max_diff_chars()
+    diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
+    if diff_chars <= 0 and diff_excerpt:
+        diff_chars = len(diff_excerpt)
+    if diff_chars > max_review_chars:
+        return _decision(
+            {
+                "changed_files": normalized_files,
+                "git_diff_chars": diff_chars,
+                "max_diff_chars": max_review_chars,
+                "ok": False,
+                "reason": "diff_too_large_for_para_merge_review",
             }
         )
 
@@ -5423,7 +5469,7 @@ def _auto_merge_local_repo(
     diff_stats = _diff_numstat_for_branch(
         base_branch=base_branch, branch=branch, workspace=workspace
     )
-    diff_excerpt = _run_cmd(
+    full_branch_diff = _run_cmd(
         [
             "git",
             "-c",
@@ -5435,7 +5481,9 @@ def _auto_merge_local_repo(
         ],
         cwd=workspace,
         timeout=180,
-    )[:20000]
+    )
+    diff_stats["git_diff_chars"] = len(full_branch_diff)
+    diff_excerpt = full_branch_diff[:20000]
     kb_validation = _validate_kb_json_changes_for_auto_merge(
         branch=branch,
         files=files,

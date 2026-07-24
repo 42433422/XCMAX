@@ -58,3 +58,21 @@ def test_indeterminate_merge_review_veto_requires_executable_change():
 
     assert requirement["required"] is True
     assert "indeterminate merge-review" in requirement["reason"]
+
+
+def test_diff_too_large_merge_review_veto_requires_executable_change():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-ee8a21",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-ee8a21: diff-too-large:37810",
+            }
+        ]
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is True
+    assert "diff-too-large merge-review" in requirement["reason"]

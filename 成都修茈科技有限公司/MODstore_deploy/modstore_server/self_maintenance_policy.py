@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
 _INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
 _MODSTORE_SERVER_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 _STAT_FOOTER_RE = re.compile(
     r"^\s*\d+\s+files?\s+changed\b|^\s*\d+\s+insertions?\b|^\s*\d+\s+deletions?\b",
@@ -34,19 +35,57 @@ def _normalize_repo_path(path: str) -> str:
     return (path or "").replace("\\", "/").strip().strip('"').strip("'")
 
 
+def normalize_merge_review_veto_code(veto: str) -> str:
+    normalized = str(veto or "").strip().lower()
+    if normalized.startswith(_DIFF_TOO_LARGE_MERGE_REVIEW_CODE):
+        return _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    return normalized
+
+
+def _detail_merge_review_veto_code(detail: str) -> str:
+    text = str(detail or "").strip()
+    if not text:
+        return ""
+    if ":" in text:
+        _, _, right = text.partition(":")
+        right = right.strip().lower()
+        if right:
+            return normalize_merge_review_veto_code(right)
+    lowered = text.lower()
+    for marker in _INDETERMINATE_MERGE_REVIEW_CODES:
+        if marker in lowered:
+            return marker
+    if _DIFF_TOO_LARGE_MERGE_REVIEW_CODE in lowered:
+        return _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    return ""
+
+
 def _item_indeterminate_merge_review_veto(item: Dict[str, Any]) -> bool:
-    veto = str(item.get("review_veto_code") or "").strip().lower()
+    veto = normalize_merge_review_veto_code(str(item.get("review_veto_code") or ""))
     if veto in _INDETERMINATE_MERGE_REVIEW_CODES:
         return True
-    detail = str(item.get("review_feedback") or item.get("detail") or "").strip()
-    if not detail:
-        return False
-    if ":" in detail:
-        _, _, right = detail.partition(":")
-        if right.strip().lower() in _INDETERMINATE_MERGE_REVIEW_CODES:
-            return True
-    lowered = detail.lower()
-    return any(marker in lowered for marker in _INDETERMINATE_MERGE_REVIEW_CODES)
+    detail_code = _detail_merge_review_veto_code(
+        str(item.get("review_feedback") or item.get("detail") or "")
+    )
+    return detail_code in _INDETERMINATE_MERGE_REVIEW_CODES
+
+
+def _item_diff_too_large_merge_review_veto(item: Dict[str, Any]) -> bool:
+    veto = normalize_merge_review_veto_code(str(item.get("review_veto_code") or ""))
+    if veto == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE:
+        return True
+    detail_code = _detail_merge_review_veto_code(
+        str(item.get("review_feedback") or item.get("detail") or "")
+    )
+    return detail_code == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+
+
+def para_merge_review_max_diff_chars() -> int:
+    raw = os.environ.get("MODSTORE_PARA_MERGE_REVIEW_MAX_DIFF_CHARS")
+    try:
+        return int(raw) if raw else 30000
+    except ValueError:
+        return 30000
 
 
 def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
@@ -153,6 +192,18 @@ def loop_memory_requires_executable_change(
                         "modstore_server production change"
                     ),
                 }
+            if (
+                item.get("kind") == "automated_remediation"
+                and item.get("reason") == "para_ai_review_rejected"
+                and _item_diff_too_large_merge_review_veto(item)
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "diff-too-large merge-review veto requires focused "
+                        "modstore_server production change under Para diff budget"
+                    ),
+                }
             text = json.dumps(item, ensure_ascii=False).lower()
             if any(
                 marker in text
@@ -234,6 +285,8 @@ __all__ = [
     "is_marker_status_path",
     "load_loop_memory",
     "loop_memory_requires_executable_change",
+    "normalize_merge_review_veto_code",
+    "para_merge_review_max_diff_chars",
     "parse_diff_stat_paths",
     "should_block_marker_only_diff_summary",
 ]
