@@ -268,7 +268,7 @@ const councilRoles = computed(() => {
   const rows = [
     { key: 'persy', eyebrow: '拟人', name: 'Persy', responsibility: '从知识库提供事实、历史与长期记忆', expected: 'grounded' },
     { key: 'para', eyebrow: '排比', name: 'Para', responsibility: '把战略绑定到真实 Goal、Loop 与执行任务', expected: 'linked' },
-    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '质疑变更是否符合意图，未对齐就阻止部署', expected: 'aligned' },
+    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '意图不清先澄清（Boss 问答页），未对齐或未回答就阻止部署', expected: 'aligned' },
   ]
   return rows.map((row) => {
     const detail = roles[row.key] || {}

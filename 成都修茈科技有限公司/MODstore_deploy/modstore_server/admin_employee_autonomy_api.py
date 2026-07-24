@@ -591,18 +591,61 @@ def list_pending_human_questions(
     GET /api/admin/employee-autonomy/questions?include_history=false
     """
     from modstore_server.human_uncertainty_queue import list_pending_questions
+    from modstore_server.retort_clarification_gate import list_clarifications
 
     items = list_pending_questions(
         user_id=_admin_user.id,
         include_expired=include_history,
         limit=limit,
     )
-    return {"items": items, "count": len(items)}
+    # Merge open Retort clarifications that may not yet have a Phase-D mirror.
+    clar = list_clarifications(include_terminal=include_history, limit=limit)
+    seen_sessions = {
+        str((item.get("context") or {}).get("session_id") or "")
+        for item in items
+        if isinstance(item, dict)
+    }
+    for row in clar.get("items") or []:
+        if not isinstance(row, dict):
+            continue
+        sid = str(row.get("session_id") or "")
+        if not sid or sid in seen_sessions:
+            continue
+        if not include_history and row.get("status") != "open":
+            continue
+        questions = row.get("questions") if isinstance(row.get("questions"), list) else []
+        primary = ""
+        for q in questions:
+            if isinstance(q, dict) and str(q.get("question") or "").strip():
+                primary = str(q.get("question") or "").strip()
+                break
+        items.append(
+            {
+                "id": f"retort:{sid}",
+                "user_id": _admin_user.id,
+                "employee_id": "retort-clarification",
+                "task": str(row.get("source") or "retort_clarification"),
+                "question": primary or "Retort 需要确认战略意图",
+                "context": {
+                    "kind": "retort_clarification",
+                    "session_id": sid,
+                    "subject": row.get("subject"),
+                },
+                "status": "pending" if row.get("status") == "open" else str(row.get("status") or ""),
+                "answer": "",
+                "asked_at": row.get("created_at"),
+                "answered_at": row.get("answered_at"),
+                "expires_at": row.get("expires_at"),
+                "source": "retort_clarification_gate",
+            }
+        )
+        seen_sessions.add(sid)
+    return {"items": items[:limit], "count": min(len(items), limit)}
 
 
 @router.post("/questions/{question_id}/answer")
 def answer_human_question(
-    question_id: int,
+    question_id: str,
     body: Dict[str, Any] = Body(...),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -610,14 +653,41 @@ def answer_human_question(
 
     POST /api/admin/employee-autonomy/questions/{id}/answer
     body: {"answer": "去这么做..."}
+    ``question_id`` 可为数字，或合成 id ``retort:<session_id>``。
     """
     from modstore_server.human_uncertainty_queue import answer_pending_question
 
     answer = str((body or {}).get("answer") or "").strip()
     if not answer:
         raise HTTPException(400, "answer is required")
+
+    raw_id = str(question_id or "").strip()
+    if raw_id.startswith("retort:"):
+        from modstore_server.retort_clarification_gate import answer_clarification
+
+        session_id = raw_id.split(":", 1)[1].strip()
+        out = answer_clarification(
+            session_id,
+            answers=answer,
+            answered_by=f"user:{_admin_user.id}",
+        )
+        if not out.get("ok"):
+            raise HTTPException(409, str(out.get("error") or "answer failed"))
+        return {
+            "ok": True,
+            "question_id": raw_id,
+            "employee_id": "retort-clarification",
+            "status": "answered",
+            "retort_clarification": out,
+        }
+
+    try:
+        numeric_id = int(raw_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "invalid question_id") from exc
+
     out = answer_pending_question(
-        question_id=question_id,
+        question_id=numeric_id,
         answer=answer,
         answered_by_user_id=_admin_user.id,
     )

@@ -53,10 +53,16 @@
 
     <section v-show="tab === 'questions'" class="card">
       <div v-for="q in questions" :key="String(q.id)" class="qa-item">
-        <div class="qa-q">{{ q.question || q.content || q.title }}</div>
-        <div class="qa-meta">{{ q.employee_id || '—' }} · {{ q.created_at || '' }}</div>
+        <div class="qa-q">
+          <span v-if="isRetortQuestion(q)" class="retort-tag">Retort 澄清</span>
+          {{ q.question || q.content || q.title }}
+        </div>
+        <div class="qa-meta">
+          {{ q.employee_id || '—' }} · {{ q.asked_at || q.created_at || '' }}
+          <template v-if="q.expires_at"> · 截止 {{ q.expires_at }}</template>
+        </div>
         <div class="qa-answer">
-          <input v-model="answers[String(q.id)]" type="text" placeholder="输入答复" />
+          <input v-model="answers[String(q.id)]" type="text" placeholder="输入答复（确认意图/风险边界）" />
           <button type="button" class="btn btn-primary" @click="answerOne(q.id)">提交</button>
         </div>
       </div>
@@ -113,6 +119,12 @@ function formatRate(value: unknown) {
   const n = Number(value)
   if (Number.isNaN(n)) return String(value)
   return n <= 1 ? `${(n * 100).toFixed(1)}%` : `${n.toFixed(1)}%`
+}
+
+function isRetortQuestion(q: Row) {
+  const employee = String(q.employee_id || '')
+  const kind = String((q.context && q.context.kind) || q.source || '')
+  return employee === 'retort-clarification' || kind.includes('retort_clarification') || String(q.id || '').startsWith('retort:')
 }
 
 function asList(payload: unknown, keys: string[] = ['items', 'suggestions', 'questions', 'rows', 'data']): Row[] {
@@ -266,9 +278,30 @@ onMounted(() => {
 .link.danger { color: #cf1322; }
 .qa-item { border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
 .qa-q { font-weight: 600; color: #172033; }
+.retort-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6f4ff;
+  color: #0958d9;
+  font-size: 11px;
+  font-weight: 700;
+}
 .qa-meta { color: #94a3b8; font-size: 12px; margin: 4px 0 8px; }
 .qa-answer { display: flex; gap: 8px; }
 .qa-answer input {
   flex: 1; border: 1px solid #d0d7e2; border-radius: 8px; padding: 8px 10px;
+}
+.retort-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff7e6;
+  color: #d46b08;
+  border: 1px solid #ffd591;
+  font-size: 11px;
+  font-weight: 700;
 }
 </style>

@@ -2706,6 +2706,115 @@ def _code_task_text(
     )
 
 
+def _evaluate_retort_clarification_before_review(
+    *,
+    run_id: str,
+    branch: Optional[str],
+    para_task_id: str,
+    memory: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Force self-maintenance review through Retort clarification gate.
+
+    Returns ``{"blocked": True, "reason": ...}`` when human clarification is still
+    required; otherwise ``{"blocked": False, ...}``. Failures in the gate itself
+    are non-blocking so review can continue with evidence of the gate error.
+    """
+
+    enabled = (
+        os.environ.get("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+        .strip()
+        .lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if not enabled:
+        return {"blocked": False, "reason": "disabled"}
+
+    try:
+        from modstore_server.retort_clarification_gate import (
+            evaluate_retort_clarification_gate,
+            gate_enabled,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"blocked": False, "reason": f"gate_import_failed:{type(exc).__name__}"}
+
+    if not gate_enabled():
+        return {"blocked": False, "reason": "gate_disabled"}
+
+    changed_files: List[str] = []
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    target = str(branch or "").strip()
+    if repo_url and base_branch and target:
+        try:
+            workspace = Path(
+                os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime"
+            ).expanduser() / "retort-review-gate" / str(run_id or "run")
+            changed_files = _changed_files_for_branch(
+                repo_url=repo_url,
+                base_branch=base_branch,
+                branch=target,
+                workspace=workspace,
+            )
+        except Exception as exc:  # noqa: BLE001 - fall back to memory hints
+            logger.warning(
+                "retort clarification branch diff failed run_id=%s err=%s",
+                run_id,
+                type(exc).__name__,
+            )
+            changed_files = []
+
+    if not changed_files:
+        mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
+        if isinstance(mem_files, list):
+            changed_files = [str(x).strip() for x in mem_files if str(x).strip()][:80]
+
+    intent_bits = [
+        f"self-maintenance review run {run_id}",
+        f"branch {target}" if target else "",
+        str((memory or {}).get("last_goal") or "").strip(),
+        str((memory or {}).get("summary") or "").strip(),
+    ]
+    strategy_intent = " | ".join(bit for bit in intent_bits if bit)[:4000]
+    try:
+        gate = evaluate_retort_clarification_gate(
+            strategy_intent=strategy_intent,
+            changed_files=changed_files,
+            proposal_id=f"self-maintenance:{run_id}",
+            run_id=str(run_id or ""),
+            package_id="change-request-auditor",
+            auto_open=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"blocked": False, "reason": f"gate_eval_failed:{type(exc).__name__}"}
+
+    blockers = list(gate.get("blockers") or [])
+    pending = "retort_clarification_pending" in blockers
+    expired = "retort_clarification_expired" in blockers
+    cancelled = "retort_clarification_cancelled" in blockers
+    if pending or expired or cancelled:
+        reason = (
+            "retort_clarification_pending"
+            if pending
+            else ("retort_clarification_expired" if expired else "retort_clarification_cancelled")
+        )
+        return {
+            "blocked": True,
+            "reason": reason,
+            "blockers": blockers,
+            "clarification": gate.get("clarification"),
+            "changed_file_count": len(changed_files),
+            "para_task_id": para_task_id,
+        }
+    return {
+        "blocked": False,
+        "reason": "aligned_or_not_needed",
+        "blockers": blockers,
+        "clarification": gate.get("clarification"),
+        "changed_file_count": len(changed_files),
+        "aligned": bool(gate.get("aligned")),
+    }
+
+
 def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
@@ -6607,6 +6716,55 @@ def _run_self_maintenance_loop_unlocked(
             remediation_base_branch = (
                 str(extra.get("branch") or "").strip() if step_name == "code" else ""
             )
+
+            if step_name == "review":
+                retort_gate = _evaluate_retort_clarification_before_review(
+                    run_id=run_id,
+                    branch=code_branch,
+                    para_task_id=str(para_task_id or ""),
+                    memory=loop_memory,
+                )
+                if retort_gate.get("blocked"):
+                    step_record = {
+                        "employee_id": employee_id,
+                        "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
+                        "ok": False,
+                        "para": {},
+                        "phase": "step",
+                        "report_excerpt": "",
+                        "run_id": run_id,
+                        "status": "failed",
+                        "step": step_name,
+                        "timestamp": _iso(_utc_now()),
+                        "retort_clarification": retort_gate,
+                    }
+                    steps.append(step_record)
+                    _append_ledger(step_record)
+                    final = {
+                        "branch": code_branch,
+                        "completed_at": _iso(_utc_now()),
+                        "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
+                        "failed_step": step_name,
+                        "para_task_id": para_task_id,
+                        "phase": "complete",
+                        "run_id": run_id,
+                        "started_at": _iso(started_at),
+                        "status": "failed",
+                        "steps": steps,
+                        "triggered_by": triggered_by,
+                        "retort_clarification": retort_gate,
+                    }
+                    final["policy_decision"] = _decide_post_loop_policy(
+                        branch=code_branch,
+                        gate=gate,
+                        para_task_id=para_task_id,
+                        run_id=run_id,
+                        status="failed",
+                        steps=steps,
+                    )
+                    _append_ledger(final)
+                    _update_loop_memory(final, gate)
+                    return final
 
             (
                 result,

@@ -49,3 +49,33 @@ def test_enrich_strategy_intent_merges_answers() -> None:
     )
     assert "发布战略三席" in enriched
     assert "strategic_council" in enriched
+
+
+def test_sensitive_path_and_high_risk_generate_extra_questions() -> None:
+    questions = build_clarification_questions(
+        {"status": "aligned", "missing_keywords": []},
+        strategy_intent="完成支付网关密钥轮换与回滚演练",
+        changed_files=[
+            {
+                "path": "app/payment/wallet.py",
+                "hunks": [
+                    {
+                        "changes": [
+                            {"type": "add", "text": "api_key = 'sk-test-should-redact'"},
+                        ]
+                    }
+                ],
+            }
+        ],
+        risk_level="high",
+        max_questions=5,
+    )
+    ids = {q["id"] for q in questions}
+    assert "sensitive_path_confirm" in ids
+    assert "secret_like_addition" in ids or "risk_acceptance" in ids
+    assert clarification_needed(
+        {"status": "aligned"},
+        "完成支付网关密钥轮换与回滚演练",
+        changed_files=["app/payment/wallet.py"],
+        risk_level="high",
+    )

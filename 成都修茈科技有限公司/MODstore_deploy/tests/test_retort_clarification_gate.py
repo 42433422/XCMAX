@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -19,6 +20,11 @@ def _clarification_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK", "fail_closed")
     monkeypatch.setenv("MODSTORE_STRATEGIC_COUNCIL_LEDGER", str(tmp_path / "council.jsonl"))
     monkeypatch.setenv("MODSTORE_AUTONOMOUS_UNCERTAINTY_QUEUE_ENABLED", "0")
+    monkeypatch.setattr(
+        gate,
+        "_mirror_to_boss_inbox",
+        lambda *_a, **_k: {"mirrored": False, "reason": "test_skip_db"},
+    )
 
 
 def test_open_answer_resolve_happy_path() -> None:
@@ -272,3 +278,50 @@ def test_terminal_prune_keeps_backlog_bounded(monkeypatch) -> None:
     listed = gate.list_clarifications(include_terminal=True, limit=50)
     assert listed["open_count"] == 0
     assert listed["count"] >= 1
+
+
+def test_boss_inbox_context_bridge_answers_retort_session() -> None:
+    """Boss inbox answers with kind=retort_clarification enrich the same session."""
+
+    opened = gate.open_clarification_session(
+        strategy_intent="密码重置",
+        changed_files=["docs/readme.md"],
+        proposal_id="boss-bridge",
+        run_id="boss-run",
+        package_id="pkg",
+        force=True,
+    )
+    sid = opened["session"]["session_id"]
+    # Same bridge payload used by human_uncertainty_queue.answer_pending_question
+    out = gate.answer_clarification(
+        sid,
+        answers="确认只改文档 unrelated readme",
+        answered_by="user:1",
+    )
+    assert out["ok"] is True
+    row = gate.get_clarification(sid)
+    assert row is not None
+    assert row["status"] == "answered"
+    assert "unrelated" in str(row.get("enriched_strategy_intent") or "")
+
+
+def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path) -> None:
+    from modstore_server import self_maintenance_loop_runner as loop
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+    monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_ENABLED", "1")
+    monkeypatch.setenv(
+        "MODSTORE_RETORT_CLARIFICATION_LEDGER", str(tmp_path / "clar.json")
+    )
+    monkeypatch.setattr(loop, "_changed_files_for_branch", lambda **_k: ["docs/readme.md"])
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/fake.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+
+    result = loop._evaluate_retort_clarification_before_review(
+        run_id="run-sm-1",
+        branch="feature/x",
+        para_task_id="para-1",
+        memory={"summary": "Implement password reset token expiry for auth accounts"},
+    )
+    assert result["blocked"] is True
+    assert result["reason"] == "retort_clarification_pending"
