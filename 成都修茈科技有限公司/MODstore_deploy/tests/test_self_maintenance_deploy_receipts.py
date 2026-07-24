@@ -114,7 +114,10 @@ def test_deployment_receipt_callback_routes_verified_event_to_employee_metric(
     )
     monkeypatch.setattr(self_maintenance_loop_runner, "_read_ledger", lambda limit=5000: [])
 
+    callback_kwargs: dict = {}
+
     def fake_record_completed_deployment_receipt(**kwargs):
+        callback_kwargs.update(kwargs)
         event = {
             "event": "post_deploy_verified",
             "environment": "production",
@@ -141,6 +144,9 @@ def test_deployment_receipt_callback_routes_verified_event_to_employee_metric(
                 "workflow_run_id": "98765",
                 "workflow_status": "completed",
                 "workflow_conclusion": "success",
+                "attested_branch": "devfleet/run-receipt",
+                "attested_branch_head_sha": "c" * 40,
+                "attested_pr_number": "559",
             },
             authorization=None,
             x_autonomy_token="receipt-token",
@@ -150,6 +156,9 @@ def test_deployment_receipt_callback_routes_verified_event_to_employee_metric(
     assert result["recorded"] is True
     assert len(events) == 1
     assert metric_events == [events[0]]
+    assert callback_kwargs["attested_branch"] == "devfleet/run-receipt"
+    assert callback_kwargs["attested_branch_head_sha"] == "c" * 40
+    assert callback_kwargs["attested_pr_number"] == "559"
 
 
 @dataclass
@@ -331,6 +340,38 @@ def test_unrelated_production_deploy_does_not_claim_a_pending_loop() -> None:
             [_pending("run-unrelated", "c" * 40)],
             merge_sha=MERGE_SHA,
             is_ancestor=lambda _ancestor, _descendant: False,
+        )
+
+
+def test_squash_merge_uses_exact_github_pr_attestation_for_requested_run() -> None:
+    pending = _pending("run-squash", "")
+    attested_head = "d" * 40
+
+    resolved = resolve_pending_merge_request(
+        [pending],
+        merge_sha=MERGE_SHA,
+        is_ancestor=lambda _ancestor, _descendant: False,
+        requested_run_id="run-squash",
+        attested_branch="devfleet/run-squash",
+        attested_branch_head_sha=attested_head,
+    )
+
+    assert resolved["run_id"] == "run-squash"
+    assert resolved["branch_head_sha"] == attested_head
+    assert resolved["head_verification"] == "github_pr_attestation"
+
+
+def test_squash_attestation_fails_closed_without_exact_run_and_branch() -> None:
+    pending = _pending("run-squash", "")
+
+    with pytest.raises(DeploymentReceiptError, match="pending_merge_not_found"):
+        resolve_pending_merge_request(
+            [pending],
+            merge_sha=MERGE_SHA,
+            is_ancestor=lambda _ancestor, _descendant: False,
+            requested_run_id="run-other",
+            attested_branch="devfleet/run-squash",
+            attested_branch_head_sha="d" * 40,
         )
 
 
