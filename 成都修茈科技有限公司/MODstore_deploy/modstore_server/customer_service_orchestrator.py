@@ -239,6 +239,61 @@ def handle_customer_message(
     db.add(user_msg)
     db.flush()
 
+    # 最高优先级：明确不能做的事（提权/要管理员等）——只拒答，不建可执行动作
+    if _looks_like_forbidden_privilege_request(text):
+        reply = _refuse_forbidden_privilege_reply(text)
+        assistant_msg = CustomerServiceMessage(
+            session_id=session.id,
+            ticket_id=None,
+            user_id=user.id,
+            role="assistant",
+            content=reply,
+            payload_json=json_dumps(
+                {
+                    "ticket": None,
+                    "decision": None,
+                    "actions": [],
+                    "cards": [],
+                    "intent": {
+                        "intent": "forbidden_request",
+                        "need_ticket": False,
+                        "confidence": 1.0,
+                        "source": "safety",
+                        "reason": "privilege_escalation_refused",
+                    },
+                    "safety": {"refused": True, "kind": "privilege_escalation"},
+                }
+            ),
+        )
+        db.add(assistant_msg)
+        audit(
+            db,
+            event_type="forbidden_request_refused",
+            session_id=session.id,
+            actor=user,
+            detail={"kind": "privilege_escalation", "text": text[:500]},
+        )
+        return {
+            "ok": True,
+            "session": session_payload(session),
+            "ticket": None,
+            "message": {
+                "role": "assistant",
+                "content": reply,
+                "payload": json_loads(assistant_msg.payload_json, {}),
+            },
+            "decision": None,
+            "actions": [],
+            "cards": [],
+            "intent": {
+                "intent": "forbidden_request",
+                "need_ticket": False,
+                "confidence": 1.0,
+                "source": "safety",
+                "reason": "privilege_escalation_refused",
+            },
+        }
+
     extracted = extract_fields(text, context)
     if image_data_url:
         extracted["has_image"] = True
@@ -262,6 +317,66 @@ def handle_customer_message(
             # 强制写入，避免空 reason / 升级话术占位
             extracted["reason"] = prior_issue[:500]
             extracted["_issue_summary"] = _summarize_user_issue(prior_issue)
+
+    # 「提交工单」若承接的是提权诉求：同样拒答，绝不建可执行工单
+    safety_text = prior_issue or classify_text or text
+    if _looks_like_forbidden_privilege_request(safety_text):
+        reply = _refuse_forbidden_privilege_reply(safety_text)
+        assistant_msg = CustomerServiceMessage(
+            session_id=session.id,
+            ticket_id=None,
+            user_id=user.id,
+            role="assistant",
+            content=reply,
+            payload_json=json_dumps(
+                {
+                    "ticket": None,
+                    "decision": None,
+                    "actions": [],
+                    "cards": [],
+                    "intent": {
+                        "intent": "forbidden_request",
+                        "need_ticket": False,
+                        "confidence": 1.0,
+                        "source": "safety",
+                        "reason": "privilege_escalation_refused",
+                    },
+                    "safety": {"refused": True, "kind": "privilege_escalation"},
+                }
+            ),
+        )
+        db.add(assistant_msg)
+        audit(
+            db,
+            event_type="forbidden_request_refused",
+            session_id=session.id,
+            actor=user,
+            detail={
+                "kind": "privilege_escalation",
+                "text": text[:200],
+                "prior_issue": (prior_issue or "")[:300],
+            },
+        )
+        return {
+            "ok": True,
+            "session": session_payload(session),
+            "ticket": None,
+            "message": {
+                "role": "assistant",
+                "content": reply,
+                "payload": json_loads(assistant_msg.payload_json, {}),
+            },
+            "decision": None,
+            "actions": [],
+            "cards": [],
+            "intent": {
+                "intent": "forbidden_request",
+                "need_ticket": False,
+                "confidence": 1.0,
+                "source": "safety",
+                "reason": "privilege_escalation_refused",
+            },
+        }
 
     classified = classify_customer_intent(classify_text, extracted, context=context)
     intent = str(classified.get("intent") or "general")
@@ -1309,10 +1424,54 @@ def _summarize_user_issue(user_text: str, *, max_len: int = 48) -> str:
     return t
 
 
+def _looks_like_forbidden_privilege_request(user_text: str) -> bool:
+    """用户是否在索要管理员/提权等客服绝不能代办的权限。"""
+    t = re.sub(r"\s+", "", (user_text or "").strip().lower())
+    if len(t) < 4:
+        return False
+    marks = (
+        "管理员权限",
+        "给我管理员",
+        "开通管理员",
+        "设为管理员",
+        "设置管理员",
+        "升级管理员",
+        "变成管理员",
+        "改成管理员",
+        "超级管理员",
+        "要admin",
+        "给我admin",
+        "开通admin",
+        "admin权限",
+        "root权限",
+        "提权",
+        "给我权限后台",
+        "开放后台权限",
+        "给我后台权限",
+        "is_admin",
+        "升为管理员",
+    )
+    return any(x in t for x in marks)
+
+
+def _refuse_forbidden_privilege_reply(user_text: str) -> str:
+    """明确拒答：不承诺、不建提权动作、不派员工改权限。"""
+    _ = user_text
+    return (
+        "我是小C。这个请求我不能办理："
+        "客服与 AI 员工都无法为账号开通管理员或其它提权。"
+        "管理员权限只能由平台运营在后台按合规流程配置。"
+        "如果你遇到的是具体功能问题（比如页面打不开、显示异常），"
+        "直接说现象和页面，我可以帮你登记排查；但不会、也不能改你的账号权限。"
+    )
+
+
 def _looks_like_product_issue(user_text: str) -> bool:
     """缺陷/界面故障语义：LLM 主判；此处仅作不可用/误判 general 时的兜底。"""
     t = (user_text or "").strip()
     if len(t) < 4 or is_greeting(t):
+        return False
+    if _looks_like_forbidden_privilege_request(t):
         return False
     # 不用 _is_escalate_only（其定义在后）；纯升级短句直接排除
     if re.fullmatch(
@@ -1337,6 +1496,12 @@ def _looks_like_product_issue(user_text: str) -> bool:
         "闪退",
         "卡住",
         "加载失败",
+        "加载不出来",
+        "加载不出",
+        "打不开网页",
+        "打不开网站",
+        "首页",
+        "官网",
         "没反应",
         "用不了",
         "点不了",
