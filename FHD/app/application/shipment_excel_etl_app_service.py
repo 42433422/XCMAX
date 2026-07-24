@@ -440,10 +440,16 @@ def parse_delivery_notes(
     file_path: str | Path,
     *,
     min_score: int = 60,
-    include_ledger: bool = True,
+    include_ledger: bool | str = "auto",
     unit_name_hint: str | None = None,
 ) -> dict[str, Any]:
-    """解析工作簿中的送货单表；可选同时解析出货流水并按单号分组。"""
+    """解析工作簿中的送货单表；可选同时解析出货流水并按单号分组。
+
+    include_ledger:
+    - True: 送货单 + 流水都收
+    - False: 只收送货单
+    - \"auto\": 有送货单时忽略同簿流水（避免历史出货记录误入库）；无送货单时再解析流水
+    """
     path = Path(file_path).expanduser().resolve()
     if not path.is_file():
         return {"success": False, "message": f"文件不存在: {path}", "notes": []}
@@ -459,7 +465,8 @@ def parse_delivery_notes(
         return {"success": False, "message": f"无法读取 Excel: {exc}", "notes": []}
 
     fallback_unit = (unit_name_hint or path.stem).strip() or path.stem
-    notes: list[dict[str, Any]] = []
+    delivery_notes: list[dict[str, Any]] = []
+    ledger_notes: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     try:
         for ws in wb.worksheets:
@@ -467,25 +474,54 @@ def parse_delivery_notes(
             if d_score >= min_score:
                 note = _parse_delivery_sheet(ws, fallback_unit=fallback_unit)
                 if note:
-                    notes.append(note)
+                    delivery_notes.append(note)
                 else:
                     skipped.append({"sheet": ws.title, "score": d_score, "reason": "delivery_parse_failed"})
                 continue
 
-            if include_ledger:
-                l_score = _score_ledger_sheet(ws)
-                if l_score >= 50:
-                    ledger_notes = _parse_ledger_sheet(ws, fallback_unit=fallback_unit)
-                    if ledger_notes:
-                        notes.extend(ledger_notes)
-                    else:
-                        skipped.append({"sheet": ws.title, "score": l_score, "reason": "ledger_empty"})
-                    continue
-                skipped.append({"sheet": ws.title, "score": max(d_score, l_score), "reason": "not_delivery_or_ledger"})
+            l_score = _score_ledger_sheet(ws)
+            if l_score >= 50:
+                parsed_ledger = _parse_ledger_sheet(ws, fallback_unit=fallback_unit)
+                if parsed_ledger:
+                    ledger_notes.extend(parsed_ledger)
+                else:
+                    skipped.append({"sheet": ws.title, "score": l_score, "reason": "ledger_empty"})
             else:
-                skipped.append({"sheet": ws.title, "score": d_score, "reason": "not_delivery_note"})
+                skipped.append({"sheet": ws.title, "score": max(d_score, l_score), "reason": "not_delivery_or_ledger"})
     finally:
         wb.close()
+
+    mode = include_ledger
+    if isinstance(mode, str):
+        mode_l = mode.strip().lower()
+        if mode_l in {"1", "true", "yes", "on"}:
+            mode = True
+        elif mode_l in {"0", "false", "no", "off"}:
+            mode = False
+        else:
+            mode = "auto"
+
+    if mode is True:
+        notes = delivery_notes + ledger_notes
+    elif mode is False:
+        notes = delivery_notes
+        for n in ledger_notes:
+            skipped.append({"sheet": n.get("sheet"), "score": n.get("score"), "reason": "ledger_disabled"})
+    else:
+        # auto
+        if delivery_notes:
+            notes = delivery_notes
+            for n in ledger_notes:
+                skipped.append(
+                    {
+                        "sheet": n.get("sheet"),
+                        "score": n.get("score"),
+                        "reason": "ledger_skipped_auto_has_delivery",
+                        "ledger_groups": 1,
+                    }
+                )
+        else:
+            notes = ledger_notes
 
     delivery_count = sum(1 for n in notes if n.get("source_kind") == "delivery_note")
     ledger_count = sum(1 for n in notes if n.get("source_kind") == "shipment_ledger")
@@ -496,6 +532,8 @@ def parse_delivery_notes(
         "note_count": len(notes),
         "delivery_note_count": delivery_count,
         "ledger_note_count": ledger_count,
+        "ledger_available_count": len(ledger_notes),
+        "include_ledger_mode": mode if mode in (True, False) else "auto",
         "notes": notes,
         "skipped_sheets": skipped,
         "message": (
@@ -509,7 +547,7 @@ def parse_delivery_notes(
 def preview_shipment_excel_etl(
     file_path: str | Path,
     *,
-    include_ledger: bool = True,
+    include_ledger: bool | str = "auto",
     unit_name_hint: str | None = None,
 ) -> dict[str, Any]:
     parsed = parse_delivery_notes(
@@ -566,7 +604,7 @@ def execute_shipment_excel_etl(
     import_shipments: bool = True,
     notes: list[dict[str, Any]] | None = None,
     idempotent: bool = True,
-    include_ledger: bool = True,
+    include_ledger: bool | str = "auto",
     unit_name_hint: str | None = None,
 ) -> dict[str, Any]:
     """执行闭环：客户+产品+发货单（可幂等）。"""
@@ -858,7 +896,7 @@ def regenerate_delivery_notes_from_file(
     file_path: str | Path,
     output_path: str | Path,
     *,
-    include_ledger: bool = True,
+    include_ledger: bool | str = "auto",
 ) -> dict[str, Any]:
     """解析 → 按标准送货单版式再出单（模板反推闭环）。"""
     parsed = parse_delivery_notes(file_path, include_ledger=include_ledger)
@@ -889,7 +927,7 @@ def regenerate_delivery_notes_from_file(
 def batch_preview_shipment_excel_etl(
     directory: str | Path,
     *,
-    include_ledger: bool = True,
+    include_ledger: bool | str = "auto",
     pattern: str = "*.xlsx",
 ) -> dict[str, Any]:
     root = Path(directory).expanduser().resolve()
@@ -932,7 +970,7 @@ def batch_preview_shipment_excel_etl(
 def batch_execute_shipment_excel_etl(
     directory: str | Path,
     *,
-    include_ledger: bool = True,
+    include_ledger: bool | str = "auto",
     pattern: str = "*.xlsx",
     idempotent: bool = True,
     import_products: bool = True,
