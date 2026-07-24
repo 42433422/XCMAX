@@ -609,7 +609,11 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                     board["calendar_day"] = _calendar_today()
                 except Exception:  # noqa: BLE001
                     board["calendar_day"] = cal
-            if board.get("day") and board.get("calendar_day") and board["day"] != board["calendar_day"]:
+            if (
+                board.get("day")
+                and board.get("calendar_day")
+                and board["day"] != board["calendar_day"]
+            ):
                 board["day_stale"] = True
             logger.info(
                 "company_hall: DB action board empty; using published download-action-board.json day=%s stale=%s",

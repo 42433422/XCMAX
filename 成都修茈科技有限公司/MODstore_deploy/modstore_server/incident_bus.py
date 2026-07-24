@@ -9,7 +9,7 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
@@ -253,7 +253,7 @@ def _admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
         u = (
-            session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
+            session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         )  # noqa: E712
         if u:
             return int(u.id)
@@ -392,9 +392,9 @@ def _dispatch_intake_routing_plan(
                 source=source,
                 incident=incident_payload,
             )
-            owner_brief = (
-                f"{brief} | route={owner} request_id={row.get('request_id') or ''}"
-            )[:500]
+            owner_brief = (f"{brief} | route={owner} request_id={row.get('request_id') or ''}")[
+                :500
+            ]
             execute_employee_task(
                 owner,
                 owner_brief,
@@ -414,9 +414,7 @@ def _dispatch_intake_routing_plan(
                 row.get("request_id"),
             )
         except Exception:  # noqa: BLE001
-            logger.exception(
-                "incident_bus: intake routing_plan dispatch failed owner=%s", owner
-            )
+            logger.exception("incident_bus: intake routing_plan dispatch failed owner=%s", owner)
     return extra
 
 

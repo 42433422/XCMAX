@@ -75,7 +75,9 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     uploader = (REPO_ROOT / "scripts" / "deploy" / "upload-desktop-skus.sh").read_text(
         encoding="utf-8"
     )
-    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(encoding="utf-8")
+    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(
+        encoding="utf-8"
+    )
     finalize = (REPO_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh").read_text(
         encoding="utf-8"
     )
@@ -112,12 +114,12 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
 
 
 def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "fix-mac-update-feed.yml").read_text(
-        encoding="utf-8"
-    )
-    restorer = (REPO_ROOT / "scripts" / "deploy" / "restore_mac_feed_from_artifact.sh").read_text(
-        encoding="utf-8"
-    )
+    workflow = (
+        REPO_ROOT / ".github" / "workflows" / "fix-mac-update-feed.yml"
+    ).read_text(encoding="utf-8")
+    restorer = (
+        REPO_ROOT / "scripts" / "deploy" / "restore_mac_feed_from_artifact.sh"
+    ).read_text(encoding="utf-8")
 
     assert "actions: read" in workflow
     assert "contents: write" in workflow
@@ -128,12 +130,17 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "SOURCE_RUN_SHA" in workflow
     assert "SOURCE_ARTIFACT_ID" in workflow
     assert "SOURCE_ARTIFACT_SIZE" in workflow
-    assert 'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
+    assert (
+        'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
+    )
     assert "Canonical ZIP identity differs from the source release run" in workflow
     assert "build_sha override differs from the canonical ZIP identity" in workflow
     assert '"https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json"' in workflow
     assert 'MANIFEST_SHA="$(printf' in workflow
-    assert "Canonical ZIP identity does not match the published release manifest" in workflow
+    assert (
+        "Canonical ZIP identity does not match the published release manifest"
+        in workflow
+    )
     assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
     assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
     assert 'RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"' in workflow
@@ -151,8 +158,14 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "--retry-all-errors" not in restorer
     assert 'unzip -q "${artifact_path}"' in restorer
     assert 'actual_build_sha="$(' in restorer
-    assert 'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"' in restorer
-    assert 'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"' in restorer
+    assert (
+        'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"'
+        in restorer
+    )
+    assert (
+        'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"'
+        in restorer
+    )
     assert restorer.index('mv -f "${OFFICIAL_DEST}/${ZIP_NAME}.part"') < restorer.index(
         'mv -f "${OFFICIAL_DEST}/latest-mac.yml.part"'
     )
@@ -190,5 +203,6 @@ def test_desktop_updater_rejects_same_version_downgrade_by_release_date() -> Non
     assert "allowDowngrade = false" in updater
     assert "remoteReleaseDate" in updater
     assert "readLocalBuildTimeMs" in updater
-    assert "return Boolean(remoteSha && localSha && remoteSha !== localSha)" not in updater
-
+    assert (
+        "return Boolean(remoteSha && localSha && remoteSha !== localSha)" not in updater
+    )

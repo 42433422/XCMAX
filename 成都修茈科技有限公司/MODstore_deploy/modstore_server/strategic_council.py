@@ -129,9 +129,7 @@ def _retort_result(
                 gate.get("clarification") if isinstance(gate.get("clarification"), dict) else {}
             )
             blockers.extend(list(gate.get("blockers") or []))
-            assessment = (
-                gate.get("assessment") if isinstance(gate.get("assessment"), dict) else {}
-            )
+            assessment = gate.get("assessment") if isinstance(gate.get("assessment"), dict) else {}
             engine_available = True
         else:
             raise RuntimeError("clarification_gate_disabled")
@@ -163,7 +161,10 @@ def _retort_result(
         and "retort_engine_unavailable" not in blockers
     )
     if engine_available and assessment.get("status") != "aligned":
-        if "retort_intent_misaligned" not in blockers and "retort_clarification_pending" not in blockers:
+        if (
+            "retort_intent_misaligned" not in blockers
+            and "retort_clarification_pending" not in blockers
+        ):
             blockers.append("retort_intent_misaligned")
 
     blockers = list(dict.fromkeys(blockers))
@@ -622,7 +623,10 @@ def _public_receipt(row: Mapping[str, Any]) -> dict[str, Any]:
 def strategic_council_status(*, limit: int = 20) -> dict[str, Any]:
     clarification_summary: dict[str, Any] = {}
     try:
-        from modstore_server.retort_clarification_gate import list_clarifications, sweep_expired_clarifications
+        from modstore_server.retort_clarification_gate import (
+            list_clarifications,
+            sweep_expired_clarifications,
+        )
 
         sweep_expired_clarifications()
         clarification_summary = list_clarifications(include_terminal=False, limit=20)

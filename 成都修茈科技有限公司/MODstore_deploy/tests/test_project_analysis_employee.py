@@ -12,10 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import sys
-from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -423,16 +420,18 @@ def test_handlers_execution_ok_prefers_any_success():
         }
     )
     assert not _handlers_execution_ok(
-        {"outputs": [{"handler": "para_delegate", "ok": False, "status": "para_api_rejected_outboxed"}]}
+        {
+            "outputs": [
+                {"handler": "para_delegate", "ok": False, "status": "para_api_rejected_outboxed"}
+            ]
+        }
     )
 
 
 def test_prefer_para_keeps_local_fallback(monkeypatch):
     from modstore_server import employee_executor as ee
 
-    monkeypatch.setattr(
-        "modstore_server.para_delegate_handler.para_delegate_enabled", lambda: True
-    )
+    monkeypatch.setattr("modstore_server.para_delegate_handler.para_delegate_enabled", lambda: True)
     monkeypatch.setattr(
         "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch", lambda: True
     )

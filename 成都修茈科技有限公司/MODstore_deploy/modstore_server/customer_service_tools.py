@@ -203,7 +203,7 @@ def execute_matching_integrations(
 ) -> list[CustomerServiceAction]:
     rows = (
         db.query(CustomerServiceIntegration)
-        .filter(CustomerServiceIntegration.enabled == True)
+        .filter(CustomerServiceIntegration.enabled.is_(True))
         .filter(CustomerServiceIntegration.scenario.in_([scenario, "general"]))
         .order_by(CustomerServiceIntegration.id.asc())
         .all()

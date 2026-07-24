@@ -112,7 +112,9 @@ def check() -> int:
                 file=sys.stderr,
             )
     if ok:
-        print(f"registry-crosscheck OK：{len(yaml_domains)} 个 enabled 域与机器注册表一致")
+        print(
+            f"registry-crosscheck OK：{len(yaml_domains)} 个 enabled 域与机器注册表一致"
+        )
         return EXIT_OK
     print(
         "修复：同步 FHD/docs/SSOT_INDEX.md「机器注册表（ssot.yaml）」与 FHD/config/ssot.yaml",

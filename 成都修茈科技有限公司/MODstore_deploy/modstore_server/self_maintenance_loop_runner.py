@@ -1754,7 +1754,9 @@ def _collect_delivery_validation_candidates(
             out.append(((1 if cmds else 0, failed, len(cmds), rank), dv))
             rank += 1
         preferred_present = [
-            key for key in _DELIVERY_VALIDATION_PREFERRED_KEYS if key in obj and key != "delivery_validation"
+            key
+            for key in _DELIVERY_VALIDATION_PREFERRED_KEYS
+            if key in obj and key != "delivery_validation"
         ]
         remaining = sorted(
             key
@@ -2720,12 +2722,9 @@ def _evaluate_retort_clarification_before_review(
     are non-blocking so review can continue with evidence of the gate error.
     """
 
-    enabled = (
-        os.environ.get("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
-        .strip()
-        .lower()
-        in {"1", "true", "yes", "on"}
-    )
+    enabled = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     if not enabled:
         return {"blocked": False, "reason": "disabled"}
 
@@ -2746,9 +2745,11 @@ def _evaluate_retort_clarification_before_review(
     target = str(branch or "").strip()
     if repo_url and base_branch and target:
         try:
-            workspace = Path(
-                os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime"
-            ).expanduser() / "retort-review-gate" / str(run_id or "run")
+            workspace = (
+                Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
+                / "retort-review-gate"
+                / str(run_id or "run")
+            )
             changed_files = _changed_files_for_branch(
                 repo_url=repo_url,
                 base_branch=base_branch,
@@ -4068,9 +4069,7 @@ def _reject_and_retry_kb_schema_failure(
     # 5. Build final state — status must be distinct from generic ``failed`` so
     # observers / dashboards can tell KB writeback schema rejection apart from
     # dispatch or test failures.
-    final_status = (
-        "completed_waiting_human_strategy" if escalated else KB_SCHEMA_FAILED_STATUS
-    )
+    final_status = "completed_waiting_human_strategy" if escalated else KB_SCHEMA_FAILED_STATUS
     policy_decision = {
         "action": "hold_for_automated_remediation",
         "active_gates": {
@@ -4963,14 +4962,16 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 select id, email
                 from users
                 where email = 'guest@devfleet.local'
                    or (email like 'guest_%@devfleet.local')
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
-                """).fetchone()
+                """
+            ).fetchone()
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint",

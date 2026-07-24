@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -185,9 +184,10 @@ def test_council_receipt_blocks_while_clarification_pending(tmp_path, monkeypatc
     assert "retort_clarification_pending" in receipt["blockers"] or (
         "retort_intent_misaligned" in receipt["blockers"]
     )
-    assert receipt["roles"]["retort"]["clarification_session_id"] or receipt["roles"]["retort"][
-        "assessment_status"
-    ]
+    assert (
+        receipt["roles"]["retort"]["clarification_session_id"]
+        or receipt["roles"]["retort"]["assessment_status"]
+    )
 
 
 def test_council_receipt_passes_after_answer_enriches_intent() -> None:
@@ -270,7 +270,7 @@ def test_terminal_prune_keeps_backlog_bounded(monkeypatch) -> None:
         )
         gate.answer_clarification(out["session"]["session_id"], answers="ok")
     # Force prune threshold by shrinking via direct store mutation then sweep.
-    store = gate._load_store_unlocked()
+    gate._load_store_unlocked()
     # Create many expired terminals beyond 200 to assert prune path works with smaller set:
     # we instead assert answered sessions remain listable and open_count is 0.
     listed = gate.list_clarifications(include_terminal=True, limit=50)
@@ -421,9 +421,7 @@ def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path)
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
     monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_ENABLED", "1")
-    monkeypatch.setenv(
-        "MODSTORE_RETORT_CLARIFICATION_LEDGER", str(tmp_path / "clar.json")
-    )
+    monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_LEDGER", str(tmp_path / "clar.json"))
     monkeypatch.setattr(loop, "_changed_files_for_branch", lambda **_k: ["docs/readme.md"])
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/fake.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")

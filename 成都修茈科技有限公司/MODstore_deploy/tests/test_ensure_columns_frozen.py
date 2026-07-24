@@ -8,9 +8,7 @@ from pathlib import Path
 
 BASE_PATH = Path(__file__).resolve().parents[1] / "modstore_server" / "db" / "base.py"
 
-_ADD_COLUMN_COL_RE = re.compile(
-    r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE
-)
+_ADD_COLUMN_COL_RE = re.compile(r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
 
 # ONLY-SHRINK: new columns must arrive via ORM model + intentional migration path,
 # not by growing this runtime patch list.
@@ -52,7 +50,10 @@ FROZEN_ENSURE_PATCHES = frozenset(
 def _patches_from_source(source: str) -> set[tuple[str, str]]:
     tree = ast.parse(source)
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_ensure_columns":
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "_ensure_columns"
+        ):
             patches: set[tuple[str, str]] = set()
             for sub in ast.walk(node):
                 if isinstance(sub, ast.Tuple) and len(sub.elts) >= 2:

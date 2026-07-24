@@ -107,7 +107,9 @@ def _has_event(rows: list[Any], *tokens: str, require_ok: bool = True) -> bool:
     lowered = tuple(token.lower() for token in tokens)
     for row in rows:
         text = _event_text(row)
-        if all(token in text for token in lowered) and (not require_ok or _event_ok(row)):
+        if all(token in text for token in lowered) and (
+            not require_ok or _event_ok(row)
+        ):
             return True
     return False
 
@@ -129,7 +131,9 @@ def _is_strong_modstore_deployment(row: Any) -> bool:
         and str(data.get("environment") or "").lower() in {"staging", "production"}
         and str(data.get("package_id") or "").strip()
         and str(data.get("version") or "").strip()
-        and _PACKAGE_SHA_RE.fullmatch(str(data.get("package_sha256") or "").strip().lower())
+        and _PACKAGE_SHA_RE.fullmatch(
+            str(data.get("package_sha256") or "").strip().lower()
+        )
     )
 
 
@@ -183,7 +187,9 @@ def _correlated_deploy_evidence(
 
 
 def _latest_event_age_hours(runtime: dict[str, Any], now: datetime) -> float | None:
-    raw = str(runtime.get("latest_event_at") or runtime.get("refreshed_at") or "").strip()
+    raw = str(
+        runtime.get("latest_event_at") or runtime.get("refreshed_at") or ""
+    ).strip()
     if not raw:
         return None
     try:
@@ -281,7 +287,11 @@ def _build_dimensions(
             hard_cap=(
                 45
                 if not workforce_ready
-                else (60 if not gates_clear else (85 if not runtime_provenance_ok else None))
+                else (
+                    60
+                    if not gates_clear
+                    else (85 if not runtime_provenance_ok else None)
+                )
             ),
         ),
         _score_dimension(

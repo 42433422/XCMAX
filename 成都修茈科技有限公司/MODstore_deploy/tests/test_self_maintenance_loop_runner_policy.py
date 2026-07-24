@@ -18,7 +18,6 @@ from modstore_server.self_maintenance_loop_runner import (
     _assess_branch_auto_merge_policy,
     _base_para_input,
     _code_task_text,
-    _delivery_validation_gate,
     _employee_result_ok,
     _existing_kb_schema_retry_item,
     _extract_failure_reason,
@@ -1801,7 +1800,10 @@ class TestFindDeliveryValidation:
         dv_a = {"commands": [{"exit_code": 1}], "marker": "a"}
         dv_b = {"commands": [{"exit_code": 1}], "marker": "b"}
         left_first = {"alpha": {"delivery_validation": dv_a}, "beta": {"delivery_validation": dv_b}}
-        right_first = {"beta": {"delivery_validation": dv_b}, "alpha": {"delivery_validation": dv_a}}
+        right_first = {
+            "beta": {"delivery_validation": dv_b},
+            "alpha": {"delivery_validation": dv_a},
+        }
 
         assert _find_delivery_validation(left_first) is dv_a
         assert _find_delivery_validation(right_first) is dv_a

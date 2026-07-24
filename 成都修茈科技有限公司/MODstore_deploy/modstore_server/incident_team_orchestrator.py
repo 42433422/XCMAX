@@ -108,7 +108,7 @@ def _execute_employee_task_with_timeout(
 
 def _admin_user_id(session) -> int:
     row = (
-        session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
+        session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
     )  # noqa: E712
     if row:
         return int(row.id)
@@ -310,14 +310,10 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 ticket_id_hint = int(payload.get("ticket_id") or 0)
             except (TypeError, ValueError):
                 ticket_id_hint = 0
-            customer_ticket = (
-                ticket_id_hint > 0
-                and (
-                    str(payload.get("source") or source or "").strip().lower()
-                    == "customer_ticket"
-                    or event_type == "ops.intake.customer_ticket"
-                    or str(payload.get("ticket_no") or "").startswith("CS")
-                )
+            customer_ticket = ticket_id_hint > 0 and (
+                str(payload.get("source") or source or "").strip().lower() == "customer_ticket"
+                or event_type == "ops.intake.customer_ticket"
+                or str(payload.get("ticket_no") or "").startswith("CS")
             )
             if has_team_claim or not customer_ticket:
                 return {

@@ -147,13 +147,9 @@ async def test_list_available_ai_routes_includes_assets(monkeypatch):
     async def fake_quota(**_kwargs):
         return {"ok": True, "providers": []}
 
-    monkeypatch.setattr(
-        "modstore_server.llm_runtime_route.platform_model_catalog", fake_catalog
-    )
+    monkeypatch.setattr("modstore_server.llm_runtime_route.platform_model_catalog", fake_catalog)
     monkeypatch.setattr("modstore_server.llm_cli_fallback.cli_status_catalog", fake_cli)
-    monkeypatch.setattr(
-        "modstore_server.llm_quota_monitor.platform_quota_snapshot", fake_quota
-    )
+    monkeypatch.setattr("modstore_server.llm_quota_monitor.platform_quota_snapshot", fake_quota)
 
     result = await EmployeeAgentRunner(
         {"employee_id": "llm-ops-engineer"}, workspace_root="."

@@ -110,7 +110,13 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
             "ok": True,
         },
         {"phase": "step", "step": "review", "status": "success", "ok": True},
-        {"phase": "step", "step": "qa", "status": "success", "qa_verdict": "PASS", "ok": True},
+        {
+            "phase": "step",
+            "step": "qa",
+            "status": "success",
+            "qa_verdict": "PASS",
+            "ok": True,
+        },
         {
             "run_id": "incident-1",
             "phase": "complete",
@@ -201,7 +207,10 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     }
     snapshot = build_founder_autonomy_snapshot(
         runtime=runtime,
-        closure={"deliverable": True, "staffing": {"planned_count": 52, "registered_count": 52}},
+        closure={
+            "deliverable": True,
+            "staffing": {"planned_count": 52, "registered_count": 52},
+        },
         approvals={"local_pending": 0},
         knowledge={"success": True, "document_count": 8, "chunk_count": 80},
         goals={"total": 10, "closed": 9, "completion_rate": 0.9},
@@ -293,7 +302,10 @@ def test_runtime_holds_apply_hard_caps_and_surface_attention() -> None:
     }
     snapshot = build_founder_autonomy_snapshot(
         runtime=runtime,
-        closure={"deliverable": True, "staffing": {"planned_count": 52, "registered_count": 52}},
+        closure={
+            "deliverable": True,
+            "staffing": {"planned_count": 52, "registered_count": 52},
+        },
         approvals={"local_pending": 8},
         strategic_decisions={"count": 2},
         surfaces=_surfaces(),
@@ -326,7 +338,9 @@ def test_planned_workforce_gap_changes_next_step_without_inflating_score() -> No
                         "employee_id": "host-checker",
                         "remediation": {
                             "task_id": "workforce-gap-aaaaaaaaaaaaaaaa",
-                            "target_files": ["FHD/mods/_employees/host-checker/manifest.json"],
+                            "target_files": [
+                                "FHD/mods/_employees/host-checker/manifest.json"
+                            ],
                             "closure_event": "later_strict_burnin_receipt_accepted",
                             "auto_close": False,
                         },
@@ -344,7 +358,9 @@ def test_planned_workforce_gap_changes_next_step_without_inflating_score() -> No
     evolution = _dimensions(snapshot)["evolution"]
 
     assert evolution["progress"] == 40
-    assert evolution["next_gap"] == ("执行已生成的 1 个员工能力修复工单，并取得后续严格试运行回执")
+    assert evolution["next_gap"] == (
+        "执行已生成的 1 个员工能力修复工单，并取得后续严格试运行回执"
+    )
     assert snapshot["live_summary"]["workforce_capability_gap_count"] == 1
     assert snapshot["live_summary"]["planned_workforce_remediations"] == 1
 
@@ -471,7 +487,9 @@ def test_untrusted_runtime_provenance_caps_founder_and_system_truth() -> None:
         "dirty_worktree",
         "head_sha_mismatch",
     ]
-    assert any(item["kind"] == "runtime_provenance" for item in snapshot["attention"]["items"])
+    assert any(
+        item["kind"] == "runtime_provenance" for item in snapshot["attention"]["items"]
+    )
 
 
 def test_empty_authoritative_customer_ledger_only_proves_ledger_and_capacity() -> None:
@@ -491,7 +509,10 @@ def test_empty_authoritative_customer_ledger_only_proves_ledger_and_capacity() -
     customer = _dimensions(snapshot)["customer"]
 
     assert customer["progress"] == 25
-    assert {gate["key"] for gate in customer["evidence"]} == {"value_ledger", "capacity"}
+    assert {gate["key"] for gate in customer["evidence"]} == {
+        "value_ledger",
+        "capacity",
+    }
     assert snapshot["live_summary"]["customer_value_ledger_ready"] is True
 
 

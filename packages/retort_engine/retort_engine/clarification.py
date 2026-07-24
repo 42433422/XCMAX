@@ -177,7 +177,9 @@ def build_clarification_questions(
     return out
 
 
-def enrich_strategy_intent(strategy_intent: str, answers: Mapping[str, Any] | Sequence[Any]) -> str:
+def enrich_strategy_intent(
+    strategy_intent: str, answers: Mapping[str, Any] | Sequence[Any]
+) -> str:
     """Merge human answers into a richer strategy intent string."""
 
     base = str(strategy_intent or "").strip()
@@ -223,7 +225,10 @@ def clarification_needed(
     files = _normalize_paths(changed_files)
     if any(_SENSITIVE_PATH_RE.search(path) for path in files):
         return True
-    if any(_SECRET_LINE_RE.search(line) for line in _added_line_samples(changed_files, limit=20)):
+    if any(
+        _SECRET_LINE_RE.search(line)
+        for line in _added_line_samples(changed_files, limit=20)
+    ):
         return True
     risk = str(risk_level or "").strip().lower()
     if _RISK_ORDER.get(risk, 0) >= _RISK_ORDER["high"] or len(files) >= 12:
@@ -245,7 +250,9 @@ def _normalize_paths(changed_files: Sequence[Any] | None) -> list[str]:
     return out
 
 
-def _added_line_samples(changed_files: Sequence[Any] | None, *, limit: int = 6) -> list[str]:
+def _added_line_samples(
+    changed_files: Sequence[Any] | None, *, limit: int = 6
+) -> list[str]:
     samples: list[str] = []
     for item in changed_files or []:
         if not isinstance(item, Mapping):

@@ -22,7 +22,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -113,7 +113,10 @@ def check_static() -> int:
         print(f"缺少 {TOPOLOGY_YAML}", file=sys.stderr)
         return EXIT_CONFIG
     if not TOPOLOGY_JSON.is_file():
-        print(f"缺少 {TOPOLOGY_JSON}（先 service_topology_ssot.py generate --apply）", file=sys.stderr)
+        print(
+            f"缺少 {TOPOLOGY_JSON}（先 service_topology_ssot.py generate --apply）",
+            file=sys.stderr,
+        )
         return EXIT_FAIL
 
     topo = load_topology()
@@ -122,7 +125,9 @@ def check_static() -> int:
     units = topo.get("systemd_units") or []
     errors: list[str] = []
 
-    must_services = [sid for sid, svc in services.items() if (svc or {}).get("must_run")]
+    must_services = [
+        sid for sid, svc in services.items() if (svc or {}).get("must_run")
+    ]
     if not must_services:
         errors.append("services 中无 must_run: true")
     must_procs = [p for p in processes if (p or {}).get("must_run")]
@@ -252,12 +257,14 @@ def build_inventory(*, host: str = "127.0.0.1") -> dict[str, Any]:
     unknown = sum(1 for i in items if i.get("actual") == "unknown")
     return {
         "schema": SCHEMA,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "host": host,
         "source": {
-            "topology": str(TOPOLOGY_JSON.relative_to(ROOT))
-            if TOPOLOGY_JSON.is_file()
-            else str(TOPOLOGY_YAML.relative_to(ROOT)),
+            "topology": (
+                str(TOPOLOGY_JSON.relative_to(ROOT))
+                if TOPOLOGY_JSON.is_file()
+                else str(TOPOLOGY_YAML.relative_to(ROOT))
+            ),
             "public_host": topo.get("host") or (topo.get("public") or {}).get("host"),
         },
         "ok": failed_must_run == 0,
@@ -286,7 +293,10 @@ def projection_targets() -> list[Path]:
         / "download-runtime-inventory.json",
         ROOT / "config" / "runtime_inventory.generated.json",
     ]
-    for raw in ("/root/成都修茈科技有限公司", "/opt/xcmax/current/成都修茈科技有限公司"):
+    for raw in (
+        "/root/成都修茈科技有限公司",
+        "/opt/xcmax/current/成都修茈科技有限公司",
+    ):
         try:
             live = Path(raw)
             if live.is_dir():
@@ -322,14 +332,22 @@ def cmd_probe(*, host: str, as_json: bool, write: bool) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         mark = "✓" if payload["ok"] else "✗"
-        print(f"runtime inventory @ {host}  {mark} failed_must_run={payload['failed_must_run']}")
+        print(
+            f"runtime inventory @ {host}  {mark} failed_must_run={payload['failed_must_run']}"
+        )
         for it in payload["items"]:
-            m = "✓" if it["actual"] == "running" else ("?" if it["actual"] == "unknown" else "✗")
+            m = (
+                "✓"
+                if it["actual"] == "running"
+                else ("?" if it["actual"] == "unknown" else "✗")
+            )
             flag = " [must_run]" if it.get("must_run") else ""
             detail = f"  {it.get('detail')}" if it.get("detail") else ""
             print(f"  {m} {it['kind']:<8} {it['id']:<28} {it['actual']}{flag}{detail}")
         if publication is not None:
-            print(f"written={len(publication.get('written') or [])} errors={publication.get('errors')}")
+            print(
+                f"written={len(publication.get('written') or [])} errors={publication.get('errors')}"
+            )
     return EXIT_OK if payload["ok"] else EXIT_FAIL
 
 

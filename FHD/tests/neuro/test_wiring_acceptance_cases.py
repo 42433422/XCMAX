@@ -93,9 +93,9 @@ def test_case_b_conscious_processor_on_real_query_case():
 
 def test_case_b_order_sample_loop_create_emits_side_effect(monkeypatch):
     from app.application import order_app_service as oas
+    from app.neuro_bus import event_store as event_store_mod
     from app.neuro_bus.domains import order_domain as od
     from app.neuro_bus.domains import order_domain_handlers as odh
-    from app.neuro_bus import event_store as event_store_mod
     from app.neuro_bus.event_store import EventStore
 
     oas.clear_sample_orders()

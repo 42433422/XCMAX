@@ -39,7 +39,9 @@ diff --git a/docs/readme.md b/docs/readme.md
         changed_files=parse_unified_diff(diff),
     )
     assert any(q["id"] == "intent_misaligned" for q in questions)
-    assert clarification_needed(assessment, "Implement password reset token expiry for auth accounts")
+    assert clarification_needed(
+        assessment, "Implement password reset token expiry for auth accounts"
+    )
 
 
 def test_enrich_strategy_intent_merges_answers() -> None:
@@ -61,7 +63,10 @@ def test_sensitive_path_and_high_risk_generate_extra_questions() -> None:
                 "hunks": [
                     {
                         "changes": [
-                            {"type": "add", "text": "api_key = 'sk-test-should-redact'"},
+                            {
+                                "type": "add",
+                                "text": "api_key = 'sk-test-should-redact'",
+                            },
                         ]
                     }
                 ],

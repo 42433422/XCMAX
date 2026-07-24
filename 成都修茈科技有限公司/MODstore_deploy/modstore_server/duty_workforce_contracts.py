@@ -237,10 +237,7 @@ def _enrich_customer_ticket_duty_input(
 
     eid = str(employee_id or "").strip()
     ticket_no = str(
-        incident.get("ticket_no")
-        or incident.get("subject_id")
-        or incident.get("ticket_id")
-        or ""
+        incident.get("ticket_no") or incident.get("subject_id") or incident.get("ticket_id") or ""
     ).strip()
     summary = str(incident.get("summary") or incident.get("title") or "").strip()
     raw = incident.get("raw") if isinstance(incident.get("raw"), dict) else {}
@@ -267,8 +264,7 @@ def _enrich_customer_ticket_duty_input(
                     "text": (summary or ticket_no or "customer_ticket")[:500],
                 }
             ],
-            "severity": str(incident.get("severity") or "normal").strip().lower()
-            or "normal",
+            "severity": str(incident.get("severity") or "normal").strip().lower() or "normal",
         }
     # surface common fields for modules that read top-level keys
     if ticket_no and not payload.get("ticket_no"):

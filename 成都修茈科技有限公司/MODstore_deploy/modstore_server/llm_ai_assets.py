@@ -10,7 +10,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from modstore_server.llm_key_resolver import OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-from modstore_server.llm_model_taxonomy import CATEGORY_ORDER, category_labels_zh, media_counts_from_detailed
+from modstore_server.llm_model_taxonomy import (
+    CATEGORY_ORDER,
+    category_labels_zh,
+    media_counts_from_detailed,
+)
 
 # Static contract of callable AI surfaces owned by Modstore LLM stack.
 PLATFORM_AI_INTERFACES: tuple[Dict[str, Any], ...] = (
@@ -106,8 +110,19 @@ CLI_PRODUCT_CAPABILITIES_NOT_WIRED: Dict[str, List[str]] = {
 }
 
 _CATEGORY_INTERFACE_IDS: Dict[str, List[str]] = {
-    "llm": ["platform.catalog", "platform.chat", "platform.chat_stream", "platform.employee_runtime", "cli.chat_fallback"],
-    "vlm": ["platform.catalog", "platform.chat", "platform.chat_stream", "platform.employee_runtime"],
+    "llm": [
+        "platform.catalog",
+        "platform.chat",
+        "platform.chat_stream",
+        "platform.employee_runtime",
+        "cli.chat_fallback",
+    ],
+    "vlm": [
+        "platform.catalog",
+        "platform.chat",
+        "platform.chat_stream",
+        "platform.employee_runtime",
+    ],
     "image": ["platform.catalog", "platform.image"],
     "video": ["platform.catalog", "platform.video"],
     "audio": ["platform.catalog"],
@@ -289,9 +304,7 @@ def build_ai_asset_inventory(
         "configured_providers": configured_providers,
         "model_count": int((platform_catalog or {}).get("model_count") or 0),
         "runtime_model_count": int((platform_catalog or {}).get("runtime_model_count") or 0),
-        "media_totals": {
-            cat: int(by_category[cat]["model_count"]) for cat in CATEGORY_ORDER
-        },
+        "media_totals": {cat: int(by_category[cat]["model_count"]) for cat in CATEGORY_ORDER},
         "cli_installed_count": len(installed_clis),
         "cli_usable_count": len(usable_clis),
         "quota_ok": bool((quota or {}).get("ok", True)),
