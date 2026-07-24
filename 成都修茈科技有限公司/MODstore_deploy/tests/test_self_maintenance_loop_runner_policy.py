@@ -2485,6 +2485,7 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
 
     enqueue_calls = []
+
     def fake_enqueue(context, **kwargs):
         enqueue_calls.append(context)
         return {"queued": True}
@@ -2512,7 +2513,7 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
                 "run_id": None,
                 "branch": "devfleet/test/branch-2",
                 "para_task_id": "task-2",
-            }
+            },
         ],
         "recent_runs": [],
     }
