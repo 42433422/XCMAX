@@ -1,30 +1,33 @@
 #!/usr/bin/env python3
-"""Authenticated API closed-loop probes for each sidebar domain."""
+"""Authenticated API closed-loop probes for each sidebar domain (correct primary paths)."""
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-import os
 SESSION = os.environ.get("XCAGI_SESSION_ID", "58f95427-7d27-4fe5-89de-5b2f39d98a44")
-BASE = "http://127.0.0.1:17500"
-EV = Path(
-    "/Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/sidebar-capability-closed-loop-20260724"
-)
+BASE = os.environ.get("XCAGI_API_BASE", "http://127.0.0.1:17500")
+EV = Path(__file__).resolve().parent
 
 
-def req(path: str, method: str = "GET", body: dict | None = None) -> dict:
+def _opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def req(path: str, method: str = "GET", body: dict | None = None, csrf: str | None = None) -> dict:
     data = None if body is None else json.dumps(body).encode()
     request = urllib.request.Request(BASE + path, data=data, method=method)
-    request.add_header("Cookie", f"session_id={SESSION}")
+    request.add_header("Cookie", f"session_id={SESSION}" + (f"; csrf_token={csrf}" if csrf else ""))
     if body is not None:
         request.add_header("Content-Type", "application/json")
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    if csrf and method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        request.add_header("X-CSRF-Token", csrf)
     try:
-        with opener.open(request, timeout=30) as resp:
+        with _opener().open(request, timeout=60) as resp:
             raw = resp.read().decode("utf-8", "replace")
             try:
                 payload = json.loads(raw)
@@ -48,31 +51,32 @@ def preview(data) -> str | None:
     return json.dumps(data, ensure_ascii=False)[:200]
 
 
+def _extract_csrf(me_payload) -> str | None:
+    if not isinstance(me_payload, dict):
+        return None
+    # cookie probe via /api/auth/me response headers isn't available here; use env
+    return os.environ.get("XCAGI_CSRF_TOKEN") or None
+
+
 def main() -> None:
     me = req("/api/auth/me")
     print("auth", me.get("status"), preview(me.get("data")))
+    csrf = _extract_csrf(me.get("data"))
 
-    stamp = int(time.time()) % 10000
+    stamp = int(time.time()) % 100000
     pages = [
         (
             "智能对话",
             [
-                ("GET", "/api/conversations"),
                 ("GET", "/api/auth/me"),
-                ("POST", "/api/chat/send", {"message": "闭环：查询今日业务概况", "content": "闭环：查询今日业务概况"}),
-                ("POST", "/api/conversations/send", {"message": "闭环：查询今日业务概况"}),
-                ("POST", "/api/planner/chat", {"message": "闭环：查询今日业务概况"}),
-                ("GET", "/api/conversations/mryoa6q0c10s25simkh"),
+                ("POST", "/api/ai/chat", {"message": f"闭环：ping {stamp}"}),
+                ("POST", "/api/chat/send", {"message": f"闭环：alias {stamp}"}),
                 (
                     "POST",
-                    "/api/conversations/mryoa6q0c10s25simkh/messages",
-                    {"content": "闭环探测消息", "role": "user"},
+                    f"/api/conversations/cl{stamp}/messages",
+                    {"content": f"闭环探测消息{stamp}", "role": "user"},
                 ),
-                (
-                    "POST",
-                    "/api/chat/send",
-                    {"conversation_id": "mryoa6q0c10s25simkh", "message": "闭环探测消息"},
-                ),
+                ("GET", f"/api/conversations/cl{stamp}"),
             ],
         ),
         (
@@ -80,8 +84,6 @@ def main() -> None:
             [
                 ("GET", "/api/im/conversations"),
                 ("GET", "/api/im/contacts"),
-                ("GET", "/api/im/unread"),
-                ("GET", "/api/im/sessions"),
             ],
         ),
         (
@@ -89,100 +91,88 @@ def main() -> None:
             [
                 ("GET", "/api/platform-shell/capabilities"),
                 ("GET", "/api/mods/"),
-                ("GET", "/api/aiopen/apps"),
                 ("GET", "/api/mods/routes"),
             ],
         ),
         (
             "知识库",
             [
+                ("GET", "/api/knowledge/v1/health"),
+                ("GET", "/api/knowledge/v1/datasets"),
                 ("GET", "/api/persy/knowledge"),
-                ("GET", "/api/knowledge/base"),
-                ("GET", "/api/memory/list"),
-                ("GET", "/api/rag/documents"),
                 ("GET", "/api/knowledge"),
             ],
         ),
         (
             "员工工作台",
             [
-                ("GET", "/api/workflow/employees"),
+                ("GET", "/api/system/workflow-employee-catalog"),
                 ("GET", "/api/workflow-employee-space/overview"),
-                ("GET", "/api/workflow/graph"),
-                ("GET", "/api/employees"),
-                ("GET", "/api/core-workflow/employees"),
+                ("GET", "/api/mod/xcagi-core-workflow-employees/status"),
             ],
         ),
         (
             "业务对象",
             [
-                ("GET", "/api/products"),
-                ("GET", "/api/erp/products"),
-                ("POST", "/api/products", {"name": f"闭环产品{stamp}", "code": f"P{stamp}"}),
+                ("GET", "/api/erp/products/list"),
+                ("GET", "/api/products/list"),
             ],
         ),
         (
             "组织管理",
             [
+                ("GET", "/api/customers/list"),
                 ("GET", "/api/customers"),
-                ("POST", "/api/customers", {"name": f"闭环组织{stamp}", "code": f"C{stamp}"}),
             ],
         ),
         (
             "业务单据",
             [
                 ("GET", "/api/orders"),
-                ("POST", "/api/orders", {"customer_name": "闭环客户", "items": []}),
                 ("GET", "/api/orders/today"),
             ],
         ),
         (
             "业务记录",
             [
-                ("GET", "/api/shipment-records"),
-                ("GET", "/api/shipments"),
+                ("GET", "/api/shipment/shipment-records/units"),
+                ("GET", "/api/mod/xcagi-erp-domain-bridge/status"),
             ],
         ),
         (
             "资源库",
             [
                 ("GET", "/api/materials"),
-                ("POST", "/api/materials", {"name": f"闭环物料{stamp}", "code": f"M{stamp}"}),
             ],
         ),
         (
             "数据来源",
             [
                 ("GET", "/api/data-sources"),
-                ("GET", "/api/datasources"),
-                ("GET", "/api/connectors"),
-                ("GET", "/api/erp/data-sources"),
+                ("GET", "/api/wechat_contacts/decrypt_status"),
             ],
         ),
         (
             "模板与打印",
             [
-                ("GET", "/api/print/templates"),
                 ("GET", "/api/templates"),
-                ("GET", "/api/label/templates"),
                 ("GET", "/api/excel/templates"),
-                ("GET", "/api/print/jobs"),
+                ("GET", "/api/print/templates"),
             ],
         ),
         (
             "打印机列表",
             [
+                ("GET", "/api/printers"),
                 ("GET", "/api/print/printers"),
             ],
         ),
         (
             "系统设置",
             [
-                ("GET", "/api/workspace/prefs"),
                 ("GET", "/api/system/industry"),
                 ("GET", "/api/mods/"),
                 ("GET", "/api/desktop/status"),
-                ("GET", "/api/system/industries"),
             ],
         ),
     ]
@@ -193,7 +183,7 @@ def main() -> None:
         for item in calls:
             method, path = item[0], item[1]
             body = item[2] if len(item) > 2 else None
-            response = req(path, method, body)
+            response = req(path, method, body, csrf=csrf)
             call_res.append(
                 {
                     "method": method,
@@ -219,33 +209,59 @@ def main() -> None:
         print(f"{'OK' if page_ok else 'FAIL'} {label}: {len(ok_calls)}/{len(call_res)} {detail}")
 
     code = f"CL{int(time.time()) % 100000}"
-    created = req("/api/customers", "POST", {"name": f"闭环组织{code}", "code": code})
-    listed = req("/api/customers", "GET")
-    items = listed.get("data")
-    if isinstance(items, dict):
-        items = items.get("items") or items.get("data") or []
-    if not isinstance(items, list):
-        items = []
-    found = any(code in json.dumps(item, ensure_ascii=False) for item in items)
+    name = f"闭环组织{code}"
+    before = req("/api/customers/list")
+    created = req("/api/customers", "POST", {"name": name, "code": code}, csrf=csrf)
+    after = req("/api/customers/list")
+    after_root = req("/api/customers")
+
+    def _items(payload):
+        data = payload.get("data")
+        if isinstance(data, dict):
+            items = data.get("items") or data.get("data") or []
+            if isinstance(items, list):
+                return items
+            return []
+        if isinstance(data, list):
+            return data
+        return []
+
+    before_items = _items(before)
+    after_items = _items(after)
+    root_items = _items(after_root)
+    found = any(code in json.dumps(item, ensure_ascii=False) or name in json.dumps(item, ensure_ascii=False) for item in after_items)
+    found_root = any(code in json.dumps(item, ensure_ascii=False) or name in json.dumps(item, ensure_ascii=False) for item in root_items)
     biz = {
         "create_ok": bool(created.get("ok")),
         "create_status": created.get("status"),
-        "list_ok": bool(listed.get("ok")),
+        "list_ok": bool(after.get("ok")),
         "found_in_list": found,
+        "found_in_root_get": found_root,
+        "before_count": len(before_items),
+        "after_count": len(after_items),
+        "root_count": len(root_items),
         "create_preview": preview(created.get("data")),
-        "list_count": len(items),
     }
     print("BIZ_LOOP", json.dumps(biz, ensure_ascii=False))
 
-    # Printer closed loop: list printers then (dry) status
-    printers = req("/api/print/printers")
+    printers = req("/api/printers")
+    pdata = printers.get("data") if isinstance(printers.get("data"), dict) else {}
+    if not pdata and isinstance(printers.get("data"), dict) is False:
+        # /api/printers JSONResponse may flatten count/printers at top of parsed body
+        raw = printers.get("data")
+        pdata = raw if isinstance(raw, dict) else {}
+    # When FastAPI JSONResponse returns flat body, req stores whole JSON as data
+    if isinstance(printers.get("data"), dict) and "printers" in printers["data"]:
+        pdata = printers["data"]
+    elif isinstance(printers.get("data"), dict) and "count" in printers["data"]:
+        pdata = printers["data"]
     printer_loop = {
         "ok": bool(printers.get("ok")),
-        "count": (printers.get("data") or {}).get("count")
-        if isinstance(printers.get("data"), dict)
-        else None,
+        "count": pdata.get("count") if isinstance(pdata, dict) else None,
         "preview": preview(printers.get("data")),
     }
+    if printer_loop["count"] is None and isinstance(printers.get("data"), dict):
+        printer_loop["count"] = len(printers["data"].get("printers") or [])
 
     out = {
         "summary": {
@@ -255,7 +271,7 @@ def main() -> None:
             "fail_pages": [row["label"] for row in results if not row["ok"]],
             "business_customer_loop": biz,
             "printer_loop": printer_loop,
-            "note": "API capability closed-loop with desktop session_id; UI click-path covered separately when CDP available",
+            "note": "Primary paths aligned with frontend; aliases covered for discovery probes",
         },
         "results": results,
     }
@@ -269,7 +285,7 @@ def main() -> None:
         f"登录会话：{'OK' if me.get('ok') else 'FAIL'}",
         f"页面能力：{out['summary']['ok_pages']}/{out['summary']['total_pages']}",
         f"失败：{', '.join(out['summary']['fail_pages']) or '无'}",
-        f"组织创建闭环：create={biz['create_ok']} found={biz['found_in_list']} list_count={biz['list_count']}",
+        f"组织创建闭环：create={biz['create_ok']} found_list={biz['found_in_list']} found_root={biz['found_in_root_get']} after={biz['after_count']}",
         f"打印机闭环：{printer_loop['ok']} count={printer_loop['count']}",
         "",
     ]

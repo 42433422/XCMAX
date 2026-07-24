@@ -1,10 +1,13 @@
-# 闭环缺口
+# 闭环缺口（修复后）
 
-- 智能对话：会话可读，但发消息接口 /api/chat/send 与 /messages 返回 405（Method Not Allowed）——对话写入闭环未通
-- 知识库：页面入口在，专用 /api/persy/knowledge、/api/knowledge 404；仅 office-pack status 可用
-- 员工工作台：核心员工 Mod status 可用；overview/employees 列表 API 404
-- 组织管理：创建返回成功，但随后列表 count 未增长/未按 code 找回（读写一致性存疑）
-- 业务对象：创建产品后列表可见（产品闭环通）
-- 资源库：创建物料成功（物料闭环通）
-- 打印机列表：检测到 Canon_TS3700_series 就绪
-- 模板与打印：模板列表 API 通但 templates 为空
+## 已修复（2026-07-24）
+
+- **组织管理读写不一致**：`GET /api/customers` 原先只读 legacy 行，与 `POST /api/customers`（service/facade）不同源；已改为委托 `customers_list`，创建后列表可见。
+- **智能对话写入 405**：补 `POST /api/chat/send`、`POST /api/planner/chat` → 同 `/api/ai/chat`；补 `POST /api/conversations/{id}/messages` 写入会话消息。
+- **知识库/员工台/数据来源/打印模板短路径 404**：新增 `sidebar_capability_compat` 门面，对齐探测路径到真实能力（knowledge/v1、workflow-employee-catalog、templates 等）。
+
+## 说明
+
+- 前端主路径仍是 `/api/ai/chat`、`/api/knowledge/v1/*`、`/api/system/workflow-employee-catalog`、`/api/templates`；兼容短路径仅为闭环与旧客户端。
+- 模板列表可为空（无上传模板时属正常）；打印机以本机 CUPS 为准。
+- 需重启桌面内嵌后端后，上述修复才会在 `:17500` 生效。

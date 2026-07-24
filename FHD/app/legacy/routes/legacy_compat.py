@@ -197,6 +197,11 @@ def _register_xcagi_compat_routes(app: FastAPI) -> None:
         log_name="xcagi_compat_router (prefix=/api)",
         prefix="/api",
     )
+    _mount_router(
+        app,
+        "app.fastapi_routes.sidebar_capability_compat",
+        log_name="sidebar_capability_compat (/api/knowledge|persy|employees|data-sources|print/templates)",
+    )
 
 
 def _register_document_routes(app: FastAPI) -> None:

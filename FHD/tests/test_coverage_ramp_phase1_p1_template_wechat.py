@@ -76,12 +76,24 @@ def customer_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+@patch("app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler", return_value=None)
+@patch("app.mod_sdk.client_primary_erp.try_invoke_client_mod_customers_list", return_value=None)
+@patch("app.mod_sdk.client_primary_erp.resolve_client_erp_mod_for_request", return_value=None)
+@patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
 @patch("app.fastapi_routes.domains.customer.routes._load_customers_rows")
-def test_customers_all(mock_load: MagicMock, customer_client: TestClient) -> None:
+def test_customers_all(
+    mock_load: MagicMock,
+    _mock_svc: MagicMock,
+    _mock_resolve: MagicMock,
+    _mock_client: MagicMock,
+    _mock_erp: MagicMock,
+    customer_client: TestClient,
+) -> None:
     mock_load.return_value = [{"id": 1, "name": "甲公司"}]
     r = customer_client.get("/customers")
     assert r.status_code == 200
     assert r.json()["success"] is True
+    assert r.json()["data"][0]["name"] == "甲公司"
 
 
 def test_customers_match_empty(customer_client: TestClient) -> None:
