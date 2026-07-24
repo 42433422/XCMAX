@@ -249,6 +249,21 @@ class PurchaseService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(order)
 
+                # Sample Neuro-DDD closed loop: emit order.created after durable commit.
+                try:
+                    from decimal import Decimal
+
+                    from app.neuro_bus.domains.order_domain import get_order_domain
+
+                    get_order_domain().emit_order_created(
+                        order_id=str(order.id),
+                        customer_id=str(order.supplier_id or ""),
+                        items=list(items_data or []),
+                        total_amount=Decimal(str(total_amount or 0)),
+                    )
+                except Exception:  # noqa: BLE001 - never block purchase on bus emit
+                    logger.debug("emit_order_created skipped", exc_info=True)
+
                 return {
                     "success": True,
                     "data": self._model_to_dict(order),

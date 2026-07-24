@@ -9,6 +9,14 @@
 被资深架构师画在**生产级图纸**上、地基三刀（SSOT / schema / 运行时真相）已通电的项目。
 结构的雄心仍略跑在业务闭环前面。**当前综合 ≈ 6.5 / 10**（地基通电后上修；无人公司业务闭环另计）。
 
+## 客服闭环总线 SSOT（勿混）
+
+**客服工单闭环的事件总线 SSOT = MODstore `incident_bus` + `incident_team`（intake-dispatcher / user-customer-service-officer 等），不是 FHD NeuroBus。**
+
+- 事件名如 `ops.intake.customer_ticket` 走 MODstore 发布与派发；duty 触发绑定 incident_bus，不写 NeuroBus subscribe。
+- FHD NeuroBus 仍服务宿主域事件与 Mod 钩子，**不承担**客服工单 intake→派发→回写闭环。
+- 短注：[`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](./architecture/CUSTOMER_TICKET_BUS_SSOT.md)
+
 ## 两份幻觉，真相在中间
 
 - **架构图骗你往高看**：DDD 四层 / NeuroBus 全套可靠性 / 一套大脑三端 / SSOT 元框架——看着 8 分。
@@ -49,7 +57,13 @@
 | **L2** schema 承重 | SQLite parity blocking + 冻结 ensure_* + 方言文档 + 摘 SKIP 开关 | 🟢 旁路封死；存量库 stamp 仍按发版流程执行 |
 | **L3** 运行时真相 | desired×actual 单一清单 | 🟢 runtime-inventory 域 + 公开投影 |
 
-> L0–L2 差价已收回大半。下一刀在**业务闭环**（未派发客服事件、handler_failed、Para 真修通）。
+> L0–L2 差价已收回大半。下一刀在**业务闭环**（客服 incident_bus 执行串、handler_failed、Para 真修通）。
+
+### 客服闭环定轨（2026-07-24）
+
+- **SSOT**：MODstore `incident_bus` + incident team（见 [`architecture/CUSTOMER_TICKET_BUS_SSOT.md`](architecture/CUSTOMER_TICKET_BUS_SSOT.md)）
+- **不是** FHD NeuroBus 订阅轨；duty 合同经 binding 落到 incident，不经 `bus.subscribe`
+- 执行体：`intake-dispatcher.routing_plan` → incident_bus 下游派发；publish 边界强制 enrich
 
 ## SSOT 全景（从最底层往上）
 
@@ -64,6 +78,7 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 
 ## 仍未解决（别假装）
 
-- 客服 `customer_ticket` 未派发积压、handler_failed 率仍高
+- 客服 `customer_ticket`：已定轨 **MODstore `incident_bus`**（enrich + `routing_plan` 真派发 + handler_failed 按 event_type 可观测）；**生产积压率仍需实跑验收**
 - Para 多 CLI 已有 fallback，但「真改代码→验证→回写」端到端未稳定证明
 - 存量生产库若历史 `SKIP_ALEMBIC` 过，需一次 `alembic stamp/upgrade` 对齐（发版流程执行，非代码缺口）
+- 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地

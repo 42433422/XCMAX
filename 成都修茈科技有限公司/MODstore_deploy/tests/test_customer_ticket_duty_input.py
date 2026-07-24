@@ -82,3 +82,85 @@ def test_duty_event_execution_input_enriches_customer_ticket(monkeypatch):
     )
     assert cs["ticket"]["id"].startswith("CS")
     assert cs["ticket"]["knowledge_sources"]
+
+
+def test_enrich_customer_ticket_publish_payload_has_requests_and_ticket():
+    from modstore_server.duty_workforce_contracts import (
+        enrich_customer_ticket_publish_payload,
+    )
+
+    enriched = enrich_customer_ticket_publish_payload(
+        {
+            "ticket_no": "CS2026072405405500610030",
+            "summary": "官网首页加载不出来",
+            "source": "customer_ticket",
+        }
+    )
+    assert enriched["requests"]
+    assert enriched["ticket"]["knowledge_sources"]
+    assert enriched["ticket_no"].startswith("CS")
+
+
+def test_intake_dispatcher_live_returns_side_effects():
+    worker = _load("intake-dispatcher", "intake_dispatcher")
+    out = worker.run(
+        {
+            "event_type": "ops.intake.customer_ticket",
+            "source": "customer_ticket",
+            "ticket_no": "CS2026072405405500610030",
+            "summary": "官网首页加载不出来",
+        },
+        {},
+    )
+    assert out["ok"] is True
+    assert out["read_only"] is False
+    assert out["side_effects"]
+    assert out["side_effects"][0]["action"] == "dispatch_employee"
+    assert out["side_effects"][0]["employee_id"] == "user-customer-service-officer"
+
+
+def test_intake_dispatcher_burn_in_stays_read_only():
+    worker = _load("intake-dispatcher", "intake_dispatcher")
+    out = worker.run(
+        {
+            "burn_in": True,
+            "burn_in_read_only": True,
+            "requests": [
+                {
+                    "id": "req-1",
+                    "text": "burn-in sample request text for intake",
+                    "route_hint": "user-customer-service-officer",
+                }
+            ],
+        },
+        {},
+    )
+    assert out["ok"] is True
+    assert out["read_only"] is True
+    assert out["side_effects"] == []
+
+
+def test_extract_routing_plan_from_exec_result():
+    from modstore_server.incident_bus import _extract_routing_plan
+
+    plan = _extract_routing_plan(
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "direct_python",
+                        "ok": True,
+                        "output": {
+                            "routing_plan": [
+                                {
+                                    "request_id": "CS1",
+                                    "proposed_owner": "user-customer-service-officer",
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+    )
+    assert plan[0]["proposed_owner"] == "user-customer-service-officer"

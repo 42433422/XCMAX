@@ -445,6 +445,24 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
 
     ok = bool(results) and all(bool(row.get("ok")) for row in results if row.get("role") != "fix")
 
+    failed_roles = [
+        str(row.get("role") or "")
+        for row in results
+        if not bool(row.get("ok"))
+        or bool((row.get("result") or {}).get("handler_failed"))
+        or str(row.get("status") or "").strip().lower() == "handler_failed"
+    ]
+    handler_failed_count = len(failed_roles)
+    if handler_failed_count:
+        logger.warning(
+            "incident_team: handler_failed_by_event_type event_type=%s event_id=%s "
+            "handler_failed_count=%s roles=%s",
+            event_type,
+            event_id,
+            handler_failed_count,
+            failed_roles,
+        )
+
     # ---- 闭环：handler_failed → 按 failure_kind 自动 follow-up ----
     # 旧版：handler_failed 仅写 _team_claim 后 return，184 个 handler_failed 全靠人工接手。
     # 新版：transient 自动重试 1 次；quota 标记 quota_blocked 不重试（避免 403 死亡螺旋）；
@@ -473,6 +491,9 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                 "recovery": recovery,
                 "team": slim_rows,
                 "follow_ups": follow_ups,
+                "handler_failed_count": handler_failed_count,
+                "handler_failed_roles": failed_roles,
+                "event_type": str(event_type or ""),
             }
             # 客服工单：复用现有 CS 消息/action，把员工进展回写到用户可见工单
             try:

@@ -1620,6 +1620,21 @@ def should_run_self_maintenance_loop(
     }
 
 
+# Preferred Para nests for delivery_validation lookup. Order is part of the
+# determinism contract: same payload shape always yields the same DV.
+_DELIVERY_VALIDATION_PREFERRED_KEYS = (
+    "para_result",
+    "response",
+    "outputs",
+    "result",
+    "change_delivery",
+    "snapshot",
+    "subtasks",
+    "data",
+    "subtask",
+)
+
+
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
     if not result or result.get("handler_failed"):
         return False
@@ -1646,7 +1661,55 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
         for item in outputs:
             if isinstance(item, dict) and item.get("ok") is False:
                 return False
+    # Nested delivery_validation with non-zero exit codes is hard failure evidence
+    # even when the outer Para envelope claims ok=True.
+    dv_gate = _delivery_validation_gate(result)
+    if dv_gate.get("found") and not dv_gate.get("ok"):
+        return False
     return True
+
+
+def _delivery_validation_command_failed(command: Any) -> bool:
+    return isinstance(command, dict) and command.get("exit_code") not in (0, None)
+
+
+def _delivery_validation_gate(result: Any) -> Dict[str, Any]:
+    """Evaluate nested delivery_validation for closed-loop completion evidence.
+
+    Returns a stable dict used by validate/writeback completion checks:
+      found / ok / reason / delivery_validation
+    """
+    dv = _find_delivery_validation(result)
+    if not isinstance(dv, dict):
+        return {
+            "delivery_validation": None,
+            "found": False,
+            "ok": True,
+            "reason": "delivery_validation_absent",
+        }
+    cmds = dv.get("commands")
+    if not isinstance(cmds, list) or not cmds:
+        return {
+            "delivery_validation": dv,
+            "found": True,
+            "ok": True,
+            "reason": "delivery_validation_no_commands",
+        }
+    failed_cmds = [c for c in cmds if _delivery_validation_command_failed(c)]
+    if failed_cmds:
+        return {
+            "delivery_validation": dv,
+            "failed_commands": failed_cmds[:3],
+            "found": True,
+            "ok": False,
+            "reason": "delivery_validation_failed",
+        }
+    return {
+        "delivery_validation": dv,
+        "found": True,
+        "ok": True,
+        "reason": "delivery_validation_passed",
+    }
 
 
 def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, Any]]:
@@ -1654,24 +1717,58 @@ def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, An
 
     delivery_validation 不在本地代码产出，由 Para 平台返回时嵌在
     result.result.outputs[].response / para_result 等任意层级，故需递归。
-    限制深度 6 / 列表前 12 项，避免大对象全遍历。
+
+    Determinism contract:
+    - Prefer canonical Para nests (``para_result`` / ``response`` / ``outputs`` / …)
+      before other keys.
+    - Remaining dict keys are visited in sorted order (not insertion order).
+    - Lists keep the first 12 items; depth is capped at 6.
+    - When multiple DVs exist, prefer the one with a ``commands`` list (and among
+      those, the one with non-zero exit_code evidence).
     """
-    if depth > 6 or not isinstance(obj, (dict, list)):
+    candidates: List[Tuple[Tuple[int, int, int, int], Dict[str, Any]]] = []
+    _collect_delivery_validation_candidates(obj, depth=depth, out=candidates)
+    if not candidates:
         return None
+    # Higher score wins; tie-break by discovery rank (earlier preferred path).
+    best = max(candidates, key=lambda item: (item[0][0], item[0][1], item[0][2], -item[0][3]))
+    return best[1]
+
+
+def _collect_delivery_validation_candidates(
+    obj: Any,
+    *,
+    depth: int,
+    out: List[Tuple[Tuple[int, int, int, int], Dict[str, Any]]],
+    rank: int = 0,
+) -> int:
+    """Collect scored delivery_validation candidates; returns next discovery rank."""
+    if depth > 6 or not isinstance(obj, (dict, list)):
+        return rank
     if isinstance(obj, dict):
         dv = obj.get("delivery_validation")
         if isinstance(dv, dict):
-            return dv
-        for value in obj.values():
-            found = _find_delivery_validation(value, depth + 1)
-            if found is not None:
-                return found
-    else:
-        for item in obj[:12]:
-            found = _find_delivery_validation(item, depth + 1)
-            if found is not None:
-                return found
-    return None
+            cmds = dv.get("commands") if isinstance(dv.get("commands"), list) else []
+            failed = sum(1 for c in cmds if _delivery_validation_command_failed(c))
+            # score: has_commands, failed_count, commands_len, -rank
+            out.append(((1 if cmds else 0, failed, len(cmds), rank), dv))
+            rank += 1
+        preferred_present = [
+            key for key in _DELIVERY_VALIDATION_PREFERRED_KEYS if key in obj and key != "delivery_validation"
+        ]
+        remaining = sorted(
+            key
+            for key in obj.keys()
+            if key not in _DELIVERY_VALIDATION_PREFERRED_KEYS and key != "delivery_validation"
+        )
+        for key in preferred_present + remaining:
+            rank = _collect_delivery_validation_candidates(
+                obj.get(key), depth=depth + 1, out=out, rank=rank
+            )
+        return rank
+    for item in obj[:12]:
+        rank = _collect_delivery_validation_candidates(item, depth=depth + 1, out=out, rank=rank)
+    return rank
 
 
 def _extract_failure_reason(
@@ -1744,27 +1841,26 @@ def _extract_failure_reason(
     # delivery_validation 失败：员工交付了代码（change_delivery.ok=true）但验证命令
     # （测试/lint）失败。这是 code step 最常见的静默失败来源——_employee_result_ok
     # 判 False 但其他分支都提不到原因。delivery_validation 由 Para 远端返回，嵌在
-    # result 任意层级，用 _find_delivery_validation 递归定位。
-    dv = _find_delivery_validation(result)
-    if isinstance(dv, dict):
-        cmds = dv.get("commands")
-        if isinstance(cmds, list):
-            failed_cmds = [
-                c for c in cmds if isinstance(c, dict) and c.get("exit_code") not in (0, None)
-            ]
-            if failed_cmds:
-                parts: List[str] = []
-                for c in failed_cmds[:3]:
-                    ec = c.get("exit_code")
-                    cmd = str(c.get("command") or "")[:80]
-                    tail = str(c.get("output_tail") or c.get("output") or "")[:120]
-                    seg = f"exit={ec}"
-                    if cmd:
-                        seg += f" cmd={cmd}"
-                    if tail:
-                        seg += f" tail={tail}"
-                    parts.append(seg)
-                return "delivery_validation_failed: " + " | ".join(parts)[:300]
+    # result 任意层级，用 deterministic `_delivery_validation_gate` 定位。
+    dv_gate = _delivery_validation_gate(result)
+    if dv_gate.get("found") and not dv_gate.get("ok"):
+        failed_cmds = dv_gate.get("failed_commands") or []
+        parts: List[str] = []
+        for c in failed_cmds[:3]:
+            if not isinstance(c, dict):
+                continue
+            ec = c.get("exit_code")
+            cmd = str(c.get("command") or "")[:80]
+            tail = str(c.get("output_tail") or c.get("output") or "")[:120]
+            seg = f"exit={ec}"
+            if cmd:
+                seg += f" cmd={cmd}"
+            if tail:
+                seg += f" tail={tail}"
+            parts.append(seg)
+        if parts:
+            return "delivery_validation_failed: " + " | ".join(parts)[:300]
+        return "delivery_validation_failed"
 
     # para 层错误（走 Para bridge 时）
     if isinstance(para_meta, dict):
@@ -1881,6 +1977,11 @@ def _extract_report_excerpt(result: Dict[str, Any], limit: int = 4000) -> str:
 
 
 def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
+    # Accepted wait-timeout is not a transient network blip: the Para task was
+    # already created. Redispatching would duplicate work (see kb fix
+    # 20260723T062851Z-fix-accepted-para-timeout-duplicate-code-retry).
+    if _is_accepted_para_wait_timeout(result):
+        return False
     text = _extract_report_excerpt(result).lower()
     transient_terms = (
         "connection refused",
@@ -1895,20 +1996,56 @@ def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
     return any(term in text for term in transient_terms)
 
 
-def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
-    """Detect an accepted Para task whose synchronous wait expired."""
+def _coerce_truthy_flag(value: Any) -> bool:
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value == 1
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
+
+def _para_item_is_accepted_wait_timeout(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    handler = str(item.get("handler") or "").strip()
+    if handler and handler != "para_delegate":
+        return False
+    if not _coerce_truthy_flag(item.get("accepted")):
+        return False
+    status = str(item.get("status") or "").strip().lower()
+    if status == "para_task_timeout":
+        return True
+    # Some wrappers put the wait outcome under para_result / snapshot.status.
+    for nest_key in ("para_result", "snapshot", "response"):
+        nested = item.get(nest_key)
+        if isinstance(nested, dict):
+            nested_status = str(nested.get("status") or "").strip().lower()
+            if nested_status == "para_task_timeout":
+                return True
+    return False
+
+
+def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
+    """Detect an accepted Para task whose synchronous wait expired.
+
+    Shapes covered (all mean: task accepted, do NOT start code_fix redispatch):
+    - ``result.outputs[]`` para_delegate item with accepted + para_task_timeout
+    - flat handler dict at top-level / ``result``
+    - accepted flag as bool/1/\"true\"; timeout status on item or nested para_result
+    """
+    if not isinstance(result, dict):
+        return False
+    if _para_item_is_accepted_wait_timeout(result):
+        return True
     inner = result.get("result") if isinstance(result.get("result"), dict) else result
+    if _para_item_is_accepted_wait_timeout(inner):
+        return True
     outputs = inner.get("outputs") if isinstance(inner, dict) else None
     if not isinstance(outputs, list):
         return False
-    return any(
-        isinstance(item, dict)
-        and item.get("handler") == "para_delegate"
-        and item.get("accepted") is True
-        and str(item.get("status") or "").strip().lower() == "para_task_timeout"
-        for item in outputs
-    )
+    return any(_para_item_is_accepted_wait_timeout(item) for item in outputs)
 
 
 def _loop_platform_bench_override() -> Optional[tuple]:
@@ -3400,6 +3537,7 @@ def _validate_kb_json_changes_for_auto_merge(
 
 KB_SCHEMA_RETRY_MAX = 2
 KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
+KB_SCHEMA_FAILED_STATUS = "kb_schema_failed"
 NEEDS_HUMAN_LABEL = "needs-human"
 
 
@@ -3818,17 +3956,23 @@ def _reject_and_retry_kb_schema_failure(
     except Exception:
         logger.exception("kb_schema_retry: failed to write governance audit")
 
-    # 5. Build final state
-    final_status = "completed_waiting_human_strategy" if escalated else "failed"
+    # 5. Build final state — status must be distinct from generic ``failed`` so
+    # observers / dashboards can tell KB writeback schema rejection apart from
+    # dispatch or test failures.
+    final_status = (
+        "completed_waiting_human_strategy" if escalated else KB_SCHEMA_FAILED_STATUS
+    )
     policy_decision = {
         "action": "hold_for_automated_remediation",
         "active_gates": {
             "kb_schema_gate": {
                 "ok": False,
                 "blocking": True,
+                "label": KB_SCHEMA_FAILED_LABEL,
                 "reason": "kb_json_schema_validation_failed",
                 "retry_count": retry_count,
                 "escalated": escalated,
+                "status": final_status,
             }
         },
         "governance_gate": audit_record,
@@ -3836,11 +3980,15 @@ def _reject_and_retry_kb_schema_failure(
         "reason": "kb_json_schema_validation_failed",
         "retry_count": retry_count,
         "escalated": escalated,
+        "status": final_status,
     }
     final = {
         "branch": branch,
         "completed_at": _iso(now),
+        "error": "kb_json_schema_validation_failed",
         "failed_step": "code",
+        "failure_kind": KB_SCHEMA_FAILED_STATUS,
+        "kb_schema_failed": True,
         "kb_schema_retry": True,
         "para_task_id": para_task_id,
         "phase": "complete",

@@ -9,7 +9,7 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.integrations.ops_action_handlers import EVENT_TYPES
@@ -335,6 +335,91 @@ def _dispatch_incident(event_id: int) -> None:
                 )
 
 
+def _extract_routing_plan(exec_result: Any) -> List[Dict[str, Any]]:
+    """Pull intake-dispatcher ``routing_plan`` out of execute_employee_task result."""
+
+    if not isinstance(exec_result, dict):
+        return []
+    result = exec_result.get("result")
+    if not isinstance(result, dict):
+        return []
+    out = result.get("output")
+    if isinstance(out, dict) and isinstance(out.get("routing_plan"), list):
+        return [row for row in out["routing_plan"] if isinstance(row, dict)]
+    outputs = result.get("outputs")
+    if isinstance(outputs, list):
+        for item in outputs:
+            if not isinstance(item, dict):
+                continue
+            nested = item.get("output")
+            if isinstance(nested, dict) and isinstance(nested.get("routing_plan"), list):
+                return [row for row in nested["routing_plan"] if isinstance(row, dict)]
+    return []
+
+
+def _routing_plan_owners(exec_result: Any) -> set[str]:
+    return {
+        str(row.get("proposed_owner") or "").strip()
+        for row in _extract_routing_plan(exec_result)
+        if str(row.get("proposed_owner") or "").strip()
+    }
+
+
+def _dispatch_intake_routing_plan(
+    exec_result: Any,
+    *,
+    incident_payload: Dict[str, Any],
+    event_type: str,
+    source: str,
+    admin_id: int,
+    catalog_ids: set[str],
+    skip_ids: set[str],
+    brief: str,
+) -> int:
+    """Execute ``proposed_owner`` employees from intake routing_plan (real side effects)."""
+
+    from modstore_server.duty_workforce_contracts import duty_event_execution_input
+
+    extra = 0
+    for row in _extract_routing_plan(exec_result):
+        owner = str(row.get("proposed_owner") or "").strip()
+        if not owner or owner in skip_ids or owner not in catalog_ids:
+            continue
+        try:
+            duty_input = duty_event_execution_input(
+                owner,
+                event_type=event_type,
+                source=source,
+                incident=incident_payload,
+            )
+            owner_brief = (
+                f"{brief} | route={owner} request_id={row.get('request_id') or ''}"
+            )[:500]
+            execute_employee_task(
+                owner,
+                owner_brief,
+                duty_input
+                or _incident_employee_input(
+                    incident_payload=incident_payload,
+                    event_type=event_type,
+                    source=source,
+                ),
+                user_id=0 if duty_input else admin_id,
+            )
+            extra += 1
+            skip_ids.add(owner)
+            logger.info(
+                "incident_bus: intake routing_plan dispatched owner=%s request_id=%s",
+                owner,
+                row.get("request_id"),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "incident_bus: intake routing_plan dispatch failed owner=%s", owner
+            )
+    return extra
+
+
 def _dispatch_incident_body(event_id: int) -> None:
     event_type_pre = _incident_event_type(event_id)
     if event_type_pre in _NON_DISPATCH_EVENT_TYPES:
@@ -497,6 +582,7 @@ def _dispatch_incident_body(event_id: int) -> None:
         brief = f"[{event_type}] {summary}"[:500]
 
     dispatched = 0
+    already_ran: set[str] = set()
     for eid_emp in binding_ids:
         if not eid_emp or eid_emp not in catalog_ids:
             continue
@@ -509,7 +595,7 @@ def _dispatch_incident_body(event_id: int) -> None:
                 source=source,
                 incident=payload,
             )
-            execute_employee_task(
+            exec_result = execute_employee_task(
                 eid_emp,
                 brief,
                 duty_input
@@ -521,6 +607,21 @@ def _dispatch_incident_body(event_id: int) -> None:
                 user_id=0 if duty_input else admin_id,
             )
             dispatched += 1
+            already_ran.add(eid_emp)
+            # intake-dispatcher: consume routing_plan → real downstream dispatch
+            if eid_emp == "intake-dispatcher":
+                extra = _dispatch_intake_routing_plan(
+                    exec_result,
+                    incident_payload=payload,
+                    event_type=event_type,
+                    source=source,
+                    admin_id=admin_id,
+                    catalog_ids=catalog_ids,
+                    skip_ids=already_ran,
+                    brief=brief,
+                )
+                dispatched += int(extra)
+                already_ran.update(_routing_plan_owners(exec_result))
         except Exception as exc:  # noqa: BLE001
             logger.exception("incident dispatch employee=%s: %s", eid_emp, exc)
 
