@@ -10,6 +10,7 @@ on:
 permissions:
   actions: read
   contents: read
+  pull-requests: read
 
 jobs:
   receipt:
@@ -33,6 +34,7 @@ jobs:
       - name: Record authenticated production receipt
         env:
           DEPLOYMENT_RECEIPT_URL: ${{ vars.MODSTORE_DEPLOYMENT_RECEIPT_URL || 'https://xiu-ci.com/api/ops/self-maintenance/deployment-receipt' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPS_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
           SOURCE_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           SOURCE_WORKFLOW_ID: ${{ github.event.workflow_run.id }}
@@ -46,12 +48,28 @@ jobs:
           run_id="$(jq -r '.run_id // ""' "$correlation")"
           environment="$(jq -r '.environment // "production"' "$correlation")"
           [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid deployment merge SHA"; exit 1; }
+          pr_attestation="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/commits/${merge_sha}/pulls" \
+            | jq -c --arg merge_sha "$merge_sha" \
+              '[.[] | select(.merged_at != null and .merge_commit_sha == $merge_sha)] | if length == 1 then .[0] else empty end')"
+          attested_branch=""
+          attested_branch_head_sha=""
+          attested_pr_number=""
+          if [ -n "$pr_attestation" ]; then
+            attested_branch="$(jq -r '.head.ref // ""' <<<"$pr_attestation")"
+            attested_branch_head_sha="$(jq -r '.head.sha // ""' <<<"$pr_attestation")"
+            attested_pr_number="$(jq -r '.number // ""' <<<"$pr_attestation")"
+          fi
           action_id=""
           if [ -n "$run_id" ]; then
             action_id="loop:${run_id}:deploy:${environment}:${merge_sha:0:12}"
           fi
           payload="$(jq -nc \
             --arg action_id "$action_id" \
+            --arg attested_branch "$attested_branch" \
+            --arg attested_branch_head_sha "$attested_branch_head_sha" \
+            --arg attested_pr_number "$attested_pr_number" \
             --arg environment "$environment" \
             --arg merge_sha "$merge_sha" \
             --arg run_id "$run_id" \
@@ -59,7 +77,7 @@ jobs:
             --arg workflow_run_id "$SOURCE_WORKFLOW_ID" \
             --arg workflow_status "completed" \
             --arg workflow_url "$SOURCE_WORKFLOW_URL" \
-            '{action_id:$action_id,environment:$environment,merge_sha:$merge_sha,run_id:$run_id,workflow_conclusion:$workflow_conclusion,workflow_run_id:$workflow_run_id,workflow_status:$workflow_status,workflow_url:$workflow_url}')"
+            '{action_id:$action_id,attested_branch:$attested_branch,attested_branch_head_sha:$attested_branch_head_sha,attested_pr_number:$attested_pr_number,environment:$environment,merge_sha:$merge_sha,run_id:$run_id,workflow_conclusion:$workflow_conclusion,workflow_run_id:$workflow_run_id,workflow_status:$workflow_status,workflow_url:$workflow_url}')"
           response="$(curl --fail-with-body --silent --show-error \
             -X POST "$DEPLOYMENT_RECEIPT_URL" \
             -H "Authorization: Bearer $OPS_TOKEN" \
