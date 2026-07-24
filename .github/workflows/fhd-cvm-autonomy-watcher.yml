@@ -3,7 +3,7 @@
 # CI SSOT: generated from FHD/.github/workflows/fhd-cvm-autonomy-watcher.yml
 # Phase 2：服务器端自治 watcher（cron 每 10 分钟 SSH 触发）
 # 与 fhd-deploy.yml break-glass 模式一致：SSH 到 CVM 执行 watcher，不常驻 systemd
-# open_incident_issue action 通过 CVM_INCIDENT_PAT 在 CVM 上调 GitHub API 创建 issue
+# open_incident_issue：优先 CVM_INCIDENT_PAT；缺省回退 github.token（job 期内有效，可经 SSH 带到 CVM）
 name: cvm-autonomy-watcher
 
 on:
@@ -22,8 +22,7 @@ concurrency:
   group: cvm-autonomy-watcher
   cancel-in-progress: false
 
-# issues: write 仅供 runner-side 调用 GitHub API 时使用（如未来扩展）；
-# 实际 issue 创建在 CVM 上通过 CVM_INCIDENT_PAT 完成（Actions GITHUB_TOKEN 不能跨 runner）
+# issues: write：供 open_incident_issue 经 CVM 调 GitHub API（token 由本 job 注入）
 permissions:
   contents: read
   issues: write
@@ -75,7 +74,9 @@ jobs:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
-          CVM_INCIDENT_PAT: ${{ secrets.CVM_INCIDENT_PAT }}
+          # 长期 PAT 优先；未配置时用本 job 的 GITHUB_TOKEN，保证「健康→根因 issue」出口不哑火
+          CVM_INCIDENT_PAT: ${{ secrets.CVM_INCIDENT_PAT || github.token }}
+          INCIDENT_TOKEN_SOURCE: ${{ secrets.CVM_INCIDENT_PAT && 'CVM_INCIDENT_PAT' || 'github.token' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           DEPLOY_ROOT: ${{ matrix.deploy_root }}
@@ -91,6 +92,12 @@ jobs:
           KEY_FILE="${RUNNER_TEMP}/cvm_autonomy_key"
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
+
+          if [ -z "${CVM_INCIDENT_PAT:-}" ]; then
+            echo "::error::No incident token: set secrets.CVM_INCIDENT_PAT or rely on github.token."
+            exit 1
+          fi
+          echo "[watcher] incident token source=${INCIDENT_TOKEN_SOURCE}"
 
           AUDIT_DIR="${DEPLOY_ROOT}/autonomy"
 
@@ -166,12 +173,17 @@ jobs:
             set +a
           fi
           export FHD_API_BASE_URL="\${FHD_API_BASE_URL:-\$API_BASE}"
+          WATCHER_SCRIPT="${DEPLOY_ROOT}/scripts/autonomy/cvm_autonomy_watcher.py"
+          if [ ! -f "\$WATCHER_SCRIPT" ]; then
+            WATCHER_SCRIPT="/opt/xcmax/current/FHD/scripts/autonomy/cvm_autonomy_watcher.py"
+          fi
+          test -f "\$WATCHER_SCRIPT"
           GITHUB_TOKEN='${CVM_INCIDENT_PAT}' \
           GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' \
           FHD_API_BASE_URL="\$FHD_API_BASE_URL" \
           AUTONOMY_WEBHOOK_TOKEN="\${AUTONOMY_WEBHOOK_TOKEN:-}" \
           MODSTORE_OPS_INGEST_TOKEN="\${MODSTORE_OPS_INGEST_TOKEN:-}" \
-          python3 "${DEPLOY_ROOT}/scripts/autonomy/cvm_autonomy_watcher.py" \
+          python3 "\$WATCHER_SCRIPT" \
             --deploy-root "${DEPLOY_ROOT}" \
             --manifest-path "${MANIFEST}" \
             --audit-dir "${AUDIT_DIR}" \
