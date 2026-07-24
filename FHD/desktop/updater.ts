@@ -15,6 +15,7 @@ let updateDownloaded = false
 let downloadedVersion = ''
 let downloadedBuildSha = ''
 let remoteBuildSha = ''
+let remoteReleaseDate = ''
 let remoteReleaseNotes = ''
 let remoteReleaseMedia: ReleaseMediaSlide[] = []
 let rebuildHookInstalled = false
@@ -91,18 +92,28 @@ export function getUpdateStatus(): { type: string; data?: unknown } | null {
   return lastUpdateEvent
 }
 
+function buildInfoCandidates(): string[] {
+  if (!app.isPackaged) {
+    return []
+  }
+  return [
+    path.join(process.resourcesPath, 'build-info.json'),
+    path.join(process.resourcesPath, 'backend', 'build-info.json'),
+  ]
+}
+
 export function readLocalBuildSha(): string {
   if (!app.isPackaged) {
     return String(process.env.XCAGI_BUILD_SHA || '').trim()
   }
-  const candidates = [
-    path.join(process.resourcesPath, 'build-info.json'),
-    path.join(process.resourcesPath, 'backend', 'build-info.json')
-  ]
-  for (const filePath of candidates) {
+  for (const filePath of buildInfoCandidates()) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { gitSha?: string; buildSha?: string }
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
+        gitSha?: string
+        buildSha?: string
+        builtAt?: string
+      }
       const sha = String(raw.gitSha || raw.buildSha || '').trim()
       if (sha) return sha
     } catch {
@@ -110,6 +121,47 @@ export function readLocalBuildSha(): string {
     }
   }
   return ''
+}
+
+/** Local package time for same-version rebuild ordering (builtAt, else build-info mtime). */
+export function readLocalBuildTimeMs(): number {
+  if (!app.isPackaged) {
+    const fromEnv = Date.parse(String(process.env.XCAGI_BUILD_TIME || '').trim())
+    return Number.isFinite(fromEnv) ? fromEnv : 0
+  }
+  for (const filePath of buildInfoCandidates()) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { builtAt?: string }
+      const builtAt = Date.parse(String(raw.builtAt || '').trim())
+      if (Number.isFinite(builtAt) && builtAt > 0) return builtAt
+      const mtimeMs = fs.statSync(filePath).mtimeMs
+      if (Number.isFinite(mtimeMs) && mtimeMs > 0) return mtimeMs
+    } catch {
+      /* try next */
+    }
+  }
+  return 0
+}
+
+/**
+ * Same Electron semver may ship multiple rebuilds. Only treat remote as an update when
+ * buildSha differs AND remote releaseDate is strictly newer than the local package time.
+ * SHA mismatch alone used to roll newer local/dev builds back to a stale CDN package.
+ */
+export function isSameVersionRebuildNewer(input: {
+  remoteSha: string
+  localSha: string
+  remoteReleaseDate: string
+  localBuildTimeMs: number
+}): boolean {
+  const remoteSha = String(input.remoteSha || '').trim()
+  const localSha = String(input.localSha || '').trim()
+  if (!remoteSha || !localSha || remoteSha === localSha) return false
+  const remoteMs = Date.parse(String(input.remoteReleaseDate || '').trim())
+  const localMs = Number(input.localBuildTimeMs) || 0
+  if (!Number.isFinite(remoteMs) || remoteMs <= 0 || localMs <= 0) return false
+  return remoteMs > localMs
 }
 
 export function parseYamlField(content: string, field: string): string {
@@ -124,23 +176,37 @@ function installSameVersionRebuildHook(): void {
   }
   rebuildHookInstalled = true
   // electron-updater 将 isUpdateAvailable 标为 private；经 unknown 注入同版本 buildSha 比对。
+  // 注意：新版 electron-updater 的 isUpdateAvailable 是 async，必须 await。
+  // 若把 Promise 对象当布尔值，Promise 恒为 truthy → 同版本也会永远「可更新」。
   const updater = autoUpdater as unknown as {
-    isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean
+    isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean | Promise<boolean>
   }
   const original = updater.isUpdateAvailable?.bind(autoUpdater)
-  updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
+  updater.isUpdateAvailable = async (updateInfo: UpdateInfo) => {
     // macOS auto-update must use a ZIP artifact; DMG-only feeds are not installable.
     if (process.platform === 'darwin' && !updateInfoHasMacZip(updateInfo)) {
       return false
-    }
-    if (original?.(updateInfo)) {
-      return true
     }
     const remoteSha = String(
       (updateInfo as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
     ).trim()
     const localSha = readLocalBuildSha()
-    return Boolean(remoteSha && localSha && remoteSha !== localSha)
+    // 同一 Git 构建已装在本机：绝不再提示自更新。
+    if (remoteSha && localSha && remoteSha === localSha) {
+      return false
+    }
+    if (original && (await original(updateInfo))) {
+      return true
+    }
+    const releaseDate = String(
+      (updateInfo as UpdateInfo & { releaseDate?: string }).releaseDate || remoteReleaseDate || ''
+    ).trim()
+    return isSameVersionRebuildNewer({
+      remoteSha,
+      localSha,
+      remoteReleaseDate: releaseDate,
+      localBuildTimeMs: readLocalBuildTimeMs(),
+    })
   }
 }
 
@@ -180,6 +246,7 @@ function enrichUpdateInfo(
 export function configureUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
+  ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
     void ensureUpdaterNetSession()
   }
@@ -338,6 +405,7 @@ export async function checkForUpdates(): Promise<unknown> {
   if (publicKeyPem && updateUrl) {
     const metadataText = await fetchLatestMetadataText()
     remoteBuildSha = parseYamlField(metadataText, 'buildSha')
+    remoteReleaseDate = parseYamlField(metadataText, 'releaseDate').replace(/^['"]|['"]$/g, '')
     remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
     remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
     installSameVersionRebuildHook()
@@ -438,6 +506,7 @@ export function __resetUpdateDownloadedForTest(): void {
   remoteReleaseMedia = []
   remoteReleaseNotes = ''
   remoteBuildSha = ''
+  remoteReleaseDate = ''
 }
 
 export { normalizeReleaseMedia, parseReleaseMediaFromYaml } from './release-media.js'

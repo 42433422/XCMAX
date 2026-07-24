@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from retort_engine.external_advantage_adjudicator import adjudicate_external_advantage_rows, blind_third_party_adjudicate_external_advantages
+from retort_engine.external_advantage_adjudicator import (
+    adjudicate_external_advantage_rows,
+    blind_third_party_adjudicate_external_advantages,
+)
 from retort_engine.external_advantage_regression import verify_external_advantage_rows
 from retort_engine.pr_review import review_diff
 
@@ -17,7 +20,7 @@ DEFAULT_ADVANTAGE_CASES: tuple[dict[str, Any], ...] = (
         "external_advantage": "PR agent style secret review should surface credential leaks as publishable blockers.",
         "expected_context": "security",
         "expected_severity": "high",
-        "diff": "diff --git a/pr_agent/settings.py b/pr_agent/settings.py\n--- a/pr_agent/settings.py\n+++ b/pr_agent/settings.py\n@@ -0,0 +1,1 @@\n+OPENAI_API_TOKEN = \"live-secret-value\"\n",
+        "diff": 'diff --git a/pr_agent/settings.py b/pr_agent/settings.py\n--- a/pr_agent/settings.py\n+++ b/pr_agent/settings.py\n@@ -0,0 +1,1 @@\n+OPENAI_API_TOKEN = "live-secret-value"\n',
     },
     {
         "case_id": "reviewdog-workflow-token",
@@ -26,7 +29,7 @@ DEFAULT_ADVANTAGE_CASES: tuple[dict[str, Any], ...] = (
         "external_advantage": "Review publisher workflows need CI context and credential safety at the same time.",
         "expected_context": "ci_config",
         "expected_severity": "high",
-        "diff": "diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml\n--- a/.github/workflows/review.yml\n+++ b/.github/workflows/review.yml\n@@ -0,0 +1,1 @@\n+REVIEWDOG_TOKEN: \"review-token-value\"\n",
+        "diff": 'diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml\n--- a/.github/workflows/review.yml\n+++ b/.github/workflows/review.yml\n@@ -0,0 +1,1 @@\n+REVIEWDOG_TOKEN: "review-token-value"\n',
     },
     {
         "case_id": "swe-bench-oracle-placeholder",
@@ -78,17 +81,39 @@ def build_external_advantage_matrix(
     selected = list(cases or DEFAULT_ADVANTAGE_CASES)
     rows = [_evaluate_case(case) for case in selected]
     ready_rows = [row for row in rows if row["ready"]]
-    source_projects = sorted({str(row["source_project"]) for row in rows if row.get("source_project")})
-    absorbed_signals = sorted({str(row["absorbed_signal"]) for row in rows if row.get("absorbed_signal")})
-    baseline_average = round(sum(int(row["baseline"]["score"]) for row in rows) / len(rows), 2) if rows else 0.0
-    retort_average = round(sum(int(row["retort"]["score"]) for row in rows) / len(rows), 2) if rows else 0.0
+    source_projects = sorted(
+        {str(row["source_project"]) for row in rows if row.get("source_project")}
+    )
+    absorbed_signals = sorted(
+        {str(row["absorbed_signal"]) for row in rows if row.get("absorbed_signal")}
+    )
+    baseline_average = (
+        round(sum(int(row["baseline"]["score"]) for row in rows) / len(rows), 2)
+        if rows
+        else 0.0
+    )
+    retort_average = (
+        round(sum(int(row["retort"]["score"]) for row in rows) / len(rows), 2)
+        if rows
+        else 0.0
+    )
     delta = round(retort_average - baseline_average, 2)
     regression = verify_external_advantage_rows(rows)
-    regression_summary = regression.get("summary") if isinstance(regression.get("summary"), dict) else {}
+    regression_summary = (
+        regression.get("summary") if isinstance(regression.get("summary"), dict) else {}
+    )
     adjudication = adjudicate_external_advantage_rows(rows)
-    adjudication_summary = adjudication.get("summary") if isinstance(adjudication.get("summary"), dict) else {}
+    adjudication_summary = (
+        adjudication.get("summary")
+        if isinstance(adjudication.get("summary"), dict)
+        else {}
+    )
     blind_adjudication = blind_third_party_adjudicate_external_advantages(rows)
-    blind_summary = blind_adjudication.get("summary") if isinstance(blind_adjudication.get("summary"), dict) else {}
+    blind_summary = (
+        blind_adjudication.get("summary")
+        if isinstance(blind_adjudication.get("summary"), dict)
+        else {}
+    )
     summary = {
         "case_count": len(rows),
         "min_case_count": min_cases,
@@ -98,30 +123,71 @@ def build_external_advantage_matrix(
         "baseline_average_score": baseline_average,
         "retort_average_score": retort_average,
         "score_delta": delta,
-        "behavior_delta_count": sum(1 for row in rows if int(row["behavior_delta"]) > 0),
-        "publishable_case_count": sum(1 for row in rows if row["retort"].get("publishable_comment_count", 0) > 0),
-        "extension_policy_case_count": sum(1 for row in rows if row["retort"].get("extension_policy_known_count", 0) > 0),
-        "per_case_before_after": all("baseline" in row and "retort" in row for row in rows),
-        "all_advantages_improved": bool(rows) and all(int(row["behavior_delta"]) > 0 for row in rows),
+        "behavior_delta_count": sum(
+            1 for row in rows if int(row["behavior_delta"]) > 0
+        ),
+        "publishable_case_count": sum(
+            1 for row in rows if row["retort"].get("publishable_comment_count", 0) > 0
+        ),
+        "extension_policy_case_count": sum(
+            1
+            for row in rows
+            if row["retort"].get("extension_policy_known_count", 0) > 0
+        ),
+        "per_case_before_after": all(
+            "baseline" in row and "retort" in row for row in rows
+        ),
+        "all_advantages_improved": bool(rows)
+        and all(int(row["behavior_delta"]) > 0 for row in rows),
         "regression_status": regression.get("status", ""),
         "regression_case_count": regression_summary.get("regression_case_count", 0),
-        "passed_regression_case_count": regression_summary.get("passed_regression_case_count", 0),
-        "direct_regression_case_count": regression_summary.get("direct_execution_case_count", 0),
-        "all_use_direct_review_execution": regression_summary.get("all_use_direct_review_execution", False),
-        "all_delta_regressions_verified": regression_summary.get("all_delta_regressions_verified", False),
+        "passed_regression_case_count": regression_summary.get(
+            "passed_regression_case_count", 0
+        ),
+        "direct_regression_case_count": regression_summary.get(
+            "direct_execution_case_count", 0
+        ),
+        "all_use_direct_review_execution": regression_summary.get(
+            "all_use_direct_review_execution", False
+        ),
+        "all_delta_regressions_verified": regression_summary.get(
+            "all_delta_regressions_verified", False
+        ),
         "independent_adjudication_status": adjudication.get("status", ""),
-        "independent_adjudicated_case_count": adjudication_summary.get("adjudicated_case_count", 0),
-        "independent_accepted_case_count": adjudication_summary.get("accepted_case_count", 0),
-        "independent_minimum_recomputed_delta": adjudication_summary.get("minimum_recomputed_delta", 0),
-        "independent_all_cases_accepted": adjudication_summary.get("all_cases_accepted", False),
+        "independent_adjudicated_case_count": adjudication_summary.get(
+            "adjudicated_case_count", 0
+        ),
+        "independent_accepted_case_count": adjudication_summary.get(
+            "accepted_case_count", 0
+        ),
+        "independent_minimum_recomputed_delta": adjudication_summary.get(
+            "minimum_recomputed_delta", 0
+        ),
+        "independent_all_cases_accepted": adjudication_summary.get(
+            "all_cases_accepted", False
+        ),
         "blind_third_party_status": blind_adjudication.get("status", ""),
-        "blind_third_party_adjudicated_case_count": blind_summary.get("adjudicated_case_count", 0),
-        "blind_third_party_accepted_case_count": blind_summary.get("accepted_case_count", 0),
-        "blind_third_party_minimum_delta": blind_summary.get("minimum_blind_recomputed_delta", 0),
-        "blind_third_party_average_delta": blind_summary.get("average_blind_recomputed_delta", 0),
-        "blind_third_party_all_cases_accepted": blind_summary.get("all_cases_accepted", False),
-        "blind_third_party_delta_floor_passed": blind_summary.get("all_delta_at_least_65", False),
-        "blind_third_party_score_fields_consumed": blind_summary.get("score_fields_consumed", True),
+        "blind_third_party_adjudicated_case_count": blind_summary.get(
+            "adjudicated_case_count", 0
+        ),
+        "blind_third_party_accepted_case_count": blind_summary.get(
+            "accepted_case_count", 0
+        ),
+        "blind_third_party_minimum_delta": blind_summary.get(
+            "minimum_blind_recomputed_delta", 0
+        ),
+        "blind_third_party_average_delta": blind_summary.get(
+            "average_blind_recomputed_delta", 0
+        ),
+        "blind_third_party_all_cases_accepted": blind_summary.get(
+            "all_cases_accepted", False
+        ),
+        "blind_third_party_delta_floor_passed": blind_summary.get(
+            "all_delta_at_least_65", False
+        ),
+        "blind_third_party_score_fields_consumed": blind_summary.get(
+            "score_fields_consumed", True
+        ),
     }
     ready = (
         summary["case_count"] >= min_cases
@@ -162,15 +228,26 @@ def build_external_advantage_matrix(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
 def _evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
-    review = review_diff(str(case["diff"]), max_comments=8, issue_context=str(case.get("external_advantage") or ""))
+    review = review_diff(
+        str(case["diff"]),
+        max_comments=8,
+        issue_context=str(case.get("external_advantage") or ""),
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = summary.get("extension_policy") if isinstance(summary.get("extension_policy"), dict) else {}
+    extension_policy = (
+        summary.get("extension_policy")
+        if isinstance(summary.get("extension_policy"), dict)
+        else {}
+    )
     baseline = _baseline_review(case)
     retort = _retort_review_score(case, comments, summary, extension_policy)
     behavior_delta = int(retort["score"]) - int(baseline["score"])
@@ -215,12 +292,27 @@ def _baseline_review(case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _retort_review_score(case: dict[str, Any], comments: list[dict[str, Any]], summary: dict[str, Any], extension_policy: dict[str, Any]) -> dict[str, Any]:
+def _retort_review_score(
+    case: dict[str, Any],
+    comments: list[dict[str, Any]],
+    summary: dict[str, Any],
+    extension_policy: dict[str, Any],
+) -> dict[str, Any]:
     expected_context = str(case.get("expected_context") or "")
     expected_severity = str(case.get("expected_severity") or "")
-    extension_contexts = {str(item) for item in extension_policy.get("review_contexts") or []}
-    severity_matched = any(str(item.get("severity") or "") == expected_severity for item in comments)
-    context_matched = any(str(item.get("review_context") or "") == expected_context for item in comments) or expected_context in extension_contexts
+    extension_contexts = {
+        str(item) for item in extension_policy.get("review_contexts") or []
+    }
+    severity_matched = any(
+        str(item.get("severity") or "") == expected_severity for item in comments
+    )
+    context_matched = (
+        any(
+            str(item.get("review_context") or "") == expected_context
+            for item in comments
+        )
+        or expected_context in extension_contexts
+    )
     publishable_count = sum(1 for item in comments if item.get("publishable"))
     task_group_count = int(summary.get("task_group_count") or 0)
     extension_known = int(extension_policy.get("known_extension_count") or 0)
@@ -240,6 +332,12 @@ def _retort_review_score(case: dict[str, Any], comments: list[dict[str, Any]], s
         "extension_policy_known_count": extension_known,
         "extension_policy_contexts": sorted(extension_contexts),
         "comment_count": len(comments),
-        "observed_contexts": sorted({str(item.get("review_context") or "") for item in comments if item.get("review_context")}),
+        "observed_contexts": sorted(
+            {
+                str(item.get("review_context") or "")
+                for item in comments
+                if item.get("review_context")
+            }
+        ),
         "observed_severities": [str(item.get("severity") or "") for item in comments],
     }

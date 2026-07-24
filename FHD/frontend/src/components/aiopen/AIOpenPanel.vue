@@ -140,6 +140,15 @@
               </div>
             </div>
             <div class="aiopen-route-list">
+              <div class="aiopen-row" style="margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary btn-sm" type="button" :disabled="seedRunning" @click="seedFullWhitelist">
+                  {{ seedRunning ? '写入中…' : '开启全业务白名单' }}
+                </button>
+                <button class="btn btn-secondary btn-sm" type="button" :disabled="loopRunning" @click="verifyCapabilityLoop">
+                  {{ loopRunning ? '检测中…' : '验证全调用闭环' }}
+                </button>
+              </div>
+              <p v-if="loopResultText" class="aiopen-offline-hint">{{ loopResultText }}</p>
               <label v-for="route in routes" :key="route.path" class="aiopen-route-item">
                 <input type="checkbox" :checked="route.enabled" @change="toggleWhitelist(route.path, $event)">
                 <code>{{ route.path }}</code>
@@ -207,6 +216,7 @@ const TOOL_LABELS = {
   api_catalog: { label: '查看接口', desc: '列出可调用的业务接口' },
   api_call: { label: '调用接口', desc: '代你请求订单、产品等业务数据' },
   chat: { label: '对话', desc: '和 XCAGI AI 助手聊天' },
+  capability_loop: { label: '闭环自检', desc: '一键验证 catalog→API→对话→光标通道' },
   ui_sessions: { label: '查看屏幕', desc: '有哪些浏览器正在待命' },
   ui_snapshot: { label: '看页面', desc: '读取当前页面上的按钮和输入框' },
   ui_navigate: { label: '跳转', desc: '打开指定菜单或页面' },
@@ -226,6 +236,9 @@ const panelAvailable = ref(true)
 const manifestTools = ref([])
 const setupRunning = ref(false)
 const shutdownRunning = ref(false)
+const seedRunning = ref(false)
+const loopRunning = ref(false)
+const loopResultText = ref('')
 const installBundle = ref(null)
 const mcpHealthy = ref(false)
 const mcpHealthText = ref('')
@@ -595,6 +608,50 @@ const toggleWhitelist = async (path, event) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, enabled }),
   })
+}
+
+const seedFullWhitelist = async () => {
+  if (!panelAvailable.value) return
+  seedRunning.value = true
+  loopResultText.value = ''
+  try {
+    const result = await safeJsonRequest('/api/aiopen/whitelist/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, merge: true }),
+    })
+    if (result.ok && result.data?.routes) {
+      routes.value = Array.isArray(result.data.routes) ? result.data.routes : routes.value
+      loopResultText.value = `已开启全业务白名单（${result.data.enabled_count || 0} 条）`
+    } else {
+      loopResultText.value = result.message || '白名单写入失败'
+    }
+  } finally {
+    seedRunning.value = false
+  }
+}
+
+const verifyCapabilityLoop = async () => {
+  if (!panelAvailable.value) return
+  loopRunning.value = true
+  loopResultText.value = ''
+  try {
+    const result = await safeJsonRequest('/api/aiopen/loop/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    if (result.ok && result.data) {
+      const ok = Boolean(result.data.closed_loop || result.data.success)
+      loopResultText.value = ok
+        ? (result.data.hint || '全调用闭环通过')
+        : (result.data.hint || result.message || '闭环未通过')
+    } else {
+      loopResultText.value = result.message || '闭环检测失败'
+    }
+  } finally {
+    loopRunning.value = false
+  }
 }
 
 const toggleWechat = async (event) => {

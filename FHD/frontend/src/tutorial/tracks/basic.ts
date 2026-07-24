@@ -138,8 +138,8 @@ export function buildBasicSteps(ctx: TutorialBuildContext): TutorialStep[] {
     }),
     createStep({
       id: 'chat-star-auto-refresh',
-      title: '星标聊天自动刷新',
-      description: `请先点击左侧「${chatLabel}」回到本页（若已在对话页可忽略）`,
+      title: '主动意识启用',
+      description: `请先点击左侧「${chatLabel}」回到本页（若已在对话页可忽略）。勾选「主动意识启用」后，小C才会感知星标会话新消息。`,
       targetSelector: '#view-chat label[data-tutorial-id="star-auto-refresh-toggle"]',
       highlightSelector: '#view-chat label[data-tutorial-id="star-auto-refresh-toggle"]',
       actionType: 'click',

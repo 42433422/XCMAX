@@ -16,7 +16,7 @@ COMPETITOR_BEHAVIOR_CASES: tuple[dict[str, Any], ...] = (
         "expected_context": "runtime",
         "expected_severity": "medium",
         "issue_context": "Compare external output parsing patch behavior.",
-        "diff": "diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -2,6 +2,7 @@ import {\n   getInput,\n+  debug,\n   info,\n@@ -79,7 +80,10 @@ export async function run(): Promise<void> {\n+    info(\"done\");\n+    debug(\"error\");\n",
+        "diff": 'diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -2,6 +2,7 @@ import {\n   getInput,\n+  debug,\n   info,\n@@ -79,7 +80,10 @@ export async function run(): Promise<void> {\n+    info("done");\n+    debug("error");\n',
     },
     {
         "case_id": "qodo-security-secret-review",
@@ -25,7 +25,7 @@ COMPETITOR_BEHAVIOR_CASES: tuple[dict[str, Any], ...] = (
         "expected_context": "security",
         "expected_severity": "high",
         "issue_context": "Secret and credential review should block publishable PR comments.",
-        "diff": "diff --git a/pr_agent/settings.py b/pr_agent/settings.py\n--- a/pr_agent/settings.py\n+++ b/pr_agent/settings.py\n@@ -0,0 +1,2 @@\n+OPENAI_API_TOKEN = \"live-secret-value\"\n+debug=True\n",
+        "diff": 'diff --git a/pr_agent/settings.py b/pr_agent/settings.py\n--- a/pr_agent/settings.py\n+++ b/pr_agent/settings.py\n@@ -0,0 +1,2 @@\n+OPENAI_API_TOKEN = "live-secret-value"\n+debug=True\n',
     },
     {
         "case_id": "reviewdog-ci-token-publisher",
@@ -34,7 +34,7 @@ COMPETITOR_BEHAVIOR_CASES: tuple[dict[str, Any], ...] = (
         "expected_context": "ci_config",
         "expected_severity": "high",
         "issue_context": "CI review publisher must detect unsafe workflow token usage.",
-        "diff": "diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml\n--- a/.github/workflows/review.yml\n+++ b/.github/workflows/review.yml\n@@ -0,0 +1,3 @@\n+env:\n+  REVIEWDOG_TOKEN: \"review-token-value\"\n+  DEBUG: true\n",
+        "diff": 'diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml\n--- a/.github/workflows/review.yml\n+++ b/.github/workflows/review.yml\n@@ -0,0 +1,3 @@\n+env:\n+  REVIEWDOG_TOKEN: "review-token-value"\n+  DEBUG: true\n',
     },
 )
 
@@ -51,18 +51,25 @@ def build_competitor_behavior_regression(
     selected = list(cases or COMPETITOR_BEHAVIOR_CASES)
     rows = [_run_case(case) for case in selected]
     ready_rows = [row for row in rows if row["ready"]]
-    source_projects = sorted({row["source_project"] for row in rows if row.get("source_project")})
+    source_projects = sorted(
+        {row["source_project"] for row in rows if row.get("source_project")}
+    )
     summary = {
         "case_count": len(rows),
         "min_case_count": min_cases,
         "ready_case_count": len(ready_rows),
         "source_project_count": len(source_projects),
         "source_projects": source_projects,
-        "all_cases_direct_review_execution": bool(rows) and all(row["direct_review_execution"] for row in rows),
+        "all_cases_direct_review_execution": bool(rows)
+        and all(row["direct_review_execution"] for row in rows),
         "all_competitor_signals_regressed": bool(rows) and len(ready_rows) == len(rows),
-        "publishable_case_count": sum(1 for row in rows if row["publishable_comment_count"] > 0),
+        "publishable_case_count": sum(
+            1 for row in rows if row["publishable_comment_count"] > 0
+        ),
         "context_matched_case_count": sum(1 for row in rows if row["context_matched"]),
-        "severity_matched_case_count": sum(1 for row in rows if row["severity_matched"]),
+        "severity_matched_case_count": sum(
+            1 for row in rows if row["severity_matched"]
+        ),
         "behavior_assertion_count": sum(len(row["assertions"]) for row in rows),
         "duration_sec": round(time.monotonic() - started, 3),
     }
@@ -88,22 +95,43 @@ def build_competitor_behavior_regression(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
 def _run_case(case: dict[str, Any]) -> dict[str, Any]:
-    review = review_diff(str(case["diff"]), max_comments=8, issue_context=str(case["issue_context"]))
+    review = review_diff(
+        str(case["diff"]), max_comments=8, issue_context=str(case["issue_context"])
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = summary.get("extension_policy") if isinstance(summary.get("extension_policy"), dict) else {}
+    extension_policy = (
+        summary.get("extension_policy")
+        if isinstance(summary.get("extension_policy"), dict)
+        else {}
+    )
     expected_context = str(case["expected_context"])
     expected_severity = str(case["expected_severity"])
-    contexts = {str(item.get("review_context") or "") for item in comments if item.get("review_context")}
-    contexts.update(str(item) for item in extension_policy.get("review_contexts") or [] if str(item))
-    severities = {str(item.get("severity") or "") for item in comments if item.get("severity")}
+    contexts = {
+        str(item.get("review_context") or "")
+        for item in comments
+        if item.get("review_context")
+    }
+    contexts.update(
+        str(item) for item in extension_policy.get("review_contexts") or [] if str(item)
+    )
+    severities = {
+        str(item.get("severity") or "") for item in comments if item.get("severity")
+    }
     publishable_count = sum(1 for item in comments if item.get("publishable"))
-    anchors = {(str(item.get("file") or ""), int(item.get("line") or 0)) for item in comments if item.get("file") and item.get("line")}
+    anchors = {
+        (str(item.get("file") or ""), int(item.get("line") or 0))
+        for item in comments
+        if item.get("file") and item.get("line")
+    }
     assertions = {
         "reviewed": review.get("status") == "reviewed",
         "expected_context_present": expected_context in contexts,

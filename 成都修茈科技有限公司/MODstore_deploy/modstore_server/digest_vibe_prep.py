@@ -762,15 +762,36 @@ async def _synthesize_vibe_markdowns(
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        m = re.search(r"\{[\s\S]*\}", raw)
-        if m:
+        # ```json ... ``` 或正文中的首个 JSON 对象
+        fence = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw, re.I)
+        blob = fence.group(1) if fence else ""
+        if not blob:
+            m = re.search(r"\{[\s\S]*\}", raw)
+            blob = m.group(0) if m else ""
+        if blob:
             try:
-                parsed = json.loads(m.group(0))
+                parsed = json.loads(blob)
             except json.JSONDecodeError:
                 parsed = {}
 
     updates = str(parsed.get("updates_markdown") or "").strip()
     patches = str(parsed.get("patches_markdown") or "").strip()
+    if not updates and not patches:
+        # 再兜一层：模型直接吐 Markdown 双清单而非 JSON
+        um = re.search(
+            r"(?:^|\n)#\s*Vibe\s*预备\s*[·•]?\s*更新清单\s*\n([\s\S]*?)(?=\n#\s*Vibe\s*预备|\Z)",
+            raw,
+            re.I,
+        )
+        pm = re.search(
+            r"(?:^|\n)#\s*Vibe\s*预备\s*[·•]?\s*补丁清单\s*\n([\s\S]*?)(?=\n#\s*Vibe\s*预备|\Z)",
+            raw,
+            re.I,
+        )
+        if um:
+            updates = ("# Vibe 预备 · 更新清单\n" + um.group(1)).strip()
+        if pm:
+            patches = ("# Vibe 预备 · 补丁清单\n" + pm.group(1)).strip()
     if not updates and not patches:
         return {
             "ok": False,

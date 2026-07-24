@@ -183,3 +183,62 @@ def test_template_fallback_emits_generation_breakpoint(monkeypatch) -> None:
     assert "**P0** 修复 Vibe 预备任务生成断点" in out["patches_markdown"]
     assert "**P0** 修复 Vibe fallback 任务责任路由" in out["patches_markdown"]
     assert "action-items、产线执行和 AI 交流圈" in out["patches_markdown"]
+
+
+def test_template_fallback_persists_action_items_not_only_minutes(tmp_path, monkeypatch):
+    """回归：template fallback 必须落入 daily_action_items，不能只剩会议纪要。"""
+    monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "action_items.db"))
+    monkeypatch.setenv("MODSTORE_PYTEST_USE_SQLITE", "1")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    from modstore_server.digest_action_items import list_action_items, parse_and_store_action_items
+    from modstore_server.digest_vibe_prep import (
+        _finalize_vibe_result,
+        resolve_vibe_prep_version_context,
+    )
+
+    ctx = resolve_vibe_prep_version_context(
+        digest_day="2026-07-24",
+        digest_subject="fallback-persist",
+        record_id=99,
+        mode="auto",
+    )
+    out = _finalize_vibe_result(
+        synth={
+            "ok": False,
+            "error": "LLM 未返回有效 JSON（缺少 updates_markdown / patches_markdown）",
+            "model": "bench/model",
+        },
+        employees=[
+            {
+                "employee_id": "modstore-backend-api",
+                "name": "MODstore 后端 API 员",
+                "pack_version": "1.0.0",
+                "scope_globs": ["modstore_server/digest_vibe_prep.py"],
+            },
+            {
+                "employee_id": "task-router-officer",
+                "name": "任务派发员",
+                "pack_version": "1.0.0",
+                "scope_globs": ["modstore_server/digest_action_items.py"],
+            },
+            {
+                "employee_id": "test-qa-runner",
+                "name": "测试质量运行员",
+                "pack_version": "1.0.0",
+                "scope_globs": ["tests/test_digest_vibe_prep.py"],
+            },
+        ],
+        ctx=ctx,
+    )
+    stored = parse_and_store_action_items(
+        day="2026-07-24",
+        record_id=99,
+        updates_markdown=out["updates_markdown"],
+        patches_markdown=out["patches_markdown"],
+    )
+    assert int(stored.get("patch") or 0) >= 2
+    items = list_action_items(day="2026-07-24", limit=50)
+    eids = {str(it.get("employee_id") or "") for it in items}
+    assert "daily-orchestrator" not in eids
+    assert "modstore-backend-api" in eids
+    assert "task-router-officer" in eids

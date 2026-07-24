@@ -41,6 +41,7 @@ from app.application.aiopen.service import (
     list_api_keys,
     openclaw_chat_proxy,
     revoke_api_key,
+    seed_capability_whitelist,
     verify_api_key,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
@@ -497,6 +498,29 @@ def aiopen_whitelist(body: dict = Body(default_factory=dict)):
         action="whitelist_update",
         body=body,
     )
+
+
+@router.post("/api/aiopen/whitelist/seed")
+def aiopen_whitelist_seed(body: dict = Body(default_factory=dict)):
+    """一键写入侧栏/业务全能力白名单，打通 MCP api_call 全调用闭环。"""
+    enable = bool(body.get("enabled", True)) if "enabled" in body else True
+    merge = bool(body.get("merge", True))
+    payload = seed_capability_whitelist(enable=enable, merge=merge)
+    return _trace_aiopen_control_result(
+        payload,
+        route="/api/aiopen/whitelist/seed",
+        action="whitelist_seed",
+        body=body,
+    )
+
+
+@router.post("/api/aiopen/loop/verify")
+async def aiopen_loop_verify(request: Request, body: dict = Body(default_factory=dict)):
+    """全调用闭环自检（等同 MCP capability_loop 工具）。"""
+    result = await invoke_tool(
+        "capability_loop", body if isinstance(body, dict) else {}, request.app
+    )
+    return result
 
 
 @router.post("/api/aiopen/config")

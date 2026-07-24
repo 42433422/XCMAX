@@ -35,8 +35,10 @@ def _normalize_db_template_id(raw_id):
 def _ensure_template_tables_ready():
     try:
         from app.db.init_db import init_template_tables
+        from app.services.document_templates.tenant_scope import ensure_templates_tenant_column
 
         init_template_tables()
+        ensure_templates_tenant_column()
     except RECOVERABLE_ERRORS as e:
         logger.warning("确保模板表结构失败: %s", e)
 
@@ -136,6 +138,14 @@ def _create_template_with_payload_inner(payload: dict):
         template_key = (
             f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
         )
+        from app.infrastructure.tenant_scope import TenantScopeError
+        from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
+
+        try:
+            tenant_id = templates_tenant_id_for_insert()
+        except TenantScopeError:
+            return _j({"success": False, "message": "缺少租户上下文，无法创建模板"}, 403)
+
         with get_db() as db:
             result = db.execute(
                 text(
@@ -144,12 +154,12 @@ def _create_template_with_payload_inner(payload: dict):
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,
                         zone_config, merged_cells_config, style_config,
-                        business_rules, is_active
+                        business_rules, is_active, tenant_id
                     ) VALUES (
                         :template_key, :template_name, :template_type,
                         :original_file_path, :analyzed_data, :editable_config,
                         :zone_config, :merged_cells_config, :style_config,
-                        :business_rules, :is_active
+                        :business_rules, :is_active, :tenant_id
                     )
                 """
                 ),
@@ -165,6 +175,7 @@ def _create_template_with_payload_inner(payload: dict):
                     "style_config": json.dumps({}, ensure_ascii=False),
                     "business_rules": json.dumps(business_rules, ensure_ascii=False),
                     "is_active": 1,
+                    "tenant_id": tenant_id,
                 },
             )
             template_id = result.lastrowid
@@ -221,17 +232,20 @@ def _update_template_with_payload_inner(payload: dict):
         db_id = _normalize_db_template_id(payload.get("id"))
         if db_id is None:
             return _j({"success": False, "message": "模板 id 无效"}, 400)
+        from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             row = db.execute(
                 text(
-                    """
+                    f"""
                     SELECT id, template_name, template_type, original_file_path,
                            analyzed_data, editable_config, business_rules
                     FROM templates
-                    WHERE id = :id
+                    WHERE id = :id AND ({tenant_sql})
                 """
                 ),
-                {"id": db_id},
+                {"id": db_id, **tenant_bind},
             ).fetchone()
             if not row:
                 return _j({"success": False, "message": "模板不存在"}, 404)
@@ -375,8 +389,12 @@ def _update_template_with_payload_inner(payload: dict):
                 if field_name not in allowed_fields:
                     return _j({"success": False, "message": f"无效的更新字段: {field_name}"}, 400)
             db.execute(
-                text("UPDATE templates SET " + ", ".join(updates) + " WHERE id = :id"),
-                params,
+                text(
+                    "UPDATE templates SET "
+                    + ", ".join(updates)
+                    + f" WHERE id = :id AND ({tenant_sql})"
+                ),
+                {**params, **tenant_bind},
             )
             db.commit()
 
@@ -396,14 +414,14 @@ def _update_template_with_payload_inner(payload: dict):
 
             refreshed = db.execute(
                 text(
-                    """
+                    f"""
                     SELECT id, template_name, template_type, original_file_path,
                            analyzed_data, business_rules
                     FROM templates
-                    WHERE id = :id
+                    WHERE id = :id AND ({tenant_sql})
                 """
                 ),
-                {"id": db_id},
+                {"id": db_id, **tenant_bind},
             ).fetchone()
 
         return _j(

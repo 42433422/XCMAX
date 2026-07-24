@@ -45,6 +45,17 @@ def _valid_input() -> dict:
     }
 
 
+@pytest.fixture(autouse=True)
+def _disable_retort_clarification_gate(monkeypatch, tmp_path) -> None:
+    """Keep legacy council contract tests deterministic; clarification covered separately."""
+
+    monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_ENABLED", "0")
+    monkeypatch.setenv(
+        "MODSTORE_RETORT_CLARIFICATION_LEDGER",
+        str(tmp_path / "retort_clarifications.json"),
+    )
+
+
 def test_verified_receipt_is_hash_chained_and_idempotent(tmp_path, monkeypatch) -> None:
     ledger = tmp_path / "council.jsonl"
     monkeypatch.setenv("MODSTORE_STRATEGIC_COUNCIL_LEDGER", str(ledger))

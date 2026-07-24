@@ -290,7 +290,22 @@ class AiGroupChatStorageMixin:
             or os.environ.get("XCAGI_SECRET_KEY", "").strip()
         )
         if not secret:
-            raise RuntimeError("SECRET_KEY is required for encrypted AI group-chat storage")
+            data_dir = (
+                os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+            ).strip()
+            desktop = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if data_dir:
+                # 桌面单机：按数据目录派生稳定密钥，避免缺 SECRET_KEY 时群聊读写 500
+                secret = f"xcagi-desktop-group-chat:{Path(data_dir).expanduser().resolve()}"
+            elif desktop:
+                secret = "xcagi-desktop-group-chat:default"
+            else:
+                raise RuntimeError("SECRET_KEY is required for encrypted AI group-chat storage")
         digest = hashlib.sha256(secret.encode("utf-8")).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
 

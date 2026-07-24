@@ -65,7 +65,88 @@ describe('useChatOfficeDocking', () => {
       workspace_root: '/workspace',
       filename: file.name,
     }))
-    mocks.apiFetch.mockResolvedValue(jsonResponse({ success: true }))
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/shipment-etl/')) {
+        return jsonResponse({ success: true, notes: [] })
+      }
+      return jsonResponse({ success: true })
+    })
+  })
+
+  it('recognizes delivery-note workbooks via shipment ETL preview and executes closed loop', async () => {
+    mocks.resolveEmployee.mockReturnValue(EXCEL_FULL_READ_EMPLOYEE_ID)
+    mocks.runEmployee.mockResolvedValue({
+      summary: '工作簿已读取',
+      output_path: 'outputs/workbook.json',
+    })
+    mocks.readOutputs.mockResolvedValue([
+      {
+        path: 'outputs/workbook.json',
+        kind: 'json',
+        json: {
+          sheets: [
+            { sheet_name: '送货单', row_count: 12 },
+          ],
+        },
+      },
+    ])
+    mocks.mapExcel.mockReturnValue({
+      fields: ['购货单位', '型号', '品名', '数量', '单价'],
+      preview_data: {
+        sheet_names: ['送货单'],
+        sample_rows: [{ 购货单位: '甲公司', 型号: 'A1', 品名: '底漆', 数量: 2, 单价: 10 }],
+      },
+      sheets: [
+        { sheet_name: '送货单', fields: ['购货单位', '型号', '品名', '数量', '单价'] },
+      ],
+    })
+    mocks.apiFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/shipment-etl/preview')) {
+        return jsonResponse({
+          success: true,
+          note_count: 1,
+          message: '识别到 1 张送货单',
+          notes: [{
+            sheet_name: '送货单',
+            unit_name: '甲公司',
+            item_count: 2,
+            total_amount: 20,
+            items: [{ model_number: 'A1', product_name: '底漆', quantity: 2 }],
+          }],
+        })
+      }
+      if (String(url).includes('/shipment-etl/execute')) {
+        return jsonResponse({
+          success: true,
+          note_count: 1,
+          shipment_created: 1,
+          product_result: { success: true, imported: 1 },
+        })
+      }
+      return jsonResponse({ success: true })
+    })
+
+    const { deps, docking } = createHarness()
+    await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '国圣送货单.xlsx')))
+
+    const item = docking.officeDockingReviewItems.value[0]
+    expect(item.intentId).toBe('shipment_delivery')
+    expect(item.databaseAction).toBe('shipment_etl_execute')
+    expect(item.databaseTargetLabel).toBe('客户/产品/发货单')
+    expect(item.shipmentEtlPreview?.note_count).toBe(1)
+    expect(item.summary).toContain('送货单 1 张')
+
+    docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
+    await docking.confirmOfficeDockingReview()
+
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      '/api/excel/data/shipment-etl/execute',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(deps.stageExcelAnalysisContext).not.toHaveBeenCalled()
+    expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
+    expect(item.commitStatus).toBe('committed')
+    expect(item.summary).toContain('送货单 ETL 完成')
   })
 
   it('reads a CSV, classifies customer/product data, and commits both targets', async () => {

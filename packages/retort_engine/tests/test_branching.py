@@ -4,11 +4,22 @@ import subprocess
 from pathlib import Path
 
 from retort_engine.absorption import run_absorption
-from tests.test_evidence_evaluator import create_focused_tool_package, create_incomplete_package, write_file
+from tests.test_evidence_evaluator import (
+    create_focused_tool_package,
+    create_incomplete_package,
+    write_file,
+)
 
 
 def git(cwd: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     return result.stdout.strip()
 
 
@@ -30,7 +41,13 @@ def test_absorption_creates_branch_for_main_project_folder(tmp_path: Path) -> No
     git(own, "add", ".")
     git(own, "commit", "-m", "package")
     create_focused_tool_package(external)
-    result = run_absorption(own_project=str(own), external_path=str(external), branch_workflow=True, absorption_branch="retort/absorb-test", max_tasks=2)
+    result = run_absorption(
+        own_project=str(own),
+        external_path=str(external),
+        branch_workflow=True,
+        absorption_branch="retort/absorb-test",
+        max_tasks=2,
+    )
     assert result.branch_workflow["created"] is True
     assert git(own, "branch", "--show-current") == "retort/absorb-test"
 
@@ -41,7 +58,9 @@ def test_branch_workflow_blocks_dirty_main_project(tmp_path: Path) -> None:
     init_repo(own)
     create_focused_tool_package(external)
     write_file(own / "dirty.txt", "dirty\n")
-    result = run_absorption(own_project=str(own), external_path=str(external), branch_workflow=True)
+    result = run_absorption(
+        own_project=str(own), external_path=str(external), branch_workflow=True
+    )
     assert result.status == "blocked_by_branch_workflow"
 
 
@@ -53,6 +72,13 @@ def test_absorption_can_merge_branch_back_to_main(tmp_path: Path) -> None:
     git(own, "add", ".")
     git(own, "commit", "-m", "package")
     create_focused_tool_package(external)
-    result = run_absorption(own_project=str(own), external_path=str(external), branch_workflow=True, absorption_branch="retort/absorb-merge-test", merge_after=True, max_tasks=2)
+    result = run_absorption(
+        own_project=str(own),
+        external_path=str(external),
+        branch_workflow=True,
+        absorption_branch="retort/absorb-merge-test",
+        merge_after=True,
+        max_tasks=2,
+    )
     assert result.branch_workflow["merged"] is True
     assert git(own, "branch", "--show-current") == "main"

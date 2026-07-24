@@ -27,10 +27,36 @@ type OfficeDockingIntentId =
   | 'pending'
   | 'attendance_roster'
   | 'attendance_source'
+  | 'shipment_delivery'
   | 'customer_product'
   | 'generic_table'
   | 'document'
-type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'customer_product_import'
+type OfficeDockingDatabaseAction =
+  | ''
+  | 'attendance_import'
+  | 'shipment_etl_execute'
+  | 'customer_product_import'
+
+export type ShipmentEtlNotePreview = {
+  sheet_name?: string
+  unit_name?: string
+  item_count?: number
+  total_amount?: number
+  items?: Record<string, unknown>[]
+  [key: string]: unknown
+}
+
+export type ShipmentEtlPreview = {
+  success?: boolean
+  note_count?: number
+  notes?: ShipmentEtlNotePreview[]
+  message?: string
+  product_records?: Record<string, unknown>[]
+  duplicate_note_count?: number
+  ledger_risk?: boolean
+  ledger_available_count?: number
+  [key: string]: unknown
+}
 
 export type ChatOfficeDockingReviewItem = {
   id: string
@@ -55,6 +81,7 @@ export type ChatOfficeDockingReviewItem = {
   outputFiles: OfficeEmployeeOutputFile[]
   knowledgeText: string
   excelAnalysis?: Record<string, unknown>
+  shipmentEtlPreview?: ShipmentEtlPreview
   fieldNames: string[]
   sampleRows: Record<string, unknown>[]
   rowCount: number
@@ -185,8 +212,13 @@ function inferOfficeDockingIntent(item: {
   const hasMonthly = sheets.includes('月度统计')
   const hasDingtalk = sheets.includes('每日统计') || sheets.includes('原始记录')
   const hasRosterFields = ['部门', '性质', '姓名'].filter((key) => haystack.includes(key)).length >= 2
-  const hasProductFields = ['客户', '购买单位', '产品', '品名', '型号', '规格', '单价', '价格']
+  const hasProductFields = ['客户', '购买单位', '购货单位', '产品', '品名', '型号', '规格', '单价', '价格']
     .filter((key) => haystack.includes(key)).length >= 3
+  const looksLikeDeliveryNote = (
+    (haystack.includes('送货单') || haystack.includes('发货单'))
+    && (haystack.includes('购货单位') || haystack.includes('购买单位') || haystack.includes('客户'))
+    && ['型号', '品名', '产品名称', '数量'].filter((key) => haystack.includes(key)).length >= 2
+  )
 
   if ((hasMingxi && (hasMonthly || hasRosterFields)) || file.includes('考勤转换结果')) {
     return {
@@ -207,6 +239,18 @@ function inferOfficeDockingIntent(item: {
       intentSummary: '识别到考勤统计结构，应写入太阳鸟考勤库',
       databaseTargetLabel: '考勤库',
       databaseAction: 'attendance_import',
+      databaseDisabledReason: '',
+      selectedDatabase: true,
+    }
+  }
+
+  if (looksLikeDeliveryNote) {
+    return {
+      intentId: 'shipment_delivery',
+      intentLabel: '送货单/发货单',
+      intentSummary: '识别到送货单抬头与明细字段，确认后走送货单 ETL（客户+产品+发货单）',
+      databaseTargetLabel: '客户/产品/发货单',
+      databaseAction: 'shipment_etl_execute',
       databaseDisabledReason: '',
       selectedDatabase: true,
     }
@@ -233,6 +277,95 @@ function inferOfficeDockingIntent(item: {
     databaseDisabledReason: '未识别到明确的业务库目标',
     selectedDatabase: false,
   }
+}
+
+function applyShipmentEtlIntent(
+  item: ChatOfficeDockingReviewItem,
+  preview: ShipmentEtlPreview,
+): void {
+  const notes = asArray<ShipmentEtlNotePreview>(preview.notes)
+  const noteCount = Number(preview.note_count || notes.length) || notes.length
+  const units = [...new Set(notes.map((n) => asString(n.unit_name).trim()).filter(Boolean))].slice(0, 3)
+  const itemCount = notes.reduce((sum, n) => sum + (Number(n.item_count) || asArray(n.items).length || 0), 0)
+  item.shipmentEtlPreview = {
+    ...preview,
+    notes,
+    note_count: noteCount,
+  }
+  item.intentId = 'shipment_delivery'
+  item.intentLabel = '送货单/发货单'
+  item.intentSummary = asString(preview.message).trim()
+    || `内容指纹识别到 ${noteCount} 张送货单，确认后写入客户、产品与发货单`
+  item.databaseTargetLabel = '客户/产品/发货单'
+  item.databaseAction = 'shipment_etl_execute'
+  item.databaseDisabledReason = ''
+  // 写库需用户确认勾选；重复导入时默认不勾
+  const dup = Number(preview.duplicate_note_count || 0)
+  item.selectedDatabase = dup < noteCount
+  if (dup > 0) {
+    item.warnings = [...item.warnings, `其中 ${dup} 张疑似已导入（幂等将跳过）`]
+  }
+  if (preview.ledger_risk) {
+    item.warnings = [
+      ...item.warnings,
+      `同文件另有约 ${Number(preview.ledger_available_count || 0)} 组历史流水未纳入本次导入`,
+    ]
+  }
+  if (units.length) {
+    item.fieldNames = [...new Set(['购货单位', '型号', '品名', '数量', ...item.fieldNames])].slice(0, 80)
+  }
+  if (!item.sampleRows.length && notes.length) {
+    item.sampleRows = notes.slice(0, 5).map((note) => ({
+      购货单位: asString(note.unit_name),
+      工作表: asString(note.sheet_name),
+      明细行: Number(note.item_count) || asArray(note.items).length || 0,
+      金额: note.total_amount ?? '',
+    }))
+  }
+  if (itemCount > 0) item.rowCount = Math.max(item.rowCount, itemCount)
+}
+
+async function previewShipmentExcelEtl(
+  filePath: string,
+  workspaceRoot?: string,
+): Promise<ShipmentEtlPreview | null> {
+  const path = asString(filePath).trim()
+  if (!path) return null
+  await primeCsrfCookie()
+  const fd = new FormData()
+  fd.append('file_path', path)
+  if (workspaceRoot) fd.append('workspace_root', workspaceRoot)
+  fd.append('include_ledger', 'auto')
+  const res = await apiFetch('/api/excel/data/shipment-etl/preview', { method: 'POST', body: fd })
+  const body = await res.json().catch(() => ({}))
+  const data = asRecord(body)
+  if (!res.ok || data.success === false) return null
+  const notes = asArray<ShipmentEtlNotePreview>(data.notes)
+  if (!notes.length) return null
+  return { ...data, notes, note_count: Number(data.note_count || notes.length) || notes.length }
+}
+
+async function executeShipmentExcelEtl(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
+  if (!item.upload?.file_path) throw new Error('缺少已上传文件路径')
+  await primeCsrfCookie()
+  const fd = new FormData()
+  fd.append('file_path', item.upload.file_path)
+  if (item.upload.workspace_root) fd.append('workspace_root', item.upload.workspace_root)
+  fd.append('import_products', '1')
+  fd.append('import_shipments', '1')
+  fd.append('idempotent', '1')
+  fd.append('include_ledger', '0')
+  fd.append('confirm_ledger', '0')
+  if (item.shipmentEtlPreview?.notes?.length) {
+    fd.append('notes_json', JSON.stringify(item.shipmentEtlPreview.notes))
+  }
+  const res = await apiFetch('/api/excel/data/shipment-etl/execute', { method: 'POST', body: fd })
+  const body = await res.json().catch(() => ({}))
+  const data = asRecord(body)
+  if (!res.ok || data.success === false) {
+    throw new Error(String(data.message || data.error || `送货单 ETL 失败 HTTP ${res.status}`))
+  }
+  return data
 }
 
 function stringifyPreview(value: unknown, max = 6000): string {
@@ -522,9 +655,32 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       item.databaseAction = intent.databaseAction
       item.databaseDisabledReason = intent.databaseDisabledReason
       item.selectedDatabase = intent.selectedDatabase
+
+      const canRunShipmentEtl = (
+        Boolean(item.upload?.file_path)
+        && item.excelAnalysis
+        && item.intentId !== 'attendance_roster'
+        && item.intentId !== 'attendance_source'
+        && (employeeId === EXCEL_FULL_READ_EMPLOYEE_ID || employeeId === CSV_FULL_READ_EMPLOYEE_ID)
+      )
+      if (canRunShipmentEtl) {
+        try {
+          const shipmentPreview = await previewShipmentExcelEtl(
+            item.upload!.file_path,
+            item.upload!.workspace_root,
+          )
+          if (shipmentPreview) applyShipmentEtlIntent(item, shipmentPreview)
+        } catch {
+          // 预览失败不阻断办公对接；仍保留字段启发式意图
+        }
+      }
+
       item.knowledgeText = buildKnowledgeText(item)
       item.status = 'ready'
-      item.summary = `${item.employeeLabel} 已识别 ${item.fileName}${item.fieldNames.length ? `，字段 ${item.fieldNames.length} 个` : ''}${item.rowCount ? `，行 ${item.rowCount} 条` : ''}；意图：${item.intentLabel}`
+      const shipmentNoteCount = Number(item.shipmentEtlPreview?.note_count || 0)
+      item.summary = shipmentNoteCount
+        ? `${item.employeeLabel} 已识别 ${item.fileName}：送货单 ${shipmentNoteCount} 张；意图：${item.intentLabel}`
+        : `${item.employeeLabel} 已识别 ${item.fileName}${item.fieldNames.length ? `，字段 ${item.fieldNames.length} 个` : ''}${item.rowCount ? `，行 ${item.rowCount} 条` : ''}；意图：${item.intentLabel}`
     } catch (err) {
       item.status = 'error'
       item.error = err instanceof Error ? err.message : String(err || '识别失败')
@@ -589,6 +745,12 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
             const employeeRows = Number(result.employee_rows || 0)
             const departmentRows = Number(result.department_rows || 0)
             item.summary = `考勤入库完成：人员 ${employeeRows} 条，部门 ${departmentRows} 条`
+          } else if (item.databaseAction === 'shipment_etl_execute') {
+            const result = await executeShipmentExcelEtl(item)
+            const noteCount = Number(result.note_count || item.shipmentEtlPreview?.note_count || 0)
+            const shipmentCreated = Number(result.shipment_created || 0)
+            const productImported = Number(asRecord(result.product_result).imported || 0)
+            item.summary = `送货单 ETL 完成：单 ${noteCount || shipmentCreated} 张，发货单新建 ${shipmentCreated}，产品写入 ${productImported}`
           } else if (item.databaseAction === 'customer_product_import') {
             deps.stageExcelAnalysisContext(item.excelAnalysis)
             await deps.sendDatabaseImportMessage(`导入数据库，确认导入：${item.fileName}`)

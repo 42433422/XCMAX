@@ -20,6 +20,22 @@ def compat_customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         lambda: [{"id": 1, "unit_name": "七彩乐园"}],
     )
     monkeypatch.setattr(customer_routes, "_business_mod_json_block", lambda: False)
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.client_primary_erp.try_invoke_client_mod_customers_list",
+        lambda **_kw: None,
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.client_primary_erp.resolve_client_erp_mod_for_request",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+        lambda *_a, **_k: None,
+    )
     app = FastAPI()
     app.include_router(customer_compat.router)
     return TestClient(app, raise_server_exceptions=False)

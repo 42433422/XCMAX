@@ -15,12 +15,22 @@ class EmployeeRuntimeHook(Protocol):
 class RetortEmployeeRuntimeAdapter:
     """Bridge Retort tasks into an employee_runtime, agent_loop, or workflow_scheduler."""
 
-    def __init__(self, queue_path: str | Path, *, history_store: str | Path = "", dispatch_hook: EmployeeRuntimeHook | None = None) -> None:
+    def __init__(
+        self,
+        queue_path: str | Path,
+        *,
+        history_store: str | Path = "",
+        dispatch_hook: EmployeeRuntimeHook | None = None,
+    ) -> None:
         self.queue = RetortEmployeeQueue(queue_path)
-        self.history_store = RetortHistoryStore(history_store) if history_store else None
+        self.history_store = (
+            RetortHistoryStore(history_store) if history_store else None
+        )
         self.dispatch_hook = dispatch_hook
 
-    def submit_tasks(self, tasks: tuple[ImprovementTask, ...] | list[ImprovementTask], *, source: str) -> tuple[EmployeeTaskRecord, ...]:
+    def submit_tasks(
+        self, tasks: tuple[ImprovementTask, ...] | list[ImprovementTask], *, source: str
+    ) -> tuple[EmployeeTaskRecord, ...]:
         records = self.queue.enqueue_tasks(tasks, source=source)
         for record in records:
             if self.history_store:

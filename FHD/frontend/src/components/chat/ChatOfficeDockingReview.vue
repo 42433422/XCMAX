@@ -29,6 +29,27 @@
         <p v-if="item.intentSummary" class="office-docking-review__intent">
           意图：{{ item.intentLabel }}{{ item.databaseTargetLabel ? ` · ${item.databaseTargetLabel}` : '' }}，{{ item.intentSummary }}
         </p>
+        <ul
+          v-if="item.warnings.length"
+          class="office-docking-review__warnings"
+          aria-label="风险提示"
+        >
+          <li v-for="(warn, idx) in item.warnings.slice(0, 4)" :key="`${item.id}-warn-${idx}`">
+            {{ warn }}
+          </li>
+        </ul>
+        <ul
+          v-if="shipmentNotes(item).length"
+          class="office-docking-review__shipment-notes"
+          aria-label="送货单预览"
+        >
+          <li v-for="(note, idx) in shipmentNotes(item).slice(0, 5)" :key="`${item.id}-note-${idx}`">
+            {{ noteLabel(note) }}
+          </li>
+          <li v-if="shipmentNotes(item).length > 5">
+            …另有 {{ shipmentNotes(item).length - 5 }} 张
+          </li>
+        </ul>
         <p v-if="item.error" class="office-docking-review__error">{{ item.error }}</p>
 
         <div v-if="item.fieldNames.length" class="office-docking-review__chips">
@@ -39,7 +60,7 @@
           {{ previewSnippet(item) }}
         </p>
         <details v-if="hasDetailedPreview(item)" class="office-docking-review__preview-details">
-          <summary>{{ item.sampleRows.length ? '查看样例数据' : '查看原文摘录' }}</summary>
+          <summary>{{ detailsSummary(item) }}</summary>
           <pre class="office-docking-review__preview">{{ detailedPreview(item) }}</pre>
         </details>
 
@@ -86,7 +107,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ChatOfficeDockingReviewItem } from '@/composables/useChatOfficeDocking'
+import type {
+  ChatOfficeDockingReviewItem,
+  ShipmentEtlNotePreview,
+} from '@/composables/useChatOfficeDocking'
 
 const props = defineProps<{
   items: ChatOfficeDockingReviewItem[]
@@ -159,6 +183,15 @@ function normalizedTextPreview(item: ChatOfficeDockingReviewItem): string {
 }
 
 function previewSnippet(item: ChatOfficeDockingReviewItem): string {
+  const notes = shipmentNotes(item)
+  if (notes.length) {
+    const units = [...new Set(notes.map((n) => String(n.unit_name || '').trim()).filter(Boolean))].slice(0, 3)
+    const amount = notes.reduce((sum, n) => sum + (Number(n.total_amount) || 0), 0)
+    const parts = [`送货单 ${notes.length} 张`]
+    if (units.length) parts.push(`购货单位 ${units.join('、')}`)
+    if (amount > 0) parts.push(`合计约 ${amount}`)
+    return parts.join('；')
+  }
   if (item.sampleRows.length) {
     const first = item.sampleRows[0]
     const cells = Object.entries(first)
@@ -172,12 +205,43 @@ function previewSnippet(item: ChatOfficeDockingReviewItem): string {
   return text.length > 220 ? `${text.slice(0, 220)}…` : text
 }
 
+function shipmentNotes(item: ChatOfficeDockingReviewItem): ShipmentEtlNotePreview[] {
+  return Array.isArray(item.shipmentEtlPreview?.notes) ? item.shipmentEtlPreview!.notes! : []
+}
+
+function noteLabel(note: ShipmentEtlNotePreview): string {
+  const unit = String(note.unit_name || '未命名购货单位').trim()
+  const sheet = String(note.sheet_name || '').trim()
+  const count = Number(note.item_count) || (Array.isArray(note.items) ? note.items.length : 0)
+  const amount = Number(note.total_amount)
+  const bits = [unit]
+  if (sheet) bits.push(`表「${sheet}」`)
+  if (count) bits.push(`${count} 行明细`)
+  if (amount) bits.push(`金额 ${amount}`)
+  return bits.join(' · ')
+}
+
+function detailsSummary(item: ChatOfficeDockingReviewItem): string {
+  if (shipmentNotes(item).length) return '查看送货单结构化预览'
+  if (item.sampleRows.length) return '查看样例数据'
+  return '查看原文摘录'
+}
+
 function detailedPreview(item: ChatOfficeDockingReviewItem): string {
+  const notes = shipmentNotes(item)
+  if (notes.length) {
+    try {
+      return JSON.stringify(notes.slice(0, 3), null, 2)
+    } catch {
+      return ''
+    }
+  }
   if (item.sampleRows.length) return samplePreview(item)
   return String(item.textPreview || '').trim()
 }
 
 function hasDetailedPreview(item: ChatOfficeDockingReviewItem): boolean {
+  if (shipmentNotes(item).length) return true
   if (item.sampleRows.length) return true
   return normalizedTextPreview(item).length > 220
 }
@@ -220,6 +284,22 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
 .office-docking-review__selection-hint {
   color: var(--app-text-muted, #667085);
   font-size: var(--app-font-size-caption, 12px);
+}
+
+.office-docking-review__shipment-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--app-text, #1f2937);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.45;
+}
+
+.office-docking-review__warnings {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #9a6700;
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.45;
 }
 
 .office-docking-review__icon-btn {

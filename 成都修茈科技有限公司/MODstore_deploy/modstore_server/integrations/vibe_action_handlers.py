@@ -131,9 +131,27 @@ def vibe_edit_handler(
             "error": "vibe_edit 暂不支持 async_mode;请改用脚本工作流或工作台「AI 代码技能」",
         }
 
-    raw_root = action_cfg.get("root") or ""
+    cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    raw_root = (
+        action_cfg.get("root")
+        or cog_input.get("project_root")
+        or cog_input.get("workspace_root")
+        or ""
+    )
     try:
-        root = ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+        trusted = _trusted_system_burn_in_project_root(
+            raw_root,
+            cog_input=cog_input,
+            user_id=int(user_id or 0),
+            read_only=False,
+        )
+        root = (
+            Path(trusted)
+            if trusted
+            else ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        )
     except VibePathError as exc:
         return {"handler": "vibe_edit", "ok": False, "error": str(exc)}
 
@@ -237,9 +255,27 @@ def vibe_heal_handler(
     except ImportError as exc:  # pragma: no cover
         return {"handler": "vibe_heal", "ok": False, "error": f"integrations 未导入: {exc}"}
 
-    raw_root = action_cfg.get("root") or ""
+    cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    raw_root = (
+        action_cfg.get("root")
+        or cog_input.get("project_root")
+        or cog_input.get("workspace_root")
+        or ""
+    )
     try:
-        root = ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+        trusted = _trusted_system_burn_in_project_root(
+            raw_root,
+            cog_input=cog_input,
+            user_id=int(user_id or 0),
+            read_only=False,
+        )
+        root = (
+            Path(trusted)
+            if trusted
+            else ensure_within_workspace(raw_root, user_id=int(user_id or 0))
+        )
     except VibePathError as exc:
         return {"handler": "vibe_heal", "ok": False, "error": str(exc)}
 

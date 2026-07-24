@@ -7,7 +7,9 @@ from retort_engine.absorption_state import save_absorption_state
 from retort_engine.llm_absorption_evidence import llm_absorption_evidence, read_json
 
 
-def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_scores(tmp_path: Path) -> None:
+def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_scores(
+    tmp_path: Path,
+) -> None:
     external = tmp_path / "external"
     external.mkdir()
     save_absorption_state(
@@ -32,14 +34,26 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     source.parent.mkdir()
     test.parent.mkdir()
     source.write_text("def feature():\n    return True\n", encoding="utf-8")
-    (source.parent / "pr_review.py").write_text("def parse_unified_diff():\n    task_groups = []\n    return task_groups\n", encoding="utf-8")
-    (source.parent / "cross_language_transfer.py").write_text("def build_cross_language_transfer():\n    return {'status': 'mapped'}\n", encoding="utf-8")
+    (source.parent / "pr_review.py").write_text(
+        "def parse_unified_diff():\n    task_groups = []\n    return task_groups\n",
+        encoding="utf-8",
+    )
+    (source.parent / "cross_language_transfer.py").write_text(
+        "def build_cross_language_transfer():\n    return {'status': 'mapped'}\n",
+        encoding="utf-8",
+    )
     test.write_text("def test_feature():\n    assert True\n", encoding="utf-8")
     run_dir = tmp_path / ".retort" / "real_absorption_runs"
     run_dir.mkdir(parents=True)
     aggregate_result_path = tmp_path / ".retort" / "employee_results" / "result.json"
     (run_dir / "run.json").write_text(
-        json.dumps({"source": "https://github.com/owner/repo", "changed_files": [str(source), str(test)], "employee_results_path": str(aggregate_result_path)}),
+        json.dumps(
+            {
+                "source": "https://github.com/owner/repo",
+                "changed_files": [str(source), str(test)],
+                "employee_results_path": str(aggregate_result_path),
+            }
+        ),
         encoding="utf-8",
     )
     docs = tmp_path / "docs"
@@ -102,7 +116,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "external_snapshot": {"git_revision": "abc123"},
                 "absorbed_signals": ["pipeline", "benchmark"],
                 "semantic_review": {"gaps": [{"name": "one"}]},
-                "license_review": {"status": "passed", "detected_license": "MIT", "source_code_copy_allowed": True, "pattern_absorption_allowed": True, "isolation_policy": "license_gate_standard"},
+                "license_review": {
+                    "status": "passed",
+                    "detected_license": "MIT",
+                    "source_code_copy_allowed": True,
+                    "pattern_absorption_allowed": True,
+                    "isolation_policy": "license_gate_standard",
+                },
                 "review_pipeline": {
                     "component_gaps": [{"component": "core"}],
                     "prioritized_absorptions": [{"task": "split"}],
@@ -270,7 +290,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "all_cases_have_ci_acceptance": True,
                 },
                 "cases": [],
-                "evidence": {"ci_gate": "all_cases_direct_replay_and_blind_delta_at_or_above_80"},
+                "evidence": {
+                    "ci_gate": "all_cases_direct_replay_and_blind_delta_at_or_above_80"
+                },
             }
         ),
         encoding="utf-8",
@@ -290,7 +312,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 },
                 "cases": [],
                 "artifacts": {},
-                "evidence": {"boundary": "generated_script_under_retort_dotdir_imports_no_retort_engine_modules"},
+                "evidence": {
+                    "boundary": "generated_script_under_retort_dotdir_imports_no_retort_engine_modules"
+                },
             }
         ),
         encoding="utf-8",
@@ -318,7 +342,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "cross_language_absorption_verified": True,
                 },
                 "cases": [],
-                "evidence": {"adjudicator": "retort_engine.heterogeneous_absorption_replay._adjudicate_rows"},
+                "evidence": {
+                    "adjudicator": "retort_engine.heterogeneous_absorption_replay._adjudicate_rows"
+                },
             }
         ),
         encoding="utf-8",
@@ -357,7 +383,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "status": "ready",
                 "summary": {
                     "competitor_project": "mopemope/pr-ai-review-bot",
-                    "competitor_projects": ["mopemope/pr-ai-review-bot", "qodo-ai/pr-agent", "reviewdog/reviewdog"],
+                    "competitor_projects": [
+                        "mopemope/pr-ai-review-bot",
+                        "qodo-ai/pr-agent",
+                        "reviewdog/reviewdog",
+                    ],
                     "competitor_project_count": 3,
                     "ready_competitor_project_count": 3,
                     "real_cached_project_count": 3,
@@ -381,7 +411,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "competitor_output": {},
                 "retort_output": {},
                 "artifacts": {},
-                "evidence": {"competitor_boundary": "external_node_process_no_retort_engine_imports"},
+                "evidence": {
+                    "competitor_boundary": "external_node_process_no_retort_engine_imports"
+                },
             }
         ),
         encoding="utf-8",
@@ -401,7 +433,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 },
                 "cases": [{"label": "retort_wins"}],
                 "artifacts": {},
-                "evidence": {"human_reviewed": False, "no_human_operating_model": True, "human_review_required": False},
+                "evidence": {
+                    "human_reviewed": False,
+                    "no_human_operating_model": True,
+                    "human_review_required": False,
+                },
             }
         ),
         encoding="utf-8",
@@ -499,7 +535,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "independent_accepted_case_count": 10,
                 },
                 "cases": [],
-                "evidence": {"claim_boundary": "direct_core_modules_not_pr_review_manifest"},
+                "evidence": {
+                    "claim_boundary": "direct_core_modules_not_pr_review_manifest"
+                },
             }
         ),
         encoding="utf-8",
@@ -523,7 +561,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "review": {},
                 "assertions": {},
                 "artifacts": {},
-                "evidence": {"integrated_runtime": "retort_engine.pr_review.review_diff"},
+                "evidence": {
+                    "integrated_runtime": "retort_engine.pr_review.review_diff"
+                },
             }
         ),
         encoding="utf-8",
@@ -571,7 +611,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "state_leak_count": 0,
                 },
                 "runs": [],
-                "evidence": {"acceptance": ">100 concurrent workers across repeated rounds with zero state leaks"},
+                "evidence": {
+                    "acceptance": ">100 concurrent workers across repeated rounds with zero state leaks"
+                },
             }
         ),
         encoding="utf-8",
@@ -611,7 +653,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "all_rollbacks_verified": True,
                 },
                 "workers": [],
-                "evidence": {"acceptance": ">100 concurrent failed employee patches, all rolled back with post-rollback gate pass"},
+                "evidence": {
+                    "acceptance": ">100 concurrent failed employee patches, all rolled back with post-rollback gate pass"
+                },
             }
         ),
         encoding="utf-8",
@@ -647,10 +691,22 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "merge_commit_count": 10,
                     "post_merge_test_passed_count": 10,
                     "all_branch_diff_merge_tests_passed": True,
-                    "source_families": ["agentic_benchmark", "architecture_governance", "architecture_graph", "benchmark_harness", "context_packager", "go_ci_review_publisher", "python_pr_agent", "security_static_analysis", "typescript_pr_bot"],
+                    "source_families": [
+                        "agentic_benchmark",
+                        "architecture_governance",
+                        "architecture_graph",
+                        "benchmark_harness",
+                        "context_packager",
+                        "go_ci_review_publisher",
+                        "python_pr_agent",
+                        "security_static_analysis",
+                        "typescript_pr_bot",
+                    ],
                 },
                 "cases": [],
-                "evidence": {"verifier": "git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest"},
+                "evidence": {
+                    "verifier": "git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest"
+                },
             }
         ),
         encoding="utf-8",
@@ -819,7 +875,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     },
                     "employee_patch_closure": {
                         "status": "ready",
-                        "summary": {"success_case_verified": True, "failure_case_rolled_back": True},
+                        "summary": {
+                            "success_case_verified": True,
+                            "failure_case_rolled_back": True,
+                        },
                     },
                 },
             }
@@ -832,7 +891,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "execution_mode": "employee_runtime_worker",
                 "results": [{"task_id": "stress"}],
                 "runtime_evidence": {
-                    "worker_review": {"status": "reviewed", "comment_count": 2, "file_count": 1, "task_group_count": 1, "artifact": "stress_review.json"},
+                    "worker_review": {
+                        "status": "reviewed",
+                        "comment_count": 2,
+                        "file_count": 1,
+                        "task_group_count": 1,
+                        "artifact": "stress_review.json",
+                    },
                 },
             }
         ),
@@ -854,15 +919,32 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert not any(item.startswith("capability_absorption_cap=") for item in evidence)
     assert "behavior_test_function_count=1" in evidence
     assert "post_absorption_hardening_scope=latest_merge_commit_to_head" in evidence
-    assert any(item.startswith("total_behavior_source_file_count=") for item in evidence)
+    assert any(
+        item.startswith("total_behavior_source_file_count=") for item in evidence
+    )
     assert "external_snapshot_revision=abc123" in evidence
     assert "semantic_gap_count=1" in evidence
-    assert "license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard" in evidence
+    assert (
+        "license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard"
+        in evidence
+    )
     assert "component_gap_count=1" in evidence
-    assert "employee_result_count=1; execution_mode=employee_runtime_worker_multi_process" in evidence
-    assert "employee_runtime_worker_review=reviewed; comments=60; artifact=review.json" in evidence
-    assert "employee_runtime_worker_review_files=45; task_groups=15; worker_reviews=5" in evidence
-    assert "employee_runtime_multi_worker_verified=True; workers=5; independent_workers=5; result_paths=5" in evidence
+    assert (
+        "employee_result_count=1; execution_mode=employee_runtime_worker_multi_process"
+        in evidence
+    )
+    assert (
+        "employee_runtime_worker_review=reviewed; comments=60; artifact=review.json"
+        in evidence
+    )
+    assert (
+        "employee_runtime_worker_review_files=45; task_groups=15; worker_reviews=5"
+        in evidence
+    )
+    assert (
+        "employee_runtime_multi_worker_verified=True; workers=5; independent_workers=5; result_paths=5"
+        in evidence
+    )
     assert "employee_worker_pid_isolation_verified=True" in evidence
     assert "employee_worker_runtime_boundary_verified=True" in evidence
     assert "employee_worker_unique_process_ids=5" in evidence
@@ -871,16 +953,27 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_worker_pid_cross_check_count=5" in evidence
     assert "employee_worker_crash_isolation_verified=True" in evidence
     assert "employee_worker_crash_isolation_verified_count=5" in evidence
-    assert "employee_runtime_crash_isolation_verified=True; crash_verified=5" in evidence
-    assert "employee_runtime_patch_closure=ready; success_case=True; rollback_case=True" in evidence
+    assert (
+        "employee_runtime_crash_isolation_verified=True; crash_verified=5" in evidence
+    )
+    assert (
+        "employee_runtime_patch_closure=ready; success_case=True; rollback_case=True"
+        in evidence
+    )
     assert "employee_patch_closure_status=ready" in evidence
     assert "employee_patch_closure_rollback_verified_count=4" in evidence
     assert "employee_patch_closure_primary_rollback_verified_count=2" in evidence
-    assert "employee_patch_closure_rollback_scope=per_primary_case_failure_injection" in evidence
+    assert (
+        "employee_patch_closure_rollback_scope=per_primary_case_failure_injection"
+        in evidence
+    )
     assert "employee_patch_closure_failure_rehearsal_count=4" in evidence
     assert "employee_patch_closure_failure_rehearsal_rollback_count=4" in evidence
     assert "employee_patch_closure_full_path_rollback_verified=True" in evidence
-    assert "employee_patch_closure_all_cases_have_failure_rollback_rehearsal=True" in evidence
+    assert (
+        "employee_patch_closure_all_cases_have_failure_rollback_rehearsal=True"
+        in evidence
+    )
     assert "employee_patch_closure_success_case_verified=True" in evidence
     assert "employee_patch_closure_failure_case_rolled_back=True" in evidence
     assert "employee_patch_closure_multi_file_case_verified=True" in evidence
@@ -911,14 +1004,26 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "external_advantage_matrix_all_improved=True" in evidence
     assert "external_advantage_matrix_direct_regression_cases=6/6" in evidence
     assert "external_advantage_matrix_all_direct_execution=True" in evidence
-    assert "external_advantage_matrix_regression_runtime=retort_engine.pr_review.review_diff" in evidence
-    assert "external_advantage_matrix_regression_model=executable_input_output_diff_replay" in evidence
+    assert (
+        "external_advantage_matrix_regression_runtime=retort_engine.pr_review.review_diff"
+        in evidence
+    )
+    assert (
+        "external_advantage_matrix_regression_model=executable_input_output_diff_replay"
+        in evidence
+    )
     assert "external_advantage_matrix_blind_third_party_status=ready" in evidence
     assert "external_advantage_matrix_blind_third_party_accepted=6/6" in evidence
     assert "external_advantage_matrix_blind_third_party_min_delta=65" in evidence
     assert "external_advantage_matrix_blind_third_party_delta_floor=True" in evidence
-    assert "external_advantage_matrix_blind_third_party_score_fields_consumed=False" in evidence
-    assert "external_advantage_matrix_blind_third_party_boundary=redacted_structural_facts_only_no_baseline_or_retort_score_fields" in evidence
+    assert (
+        "external_advantage_matrix_blind_third_party_score_fields_consumed=False"
+        in evidence
+    )
+    assert (
+        "external_advantage_matrix_blind_third_party_boundary=redacted_structural_facts_only_no_baseline_or_retort_score_fields"
+        in evidence
+    )
     assert "external_advantage_ci_regression_status=ready" in evidence
     assert "external_advantage_ci_regression_cases=6/6" in evidence
     assert "external_advantage_ci_regression_min_blind_delta=80" in evidence
@@ -934,7 +1039,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "heterogeneous_absorption_replay_ready_cases=6/6" in evidence
     assert "heterogeneous_absorption_replay_cached_sources=6" in evidence
     assert "heterogeneous_absorption_replay_language_families=5" in evidence
-    assert "heterogeneous_absorption_replay_language_family_list=go,jvm,python,rust,typescript" in evidence
+    assert (
+        "heterogeneous_absorption_replay_language_family_list=go,jvm,python,rust,typescript"
+        in evidence
+    )
     assert "heterogeneous_absorption_replay_before_after=True" in evidence
     assert "heterogeneous_absorption_replay_min_delta=70" in evidence
     assert "heterogeneous_absorption_replay_independent_adjudication=ready" in evidence
@@ -958,7 +1066,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_runtime_comparison_live_upstream_verified=3/3" in evidence
     assert "competitor_runtime_comparison_all_live_upstream_verified=True" in evidence
     assert "competitor_runtime_comparison_live_upstream_materialized=3/3" in evidence
-    assert "competitor_runtime_comparison_all_live_upstream_materialized=True" in evidence
+    assert (
+        "competitor_runtime_comparison_all_live_upstream_materialized=True" in evidence
+    )
     assert "competitor_runtime_comparison_hunks=2" in evidence
     assert "competitor_runtime_comparison_retort_comments=4" in evidence
     assert "competitor_runtime_comparison_side_by_side=True" in evidence
@@ -977,7 +1087,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_behavior_regression_assertions=18" in evidence
     assert "paibi_cli_cross_adjudication_status=ready" in evidence
     assert "paibi_cli_cross_adjudication_tools=4/4" in evidence
-    assert "paibi_cli_cross_adjudication_tool_identities=codex,cursor,trae,claude_code" in evidence
+    assert (
+        "paibi_cli_cross_adjudication_tool_identities=codex,cursor,trae,claude_code"
+        in evidence
+    )
     assert "paibi_cli_cross_adjudication_all_accepted=True" in evidence
     assert "paibi_cli_cross_adjudication_consensus=True" in evidence
     assert "paibi_cli_cross_adjudication_input_score_fields=False" in evidence
@@ -989,7 +1102,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "paibi_cli_cross_adjudication_human_reviewed=False" in evidence
     assert "paibi_cli_cross_adjudication_human_calibrated=True" in evidence
     assert "paibi_cli_cross_adjudication_calibration_labels=50" in evidence
-    assert "paibi_cli_cross_adjudication_calibration_source=retort_oracle_no_human" in evidence
+    assert (
+        "paibi_cli_cross_adjudication_calibration_source=retort_oracle_no_human"
+        in evidence
+    )
     assert "paibi_cli_cross_adjudication_calibration_pass_rate=1.0" in evidence
     assert "paibi_cli_cross_adjudication_calibration_false_positive=0" in evidence
     assert "paibi_cli_cross_adjudication_calibration_false_negative=0" in evidence
@@ -1000,13 +1116,19 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "cross_domain_absorption_replay_before_after=True" in evidence
     assert "cross_domain_absorption_replay_direct_execution=True" in evidence
     assert "cross_domain_absorption_replay_output_assertions=True" in evidence
-    assert "cross_domain_absorption_replay_claim_boundary=direct_core_modules_not_pr_review_manifest" in evidence
+    assert (
+        "cross_domain_absorption_replay_claim_boundary=direct_core_modules_not_pr_review_manifest"
+        in evidence
+    )
     assert "cross_domain_end_to_end_status=ready" in evidence
     assert "cross_domain_end_to_end_domains=10" in evidence
     assert "cross_domain_end_to_end_integrated_review=reviewed" in evidence
     assert "cross_domain_end_to_end_all_stages_chained=True" in evidence
     assert "cross_domain_end_to_end_all_outputs_consumed=True" in evidence
-    assert "cross_domain_end_to_end_runtime=retort_engine.pr_review.review_diff" in evidence
+    assert (
+        "cross_domain_end_to_end_runtime=retort_engine.pr_review.review_diff"
+        in evidence
+    )
     assert "cross_domain_ci_regression_status=ready" in evidence
     assert "cross_domain_ci_regression_rounds=3/3" in evidence
     assert "cross_domain_ci_regression_total_domains=30" in evidence
@@ -1019,8 +1141,14 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "contract_runtime_rehearsal_concurrency_faults=18" in evidence
     assert "contract_runtime_rehearsal_all_concurrent_rejected=True" in evidence
     assert "contract_runtime_rehearsal_all_concurrent_rollbacks=True" in evidence
-    assert "contract_runtime_rehearsal_fault_model=threaded_invalid_payload_workers_with_per_worker_state_rollback" in evidence
-    assert "contract_runtime_rehearsal_guard=retort_engine.contracts.validate_contract" in evidence
+    assert (
+        "contract_runtime_rehearsal_fault_model=threaded_invalid_payload_workers_with_per_worker_state_rollback"
+        in evidence
+    )
+    assert (
+        "contract_runtime_rehearsal_guard=retort_engine.contracts.validate_contract"
+        in evidence
+    )
     assert "contract_stability_stress_status=ready" in evidence
     assert "contract_stability_stress_rounds=2/2" in evidence
     assert "contract_stability_stress_workers=120" in evidence
@@ -1042,17 +1170,25 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "product_mainline_absorption_quality=True" in evidence
     assert "review_family_behavior_replay_status=ready" in evidence
     assert "review_family_behavior_replay_ready_cases=3/3" in evidence
-    assert "review_family_behavior_replay_language_families=python,typescript" in evidence
+    assert (
+        "review_family_behavior_replay_language_families=python,typescript" in evidence
+    )
     assert "review_family_behavior_replay_typescript_cases=2" in evidence
     assert "review_family_behavior_replay_direct_outputs=True" in evidence
-    assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in evidence
+    assert (
+        "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff"
+        in evidence
+    )
     assert "external_merge_landing_status=ready" in evidence
     assert "external_merge_landing_ready_cases=10/10" in evidence
     assert "external_merge_landing_branch_diffs=10" in evidence
     assert "external_merge_landing_merge_commits=10" in evidence
     assert "external_merge_landing_post_merge_tests=10" in evidence
     assert "external_merge_landing_all_passed=True" in evidence
-    assert "external_merge_landing_verifier=git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest" in evidence
+    assert (
+        "external_merge_landing_verifier=git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest"
+        in evidence
+    )
     assert "pr_review_cross_language_transfer_source=True" in evidence
     assert "pr_review_cross_language_transfer_status=mapped" in evidence
     assert "pr_review_cross_language_transfer_core_mapping=True" in evidence
@@ -1088,8 +1224,14 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_live_publish_probe_degraded_without_write=True" in evidence
     assert "pr_live_publish_probe_real_network=False" in evidence
     assert "pr_live_publish_probe_transport=injected_transport" in evidence
-    assert "pr_live_publish_probe_required_permission=issues:write or pull_requests:write" in evidence
-    assert "pr_live_publish_probe_degradation=no_comment_created_no_rollback_needed" in evidence
+    assert (
+        "pr_live_publish_probe_required_permission=issues:write or pull_requests:write"
+        in evidence
+    )
+    assert (
+        "pr_live_publish_probe_degradation=no_comment_created_no_rollback_needed"
+        in evidence
+    )
     assert "pr_low_permission_probe_status=permission_denied_degraded" in evidence
     assert "pr_low_permission_probe_live_write=False" in evidence
     assert "pr_low_permission_probe_permission_denied=True" in evidence
@@ -1103,7 +1245,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "operator_journey_replay_ready_stages=11/11" in evidence
     assert "operator_journey_replay_cross_domain_ready=True" in evidence
     assert "operator_journey_replay_frontend_operation_replay_ready=True" in evidence
-    assert "operator_journey_replay_external_process_adjudication_ready=True" in evidence
+    assert (
+        "operator_journey_replay_external_process_adjudication_ready=True" in evidence
+    )
     assert "operator_journey_replay_upstream_pr_ci_ready=True" in evidence
     assert "operator_journey_replay_competitor_runtime_ready=True" in evidence
     assert "operator_journey_replay_competitor_blind_ready=True" in evidence
@@ -1121,7 +1265,9 @@ def test_llm_absorption_evidence_read_json_fails_closed(tmp_path: Path) -> None:
     assert read_json(path) == {}
 
 
-def test_llm_absorption_evidence_includes_extension_policy_runtime_signals(tmp_path: Path, monkeypatch) -> None:
+def test_llm_absorption_evidence_includes_extension_policy_runtime_signals(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.setattr(
         "retort_engine.llm_absorption_evidence.pr_review_runtime_evidence",
         lambda project: {
@@ -1137,8 +1283,20 @@ def test_llm_absorption_evidence_includes_extension_policy_runtime_signals(tmp_p
             "extension_policy_unknown_count": 0,
             "extension_policy_language_family_count": 8,
             "extension_policy_review_context_count": 5,
-            "extension_policy_review_contexts": ["ci_config", "config", "docs", "frontend", "runtime"],
-            "extension_policy_language_families": ["cpp", "dotnet", "go", "rust", "typescript"],
+            "extension_policy_review_contexts": [
+                "ci_config",
+                "config",
+                "docs",
+                "frontend",
+                "runtime",
+            ],
+            "extension_policy_language_families": [
+                "cpp",
+                "dotnet",
+                "go",
+                "rust",
+                "typescript",
+            ],
             "extension_policy_source": "retort_holdout_extension_policy_v1",
         },
     )
@@ -1149,6 +1307,15 @@ def test_llm_absorption_evidence_includes_extension_policy_runtime_signals(tmp_p
     assert "pr_review_extension_policy_unknown=0" in evidence
     assert "pr_review_extension_policy_language_family_count=8" in evidence
     assert "pr_review_extension_policy_review_context_count=5" in evidence
-    assert "pr_review_extension_policy_review_contexts=ci_config,config,docs,frontend,runtime" in evidence
-    assert "pr_review_extension_policy_language_families=cpp,dotnet,go,rust,typescript" in evidence
-    assert "pr_review_extension_policy_source=retort_holdout_extension_policy_v1" in evidence
+    assert (
+        "pr_review_extension_policy_review_contexts=ci_config,config,docs,frontend,runtime"
+        in evidence
+    )
+    assert (
+        "pr_review_extension_policy_language_families=cpp,dotnet,go,rust,typescript"
+        in evidence
+    )
+    assert (
+        "pr_review_extension_policy_source=retort_holdout_extension_policy_v1"
+        in evidence
+    )

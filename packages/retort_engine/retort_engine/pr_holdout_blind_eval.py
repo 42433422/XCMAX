@@ -50,14 +50,27 @@ def build_pr_holdout_blind_eval(
     root = Path(project).expanduser().resolve()
     urls = tuple(_dedupe(pr_urls or DEFAULT_HOLDOUT_PR_URLS))
     known_urls = _known_pr_urls(root)
-    review_call = reviewer or (lambda url: review_pr_url(url, max_comments=max_comments, max_bytes=max_bytes))
+    review_call = reviewer or (
+        lambda url: review_pr_url(url, max_comments=max_comments, max_bytes=max_bytes)
+    )
     cases = [_evaluate_case(url, review_call) for url in urls]
     reviewed = [case for case in cases if case["status"] == "reviewed"]
     accepted = [case for case in reviewed if case["accepted"]]
     repos = {_repo_slug(str(case.get("pr_url") or "")) for case in reviewed}
     repos.discard("")
-    extensions = {ext for case in reviewed for ext in case.get("language_extensions") or [] if str(ext).strip()}
-    overlap = sorted({str(case.get("pr_url") or "") for case in cases if str(case.get("pr_url") or "") in known_urls})
+    extensions = {
+        ext
+        for case in reviewed
+        for ext in case.get("language_extensions") or []
+        if str(ext).strip()
+    }
+    overlap = sorted(
+        {
+            str(case.get("pr_url") or "")
+            for case in cases
+            if str(case.get("pr_url") or "") in known_urls
+        }
+    )
     pass_rate = len(accepted) / len(reviewed) if reviewed else 0.0
     summary = {
         "target_pr_count": target_prs,
@@ -68,10 +81,14 @@ def build_pr_holdout_blind_eval(
         "acceptance_pass_rate": round(pass_rate, 4),
         "distinct_repo_count": len(repos),
         "distinct_extension_count": len(extensions),
-        "total_comment_count": sum(int(case.get("comment_count") or 0) for case in reviewed),
+        "total_comment_count": sum(
+            int(case.get("comment_count") or 0) for case in reviewed
+        ),
         "total_file_count": sum(int(case.get("file_count") or 0) for case in reviewed),
         "total_hunk_count": sum(int(case.get("hunk_count") or 0) for case in reviewed),
-        "total_reviewed_new_change_count": sum(int(case.get("reviewed_new_change_count") or 0) for case in reviewed),
+        "total_reviewed_new_change_count": sum(
+            int(case.get("reviewed_new_change_count") or 0) for case in reviewed
+        ),
         "truncated_pr_count": sum(1 for case in reviewed if case.get("truncated")),
         "overlap_with_prior_long_run_count": len(overlap),
         "holdout_label_count": len(cases),
@@ -108,7 +125,10 @@ def build_pr_holdout_blind_eval(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -125,22 +145,51 @@ def _evaluate_case(url: str, reviewer: Reviewer) -> dict[str, Any]:
             "expectation": _expectation(),
         }
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    nested_review = review.get("review") if isinstance(review.get("review"), dict) else {}
-    nested_summary = nested_review.get("summary") if isinstance(nested_review.get("summary"), dict) else {}
-    files = [item for item in nested_review.get("files") or [] if isinstance(item, dict)]
-    extensions = sorted({_extension(str(item.get("path") or "")) for item in files if _extension(str(item.get("path") or ""))})
+    nested_review = (
+        review.get("review") if isinstance(review.get("review"), dict) else {}
+    )
+    nested_summary = (
+        nested_review.get("summary")
+        if isinstance(nested_review.get("summary"), dict)
+        else {}
+    )
+    files = [
+        item for item in nested_review.get("files") or [] if isinstance(item, dict)
+    ]
+    extensions = sorted(
+        {
+            _extension(str(item.get("path") or ""))
+            for item in files
+            if _extension(str(item.get("path") or ""))
+        }
+    )
     status = str(review.get("status") or "")
-    comment_count = int(summary.get("comment_count") or nested_summary.get("comment_count") or 0)
-    reviewed_changes = int(nested_summary.get("reviewed_new_change_count") or summary.get("reviewed_new_change_count") or 0)
-    file_count = int(summary.get("file_count") or nested_summary.get("file_count") or len(files))
-    accepted = status == "reviewed" and file_count > 0 and comment_count > 0 and reviewed_changes > 0
+    comment_count = int(
+        summary.get("comment_count") or nested_summary.get("comment_count") or 0
+    )
+    reviewed_changes = int(
+        nested_summary.get("reviewed_new_change_count")
+        or summary.get("reviewed_new_change_count")
+        or 0
+    )
+    file_count = int(
+        summary.get("file_count") or nested_summary.get("file_count") or len(files)
+    )
+    accepted = (
+        status == "reviewed"
+        and file_count > 0
+        and comment_count > 0
+        and reviewed_changes > 0
+    )
     return {
         "pr_url": str(review.get("pr_url") or url),
         "repo": _repo_slug(str(review.get("pr_url") or url)),
         "status": status,
         "accepted": accepted,
         "file_count": file_count,
-        "hunk_count": int(summary.get("hunk_count") or nested_summary.get("hunk_count") or 0),
+        "hunk_count": int(
+            summary.get("hunk_count") or nested_summary.get("hunk_count") or 0
+        ),
         "comment_count": comment_count,
         "reviewed_new_change_count": reviewed_changes,
         "fetched_bytes": int(summary.get("fetched_bytes") or 0),
@@ -162,7 +211,10 @@ def _expectation() -> dict[str, Any]:
 
 def _known_pr_urls(root: Path) -> set[str]:
     urls: set[str] = set()
-    for rel in ("docs/retort_complex_pr_replay.json", "docs/retort_pr_long_run_review.json"):
+    for rel in (
+        "docs/retort_complex_pr_replay.json",
+        "docs/retort_pr_long_run_review.json",
+    ):
         report = _read_json(root / rel)
         for item in report.get("pull_requests") or []:
             if isinstance(item, dict) and item.get("pr_url"):

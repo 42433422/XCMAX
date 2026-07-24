@@ -33,6 +33,10 @@ function resolveBuildSha() {
 }
 
 const buildSha = resolveBuildSha()
+if (!/^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$/.test(buildSha)) {
+  console.error(`update metadata requires a full Git SHA buildSha, got: ${JSON.stringify(buildSha)}`)
+  process.exit(2)
+}
 const productVersion = String(process.env.XCAGI_PRODUCT_VERSION || version).trim()
 const releaseNotes = String(process.env.XCAGI_RELEASE_NOTES || '').trim()
 

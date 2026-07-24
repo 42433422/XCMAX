@@ -41,6 +41,7 @@ _EXCLUDED_PREFIXES = (
     "data-sources/",
     "xcmax-dashboard/",
     "brand-xc-logo",
+    "ai-butler-",
 )
 
 
@@ -52,6 +53,9 @@ _VUE_DIST_ROOT_FILES: dict[str, str] = {
     "vite.svg": "image/svg+xml",
     "brand-xc-logo.jpg": "image/jpeg",
     "brand-xc-logo.png": "image/png",
+    # 小C助理头像（FloatingChatAssistant public/ 根路径）
+    "ai-butler-female-avatar-v1.png": "image/png",
+    "ai-butler-male-avatar-v1.jpg": "image/jpeg",
 }
 
 
@@ -77,9 +81,13 @@ def _try_serve_vue_dist_root_file(fallback: str) -> FileResponse | None:
             if os.path.isfile(p):
                 return FileResponse(p, media_type=media)
         return None
-    p = os.path.join(_vue_dist_dir(), fallback)
-    if os.path.isfile(p):
-        return FileResponse(p, media_type=media)
+    candidates = [
+        os.path.join(_vue_dist_dir(), fallback),
+        os.path.join(get_base_dir(), "frontend", "public", fallback),
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return FileResponse(p, media_type=media)
     return None
 
 

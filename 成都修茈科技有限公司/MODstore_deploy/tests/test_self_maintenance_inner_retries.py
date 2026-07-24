@@ -164,6 +164,113 @@ def test_code_step_accepted_para_timeout_does_not_start_duplicate_retry(
     assert code_fix_rounds == 0
     assert len(calls) == 1
     assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
+    # Outer dispatch retry path must also refuse to treat this as transient.
+    assert mod._is_accepted_para_wait_timeout(timeout) is True
+    assert mod._is_transient_employee_dispatch_failure(timeout) is False
+
+
+def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, captured_ledger):
+    """Mock Para success + nested delivery_validation(all exit 0) → validate/writeback ok."""
+    dv = {
+        "commands": [
+            {
+                "command": "pytest tests/test_self_maintenance_inner_retries.py",
+                "exit_code": 0,
+                "output_tail": "1 passed",
+            },
+            {"command": "ruff check .", "exit_code": 0},
+        ],
+        "ok": True,
+    }
+    success = {
+        "result": {
+            "ok": True,
+            "status": "completed",
+            "outputs": [
+                {
+                    "accepted": True,
+                    "completed": True,
+                    "handler": "para_delegate",
+                    "ok": True,
+                    "status": "para_task_completed",
+                    "para_result": {
+                        "task_id": "task-dv-ok",
+                        "status": "completed",
+                        "subtasks": [
+                            {
+                                "id": "sub-1",
+                                "branch": "devfleet/codex/fix-dv-ok",
+                                "delivery_validation": dv,
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    }
+    calls = _patch_dispatch(monkeypatch, [success])
+
+    result, ok, failure_reason, para_meta, _, code_fix_rounds, marker_rounds = (
+        mod._run_step_with_inner_retries(
+            employee_id="vibe-coding-maintainer",
+            step_name="code",
+            task_text="base task with kb writeback",
+            extra={},
+            user_id=1,
+            run_id="run-dv-ok",
+        )
+    )
+
+    assert ok is True
+    assert failure_reason == ""
+    assert code_fix_rounds == 0
+    assert marker_rounds == 0
+    assert len(calls) == 1
+    assert para_meta["task_id"] == "task-dv-ok"
+    assert para_meta["branch"] == "devfleet/codex/fix-dv-ok"
+    gate = mod._delivery_validation_gate(result)
+    assert gate["found"] is True
+    assert gate["ok"] is True
+    assert gate["reason"] == "delivery_validation_passed"
+    assert gate["delivery_validation"] is dv
+    assert mod._employee_result_ok(result) is True
+    assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
+
+
+def test_nested_delivery_validation_failure_blocks_completion_even_if_envelope_ok():
+    """Outer ok=True 但 nested DV exit_code≠0 → 不得标完成。"""
+    result = {
+        "result": {
+            "ok": True,
+            "status": "completed",
+            "outputs": [
+                {
+                    "handler": "para_delegate",
+                    "ok": True,
+                    "para_result": {
+                        "delivery_validation": {
+                            "commands": [
+                                {
+                                    "command": "pytest tests/bad.py",
+                                    "exit_code": 1,
+                                    "output_tail": "FAILED",
+                                }
+                            ]
+                        }
+                    },
+                }
+            ],
+        }
+    }
+
+    gate = mod._delivery_validation_gate(result)
+    assert gate["found"] is True
+    assert gate["ok"] is False
+    assert gate["reason"] == "delivery_validation_failed"
+    assert mod._employee_result_ok(result) is False
+    reason = mod._extract_failure_reason(result, {})
+    assert "delivery_validation_failed" in reason
+    assert "exit=1" in reason
 
 
 def test_review_step_marker_missing_then_present(monkeypatch, captured_ledger):

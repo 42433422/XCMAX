@@ -6,14 +6,25 @@ from pathlib import Path
 from typing import Any
 
 
-def build_pr_long_run_review(project: str | Path, *, min_prs: int = 10, output: str | Path = "") -> dict[str, Any]:
+def build_pr_long_run_review(
+    project: str | Path, *, min_prs: int = 10, output: str | Path = ""
+) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     complex_report = _read_json(root / "docs" / "retort_complex_pr_replay.json")
-    pull_requests = [item for item in complex_report.get("pull_requests") or [] if isinstance(item, dict)]
+    pull_requests = [
+        item
+        for item in complex_report.get("pull_requests") or []
+        if isinstance(item, dict)
+    ]
     reviewed = [item for item in pull_requests if item.get("status") == "reviewed"]
     repos = {_repo_slug(str(item.get("pr_url") or "")) for item in reviewed}
     repos.discard("")
-    extensions = {ext for item in reviewed for ext in item.get("language_extensions") or [] if str(ext).strip()}
+    extensions = {
+        ext
+        for item in reviewed
+        for ext in item.get("language_extensions") or []
+        if str(ext).strip()
+    }
     safety = _publish_safety_matrix(root)
     summary = {
         "target_pr_count": min_prs,
@@ -21,11 +32,17 @@ def build_pr_long_run_review(project: str | Path, *, min_prs: int = 10, output: 
         "reviewed_pr_count": len(reviewed),
         "distinct_repo_count": len(repos),
         "distinct_extension_count": len(extensions),
-        "complex_pr_count": int((complex_report.get("summary") or {}).get("complex_pr_count") or 0),
-        "total_comment_count": sum(int(item.get("comment_count") or 0) for item in reviewed),
+        "complex_pr_count": int(
+            (complex_report.get("summary") or {}).get("complex_pr_count") or 0
+        ),
+        "total_comment_count": sum(
+            int(item.get("comment_count") or 0) for item in reviewed
+        ),
         "total_file_count": sum(int(item.get("file_count") or 0) for item in reviewed),
         "total_hunk_count": sum(int(item.get("hunk_count") or 0) for item in reviewed),
-        "total_reviewed_new_change_count": sum(int(item.get("reviewed_new_change_count") or 0) for item in reviewed),
+        "total_reviewed_new_change_count": sum(
+            int(item.get("reviewed_new_change_count") or 0) for item in reviewed
+        ),
         "all_reviewed": bool(pull_requests) and len(reviewed) == len(pull_requests),
         "publish_safety_matrix_ready": safety["ready"],
     }
@@ -53,7 +70,10 @@ def build_pr_long_run_review(project: str | Path, *, min_prs: int = 10, output: 
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -64,12 +84,26 @@ def _publish_safety_matrix(root: Path) -> dict[str, Any]:
     sandbox = _read_json(root / "docs" / "retort_pr_publish_sandbox.json")
     live_summary = live.get("summary") if isinstance(live.get("summary"), dict) else {}
     low_summary = low.get("summary") if isinstance(low.get("summary"), dict) else {}
-    readonly_summary = readonly.get("summary") if isinstance(readonly.get("summary"), dict) else {}
-    sandbox_summary = sandbox.get("summary") if isinstance(sandbox.get("summary"), dict) else {}
+    readonly_summary = (
+        readonly.get("summary") if isinstance(readonly.get("summary"), dict) else {}
+    )
+    sandbox_summary = (
+        sandbox.get("summary") if isinstance(sandbox.get("summary"), dict) else {}
+    )
     checks = {
-        "live_write_rolled_back": bool(live_summary.get("live_github_write") and live_summary.get("rollback_verified")),
-        "low_permission_degraded": bool(low_summary.get("permission_denied") and low_summary.get("degraded_without_write") and low.get("evidence", {}).get("real_network")),
-        "readonly_degraded": bool(readonly_summary.get("degraded_without_write") and readonly_summary.get("degradation_artifact_ready")),
+        "live_write_rolled_back": bool(
+            live_summary.get("live_github_write")
+            and live_summary.get("rollback_verified")
+        ),
+        "low_permission_degraded": bool(
+            low_summary.get("permission_denied")
+            and low_summary.get("degraded_without_write")
+            and low.get("evidence", {}).get("real_network")
+        ),
+        "readonly_degraded": bool(
+            readonly_summary.get("degraded_without_write")
+            and readonly_summary.get("degradation_artifact_ready")
+        ),
         "sandbox_rolled_back": bool(sandbox_summary.get("rollback_verified")),
     }
     return {

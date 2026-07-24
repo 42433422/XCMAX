@@ -40,7 +40,9 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
 
     # 1. Product 领域
     try:
-        from app.neuro_bus.domains.product_domain_handlers import register_product_domain_handlers
+        from app.neuro_bus.domains.product_domain_handlers import (
+            register_product_domain_handlers,
+        )
 
         register_product_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Product 领域处理器注册完成")
@@ -49,7 +51,9 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
 
     # 3. Shipment 领域
     try:
-        from app.neuro_bus.domains.shipment_domain_handlers import register_shipment_domain_handlers
+        from app.neuro_bus.domains.shipment_domain_handlers import (
+            register_shipment_domain_handlers,
+        )
 
         register_shipment_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Shipment 领域处理器注册完成")
@@ -79,7 +83,9 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
 
     # 8. OCR 领域
     try:
-        from app.neuro_bus.domains.ocr_domain_handlers import register_ocr_domain_handlers
+        from app.neuro_bus.domains.ocr_domain_handlers import (
+            register_ocr_domain_handlers,
+        )
 
         register_ocr_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] OCR 领域处理器注册完成")
@@ -93,7 +99,9 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
 
     # 10. Print 领域
     try:
-        from app.neuro_bus.domains.print_domain_handlers import register_print_domain_handlers
+        from app.neuro_bus.domains.print_domain_handlers import (
+            register_print_domain_handlers,
+        )
 
         register_print_domain_handlers(bus)
         logger.info("[NeuroDomainRegistration] Print 领域处理器注册完成")
@@ -102,18 +110,43 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] Print 领域注册失败: %s", e)
 
-    # 11. AI 领域
+    # 11. AI 领域（模块实名为 ai_service_domain_handlers；经 DomainRegistry 注册）
     try:
-        from app.neuro_bus.domains.ai_domain_handlers import register_ai_domain_handlers
+        from app.neuro_bus.domains.ai_service_domain import get_ai_service_domain
 
-        register_ai_domain_handlers(bus)
+        get_ai_service_domain()
         logger.info("[NeuroDomainRegistration] AI 领域处理器注册完成")
     except ImportError:
         logger.info("[NeuroDomainRegistration] AI 领域处理器不存在，跳过")
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] AI 领域注册失败: %s", e)
 
-    # 11. 核心 app service 真实落地消费者（products.imported / conversation.message_saved /
+    # 12. Finance / Report（有真实副作用 handler，须进入启动注册链）
+    try:
+        from app.neuro_bus.domains.finance_domain_handlers import (
+            register_finance_domain_handlers,
+        )
+
+        register_finance_domain_handlers(bus)
+        logger.info("[NeuroDomainRegistration] Finance 领域处理器注册完成")
+    except ImportError:
+        logger.info("[NeuroDomainRegistration] Finance 领域处理器不存在，跳过")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("[NeuroDomainRegistration] Finance 领域注册失败: %s", e)
+
+    try:
+        from app.neuro_bus.domains.report_domain_handlers import (
+            register_report_domain_handlers,
+        )
+
+        register_report_domain_handlers(bus)
+        logger.info("[NeuroDomainRegistration] Report 领域处理器注册完成")
+    except ImportError:
+        logger.info("[NeuroDomainRegistration] Report 领域处理器不存在，跳过")
+    except RECOVERABLE_ERRORS as e:
+        logger.error("[NeuroDomainRegistration] Report 领域注册失败: %s", e)
+
+    # 13. 核心 app service 真实落地消费者（products.imported / conversation.message_saved /
     #     customer.changed）—— 为「只发布、无消费」的服务补齐持久副作用消费者。
     #
     # 注：auth / material / conversation 暂无 *_domain_handlers 实现，故不在此注册。
