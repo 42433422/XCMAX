@@ -16,6 +16,7 @@ from modstore_server.self_maintenance_loop_runner import (
     NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
     _base_para_input,
+    _classify_para_merge_review_detail,
     _code_task_text,
     _employee_result_ok,
     _existing_kb_schema_retry_item,
@@ -1486,6 +1487,7 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
 
     assert result["remediation_added"] == 1
     assert memory["open_items"][0]["review_feedback"] == feedback
+    assert memory["open_items"][0]["review_actionable_findings"] is True
     candidate = _resume_review_qa_candidate(memory)
     assert candidate == {
         "branch": "devfleet/codex/fix-1",
@@ -1494,7 +1496,10 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
         "failed_steps": ["code"],
         "para_task_id": "task-1",
         "reason": "resume_para_ai_review_rejection",
+        "review_actionable_findings": True,
         "review_feedback": feedback,
+        "review_veto_branch_hint": "",
+        "review_veto_code": "",
     }
     prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
     assert "EXTERNAL MERGE REVIEW REMEDIATION" in prompt
@@ -1514,6 +1519,53 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
     )
     assert repeated["changed"] is False
     assert len(memory["open_items"]) == 1
+
+
+def test_classify_indeterminate_merge_review_detail():
+    meta = _classify_para_merge_review_detail(
+        "devfleet/codex/sub-1-46107b: indeterminate-review",
+    )
+    assert meta["veto_code"] == "indeterminate-review"
+    assert meta["branch_hint"] == "devfleet/codex/sub-1-46107b"
+    assert meta["actionable_code_findings"] is False
+
+
+def test_reconcile_indeterminate_merge_review_veto_prompts_executable_remediation():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/sub-1-46107b",
+                "para_task_id": "task-indeterminate",
+                "run_id": "run-indeterminate",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "devfleet/codex/sub-1-46107b: indeterminate-review"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/sub-1-46107b",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    item = memory["open_items"][0]
+    assert item["review_veto_code"] == "indeterminate-review"
+    assert item["review_actionable_findings"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-followup", {"gaps": []}, memory, candidate)
+    assert "INDETERMINATE MERGE REVIEW VETO" in prompt
+    assert feedback in prompt
 
 
 def test_reconcile_real_para_merge_sha_closes_matching_open_item():

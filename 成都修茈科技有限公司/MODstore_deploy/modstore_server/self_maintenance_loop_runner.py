@@ -1091,6 +1091,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             branch = str(item.get("branch") or "").strip()
             para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
             if branch and para_task_id:
+                feedback = str(item.get("review_feedback") or item.get("detail") or "")[:4000]
+                veto_meta = _classify_para_merge_review_detail(feedback)
                 return {
                     "branch": branch,
                     "continue_existing_code_task": True,
@@ -1098,9 +1100,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "failed_steps": ["code"],
                     "para_task_id": para_task_id,
                     "reason": "resume_para_ai_review_rejection",
-                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
-                        :4000
-                    ],
+                    "review_actionable_findings": veto_meta.get("actionable_code_findings"),
+                    "review_feedback": feedback,
+                    "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
+                    "review_veto_code": str(item.get("review_veto_code") or veto_meta.get("veto_code") or ""),
                 }
 
     last_decision = memory.get("last_policy_decision")
@@ -2156,6 +2159,56 @@ def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
     return task if isinstance(task, dict) else {}
 
 
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+
+
+def _classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
+    """Normalize Para merge-worker veto detail for loop remediation."""
+
+    text = str(detail or "").strip()[:4000]
+    lowered = text.lower()
+    branch_hint = ""
+    veto_code = ""
+    if ":" in text:
+        left, _, right = text.partition(":")
+        left = left.strip()
+        right = right.strip().lower()
+        if "/" in left and right:
+            branch_hint = left
+            veto_code = right
+    if not veto_code:
+        for marker in _INDETERMINATE_MERGE_REVIEW_CODES:
+            if marker in lowered:
+                veto_code = marker
+                break
+    actionable_code_findings = bool(
+        text
+        and veto_code not in _INDETERMINATE_MERGE_REVIEW_CODES
+        and re.search(r"\bREJECT\s*:", text, re.IGNORECASE)
+    )
+    return {
+        "actionable_code_findings": actionable_code_findings,
+        "branch_hint": branch_hint,
+        "detail": text,
+        "veto_code": veto_code,
+    }
+
+
+def _indeterminate_merge_review_remediation_hint() -> str:
+    return (
+        "\n\n=== INDETERMINATE MERGE REVIEW VETO ===\n"
+        "The merge-worker reported indeterminate-review: Trae and MiniMax did not emit a "
+        "parseable APPROVE/REJECT verdict on the prior PR diff. This is not a dimensional "
+        "code-defect list. Remediation must be executable and reviewable:\n"
+        "1) Do not re-land duplicate KB/tests-only deltas when the production fix already "
+        "exists on the canonical base branch.\n"
+        "2) Ship a focused modstore_server production change plus regression tests that "
+        "make indeterminate vetoes classifiable in loop memory (this branch).\n"
+        "3) Keep the diff small and free of marker-only or status-only files so the "
+        "independent merge reviewer can emit a strict verdict."
+    )
+
+
 def _reconcile_requested_merge_feedback(
     memory: Dict[str, Any],
     *,
@@ -2259,6 +2312,7 @@ def _reconcile_requested_merge_feedback(
             for item in open_items
         )
         if source == "ai-review-veto" and detail and not already_open:
+            veto_meta = _classify_para_merge_review_detail(detail)
             open_items.append(
                 {
                     "branch": str(conflict.get("branch_name") or branch).strip(),
@@ -2267,7 +2321,10 @@ def _reconcile_requested_merge_feedback(
                     "kind": "automated_remediation",
                     "para_task_id": task_id,
                     "reason": reason,
+                    "review_actionable_findings": veto_meta.get("actionable_code_findings"),
                     "review_feedback": detail,
+                    "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
+                    "review_veto_code": veto_meta.get("veto_code") or "",
                     "run_id": str(run.get("run_id") or "").strip(),
                     "source": source,
                     "task_id": task_id,
@@ -2429,6 +2486,11 @@ def _code_task_text(
         and resume_candidate.get("reason") == "resume_para_ai_review_rejection"
     ):
         feedback = str(resume_candidate.get("review_feedback") or "").strip()[:4000]
+        veto_code = str(
+            resume_candidate.get("review_veto_code")
+            or _classify_para_merge_review_detail(feedback).get("veto_code")
+            or ""
+        ).strip()
         external_review_remediation = (
             "\n\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\n"
             "The independent Para merge reviewer vetoed the previous candidate. "
@@ -2438,6 +2500,8 @@ def _code_task_text(
             "After the fix, run the mandatory policy suite, commit, and push the current work branch. "
             f"Exact reviewer findings: {feedback or '(missing feedback: fail closed and inspect the parent diff)'}"
         )
+        if veto_code in _INDETERMINATE_MERGE_REVIEW_CODES:
+            external_review_remediation += _indeterminate_merge_review_remediation_hint()
     score_remediation = ""
     if isinstance(selected_remediation, dict):
         merge_result = (
