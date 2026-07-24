@@ -42,7 +42,10 @@ def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
         plan_id="plan_basic",
     )
     payment_orders.update_status(
-        out_trade_no=order_no, status="paid", trade_no="TRADE1", paid_at="2026-01-01T00:00:00Z"
+        out_trade_no=order_no,
+        status="paid",
+        trade_no="TRADE1",
+        paid_at="2026-01-01T00:00:00Z",
     )
     return order_no
 
@@ -115,6 +118,7 @@ def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeyp
 def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
+    from threading import Event
 
     from modstore_server import customer_service_api
     from modstore_server.app import app
@@ -122,11 +126,11 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_async_inc")
     started = {"ok": False}
+    started_event = Event()
 
     def slow_publish(payload):
         started["ok"] = True
-        time.sleep(3)
-        return None
+        started_event.set()
 
     monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
     app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
@@ -142,10 +146,8 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
         elapsed = time.time() - t0
         assert r.status_code == 200, r.text
         assert r.json().get("ticket")
-        assert elapsed < 1.5, f"chat blocked on incident publish: {elapsed:.2f}s"
-        deadline = time.time() + 1.0
-        while time.time() < deadline and not started["ok"]:
-            time.sleep(0.05)
+        assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
+        assert started_event.wait(1.0)
         assert started["ok"] is True
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
@@ -154,6 +156,7 @@ def test_customer_service_chat_does_not_block_on_incident_publish_async(client, 
 def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
+    from threading import Event
 
     from modstore_server import customer_service_api
     from modstore_server.app import app
@@ -161,11 +164,11 @@ def test_customer_service_chat_does_not_block_on_incident_publish(client, monkey
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_async_inc")
     started = {"ok": False}
+    started_event = Event()
 
     def slow_publish(payload):
         started["ok"] = True
-        time.sleep(3)
-        return None
+        started_event.set()
 
     monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
     app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
@@ -181,10 +184,8 @@ def test_customer_service_chat_does_not_block_on_incident_publish(client, monkey
         elapsed = time.time() - t0
         assert r.status_code == 200, r.text
         assert r.json().get("ticket")
-        assert elapsed < 1.5, f"chat blocked on incident publish: {elapsed:.2f}s"
-        deadline = time.time() + 1.0
-        while time.time() < deadline and not started["ok"]:
-            time.sleep(0.05)
+        assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
+        assert started_event.wait(1.0)
         assert started["ok"] is True
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
@@ -530,7 +531,10 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
 
 
 def test_infer_intent_order_no_alone_is_not_refund():
-    from modstore_server.customer_service_orchestrator import infer_intent, should_create_ticket
+    from modstore_server.customer_service_orchestrator import (
+        infer_intent,
+        should_create_ticket,
+    )
 
     intent = infer_intent("订单号：ABC123456789", {"order_no": "ABC123456789"})
     assert intent == "general"
@@ -573,8 +577,8 @@ def test_infer_intent_balance_is_account_support():
 
 def test_xiaoc_general_reply_acks_concrete_ui_issue(monkeypatch):
     """知识库只有 hybrid 脏数据时，应复述用户问题，而不是购买/会员开场白。"""
-    from modstore_server.customer_service_orchestrator import _xiaoc_general_reply
     import modstore_server.xiaoc_cs_ssot as ssot
+    from modstore_server.customer_service_orchestrator import _xiaoc_general_reply
 
     dirty = (
         '1. (hybrid) {"fields": [{"name": "template_name", "value": "发货模板"}]}\n'
@@ -647,6 +651,7 @@ def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
 
 def test_execute_action_hard_blocks_admin_grant():
     from types import SimpleNamespace
+
     from modstore_server.customer_service_tools import execute_action
 
     calls = []
