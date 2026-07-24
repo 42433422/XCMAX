@@ -797,7 +797,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示「下一步」按钮', async () => {
+  it('host-pack 步骤：baselineOk 时显示「完成并进入对话」按钮', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -805,7 +805,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     const buttons = wrapper.findAll('.actions .btn.primary')
-    const nextBtn = buttons.find((b) => b.text().trim() === '下一步')
+    const nextBtn = buttons.find((b) => b.text().trim() === '完成并进入对话')
     expect(nextBtn).toBeTruthy()
   })
 
