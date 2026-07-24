@@ -259,6 +259,15 @@ def main(argv: list[str] | None = None) -> None:
     _load_dotenv_if_present(_XCAGI_DIR / ".env")
     _load_dotenv_if_present(_REPO_ROOT / ".env")
 
+    # Clash 常注入 ALL_PROXY=socks5://…；无 socksio 时 httpx 会直接失败。
+    _ensure_sys_path()
+    try:
+        from app.utils.proxy_env import sanitize_socks_all_proxy
+
+        sanitize_socks_all_proxy()
+    except Exception:
+        pass
+
     if args.desktop or args.data_dir or args.migrate_only:
         _apply_desktop_bootstrap(args)
 

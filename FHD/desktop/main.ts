@@ -327,6 +327,25 @@ export function readJsonTextFile(filePath: string): string {
   return text.replace(/^\uFEFF/, '')
 }
 
+function sanitizeBackendProxyEnv(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>
+): Record<string, string | undefined> {
+  const next: Record<string, string | undefined> = { ...env }
+  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
+    const raw = String(next[key] || '').trim().toLowerCase()
+    if (
+      raw.startsWith('socks://') ||
+      raw.startsWith('socks4://') ||
+      raw.startsWith('socks5://') ||
+      raw.startsWith('socks5h://')
+    ) {
+      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
+      delete next[key]
+    }
+  }
+  return next
+}
+
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
@@ -797,7 +816,7 @@ async function startBackend(): Promise<void> {
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
     env: {
-      ...process.env,
+      ...sanitizeBackendProxyEnv(process.env),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
@@ -883,7 +902,7 @@ function runBackendMigration(): Promise<string> {
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
       cwd: executable.cwd,
       env: {
-        ...process.env,
+        ...sanitizeBackendProxyEnv(process.env),
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
         XCAGI_UVICORN_RELOAD: '0',
