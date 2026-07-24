@@ -181,6 +181,30 @@ class TestAssetRoutes:
 
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_ai_butler_avatars(self):
+        app, client, tmpdir = self._make_app_with_file(
+            "ai-butler-female-avatar-v1.png", b"\x89PNG\r\n\x1a\n"
+        )
+        male = os.path.join(tmpdir, "templates", "vue-dist", "ai-butler-male-avatar-v1.jpg")
+        os.makedirs(os.path.dirname(male), exist_ok=True)
+        with open(male, "wb") as fh:
+            fh.write(b"\xff\xd8\xff")
+        try:
+            with patch(
+                "app.fastapi_routes.domains.static.routes.get_base_dir",
+                return_value=tmpdir,
+            ):
+                female = client.get("/ai-butler-female-avatar-v1.png")
+                assert female.status_code == 200
+                assert female.headers.get("content-type", "").startswith("image/")
+                male_resp = client.get("/ai-butler-male-avatar-v1.jpg")
+                assert male_resp.status_code == 200
+                assert male_resp.headers.get("content-type", "").startswith("image/")
+        finally:
+            import shutil
+
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
     def test_workflow_employee_docs_json(self):
         app, client, tmpdir = self._make_app_with_file(
             "workflow-employee-docs.json", b'{"docs": []}'
