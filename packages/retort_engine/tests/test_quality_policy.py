@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.absorption_state import closed_loop_proof, public_absorption_state, save_absorption_state
+from retort_engine.absorption_state import (
+    closed_loop_proof,
+    public_absorption_state,
+    save_absorption_state,
+)
 from retort_engine.core import RetortService
-from retort_engine.quality_metrics import is_generated_absorption_file, test_code_health as code_health
-from retort_engine.quality_policy import TEST_TO_SOURCE_HEALTHY_RATIO, apply_default_llm_policy, test_source_ratio_status as ratio_status
+from retort_engine.quality_metrics import (
+    is_generated_absorption_file,
+    test_code_health as code_health,
+)
+from retort_engine.quality_policy import (
+    TEST_TO_SOURCE_HEALTHY_RATIO,
+    apply_default_llm_policy,
+    test_source_ratio_status as ratio_status,
+)
 
 
 def test_default_llm_policy_enables_dispatch_without_requiring_scores() -> None:
@@ -39,7 +50,9 @@ def test_source_ratio_status_thresholds() -> None:
     assert ratio_status(None) == "unknown"
 
 
-def test_quality_metrics_counts_behavior_code_and_excludes_generated(tmp_path: Path) -> None:
+def test_quality_metrics_counts_behavior_code_and_excludes_generated(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "project"
     source = root / "retort_engine" / "feature.py"
     test = root / "tests" / "test_feature.py"
@@ -47,8 +60,12 @@ def test_quality_metrics_counts_behavior_code_and_excludes_generated(tmp_path: P
     source.parent.mkdir(parents=True)
     test.parent.mkdir(parents=True)
     generated.parent.mkdir(parents=True)
-    source.write_text("\n".join(f"value_{index} = {index}" for index in range(10)), encoding="utf-8")
-    test.write_text("\n".join(f"assert {index} == {index}" for index in range(5)), encoding="utf-8")
+    source.write_text(
+        "\n".join(f"value_{index} = {index}" for index in range(10)), encoding="utf-8"
+    )
+    test.write_text(
+        "\n".join(f"assert {index} == {index}" for index in range(5)), encoding="utf-8"
+    )
     generated.write_text("{}", encoding="utf-8")
 
     health = code_health(root)
@@ -88,7 +105,9 @@ def test_absorption_state_module_public_proof(tmp_path: Path) -> None:
     assert proof["evidence"] == ["merge_commit=abc123"]
 
 
-def test_retort_service_default_assess_dispatches_llm(tmp_path: Path, monkeypatch) -> None:
+def test_retort_service_default_assess_dispatches_llm(
+    tmp_path: Path, monkeypatch
+) -> None:
     project = tmp_path / "own"
     project.mkdir()
     (project / "README.md").write_text("# Own\n", encoding="utf-8")
@@ -96,9 +115,16 @@ def test_retort_service_default_assess_dispatches_llm(tmp_path: Path, monkeypatc
 
     def fake_request(**kwargs: object) -> dict[str, object]:
         calls.append(dict(kwargs))
-        return {"provider": "paibi", "enabled": True, "status": "accepted", "dispatch": {"status": "accepted", "task_id": "task-default"}}
+        return {
+            "provider": "paibi",
+            "enabled": True,
+            "status": "accepted",
+            "dispatch": {"status": "accepted", "task_id": "task-default"},
+        }
 
-    def fake_wait(task_id: str, *, timeout_sec: float, interval_sec: float = 5.0) -> dict[str, object]:
+    def fake_wait(
+        task_id: str, *, timeout_sec: float, interval_sec: float = 5.0
+    ) -> dict[str, object]:
         return {"provider": "paibi", "task_id": task_id, "status": "running"}
 
     monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
@@ -117,7 +143,14 @@ def test_frontend_exposes_dense_ops_dashboard() -> None:
     app = (root / "app.js").read_text(encoding="utf-8")
     styles = (root / "styles.css").read_text(encoding="utf-8")
 
-    for element_id in ("opsDashboard", "opsLlm", "opsGates", "opsProof", "opsRatio", "opsBranch"):
+    for element_id in (
+        "opsDashboard",
+        "opsLlm",
+        "opsGates",
+        "opsProof",
+        "opsRatio",
+        "opsBranch",
+    ):
         assert f'id="{element_id}"' in index
     assert "function renderOpsDashboard" in app
     assert "latest_test_to_source_ratio_status" in app

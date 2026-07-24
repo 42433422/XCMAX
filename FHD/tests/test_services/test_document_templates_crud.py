@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.infrastructure.tenant_scope import tenant_scope
 from app.services.document_templates.crud import (
     _build_template_payload_from_row,
     _j,
@@ -14,6 +15,14 @@ from app.services.document_templates.crud import (
     create_template_with_payload,
     update_template_with_payload,
 )
+
+
+@pytest.fixture
+def tenant_ctx():
+    """模板 CRUD 写读路径需要租户上下文。"""
+    with tenant_scope(1):
+        yield
+
 
 # ========================= _normalize_db_template_id =====================
 
@@ -76,11 +85,17 @@ class TestEnsureTemplateTablesReady:
     """Test _ensure_template_tables_ready helper."""
 
     def test_calls_init_template_tables(self):
-        with patch("app.db.init_db.init_template_tables") as mock_init:
+        with (
+            patch("app.db.init_db.init_template_tables") as mock_init,
+            patch(
+                "app.services.document_templates.tenant_scope.ensure_templates_tenant_column"
+            ) as mock_ensure,
+        ):
             from app.services.document_templates.crud import _ensure_template_tables_ready
 
             _ensure_template_tables_ready()
             mock_init.assert_called_once()
+            mock_ensure.assert_called_once()
 
     def test_handles_error_gracefully(self):
         with patch("app.db.init_db.init_template_tables", side_effect=RuntimeError("db error")):
@@ -230,6 +245,7 @@ class TestBuildTemplatePayloadFromRow:
 # ========================= create_template_with_payload =====================
 
 
+@pytest.mark.usefixtures("tenant_ctx")
 class TestCreateTemplateWithPayload:
     """Test create_template_with_payload function."""
 
@@ -457,6 +473,7 @@ class TestCreateTemplateWithPayload:
 # ========================= update_template_with_payload =====================
 
 
+@pytest.mark.usefixtures("tenant_ctx")
 class TestUpdateTemplateWithPayload:
     """Test update_template_with_payload function."""
 

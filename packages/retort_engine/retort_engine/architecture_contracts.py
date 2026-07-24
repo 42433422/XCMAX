@@ -13,14 +13,23 @@ def default_architecture_contracts() -> list[dict[str, Any]]:
             "name": "codebase_graph_stays_foundational",
             "type": "forbidden_import",
             "source": "retort_engine.codebase_graph",
-            "forbidden": ["retort_engine.core", "retort_engine.service", "retort_engine.ui_server", "retort_engine.paibi_llm"],
+            "forbidden": [
+                "retort_engine.core",
+                "retort_engine.service",
+                "retort_engine.ui_server",
+                "retort_engine.paibi_llm",
+            ],
             "reason": "Code graphing must stay deterministic and below runtime, UI, and LLM boundaries.",
         },
         {
             "name": "contracts_stay_schema_only",
             "type": "forbidden_import",
             "source": "retort_engine.contracts",
-            "forbidden": ["retort_engine.core", "retort_engine.service", "retort_engine.paibi_llm"],
+            "forbidden": [
+                "retort_engine.core",
+                "retort_engine.service",
+                "retort_engine.paibi_llm",
+            ],
             "reason": "Contract schemas should not depend on runtime execution surfaces.",
         },
     ]
@@ -42,14 +51,20 @@ def evaluate_architecture_contracts(
     include_tests: bool = False,
     max_files: int = 400,
 ) -> dict[str, Any]:
-    graph = build_codebase_graph(project, include_tests=include_tests, max_files=max_files)
-    active_contracts = contracts if contracts is not None else default_architecture_contracts()
+    graph = build_codebase_graph(
+        project, include_tests=include_tests, max_files=max_files
+    )
+    active_contracts = (
+        contracts if contracts is not None else default_architecture_contracts()
+    )
     violations: list[dict[str, Any]] = []
     for contract in active_contracts:
         if str(contract.get("type") or "") == "forbidden_import":
             violations.extend(_forbidden_import_violations(graph, contract))
     return {
-        "status": "passed" if not violations and graph["status"] in {"ready", "partial"} else ("failed" if violations else graph["status"]),
+        "status": "passed"
+        if not violations and graph["status"] in {"ready", "partial"}
+        else ("failed" if violations else graph["status"]),
         "project": graph["project"],
         "summary": {
             "contract_count": len(active_contracts),
@@ -67,7 +82,9 @@ def evaluate_architecture_contracts(
     }
 
 
-def _forbidden_import_violations(graph: dict[str, Any], contract: dict[str, Any]) -> list[dict[str, Any]]:
+def _forbidden_import_violations(
+    graph: dict[str, Any], contract: dict[str, Any]
+) -> list[dict[str, Any]]:
     source_prefixes = _list_value(contract.get("source") or contract.get("sources"))
     forbidden_prefixes = _list_value(contract.get("forbidden"))
     violations: list[dict[str, Any]] = []
@@ -76,13 +93,17 @@ def _forbidden_import_violations(graph: dict[str, Any], contract: dict[str, Any]
             continue
         source_module = _module_from_path(str(edge.get("from") or ""))
         imported = str(edge.get("to") or "")
-        if _matches_any(source_module, source_prefixes) and _matches_any(imported, forbidden_prefixes):
+        if _matches_any(source_module, source_prefixes) and _matches_any(
+            imported, forbidden_prefixes
+        ):
             violations.append(
                 {
                     "contract": str(contract.get("name") or "forbidden_import"),
                     "source": source_module,
                     "imported": imported,
-                    "reason": str(contract.get("reason") or "forbidden import boundary crossed"),
+                    "reason": str(
+                        contract.get("reason") or "forbidden import boundary crossed"
+                    ),
                 }
             )
     return violations

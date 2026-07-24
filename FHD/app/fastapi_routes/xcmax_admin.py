@@ -137,7 +137,10 @@ async def admin_resume_autonomy_action(action_id: str, request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import ApprovalStateError, resume_action
+    from app.application.autonomy.approval_resume import (
+        ApprovalStateError,
+        resume_action,
+    )
 
     try:
         body = await request.json()
@@ -166,7 +169,10 @@ async def admin_reject_autonomy_action(action_id: str, request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import ApprovalStateError, reject_action
+    from app.application.autonomy.approval_resume import (
+        ApprovalStateError,
+        reject_action,
+    )
 
     try:
         body = await request.json()
@@ -248,7 +254,11 @@ async def admin_autonomy_overview(request: Request):
         "ok": True,
         "health": {"ok": True, "service": "ops-autonomy-approval"},
         "pending": {"count": len(pending), "items": pending[:20]},
-        "audit": {"items": audit_items, "count": len(audit_items), "summary": audit_summary},
+        "audit": {
+            "items": audit_items,
+            "count": len(audit_items),
+            "summary": audit_summary,
+        },
         "loop": extract_loop_run_summary(runtime if isinstance(runtime, dict) else {}),
         "runtime": runtime,
         "closure": {
@@ -303,7 +313,9 @@ async def admin_autonomy_cross_tier_gate(request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.admin_overview import evaluate_cross_tier_gate_snapshot
+    from app.application.autonomy.admin_overview import (
+        evaluate_cross_tier_gate_snapshot,
+    )
 
     return {"ok": True, **evaluate_cross_tier_gate_snapshot(None)}
 
@@ -715,7 +727,10 @@ async def _remote_duty_health(request: Request) -> dict[str, Any]:
         return health_payload
     if hasattr(health_payload, "body"):
         try:
-            return cast("dict[str, Any]", json.loads(getattr(health_payload, "body", b"") or b"{}"))
+            return cast(
+                "dict[str, Any]",
+                json.loads(getattr(health_payload, "body", b"") or b"{}"),
+            )
         except RECOVERABLE_ERRORS:
             return {}
     return {}
@@ -1242,7 +1257,10 @@ async def admin_set_user_profile(
             # account_tier 仅企业可设
             if norm_account_tier is not None and not should_have_account_tier(final_tier):
                 return JSONResponse(
-                    {"success": False, "message": "账号等级（account_tier）仅企业用户可设置"},
+                    {
+                        "success": False,
+                        "message": "账号等级（account_tier）仅企业用户可设置",
+                    },
                     status_code=422,
                 )
 
@@ -1381,12 +1399,14 @@ async def admin_force_push_user_entitlements(
         },
         "mod_ids": _clean_string_list(payload.get("mod_ids")),
         "wallet": wallet_data,
-        "workflow_employees": payload.get("workflow_employees")
-        if isinstance(payload.get("workflow_employees"), list)
-        else [],
-        "installed_mods": payload.get("installed_mods")
-        if isinstance(payload.get("installed_mods"), list)
-        else [],
+        "workflow_employees": (
+            payload.get("workflow_employees")
+            if isinstance(payload.get("workflow_employees"), list)
+            else []
+        ),
+        "installed_mods": (
+            payload.get("installed_mods") if isinstance(payload.get("installed_mods"), list) else []
+        ),
         "source": "admin_entitlements_force_push",
         "meta": {
             "updated_at_ms": int(time.time() * 1000),
@@ -1814,7 +1834,9 @@ async def local_employee_execute(
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
     from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
-    from app.application.employee_runtime.result_verifier import verify_employee_run_result
+    from app.application.employee_runtime.result_verifier import (
+        verify_employee_run_result,
+    )
     from app.application.employee_runtime.run_ledger import (
         create_employee_run_log,
         finish_employee_run_log,
@@ -2213,7 +2235,10 @@ async def ops_duty_health(request: Request):
             "success": False,
             "staffing": closure.get("staffing") or {},
         }
-    merged = {**remote, "staffing": closure.get("staffing") or remote.get("staffing") or {}}
+    merged = {
+        **remote,
+        "staffing": closure.get("staffing") or remote.get("staffing") or {},
+    }
     merged["planned_employee_ids"] = closure.get("planned_employee_ids")
     merged["registered_employee_ids"] = closure.get("registered_employee_ids")
     merged["planned_local_installed_count"] = closure.get("planned_local_installed_count")
@@ -2276,6 +2301,29 @@ async def ops_closure_status(request: Request):
         return gate
     data = build_ops_closure_status(await _remote_duty_health(request))
     return {"success": True, "data": data}
+
+
+@router.get("/ops/runtime-inventory", response_model=None)
+async def ops_runtime_inventory(request: Request):
+    """Desired×actual 运行时真相清单（拓扑 SSOT + 本机探针），并刷新公开投影。"""
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+
+    from app.application.runtime_inventory import write_runtime_inventory_projection
+
+    try:
+        result = write_runtime_inventory_projection(host="127.0.0.1")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("runtime inventory probe failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+    snapshot = result.get("snapshot") or {}
+    return {
+        "success": True,
+        "data": snapshot,
+        "publication": result.get("publication") or {},
+    }
 
 
 @router.get("/ops/founder-autonomy", response_model=None)
@@ -2911,7 +2959,8 @@ def _collect_cursor_usage() -> dict[str, Any]:
     for a in aggs:
         m = a.get("modelIntent", "unknown")
         slot = by_model.setdefault(
-            m, {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0}
+            m,
+            {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0},
         )
         slot["input"] += _to_int(a.get("inputTokens"))
         slot["output"] += _to_int(a.get("outputTokens"))
@@ -3146,7 +3195,13 @@ def _build_token_usage_summary() -> dict[str, Any]:
     codex = _collect_codex_usage()
     trae = _collect_trae_usage()
     mimo = _collect_mimo_usage()
-    sources = {"local": local, "cursor": cursor, "codex": codex, "trae": trae, "mimo": mimo}
+    sources = {
+        "local": local,
+        "cursor": cursor,
+        "codex": codex,
+        "trae": trae,
+        "mimo": mimo,
+    }
     # 给每个来源加费用估算
     for key, src in sources.items():
         src["estimated_cost_usd"] = round(_estimate_cost_usd(key, src), 2)
@@ -3164,7 +3219,9 @@ def _build_token_usage_summary() -> dict[str, Any]:
         "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     try:
-        from app.infrastructure.billing.platform_made_tokens import write_public_snapshot
+        from app.infrastructure.billing.platform_made_tokens import (
+            write_public_snapshot,
+        )
 
         snapshot_path = write_public_snapshot(summary)
         summary["public_snapshot_path"] = str(snapshot_path)

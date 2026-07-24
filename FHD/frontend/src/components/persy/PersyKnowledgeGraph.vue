@@ -137,7 +137,7 @@ const graphNodes = computed<KnowledgeGraphNode[]>(() => {
         id: 'onboarding:upload',
         label: '导入资料',
         type: 'onboarding',
-        summary: 'PDF、Word、文本与表格',
+        summary: 'PDF、Word、Excel、文本与表格',
         size: 34,
         metadata: { action: 'upload' },
       },

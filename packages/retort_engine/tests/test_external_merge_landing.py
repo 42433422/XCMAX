@@ -10,7 +10,9 @@ from retort_engine.external_merge_landing import build_external_merge_landing
 from retort_engine.service import RetortService
 
 
-def test_external_merge_landing_runs_real_branch_merge_and_pytest(tmp_path: Path) -> None:
+def test_external_merge_landing_runs_real_branch_merge_and_pytest(
+    tmp_path: Path,
+) -> None:
     cache_a = tmp_path / ".retort" / "cache" / "github" / "owner" / "agent-a"
     cache_b = tmp_path / ".retort" / "cache" / "github" / "owner" / "agent-b"
     cache_a.mkdir(parents=True)
@@ -18,12 +20,24 @@ def test_external_merge_landing_runs_real_branch_merge_and_pytest(tmp_path: Path
     (cache_a / "README.md").write_text("agent a", encoding="utf-8")
     (cache_b / "action.yml").write_text("agent b", encoding="utf-8")
     cases = [
-        {"source": "owner/agent-a", "source_path": ".retort/cache/github/owner/agent-a", "family": "python_pr_agent", "absorbed_rule": "semantic_review"},
-        {"source": "owner/agent-b", "source_path": ".retort/cache/github/owner/agent-b", "family": "typescript_pr_bot", "absorbed_rule": "diff_hunk_review"},
+        {
+            "source": "owner/agent-a",
+            "source_path": ".retort/cache/github/owner/agent-a",
+            "family": "python_pr_agent",
+            "absorbed_rule": "semantic_review",
+        },
+        {
+            "source": "owner/agent-b",
+            "source_path": ".retort/cache/github/owner/agent-b",
+            "family": "typescript_pr_bot",
+            "absorbed_rule": "diff_hunk_review",
+        },
     ]
     output = tmp_path / "docs" / "retort_external_merge_landing.json"
 
-    result = build_external_merge_landing(tmp_path, min_cases=2, output=output, cases=cases)
+    result = build_external_merge_landing(
+        tmp_path, min_cases=2, output=output, cases=cases
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["ready_case_count"] == 2
@@ -37,7 +51,13 @@ def test_external_merge_landing_runs_real_branch_merge_and_pytest(tmp_path: Path
     assert validate_contract("external_merge_landing_result", result)["valid"] is True
 
     repo = Path(result["evidence"]["repo"])
-    log = subprocess.run(["git", "log", "--oneline", "--merges"], cwd=repo, check=True, stdout=subprocess.PIPE, text=True).stdout
+    log = subprocess.run(
+        ["git", "log", "--oneline", "--merges"],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout
     assert "merge absorbed owner/agent-a rule" in log
     assert "merge absorbed owner/agent-b rule" in log
 
@@ -46,7 +66,13 @@ def test_external_merge_landing_blocks_missing_cache(tmp_path: Path) -> None:
     result = build_external_merge_landing(
         tmp_path,
         min_cases=1,
-        cases=[{"source": "missing/repo", "source_path": ".retort/cache/github/missing/repo", "family": "python_pr_agent"}],
+        cases=[
+            {
+                "source": "missing/repo",
+                "source_path": ".retort/cache/github/missing/repo",
+                "family": "python_pr_agent",
+            }
+        ],
     )
 
     assert result["status"] == "blocked"
@@ -63,7 +89,13 @@ def test_service_exposes_external_merge_landing(tmp_path: Path) -> None:
         {
             "project": str(tmp_path),
             "min_cases": 1,
-            "cases": [{"source": "owner/agent", "source_path": ".retort/cache/github/owner/agent", "family": "python_pr_agent"}],
+            "cases": [
+                {
+                    "source": "owner/agent",
+                    "source_path": ".retort/cache/github/owner/agent",
+                    "family": "python_pr_agent",
+                }
+            ],
         }
     )
 

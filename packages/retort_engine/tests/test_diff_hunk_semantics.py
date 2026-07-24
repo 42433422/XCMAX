@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from retort_engine.diff_hunk_semantics import analyze_hunk_semantics, summarize_hunk_semantics
+from retort_engine.diff_hunk_semantics import (
+    analyze_hunk_semantics,
+    summarize_hunk_semantics,
+)
 
 
 def test_analyze_hunk_semantics_detects_deleted_validation_before_publish() -> None:
@@ -8,8 +11,16 @@ def test_analyze_hunk_semantics_detects_deleted_validation_before_publish() -> N
         "header": "@@ -1,4 +1,4 @@",
         "changes": [
             {"type": "context", "line": 1, "text": "def publish(payload):"},
-            {"type": "delete", "line": None, "text": "    validate_permissions(payload)"},
-            {"type": "delete", "line": None, "text": "    assert payload['rollback_receipt']"},
+            {
+                "type": "delete",
+                "line": None,
+                "text": "    validate_permissions(payload)",
+            },
+            {
+                "type": "delete",
+                "line": None,
+                "text": "    assert payload['rollback_receipt']",
+            },
             {"type": "add", "line": 2, "text": "    publish(payload)"},
             {"type": "add", "line": 3, "text": "    return True"},
         ],
@@ -29,7 +40,11 @@ def test_summarize_hunk_semantics_keeps_finding_types_and_contexts() -> None:
     analyses = [
         {
             "findings": [
-                {"type": "validation_regression", "review_context": "runtime", "confidence": 95},
+                {
+                    "type": "validation_regression",
+                    "review_context": "runtime",
+                    "confidence": 95,
+                },
                 {"type": "test_weakening", "review_context": "tests", "confidence": 94},
             ]
         }

@@ -61,8 +61,8 @@ def _ready_customer_value(**overrides) -> dict:
     return evidence
 
 
-def _ready_council() -> dict:
-    return {
+def _ready_council(**overrides) -> dict:
+    payload = {
         "ready": True,
         "verified_receipt_count": 1,
         "roles": {
@@ -76,7 +76,15 @@ def _ready_council() -> dict:
             "loop_run_id": "loop-1",
             "para_task_id": "para-1",
         },
+        "retort_clarifications": {
+            "ok": True,
+            "open_count": 0,
+            "critical_count": 0,
+            "healthy": True,
+        },
     }
+    payload.update(overrides)
+    return payload
 
 
 def test_missing_evidence_is_not_reported_as_finished() -> None:
@@ -102,7 +110,13 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
             "ok": True,
         },
         {"phase": "step", "step": "review", "status": "success", "ok": True},
-        {"phase": "step", "step": "qa", "status": "success", "qa_verdict": "PASS", "ok": True},
+        {
+            "phase": "step",
+            "step": "qa",
+            "status": "success",
+            "qa_verdict": "PASS",
+            "ok": True,
+        },
         {
             "run_id": "incident-1",
             "phase": "complete",
@@ -193,7 +207,10 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     }
     snapshot = build_founder_autonomy_snapshot(
         runtime=runtime,
-        closure={"deliverable": True, "staffing": {"planned_count": 52, "registered_count": 52}},
+        closure={
+            "deliverable": True,
+            "staffing": {"planned_count": 52, "registered_count": 52},
+        },
         approvals={"local_pending": 0},
         knowledge={"success": True, "document_count": 8, "chunk_count": 80},
         goals={"total": 10, "closed": 9, "completion_rate": 0.9},
@@ -227,6 +244,27 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     assert snapshot["truth_domains"]["production_value"]["available"] is True
     assert snapshot["live_summary"]["employee_workforce_ready"] is True
     assert snapshot["live_summary"]["dead_letters_healthy"] is True
+    assert snapshot["live_summary"]["retort_clarifications_healthy"] is True
+
+
+def test_retort_clarification_backlog_surfaces_in_attention() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        strategic_council=_ready_council(
+            retort_clarifications={
+                "ok": True,
+                "open_count": 2,
+                "critical_count": 1,
+                "healthy": False,
+            }
+        ),
+        generated_at=NOW,
+    )
+    kinds = {item["kind"] for item in snapshot["attention"]["items"]}
+    assert "retort_clarification" in kinds
+    assert snapshot["live_summary"]["retort_clarifications_open"] == 2
+    assert snapshot["live_summary"]["retort_clarifications_critical"] == 1
+    assert snapshot["live_summary"]["retort_clarifications_healthy"] is False
+    assert snapshot["attention"]["human_intervention_rare"] is False
 
 
 def test_runtime_holds_apply_hard_caps_and_surface_attention() -> None:
@@ -264,7 +302,10 @@ def test_runtime_holds_apply_hard_caps_and_surface_attention() -> None:
     }
     snapshot = build_founder_autonomy_snapshot(
         runtime=runtime,
-        closure={"deliverable": True, "staffing": {"planned_count": 52, "registered_count": 52}},
+        closure={
+            "deliverable": True,
+            "staffing": {"planned_count": 52, "registered_count": 52},
+        },
         approvals={"local_pending": 8},
         strategic_decisions={"count": 2},
         surfaces=_surfaces(),
@@ -462,7 +503,10 @@ def test_empty_authoritative_customer_ledger_only_proves_ledger_and_capacity() -
     customer = _dimensions(snapshot)["customer"]
 
     assert customer["progress"] == 25
-    assert {gate["key"] for gate in customer["evidence"]} == {"value_ledger", "capacity"}
+    assert {gate["key"] for gate in customer["evidence"]} == {
+        "value_ledger",
+        "capacity",
+    }
     assert snapshot["live_summary"]["customer_value_ledger_ready"] is True
 
 

@@ -283,13 +283,43 @@ flowchart TB
 | 桌面/网页差异 | `FHD/docs/ARCHITECTURE.md` §1.4 |
 | 六线员工映射 | `six_line_employee_map.json`（仓库根） |
 | 员工辐射图 | `docs/xcagi-dashboard/emp-wf-radial-graph.js` |
+| 客服工单总线 | `FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md` |
 
 ---
 
-## 八、一句话总结
+## 八、客服工单 duty 触发（incident_bus，非 NeuroBus）
+
+> 说明：[`FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md`](../../FHD/docs/architecture/CUSTOMER_TICKET_BUS_SSOT.md)
+
+客服闭环与「Mod 加载时的 NeuroBus 钩子订阅」是两条轨：
+
+| 轨 | 总线 | 典型用途 |
+|---|---|---|
+| 宿主 / Mod 钩子 | FHD **NeuroBus** | `_register_mod_hooks`、域事件、跨 Mod 通知 |
+| **客服工单闭环** | MODstore **`incident_bus` + `incident_team`** | `ops.intake.customer_ticket` → intake-dispatcher / CS officer |
+
+**硬口径**
+
+- `duty` 合约中 `trigger.events` 含 `ops.intake.customer_ticket` 时，语义是 **incident_bus 绑定派发**，**不是** `NeuroBus.subscribe`。
+- 主路径：`incident_bus.publish` → `incident_team` / duty 执行（`intake-dispatcher`、`user-customer-service-officer`）。
+- 勿把客服积压、handler_failed 记到 NeuroBus 指标或 NeuroBus 订阅缺口上。
+
+```mermaid
+flowchart LR
+    TICKET[customer_ticket] --> IB[MODstore incident_bus]
+    IB --> TEAM[incident_team]
+    TEAM --> INTAKE[intake-dispatcher]
+    TEAM --> CS[user-customer-service-officer]
+    NB[FHD NeuroBus] -.->|不承担客服闭环| X[ ]
+```
+
+---
+
+## 九、一句话总结
 
 > **MOD = 房子**：物理上一个目录，挂到 FastAPI 主 app 的 `/api/mod/<id>/...`
 > **员工 = 家具**：声明在 `manifest.workflow_employees[]`（或独立 `mods/_employees/`），实现在 `backend/employees/<id>.py` 的 `run(payload, ctx)`
-> **加载链路**：扫 `mods/*/manifest.json` → 校验依赖 + SKU 策略 → 注册到 `ModRegistry` → `import_mod_backend_py` 防撞名加载 → `load_mod_routes` 挂 FastAPI → NeuroBus 订阅
+> **加载链路**：扫 `mods/*/manifest.json` → 校验依赖 + SKU 策略 → 注册到 `ModRegistry` → `import_mod_backend_py` 防撞名加载 → `load_mod_routes` 挂 FastAPI → NeuroBus 订阅（宿主钩子；**客服工单 duty 除外，见 §八**）
+> **客服闭环**：MODstore `incident_bus` + `incident_team`，duty 事件绑定非 NeuroBus
 > **Mod ↔ 宿主契约**：`app.mod_sdk.*` 唯一稳定面，CI 守住导入边界
 > **桌面 / 网页**：同一份代码，差异只在 `XCAGI_DESKTOP_MODE` + SQLite/Postgres + 本地队列/Redis

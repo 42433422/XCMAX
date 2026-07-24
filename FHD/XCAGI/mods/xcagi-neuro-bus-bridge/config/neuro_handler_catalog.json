@@ -58,9 +58,19 @@
     },
     {
       "domain_id": "ai",
-      "host_module": "app.neuro_bus.domains.ai_domain_handlers",
-      "register_fn": "register_ai_domain_handlers",
+      "host_module": "app.neuro_bus.domains.ai_service_domain",
+      "register_fn": "get_ai_service_domain",
       "optional": true
+    },
+    {
+      "domain_id": "finance",
+      "host_module": "app.neuro_bus.domains.finance_domain_handlers",
+      "register_fn": "register_finance_domain_handlers"
+    },
+    {
+      "domain_id": "report",
+      "host_module": "app.neuro_bus.domains.report_domain_handlers",
+      "register_fn": "register_report_domain_handlers"
     },
     {
       "domain_id": "application_consumers",

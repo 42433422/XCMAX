@@ -1,8 +1,21 @@
 from __future__ import annotations
 
-from retort_engine.absorbed_capabilities import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, deferred_breadth_queue, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
+from retort_engine.absorbed_capabilities import (
+    absorbed_capability_plan,
+    absorption_quality_gate,
+    advantage_diff_map,
+    capability_progress_from_execution,
+    deferred_breadth_queue,
+    depth_absorption_plan,
+    depth_first_task_queue,
+    explain_missing_absorption_evidence,
+    marketplace_candidate_queue,
+    multi_project_reproduction_index,
+    ranked_capabilities,
+    review_strategy_for_file,
+)
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/alibaba/open-code-review'
+EXPECTED_ABSORPTION_SOURCE = "https://github.com/alibaba/open-code-review"
 
 
 def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
@@ -22,11 +35,16 @@ def test_depth_absorption_plan_keeps_depth_before_breadth() -> None:
     assert focused_components
     assert not (focused_components & {"provider_surface", "plugin_surface"})
     assert workflow["breadth_rejected"]
-    assert all(task["acceptance"] and task["evidence_required"] for task in depth_first_task_queue())
+    assert all(
+        task["acceptance"] and task["evidence_required"]
+        for task in depth_first_task_queue()
+    )
 
 
 def test_ranked_capabilities_include_depth_focus_components() -> None:
-    focused_components = {item["component"] for item in depth_absorption_plan()["focused_components"]}
+    focused_components = {
+        item["component"] for item in depth_absorption_plan()["focused_components"]
+    }
     ranked_signals = {item["signal"] for item in ranked_capabilities()}
 
     assert focused_components <= ranked_signals
@@ -36,7 +54,9 @@ def test_breadth_candidates_stay_closed_until_similarity_saturation() -> None:
     assert marketplace_candidate_queue() == []
     deferred = deferred_breadth_queue()
     assert deferred
-    assert all(item["status"] == "closed_until_similarity_saturation" for item in deferred)
+    assert all(
+        item["status"] == "closed_until_similarity_saturation" for item in deferred
+    )
     assert all(item["next_open_condition"] for item in deferred)
 
 
@@ -52,18 +72,26 @@ def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:
 
 def test_capability_progress_rejects_registry_only_absorption() -> None:
     progress = capability_progress_from_execution(
-        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+        [
+            "retort_engine/absorbed_capabilities.py",
+            "tests/test_absorbed_capabilities.py",
+        ],
         [{"ok": True}, {"ok": True}],
     )
 
     assert progress["ready_for_90"] is False
     assert progress["behavior_source_files"] == []
     assert progress["behavior_test_files"] == []
-    assert progress["generated_evidence_files"] == ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"]
+    assert progress["generated_evidence_files"] == [
+        "retort_engine/absorbed_capabilities.py",
+        "tests/test_absorbed_capabilities.py",
+    ]
 
 
 def test_missing_absorption_evidence_blocks_report_only_runs() -> None:
-    missing = explain_missing_absorption_evidence(["docs/retort_absorption_log.md"], [{"ok": True}])
+    missing = explain_missing_absorption_evidence(
+        ["docs/retort_absorption_log.md"], [{"ok": True}]
+    )
     assert "missing_behavior_source_diff" in missing
     assert "missing_behavior_test_diff" in missing
 
@@ -75,7 +103,12 @@ def test_advantage_diff_map_points_to_behavior_files() -> None:
 
 
 def test_advantage_diff_map_ignores_registry_files() -> None:
-    rows = advantage_diff_map(["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"])
+    rows = advantage_diff_map(
+        [
+            "retort_engine/absorbed_capabilities.py",
+            "tests/test_absorbed_capabilities.py",
+        ]
+    )
     assert rows
     assert not any(row["has_behavior_diff"] for row in rows)
 
@@ -83,7 +116,13 @@ def test_advantage_diff_map_ignores_registry_files() -> None:
 def test_absorption_quality_gate_blocks_too_few_behavior_tests() -> None:
     gate = absorption_quality_gate(
         ["retort_engine/review_context_bias.py", "tests/test_review_context_bias.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_review_context_bias.py"], "stdout_tail": "3 passed"}],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_review_context_bias.py"],
+                "stdout_tail": "3 passed",
+            }
+        ],
         minimum_behavior_tests=5,
     )
     assert gate["passed"] is False
@@ -92,10 +131,23 @@ def test_absorption_quality_gate_blocks_too_few_behavior_tests() -> None:
 
 def test_absorption_quality_gate_passes_with_behavior_depth() -> None:
     gate = absorption_quality_gate(
-        ["retort_engine/pr_review.py", "tests/test_pr_review.py", "retort_engine/review_context_bias.py", "tests/test_review_context_bias.py"],
         [
-            {"ok": True, "command": ["pytest", "tests/test_pr_review.py"], "stdout_tail": "8 passed"},
-            {"ok": True, "command": ["pytest", "tests/test_review_context_bias.py"], "stdout_tail": "1 passed"},
+            "retort_engine/pr_review.py",
+            "tests/test_pr_review.py",
+            "retort_engine/review_context_bias.py",
+            "tests/test_review_context_bias.py",
+        ],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_pr_review.py"],
+                "stdout_tail": "8 passed",
+            },
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_review_context_bias.py"],
+                "stdout_tail": "1 passed",
+            },
         ],
         minimum_behavior_tests=1,
     )
@@ -105,7 +157,13 @@ def test_absorption_quality_gate_passes_with_behavior_depth() -> None:
 def test_absorption_quality_gate_forwards_code_graph_proof() -> None:
     gate = absorption_quality_gate(
         ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_codebase_graph.py"], "stdout_tail": "6 passed"}],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_codebase_graph.py"],
+                "stdout_tail": "6 passed",
+            }
+        ],
         minimum_behavior_tests=1,
         code_graph_proof={"passed": False},
     )

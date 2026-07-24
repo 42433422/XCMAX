@@ -88,7 +88,7 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     id: 'llm-ops-engineer',
     label: 'LLM 运维工程师',
     summary:
-        '负责 LLM API key 健康检查、真实额度与成本追踪、模型选型，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。',
+        '负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。',
   ),
   DutyRosterEmployee(
     id: 'legacy-archive-curator',

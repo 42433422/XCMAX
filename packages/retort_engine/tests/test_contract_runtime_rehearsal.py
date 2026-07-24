@@ -10,7 +10,9 @@ from retort_engine.contracts import validate_contract
 from retort_engine.service import RetortService
 
 
-def test_contract_runtime_rehearsal_rejects_violations_and_rolls_back(tmp_path: Path) -> None:
+def test_contract_runtime_rehearsal_rejects_violations_and_rolls_back(
+    tmp_path: Path,
+) -> None:
     result = build_contract_runtime_rehearsal(tmp_path, run_id="unit-contract-runtime")
 
     assert result["status"] == "ready"
@@ -26,7 +28,9 @@ def test_contract_runtime_rehearsal_rejects_violations_and_rolls_back(tmp_path: 
     assert result["summary"]["all_rollbacks_verified"] is True
     assert result["summary"]["all_concurrent_violations_rejected"] is True
     assert result["summary"]["all_concurrent_rollbacks_verified"] is True
-    assert validate_contract("contract_runtime_rehearsal_result", result)["valid"] is True
+    assert (
+        validate_contract("contract_runtime_rehearsal_result", result)["valid"] is True
+    )
 
 
 def test_service_exposes_contract_runtime_rehearsal(tmp_path: Path) -> None:
@@ -38,7 +42,15 @@ def test_service_exposes_contract_runtime_rehearsal(tmp_path: Path) -> None:
 
 def test_contract_runtime_rehearsal_cli_outputs_contract(tmp_path: Path) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "retort_engine.cli", "contract-runtime-rehearsal", "--project", str(tmp_path), "--json"],
+        [
+            sys.executable,
+            "-m",
+            "retort_engine.cli",
+            "contract-runtime-rehearsal",
+            "--project",
+            str(tmp_path),
+            "--json",
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -47,6 +59,8 @@ def test_contract_runtime_rehearsal_cli_outputs_contract(tmp_path: Path) -> None
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert validate_contract("contract_runtime_rehearsal_result", payload)["valid"] is True
+    assert (
+        validate_contract("contract_runtime_rehearsal_result", payload)["valid"] is True
+    )
     assert payload["summary"]["all_rollbacks_verified"] is True
     assert payload["summary"]["all_concurrent_rollbacks_verified"] is True

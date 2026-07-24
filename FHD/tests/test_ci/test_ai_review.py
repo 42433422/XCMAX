@@ -77,6 +77,22 @@ class TestParseDiff:
         assert hunks[0].file_path == "a.py"
         assert hunks[1].file_path == "b.py"
 
+    def test_quoted_paths_supported(self) -> None:
+        diff = (
+            'diff --git "a/中文/含空格 文件.py" "b/中文/含空格 文件.py"\n'
+            "@@ -1,2 +1,2 @@\n"
+            "-old line\n"
+            "+new line\n"
+            "diff --git a/c.py b/c.py\n"
+            "@@ -3,1 +3,1 @@\n"
+            "-x\n"
+            "+y\n"
+        )
+        hunks = review.parse_diff(diff)
+        assert len(hunks) == 2
+        assert hunks[0].file_path == "中文/含空格 文件.py"
+        assert hunks[1].file_path == "c.py"
+
     def test_hunk_with_no_additions(self) -> None:
         diff = "diff --git a/foo.py b/foo.py\n@@ -1,2 +1,2 @@\n context\n-removed\n context2\n"
         hunks = review.parse_diff(diff)

@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.pr_review import group_related_files_for_review, parse_unified_diff, review_context_for_file, review_diff
+from retort_engine.pr_review import (
+    group_related_files_for_review,
+    parse_unified_diff,
+    review_context_for_file,
+    review_diff,
+)
 
 
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
@@ -61,7 +66,10 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["calibration_policy"]["enabled"] is True
     assert result["summary"]["calibration_rank_weights"]["runtime"] > 0
     assert result["summary"]["risk_counts"]["high"] >= 1
-    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v5_external_diagnostics"
+    assert (
+        result["summary"]["comment_ranking_model"]
+        == "severity_context_transfer_publishability_v5_external_diagnostics"
+    )
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["summary"]["task_group_count"] == len(result["task_groups"])
     assert result["summary"]["actionable_task_group_count"] >= 1
@@ -73,7 +81,9 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert "semantic=" in result["comments"][0]["rank_reason"]
     assert result["comments"][0]["calibration_rank_weight"] > 0
     assert result["comments"][0]["publish_payload"]["side"] == "RIGHT"
-    assert result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
+    assert (
+        result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
+    )
     assert result["file_summaries"][0]["stages"]
     assert result["file_summaries"][0]["review_context"] == "runtime"
     assert result["comments"][0]["review_stage"]
@@ -114,7 +124,10 @@ diff --git a/app/security.py b/app/security.py
 
     result = review_diff(diff, max_comments=1)
 
-    assert result["summary"]["candidate_comment_count"] > result["summary"]["comment_count"]
+    assert (
+        result["summary"]["candidate_comment_count"]
+        > result["summary"]["comment_count"]
+    )
     assert result["summary"]["suppressed_comment_count"] >= 1
     assert result["comments"][0]["severity"] == "high"
     assert result["comments"][0]["file"] == "app/security.py"
@@ -128,7 +141,11 @@ diff --git a/app/security.py b/app/security.py
 
 
 def test_review_diff_secret_line_overrides_file_context_to_security() -> None:
-    result = review_diff(_single_add_diff("pr_agent/settings.py", 'OPENAI_API_TOKEN = "live-secret-value"'))
+    result = review_diff(
+        _single_add_diff(
+            "pr_agent/settings.py", 'OPENAI_API_TOKEN = "live-secret-value"'
+        )
+    )
 
     assert result["comments"][0]["severity"] == "high"
     assert result["comments"][0]["review_context"] == "security"
@@ -150,20 +167,33 @@ diff --git a/src/App.tsx b/src/App.tsx
 
     result = review_diff(diff)
 
-    assert {comment["file"] for comment in result["comments"]} >= {"src/main.go", "src/App.tsx"}
+    assert {comment["file"] for comment in result["comments"]} >= {
+        "src/main.go",
+        "src/App.tsx",
+    }
     assert all(comment["publishable"] is True for comment in result["comments"])
-    assert all(comment["comment_anchor"]["side"] == "RIGHT" for comment in result["comments"])
-    assert {comment["review_context"] for comment in result["comments"]} >= {"runtime", "frontend"}
+    assert all(
+        comment["comment_anchor"]["side"] == "RIGHT" for comment in result["comments"]
+    )
+    assert {comment["review_context"] for comment in result["comments"]} >= {
+        "runtime",
+        "frontend",
+    }
     assert result["summary"]["extension_policy"]["language_family_count"] >= 2
     assert result["summary"]["extension_policy"]["known_extension_count"] == 2
-    assert {summary["extension_policy"]["family"] for summary in result["file_summaries"]} >= {"go", "typescript"}
+    assert {
+        summary["extension_policy"]["family"] for summary in result["file_summaries"]
+    } >= {"go", "typescript"}
 
 
 def test_review_diff_applies_holdout_extension_policy_to_cross_language_files() -> None:
     diff = (
         _single_add_diff("src/lib.rs", 'let token = "live-secret-value";')
         + _single_add_diff("native/buffer.cpp", "// TODO: audit pointer lifetime")
-        + _single_add_diff("service/Worker.csproj", '<PackageReference Include="Example" Version="1.0.0" />')
+        + _single_add_diff(
+            "service/Worker.csproj",
+            '<PackageReference Include="Example" Version="1.0.0" />',
+        )
         + _single_add_diff("docs/architecture.adoc", "= Architecture")
         + _single_add_diff("go.mod", "require github.com/example/lib v1.2.3")
         + _single_add_diff("scripts/review.unknownext", "# TODO: unknown extension")
@@ -178,14 +208,24 @@ def test_review_diff_applies_holdout_extension_policy_to_cross_language_files() 
     assert summary["known_extension_count"] == 5
     assert summary["unknown_extension_count"] == 1
     assert summary["language_family_count"] >= 5
-    assert {"runtime", "ci_config", "docs", "config"}.issubset(set(summary["review_contexts"]))
-    assert {"memory_safety", "dependency_graph", "operator_contract"}.issubset(set(summary["risk_tags"]))
+    assert {"runtime", "ci_config", "docs", "config"}.issubset(
+        set(summary["review_contexts"])
+    )
+    assert {"memory_safety", "dependency_graph", "operator_contract"}.issubset(
+        set(summary["risk_tags"])
+    )
     assert summaries_by_file["src/lib.rs"]["extension_policy"]["family"] == "rust"
-    assert summaries_by_file["native/buffer.cpp"]["extension_policy"]["risk_tags"] == ["memory_safety", "build_flags"]
+    assert summaries_by_file["native/buffer.cpp"]["extension_policy"]["risk_tags"] == [
+        "memory_safety",
+        "build_flags",
+    ]
     assert summaries_by_file["service/Worker.csproj"]["review_context"] == "ci_config"
     assert summaries_by_file["docs/architecture.adoc"]["review_context"] == "docs"
     assert summaries_by_file["go.mod"]["extension_policy"]["family"] == "go"
-    assert summaries_by_file["scripts/review.unknownext"]["extension_policy"]["known"] is False
+    assert (
+        summaries_by_file["scripts/review.unknownext"]["extension_policy"]["known"]
+        is False
+    )
 
 
 def test_review_diff_ignores_documented_or_fake_secret_terms() -> None:
@@ -219,8 +259,14 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:
     result = review_diff(diff)
 
     assert result["summary"]["static_analysis"]["high_count"] == 2
-    assert {comment["capability"] for comment in result["comments"]} >= {"static_analysis"}
-    assert {comment["line"] for comment in result["comments"] if comment["capability"] == "static_analysis"} == {1, 2}
+    assert {comment["capability"] for comment in result["comments"]} >= {
+        "static_analysis"
+    }
+    assert {
+        comment["line"]
+        for comment in result["comments"]
+        if comment["capability"] == "static_analysis"
+    } == {1, 2}
 
 
 def test_review_diff_maps_cross_language_pr_bot_patterns_into_core_comments() -> None:
@@ -249,7 +295,11 @@ diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py
 
     result = review_diff(diff, max_comments=10)
     transfer = result["summary"]["cross_language_transfer"]
-    transfer_comments = [comment for comment in result["comments"] if comment["capability"] == "cross_language_transfer"]
+    transfer_comments = [
+        comment
+        for comment in result["comments"]
+        if comment["capability"] == "cross_language_transfer"
+    ]
 
     assert transfer["cross_language_core_mapping"] is True
     assert transfer["language_family_count"] >= 3
@@ -257,17 +307,40 @@ diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py
     assert transfer["pattern_count"] >= 4
     assert transfer["severity_counts"]["high"] >= 2
     assert transfer_comments
-    assert {comment["review_context"] for comment in transfer_comments} >= {"ci_config", "config", "runtime"}
-    assert {comment["file"] for comment in transfer_comments} >= {".github/workflows/review.yml", "src/reviewer.ts", "retort_engine/review_bridge.py"}
-    assert transfer_comments[0]["rank_reason"].startswith("high:ci_config:cross_language_transfer")
-    assert result["summary"]["core_review_score"]["cross_language_core_behavior_active"] is True
-    assert result["summary"]["core_review_score"]["cross_language_ranked_comment_count"] == len(transfer_comments)
-    assert result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"] is True
+    assert {comment["review_context"] for comment in transfer_comments} >= {
+        "ci_config",
+        "config",
+        "runtime",
+    }
+    assert {comment["file"] for comment in transfer_comments} >= {
+        ".github/workflows/review.yml",
+        "src/reviewer.ts",
+        "retort_engine/review_bridge.py",
+    }
+    assert transfer_comments[0]["rank_reason"].startswith(
+        "high:ci_config:cross_language_transfer"
+    )
+    assert (
+        result["summary"]["core_review_score"]["cross_language_core_behavior_active"]
+        is True
+    )
+    assert result["summary"]["core_review_score"][
+        "cross_language_ranked_comment_count"
+    ] == len(transfer_comments)
+    assert (
+        result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"]
+        is True
+    )
     assert result["summary"]["core_review_score"]["hunk_semantic_top_ranked"] is True
-    assert result["cross_language_transfer"]["evidence"]["source"] == "absorbed_pr_bot_cross_language_transfer"
+    assert (
+        result["cross_language_transfer"]["evidence"]["source"]
+        == "absorbed_pr_bot_cross_language_transfer"
+    )
 
 
-def test_review_diff_ingests_reviewdog_style_external_diagnostics_into_core_ranking() -> None:
+def test_review_diff_ingests_reviewdog_style_external_diagnostics_into_core_ranking() -> (
+    None
+):
     diff = """diff --git a/.github/workflows/reviewdog.yml b/.github/workflows/reviewdog.yml
 --- a/.github/workflows/reviewdog.yml
 +++ b/.github/workflows/reviewdog.yml
@@ -307,12 +380,24 @@ diff --git a/src/reviewer.go b/src/reviewer.go
         ],
     )
 
-    external = [comment for comment in result["comments"] if comment["capability"] == "external_diagnostic_ingestion"]
+    external = [
+        comment
+        for comment in result["comments"]
+        if comment["capability"] == "external_diagnostic_ingestion"
+    ]
 
     assert result["summary"]["external_diagnostic_ingestion"]["accepted_count"] == 1
     assert result["summary"]["external_diagnostic_ingestion"]["dropped_count"] == 1
-    assert result["summary"]["external_diagnostic_ingestion"]["diff_line_anchor_enforced"] is True
-    assert result["summary"]["core_review_score"]["external_diagnostic_core_behavior_active"] is True
+    assert (
+        result["summary"]["external_diagnostic_ingestion"]["diff_line_anchor_enforced"]
+        is True
+    )
+    assert (
+        result["summary"]["core_review_score"][
+            "external_diagnostic_core_behavior_active"
+        ]
+        is True
+    )
     assert external
     assert external[0]["publishable"] is True
     assert external[0]["line"] == 3
@@ -334,7 +419,11 @@ def test_review_diff_uses_hunk_semantics_for_validation_regression() -> None:
 """
 
     result = review_diff(diff, max_comments=3)
-    semantic_comments = [comment for comment in result["comments"] if comment["capability"] == "hunk_semantic_review"]
+    semantic_comments = [
+        comment
+        for comment in result["comments"]
+        if comment["capability"] == "hunk_semantic_review"
+    ]
 
     assert semantic_comments
     assert semantic_comments[0]["semantic_finding_type"] == "validation_regression"
@@ -344,7 +433,10 @@ def test_review_diff_uses_hunk_semantics_for_validation_regression() -> None:
     assert result["summary"]["hunk_semantic_analysis"]["core_behavior_active"] is True
     assert result["summary"]["hunk_semantic_analysis"]["finding_count"] >= 1
     assert result["summary"]["core_review_score"]["hunk_semantic_top_ranked"] is True
-    assert result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"] is True
+    assert (
+        result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"]
+        is True
+    )
 
 
 def test_review_diff_uses_hunk_semantics_for_test_weakening() -> None:
@@ -358,12 +450,18 @@ def test_review_diff_uses_hunk_semantics_for_test_weakening() -> None:
 """
 
     result = review_diff(diff, max_comments=2)
-    semantic_comments = [comment for comment in result["comments"] if comment["capability"] == "hunk_semantic_review"]
+    semantic_comments = [
+        comment
+        for comment in result["comments"]
+        if comment["capability"] == "hunk_semantic_review"
+    ]
 
     assert semantic_comments
     assert semantic_comments[0]["semantic_finding_type"] == "test_weakening"
     assert semantic_comments[0]["review_context"] == "tests"
-    assert result["summary"]["hunk_semantic_analysis"]["finding_types"] == ["test_weakening"]
+    assert result["summary"]["hunk_semantic_analysis"]["finding_types"] == [
+        "test_weakening"
+    ]
 
 
 def test_cross_language_transfer_weight_changes_core_comment_ordering() -> None:
@@ -391,11 +489,17 @@ def test_review_diff_surfaces_issue_intent_mismatch() -> None:
 +.card { border-radius: 8px; }
 """
 
-    result = review_diff(diff, issue_context="Fix password reset token expiry in auth flow", pr_body="Refresh dashboard colors")
+    result = review_diff(
+        diff,
+        issue_context="Fix password reset token expiry in auth flow",
+        pr_body="Refresh dashboard colors",
+    )
 
     assert result["intent_alignment"]["status"] == "misaligned"
     assert result["summary"]["intent_alignment"]["aligned"] is False
-    assert any(comment["capability"] == "intent_alignment" for comment in result["comments"])
+    assert any(
+        comment["capability"] == "intent_alignment" for comment in result["comments"]
+    )
     assert validate_contract("pr_review_result", result)["valid"] is True
 
 
@@ -435,8 +539,13 @@ diff --git a/docs/review.md b/docs/review.md
     assert {"security", "tests", "ci_config", "docs"}.issubset(contexts)
     assert result["summary"]["review_context_group_count"] >= 4
     assert result["summary"]["absorbed_context_signal_strength"] >= 40
-    assert any(comment["review_context"] == "security" for comment in result["comments"])
-    assert any(group["review_focus"] == "repeatable_gates_and_release_safety" for group in result["context_groups"])
+    assert any(
+        comment["review_context"] == "security" for comment in result["comments"]
+    )
+    assert any(
+        group["review_focus"] == "repeatable_gates_and_release_safety"
+        for group in result["context_groups"]
+    )
     assert validate_contract("pr_review_result", result)["valid"] is True
 
 
@@ -444,7 +553,9 @@ def test_review_diff_balances_contexts_for_large_diffs() -> None:
     sections = [
         _single_add_diff("app/auth.py", 'API_TOKEN = "live-secret-value"'),
         _single_add_diff("tests/test_auth.py", "# TODO: assert auth behavior"),
-        _single_add_diff(".github/workflows/ci.yml", 'DEPLOY_TOKEN: "live-secret-value"'),
+        _single_add_diff(
+            ".github/workflows/ci.yml", 'DEPLOY_TOKEN: "live-secret-value"'
+        ),
         _single_add_diff("settings/runtime.yaml", 'SERVICE_TOKEN: "live-secret-value"'),
         _single_add_diff("app/runtime_1.py", "# TODO: runtime follow-up 1"),
         _single_add_diff("app/runtime_2.py", "# TODO: runtime follow-up 2"),
@@ -466,10 +577,16 @@ def test_review_diff_balances_contexts_for_large_diffs() -> None:
 
 
 def test_review_diff_employee_feedback_changes_next_ranking() -> None:
-    diff = _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior") + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+    diff = _single_add_diff(
+        "app/runtime.py", "# TODO: finish runtime behavior"
+    ) + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
 
     before = review_diff(diff, max_comments=1)
-    after = review_diff(diff, max_comments=1, employee_feedback=[{"dimension": "test_gate_evidence", "status": "failed"}])
+    after = review_diff(
+        diff,
+        max_comments=1,
+        employee_feedback=[{"dimension": "test_gate_evidence", "status": "failed"}],
+    )
 
     assert before["comments"][0]["review_context"] == "runtime"
     assert before["summary"]["employee_feedback_ranked"] is False
@@ -546,10 +663,17 @@ def test_review_diff_employee_feedback_changes_ranking_across_core_dimensions() 
         assert first["review_context"] == case["expected_context"]
         assert first["feedback_rank_weight"] >= case["expected_weight"]
         assert result["summary"]["employee_feedback_ranked"] is True
-        assert result["summary"]["employee_feedback_context_weights"][case["expected_context"]] >= case["expected_weight"]
+        assert (
+            result["summary"]["employee_feedback_context_weights"][
+                case["expected_context"]
+            ]
+            >= case["expected_weight"]
+        )
 
 
-def test_review_diff_product_feedback_prioritizes_frontend_without_security_override() -> None:
+def test_review_diff_product_feedback_prioritizes_frontend_without_security_override() -> (
+    None
+):
     diff = (
         _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
         + _single_add_diff("ui/App.tsx", "# TODO: prove user flow")
@@ -562,8 +686,16 @@ def test_review_diff_product_feedback_prioritizes_frontend_without_security_over
         max_comments=4,
         employee_feedback=[{"dimension": "product_operability", "status": "failed"}],
     )
-    before_frontend = next(comment for comment in before["comments"] if comment["review_context"] == "frontend")
-    after_frontend = next(comment for comment in after["comments"] if comment["review_context"] == "frontend")
+    before_frontend = next(
+        comment
+        for comment in before["comments"]
+        if comment["review_context"] == "frontend"
+    )
+    after_frontend = next(
+        comment
+        for comment in after["comments"]
+        if comment["review_context"] == "frontend"
+    )
 
     assert before["comments"][0]["review_context"] != "frontend"
     assert after_frontend["rank_position"] < before_frontend["rank_position"]
@@ -574,10 +706,9 @@ def test_review_diff_product_feedback_prioritizes_frontend_without_security_over
 
 
 def test_review_diff_ignores_successful_employee_feedback_for_ranking() -> None:
-    diff = (
-        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
-        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
-    )
+    diff = _single_add_diff(
+        "app/runtime.py", "# TODO: finish runtime behavior"
+    ) + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
 
     before = review_diff(diff, max_comments=1)
     after = review_diff(
@@ -592,15 +723,16 @@ def test_review_diff_ignores_successful_employee_feedback_for_ranking() -> None:
 
 
 def test_review_diff_employee_feedback_accepts_nested_task_dimension() -> None:
-    diff = (
-        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
-        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
-    )
+    diff = _single_add_diff(
+        "app/runtime.py", "# TODO: finish runtime behavior"
+    ) + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
 
     result = review_diff(
         diff,
         max_comments=1,
-        employee_feedback=[{"task": {"dimension": "test_gate_evidence"}, "status": "blocked"}],
+        employee_feedback=[
+            {"task": {"dimension": "test_gate_evidence"}, "status": "blocked"}
+        ],
     )
 
     assert result["comments"][0]["file"] == "tests/test_runtime.py"
@@ -611,7 +743,9 @@ def test_review_diff_employee_feedback_accepts_nested_task_dimension() -> None:
 
 def test_parse_unified_diff_keeps_new_line_numbers() -> None:
     files = parse_unified_diff(SAMPLE_DIFF)
-    added = [change for change in files[0]["hunks"][0]["changes"] if change["type"] == "add"]
+    added = [
+        change for change in files[0]["hunks"][0]["changes"] if change["type"] == "add"
+    ]
 
     assert files[0]["path"] == "app.py"
     assert [change["line"] for change in added] == [2, 3]

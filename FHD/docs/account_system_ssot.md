@@ -314,10 +314,12 @@ persona = apply_task_context(base, current_task)
 - 逃生舱：`session.execute(stmt, execution_options={"skip_tenant_filter": True})`。
 - 应急总开关：`XCAGI_DISABLE_TENANT_FILTER=1` 完全停用。
 
-### 已纳入隔离的业务表（14）
+### 已纳入隔离的业务表（15）
 products / purchase_units / materials / shipment_records / financial_transactions /
 suppliers / purchase_orders / purchase_order_items / purchase_inbounds / purchase_inbound_items /
-warehouses / storage_locations / inventory_ledger / inventory_transactions。
+warehouses / storage_locations / inventory_ledger / inventory_transactions / templates。
+
+模板库额外约定：DB `templates.tenant_id` 读写过滤；文件系统发现仅扫内置目录 + `tenants/{tid}/templates`（不再扫共享 runtime，避免跨租户串文件）。
 
 新增业务模型只需继承 `TenantScopedMixin` + 把表名加入 `ensure_business_tenant_id_columns` 与迁移 `2026_06_22_business_tenant_id.py` 即可自动隔离（无需改仓储）。
 

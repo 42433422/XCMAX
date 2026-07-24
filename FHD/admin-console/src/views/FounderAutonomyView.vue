@@ -99,6 +99,20 @@
           <div><dt>Loop</dt><dd>{{ snapshot.live_summary?.strategic_council_latest?.loop_run_id || '未绑定' }}</dd></div>
           <div><dt>Para task</dt><dd>{{ snapshot.live_summary?.strategic_council_latest?.para_task_id || '未绑定' }}</dd></div>
           <div><dt>验证回执</dt><dd>{{ snapshot.live_summary?.strategic_council_receipts || 0 }} 条</dd></div>
+          <div>
+            <dt>Retort 澄清</dt>
+            <dd :class="{ warn: !snapshot.live_summary?.retort_clarifications_healthy }">
+              <template v-if="snapshot.live_summary?.retort_clarifications_healthy">队列健康</template>
+              <template v-else>
+                待答 {{ snapshot.live_summary?.retort_clarifications_open || 0 }}
+                <template v-if="snapshot.live_summary?.retort_clarifications_critical">
+                  · 即将超时 {{ snapshot.live_summary.retort_clarifications_critical }}
+                </template>
+                ·
+                <router-link :to="{ name: 'employee-autonomy', query: { tab: 'questions' } }">去问答</router-link>
+              </template>
+            </dd>
+          </div>
         </dl>
       </section>
 
@@ -268,7 +282,7 @@ const councilRoles = computed(() => {
   const rows = [
     { key: 'persy', eyebrow: '拟人', name: 'Persy', responsibility: '从知识库提供事实、历史与长期记忆', expected: 'grounded' },
     { key: 'para', eyebrow: '排比', name: 'Para', responsibility: '把战略绑定到真实 Goal、Loop 与执行任务', expected: 'linked' },
-    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '质疑变更是否符合意图，未对齐就阻止部署', expected: 'aligned' },
+    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '意图不清先澄清（Boss 问答页），未对齐或未回答就阻止部署', expected: 'aligned' },
   ]
   return rows.map((row) => {
     const detail = roles[row.key] || {}
@@ -416,10 +430,12 @@ onBeforeUnmount(stopPolling)
 .council-grid p { min-height: 40px; margin: 8px 0; color: #647995; font-size: 12px; line-height: 1.55; }
 .council-grid small { color: #9b5e0b; font-weight: 750; }
 .council-grid small.ok { color: #18744f; }
-.council-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+.council-links { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
 .council-links div { min-width: 0; padding: 9px 11px; border-radius: 10px; background: rgba(233, 239, 249, 0.8); }
 .council-links dt { color: #7b8ca1; font-size: 10px; }
 .council-links dd { margin: 3px 0 0; color: #263b59; font-size: 12px; font-weight: 750; overflow-wrap: anywhere; }
+.council-links dd.warn { color: #a35c00; }
+.council-links dd a { color: #1890ff; text-decoration: none; font-weight: 700; }
 
 .score-section { margin-top: 30px; }
 .section-heading { align-items: end; margin-bottom: 14px; }

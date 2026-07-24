@@ -1620,6 +1620,21 @@ def should_run_self_maintenance_loop(
     }
 
 
+# Preferred Para nests for delivery_validation lookup. Order is part of the
+# determinism contract: same payload shape always yields the same DV.
+_DELIVERY_VALIDATION_PREFERRED_KEYS = (
+    "para_result",
+    "response",
+    "outputs",
+    "result",
+    "change_delivery",
+    "snapshot",
+    "subtasks",
+    "data",
+    "subtask",
+)
+
+
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
     if not result or result.get("handler_failed"):
         return False
@@ -1646,7 +1661,55 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
         for item in outputs:
             if isinstance(item, dict) and item.get("ok") is False:
                 return False
+    # Nested delivery_validation with non-zero exit codes is hard failure evidence
+    # even when the outer Para envelope claims ok=True.
+    dv_gate = _delivery_validation_gate(result)
+    if dv_gate.get("found") and not dv_gate.get("ok"):
+        return False
     return True
+
+
+def _delivery_validation_command_failed(command: Any) -> bool:
+    return isinstance(command, dict) and command.get("exit_code") not in (0, None)
+
+
+def _delivery_validation_gate(result: Any) -> Dict[str, Any]:
+    """Evaluate nested delivery_validation for closed-loop completion evidence.
+
+    Returns a stable dict used by validate/writeback completion checks:
+      found / ok / reason / delivery_validation
+    """
+    dv = _find_delivery_validation(result)
+    if not isinstance(dv, dict):
+        return {
+            "delivery_validation": None,
+            "found": False,
+            "ok": True,
+            "reason": "delivery_validation_absent",
+        }
+    cmds = dv.get("commands")
+    if not isinstance(cmds, list) or not cmds:
+        return {
+            "delivery_validation": dv,
+            "found": True,
+            "ok": True,
+            "reason": "delivery_validation_no_commands",
+        }
+    failed_cmds = [c for c in cmds if _delivery_validation_command_failed(c)]
+    if failed_cmds:
+        return {
+            "delivery_validation": dv,
+            "failed_commands": failed_cmds[:3],
+            "found": True,
+            "ok": False,
+            "reason": "delivery_validation_failed",
+        }
+    return {
+        "delivery_validation": dv,
+        "found": True,
+        "ok": True,
+        "reason": "delivery_validation_passed",
+    }
 
 
 def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, Any]]:
@@ -1654,24 +1717,60 @@ def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, An
 
     delivery_validation 不在本地代码产出，由 Para 平台返回时嵌在
     result.result.outputs[].response / para_result 等任意层级，故需递归。
-    限制深度 6 / 列表前 12 项，避免大对象全遍历。
+
+    Determinism contract:
+    - Prefer canonical Para nests (``para_result`` / ``response`` / ``outputs`` / …)
+      before other keys.
+    - Remaining dict keys are visited in sorted order (not insertion order).
+    - Lists keep the first 12 items; depth is capped at 6.
+    - When multiple DVs exist, prefer the one with a ``commands`` list (and among
+      those, the one with non-zero exit_code evidence).
     """
-    if depth > 6 or not isinstance(obj, (dict, list)):
+    candidates: List[Tuple[Tuple[int, int, int, int], Dict[str, Any]]] = []
+    _collect_delivery_validation_candidates(obj, depth=depth, out=candidates)
+    if not candidates:
         return None
+    # Higher score wins; tie-break by discovery rank (earlier preferred path).
+    best = max(candidates, key=lambda item: (item[0][0], item[0][1], item[0][2], -item[0][3]))
+    return best[1]
+
+
+def _collect_delivery_validation_candidates(
+    obj: Any,
+    *,
+    depth: int,
+    out: List[Tuple[Tuple[int, int, int, int], Dict[str, Any]]],
+    rank: int = 0,
+) -> int:
+    """Collect scored delivery_validation candidates; returns next discovery rank."""
+    if depth > 6 or not isinstance(obj, (dict, list)):
+        return rank
     if isinstance(obj, dict):
         dv = obj.get("delivery_validation")
         if isinstance(dv, dict):
-            return dv
-        for value in obj.values():
-            found = _find_delivery_validation(value, depth + 1)
-            if found is not None:
-                return found
-    else:
-        for item in obj[:12]:
-            found = _find_delivery_validation(item, depth + 1)
-            if found is not None:
-                return found
-    return None
+            cmds = dv.get("commands") if isinstance(dv.get("commands"), list) else []
+            failed = sum(1 for c in cmds if _delivery_validation_command_failed(c))
+            # score: has_commands, failed_count, commands_len, -rank
+            out.append(((1 if cmds else 0, failed, len(cmds), rank), dv))
+            rank += 1
+        preferred_present = [
+            key
+            for key in _DELIVERY_VALIDATION_PREFERRED_KEYS
+            if key in obj and key != "delivery_validation"
+        ]
+        remaining = sorted(
+            key
+            for key in obj.keys()
+            if key not in _DELIVERY_VALIDATION_PREFERRED_KEYS and key != "delivery_validation"
+        )
+        for key in preferred_present + remaining:
+            rank = _collect_delivery_validation_candidates(
+                obj.get(key), depth=depth + 1, out=out, rank=rank
+            )
+        return rank
+    for item in obj[:12]:
+        rank = _collect_delivery_validation_candidates(item, depth=depth + 1, out=out, rank=rank)
+    return rank
 
 
 def _extract_failure_reason(
@@ -1744,27 +1843,26 @@ def _extract_failure_reason(
     # delivery_validation 失败：员工交付了代码（change_delivery.ok=true）但验证命令
     # （测试/lint）失败。这是 code step 最常见的静默失败来源——_employee_result_ok
     # 判 False 但其他分支都提不到原因。delivery_validation 由 Para 远端返回，嵌在
-    # result 任意层级，用 _find_delivery_validation 递归定位。
-    dv = _find_delivery_validation(result)
-    if isinstance(dv, dict):
-        cmds = dv.get("commands")
-        if isinstance(cmds, list):
-            failed_cmds = [
-                c for c in cmds if isinstance(c, dict) and c.get("exit_code") not in (0, None)
-            ]
-            if failed_cmds:
-                parts: List[str] = []
-                for c in failed_cmds[:3]:
-                    ec = c.get("exit_code")
-                    cmd = str(c.get("command") or "")[:80]
-                    tail = str(c.get("output_tail") or c.get("output") or "")[:120]
-                    seg = f"exit={ec}"
-                    if cmd:
-                        seg += f" cmd={cmd}"
-                    if tail:
-                        seg += f" tail={tail}"
-                    parts.append(seg)
-                return "delivery_validation_failed: " + " | ".join(parts)[:300]
+    # result 任意层级，用 deterministic `_delivery_validation_gate` 定位。
+    dv_gate = _delivery_validation_gate(result)
+    if dv_gate.get("found") and not dv_gate.get("ok"):
+        failed_cmds = dv_gate.get("failed_commands") or []
+        parts: List[str] = []
+        for c in failed_cmds[:3]:
+            if not isinstance(c, dict):
+                continue
+            ec = c.get("exit_code")
+            cmd = str(c.get("command") or "")[:80]
+            tail = str(c.get("output_tail") or c.get("output") or "")[:120]
+            seg = f"exit={ec}"
+            if cmd:
+                seg += f" cmd={cmd}"
+            if tail:
+                seg += f" tail={tail}"
+            parts.append(seg)
+        if parts:
+            return "delivery_validation_failed: " + " | ".join(parts)[:300]
+        return "delivery_validation_failed"
 
     # para 层错误（走 Para bridge 时）
     if isinstance(para_meta, dict):
@@ -1881,6 +1979,11 @@ def _extract_report_excerpt(result: Dict[str, Any], limit: int = 4000) -> str:
 
 
 def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
+    # Accepted wait-timeout is not a transient network blip: the Para task was
+    # already created. Redispatching would duplicate work (see kb fix
+    # 20260723T062851Z-fix-accepted-para-timeout-duplicate-code-retry).
+    if _is_accepted_para_wait_timeout(result):
+        return False
     text = _extract_report_excerpt(result).lower()
     transient_terms = (
         "connection refused",
@@ -1895,20 +1998,56 @@ def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
     return any(term in text for term in transient_terms)
 
 
-def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
-    """Detect an accepted Para task whose synchronous wait expired."""
+def _coerce_truthy_flag(value: Any) -> bool:
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value == 1
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
+
+def _para_item_is_accepted_wait_timeout(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    handler = str(item.get("handler") or "").strip()
+    if handler and handler != "para_delegate":
+        return False
+    if not _coerce_truthy_flag(item.get("accepted")):
+        return False
+    status = str(item.get("status") or "").strip().lower()
+    if status == "para_task_timeout":
+        return True
+    # Some wrappers put the wait outcome under para_result / snapshot.status.
+    for nest_key in ("para_result", "snapshot", "response"):
+        nested = item.get(nest_key)
+        if isinstance(nested, dict):
+            nested_status = str(nested.get("status") or "").strip().lower()
+            if nested_status == "para_task_timeout":
+                return True
+    return False
+
+
+def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
+    """Detect an accepted Para task whose synchronous wait expired.
+
+    Shapes covered (all mean: task accepted, do NOT start code_fix redispatch):
+    - ``result.outputs[]`` para_delegate item with accepted + para_task_timeout
+    - flat handler dict at top-level / ``result``
+    - accepted flag as bool/1/\"true\"; timeout status on item or nested para_result
+    """
+    if not isinstance(result, dict):
+        return False
+    if _para_item_is_accepted_wait_timeout(result):
+        return True
     inner = result.get("result") if isinstance(result.get("result"), dict) else result
+    if _para_item_is_accepted_wait_timeout(inner):
+        return True
     outputs = inner.get("outputs") if isinstance(inner, dict) else None
     if not isinstance(outputs, list):
         return False
-    return any(
-        isinstance(item, dict)
-        and item.get("handler") == "para_delegate"
-        and item.get("accepted") is True
-        and str(item.get("status") or "").strip().lower() == "para_task_timeout"
-        for item in outputs
-    )
+    return any(_para_item_is_accepted_wait_timeout(item) for item in outputs)
 
 
 def _loop_platform_bench_override() -> Optional[tuple]:
@@ -2567,6 +2706,114 @@ def _code_task_text(
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
+
+
+def _evaluate_retort_clarification_before_review(
+    *,
+    run_id: str,
+    branch: Optional[str],
+    para_task_id: str,
+    memory: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Force self-maintenance review through Retort clarification gate.
+
+    Returns ``{"blocked": True, "reason": ...}`` when human clarification is still
+    required; otherwise ``{"blocked": False, ...}``. Failures in the gate itself
+    are non-blocking so review can continue with evidence of the gate error.
+    """
+
+    enabled = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        return {"blocked": False, "reason": "disabled"}
+
+    try:
+        from modstore_server.retort_clarification_gate import (
+            evaluate_retort_clarification_gate,
+            gate_enabled,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"blocked": False, "reason": f"gate_import_failed:{type(exc).__name__}"}
+
+    if not gate_enabled():
+        return {"blocked": False, "reason": "gate_disabled"}
+
+    changed_files: List[str] = []
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    target = str(branch or "").strip()
+    if repo_url and base_branch and target:
+        try:
+            workspace = (
+                Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
+                / "retort-review-gate"
+                / str(run_id or "run")
+            )
+            changed_files = _changed_files_for_branch(
+                repo_url=repo_url,
+                base_branch=base_branch,
+                branch=target,
+                workspace=workspace,
+            )
+        except Exception as exc:  # noqa: BLE001 - fall back to memory hints
+            logger.warning(
+                "retort clarification branch diff failed run_id=%s err=%s",
+                run_id,
+                type(exc).__name__,
+            )
+            changed_files = []
+
+    if not changed_files:
+        mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
+        if isinstance(mem_files, list):
+            changed_files = [str(x).strip() for x in mem_files if str(x).strip()][:80]
+
+    intent_bits = [
+        f"self-maintenance review run {run_id}",
+        f"branch {target}" if target else "",
+        str((memory or {}).get("last_goal") or "").strip(),
+        str((memory or {}).get("summary") or "").strip(),
+    ]
+    strategy_intent = " | ".join(bit for bit in intent_bits if bit)[:4000]
+    try:
+        gate = evaluate_retort_clarification_gate(
+            strategy_intent=strategy_intent,
+            changed_files=changed_files,
+            proposal_id=f"self-maintenance:{run_id}",
+            run_id=str(run_id or ""),
+            package_id="change-request-auditor",
+            auto_open=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"blocked": False, "reason": f"gate_eval_failed:{type(exc).__name__}"}
+
+    blockers = list(gate.get("blockers") or [])
+    pending = "retort_clarification_pending" in blockers
+    expired = "retort_clarification_expired" in blockers
+    cancelled = "retort_clarification_cancelled" in blockers
+    if pending or expired or cancelled:
+        reason = (
+            "retort_clarification_pending"
+            if pending
+            else ("retort_clarification_expired" if expired else "retort_clarification_cancelled")
+        )
+        return {
+            "blocked": True,
+            "reason": reason,
+            "blockers": blockers,
+            "clarification": gate.get("clarification"),
+            "changed_file_count": len(changed_files),
+            "para_task_id": para_task_id,
+        }
+    return {
+        "blocked": False,
+        "reason": "aligned_or_not_needed",
+        "blockers": blockers,
+        "clarification": gate.get("clarification"),
+        "changed_file_count": len(changed_files),
+        "aligned": bool(gate.get("aligned")),
+    }
 
 
 def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
@@ -3400,6 +3647,7 @@ def _validate_kb_json_changes_for_auto_merge(
 
 KB_SCHEMA_RETRY_MAX = 2
 KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
+KB_SCHEMA_FAILED_STATUS = "kb_schema_failed"
 NEEDS_HUMAN_LABEL = "needs-human"
 
 
@@ -3818,17 +4066,21 @@ def _reject_and_retry_kb_schema_failure(
     except Exception:
         logger.exception("kb_schema_retry: failed to write governance audit")
 
-    # 5. Build final state
-    final_status = "completed_waiting_human_strategy" if escalated else "failed"
+    # 5. Build final state — status must be distinct from generic ``failed`` so
+    # observers / dashboards can tell KB writeback schema rejection apart from
+    # dispatch or test failures.
+    final_status = "completed_waiting_human_strategy" if escalated else KB_SCHEMA_FAILED_STATUS
     policy_decision = {
         "action": "hold_for_automated_remediation",
         "active_gates": {
             "kb_schema_gate": {
                 "ok": False,
                 "blocking": True,
+                "label": KB_SCHEMA_FAILED_LABEL,
                 "reason": "kb_json_schema_validation_failed",
                 "retry_count": retry_count,
                 "escalated": escalated,
+                "status": final_status,
             }
         },
         "governance_gate": audit_record,
@@ -3836,11 +4088,15 @@ def _reject_and_retry_kb_schema_failure(
         "reason": "kb_json_schema_validation_failed",
         "retry_count": retry_count,
         "escalated": escalated,
+        "status": final_status,
     }
     final = {
         "branch": branch,
         "completed_at": _iso(now),
+        "error": "kb_json_schema_validation_failed",
         "failed_step": "code",
+        "failure_kind": KB_SCHEMA_FAILED_STATUS,
+        "kb_schema_failed": True,
         "kb_schema_retry": True,
         "para_task_id": para_task_id,
         "phase": "complete",
@@ -6459,6 +6715,55 @@ def _run_self_maintenance_loop_unlocked(
             remediation_base_branch = (
                 str(extra.get("branch") or "").strip() if step_name == "code" else ""
             )
+
+            if step_name == "review":
+                retort_gate = _evaluate_retort_clarification_before_review(
+                    run_id=run_id,
+                    branch=code_branch,
+                    para_task_id=str(para_task_id or ""),
+                    memory=loop_memory,
+                )
+                if retort_gate.get("blocked"):
+                    step_record = {
+                        "employee_id": employee_id,
+                        "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
+                        "ok": False,
+                        "para": {},
+                        "phase": "step",
+                        "report_excerpt": "",
+                        "run_id": run_id,
+                        "status": "failed",
+                        "step": step_name,
+                        "timestamp": _iso(_utc_now()),
+                        "retort_clarification": retort_gate,
+                    }
+                    steps.append(step_record)
+                    _append_ledger(step_record)
+                    final = {
+                        "branch": code_branch,
+                        "completed_at": _iso(_utc_now()),
+                        "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
+                        "failed_step": step_name,
+                        "para_task_id": para_task_id,
+                        "phase": "complete",
+                        "run_id": run_id,
+                        "started_at": _iso(started_at),
+                        "status": "failed",
+                        "steps": steps,
+                        "triggered_by": triggered_by,
+                        "retort_clarification": retort_gate,
+                    }
+                    final["policy_decision"] = _decide_post_loop_policy(
+                        branch=code_branch,
+                        gate=gate,
+                        para_task_id=para_task_id,
+                        run_id=run_id,
+                        status="failed",
+                        steps=steps,
+                    )
+                    _append_ledger(final)
+                    _update_loop_memory(final, gate)
+                    return final
 
             (
                 result,

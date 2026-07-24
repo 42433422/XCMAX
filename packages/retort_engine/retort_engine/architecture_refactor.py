@@ -14,23 +14,45 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "Review stages, context localization, and PR comments share one component contract.",
     },
     "workflow_ci": {
-        "modules": ["retort_engine/real_absorption.py", "retort_engine/proof.py", "retort_engine/git_status.py"],
+        "modules": [
+            "retort_engine/real_absorption.py",
+            "retort_engine/proof.py",
+            "retort_engine/git_status.py",
+        ],
         "tests": ["tests/test_retort_engine.py", "tests/test_branching_git_status.py"],
         "contract": "Absorption, merge proof, rollback proof, and local gates must fail closed together.",
     },
     "safety_policy": {
-        "modules": ["retort_engine/license_gate.py", "retort_engine/git_status.py", "retort_engine/proof.py"],
+        "modules": [
+            "retort_engine/license_gate.py",
+            "retort_engine/git_status.py",
+            "retort_engine/proof.py",
+        ],
         "tests": ["tests/test_retort_engine.py", "tests/test_branching_git_status.py"],
         "contract": "License, dirty-worktree, generated evidence, and rollback policies share one safety boundary.",
     },
     "evaluation_loop": {
-        "modules": ["retort_engine/absorption_quality.py", "retort_engine/review_quality_benchmark.py", "retort_engine/swe_bench_oracle.py"],
-        "tests": ["tests/test_absorbed_capabilities.py", "tests/test_review_quality_benchmark.py", "tests/test_swe_bench_oracle.py"],
+        "modules": [
+            "retort_engine/absorption_quality.py",
+            "retort_engine/review_quality_benchmark.py",
+            "retort_engine/swe_bench_oracle.py",
+        ],
+        "tests": [
+            "tests/test_absorbed_capabilities.py",
+            "tests/test_review_quality_benchmark.py",
+            "tests/test_swe_bench_oracle.py",
+        ],
         "contract": "Every absorbed behavior has benchmark counters and regression gates.",
     },
     "regression_oracle": {
-        "modules": ["retort_engine/absorption_quality.py", "retort_engine/architecture_refactor.py"],
-        "tests": ["tests/test_absorbed_capabilities.py", "tests/test_architecture_refactor.py"],
+        "modules": [
+            "retort_engine/absorption_quality.py",
+            "retort_engine/architecture_refactor.py",
+        ],
+        "tests": [
+            "tests/test_absorbed_capabilities.py",
+            "tests/test_architecture_refactor.py",
+        ],
         "contract": "Architecture refactors need a pass/fail oracle before merge.",
     },
     "provider_boundary": {
@@ -44,22 +66,50 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "Prompt construction and provider IO stay separable and testable.",
     },
     "context_localization": {
-        "modules": ["retort_engine/review_context_bias.py", "retort_engine/pr_review.py", "retort_engine/codebase_graph.py"],
-        "tests": ["tests/test_review_context_bias.py", "tests/test_pr_review.py", "tests/test_codebase_graph.py"],
+        "modules": [
+            "retort_engine/review_context_bias.py",
+            "retort_engine/pr_review.py",
+            "retort_engine/codebase_graph.py",
+        ],
+        "tests": [
+            "tests/test_review_context_bias.py",
+            "tests/test_pr_review.py",
+            "tests/test_codebase_graph.py",
+        ],
         "contract": "Context grouping and deterministic code graphing feed review without leaking broad, irrelevant files.",
     },
     "codebase_graph": {
-        "modules": ["retort_engine/codebase_graph.py", "retort_engine/architecture_contracts.py", "retort_engine/service.py", "retort_engine/cli.py"],
-        "tests": ["tests/test_codebase_graph.py", "tests/test_architecture_contracts.py", "tests/test_contracts_feedback.py"],
+        "modules": [
+            "retort_engine/codebase_graph.py",
+            "retort_engine/architecture_contracts.py",
+            "retort_engine/service.py",
+            "retort_engine/cli.py",
+        ],
+        "tests": [
+            "tests/test_codebase_graph.py",
+            "tests/test_architecture_contracts.py",
+            "tests/test_contracts_feedback.py",
+        ],
         "contract": "Architecture and absorption targeting use deterministic graph evidence plus import-boundary contracts.",
     },
     "architecture_contracts": {
-        "modules": ["retort_engine/architecture_contracts.py", "retort_engine/codebase_graph.py", "retort_engine/contracts.py"],
-        "tests": ["tests/test_architecture_contracts.py", "tests/test_contracts_feedback.py"],
+        "modules": [
+            "retort_engine/architecture_contracts.py",
+            "retort_engine/codebase_graph.py",
+            "retort_engine/contracts.py",
+        ],
+        "tests": [
+            "tests/test_architecture_contracts.py",
+            "tests/test_contracts_feedback.py",
+        ],
         "contract": "Import and dependency boundaries are executable gates before architecture changes are accepted.",
     },
     "automation_surface": {
-        "modules": ["retort_engine/cli.py", "retort_engine/ui_server.py", "retort_engine/service.py"],
+        "modules": [
+            "retort_engine/cli.py",
+            "retort_engine/ui_server.py",
+            "retort_engine/service.py",
+        ],
         "tests": ["tests/test_retort_engine.py"],
         "contract": "CLI, API, and UI expose the same absorption/refactor workflow.",
     },
@@ -69,27 +119,53 @@ CORE_COMPONENT_CONTRACTS = {
         "contract": "Command results stay schema-checked and replayable.",
     },
     "benchmark_eval": {
-        "modules": ["retort_engine/review_quality_benchmark.py", "retort_engine/absorption_quality.py", "retort_engine/swe_bench_oracle.py"],
-        "tests": ["tests/test_review_quality_benchmark.py", "tests/test_absorbed_capabilities.py", "tests/test_swe_bench_oracle.py"],
+        "modules": [
+            "retort_engine/review_quality_benchmark.py",
+            "retort_engine/absorption_quality.py",
+            "retort_engine/swe_bench_oracle.py",
+        ],
+        "tests": [
+            "tests/test_review_quality_benchmark.py",
+            "tests/test_absorbed_capabilities.py",
+            "tests/test_swe_bench_oracle.py",
+        ],
         "contract": "Review quality and absorption quality share benchmark evidence.",
     },
 }
 
 
-def build_core_refactor_plan(memory: dict[str, Any], *, project_root: str | Path = ".", max_tasks: int = 12) -> dict[str, Any]:
+def build_core_refactor_plan(
+    memory: dict[str, Any], *, project_root: str | Path = ".", max_tasks: int = 12
+) -> dict[str, Any]:
     root = Path(project_root)
     code_graph = _safe_code_graph(root)
-    component_index = memory.get("component_index") if isinstance(memory.get("component_index"), dict) else {}
-    architecture_tasks = [task for task in memory.get("deep_architecture_tasks") or [] if isinstance(task, dict)]
+    component_index = (
+        memory.get("component_index")
+        if isinstance(memory.get("component_index"), dict)
+        else {}
+    )
+    architecture_tasks = [
+        task
+        for task in memory.get("deep_architecture_tasks") or []
+        if isinstance(task, dict)
+    ]
     task_components = [_component_from_task(task) for task in architecture_tasks]
-    ready_components = [name for name, row in component_index.items() if isinstance(row, dict) and row.get("ready_for_deep_refactor")]
+    ready_components = [
+        name
+        for name, row in component_index.items()
+        if isinstance(row, dict) and row.get("ready_for_deep_refactor")
+    ]
     selected = _ordered_unique([*task_components, *ready_components])
     items = []
     for component in selected:
         contract = CORE_COMPONENT_CONTRACTS.get(component)
         if not contract:
             continue
-        index_row = component_index.get(component) if isinstance(component_index.get(component), dict) else {}
+        index_row = (
+            component_index.get(component)
+            if isinstance(component_index.get(component), dict)
+            else {}
+        )
         modules = [str(item) for item in contract["modules"]]
         tests = [str(item) for item in contract["tests"]]
         missing_modules = [item for item in modules if not (root / item).is_file()]
@@ -106,25 +182,49 @@ def build_core_refactor_plan(memory: dict[str, Any], *, project_root: str | Path
                 "missing_tests": missing_tests,
                 "supporting_source_count": int(index_row.get("source_count") or 0),
                 "gate_pass_rate": float(index_row.get("gate_pass_rate") or 0),
-                "architecture_depth_score": int(index_row.get("architecture_depth_score") or 0),
+                "architecture_depth_score": int(
+                    index_row.get("architecture_depth_score") or 0
+                ),
                 "code_graph_hotspot_score": graph_signal["score"],
                 "code_graph_hotspots": graph_signal["hotspots"],
-                "code_graph_proof_count": int(index_row.get("code_graph_proof_count") or 0),
-                "ready_for_core_refactor": not missing_modules and not missing_tests and int(index_row.get("source_count") or 0) >= 2,
+                "code_graph_proof_count": int(
+                    index_row.get("code_graph_proof_count") or 0
+                ),
+                "ready_for_core_refactor": not missing_modules
+                and not missing_tests
+                and int(index_row.get("source_count") or 0) >= 2,
                 "refactor_steps": _refactor_steps(component),
             }
         )
-    items = sorted(items, key=lambda item: (str(item["priority"]), -int(item["code_graph_hotspot_score"]), -int(item["supporting_source_count"]), str(item["component"])))[:max_tasks]
+    items = sorted(
+        items,
+        key=lambda item: (
+            str(item["priority"]),
+            -int(item["code_graph_hotspot_score"]),
+            -int(item["supporting_source_count"]),
+            str(item["component"]),
+        ),
+    )[:max_tasks]
     gate = core_refactor_gate(items)
     return {
         "schema_version": 1,
         "summary": {
             "task_count": len(items),
-            "ready_task_count": sum(1 for item in items if item["ready_for_core_refactor"]),
-            "blocked_task_count": sum(1 for item in items if not item["ready_for_core_refactor"]),
+            "ready_task_count": sum(
+                1 for item in items if item["ready_for_core_refactor"]
+            ),
+            "blocked_task_count": sum(
+                1 for item in items if not item["ready_for_core_refactor"]
+            ),
             "source_count": int((memory.get("summary") or {}).get("source_count") or 0),
-            "ready_component_count": int((memory.get("summary") or {}).get("ready_component_count") or 0),
-            "code_graph_hotspot_task_count": sum(1 for item in items if int(item.get("code_graph_hotspot_score") or 0) > 0),
+            "ready_component_count": int(
+                (memory.get("summary") or {}).get("ready_component_count") or 0
+            ),
+            "code_graph_hotspot_task_count": sum(
+                1
+                for item in items
+                if int(item.get("code_graph_hotspot_score") or 0) > 0
+            ),
         },
         "code_graph_summary": code_graph.get("summary") or {},
         "tasks": items,
@@ -143,8 +243,12 @@ def core_refactor_gate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             "missing_modules": [],
             "missing_tests": [],
         }
-    missing_modules = sorted({item for task in tasks for item in task.get("missing_modules", [])})
-    missing_tests = sorted({item for task in tasks for item in task.get("missing_tests", [])})
+    missing_modules = sorted(
+        {item for task in tasks for item in task.get("missing_modules", [])}
+    )
+    missing_tests = sorted(
+        {item for task in tasks for item in task.get("missing_tests", [])}
+    )
     ready_tasks = [task for task in tasks if task.get("ready_for_core_refactor")]
     missing = []
     if not ready_tasks:
@@ -166,7 +270,9 @@ def core_refactor_gate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
 
 def write_core_refactor_plan(path: Path, plan: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
 
 def _component_from_task(task: dict[str, Any]) -> str:
@@ -194,10 +300,16 @@ def _safe_code_graph(root: Path) -> dict[str, Any]:
     try:
         return build_codebase_graph(root, include_tests=True, max_files=400)
     except Exception as exc:
-        return {"status": "error", "summary": {"error": type(exc).__name__}, "hotspots": []}
+        return {
+            "status": "error",
+            "summary": {"error": type(exc).__name__},
+            "hotspots": [],
+        }
 
 
-def _component_code_graph_signal(modules: list[str], code_graph: dict[str, Any]) -> dict[str, Any]:
+def _component_code_graph_signal(
+    modules: list[str], code_graph: dict[str, Any]
+) -> dict[str, Any]:
     module_set = {item.replace("\\", "/") for item in modules}
     hotspots = []
     score = 0

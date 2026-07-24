@@ -12,6 +12,7 @@ from modstore_server.autonomous_risk_gate import (
 from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     KB_SCHEMA_FAILED_LABEL,
+    KB_SCHEMA_FAILED_STATUS,
     KB_SCHEMA_RETRY_MAX,
     NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
@@ -703,6 +704,57 @@ def test_accepted_para_wait_timeout_is_not_a_code_delivery_failure():
     }
 
     assert _is_accepted_para_wait_timeout(result) is True
+
+
+def test_accepted_para_wait_timeout_detects_flat_and_nested_shapes():
+    flat = {
+        "accepted": True,
+        "handler": "para_delegate",
+        "status": "para_task_timeout",
+        "error": "Para task task-flat 未在 1800s 内完成",
+    }
+    nested_status = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": "true",
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "para_result": {"status": "para_task_timeout", "task_id": "task-nested"},
+                }
+            ]
+        }
+    }
+    not_accepted = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": False,
+                    "handler": "para_delegate",
+                    "status": "para_task_timeout",
+                }
+            ]
+        }
+    }
+    wrong_handler = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": True,
+                    "handler": "local_shell",
+                    "status": "para_task_timeout",
+                }
+            ]
+        }
+    }
+
+    assert _is_accepted_para_wait_timeout(flat) is True
+    assert _is_accepted_para_wait_timeout(nested_status) is True
+    assert _is_accepted_para_wait_timeout(not_accepted) is False
+    assert _is_accepted_para_wait_timeout(wrong_handler) is False
+    # Must not be treated as a redispatchable transient failure once fixed.
+    assert _is_transient_employee_dispatch_failure(flat) is False
+    assert _is_transient_employee_dispatch_failure(nested_status) is False
 
 
 def test_base_para_input_default_wait_budget_covers_real_agent_runtime(monkeypatch):
@@ -1714,7 +1766,7 @@ class TestFindDeliveryValidation:
         assert _find_delivery_validation({}) is None
 
     def test_find_delivery_validation_multiple_occurrences(self):
-        """多个 delivery_validation 时返回第一个（DFS 顺序）。"""
+        """多个同质 delivery_validation 时返回更早发现的候选（稳定排序）。"""
         dv_first = {"commands": [{"exit_code": 1}], "marker": "first"}
         dv_second = {"commands": [{"exit_code": 2}], "marker": "second"}
         result = {
@@ -1727,6 +1779,34 @@ class TestFindDeliveryValidation:
         found = _find_delivery_validation(result)
 
         assert found is dv_first
+
+    def test_find_delivery_validation_prefers_commands_over_stub(self):
+        """无 commands 的 stub 不应盖过 para_result 里带 commands 的真 DV。"""
+        stub = {"ok": True, "marker": "stub"}
+        real = {"commands": [{"exit_code": 1, "command": "pytest"}], "marker": "real"}
+        # Insertion order puts stub first; preferred key + commands score must win.
+        result = {
+            "zzz_stub": {"delivery_validation": stub},
+            "para_result": {"delivery_validation": real},
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is real
+        assert found["marker"] == "real"
+
+    def test_find_delivery_validation_sorted_keys_are_deterministic(self):
+        """非 preferred key 按字典序遍历，不依赖插入顺序。"""
+        dv_a = {"commands": [{"exit_code": 1}], "marker": "a"}
+        dv_b = {"commands": [{"exit_code": 1}], "marker": "b"}
+        left_first = {"alpha": {"delivery_validation": dv_a}, "beta": {"delivery_validation": dv_b}}
+        right_first = {
+            "beta": {"delivery_validation": dv_b},
+            "alpha": {"delivery_validation": dv_a},
+        }
+
+        assert _find_delivery_validation(left_first) is dv_a
+        assert _find_delivery_validation(right_first) is dv_a
 
     def test_find_delivery_validation_in_list_items(self):
         """列表项中包含 delivery_validation 能被找到。"""
@@ -2208,12 +2288,21 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, 
         gate={},
     )
 
-    # 验证 final 状态
-    assert final["status"] == "failed"
+    # 验证 final 状态：必须是 kb_schema_failed，不能落成泛化 failed
+    assert final["status"] == KB_SCHEMA_FAILED_STATUS
+    assert final["status"] != "failed"
+    assert final["failure_kind"] == KB_SCHEMA_FAILED_STATUS
+    assert final["kb_schema_failed"] is True
+    assert final["error"] == "kb_json_schema_validation_failed"
     assert final["failed_step"] == "code"
     assert final["kb_schema_retry"] is True
     assert final["policy_decision"]["action"] == "hold_for_automated_remediation"
     assert final["policy_decision"]["reason"] == "kb_json_schema_validation_failed"
+    assert final["policy_decision"]["status"] == KB_SCHEMA_FAILED_STATUS
+    assert (
+        final["policy_decision"]["active_gates"]["kb_schema_gate"]["label"]
+        == KB_SCHEMA_FAILED_LABEL
+    )
     assert final["policy_decision"]["retry_count"] == 1
     assert final["policy_decision"]["escalated"] is False
 

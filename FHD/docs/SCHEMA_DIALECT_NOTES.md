@@ -70,3 +70,7 @@ autogenerate 报出 `vector` / 默认值差异时，先对照本文判断是否�
 运行时 `ensure_*` 补列只用于把 **ORM 已声明** 的列回填进旧库，**不得**用它引入 ORM 不知道的新列
 （由 [tests/test_db/test_ensure_columns_frozen.py](../tests/test_db/test_ensure_columns_frozen.py) 冻结守护）。
 新增业务列请走：改 ORM 模型 → 写 alembic 迁移 → 让 `create_all` / alembic 自然带出。
+
+**跳过 alembic 已禁用**：`docker-entrypoint-fhd-api.sh` 在 `DATABASE_URL` 非空时默认
+`alembic upgrade head`；`FHD_SKIP_ALEMBIC=1` 会 **FATAL 退出**，除非同时设置
+`FHD_ALLOW_SKIP_ALEMBIC_EMERGENCY=1`（灾难恢复旁路，事后必须补跑迁移）。

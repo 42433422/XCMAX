@@ -353,7 +353,7 @@ python scripts/autonomy/audit_query.py --source ci --since 7d \
 | ImpactPredictor deny | 桌面 controller | 写 audit + return |
 | CI 自愈失败 | ai-self-heal | PR 标 `needs-human` 标签 |
 | CI review confirmed-high | ai-review | PR review 阻断合并 |
-| CVM 部署异常 | cvm-autonomy-watcher | 创建根因 issue（只诊断不改码） |
+| CVM 部署异常 | cvm-autonomy-watcher | 创建根因 issue（只诊断不改码；token=`CVM_INCIDENT_PAT` 或缺省 `github.token`） |
 
 ### 7.1 人工介入入口
 

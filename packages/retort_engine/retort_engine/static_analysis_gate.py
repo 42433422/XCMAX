@@ -48,7 +48,9 @@ def scan_static_analysis_findings(files: list[dict[str, Any]]) -> dict[str, Any]
                 if change.get("type") != "add":
                     continue
                 text = str(change.get("text") or "")
-                finding = _finding_for_line(file_path, int(change.get("line") or 0), text)
+                finding = _finding_for_line(
+                    file_path, int(change.get("line") or 0), text
+                )
                 if finding:
                     findings.append(finding)
     counts = {"high": 0, "medium": 0, "low": 0}

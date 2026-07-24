@@ -79,18 +79,19 @@ class FileSystemTemplateStore(TemplateStorePort):
         return None
 
     def _discovery_directories(self) -> list[str]:
-        """Return code-bundled and writable desktop template directories."""
+        """代码内置目录 + 当前租户私有目录（不再扫共享 runtime，避免跨租户串数据）。"""
+        from app.infrastructure.tenant_scope import current_tenant_id
+
         runtime_root = get_app_data_dir()
         candidates = [
             self._base_dir,
             self._template_dir,
             os.path.join(self._base_dir, "resources", "templates"),
-            runtime_root,
-            os.path.join(runtime_root, "templates"),
-            os.path.join(runtime_root, "resources", "templates"),
-            os.path.join(runtime_root, "424"),
-            os.path.join(runtime_root, "424", "document_templates"),
         ]
+        tid = current_tenant_id()
+        if tid is not None:
+            candidates.append(os.path.join(runtime_root, "tenants", str(tid), "templates"))
+            candidates.append(os.path.join(runtime_root, "tenants", str(tid), "document_templates"))
         deduped: list[str] = []
         seen: set[str] = set()
         for folder in candidates:
@@ -101,14 +102,8 @@ class FileSystemTemplateStore(TemplateStorePort):
         return deduped
 
     def _discover_excel_templates(self) -> list[dict]:
-        """
-        从固定目录自动发现 Excel 模板文件：
-        - 项目根目录
-        - templates 目录
-        - resources/templates 目录
-        """
+        """从内置/租户私有目录自动发现 Excel 模板。"""
         candidates = self._discovery_directories()
-
         templates: list[dict] = []
         seen_paths = set()
         for folder in candidates:
@@ -121,16 +116,13 @@ class FileSystemTemplateStore(TemplateStorePort):
                         continue
                     if not (lower.endswith(".xlsx") or lower.endswith(".xls")):
                         continue
-
                     file_path = os.path.join(folder, entry)
                     if not os.path.isfile(file_path):
                         continue
-
                     norm_path = os.path.normcase(os.path.abspath(file_path))
                     if norm_path in seen_paths:
                         continue
                     seen_paths.add(norm_path)
-
                     template_type = self._infer_template_type_from_filename(entry)
                     templates.append(
                         {
@@ -204,16 +196,27 @@ class FileSystemTemplateStore(TemplateStorePort):
         return "excel"
 
     def _db_templates(self) -> list[dict]:
-        """从 templates 表读取模板元数据（若表不存在则返回空列表）。"""
+        """从 templates 表读取模板元数据（按当前租户隔离；若表不存在则返回空列表）。"""
+        from app.services.document_templates.tenant_scope import (
+            ensure_templates_tenant_column,
+            templates_tenant_where_sql,
+        )
+
+        ensure_templates_tenant_column()
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         try:
             with get_db() as db:
-                # templates(id, template_key, template_name, template_type, original_file_path, is_active, ...)
                 rows = db.execute(
                     text(
-                        "SELECT id, template_key, template_name, template_type, original_file_path, is_active "
-                        "FROM templates "
-                        "WHERE is_active IS NULL OR is_active = 1"
-                    )
+                        f"""
+                        SELECT id, template_key, template_name, template_type,
+                               original_file_path, is_active, tenant_id
+                        FROM templates
+                        WHERE (is_active IS NULL OR is_active = 1)
+                          AND ({tenant_sql})
+                        """
+                    ),
+                    tenant_bind,
                 ).fetchall()
         except RECOVERABLE_ERRORS:
             return []
@@ -243,6 +246,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                     "business_scope": self._business_scope(getattr(r, "template_type", "")),
                     "preview_capable": exists,
                     "is_active": getattr(r, "is_active", 1),
+                    "tenant_id": getattr(r, "tenant_id", None),
                     "source": "db",
                 }
             )
@@ -363,20 +367,33 @@ class FileSystemTemplateStore(TemplateStorePort):
         shutil.copy2(source_path, target_path)
 
         # 记录 / 更新 templates 表（表驱动）——失败不影响返回
+        from app.infrastructure.tenant_scope import TenantScopeError
+
         try:
             from sqlalchemy import text as sql_text
 
+            from app.services.document_templates.tenant_scope import (
+                templates_tenant_id_for_insert,
+                templates_tenant_where_sql,
+            )
+
+            tenant_id = templates_tenant_id_for_insert()
+            tenant_sql, tenant_bind = templates_tenant_where_sql()
             with get_db() as db:
                 # 这里不强制唯一约束，只是简单插入一条记录，并将同类型旧记录标记为非激活
                 db.execute(
                     sql_text(
-                        """
+                        f"""
                         UPDATE templates
                         SET is_active = 0, updated_at = :updated_at
-                        WHERE template_type = :template_type
+                        WHERE template_type = :template_type AND ({tenant_sql})
                         """
                     ),
-                    {"template_type": "发货单", "updated_at": datetime.now()},
+                    {
+                        "template_type": "发货单",
+                        "updated_at": datetime.now(),
+                        **tenant_bind,
+                    },
                 )
                 db.execute(
                     sql_text(
@@ -385,12 +402,12 @@ class FileSystemTemplateStore(TemplateStorePort):
                             template_key, template_name, template_type,
                             original_file_path, analyzed_data, editable_config,
                             zone_config, merged_cells_config, style_config,
-                            business_rules, is_active
+                            business_rules, is_active, tenant_id
                         ) VALUES (
                             :template_key, :template_name, :template_type,
                             :original_file_path, :analyzed_data, :editable_config,
                             :zone_config, :merged_cells_config, :style_config,
-                            :business_rules, :is_active
+                            :business_rules, :is_active, :tenant_id
                         )
                         """
                     ),
@@ -406,11 +423,14 @@ class FileSystemTemplateStore(TemplateStorePort):
                         "style_config": "{}",
                         "business_rules": "{}",
                         "is_active": 1,
+                        "tenant_id": tenant_id,
                     },
                 )
                 db.commit()
         except RECOVERABLE_ERRORS:
-            # 表不存在或结构不兼容时忽略，仍保持文件模式可用
+            pass
+        except TenantScopeError:
+            # 缺租户时忽略 DB 元数据写入，仍保持文件模式可用
             pass
 
         return {
@@ -437,6 +457,10 @@ class FileSystemTemplateStore(TemplateStorePort):
         original_file_path = template_data.get("original_file_path") or ""
 
         try:
+            from app.infrastructure.tenant_scope import TenantScopeError
+            from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
+
+            tenant_id = templates_tenant_id_for_insert()
             with get_db() as db:
                 res = db.execute(
                     text(
@@ -444,11 +468,13 @@ class FileSystemTemplateStore(TemplateStorePort):
                         INSERT INTO templates (
                             template_key, template_name, template_type, original_file_path,
                             analyzed_data, editable_config, zone_config, merged_cells_config,
-                            style_config, business_rules, is_active, created_at, updated_at
+                            style_config, business_rules, is_active, tenant_id,
+                            created_at, updated_at
                         ) VALUES (
                             :template_key, :template_name, :template_type, :original_file_path,
                             :analyzed_data, :editable_config, :zone_config, :merged_cells_config,
-                            :style_config, :business_rules, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                            :style_config, :business_rules, 1, :tenant_id,
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                         )
                         """
                     ),
@@ -463,11 +489,14 @@ class FileSystemTemplateStore(TemplateStorePort):
                         "merged_cells_config": _dumps(template_data.get("merged_cells_config")),
                         "style_config": _dumps(template_data.get("style_config")),
                         "business_rules": _dumps(template_data.get("business_rules")),
+                        "tenant_id": tenant_id,
                     },
                 )
                 db.commit()
                 new_id = getattr(res, "lastrowid", None)
             return {"success": True, "message": "模板创建成功", "id": new_id}
+        except TenantScopeError:
+            return {"success": False, "message": "缺少租户上下文，无法创建模板"}
         except RECOVERABLE_ERRORS as e:
             logger.error("save_template failed: %s", e, exc_info=True)
             return {"success": False, "message": str(e)}

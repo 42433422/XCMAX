@@ -15,6 +15,8 @@ class XcagiMobileTopology {
   static const fhdApiListenPort = 5000;
   static const fhdApiUpstreamPort = 5100;
   static const mobileLanProxyListenPort = 5011;
-  static const modstoreListenPort = 8765;
-  static const mustRunProcesses = <String>['web', 'modstore-scheduler'];
+  static const modstoreListenPort = 9999;
+  static const modstoreUpstreamPort = 9999;
+  static const modstoreSchedulerListenPort = 9990;
+  static const mustRunProcesses = <String>['web', 'modstore-api', 'modstore-scheduler'];
 }

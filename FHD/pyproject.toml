@@ -26,6 +26,7 @@ server-api = [
     "gevent>=25.4.2",
     "python-dotenv>=1.2.2",
     "httpx==0.26.0",
+    "socksio>=1.0.0",
     "requests>=2.33.0",
     "python-alipay-sdk>=3.3.0",
     "edge-tts>=6.1.10",

@@ -3,10 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from retort_engine.project_assessment import AssessmentDependencies, assess_project, project_files
+from retort_engine.project_assessment import (
+    AssessmentDependencies,
+    assess_project,
+    project_files,
+)
 
 
-def test_project_assessment_collects_structured_evidence_without_local_scores(tmp_path: Path) -> None:
+def test_project_assessment_collects_structured_evidence_without_local_scores(
+    tmp_path: Path,
+) -> None:
     frontend = tmp_path / "retort_engine" / "frontend"
     frontend.mkdir(parents=True)
     (frontend / "index.html").write_text(
@@ -32,10 +38,14 @@ def test_project_assessment_collects_structured_evidence_without_local_scores(tm
         """,
         encoding="utf-8",
     )
-    (tmp_path / "retort_engine" / "service.py").write_text("class RetortService: pass\n", encoding="utf-8")
+    (tmp_path / "retort_engine" / "service.py").write_text(
+        "class RetortService: pass\n", encoding="utf-8"
+    )
     tests = tmp_path / "tests"
     tests.mkdir()
-    (tests / "test_demo.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    (tests / "test_demo.py").write_text(
+        "def test_ok():\n    assert True\n", encoding="utf-8"
+    )
 
     def proof(_: Path) -> dict[str, Any]:
         return {"verified": True, "missing": (), "flags": {}, "evidence": []}
@@ -48,7 +58,10 @@ def test_project_assessment_collects_structured_evidence_without_local_scores(tm
             python_command=lambda: "python",
             tracking_state=lambda _root: "tracked_clean",
             closed_loop_proof=proof,
-            capability_absorption_audit=lambda _root: {"risk_level": "low", "blockers": []},
+            capability_absorption_audit=lambda _root: {
+                "risk_level": "low",
+                "blockers": [],
+            },
             public_absorption_state=lambda _root: {"active": False, "status": "empty"},
         ),
     )

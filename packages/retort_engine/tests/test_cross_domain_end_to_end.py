@@ -10,7 +10,9 @@ from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.service import RetortService
 
 
-def test_cross_domain_end_to_end_links_all_direct_modules_into_one_review(tmp_path: Path) -> None:
+def test_cross_domain_end_to_end_links_all_direct_modules_into_one_review(
+    tmp_path: Path,
+) -> None:
     result = build_cross_domain_end_to_end(tmp_path, run_id="unit-cross-domain-e2e")
 
     assert result["status"] == "ready"
@@ -27,7 +29,9 @@ def test_cross_domain_end_to_end_links_all_direct_modules_into_one_review(tmp_pa
 
 
 def test_service_exposes_cross_domain_end_to_end(tmp_path: Path) -> None:
-    result = RetortService().cross_domain_end_to_end({"project": str(tmp_path), "min_domains": 10})
+    result = RetortService().cross_domain_end_to_end(
+        {"project": str(tmp_path), "min_domains": 10}
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["linked_domain_count"] == 10
@@ -35,7 +39,15 @@ def test_service_exposes_cross_domain_end_to_end(tmp_path: Path) -> None:
 
 def test_cross_domain_end_to_end_cli_outputs_contract(tmp_path: Path) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "retort_engine.cli", "cross-domain-end-to-end", "--project", str(tmp_path), "--json"],
+        [
+            sys.executable,
+            "-m",
+            "retort_engine.cli",
+            "cross-domain-end-to-end",
+            "--project",
+            str(tmp_path),
+            "--json",
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

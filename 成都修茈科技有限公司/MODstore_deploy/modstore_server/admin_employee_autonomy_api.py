@@ -591,18 +591,100 @@ def list_pending_human_questions(
     GET /api/admin/employee-autonomy/questions?include_history=false
     """
     from modstore_server.human_uncertainty_queue import list_pending_questions
+    from modstore_server.retort_clarification_gate import get_clarification, list_clarifications
 
     items = list_pending_questions(
         user_id=_admin_user.id,
         include_expired=include_history,
         limit=limit,
     )
-    return {"items": items, "count": len(items)}
+    # Enrich Phase-D mirrored Retort items with structured questions / countdown.
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ctx = item.get("context") if isinstance(item.get("context"), dict) else {}
+        if str(ctx.get("kind") or "") != "retort_clarification":
+            continue
+        sid = str(ctx.get("session_id") or "").strip()
+        detail = get_clarification(sid) if sid else None
+        if not detail:
+            continue
+        item["questions"] = detail.get("questions") or []
+        item["seconds_remaining"] = detail.get("seconds_remaining")
+        item["urgency"] = detail.get("urgency")
+        item["blocking_question_ids"] = detail.get("blocking_question_ids") or []
+        item["source"] = "retort_clarification_gate"
+
+    # Merge open Retort clarifications that may not yet have a Phase-D mirror.
+    clar = list_clarifications(include_terminal=include_history, limit=limit)
+    seen_sessions = {
+        str((item.get("context") or {}).get("session_id") or "")
+        for item in items
+        if isinstance(item, dict)
+    }
+    for row in clar.get("items") or []:
+        if not isinstance(row, dict):
+            continue
+        sid = str(row.get("session_id") or "")
+        if not sid or sid in seen_sessions:
+            continue
+        if not include_history and row.get("status") != "open":
+            continue
+        questions = row.get("questions") if isinstance(row.get("questions"), list) else []
+        primary = ""
+        for q in questions:
+            if isinstance(q, dict) and str(q.get("question") or "").strip():
+                primary = str(q.get("question") or "").strip()
+                break
+        items.append(
+            {
+                "id": f"retort:{sid}",
+                "user_id": _admin_user.id,
+                "employee_id": "retort-clarification",
+                "task": str(row.get("source") or "retort_clarification"),
+                "question": primary or "Retort 需要确认战略意图",
+                "questions": questions,
+                "blocking_question_ids": row.get("blocking_question_ids") or [],
+                "seconds_remaining": row.get("seconds_remaining"),
+                "urgency": row.get("urgency") or "none",
+                "context": {
+                    "kind": "retort_clarification",
+                    "session_id": sid,
+                    "subject": row.get("subject"),
+                    "change_request_id": row.get("change_request_id"),
+                },
+                "status": (
+                    "pending" if row.get("status") == "open" else str(row.get("status") or "")
+                ),
+                "answer": "",
+                "asked_at": row.get("created_at"),
+                "answered_at": row.get("answered_at"),
+                "expires_at": row.get("expires_at"),
+                "source": "retort_clarification_gate",
+            }
+        )
+        seen_sessions.add(sid)
+
+    # Pending Retort first, then soon-to-expire.
+    def _sort_key(item: Dict[str, Any]) -> tuple:
+        is_retort = 0 if str(item.get("employee_id") or "") == "retort-clarification" else 1
+        remaining = item.get("seconds_remaining")
+        remaining_key = int(remaining) if isinstance(remaining, int) else 10**9
+        return (is_retort, remaining_key, str(item.get("asked_at") or ""))
+
+    items = sorted([item for item in items if isinstance(item, dict)], key=_sort_key)
+    return {
+        "items": items[:limit],
+        "count": min(len(items), limit),
+        "retort_open_count": int(clar.get("open_count") or 0),
+        "retort_critical_count": int(clar.get("critical_count") or 0),
+        "retort_healthy": bool(clar.get("healthy")),
+    }
 
 
 @router.post("/questions/{question_id}/answer")
 def answer_human_question(
-    question_id: int,
+    question_id: str,
     body: Dict[str, Any] = Body(...),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -610,15 +692,88 @@ def answer_human_question(
 
     POST /api/admin/employee-autonomy/questions/{id}/answer
     body: {"answer": "去这么做..."}
+    ``question_id`` 可为数字，或合成 id ``retort:<session_id>``。
     """
     from modstore_server.human_uncertainty_queue import answer_pending_question
 
+    raw_answers = (body or {}).get("answers")
     answer = str((body or {}).get("answer") or "").strip()
-    if not answer:
-        raise HTTPException(400, "answer is required")
+    if not answer and not isinstance(raw_answers, (dict, list)):
+        raise HTTPException(400, "answer or answers is required")
+
+    payload_answers: Any = raw_answers if isinstance(raw_answers, (dict, list)) else answer
+    raw_id = str(question_id or "").strip()
+    if raw_id.startswith("retort:"):
+        from modstore_server.retort_clarification_gate import answer_clarification
+
+        session_id = raw_id.split(":", 1)[1].strip()
+        out = answer_clarification(
+            session_id,
+            answers=payload_answers,
+            answered_by=f"user:{_admin_user.id}",
+        )
+        if not out.get("ok"):
+            raise HTTPException(409, str(out.get("error") or "answer failed"))
+        return {
+            "ok": True,
+            "question_id": raw_id,
+            "employee_id": "retort-clarification",
+            "status": "answered",
+            "retort_clarification": out,
+        }
+
+    try:
+        numeric_id = int(raw_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "invalid question_id") from exc
+
+    # Phase-D mirrored Retort rows may carry structured answers.
+    if isinstance(raw_answers, (dict, list)):
+        from modstore_server.human_uncertainty_queue import list_pending_questions
+        from modstore_server.retort_clarification_gate import answer_clarification
+
+        matched = next(
+            (
+                item
+                for item in list_pending_questions(
+                    user_id=_admin_user.id, include_expired=True, limit=200
+                )
+                if int(item.get("id") or 0) == numeric_id
+            ),
+            None,
+        )
+        ctx = (matched or {}).get("context") if isinstance(matched, dict) else {}
+        sid = str((ctx or {}).get("session_id") or "").strip()
+        if sid and str((ctx or {}).get("kind") or "") == "retort_clarification":
+            bridged = answer_clarification(
+                sid,
+                answers=payload_answers,
+                answered_by=f"user:{_admin_user.id}",
+            )
+            if not bridged.get("ok"):
+                raise HTTPException(409, str(bridged.get("error") or "answer failed"))
+            # Also close the Phase-D row with a concise summary.
+            summary = answer or json.dumps(raw_answers, ensure_ascii=False)[:1000]
+            out = answer_pending_question(
+                question_id=numeric_id,
+                answer=summary,
+                answered_by_user_id=_admin_user.id,
+            )
+            out["retort_clarification"] = bridged
+            if not out.get("ok"):
+                # Session already answered; treat as success if bridge ok.
+                return {
+                    "ok": True,
+                    "question_id": numeric_id,
+                    "employee_id": "retort-clarification",
+                    "status": "answered",
+                    "retort_clarification": bridged,
+                }
+            return out
+
     out = answer_pending_question(
-        question_id=question_id,
-        answer=answer,
+        question_id=numeric_id,
+        answer=answer or json.dumps(raw_answers, ensure_ascii=False)[:1000],
         answered_by_user_id=_admin_user.id,
     )
     if not out.get("ok"):
