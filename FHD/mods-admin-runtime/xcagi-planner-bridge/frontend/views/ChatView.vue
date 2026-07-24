@@ -428,6 +428,7 @@
         </label>
         <label
           data-tutorial-id="star-auto-refresh-toggle"
+          title="需主动勾选后启用：小C才会感知星标会话新消息（约每分钟拉取）"
           style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
         >
           <input
