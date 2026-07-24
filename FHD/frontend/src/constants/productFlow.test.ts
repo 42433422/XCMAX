@@ -51,17 +51,23 @@ describe('productFlow', () => {
     expect(readOnboardingReturnPath('')).toBe('/')
   })
 
-  it('PRODUCT_FLOW_STEPS has 6 steps', () => {
-    expect(PRODUCT_FLOW_STEPS).toHaveLength(6)
+  it('PRODUCT_FLOW_STEPS is host onboarding 1-2-3 + done', () => {
+    expect(PRODUCT_FLOW_STEPS).toHaveLength(4)
   })
 
   it('PRODUCT_FLOW_STEPS has correct step ids', () => {
     const ids = PRODUCT_FLOW_STEPS.map((s) => s.id)
-    expect(ids).toEqual(['welcome', 'industry', 'host-pack', 'seed-demo', 'first-ai-task', 'done'])
+    expect(ids).toEqual(['welcome', 'industry', 'host-pack', 'done'])
     expect(ids).toContain('welcome')
     expect(ids).toContain('industry')
     expect(ids).toContain('host-pack')
     expect(ids).toContain('done')
+  })
+
+  it('parseFlowStepQuery maps legacy seed/ai steps to host-pack', () => {
+    expect(parseFlowStepQuery('seed-demo')).toBe('host-pack')
+    expect(parseFlowStepQuery('first-ai-task')).toBe('host-pack')
+    expect(parseFlowStepQuery('ai-demo')).toBe('host-pack')
   })
 
   it('ONBOARDING_OPEN_INDUSTRY_IDS contains 涂料 and 考勤', () => {
