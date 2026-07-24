@@ -82,6 +82,34 @@ def gap_batch2_brand_xc_logo_png():
     return JSONResponse({"success": False, "message": "brand-xc-logo.png 不存在"}, status_code=404)
 
 
+@router.get("/ai-butler-female-avatar-v1.png")
+def gap_batch2_ai_butler_female_avatar():
+    """小C助理头像（企业端悬浮窗 / FloatingChatAssistant）。"""
+    for p in (
+        os.path.join(_vue_dist_dir(), "ai-butler-female-avatar-v1.png"),
+        os.path.join(get_base_dir(), "frontend", "public", "ai-butler-female-avatar-v1.png"),
+    ):
+        if os.path.isfile(p):
+            return FileResponse(p, media_type="image/png")
+    return JSONResponse(
+        {"success": False, "message": "ai-butler-female-avatar-v1.png 不存在"}, status_code=404
+    )
+
+
+@router.get("/ai-butler-male-avatar-v1.jpg")
+def gap_batch2_ai_butler_male_avatar():
+    """管理端小C助理头像。"""
+    for p in (
+        os.path.join(_vue_dist_dir(), "ai-butler-male-avatar-v1.jpg"),
+        os.path.join(get_base_dir(), "frontend", "public", "ai-butler-male-avatar-v1.jpg"),
+    ):
+        if os.path.isfile(p):
+            return FileResponse(p, media_type="image/jpeg")
+    return JSONResponse(
+        {"success": False, "message": "ai-butler-male-avatar-v1.jpg 不存在"}, status_code=404
+    )
+
+
 @router.get("/workflow-employee-docs.json")
 def gap_batch2_workflow_employee_docs_json():
     p = os.path.join(_vue_dist_dir(), "workflow-employee-docs.json")
