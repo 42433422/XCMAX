@@ -1,13 +1,14 @@
-# 闭环缺口（修复后）
+# 闭环缺口（复测 · 源码后端）
 
-## 已修复（2026-07-24）
+从智能对话起，16/16 页能力读写闭环通过（stamp=95006，用户 wuxinghua1）。
 
-- **组织管理读写不一致**：`GET /api/customers` 原先只读 legacy 行，与 `POST /api/customers`（service/facade）不同源；已改为委托 `customers_list`，创建后列表可见。
-- **智能对话写入 405**：补 `POST /api/chat/send`、`POST /api/planner/chat` → 同 `/api/ai/chat`；补 `POST /api/conversations/{id}/messages` 写入会话消息。
-- **知识库/员工台/数据来源/打印模板短路径 404**：新增 `sidebar_capability_compat` 门面，对齐探测路径到真实能力（knowledge/v1、workflow-employee-catalog、templates 等）。
+## 本轮额外修复
 
-## 说明
+- **AI 群聊消息 500**：桌面缺 `SECRET_KEY` 时加密存储抛错；已按 `XCAGI_DATA_DIR` 派生稳定密钥回退（`group_chat/storage.py`）。
 
-- 前端主路径仍是 `/api/ai/chat`、`/api/knowledge/v1/*`、`/api/system/workflow-employee-catalog`、`/api/templates`；兼容短路径仅为闭环与旧客户端。
-- 模板列表可为空（无上传模板时属正常）；打印机以本机 CUPS 为准。
-- 需重启桌面内嵌后端后，上述修复才会在 `:17500` 生效。
+## 说明（非失败）
+
+- 桌面端 `GET/POST /api/admin/ai-groups` → 403（`ADMIN_DESKTOP_FORBIDDEN`）属设计；闭环走 `/api/mobile/v1/ai-groups`。
+- `/api/orders/today` 会被 `{id}` 路由吃掉，前端未用；勿当「今日订单」接口。
+- 知识库 RAG/embedding 可为 off；入库与 query 接口仍 200。
+- 打印机：本机检测到 `Canon_TS3700_series` 就绪。
