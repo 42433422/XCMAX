@@ -309,14 +309,18 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         }
         # agent/直接分析岗需要仓库根；复用现有 env，避免「缺 project_root」空转失败
         if not str(runtime_input.get("project_root") or "").strip():
-            root = str(
-                os.environ.get("MODSTORE_DUTY_PROJECT_ROOT")
-                or os.environ.get("XCMAX_MONOREPO_ROOT")
-                or os.environ.get("MODSTORE_REPO_ROOT")
-                or ""
-            ).strip()
-            if root:
-                runtime_input["project_root"] = root
+            candidates = [
+                str(os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or "").strip(),
+                str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip(),
+                str(os.environ.get("MODSTORE_REPO_ROOT") or "").strip(),
+                str(os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "").strip(),
+                "/opt/xcmax/current",
+                "/root/XCMAX",
+            ]
+            for root in candidates:
+                if root and os.path.isdir(root):
+                    runtime_input["project_root"] = root
+                    break
         runtime_input.update(
             {
                 "incident_team": team_plan,
