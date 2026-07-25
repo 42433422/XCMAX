@@ -2198,10 +2198,14 @@ def _classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
         and veto_code != _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
         and re.search(r"\bREJECT\s*:", text, re.IGNORECASE)
     )
+    from modstore_server.self_maintenance_policy import parse_merge_review_diff_char_count
+
+    review_diff_chars = parse_merge_review_diff_char_count(text)
     return {
         "actionable_code_findings": actionable_code_findings,
         "branch_hint": branch_hint,
         "detail": text,
+        "review_diff_chars": review_diff_chars,
         "veto_code": veto_code,
     }
 
@@ -2229,8 +2233,9 @@ def _diff_too_large_merge_review_remediation_hint() -> str:
         "Remediation must shrink the branch before re-requesting merge:\n"
         "1) Rebase onto the current integration base and drop unrelated merge commits "
         "(for example generated workflow or desktop feed deltas not part of this fix).\n"
-        "2) Keep modstore_server production changes plus focused tests; avoid landing "
-        "bulky KB fix_diff blobs in the same PR when they push the diff over budget.\n"
+        "2) Keep modstore_server production changes plus focused tests; do not land "
+        "FHD/XCAGI/kb/* paths on this remediation branch (auto-merge blocks KB while "
+        "a diff-too-large open_item is active).\n"
         "3) Confirm git diff character count stays under the budget before merge request."
     )
 
@@ -2351,6 +2356,11 @@ def _reconcile_requested_merge_feedback(
                     "review_feedback": detail,
                     "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
                     "review_veto_code": veto_meta.get("veto_code") or "",
+                    **(
+                        {"review_diff_chars": veto_meta["review_diff_chars"]}
+                        if veto_meta.get("review_diff_chars") is not None
+                        else {}
+                    ),
                     "run_id": str(run.get("run_id") or "").strip(),
                     "source": source,
                     "task_id": task_id,
@@ -4468,10 +4478,27 @@ def _assess_branch_auto_merge_policy(
             is_auxiliary_self_maintenance_evidence_path,
             is_marker_status_path,
             loop_memory_requires_executable_change,
+            memory_has_diff_too_large_remediation,
             para_merge_review_max_diff_chars,
         )
 
         requirement = loop_memory_requires_executable_change(memory)
+        if requirement.get("required") and memory_has_diff_too_large_remediation(memory):
+            kb_paths = [
+                file_name
+                for file_name in normalized_files
+                if file_name.startswith("FHD/XCAGI/kb/")
+            ]
+            if kb_paths:
+                return _decision(
+                    {
+                        "changed_files": normalized_files,
+                        "kb_paths": kb_paths,
+                        "ok": False,
+                        "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+                        "self_maintenance_requirement": requirement,
+                    }
+                )
         if requirement.get("required"):
             if all(is_marker_status_path(file_name) for file_name in normalized_files):
                 return _decision(

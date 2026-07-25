@@ -88,6 +88,34 @@ def para_merge_review_max_diff_chars() -> int:
         return 30000
 
 
+def parse_merge_review_diff_char_count(detail: str) -> Optional[int]:
+    """Extract reported git diff size from merge-worker veto detail (diff-too-large:NNN)."""
+
+    match = re.search(r"diff-too-large:(\d+)", str(detail or ""), re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def memory_has_diff_too_large_remediation(memory: Optional[Dict[str, Any]]) -> bool:
+    open_items = memory.get("open_items") if isinstance(memory, dict) else None
+    if not isinstance(open_items, list):
+        return False
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        if (
+            item.get("kind") == "automated_remediation"
+            and item.get("reason") == "para_ai_review_rejected"
+            and _item_diff_too_large_merge_review_veto(item)
+        ):
+            return True
+    return False
+
+
 def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
     normalized = _normalize_repo_path(path)
     if not normalized:
@@ -285,8 +313,10 @@ __all__ = [
     "is_marker_status_path",
     "load_loop_memory",
     "loop_memory_requires_executable_change",
+    "memory_has_diff_too_large_remediation",
     "normalize_merge_review_veto_code",
     "para_merge_review_max_diff_chars",
     "parse_diff_stat_paths",
+    "parse_merge_review_diff_char_count",
     "should_block_marker_only_diff_summary",
 ]

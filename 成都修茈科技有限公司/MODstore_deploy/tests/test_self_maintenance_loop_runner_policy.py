@@ -1681,6 +1681,63 @@ def test_classify_diff_too_large_merge_review_detail():
     assert meta["veto_code"] == "diff-too-large"
     assert meta["branch_hint"] == "devfleet/cursor/sub-1-ee8a21"
     assert meta["actionable_code_findings"] is False
+    assert meta["review_diff_chars"] == 37810
+
+
+def test_classify_diff_too_large_merge_review_detail_327c02_budget():
+    meta = _classify_para_merge_review_detail(
+        "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+    )
+    assert meta["veto_code"] == "diff-too-large"
+    assert meta["review_diff_chars"] == 50140
+
+
+def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large-327",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/20260725T120000Z-fix-kb-defer-diff-too-large.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=12), "git_diff_chars": 29900}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_diff_too_large_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_auto_merge_policy_allows_modstore_only_under_diff_budget_during_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=5), "git_diff_chars": 12000}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory=memory)
+
+    assert result.get("reason") != "kb_paths_blocked_during_diff_too_large_remediation"
 
 
 def test_dynamic_low_risk_policy_blocks_kb_only_when_diff_too_large_veto_open():
@@ -1704,7 +1761,7 @@ def test_dynamic_low_risk_policy_blocks_kb_only_when_diff_too_large_veto_open():
     result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
 
     assert result["ok"] is False
-    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+    assert result["reason"] == "kb_paths_blocked_during_diff_too_large_remediation"
 
 
 def test_auto_merge_policy_blocks_branch_diff_over_para_review_budget(monkeypatch):
@@ -1752,6 +1809,7 @@ def test_reconcile_diff_too_large_merge_review_veto_prompts_focused_remediation(
     assert result["remediation_added"] == 1
     item = memory["open_items"][0]
     assert item["review_veto_code"] == "diff-too-large"
+    assert item.get("review_diff_chars") == 37810
     candidate = _resume_review_qa_candidate(memory)
     prompt = _code_task_text("run-followup", {"gaps": []}, memory, candidate)
     assert "DIFF TOO LARGE MERGE REVIEW VETO" in prompt
