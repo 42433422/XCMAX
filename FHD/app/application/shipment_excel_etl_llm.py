@@ -90,9 +90,11 @@ class AssistResult:
     confidence: float = 0.0
     reason: str = ""
     error: str = ""
+    model: str = ""
+    billing: dict[str, Any] = field(default_factory=dict)
 
     def as_public_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "used_llm": self.used_llm,
             "cache_hit": self.cache_hit,
             "ok": self.ok,
@@ -101,6 +103,11 @@ class AssistResult:
             "source_kind": self.source_kind,
             "header_row": self.header_row,
         }
+        if self.model:
+            out["model"] = self.model
+        if self.billing:
+            out["billing"] = dict(self.billing)
+        return out
 
 
 _CACHE_LOCK = threading.Lock()
@@ -238,6 +245,8 @@ def _cache_get(key: str) -> AssistResult | None:
             confidence=hit.confidence,
             reason=hit.reason,
             error=hit.error,
+            model=hit.model,
+            billing=dict(hit.billing or {}),
         )
 
 
@@ -254,6 +263,8 @@ def _cache_put(key: str, result: AssistResult) -> None:
             confidence=result.confidence,
             reason=result.reason,
             error=result.error,
+            model=result.model,
+            billing=dict(result.billing or {}),
         )
         _CACHE.move_to_end(key)
         while len(_CACHE) > _CACHE_MAX:
@@ -398,6 +409,17 @@ def assist_sheet_layout(probe: SheetProbe) -> AssistResult:
             profile="default",
         )
         normalized = _validate_and_normalize(result.data, probe)
+        if result.model:
+            normalized.model = str(result.model)
+        else:
+            try:
+                from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
+
+                normalized.model = str(resolve_default_chat_model() or "").strip()
+            except RECOVERABLE_ERRORS:
+                normalized.model = ""
+        if result.billing:
+            normalized.billing = dict(result.billing)
         if normalized.ok:
             _cache_put(key, normalized)
         return normalized
