@@ -261,7 +261,8 @@ def main() -> int:
         "steps": steps,
     }
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    # 不向 stdout 打印绝对路径/fixtures，避免 CI CodeQL clear-text-logging
+    print(json.dumps({"success": bool(ok), "report": str(report_path.name)}, ensure_ascii=False))
     return 0 if ok else 1
 
 

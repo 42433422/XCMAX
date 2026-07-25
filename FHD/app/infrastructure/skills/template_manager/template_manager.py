@@ -64,7 +64,7 @@ def get_template_info(template_id: int) -> dict | None:
     from sqlalchemy import text
 
     from app.db.session import get_db
-    from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
     tenant_sql, tenant_bind = templates_tenant_where_sql()
     with get_db() as db:
@@ -104,8 +104,8 @@ def create_template(template_name: str, template_type: str = "通用", **kwargs)
     from sqlalchemy import text
 
     from app.db.session import get_db
+    from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
     from app.infrastructure.tenant_scope import TenantScopeError
-    from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
 
     template_key = f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
     try:
@@ -177,7 +177,7 @@ def update_template(template_id: int, **updates) -> dict:
     from sqlalchemy import text
 
     from app.db.session import get_db
-    from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
     tenant_sql, tenant_bind = templates_tenant_where_sql()
     with get_db() as db:
@@ -228,7 +228,7 @@ def delete_template(template_id: int) -> dict:
     from sqlalchemy import text
 
     from app.db.session import get_db
-    from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
     tenant_sql, tenant_bind = templates_tenant_where_sql()
     with get_db() as db:

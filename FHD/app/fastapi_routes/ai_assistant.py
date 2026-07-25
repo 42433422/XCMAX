@@ -154,6 +154,8 @@ def compat_health():
 def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
     order_text = str(payload.get("order_text") or "").strip()
     template_name = payload.get("template_name")
+    template_id = payload.get("template_id")
+    preferred_template = payload.get("preferred_template") or payload.get("template")
 
     if not order_text:
         return _fail("请输入订单信息", 400)
@@ -175,11 +177,20 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
             unit_name=unit_name,
             products=products,
             template_name=template_name,
+            template_id=template_id,
+            preferred_template=preferred_template,
+            intent="shipment_generate",
+            raw_text=order_text,
         )
 
         if not result.get("success"):
+            safe_fail = {
+                "success": False,
+                "message": "生成失败",
+                "error_code": str(result.get("error_code") or "")[:64] or None,
+            }
             traced = _trace_ai_assistant_route(
-                dict(result),
+                safe_fail,
                 route="/api/generate",
                 action="generate_shipment_document",
                 body=payload,
@@ -199,6 +210,8 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
                     "order_number": result.get("order_number"),
                     "total_amount": result.get("total_amount"),
                     "total_quantity": result.get("total_quantity"),
+                    "template_resolution": result.get("template_resolution"),
+                    "products_source": result.get("products_source"),
                 },
                 message="发货单生成成功",
                 filename=doc_name,
@@ -210,7 +223,7 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
     except RECOVERABLE_ERRORS as e:
         logger.error("兼容 /api/generate 失败: %s", e, exc_info=True)
-        return _fail(f"生成失败: {str(e)}", 500)
+        return _fail("生成失败", 500)
 
 
 @router.get("/api/shipment-records/units")
@@ -381,7 +394,7 @@ def compat_print_diagnose():
         return JSONResponse({"success": True, "diagnostic": base})
     except RECOVERABLE_ERRORS as e:
         logger.error("打印机诊断失败: %s", e, exc_info=True)
-        return _fail(f"打印机诊断失败: {str(e)}", 500)
+        return _fail("打印机诊断失败", 500)
 
 
 @router.post("/api/print/{filename:path}")
@@ -493,28 +506,13 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
 
     try:
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
-
-        adapter = OpenAICompatibleAdapter(provider="xiaomi")
+        from app.application.tts_translate_app_service import translate_zh_to_en
 
         async def _run() -> str:
-            resp = await adapter.chat_completion(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a concise translator. Translate the user's Chinese text into natural English. "
-                            "Output ONLY the English translation, no quotes, no explanation."
-                        ),
-                    },
-                    {"role": "user", "content": text[:500]},
-                ],
-                temperature=0.2,
-                max_tokens=180,
-            )
-            choice0 = (resp.get("choices") or [None])[0] or {}
-            message = choice0.get("message") or {}
-            return str(message.get("content") or "").strip().strip('"').strip("'")
+            out = await translate_zh_to_en(text, max_chars=500)
+            if not out.get("success"):
+                raise RuntimeError(str(out.get("message") or "translate failed"))
+            return str(out.get("translation") or "").strip().strip('"').strip("'")
 
         try:
             en = asyncio.run(_run())

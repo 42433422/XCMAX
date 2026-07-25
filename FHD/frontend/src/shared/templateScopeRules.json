@@ -33,5 +33,10 @@
     "label": "销售报表",
     "templateType": "销售报表",
     "requiredTerms": ["销售金额", "实收款", "下欠款金额"]
+  },
+  "custom": {
+    "label": "自定义",
+    "templateType": "自定义模板",
+    "requiredTerms": []
   }
 }

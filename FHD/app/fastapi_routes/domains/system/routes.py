@@ -418,12 +418,59 @@ async def templates_analyze(
     file: UploadFile = File(...),
     template_name: str = Form(default=""),
     template_scope: str = Form(default=""),
+    auto_save: str = Form(default="0"),
 ):
+    """解析办公模板；``auto_save=1`` 时直接写入模版库（等同 upload）。"""
+    if str(auto_save or "").strip().lower() in {"1", "true", "yes", "on"}:
+        raw = await file.read()
+        from app.application.office_template_ingest_app_service import (
+            ingest_office_bytes_to_template_library,
+        )
+
+        data, code = ingest_office_bytes_to_template_library(
+            file_body=raw,
+            filename=str(file.filename or "upload.bin"),
+            template_name=template_name,
+            template_scope=template_scope,
+            source="templates_analyze_auto_save",
+        )
+        return JSONResponse(data, status_code=code)
+
     data, code = await _run_templates_analyze_agent(
         request=request,
         file=file,
         template_name=template_name,
         template_scope=template_scope,
+    )
+    return JSONResponse(data, status_code=code)
+
+
+@router.post("/api/templates/upload")
+async def templates_upload(
+    file: UploadFile = File(...),
+    template_name: str = Form(default=""),
+    name: str = Form(default=""),
+    template_scope: str = Form(default=""),
+    type: str = Form(default=""),
+    source: str = Form(default="office_upload"),
+):
+    """办公文件入口：解析并自动入库模版库（analyze → create）。"""
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+
+    raw = await file.read()
+    display_name = str(template_name or name or "").strip()
+    scope = str(template_scope or type or "").strip()
+    # 文档历史参数 type=excel|word|logo 不是 business_scope，避免误触发词条校验
+    if scope.lower() in {"excel", "word", "logo", "label", "image"}:
+        scope = ""
+    data, code = ingest_office_bytes_to_template_library(
+        file_body=raw,
+        filename=str(file.filename or "upload.bin"),
+        template_name=display_name,
+        template_scope=scope,
+        source=str(source or "office_upload").strip() or "office_upload",
     )
     return JSONResponse(data, status_code=code)
 

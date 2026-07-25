@@ -113,6 +113,17 @@ class InstrumentedProvider:
             telemetry.record_response(span, result, request_messages=messages)
             span.finish("ok")
             self._persist(span)
+            try:
+                from app.infrastructure.llm.platform_billing_pass import record_platform_billing
+
+                record_platform_billing(
+                    result,
+                    source=f"instrumented:{self.provider_id}",
+                    user_id=str(kwargs.get("user_id") or ""),
+                    run_id=str(kwargs.get("run_id") or ""),
+                )
+            except RECOVERABLE_ERRORS:
+                pass
             return result
         except RECOVERABLE_ERRORS:
             raise

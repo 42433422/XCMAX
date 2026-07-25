@@ -143,7 +143,7 @@ def _resolve_fallback_overrides(exclude_provider: str = "") -> list[dict[str, An
 
 
 async def _call_openai_compatible_chat(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     api_key: str,
     chat_url: str,
@@ -170,12 +170,89 @@ async def _call_openai_compatible_chat(
             r.raise_for_status()
             return cast("dict[str, Any] | None", r.json())
     except RECOVERABLE_ERRORS as e:  # noqa: BLE001
-        logger.exception("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", e)
+        logger.error("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", type(e).__name__)
         return None
 
 
+def _prefer_vlm_candidates(
+    candidates: list[dict[str, Any]],
+    *,
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """含 image_url 时，把已解析的 VLM 路由插到候选队首。"""
+    try:
+        from app.application.workflow.multimodal_user_content import messages_have_image_parts
+        from app.infrastructure.llm.vlm_route import resolve_vlm_route
+    except RECOVERABLE_ERRORS:
+        return candidates
+    if not messages_have_image_parts(messages):
+        return candidates
+
+    route = resolve_vlm_route()
+    if not route.get("ok"):
+        logger.warning("mod_employee_complete: 消息含图片但未配置 VLM：%s", route.get("message"))
+        return candidates
+
+    provider = str(route.get("provider") or "").strip().lower()
+    model = str(route.get("model") or "").strip()
+    if not provider or not model:
+        return candidates
+
+    # 尝试从已有候选里复用同 provider 的 key/url，仅替换 model
+    promoted: list[dict[str, Any]] = []
+    for cand in candidates:
+        if str(cand.get("provider") or "").strip().lower() != provider:
+            continue
+        row = dict(cand)
+        row["model"] = model
+        row["vlm_preferred"] = True
+        promoted.append(row)
+        break
+
+    if not promoted:
+        # 构造直连候选（若环境有 key）
+        env_key = os.environ.get(f"{provider.upper()}_API_KEY", "").strip()
+        if provider in {"openai", "b.ai"} and not env_key:
+            env_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        if provider == "qwen" and not env_key:
+            env_key = (
+                os.environ.get("DASHSCOPE_API_KEY", "").strip()
+                or os.environ.get("QWEN_API_KEY", "").strip()
+            )
+        base = os.environ.get(f"{provider.upper()}_BASE_URL", "").strip()
+        if provider in {"openai", "b.ai"} and not base:
+            base = os.environ.get("OPENAI_BASE_URL", "").strip()
+        if provider == "qwen" and not base:
+            base = os.environ.get("DASHSCOPE_BASE_URL", "").strip()
+        if env_key and base:
+            promoted.append(
+                {
+                    "use_direct": True,
+                    "api_key": env_key,
+                    "chat_url": _chat_url_from_base_url(base.rstrip("/")),
+                    "model": model,
+                    "provider": provider,
+                    "vlm_preferred": True,
+                }
+            )
+
+    if not promoted:
+        return candidates
+
+    # VLM 优先，其余去重后跟进
+    seen = {(str(p.get("provider")), str(p.get("model"))) for p in promoted}
+    rest = [c for c in candidates if (str(c.get("provider")), str(c.get("model"))) not in seen]
+    logger.info(
+        "mod_employee_complete: 启用 VLM 路由 %s/%s (source=%s)",
+        provider,
+        model,
+        route.get("source"),
+    )
+    return promoted + rest
+
+
 async def mod_employee_complete(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     max_tokens: int = 1024,
     temperature: float = 0.2,
@@ -187,6 +264,7 @@ async def mod_employee_complete(
         {"success": bool, "content": str, "error": str}
 
     ``response_format`` 若不为 None，会原样传入底层 API（若上游支持）。
+    消息含 ``image_url`` 时优先走 ``resolve_vlm_route()`` 视觉模型。
     """
     if not isinstance(messages, list) or not messages:
         return {"success": False, "content": "", "error": "messages 必须为非空列表"}
@@ -202,6 +280,7 @@ async def mod_employee_complete(
     if override.get("use_direct"):
         direct_candidates.append(override)
     direct_candidates.extend(_resolve_fallback_overrides(exclude_provider=primary_provider))
+    direct_candidates = _prefer_vlm_candidates(direct_candidates, messages=messages)
 
     for cand in direct_candidates:
         raw = await _call_openai_compatible_chat(
@@ -216,11 +295,10 @@ async def mod_employee_complete(
         if raw:
             parsed = _parse_chat_completions_response(raw)
             if parsed.get("success"):
-                if str(cand.get("provider") or "") != primary_provider:
+                if str(cand.get("provider") or "") != primary_provider or cand.get("vlm_preferred"):
+                    # 不从含 api_key 的 dict 取值写日志，避免 clear-text-logging
                     logger.warning(
-                        "mod_employee_complete: 主 LLM(%s) 不可用，已自动切换到 %s",
-                        primary_provider or "default",
-                        cand.get("provider"),
+                        "mod_employee_complete: 主 LLM 不可用或需视觉能力，已切换备用通道"
                     )
                 return parsed
     if direct_candidates:
@@ -254,6 +332,18 @@ async def mod_employee_complete(
     kwargs: dict[str, Any] = {}
     if response_format is not None:
         kwargs["response_format"] = response_format
+    # 宿主通道：若有 VLM 路由，显式传入 provider/model（服务支持时生效）
+    try:
+        from app.application.workflow.multimodal_user_content import messages_have_image_parts
+        from app.infrastructure.llm.vlm_route import resolve_vlm_route
+
+        if messages_have_image_parts(messages):
+            route = resolve_vlm_route()
+            if route.get("ok"):
+                kwargs["provider"] = route.get("provider")
+                kwargs["model"] = route.get("model")
+    except RECOVERABLE_ERRORS:
+        pass
 
     try:
         raw: dict[str, Any] | None = await svc.call_deepseek_api(

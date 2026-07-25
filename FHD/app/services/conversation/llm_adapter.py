@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -352,6 +354,13 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         response.raise_for_status()
 
         result = response.json()
+        if isinstance(result, dict):
+            try:
+                from app.infrastructure.llm.platform_billing_pass import attach_billing_meta
+
+                attach_billing_meta(result, headers=response.headers)
+            except RECOVERABLE_ERRORS:
+                pass
 
         logger.debug("LLM completion request succeeded")
 

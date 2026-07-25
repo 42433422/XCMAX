@@ -510,9 +510,13 @@ def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
             svc.generate_shipment_document(
                 unit_name=str(parsed.get("unit_name") or ""),
                 products=list(parsed.get("products") or []),
-                template_name=params.get("template_name"),
+                template_name=params.get("template_name") or params.get("template"),
+                template_id=params.get("template_id"),
+                preferred_template=params.get("preferred_template") or params.get("template"),
                 date=params.get("date"),
                 order_number=params.get("order_number"),
+                intent="shipment_generate",
+                allow_products_from_db=True,
                 raw_text=order_text or str(params.get("raw_text") or ""),
             ),
         )

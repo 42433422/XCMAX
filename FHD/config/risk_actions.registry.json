@@ -925,7 +925,7 @@
       }
     },
     "document_template": {
-      "description": "文档/Excel 模板库创建、更新与删除",
+      "description": "文档/Excel 模板库创建、更新、删除与解析入库",
       "availability": "shared",
       "actions": {
         "create": {
@@ -949,6 +949,20 @@
             "id"
           ],
           "availability": "shared"
+        },
+        "ingest": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "timeout_seconds": 120
+        },
+        "upload": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "timeout_seconds": 120
         }
       }
     },

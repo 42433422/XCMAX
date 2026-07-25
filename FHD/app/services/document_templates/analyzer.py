@@ -124,6 +124,14 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
             return _analyze_word_template(
                 file_path, template_name, file.filename, task_id, template_scope
             )
+        if file_ext in [".pptx", ".ppt"]:
+            return _analyze_pptx_template(
+                file_path, template_name, file.filename, task_id, template_scope
+            )
+        if file_ext == ".pdf":
+            return _analyze_pdf_template(
+                file_path, template_name, file.filename, task_id, template_scope
+            )
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
             return _analyze_label_template(file_path, template_name, file.filename, task_id)
 
@@ -138,6 +146,23 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
         traceback.print_exc()
 
         return _j({"success": False, "message": f"分析失败：{str(e)}"}, 500)
+
+
+def _pick_excel_analyze_sheet(file_path: str) -> str:
+    """网络/杂项单据常见表名；优先「出货」，否则回退活动表。"""
+    try:
+        from openpyxl import load_workbook
+
+        wb = load_workbook(file_path, read_only=True)
+        names = list(wb.sheetnames or [])
+        wb.close()
+    except RECOVERABLE_ERRORS:
+        return "出货"
+    preferred = ("出货", "送货单", "发货单", "送货", "出货明细", "Sheet1")
+    for name in preferred:
+        if name in names:
+            return name
+    return names[0] if names else "出货"
 
 
 def _analyze_excel_template(
@@ -155,10 +180,11 @@ def _analyze_excel_template(
         _update_progress(task_id, 10, 1, "文件上传成功")
 
         skill = get_excel_analyzer_skill()
+        sheet_name = _pick_excel_analyze_sheet(file_path)
 
-        _update_progress(task_id, 50, 2, "分析 Excel 结构...")
+        _update_progress(task_id, 50, 2, f"分析 Excel 结构（{sheet_name}）...")
 
-        analyze_result = skill.execute(file_path=file_path, sheet_name="出货")
+        analyze_result = skill.execute(file_path=file_path, sheet_name=sheet_name)
 
         if not analyze_result.get("success"):
             _cleanup_progress_tracking(task_id)
@@ -173,9 +199,11 @@ def _analyze_excel_template(
         merged_cells = analyze_result.get("merged_cells", [])
         structure = analyze_result.get("structure", {})
 
-        structured = _extract_structured_excel_preview(file_path, sheet_name="出货", sample_limit=8)
+        structured = _extract_structured_excel_preview(
+            file_path, sheet_name=sheet_name, sample_limit=8
+        )
         grid_preview = _extract_excel_grid_preview(
-            file_path, sheet_name="出货", max_rows=18, max_cols=12
+            file_path, sheet_name=sheet_name, max_rows=18, max_cols=12
         )
         fields = structured.get("fields") or []
 
@@ -307,75 +335,39 @@ def _analyze_word_template(
     task_id: str,
     template_scope: str = "",
 ):
-    try:
-        _update_progress(task_id, 15, 1, "文件上传成功")
-        _update_progress(task_id, 45, 2, "解析 Word 占位符...")
+    from app.application.office_template_analyze_handlers import analyze_word_template
 
-        fields, raw_placeholders, full_text = _extract_word_placeholder_fields(file_path)
-        if not fields:
-            _cleanup_progress_tracking(task_id)
-            _safe_remove(file_path)
-            return _j(
-                {
-                    "success": False,
-                    "message": (
-                        "未能从 Word 中识别占位符。请在正文、页眉或页脚中使用 "
-                        "{{字段名}}、${字段名}、{% 字段名 %} 或 [[字段名]] 等形式后再上传。"
-                    ),
-                },
-                400,
-            )
+    return analyze_word_template(
+        file_path, template_name, original_filename, task_id, template_scope
+    )
 
-        valid, missing_terms = _validate_required_terms({}, fields, template_scope)
-        if not valid:
-            _cleanup_progress_tracking(task_id)
-            _safe_remove(file_path)
-            return _j(
-                {
-                    "success": False,
-                    "message": "模板缺少必备词条，请补全占位符后重试",
-                    "required_terms": _get_template_scope_required_terms().get(template_scope, []),
-                    "missing_terms": missing_terms,
-                },
-                400,
-            )
 
-        name = (
-            template_name
-            if template_name
-            else original_filename.replace(".docx", "").replace(".doc", "")
-        )
+def _analyze_pptx_template(
+    file_path: str,
+    template_name: str,
+    original_filename: str,
+    task_id: str,
+    template_scope: str = "",
+):
+    from app.application.office_template_analyze_handlers import analyze_pptx_template
 
-        snippet = full_text.strip().replace("\n", " ")
-        if len(snippet) > 400:
-            snippet = snippet[:400] + "…"
+    return analyze_pptx_template(
+        file_path, template_name, original_filename, task_id, template_scope
+    )
 
-        _mark_progress_completed(task_id, 100, 3, "分析完成！")
 
-        return _j(
-            {
-                "success": True,
-                "task_id": task_id,
-                "template_name": name,
-                "template_type": "word",
-                "fields": fields,
-                "preview_data": {
-                    "file_path": file_path,
-                    "original_filename": original_filename,
-                    "placeholders": raw_placeholders,
-                    "text_snippet": snippet,
-                },
-            }
-        )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("分析 Word 模板失败：%s", e)
-        import traceback
+def _analyze_pdf_template(
+    file_path: str,
+    template_name: str,
+    original_filename: str,
+    task_id: str,
+    template_scope: str = "",
+):
+    from app.application.office_template_analyze_handlers import analyze_pdf_template
 
-        traceback.print_exc()
-        _cleanup_progress_tracking(task_id)
-        _safe_remove(file_path)
-
-        return _j({"success": False, "message": f"分析 Word 失败：{str(e)}"}, 500)
+    return analyze_pdf_template(
+        file_path, template_name, original_filename, task_id, template_scope
+    )
 
 
 def _analyze_label_template(

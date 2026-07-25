@@ -149,6 +149,8 @@
           "test_llm_key_health",
           "query_provider_usage",
           "compare_model_prices",
+          "list_vlm_models",
+          "get_vlm_route",
           "query_local_token_usage",
           "query_cursor_usage",
           "query_codex_usage",
@@ -165,6 +167,7 @@
         "app/infrastructure/llm/**",
         "app/mod_sdk/mod_employee_llm.py",
         "app/application/employee_runtime/agent_runner.py",
+        "app/application/office_template_media_bridge.py",
         "app/legacy/llm_config*",
         "yuangon/server-and-ops/llm-ops-engineer/**"
       ],

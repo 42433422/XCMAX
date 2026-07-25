@@ -44,6 +44,8 @@ class StructuredResult:
     attempts: int
     repaired: bool
     trace_id: str | None = None
+    billing: dict[str, Any] | None = None
+    model: str = ""
 
 
 def extract_json(content: str) -> dict[str, Any] | None:
@@ -147,11 +149,22 @@ async def complete_structured(
         else:
             ok, message = validate_payload(schema, data)
             if ok:
+                billing: dict[str, Any] = {}
+                try:
+                    from app.infrastructure.llm.platform_billing_pass import (
+                        billing_meta_from_response,
+                    )
+
+                    billing = billing_meta_from_response(result)
+                except RECOVERABLE_ERRORS:
+                    billing = {}
                 return StructuredResult(
                     data=data,
                     attempts=attempt,
                     repaired=attempt > 1,
                     trace_id=_current_trace_id(),
+                    billing=billing or None,
+                    model=str(result.get("model") or billing.get("resolved_model") or ""),
                 )
             last_errors = [message]
         attempt_messages = [

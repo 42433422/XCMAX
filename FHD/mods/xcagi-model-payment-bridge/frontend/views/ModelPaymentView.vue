@@ -153,9 +153,33 @@
         <summary class="mp-fold-title">
           模型支持
           <span v-if="llmProviders.length" class="mp-fold-badge">{{ llmProviders.length }} 家供应商</span>
+          <span v-if="catalogCategorySummary" class="mp-fold-badge">{{ catalogCategorySummary }}</span>
         </summary>
         <p v-if="llmCatalogMessage" class="mp-sync-message">{{ llmCatalogMessage }}</p>
         <div v-if="llmCatalogLoading && !llmProviders.length" class="mp-loading muted">正在同步模型目录...</div>
+        <div v-else-if="modelsByCategory.length" class="mp-cat-list">
+          <section
+            v-for="bucket in modelsByCategory"
+            :key="bucket.category"
+            class="mp-cat-block"
+          >
+            <header class="mp-cat-head">
+              <strong>{{ bucket.label }}</strong>
+              <small>{{ bucket.models.length }} 个</small>
+            </header>
+            <ul class="mp-cat-models">
+              <li v-for="m in bucket.models.slice(0, 12)" :key="`${m.provider}/${m.id}`">
+                <span class="mp-cat-model-id">{{ m.provider }}/{{ m.id }}</span>
+                <span v-if="m.runtime_selectable" class="mp-cat-tag">可路由</span>
+                <span v-if="m.chat_compatible" class="mp-cat-tag mp-cat-tag--chat">对话</span>
+                <span v-if="m.priceText" class="mp-cat-price">{{ m.priceText }}</span>
+              </li>
+            </ul>
+            <p v-if="bucket.models.length > 12" class="muted mp-cat-more">
+              另有 {{ bucket.models.length - 12 }} 个未展开
+            </p>
+          </section>
+        </div>
         <div v-else-if="llmProviders.length" class="mp-llm-grid mp-llm-grid--scroll" role="list">
           <article
             v-for="provider in llmProviders"
@@ -666,6 +690,100 @@ const llmProviders = computed<MarketLlmProvider[]>(() => (
     .filter((p) => p && p.provider)
     .sort((a, b) => providerModelCount(b) - providerModelCount(a))
 ));
+
+type CatalogModelRow = {
+  provider: string;
+  id: string;
+  category: string;
+  runtime_selectable?: boolean;
+  chat_compatible?: boolean;
+  priceText?: string;
+};
+
+const CATEGORY_ORDER = ['llm', 'vlm', 'image', 'video', 'audio', 'embedding', 'rerank', 'other'];
+
+const DEFAULT_CATEGORY_LABELS: Record<string, string> = {
+  llm: '语言大模型 (LLM)',
+  vlm: '视觉 / 多模态 (VLM)',
+  image: '图像生成',
+  video: '视频生成',
+  audio: '语音 / 音频',
+  embedding: '向量嵌入',
+  rerank: '重排 / 相关性',
+  other: '其他',
+};
+
+function formatModelPrice(pricing: Record<string, unknown> | undefined): string {
+  if (!pricing || typeof pricing !== 'object') return '';
+  const inn = pricing.input_per_1k ?? pricing.input_price_per_1k ?? pricing.in;
+  const out = pricing.output_per_1k ?? pricing.output_price_per_1k ?? pricing.out;
+  const parts: string[] = [];
+  if (inn != null && inn !== '') parts.push(`入¥${inn}/1k`);
+  if (out != null && out !== '') parts.push(`出¥${out}/1k`);
+  return parts.join(' · ');
+}
+
+const modelsByCategory = computed(() => {
+  const labels = {
+    ...DEFAULT_CATEGORY_LABELS,
+    ...(llmCatalog.value?.category_labels || {}),
+  };
+  const buckets = new Map<string, CatalogModelRow[]>();
+  for (const provider of llmProviders.value) {
+    const detailed = Array.isArray(provider.models_detailed) ? provider.models_detailed : [];
+    if (detailed.length) {
+      for (const row of detailed) {
+        if (!row || typeof row !== 'object') continue;
+        const id = String((row as Record<string, unknown>).id || '').trim();
+        if (!id) continue;
+        const category = String((row as Record<string, unknown>).category || 'other').toLowerCase();
+        const pricing = (row as Record<string, unknown>).pricing;
+        const list = buckets.get(category) || [];
+        list.push({
+          provider: provider.provider,
+          id,
+          category,
+          runtime_selectable: Boolean((row as Record<string, unknown>).runtime_selectable),
+          chat_compatible: category === 'llm' || category === 'vlm',
+          priceText: formatModelPrice(
+            pricing && typeof pricing === 'object'
+              ? (pricing as Record<string, unknown>)
+              : undefined,
+          ),
+        });
+        buckets.set(category, list);
+      }
+      continue;
+    }
+    // 无 detailed 时退化为 models 列表，归入 llm
+    for (const mid of provider.models || []) {
+      const id = String(mid || '').trim();
+      if (!id) continue;
+      const list = buckets.get('llm') || [];
+      list.push({
+        provider: provider.provider,
+        id,
+        category: 'llm',
+        chat_compatible: true,
+      });
+      buckets.set('llm', list);
+    }
+  }
+  return CATEGORY_ORDER
+    .filter((c) => (buckets.get(c) || []).length > 0)
+    .map((category) => ({
+      category,
+      label: labels[category] || category,
+      models: buckets.get(category) || [],
+    }));
+});
+
+const catalogCategorySummary = computed(() => {
+  if (!modelsByCategory.value.length) return '';
+  return modelsByCategory.value
+    .map((b) => `${b.label.split(' ')[0]}${b.models.length}`)
+    .join(' · ');
+});
 
 function providerModelCount(provider: MarketLlmProvider): number {
   if (Array.isArray(provider.models_detailed) && provider.models_detailed.length) {
@@ -1726,6 +1844,82 @@ onUnmounted(() => {
 .mp-recharge-card span {
   color: #64748b;
   font-size: 0.8rem;
+}
+
+.mp-cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.mp-cat-block {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.mp-cat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mp-cat-head strong {
+  font-size: 0.9rem;
+}
+
+.mp-cat-head small {
+  color: #64748b;
+}
+
+.mp-cat-models {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mp-cat-models li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.78rem;
+  color: #334155;
+}
+
+.mp-cat-model-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mp-cat-tag {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.mp-cat-tag--chat {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.mp-cat-price {
+  margin-left: auto;
+  color: #64748b;
+}
+
+.mp-cat-more {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
 }
 
 </style>
