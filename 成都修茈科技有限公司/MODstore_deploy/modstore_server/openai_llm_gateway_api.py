@@ -190,7 +190,9 @@ async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[s
                         category=str(row.get("category") or "other"),
                         display_name=str(row.get("display_name") or mid),
                         runtime_selectable=bool(row.get("runtime_selectable")),
-                        pricing=row.get("pricing") if isinstance(row.get("pricing"), dict) else None,
+                        pricing=(
+                            row.get("pricing") if isinstance(row.get("pricing"), dict) else None
+                        ),
                         capabilities=(
                             row.get("capabilities")
                             if isinstance(row.get("capabilities"), dict)

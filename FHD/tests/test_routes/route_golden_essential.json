@@ -324,6 +324,7 @@
   "/api/xcmax/ops/founder-autonomy",
   "/api/xcmax/ops/jobs",
   "/api/xcmax/ops/jobs/{job_id}",
+  "/api/xcmax/ops/runtime-inventory",
   "/api/xcmax/ops/staffing/close-gap",
   "/api/xcmax/ops/staffing/install-local",
   "/api/xcmax/ops/staffing/onboard",
