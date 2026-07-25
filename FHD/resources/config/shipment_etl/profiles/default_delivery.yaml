@@ -1,0 +1,186 @@
+# 送货单 / 出货流水 ETL 默认版式（外置，引擎不硬编码这些字符串）
+id: default
+kind: delivery_note
+
+detect:
+  delivery:
+    title_patterns:
+      - "送货单"
+    title_weight: 50
+    buyer_token: "购货单位"
+    buyer_weight: 25
+    header_hit_tokens:
+      - "产品型号"
+      - "产品名称"
+      - "数量/件"
+      - "数量件"
+      - "规格/kg"
+      - "规格kg"
+      - "单价"
+    header_hit_weight: 6
+    header_hit_cap: 5
+    bonus_tokens:
+      - token: "金额"
+        weight: 5
+    min_score: 60
+    probe_rows: 8
+  ledger:
+    sheet_name_pattern: "出货|流水|明细"
+    content_tokens:
+      - "出货"
+      - "流水"
+    sheet_weight: 20
+    hit_tokens:
+      - "日期"
+      - "单号"
+      - "型号"
+      - "品名"
+      - "名称"
+      - "数量"
+      - "单价"
+    hit_weight: 10
+    hit_cap: 6
+    bonus_require_token: "购货单位"
+    bonus_exclude_token: "送货单"
+    bonus_weight: 5
+    suppress_if_delivery_score_gte: 60
+    probe_rows: 10
+
+meta:
+  buyer_pattern: "购货单位[（(]?[乙乙方]*[)）]?[：:\\s]*([^\\s联系人日期订单编号]+(?:\\s*[家私厂公司化工柜]*)?)"
+  buyer_split_pattern: "购货单位[（(]?[乙乙方]*[)）]?[：:]"
+  buyer_stop_pattern: "联系人|日期|订单编号"
+  buyer_label: "购货单位"
+  contact_pattern: "联系人[：:\\s]*([^\\s日期订单编号购货]*)"
+  date_pattern: "((?:20)?\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日|\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})"
+  order_no_pattern: "订单编号[：:\\s]*([A-Za-z0-9\\-]+)"
+  stop_row_pattern: "大\\s*写|销售协议|销售单位|销售负责人|一式四联"
+
+header_detect:
+  delivery:
+    max_scan_rows: 12
+    require_groups:
+      - ["型号", "编号"]
+      - ["名称", "品名"]
+      - ["数量"]
+  ledger:
+    max_scan_rows: 16
+    require_groups:
+      - ["单号"]
+      - ["品名", "名称"]
+      - ["数量"]
+    and_any_groups:
+      - ["型号", "编号"]
+      - ["规格"]
+
+columns:
+  model_number:
+    - contains_any: ["型号"]
+    - contains_any: ["编号"]
+      exclude_any: ["订单", "单号"]
+  product_name:
+    - contains_any: ["名称", "品名"]
+  quantity_tins:
+    - contains_all_groups:
+        - ["数量"]
+        - ["件", "桶"]
+    - exact: ["数量", "数量/"]
+      only_if_missing: ["quantity_tins", "quantity_kg"]
+  tin_spec:
+    - contains_any: ["规格"]
+  quantity_kg:
+    - contains_all_groups:
+        - ["数量"]
+        - ["kg", "公斤"]
+  unit_price:
+    - contains_any: ["单价", "价格"]
+  amount:
+    - contains_any: ["金额"]
+  remark:
+    - contains_any: ["备注"]
+  order_number:
+    - contains_any: ["单号"]
+  order_date:
+    - contains_any: ["日期", "打单", "购货日"]
+
+ledger:
+  title_template: "{unit}出货流水/{order_no}"
+
+write:
+  seller_title: "成都修茈测试工厂送货单"
+  default_sheet_name: "送货单"
+  sheet_name_prefix: "送货"
+  meta_line_template: "购货单位（乙方）：{unit}     联系人：{contact}        日期：{order_date}         订单编号：{order_no}"
+  demo_meta_line: "购货单位（乙方）：示例客户     联系人：测试        日期：2026年07月24日         订单编号：DEMO-0001"
+  header_row:
+    - "产品型号"
+    - ""
+    - ""
+    - "产品名称"
+    - "数量/件"
+    - "规格/KG"
+    - "数量/KG"
+    - "单价/元"
+    - "金额/元"
+  footer_label: "大 写：测试联"
+  date_format: "%Y年%m月%d日"
+  item_columns:
+    model_number: 1
+    product_name: 4
+    quantity_tins: 5
+    tin_spec: 6
+    quantity_kg: 7
+    unit_price: 8
+    amount: 9
+  demo_item:
+    model_number: "RX-DEMO"
+    product_name: "PU哑光清漆"
+    quantity_tins: 2
+    tin_spec: 25
+    quantity_kg: 50
+    unit_price: 18
+    amount: 900
+  ledger_sheet_name: "25出货"
+  ledger_extra_sheet: "已调价"
+  ledger_default_unit: "流水测试客户"
+  ledger_header_row:
+    - "日期"
+    - "单号"
+    - "产品型号"
+    - ""
+    - ""
+    - "产品名称"
+    - "数量/件"
+    - "规格/KG"
+    - "数量/KG"
+    - "单价/元"
+    - "金额/元"
+  ledger_item_columns:
+    order_date: 1
+    order_number: 2
+    model_number: 3
+    product_name: 6
+    quantity_tins: 7
+    tin_spec: 8
+    quantity_kg: 9
+    unit_price: 10
+    amount: 11
+  ledger_sample_rows:
+    - order_date: "2026-07-01"
+      order_number: "L-001"
+      model_number: "GS621"
+      product_name: "PE白底漆"
+      quantity_tins: 2
+      tin_spec: 25
+      quantity_kg: 50
+      unit_price: 8.5
+      amount: 425
+    - order_date: "2026-07-02"
+      order_number: "L-002"
+      model_number: "RX001"
+      product_name: "PU哑光漆"
+      quantity_tins: 1
+      tin_spec: 20
+      quantity_kg: 20
+      unit_price: 17
+      amount: 340

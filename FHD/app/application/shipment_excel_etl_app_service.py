@@ -1,8 +1,8 @@
 """发货单 / 出货流水 Excel ETL：识别 → 预览 → 幂等入库 → 模板回写。
 
-识别依据（非文件名）：
-- 送货单：标题含「送货单」+ 购货单位 + 型号/名称/数量表头
-- 出货流水：表头含 日期/单号/型号/品名/数量，按单号分组
+版式（标题/表头别名/打分 token/写出模板）来自 YAML profile，
+见 ``app.application.shipment_etl_profile`` 与
+``resources/config/shipment_etl/profiles/``。
 
 闭环能力：
 - preview / execute（客户+产品+发货单，指纹幂等）
@@ -20,22 +20,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.application.shipment_etl_profile import (
+    ShipmentEtlProfile,
+    column_rule_matches,
+    get_shipment_etl_profile,
+    header_groups_match,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-_DELIVERY_TITLE_RE = re.compile(r"送货单")
-_BUYER_RE = re.compile(
-    r"购货单位[（(]?[乙乙方]*[)）]?[：:\s]*([^\s联系人日期订单编号]+(?:\s*[家私厂公司化工柜]*)?)",
-    re.UNICODE,
-)
-_CONTACT_RE = re.compile(r"联系人[：:\s]*([^\s日期订单编号购货]*)")
-_DATE_RE = re.compile(
-    r"((?:20)?\d{2}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\d{4}[-/]\d{1,2}[-/]\d{1,2})"
-)
-_ORDER_NO_RE = re.compile(r"订单编号[：:\s]*([A-Za-z0-9\-]+)")
-_STOP_ROW_RE = re.compile(r"大\s*写|销售协议|销售单位|销售负责人|一式四联")
-_LEDGER_SHEET_RE = re.compile(r"出货|流水|明细")
+
+def _resolve_profile(profile: ShipmentEtlProfile | None = None, profile_id: str | None = None) -> ShipmentEtlProfile:
+    if profile is not None:
+        return profile
+    return get_shipment_etl_profile(profile_id)
 
 
 def _norm_cell(value: Any) -> str:
@@ -84,107 +83,121 @@ def _joined_row(ws, row: int, max_col: int = 16) -> str:
     return " ".join(_row_texts(ws, row, max_col))
 
 
-def _score_delivery_sheet(ws) -> int:
-    """内容指纹打分：越高越像国圣系送货单。"""
-    score = 0
-    probe_rows = min(8, int(ws.max_row or 0))
+def _token_in_compact(token: str, compact: str) -> bool:
+    """忽略斜杠差异的包含匹配。"""
+    t = str(token or "")
+    if not t:
+        return False
+    if t in compact:
+        return True
+    return t.replace("/", "") in compact.replace("/", "").lower() or t.lower() in compact.lower()
+
+
+def _score_delivery_sheet(ws, profile: ShipmentEtlProfile) -> int:
+    """内容指纹打分：规则来自 profile.detect.delivery。"""
+    cfg = profile.detect.get("delivery") or {}
+    probe_n = int(cfg.get("probe_rows") or 8)
+    probe_rows = min(probe_n, int(ws.max_row or 0))
     blob = " ".join(_joined_row(ws, r) for r in range(1, probe_rows + 1))
     compact = _norm_cell(blob)
-    if _DELIVERY_TITLE_RE.search(blob):
-        score += 50
-    if "购货单位" in compact:
-        score += 25
+    score = 0
+    if profile.meta_patterns.title.search(blob):
+        score += int(cfg.get("title_weight") or 50)
+    buyer_token = str(cfg.get("buyer_token") or "")
+    if buyer_token and buyer_token in compact:
+        score += int(cfg.get("buyer_weight") or 25)
     header_hits = 0
-    for token in ("产品型号", "产品名称", "数量/件", "数量件", "规格/kg", "规格kg", "单价"):
-        if token.replace("/", "") in compact.replace("/", "").lower() or token in compact:
+    for token in cfg.get("header_hit_tokens") or []:
+        if _token_in_compact(str(token), compact):
             header_hits += 1
-    score += min(header_hits, 5) * 6
-    if "金额" in compact:
-        score += 5
+    score += min(header_hits, int(cfg.get("header_hit_cap") or 5)) * int(
+        cfg.get("header_hit_weight") or 6
+    )
+    for bonus in cfg.get("bonus_tokens") or []:
+        if not isinstance(bonus, dict):
+            continue
+        tok = str(bonus.get("token") or "")
+        if tok and tok in compact:
+            score += int(bonus.get("weight") or 0)
     return score
 
 
-def _score_ledger_sheet(ws) -> int:
-    """出货流水打分（无「送货单」抬头时使用）。"""
-    if _score_delivery_sheet(ws) >= 60:
+def _score_ledger_sheet(ws, profile: ShipmentEtlProfile) -> int:
+    """出货流水打分：规则来自 profile.detect.ledger。"""
+    cfg = profile.detect.get("ledger") or {}
+    suppress_at = int(cfg.get("suppress_if_delivery_score_gte") or 60)
+    if _score_delivery_sheet(ws, profile) >= suppress_at:
         return 0
-    probe_rows = min(10, int(ws.max_row or 0))
+    probe_n = int(cfg.get("probe_rows") or 10)
+    probe_rows = min(probe_n, int(ws.max_row or 0))
     blob = " ".join(_joined_row(ws, r) for r in range(1, probe_rows + 1))
     compact = _norm_cell(blob)
     score = 0
-    if _LEDGER_SHEET_RE.search(str(ws.title or "")) or "出货" in compact or "流水" in compact:
-        score += 20
+    sheet_hit = bool(profile.meta_patterns.ledger_sheet.search(str(ws.title or "")))
+    content_tokens = [str(t) for t in (cfg.get("content_tokens") or [])]
+    if sheet_hit or any(t in compact for t in content_tokens if t):
+        score += int(cfg.get("sheet_weight") or 20)
     hits = 0
-    for token in ("日期", "单号", "型号", "品名", "名称", "数量", "单价"):
-        if token in compact:
+    for token in cfg.get("hit_tokens") or []:
+        if str(token) in compact:
             hits += 1
-    score += min(hits, 6) * 10
-    if "购货单位" in compact and "送货单" not in compact:
-        score += 5
+    score += min(hits, int(cfg.get("hit_cap") or 6)) * int(cfg.get("hit_weight") or 10)
+    bonus_req = str(cfg.get("bonus_require_token") or "")
+    bonus_exc = str(cfg.get("bonus_exclude_token") or "")
+    if bonus_req and bonus_req in compact and (not bonus_exc or bonus_exc not in compact):
+        score += int(cfg.get("bonus_weight") or 0)
     return score
 
 
-def _find_header_row(ws) -> int | None:
-    for row in range(1, min(12, int(ws.max_row or 0) + 1)):
+def _find_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
+    cfg = (profile.header_detect.get("delivery") or {})
+    max_scan = int(cfg.get("max_scan_rows") or 12)
+    groups = cfg.get("require_groups") or []
+    for row in range(1, min(max_scan, int(ws.max_row or 0) + 1)):
         compact = _norm_header(_joined_row(ws, row))
-        has_model = "型号" in compact or "编号" in compact
-        has_name = "名称" in compact or "品名" in compact
-        has_qty = "数量" in compact
-        if has_model and has_name and has_qty:
+        if header_groups_match(compact, groups):
             return row
     return None
 
 
-def _find_ledger_header_row(ws) -> int | None:
-    for row in range(1, min(16, int(ws.max_row or 0) + 1)):
+def _find_ledger_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
+    cfg = (profile.header_detect.get("ledger") or {})
+    max_scan = int(cfg.get("max_scan_rows") or 16)
+    groups = cfg.get("require_groups") or []
+    and_any = cfg.get("and_any_groups") or []
+    for row in range(1, min(max_scan, int(ws.max_row or 0) + 1)):
         compact = _norm_header(_joined_row(ws, row))
-        has_order = "单号" in compact
-        has_name = "品名" in compact or "名称" in compact
-        has_qty = "数量" in compact
-        has_model = "型号" in compact or "编号" in compact
-        if has_order and has_name and has_qty and (has_model or "规格" in compact):
-            return row
+        if not header_groups_match(compact, groups):
+            continue
+        if and_any:
+            if not any(header_groups_match(compact, [g]) for g in and_any):
+                continue
+        return row
     return None
 
 
-def _map_headers(ws, header_row: int) -> dict[str, int]:
+def _map_headers(ws, header_row: int, profile: ShipmentEtlProfile) -> dict[str, int]:
     mapping: dict[str, int] = {}
+    # Preserve original field priority order from profile columns declaration.
+    field_order = list(profile.columns.keys())
     for col in range(1, min(16, int(ws.max_column or 0) + 1)):
         key = _norm_header(ws.cell(header_row, col).value)
         if not key:
             continue
-        if (
-            "型号" in key or ("编号" in key and "订单" not in key and "单号" not in key)
-        ) and "model_number" not in mapping:
-            mapping["model_number"] = col
-        elif ("名称" in key or "品名" in key) and "product_name" not in mapping:
-            mapping["product_name"] = col
-        elif ("数量" in key and ("件" in key or "桶" in key)) and "quantity_tins" not in mapping:
-            mapping["quantity_tins"] = col
-        elif ("规格" in key) and "tin_spec" not in mapping:
-            mapping["tin_spec"] = col
-        elif ("数量" in key and ("kg" in key or "公斤" in key)) and "quantity_kg" not in mapping:
-            mapping["quantity_kg"] = col
-        elif (
-            key in {"数量", "数量/"}
-            and "quantity_tins" not in mapping
-            and "quantity_kg" not in mapping
-        ):
-            mapping["quantity_tins"] = col
-        elif ("单价" in key or "价格" in key) and "unit_price" not in mapping:
-            mapping["unit_price"] = col
-        elif ("金额" in key) and "amount" not in mapping:
-            mapping["amount"] = col
-        elif ("备注" in key) and "remark" not in mapping:
-            mapping["remark"] = col
-        elif "单号" in key and "order_number" not in mapping:
-            mapping["order_number"] = col
-        elif ("日期" in key or "打单" in key or "购货日" in key) and "order_date" not in mapping:
-            mapping["order_date"] = col
+        for field_name in field_order:
+            if field_name in mapping:
+                continue
+            for rule in profile.columns.get(field_name) or []:
+                only_if_missing = [str(x) for x in (rule.get("only_if_missing") or [])]
+                if only_if_missing and any(f in mapping for f in only_if_missing):
+                    continue
+                if column_rule_matches(key, rule):
+                    mapping[field_name] = col
+                    break
     return mapping
 
 
-def _parse_buyer_meta(ws, header_row: int) -> dict[str, str]:
+def _parse_buyer_meta(ws, header_row: int, profile: ShipmentEtlProfile) -> dict[str, str]:
     meta = {
         "unit_name": "",
         "contact_person": "",
@@ -192,32 +205,34 @@ def _parse_buyer_meta(ws, header_row: int) -> dict[str, str]:
         "order_number": "",
         "title": "",
     }
+    mp = profile.meta_patterns
     for row in range(1, header_row):
         text = _joined_row(ws, row)
         if not text:
             continue
-        if not meta["title"] and _DELIVERY_TITLE_RE.search(text):
+        if not meta["title"] and mp.title.search(text):
             meta["title"] = text.strip()
-        buyer = _BUYER_RE.search(text.replace("　", " "))
+        buyer = mp.buyer.search(text.replace("　", " "))
         if buyer and not meta["unit_name"]:
             meta["unit_name"] = buyer.group(1).strip(" ：:　")
-        contact = _CONTACT_RE.search(text)
+        contact = mp.contact.search(text)
         if contact and not meta["contact_person"]:
             meta["contact_person"] = contact.group(1).strip(" ：:　")
-        date_m = _DATE_RE.search(text)
+        date_m = mp.date.search(text)
         if date_m and not meta["order_date"]:
             meta["order_date"] = date_m.group(1).replace(" ", "")
-        order_m = _ORDER_NO_RE.search(text)
+        order_m = mp.order_no.search(text)
         if order_m and not meta["order_number"]:
             meta["order_number"] = order_m.group(1).strip()
     if not meta["unit_name"]:
+        label = mp.buyer_label
         for row in range(1, header_row):
             text = _joined_row(ws, row)
-            if "购货单位" not in text:
+            if label not in text:
                 continue
-            after = re.split(r"购货单位[（(]?[乙乙方]*[)）]?[：:]", text, maxsplit=1)
+            after = mp.buyer_split.split(text, maxsplit=1)
             if len(after) > 1:
-                chunk = re.split(r"联系人|日期|订单编号", after[1], maxsplit=1)[0]
+                chunk = mp.buyer_stop.split(after[1], maxsplit=1)[0]
                 meta["unit_name"] = chunk.strip(" ：:　")
                 break
     return meta
@@ -270,14 +285,16 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
     }
 
 
-def _parse_items(ws, header_row: int, mapping: dict[str, int]) -> list[dict[str, Any]]:
+def _parse_items(
+    ws, header_row: int, mapping: dict[str, int], profile: ShipmentEtlProfile
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     max_row = int(ws.max_row or 0)
     for row in range(header_row + 1, max_row + 1):
         joined = _joined_row(ws, row)
         if not joined:
             continue
-        if _STOP_ROW_RE.search(joined):
+        if profile.meta_patterns.stop_row.search(joined):
             break
         item = _build_item_from_row(ws, row, mapping)
         if item:
@@ -393,34 +410,213 @@ def _enrich_note(note: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _parse_delivery_sheet(ws, *, fallback_unit: str) -> dict[str, Any] | None:
-    header_row = _find_header_row(ws)
-    if header_row is None:
-        return None
-    mapping = _map_headers(ws, header_row)
-    if "product_name" not in mapping and "model_number" not in mapping:
-        return None
-    meta = _parse_buyer_meta(ws, header_row)
-    items = _parse_items(ws, header_row, mapping)
-    if not items:
-        return None
-    unit = meta["unit_name"] or fallback_unit
-    return _enrich_note(
-        {
-            "sheet": ws.title,
-            "source_kind": "delivery_note",
-            "score": _score_delivery_sheet(ws),
-            "unit_name": unit,
-            "contact_person": meta["contact_person"],
-            "order_date": meta["order_date"],
-            "order_number": meta["order_number"],
-            "title": meta["title"],
-            "items": items,
-        }
+def _build_sheet_probe(
+    ws,
+    profile: ShipmentEtlProfile,
+    *,
+    rule_hint: dict[str, Any] | None = None,
+) -> Any:
+    from app.application.shipment_excel_etl_llm import SheetProbe
+
+    max_row = int(ws.max_row or 0)
+    max_col = min(16, int(ws.max_column or 0) or 16)
+    probe_n = min(10, max_row)
+    probe_rows: list[dict[str, Any]] = []
+    for row in range(1, probe_n + 1):
+        cells = []
+        for col in range(1, max_col + 1):
+            raw = ws.cell(row, col).value
+            if raw is None or str(raw).strip() == "":
+                continue
+            cells.append({"col": col, "text": str(raw).strip()[:80]})
+        if cells:
+            probe_rows.append({"row": row, "cells": cells})
+
+    candidate_headers: list[dict[str, Any]] = []
+    for row in range(1, min(16, max_row) + 1):
+        cells = []
+        for col in range(1, max_col + 1):
+            raw = ws.cell(row, col).value
+            text = str(raw).strip() if raw is not None else ""
+            if not text:
+                continue
+            samples: list[str] = []
+            for r in range(row + 1, min(row + 4, max_row + 1)):
+                sv = ws.cell(r, col).value
+                if sv is None or str(sv).strip() == "":
+                    continue
+                samples.append(str(sv).strip()[:40])
+                if len(samples) >= 3:
+                    break
+            cells.append({"col": col, "header": text[:80], "samples": samples})
+        if len(cells) >= 2:
+            candidate_headers.append({"row": row, "cells": cells})
+
+    return SheetProbe(
+        profile_id=profile.id,
+        sheet_title=str(ws.title or ""),
+        probe_rows=probe_rows,
+        candidate_headers=candidate_headers[:8],
+        max_row=max_row,
+        max_col=max_col,
+        rule_hint=dict(rule_hint or {}),
     )
 
 
-def _excel_date_to_str(value: Any) -> str:
+def _merge_meta(base: dict[str, str], overlay: dict[str, str]) -> dict[str, str]:
+    out = dict(base)
+    for key in ("unit_name", "contact_person", "order_date", "order_number", "title"):
+        val = str((overlay or {}).get(key) or "").strip()
+        if val and not str(out.get(key) or "").strip():
+            out[key] = val
+    return out
+
+
+def _apply_llm_assist_to_layout(
+    ws,
+    profile: ShipmentEtlProfile,
+    *,
+    delivery_score: int,
+    ledger_score: int,
+    min_score: int,
+    header_row: int | None,
+    mapping: dict[str, int],
+    meta: dict[str, str] | None,
+    prefer_kind: str | None,
+) -> tuple[int | None, dict[str, int], dict[str, str], str | None, dict[str, Any]]:
+    """低置信时请求 LLM；返回 (header_row, mapping, meta, source_kind, assist_public)."""
+    from app.application.shipment_excel_etl_llm import (
+        assist_sheet_layout,
+        needs_llm_assist,
+    )
+
+    need, reason = needs_llm_assist(
+        delivery_score=delivery_score,
+        ledger_score=ledger_score,
+        min_score=min_score,
+        header_row=header_row,
+        mapping=mapping,
+        meta=meta,
+        prefer_kind=prefer_kind,
+    )
+    assist_public: dict[str, Any] = {
+        "used_llm": False,
+        "cache_hit": False,
+        "ok": False,
+        "confidence": 1.0 if not need else 0.0,
+        "reason": reason,
+    }
+    if not need:
+        assist_public["ok"] = True
+        return header_row, mapping, dict(meta or {}), prefer_kind, assist_public
+
+    probe = _build_sheet_probe(
+        ws,
+        profile,
+        rule_hint={
+            "delivery_score": delivery_score,
+            "ledger_score": ledger_score,
+            "min_score": min_score,
+            "prefer_kind": prefer_kind,
+            "rule_header_row": header_row,
+            "rule_mapping": mapping,
+            "rule_meta": meta or {},
+            "assist_reason": reason,
+        },
+    )
+    assist = assist_sheet_layout(probe)
+    assist_public = assist.as_public_dict()
+    if not assist.ok:
+        return header_row, mapping, dict(meta or {}), prefer_kind, assist_public
+
+    new_header = assist.header_row if assist.header_row is not None else header_row
+    new_mapping = dict(mapping)
+    for field_name, col in (assist.columns or {}).items():
+        if field_name not in new_mapping and isinstance(col, int) and col > 0:
+            new_mapping[field_name] = col
+    # Prefer LLM columns when rules were incomplete for that field
+    for field_name, col in (assist.columns or {}).items():
+        if field_name in {"product_name", "model_number", "order_number", "quantity_tins", "quantity_kg"}:
+            if field_name not in mapping and isinstance(col, int) and col > 0:
+                new_mapping[field_name] = col
+    new_meta = _merge_meta(dict(meta or {}), assist.meta or {})
+    kind = assist.source_kind if assist.source_kind in {"delivery_note", "shipment_ledger", "ignore"} else prefer_kind
+    return new_header, new_mapping, new_meta, kind, assist_public
+
+
+def _parse_delivery_sheet(
+    ws,
+    *,
+    fallback_unit: str,
+    profile: ShipmentEtlProfile,
+    allow_llm: bool = True,
+) -> dict[str, Any] | None:
+    d_score = _score_delivery_sheet(ws, profile)
+    l_score = _score_ledger_sheet(ws, profile)
+    header_row = _find_header_row(ws, profile)
+    mapping = _map_headers(ws, header_row, profile) if header_row is not None else {}
+    meta = (
+        _parse_buyer_meta(ws, header_row, profile)
+        if header_row is not None
+        else {
+            "unit_name": "",
+            "contact_person": "",
+            "order_date": "",
+            "order_number": "",
+            "title": "",
+        }
+    )
+    assist_public: dict[str, Any] = {
+        "used_llm": False,
+        "cache_hit": False,
+        "ok": False,
+        "confidence": 1.0,
+        "reason": "rules_only",
+    }
+    if allow_llm:
+        header_row, mapping, meta, kind, assist_public = _apply_llm_assist_to_layout(
+            ws,
+            profile,
+            delivery_score=d_score,
+            ledger_score=l_score,
+            min_score=profile.delivery_min_score,
+            header_row=header_row,
+            mapping=mapping,
+            meta=meta,
+            prefer_kind="delivery_note",
+        )
+        if kind == "ignore":
+            return None
+        if kind == "shipment_ledger":
+            # LLM reclassified as ledger — let caller handle via ledger path
+            return None
+
+    if header_row is None:
+        return None
+    if "product_name" not in mapping and "model_number" not in mapping:
+        return None
+    items = _parse_items(ws, header_row, mapping, profile)
+    if not items:
+        return None
+    unit = meta.get("unit_name") or fallback_unit
+    note = _enrich_note(
+        {
+            "sheet": ws.title,
+            "source_kind": "delivery_note",
+            "score": d_score,
+            "unit_name": unit,
+            "contact_person": meta.get("contact_person") or "",
+            "order_date": meta.get("order_date") or "",
+            "order_number": meta.get("order_number") or "",
+            "title": meta.get("title") or "",
+            "items": items,
+            "assist": assist_public,
+        }
+    )
+    return note
+
+
+def _excel_date_to_str(value: Any, profile: ShipmentEtlProfile) -> str:
     if value is None or value == "":
         return ""
     if isinstance(value, datetime):
@@ -433,20 +629,61 @@ def _excel_date_to_str(value: Any) -> str:
         except RECOVERABLE_ERRORS:
             return str(value)
     text = str(value).strip()
-    date_m = _DATE_RE.search(text)
+    date_m = profile.meta_patterns.date.search(text)
     return date_m.group(1).replace(" ", "") if date_m else text
 
 
-def _parse_ledger_sheet(ws, *, fallback_unit: str) -> list[dict[str, Any]]:
-    header_row = _find_ledger_header_row(ws)
+def _parse_ledger_sheet(
+    ws,
+    *,
+    fallback_unit: str,
+    profile: ShipmentEtlProfile,
+    allow_llm: bool = True,
+) -> list[dict[str, Any]]:
+    d_score = _score_delivery_sheet(ws, profile)
+    l_score = _score_ledger_sheet(ws, profile)
+    header_row = _find_ledger_header_row(ws, profile)
+    mapping = _map_headers(ws, header_row, profile) if header_row is not None else {}
+    meta: dict[str, str] = {
+        "unit_name": "",
+        "contact_person": "",
+        "order_date": "",
+        "order_number": "",
+        "title": "",
+    }
+    assist_public: dict[str, Any] = {
+        "used_llm": False,
+        "cache_hit": False,
+        "ok": False,
+        "confidence": 1.0,
+        "reason": "rules_only",
+    }
+    if allow_llm:
+        header_row, mapping, meta, kind, assist_public = _apply_llm_assist_to_layout(
+            ws,
+            profile,
+            delivery_score=d_score,
+            ledger_score=l_score,
+            min_score=profile.delivery_min_score,
+            header_row=header_row,
+            mapping=mapping,
+            meta=meta,
+            prefer_kind="shipment_ledger",
+        )
+        if kind == "ignore":
+            return []
+        if kind == "delivery_note":
+            return []
+
     if header_row is None:
         return []
-    mapping = _map_headers(ws, header_row)
     if "order_number" not in mapping:
         return []
     if "product_name" not in mapping and "model_number" not in mapping:
         return []
 
+    title_tpl = str((profile.ledger or {}).get("title_template") or "{unit}/{order_no}")
+    unit_fallback = str(meta.get("unit_name") or fallback_unit).strip() or fallback_unit
     groups: dict[str, dict[str, Any]] = {}
     max_row = int(ws.max_row or 0)
     for row in range(header_row + 1, max_row + 1):
@@ -461,19 +698,22 @@ def _parse_ledger_sheet(ws, *, fallback_unit: str) -> list[dict[str, Any]]:
             continue
         order_date = ""
         if "order_date" in mapping:
-            order_date = _excel_date_to_str(ws.cell(row, mapping["order_date"]).value)
+            order_date = _excel_date_to_str(
+                ws.cell(row, mapping["order_date"]).value, profile
+            )
         bucket = groups.setdefault(
             order_no,
             {
                 "sheet": ws.title,
                 "source_kind": "shipment_ledger",
-                "score": _score_ledger_sheet(ws),
-                "unit_name": fallback_unit,
-                "contact_person": "",
+                "score": l_score,
+                "unit_name": unit_fallback,
+                "contact_person": meta.get("contact_person") or "",
                 "order_date": order_date,
                 "order_number": order_no,
-                "title": f"{fallback_unit}出货流水/{order_no}",
+                "title": title_tpl.format(unit=unit_fallback, order_no=order_no),
                 "items": [],
+                "assist": assist_public,
             },
         )
         if order_date and not bucket.get("order_date"):
@@ -486,9 +726,11 @@ def _parse_ledger_sheet(ws, *, fallback_unit: str) -> list[dict[str, Any]]:
 def parse_delivery_notes(
     file_path: str | Path,
     *,
-    min_score: int = 60,
+    min_score: int | None = None,
     include_ledger: bool | str = "auto",
     unit_name_hint: str | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
     """解析工作簿中的送货单表；可选同时解析出货流水并按单号分组。
 
@@ -497,6 +739,8 @@ def parse_delivery_notes(
     - False: 只收送货单
     - \"auto\": 有送货单时忽略同簿流水（避免历史出货记录误入库）；无送货单时再解析流水
     """
+    prof = _resolve_profile(profile, profile_id)
+    score_floor = int(min_score if min_score is not None else prof.delivery_min_score)
     path = Path(file_path).expanduser().resolve()
     if not path.is_file():
         return {"success": False, "message": f"文件不存在: {path}", "notes": []}
@@ -515,26 +759,48 @@ def parse_delivery_notes(
     delivery_notes: list[dict[str, Any]] = []
     ledger_notes: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    assist_summaries: list[dict[str, Any]] = []
     try:
         for ws in wb.worksheets:
-            d_score = _score_delivery_sheet(ws)
-            if d_score >= min_score:
-                note = _parse_delivery_sheet(ws, fallback_unit=fallback_unit)
+            d_score = _score_delivery_sheet(ws, prof)
+            l_score = _score_ledger_sheet(ws, prof)
+            # 高分或灰色区间都尝试送货单解析（灰色区间可能靠 LLM 补列映射）
+            if d_score >= 40:
+                note = _parse_delivery_sheet(
+                    ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
+                )
                 if note:
                     delivery_notes.append(note)
-                else:
+                    if isinstance(note.get("assist"), dict):
+                        assist_summaries.append(
+                            {"sheet": ws.title, **dict(note.get("assist") or {})}
+                        )
+                    continue
+                if d_score >= score_floor:
                     skipped.append(
                         {"sheet": ws.title, "score": d_score, "reason": "delivery_parse_failed"}
                     )
-                continue
+                    continue
 
-            l_score = _score_ledger_sheet(ws)
-            if l_score >= 50:
-                parsed_ledger = _parse_ledger_sheet(ws, fallback_unit=fallback_unit)
+            if l_score >= 40:
+                parsed_ledger = _parse_ledger_sheet(
+                    ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
+                )
                 if parsed_ledger:
                     ledger_notes.extend(parsed_ledger)
-                else:
+                    assist = (parsed_ledger[0] or {}).get("assist")
+                    if isinstance(assist, dict):
+                        assist_summaries.append({"sheet": ws.title, **assist})
+                elif l_score >= 50:
                     skipped.append({"sheet": ws.title, "score": l_score, "reason": "ledger_empty"})
+                else:
+                    skipped.append(
+                        {
+                            "sheet": ws.title,
+                            "score": max(d_score, l_score),
+                            "reason": "not_delivery_or_ledger",
+                        }
+                    )
             else:
                 skipped.append(
                     {
@@ -582,10 +848,12 @@ def parse_delivery_notes(
 
     delivery_count = sum(1 for n in notes if n.get("source_kind") == "delivery_note")
     ledger_count = sum(1 for n in notes if n.get("source_kind") == "shipment_ledger")
+    used_llm = any(bool(a.get("used_llm") and a.get("ok")) for a in assist_summaries)
     return {
         "success": True,
         "file_path": str(path),
         "file_name": path.name,
+        "profile_id": prof.id,
         "note_count": len(notes),
         "delivery_note_count": delivery_count,
         "ledger_note_count": ledger_count,
@@ -593,6 +861,10 @@ def parse_delivery_notes(
         "include_ledger_mode": mode if mode in (True, False) else "auto",
         "notes": notes,
         "skipped_sheets": skipped,
+        "assist": {
+            "used_llm": used_llm,
+            "sheets": assist_summaries,
+        },
         "message": (
             f"识别到 {len(notes)} 张单据（送货单 {delivery_count} / 流水分组 {ledger_count}）"
             if notes
@@ -607,6 +879,8 @@ def preview_shipment_excel_etl(
     include_ledger: bool | str = "auto",
     unit_name_hint: str | None = None,
     workspace_root: str | Path | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
     from app.application.shipment_excel_etl_security import (
         ShipmentEtlPathError,
@@ -628,6 +902,8 @@ def preview_shipment_excel_etl(
         path,
         include_ledger=include_ledger,
         unit_name_hint=unit_name_hint,
+        profile_id=profile_id,
+        profile=profile,
     )
     if not parsed.get("success"):
         return parsed
@@ -685,6 +961,8 @@ def execute_shipment_excel_etl(
     compensate_on_failure: bool = True,
     unit_name_hint: str | None = None,
     workspace_root: str | Path | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
     """执行闭环：客户+产品+发货单（可幂等 / dry-run / 失败补偿）。
 
@@ -697,6 +975,7 @@ def execute_shipment_excel_etl(
         tenant_key_for_etl,
     )
 
+    prof = _resolve_profile(profile, profile_id)
     path: Path | None = None
     file_name = "shipment.xlsx"
     if file_path:
@@ -719,6 +998,7 @@ def execute_shipment_excel_etl(
             path,
             include_ledger=include_ledger,
             unit_name_hint=unit_name_hint,
+            profile=prof,
         )
         if not parsed.get("success"):
             return parsed
@@ -954,30 +1234,44 @@ def write_delivery_note_workbook(
     notes: list[dict[str, Any]],
     output_path: str | Path,
     *,
-    seller_title: str = "成都修茈测试工厂送货单",
+    seller_title: str | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
-    """按国圣系版式写出送货单模板（可用于回环验证 / 测试数据）。"""
+    """按 profile.write 版式写出送货单模板（可用于回环验证 / 测试数据）。"""
     try:
         from openpyxl import Workbook
     except ImportError as exc:
         return {"success": False, "message": f"缺少 openpyxl: {exc}"}
 
+    prof = _resolve_profile(profile, profile_id)
+    write_cfg = prof.write or {}
+    title = str(seller_title if seller_title is not None else write_cfg.get("seller_title") or "")
+    headers = list(write_cfg.get("header_row") or [])
+    item_cols = dict(write_cfg.get("item_columns") or {})
+    date_fmt = str(write_cfg.get("date_format") or "%Y-%m-%d")
+    meta_tpl = str(write_cfg.get("meta_line_template") or "{unit} {contact} {order_date} {order_no}")
+    footer = str(write_cfg.get("footer_label") or "")
+    default_sheet = str(write_cfg.get("default_sheet_name") or "Sheet1")
+    sheet_prefix = str(write_cfg.get("sheet_name_prefix") or "S")
+    demo_meta = str(write_cfg.get("demo_meta_line") or meta_tpl)
+    demo_item = dict(write_cfg.get("demo_item") or {})
+
     path = Path(output_path).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
-    # remove default later if we create sheets
     default = wb.active
     created = 0
     for idx, note in enumerate(notes or [], start=1):
         unit = str(note.get("unit_name") or f"客户{idx}").strip()
-        sheet_name = str(note.get("sheet_name") or note.get("sheet") or unit)[:28] or f"送货{idx}"
-        # openpyxl sheet name constraints
+        sheet_name = (
+            str(note.get("sheet_name") or note.get("sheet") or unit)[:28] or f"{sheet_prefix}{idx}"
+        )
         sheet_name = re.sub(r"[\\/*?:\[\]]", "_", sheet_name)[:31]
         if idx == 1:
             ws = default
             ws.title = sheet_name
         else:
-            # unique sheet names
             base = sheet_name
             n = 1
             while sheet_name in wb.sheetnames:
@@ -986,58 +1280,65 @@ def write_delivery_note_workbook(
             ws = wb.create_sheet(sheet_name)
 
         contact = str(note.get("contact_person") or "").strip()
-        order_date = str(note.get("order_date") or datetime.now().strftime("%Y年%m月%d日")).strip()
+        order_date = str(note.get("order_date") or datetime.now().strftime(date_fmt)).strip()
         order_no = str(note.get("order_number") or f"TEST-{idx:04d}").strip()
-        ws["A1"] = seller_title
-        ws["A2"] = (
-            f"购货单位（乙方）：{unit}     联系人：{contact}        "
-            f"日期：{order_date}         订单编号：{order_no}"
+        ws["A1"] = title
+        ws["A2"] = meta_tpl.format(
+            unit=unit, contact=contact, order_date=order_date, order_no=order_no
         )
-        headers = [
-            "产品型号",
-            "",
-            "",
-            "产品名称",
-            "数量/件",
-            "规格/KG",
-            "数量/KG",
-            "单价/元",
-            "金额/元",
-        ]
         for col, h in enumerate(headers, start=1):
             ws.cell(3, col, h)
         last_row = 3
         for r, item in enumerate(note.get("items") or [], start=4):
-            ws.cell(r, 1, item.get("model_number") or "")
-            ws.cell(r, 4, item.get("product_name") or "")
-            ws.cell(r, 5, item.get("quantity_tins") or item.get("quantity") or 0)
-            ws.cell(r, 6, item.get("tin_spec") or item.get("spec_per_tin") or 0)
-            ws.cell(r, 7, item.get("quantity_kg") or 0)
-            ws.cell(r, 8, item.get("unit_price") or 0)
-            ws.cell(r, 9, item.get("amount") or 0)
+            if "model_number" in item_cols:
+                ws.cell(r, int(item_cols["model_number"]), item.get("model_number") or "")
+            if "product_name" in item_cols:
+                ws.cell(r, int(item_cols["product_name"]), item.get("product_name") or "")
+            if "quantity_tins" in item_cols:
+                ws.cell(
+                    r,
+                    int(item_cols["quantity_tins"]),
+                    item.get("quantity_tins") or item.get("quantity") or 0,
+                )
+            if "tin_spec" in item_cols:
+                ws.cell(
+                    r,
+                    int(item_cols["tin_spec"]),
+                    item.get("tin_spec") or item.get("spec_per_tin") or 0,
+                )
+            if "quantity_kg" in item_cols:
+                ws.cell(r, int(item_cols["quantity_kg"]), item.get("quantity_kg") or 0)
+            if "unit_price" in item_cols:
+                ws.cell(r, int(item_cols["unit_price"]), item.get("unit_price") or 0)
+            if "amount" in item_cols:
+                ws.cell(r, int(item_cols["amount"]), item.get("amount") or 0)
             last_row = r
-        ws.cell(last_row + 2, 1, "大 写：测试联")
+        if footer:
+            ws.cell(last_row + 2, 1, footer)
         created += 1
 
     if created == 0:
         ws = default
-        ws.title = "送货单"
-        ws["A1"] = seller_title
-        ws["A2"] = (
-            "购货单位（乙方）：示例客户     联系人：测试        日期：2026年07月24日         订单编号：DEMO-0001"
-        )
-        for col, h in enumerate(
-            ["产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"],
-            start=1,
-        ):
+        ws.title = default_sheet[:31]
+        ws["A1"] = title
+        ws["A2"] = demo_meta
+        for col, h in enumerate(headers, start=1):
             ws.cell(3, col, h)
-        ws["A4"] = "RX-DEMO"
-        ws["D4"] = "PU哑光清漆"
-        ws["E4"] = 2
-        ws["F4"] = 25
-        ws["G4"] = 50
-        ws["H4"] = 18
-        ws["I4"] = 900
+        r = 4
+        if "model_number" in item_cols:
+            ws.cell(r, int(item_cols["model_number"]), demo_item.get("model_number") or "")
+        if "product_name" in item_cols:
+            ws.cell(r, int(item_cols["product_name"]), demo_item.get("product_name") or "")
+        if "quantity_tins" in item_cols:
+            ws.cell(r, int(item_cols["quantity_tins"]), demo_item.get("quantity_tins") or 0)
+        if "tin_spec" in item_cols:
+            ws.cell(r, int(item_cols["tin_spec"]), demo_item.get("tin_spec") or 0)
+        if "quantity_kg" in item_cols:
+            ws.cell(r, int(item_cols["quantity_kg"]), demo_item.get("quantity_kg") or 0)
+        if "unit_price" in item_cols:
+            ws.cell(r, int(item_cols["unit_price"]), demo_item.get("unit_price") or 0)
+        if "amount" in item_cols:
+            ws.cell(r, int(item_cols["amount"]), demo_item.get("amount") or 0)
         created = 1
 
     wb.save(path)
@@ -1046,6 +1347,7 @@ def write_delivery_note_workbook(
         "success": True,
         "file_path": str(path),
         "sheet_count": created,
+        "profile_id": prof.id,
         "message": f"已生成送货单模板 {path.name}（{created} 张表）",
     }
 
@@ -1054,78 +1356,58 @@ def write_ledger_workbook(
     rows: list[dict[str, Any]],
     output_path: str | Path,
     *,
-    sheet_name: str = "25出货",
-    unit_name: str = "流水测试客户",
+    sheet_name: str | None = None,
+    unit_name: str | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
-    """写出出货流水模板（日期/单号/型号/品名/数量…）。"""
+    """写出出货流水模板（表头/列位来自 profile.write）。"""
     try:
         from openpyxl import Workbook
     except ImportError as exc:
         return {"success": False, "message": f"缺少 openpyxl: {exc}"}
 
+    prof = _resolve_profile(profile, profile_id)
+    write_cfg = prof.write or {}
+    default_sheet = str(sheet_name or write_cfg.get("ledger_sheet_name") or "ledger")
+    resolved_unit = str(unit_name or write_cfg.get("ledger_default_unit") or "unit")
+    headers = list(write_cfg.get("ledger_header_row") or [])
+    item_cols = dict(write_cfg.get("ledger_item_columns") or {})
+    sample_rows = rows or list(write_cfg.get("ledger_sample_rows") or [])
+    extra_sheet = str(write_cfg.get("ledger_extra_sheet") or "").strip()
+
     path = Path(output_path).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
-    ws.title = sheet_name[:31] or "25出货"
-    headers = [
-        "日期",
-        "单号",
-        "产品型号",
-        "",
-        "",
-        "产品名称",
-        "数量/件",
-        "规格/KG",
-        "数量/KG",
-        "单价/元",
-        "金额/元",
-    ]
+    ws.title = default_sheet[:31] or "ledger"
     for col, h in enumerate(headers, start=1):
         ws.cell(1, col, h)
-    sample_rows = rows or [
-        {
-            "order_date": "2026-07-01",
-            "order_number": "L-001",
-            "model_number": "GS621",
-            "product_name": "PE白底漆",
-            "quantity_tins": 2,
-            "tin_spec": 25,
-            "quantity_kg": 50,
-            "unit_price": 8.5,
-            "amount": 425,
-        },
-        {
-            "order_date": "2026-07-02",
-            "order_number": "L-002",
-            "model_number": "RX001",
-            "product_name": "PU哑光漆",
-            "quantity_tins": 1,
-            "tin_spec": 20,
-            "quantity_kg": 20,
-            "unit_price": 17,
-            "amount": 340,
-        },
-    ]
     for r, row in enumerate(sample_rows, start=2):
-        ws.cell(r, 1, row.get("order_date") or "")
-        ws.cell(r, 2, row.get("order_number") or "")
-        ws.cell(r, 3, row.get("model_number") or "")
-        ws.cell(r, 6, row.get("product_name") or "")
-        ws.cell(r, 7, row.get("quantity_tins") or 0)
-        ws.cell(r, 8, row.get("tin_spec") or 0)
-        ws.cell(r, 9, row.get("quantity_kg") or 0)
-        ws.cell(r, 10, row.get("unit_price") or 0)
-        ws.cell(r, 11, row.get("amount") or 0)
-    # embed unit hint in unused title cell for parse fallback via filename usually
-    wb.create_sheet("已调价")
+        for field_name, col_idx in item_cols.items():
+            raw = row.get(field_name)
+            if raw is None or raw == "":
+                if field_name in {
+                    "quantity_tins",
+                    "tin_spec",
+                    "quantity_kg",
+                    "unit_price",
+                    "amount",
+                }:
+                    raw = 0
+                else:
+                    raw = ""
+            ws.cell(r, int(col_idx), raw)
+    if extra_sheet and extra_sheet not in wb.sheetnames:
+        wb.create_sheet(extra_sheet[:31])
     wb.save(path)
     wb.close()
     return {
         "success": True,
         "file_path": str(path),
-        "unit_name": unit_name,
+        "unit_name": resolved_unit,
         "row_count": len(sample_rows),
+        "profile_id": prof.id,
         "message": f"已生成出货流水模板 {path.name}",
     }
 
@@ -1135,18 +1417,23 @@ def regenerate_delivery_notes_from_file(
     output_path: str | Path,
     *,
     include_ledger: bool | str = "auto",
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
-    """解析 → 按标准送货单版式再出单（模板反推闭环）。"""
-    parsed = parse_delivery_notes(file_path, include_ledger=include_ledger)
+    """解析 → 按 profile 送货单版式再出单（模板反推闭环）。"""
+    prof = _resolve_profile(profile, profile_id)
+    parsed = parse_delivery_notes(
+        file_path, include_ledger=include_ledger, profile=prof
+    )
     if not parsed.get("success"):
         return parsed
     notes = parsed.get("notes") or []
     if not notes:
         return {"success": False, "message": "无可反推的单据", "error_code": "no_delivery_notes"}
-    written = write_delivery_note_workbook(notes, output_path)
+    written = write_delivery_note_workbook(notes, output_path, profile=prof)
     if not written.get("success"):
         return written
-    reparsed = parse_delivery_notes(output_path, include_ledger=False)
+    reparsed = parse_delivery_notes(output_path, include_ledger=False, profile=prof)
     return {
         "success": True,
         "source": parsed,
@@ -1158,6 +1445,7 @@ def regenerate_delivery_notes_from_file(
             if reparsed.get("success")
             else False
         ),
+        "profile_id": prof.id,
         "message": "模板反推完成",
     }
 
@@ -1168,12 +1456,15 @@ def batch_preview_shipment_excel_etl(
     include_ledger: bool | str = "auto",
     pattern: str = "*.xlsx",
     workspace_root: str | Path | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
     from app.application.shipment_excel_etl_security import (
         ShipmentEtlPathError,
         resolve_etl_path,
     )
 
+    prof = _resolve_profile(profile, profile_id)
     try:
         root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
     except ShipmentEtlPathError as exc:
@@ -1196,6 +1487,7 @@ def batch_preview_shipment_excel_etl(
             include_ledger=include_ledger,
             unit_name_hint=path.stem,
             workspace_root=workspace_root or root,
+            profile=prof,
         )
         note_count = int(preview.get("note_count") or 0)
         total_notes += note_count
@@ -1216,6 +1508,7 @@ def batch_preview_shipment_excel_etl(
         "file_count": len(results),
         "note_count": total_notes,
         "files": results,
+        "profile_id": prof.id,
         "message": f"批量预览完成：{len(results)} 个文件，共 {total_notes} 张单据",
     }
 
@@ -1231,6 +1524,8 @@ def batch_execute_shipment_excel_etl(
     confirm_ledger: bool = False,
     dry_run: bool = False,
     workspace_root: str | Path | None = None,
+    profile_id: str | None = None,
+    profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
     from app.application.shipment_excel_etl_security import (
         ShipmentEtlPathError,
@@ -1238,6 +1533,7 @@ def batch_execute_shipment_excel_etl(
         resolve_etl_path,
     )
 
+    prof = _resolve_profile(profile, profile_id)
     if not dry_run and not batch_execute_allowed():
         return {
             "success": False,
@@ -1279,6 +1575,7 @@ def batch_execute_shipment_excel_etl(
             confirm_ledger=confirm_ledger,
             dry_run=dry_run,
             workspace_root=workspace_root or root,
+            profile=prof,
         )
         created += int(result.get("shipment_created") or result.get("would_create") or 0)
         skipped += int(result.get("shipment_skipped") or result.get("would_skip") or 0)
@@ -1305,37 +1602,50 @@ def batch_execute_shipment_excel_etl(
         "files": results,
         "closed_loop": not dry_run,
         "dry_run": dry_run,
+        "profile_id": prof.id,
         "message": f"{'批量预演' if dry_run else '批量入库'}完成：新建/将建 {created}，跳过 {skipped}，失败 {failed}",
     }
 
 
 class ShipmentExcelEtlApplicationService:
+    def __init__(self, profile_id: str | None = None) -> None:
+        self._profile_id = profile_id
+
+    def _profile_kwargs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        if "profile" in kwargs or "profile_id" in kwargs:
+            return kwargs
+        if self._profile_id:
+            return {**kwargs, "profile_id": self._profile_id}
+        return kwargs
+
     def preview(self, file_path: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return preview_shipment_excel_etl(file_path, **kwargs)
+        return preview_shipment_excel_etl(file_path, **self._profile_kwargs(kwargs))
 
     def execute(self, file_path: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return execute_shipment_excel_etl(file_path, **kwargs)
+        return execute_shipment_excel_etl(file_path, **self._profile_kwargs(kwargs))
 
     def batch_preview(self, directory: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return batch_preview_shipment_excel_etl(directory, **kwargs)
+        return batch_preview_shipment_excel_etl(directory, **self._profile_kwargs(kwargs))
 
     def batch_execute(self, directory: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return batch_execute_shipment_excel_etl(directory, **kwargs)
+        return batch_execute_shipment_excel_etl(directory, **self._profile_kwargs(kwargs))
 
     def write_delivery_template(
         self, notes: list[dict[str, Any]], output_path: str | Path, **kwargs: Any
     ) -> dict[str, Any]:
-        return write_delivery_note_workbook(notes, output_path, **kwargs)
+        return write_delivery_note_workbook(notes, output_path, **self._profile_kwargs(kwargs))
 
     def write_ledger_template(
         self, rows: list[dict[str, Any]], output_path: str | Path, **kwargs: Any
     ) -> dict[str, Any]:
-        return write_ledger_workbook(rows, output_path, **kwargs)
+        return write_ledger_workbook(rows, output_path, **self._profile_kwargs(kwargs))
 
     def regenerate(
         self, file_path: str | Path, output_path: str | Path, **kwargs: Any
     ) -> dict[str, Any]:
-        return regenerate_delivery_notes_from_file(file_path, output_path, **kwargs)
+        return regenerate_delivery_notes_from_file(
+            file_path, output_path, **self._profile_kwargs(kwargs)
+        )
 
 
 _svc: ShipmentExcelEtlApplicationService | None = None

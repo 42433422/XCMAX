@@ -7,6 +7,7 @@
       "success": true,
       "file_path": "/Users/a4243342/Desktop/XCMAX/FHD/tests/fixtures/shipment_etl/闭环测试_送货单模板.xlsx",
       "sheet_count": 2,
+      "profile_id": "default",
       "message": "已生成送货单模板 闭环测试_送货单模板.xlsx（2 张表）"
     },
     {
@@ -15,6 +16,7 @@
       "file_path": "/Users/a4243342/Desktop/XCMAX/FHD/tests/fixtures/shipment_etl/闭环流水客户.xlsx",
       "unit_name": "闭环流水客户",
       "row_count": 2,
+      "profile_id": "default",
       "message": "已生成出货流水模板 闭环流水客户.xlsx"
     },
     {
