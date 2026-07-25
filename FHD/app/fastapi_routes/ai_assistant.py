@@ -184,8 +184,13 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
 
         if not result.get("success"):
+            safe_fail = {
+                "success": False,
+                "message": "生成失败",
+                "error_code": str(result.get("error_code") or "")[:64] or None,
+            }
             traced = _trace_ai_assistant_route(
-                dict(result),
+                safe_fail,
                 route="/api/generate",
                 action="generate_shipment_document",
                 body=payload,
