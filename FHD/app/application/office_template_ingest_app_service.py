@@ -32,6 +32,12 @@ def _category_from_filename(filename: str, analyzed_type: str = "") -> str:
     raw = str(analyzed_type or "").strip().lower()
     if raw == "word" or ext == ".docx":
         return "word"
+    if raw in {"pptx", "ppt"} or ext in {".pptx", ".ppt"}:
+        return "pptx"
+    if raw == "pdf" or ext == ".pdf":
+        return "pdf"
+    if raw == "label":
+        return "label"
     return "excel"
 
 
@@ -44,6 +50,10 @@ def _template_type_for_ingest(*, template_scope: str, analyzed_type: str) -> str
         return "Word"
     if kind == "label":
         return "Label"
+    if kind in {"pptx", "ppt"}:
+        return "PPTX"
+    if kind == "pdf":
+        return "PDF"
     return "Excel"
 
 

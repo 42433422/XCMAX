@@ -1083,6 +1083,9 @@ _LLM_ENV_KEYS: tuple[str, ...] = tuple(
             "XCAUTO_PAT",
             "XIUCI_API_KEY",
             "XCAGI_EMPLOYEE_LLM_MODEL",
+            "XCAGI_EMPLOYEE_VLM_MODEL",
+            "XCAGI_EMPLOYEE_VLM_PROVIDER",
+            "FHD_TEMPLATE_VLM_ENRICH",
         ]
     )
 )
@@ -1613,6 +1616,49 @@ async def tool_compare_model_prices(params: dict[str, Any], ctx: dict[str, Any])
         total_models=len(_MODEL_PRICES),
         providers_covered=sorted({p["provider"] for p in _MODEL_PRICES}),
     )
+
+
+async def tool_list_vlm_models(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    """列出当前环境可推断的 VLM（视觉识别）模型候选。
+
+    供 llm-ops-engineer 盘点「谁能做图文识别」，并指导配置
+    ``XCAGI_EMPLOYEE_VLM_PROVIDER`` / ``XCAGI_EMPLOYEE_VLM_MODEL``。
+    """
+    from app.infrastructure.llm.vlm_route import list_configured_vlm_candidates, resolve_vlm_route
+
+    candidates = list_configured_vlm_candidates()
+    route = resolve_vlm_route()
+    known_defaults = [
+        {"provider": "openai", "model": "gpt-4o-mini", "capability": "vlm"},
+        {"provider": "qwen", "model": "qwen-vl-plus", "capability": "vlm"},
+        {"provider": "zhipu", "model": "glm-4v-flash", "capability": "vlm"},
+        {"provider": "siliconflow", "model": "Qwen/Qwen2-VL-7B-Instruct", "capability": "vlm"},
+        {"provider": "openrouter", "model": "openai/gpt-4o-mini", "capability": "vlm"},
+    ]
+    return _ok(
+        f"发现 {len(candidates)} 个已配置 VLM 候选；当前路由 ok={bool(route.get('ok'))}",
+        candidates=candidates,
+        active_route=route,
+        known_defaults=known_defaults,
+        env_hint={
+            "XCAGI_EMPLOYEE_VLM_PROVIDER": os.environ.get("XCAGI_EMPLOYEE_VLM_PROVIDER", "") or "(未设置)",
+            "XCAGI_EMPLOYEE_VLM_MODEL": os.environ.get("XCAGI_EMPLOYEE_VLM_MODEL", "") or "(未设置)",
+            "FHD_TEMPLATE_VLM_ENRICH": os.environ.get("FHD_TEMPLATE_VLM_ENRICH", "") or "(未设置)",
+        },
+    )
+
+
+async def tool_get_vlm_route(params: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    """查询当前生效的员工 VLM 路由（模版 PDF/PPT 识图与员工 call_llm 多模态共用）。"""
+    from app.infrastructure.llm.vlm_route import resolve_vlm_route
+
+    route = resolve_vlm_route()
+    if route.get("ok"):
+        return _ok(
+            f"VLM 路由：{route.get('provider')}/{route.get('model')}（{route.get('source')}）",
+            route=route,
+        )
+    return _err(str(route.get("message") or "未配置 VLM"), route=route)
 
 
 async def tool_query_local_token_usage(
@@ -2402,6 +2448,8 @@ TOOL_REGISTRY: dict[str, Any] = {
     "test_llm_key_health": tool_test_llm_key_health,
     "query_provider_usage": tool_query_provider_usage,
     "compare_model_prices": tool_compare_model_prices,
+    "list_vlm_models": tool_list_vlm_models,
+    "get_vlm_route": tool_get_vlm_route,
     "query_local_token_usage": tool_query_local_token_usage,
     "query_cursor_usage": tool_query_cursor_usage,
     "query_codex_usage": tool_query_codex_usage,
@@ -2527,6 +2575,8 @@ EMPLOYEE_TOOLS: dict[str, list[str]] = {
         "test_llm_key_health",
         "query_provider_usage",
         "compare_model_prices",
+        "list_vlm_models",
+        "get_vlm_route",
         "query_local_token_usage",
         "query_cursor_usage",
         "query_codex_usage",
