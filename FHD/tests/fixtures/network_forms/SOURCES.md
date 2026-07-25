@@ -21,8 +21,16 @@
 
 `separated=true` 需同时具备版式信号与数据信号。
 
-## 复跑
+## 可用性（能不能用）
+
+拆开之后再跑：
 
 ```bash
-cd FHD && .venv/bin/python scripts/dev/test_form_template_data_separation.py
+cd FHD && .venv/bin/python scripts/dev/test_form_separation_usability.py
 ```
+
+分级：
+- **A**：客户名真 + 明细语义正常 + 能建单 + 能打单
+- **B**：明细可用且能闭环，但客户名弱（常退化成文件名）
+- **D**：技术能跑通，但抽出内容业务语义不可信
+- **C**：只能拆，不能发货闭环（如考勤）
