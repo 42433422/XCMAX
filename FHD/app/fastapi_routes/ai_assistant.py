@@ -501,28 +501,13 @@ def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
 
     try:
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
-
-        adapter = OpenAICompatibleAdapter(provider="xiaomi")
+        from app.application.tts_translate_app_service import translate_zh_to_en
 
         async def _run() -> str:
-            resp = await adapter.chat_completion(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a concise translator. Translate the user's Chinese text into natural English. "
-                            "Output ONLY the English translation, no quotes, no explanation."
-                        ),
-                    },
-                    {"role": "user", "content": text[:500]},
-                ],
-                temperature=0.2,
-                max_tokens=180,
-            )
-            choice0 = (resp.get("choices") or [None])[0] or {}
-            message = choice0.get("message") or {}
-            return str(message.get("content") or "").strip().strip('"').strip("'")
+            out = await translate_zh_to_en(text, max_chars=500)
+            if not out.get("success"):
+                raise RuntimeError(str(out.get("message") or "translate failed"))
+            return str(out.get("translation") or "").strip().strip('"').strip("'")
 
         try:
             en = asyncio.run(_run())

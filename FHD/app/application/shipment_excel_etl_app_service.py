@@ -1291,12 +1291,12 @@ def parse_delivery_notes(
 
     try:
         from openpyxl import load_workbook
-    except ImportError as exc:
+    except ImportError:
         return {"success": False, "message": "缺少 openpyxl，无法解析 Excel", "notes": []}
 
     try:
         wb = load_workbook(str(path), data_only=True)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return {"success": False, "message": "无法读取 Excel 文件", "notes": []}
 
     fallback_unit = (unit_name_hint or path.stem).strip() or path.stem
@@ -1577,7 +1577,7 @@ def preview_shipment_excel_etl(
 
     try:
         path = resolve_etl_path(file_path, workspace_root=workspace_root, must_exist=True)
-    except ShipmentEtlPathError as exc:
+    except ShipmentEtlPathError:
         return {
             "success": False,
             "message": "非法文件路径",
@@ -1687,7 +1687,7 @@ def execute_shipment_excel_etl(
                 file_path, workspace_root=workspace_root, must_exist=notes is None
             )
             file_name = path.name
-        except ShipmentEtlPathError as exc:
+        except ShipmentEtlPathError:
             return {
                 "success": False,
                 "message": "非法文件路径",
@@ -1827,7 +1827,7 @@ def execute_shipment_excel_etl(
             from app.bootstrap import get_shipment_app_service
 
             svc = get_shipment_app_service()
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             return {
                 "success": False,
                 "message": "发货单服务不可用",
@@ -1978,7 +1978,7 @@ def write_delivery_note_workbook(
     """按 profile.write 版式写出送货单模板（可用于回环验证 / 测试数据）。"""
     try:
         from openpyxl import Workbook
-    except ImportError as exc:
+    except ImportError:
         return {"success": False, "message": "缺少 openpyxl，无法解析 Excel"}
 
     prof = _resolve_profile(profile, profile_id)
@@ -2103,7 +2103,7 @@ def write_ledger_workbook(
     """写出出货流水模板（表头/列位来自 profile.write）。"""
     try:
         from openpyxl import Workbook
-    except ImportError as exc:
+    except ImportError:
         return {"success": False, "message": "缺少 openpyxl，无法解析 Excel"}
 
     prof = _resolve_profile(profile, profile_id)
@@ -2204,7 +2204,7 @@ def batch_preview_shipment_excel_etl(
     prof = _resolve_profile(profile, profile_id)
     try:
         root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
-    except ShipmentEtlPathError as exc:
+    except ShipmentEtlPathError:
         return {
             "success": False,
             "message": "非法目录",
@@ -2280,7 +2280,7 @@ def batch_execute_shipment_excel_etl(
         }
     try:
         root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
-    except ShipmentEtlPathError as exc:
+    except ShipmentEtlPathError:
         return {
             "success": False,
             "message": "非法目录",
