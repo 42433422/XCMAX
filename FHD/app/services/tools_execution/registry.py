@@ -131,6 +131,8 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("document_template", "create"): [],
     ("document_template", "update"): ["id"],
     ("document_template", "delete"): ["id"],
+    ("document_template", "ingest"): [],
+    ("document_template", "upload"): [],
     ("excel_import", "execute_import"): ["pending_import_id"],
     ("excel_import", "import_records"): ["records"],
     ("unit_products_import", "execute_import"): ["saved_name", "unit_name"],

@@ -528,7 +528,8 @@ class TestToolApiCall:
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
@@ -538,6 +539,7 @@ class TestToolApiCall:
                 )
                 assert result["success"] is True
                 assert result["method"] == "POST"
+                mock_client.request.assert_called()
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -582,7 +584,8 @@ class TestToolChat:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"reply": "hello"}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/ai/unified_chat": True}
@@ -625,7 +628,8 @@ class TestInvokeTool:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"reply": "hi"}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/ai/unified_chat": True}
@@ -746,7 +750,8 @@ class TestConstants:
         assert MCP_DEFAULT_PROTOCOL_VERSION in MCP_PROTOCOL_VERSIONS
 
     def test_tool_definitions_count(self):
-        assert len(TOOL_DEFINITIONS) == 9
+        assert len(TOOL_DEFINITIONS) == 10
+        assert any(t["name"] == "capability_loop" for t in TOOL_DEFINITIONS)
 
     def test_ui_actions_mapping(self):
         assert "ui_snapshot" in _UI_ACTIONS

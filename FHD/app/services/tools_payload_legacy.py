@@ -543,6 +543,9 @@ def dispatch_legacy_tool_payload(
                 direct_unit_name=direct_unit_name,
                 direct_products=direct_products if isinstance(direct_products, list) else [],
                 parse_order_text=_parse_order_text,
+                template_name=params.get("template_name") or params.get("template"),
+                template_id=params.get("template_id"),
+                preferred_template=params.get("preferred_template") or params.get("template"),
             )
             return _j(payload, status_code)
 

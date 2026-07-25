@@ -9,11 +9,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
-from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
-from app.services.document_templates.tenant_scope import (
+from app.infrastructure.templates.tenant_scope import (
     templates_tenant_id_for_insert,
     templates_tenant_where_sql,
 )
+from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
 
 
 @pytest.fixture()
@@ -68,7 +68,7 @@ def templates_db(monkeypatch):
         lambda: _Ctx(),
     )
     monkeypatch.setattr(
-        "app.services.document_templates.tenant_scope.ensure_templates_tenant_column",
+        "app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column",
         lambda: None,
     )
     return eng
@@ -98,14 +98,14 @@ class TestTemplatesTenantWhereSql:
 class TestTemplatesTenantIdForInsert:
     def test_requires_tenant(self):
         with (
-            patch("app.services.document_templates.tenant_scope.ensure_templates_tenant_column"),
+            patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
             pytest.raises(TenantScopeError),
         ):
             templates_tenant_id_for_insert()
 
     def test_returns_current(self):
         with (
-            patch("app.services.document_templates.tenant_scope.ensure_templates_tenant_column"),
+            patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
             tenant_scope(3),
         ):
             assert templates_tenant_id_for_insert() == 3
@@ -181,7 +181,7 @@ class TestCreateTagsTenant:
             tenant_scope(42),
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
-            patch("app.services.document_templates.tenant_scope.ensure_templates_tenant_column"),
+            patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
             patch(
                 "app.services.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
@@ -200,7 +200,7 @@ class TestCreateTagsTenant:
 
         with (
             patch("app.db.init_db.init_template_tables"),
-            patch("app.services.document_templates.tenant_scope.ensure_templates_tenant_column"),
+            patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
             patch(
                 "app.services.document_templates.crud._validate_required_terms",
                 return_value=(True, []),

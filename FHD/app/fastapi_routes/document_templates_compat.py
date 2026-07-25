@@ -157,7 +157,7 @@ def run_archive_template_delete(
 
         from app.db.init_db import init_template_tables
         from app.db.session import get_db
-        from app.services.document_templates.tenant_scope import (
+        from app.infrastructure.templates.tenant_scope import (
             ensure_templates_tenant_column,
             templates_tenant_where_sql,
         )
@@ -205,3 +205,25 @@ def run_archive_template_analyze(
         content_type="application/octet-stream",
     )
     return _unpack_response(_tpl.analyze_template_with_upload(fs, template_name, template_scope))
+
+
+def run_archive_template_upload(
+    *,
+    file_body: bytes,
+    filename: str,
+    template_name: str = "",
+    template_scope: str = "",
+    source: str = "office_upload",
+) -> tuple[dict, int]:
+    """解析办公文件并自动写入模版库（analyze → create）。"""
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+
+    return ingest_office_bytes_to_template_library(
+        file_body=file_body,
+        filename=filename,
+        template_name=template_name,
+        template_scope=template_scope,
+        source=source,
+    )

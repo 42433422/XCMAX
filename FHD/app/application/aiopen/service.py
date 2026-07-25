@@ -869,11 +869,15 @@ def _tool_api_call(app: Any, args: dict[str, Any]) -> dict[str, Any]:
             data = resp.json()
         except (ValueError, TypeError):
             data = {"raw": resp.text[:2000]}
+        try:
+            status_code = int(resp.status_code)
+        except (TypeError, ValueError):
+            status_code = 599
         return {
-            "success": resp.status_code < 500,
+            "success": status_code < 500,
             "path": raw_path,
             "method": method,
-            "status_code": resp.status_code,
+            "status_code": status_code,
             "data": data,
         }
     except RECOVERABLE_ERRORS as err:

@@ -36,7 +36,16 @@ class TestCreateShipment:
             return_value=False,
         ):
             result = facade.create_shipment("Acme", [{"name": "P"}], "c", "p")
-        core.create_shipment.assert_called_once_with("Acme", [{"name": "P"}], "c", "p")
+        core.create_shipment.assert_called_once_with(
+            "Acme",
+            [{"name": "P"}],
+            "c",
+            "p",
+            external_order_number="",
+            order_date="",
+            source_fingerprint="",
+            source_kind="",
+        )
         assert result == {"success": True}
 
     def test_event_primary_enabled_dispatches_command(self):

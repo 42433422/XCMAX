@@ -182,6 +182,9 @@ def _mock_client(
     client.get_workflow_run_conclusion.return_value = (ai_review_ok, ai_review_reason)
     client.get_pr_check_runs.return_value = (ci_ok, ci_reason)
     client.get_pr_head_sha.return_value = "abc123"
+    client.get_pr_mergeability.return_value = (True, "ok")
+    client.has_issue_comment_containing.return_value = False
+    client.merge_pr.return_value = (True, "ok")
     return client
 
 
@@ -272,7 +275,8 @@ class TestProcessRegularPr:
 
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
-        client.merge_pr.return_value = True
+        client.get_pr_mergeability.return_value = (True, "ok")
+        client.merge_pr.return_value = (True, "ok")
         client.comment.return_value = True
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
@@ -286,7 +290,7 @@ class TestProcessRegularPr:
 
         pr = _make_pr(labels=["hold-merge"], author="octocat")
         client = _mock_client()
-        client.merge_pr.return_value = True
+        client.merge_pr.return_value = (True, "ok")
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
         assert action == "skipped"
@@ -298,7 +302,7 @@ class TestProcessRegularPr:
 
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
-        client.merge_pr.return_value = True
+        client.merge_pr.return_value = (True, "ok")
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=True)
         assert action == "auto_merged_dry"
@@ -313,14 +317,41 @@ class TestProcessRegularPr:
 
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
-        client.merge_pr.return_value = False
+        client.get_pr_mergeability.return_value = (True, "ok")
+        client.merge_pr.return_value = (False, "permission")
+        client.has_issue_comment_containing.return_value = False
         client.comment.return_value = True
+        client.add_labels.return_value = True
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
         assert action == "merge_failed"
         client.merge_pr.assert_called_once_with(100, method="squash")
-        # 失败也要发评论告知
+        # 失败也要发评论告知（且文案应区分权限）
         client.comment.assert_called()
+        body = client.comment.call_args.args[1]
+        assert "权限不足" in body
+        client.add_labels.assert_called()
+
+    def test_conflict_blocks_before_merge_and_dedupes_comment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        monkeypatch.setattr(sla, "STALE_JSONL", tmp_path / "stale.jsonl")
+
+        pr = _make_pr(labels=["ai-review: passed"], author="octocat")
+        client = _mock_client()
+        client.get_pr_mergeability.return_value = (False, "conflict")
+        client.has_issue_comment_containing.return_value = True  # 已通知过
+        client.add_labels.return_value = True
+
+        action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
+        assert action == "merge_failed"
+        client.merge_pr.assert_not_called()
+        client.comment.assert_not_called()
+        client.add_labels.assert_called()
+        labels = client.add_labels.call_args.args[1]
+        assert "needs-human" in labels
+        assert "hold-merge" in labels
 
     def test_stale_log_appended_on_skip(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -365,6 +396,17 @@ class TestProcessAiGeneratedPr:
         assert action == "skipped"
         client.get_pr_check_runs.assert_not_called()
         client.merge_pr.assert_not_called()
+
+
+class TestMergeFailureHelpers:
+    def test_merge_failure_comment_distinguishes_conflict_vs_permission(self) -> None:
+        conflict = sla._merge_failure_comment("conflict")
+        permission = sla._merge_failure_comment("permission")
+        assert "合并冲突" in conflict
+        assert "非权限问题" in conflict
+        assert "权限不足" in permission
+        assert conflict.startswith(sla.MERGE_FAIL_COMMENT_MARKER)
+        assert permission.startswith(sla.MERGE_FAIL_COMMENT_MARKER)
 
 
 # =====================================================================
@@ -682,7 +724,8 @@ class TestMainScanRegularPrs:
         created_client.get_pr_check_runs.return_value = (True, "ok")
         created_client.get_workflow_run_conclusion.return_value = (True, "ok")
         created_client.get_pr_head_sha.return_value = "sha-42"
-        created_client.merge_pr.return_value = True
+        created_client.merge_pr.return_value = (True, "ok")
+        created_client.get_pr_mergeability.return_value = (True, "ok")
         created_client.comment.return_value = True
         monkeypatch.setattr(sla, "GitHubClient", lambda repo, token: created_client)
 

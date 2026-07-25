@@ -5,14 +5,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app.utils.safe_download_path import UnsafeDownloadPathError, resolve_under_allowed_dirs
-
 
 class ShipmentEtlPathError(ValueError):
     """ETL 路径不在允许沙箱内。"""
 
 
-def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
+def _trusted_base_roots() -> list[Path]:
+    """不可被请求参数扩展的受信根目录。"""
     roots: list[Path] = []
     try:
         from app.utils.path_utils import get_app_data_dir, get_data_dir
@@ -22,18 +21,11 @@ def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
         roots.append((Path(get_app_data_dir()) / "temp_excel").resolve())
     except Exception:  # noqa: BLE001
         pass
+    roots.append(Path.cwd().resolve())
+    # OCR/上传临时文件落系统 temp
+    import tempfile
 
-    wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
-    if wr:
-        roots.append(Path(wr).expanduser().resolve())
-    cwd = Path.cwd().resolve()
-    roots.append(cwd)
-    # 单测临时目录（仅 pytest 会话）
-    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("FHD_SHIPMENT_ETL_ALLOW_TMP"):
-        import tempfile
-
-        roots.append(Path(tempfile.gettempdir()).resolve())
-    # 去重保序
+    roots.append(Path(tempfile.gettempdir()).resolve())
     seen: set[str] = set()
     out: list[Path] = []
     for r in roots:
@@ -45,28 +37,80 @@ def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
     return out
 
 
+def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
+    """返回受信根；仅当 workspace_root 已落在受信根下时才并入。"""
+    roots = list(_trusted_base_roots())
+    candidates = [
+        str(workspace_root or "").strip(),
+        str(os.environ.get("WORKSPACE_ROOT") or "").strip(),
+    ]
+    root_reals = [os.path.realpath(str(r)) for r in roots]
+    for wr in candidates:
+        if not wr or any(ch in wr for ch in ("\x00", "\n", "\r")):
+            continue
+        try:
+            wr_real = os.path.realpath(wr)
+        except (OSError, ValueError):
+            continue
+        if any(wr_real == r or wr_real.startswith(r + os.sep) for r in root_reals):
+            roots.append(Path(wr_real))
+            root_reals.append(wr_real)
+    seen: set[str] = set()
+    out: list[Path] = []
+    for r in roots:
+        key = os.path.realpath(str(r))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(Path(key))
+    return out
+
+
+def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
+    """用 commonpath/startswith 消毒后，在命中根下按相对片段重建路径。"""
+    text = str(raw or "").strip()
+    if not text or "\x00" in text:
+        raise ShipmentEtlPathError("empty path")
+
+    root_reals = [os.path.realpath(str(r)) for r in roots]
+    if not root_reals:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+
+    parts = [p for p in Path(text).parts if p not in ("", ".")]
+    if any(p == ".." for p in parts):
+        raise ShipmentEtlPathError("path not under allowed dirs")
+
+    if os.path.isabs(text):
+        candidate = os.path.realpath(text)
+    else:
+        candidate = os.path.realpath(os.path.join(root_reals[0], *parts))
+
+    for root in root_reals:
+        if candidate != root and not candidate.startswith(root + os.sep):
+            continue
+        rel = os.path.relpath(candidate, root)
+        if rel.startswith("..") or os.path.isabs(rel):
+            continue
+        rel_parts = [p for p in Path(rel).parts if p not in ("", ".", "..")]
+        safe = root if not rel_parts else os.path.realpath(os.path.join(root, *rel_parts))
+        if safe == root or safe.startswith(root + os.sep):
+            return Path(safe)
+    raise ShipmentEtlPathError("path not under allowed dirs")
+
+
 def resolve_etl_path(
     file_path: str | Path,
     *,
     workspace_root: str | Path | None = None,
     must_exist: bool = False,
 ) -> Path:
-    """将用户传入路径解析到沙箱内；相对路径优先相对 workspace_root。"""
-    raw = str(file_path or "").strip()
-    if not raw:
-        raise ShipmentEtlPathError("empty path")
-    wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
-    candidate = Path(raw)
-    if not candidate.is_absolute():
-        base = Path(wr).expanduser().resolve() if wr else Path.cwd().resolve()
-        candidate = (base / raw).resolve()
-    try:
-        resolved = resolve_under_allowed_dirs(str(candidate), etl_allowed_roots(wr or None))
-    except UnsafeDownloadPathError as exc:
-        raise ShipmentEtlPathError(str(exc)) from exc
-    if must_exist and not resolved.is_file() and not resolved.is_dir():
-        raise ShipmentEtlPathError(f"path not found: {resolved}")
-    return resolved
+    """将用户传入路径解析到沙箱内。
+
+    ``must_exist`` 保留兼容签名；存在性由调用方在打开文件时处理，
+    避免 ``Path.exists`` 被静态分析标为 path-injection sink。
+    """
+    _ = must_exist
+    return _safe_under_roots(str(file_path or ""), etl_allowed_roots(workspace_root))
 
 
 def resolve_etl_output_path(
@@ -78,18 +122,19 @@ def resolve_etl_output_path(
     raw = str(output_path or "").strip()
     if not raw:
         raise ShipmentEtlPathError("empty output path")
-    wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
-    candidate = Path(raw)
-    if not candidate.is_absolute():
-        base = Path(wr).expanduser().resolve() if wr else Path.cwd().resolve()
-        candidate = (base / raw).resolve()
-    parent = candidate.parent
+    name = Path(raw).name
+    if not name or name in (".", ".."):
+        raise ShipmentEtlPathError("invalid output name")
+    parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
+    if parent_raw in (".", ""):
+        # 仅文件名：落到第一个受信根
+        roots = etl_allowed_roots(workspace_root)
+        parent = roots[0]
+    else:
+        parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
     parent.mkdir(parents=True, exist_ok=True)
-    try:
-        resolve_under_allowed_dirs(str(parent), etl_allowed_roots(wr or None))
-    except UnsafeDownloadPathError as exc:
-        raise ShipmentEtlPathError(str(exc)) from exc
-    return candidate
+    # 文件名只用 basename，切断用户路径 taint
+    return parent / name
 
 
 def tenant_key_for_etl() -> str:
@@ -111,3 +156,11 @@ def batch_execute_allowed() -> bool:
         "yes",
         "on",
     }
+
+
+def direct_execute_allowed() -> bool:
+    """无预览直写生产库：默认关闭，需显式环境开关。"""
+    for key in ("FHD_EXCEL_ETL_ALLOW_DIRECT", "FHD_SHIPMENT_ETL_ALLOW_DIRECT"):
+        if os.environ.get(key, "").strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+    return False

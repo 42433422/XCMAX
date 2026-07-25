@@ -575,14 +575,15 @@ class TestToolApiCallExt:
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
             try:
                 _tool_api_call(MagicMock(), {"path": "/api/products", "method": "POST"})
                 # Verify source was set in payload
-                call_kwargs = mock_client.post.call_args
+                call_kwargs = mock_client.request.call_args
                 payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
                 assert payload["source"] == "aiopen"
             finally:
@@ -593,7 +594,8 @@ class TestToolApiCallExt:
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
@@ -602,7 +604,7 @@ class TestToolApiCallExt:
                     MagicMock(),
                     {"path": "/api/products", "method": "POST", "body": {"source": "custom"}},
                 )
-                call_kwargs = mock_client.post.call_args
+                call_kwargs = mock_client.request.call_args
                 payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
                 # setdefault doesn't overwrite existing
                 assert payload["source"] == "custom"
@@ -663,7 +665,8 @@ class TestToolApiCallExt:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
@@ -673,7 +676,7 @@ class TestToolApiCallExt:
                     MagicMock(),
                     {"path": "/api/products", "method": "POST", "body": "not-a-dict"},
                 )
-                call_kwargs = mock_client.post.call_args
+                call_kwargs = mock_client.request.call_args
                 payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
                 # source is set to aiopen (default in empty dict)
                 assert payload["source"] == "aiopen"
@@ -693,7 +696,7 @@ class TestToolApiCallExt:
                 # No method provided
                 result = _tool_api_call(MagicMock(), {"path": "/api/products"})
                 assert result["method"] == "GET"
-                mock_client.get.assert_called_once_with("/api/products")
+                assert mock_client.get.call_args.args[0] == "/api/products"
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -702,7 +705,8 @@ class TestToolApiCallExt:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
@@ -749,7 +753,8 @@ class TestToolChatExt:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"reply": "hi"}
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_resp
+        mock_client.request.return_value = mock_resp
+        mock_client.cookies.get.return_value = None
         with patch("starlette.testclient.TestClient", return_value=mock_client):
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/ai/unified_chat": True}
@@ -757,8 +762,9 @@ class TestToolChatExt:
                 result = _tool_chat(MagicMock(), {"message": "hello"})
                 assert result["success"] is True
                 # Verify the path used
-                call_args = mock_client.post.call_args
-                assert call_args[0][0] == "/api/ai/unified_chat"
+                call_args = mock_client.request.call_args
+                assert call_args.args[0] == "POST"
+                assert call_args.args[1] == "/api/ai/unified_chat"
                 payload = call_args.kwargs.get("json") or call_args[1].get("json")
                 assert payload["message"] == "hello"
                 assert payload["source"] == "aiopen"
@@ -1031,6 +1037,7 @@ class TestAiopenManifestExt:
             "api_catalog",
             "api_call",
             "chat",
+            "capability_loop",
             "ui_sessions",
             "ui_snapshot",
             "ui_navigate",
