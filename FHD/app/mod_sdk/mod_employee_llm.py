@@ -170,7 +170,7 @@ async def _call_openai_compatible_chat(
             r.raise_for_status()
             return cast("dict[str, Any] | None", r.json())
     except RECOVERABLE_ERRORS as e:  # noqa: BLE001
-        logger.exception("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", e)
+        logger.error("mod_employee_complete: OpenAI-compatible chat 请求失败: %s", type(e).__name__)
         return None
 
 
@@ -241,11 +241,7 @@ def _prefer_vlm_candidates(
 
     # VLM 优先，其余去重后跟进
     seen = {(str(p.get("provider")), str(p.get("model"))) for p in promoted}
-    rest = [
-        c
-        for c in candidates
-        if (str(c.get("provider")), str(c.get("model"))) not in seen
-    ]
+    rest = [c for c in candidates if (str(c.get("provider")), str(c.get("model"))) not in seen]
     logger.info(
         "mod_employee_complete: 启用 VLM 路由 %s/%s (source=%s)",
         provider,

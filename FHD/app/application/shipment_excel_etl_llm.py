@@ -366,9 +366,7 @@ def needs_llm_assist(
                 return True, "delivery_columns_incomplete"
             if meta is not None and not str(meta.get("unit_name") or "").strip():
                 return True, "delivery_unit_missing"
-    if prefer_kind == "shipment_ledger" or (
-        delivery_score < min_score and ledger_score >= 40
-    ):
+    if prefer_kind == "shipment_ledger" or (delivery_score < min_score and ledger_score >= 40):
         if header_row is None:
             return True, "ledger_header_missing"
         if "order_number" not in mapping:
@@ -379,7 +377,9 @@ def needs_llm_assist(
     if incomplete and prefer_kind in {None, "delivery_note", "shipment_ledger"}:
         if mode == "on":
             return True, "forced_on_incomplete_layout"
-        if mode == "auto" and (delivery_score >= 16 or ledger_score >= 16 or header_row is not None):
+        if mode == "auto" and (
+            delivery_score >= 16 or ledger_score >= 16 or header_row is not None
+        ):
             return True, "auto_unknown_headers"
     if delivery_score < gray_low and ledger_score < 40:
         return False, "scores_too_low"

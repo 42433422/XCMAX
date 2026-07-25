@@ -1641,8 +1641,10 @@ async def tool_list_vlm_models(params: dict[str, Any], ctx: dict[str, Any]) -> d
         active_route=route,
         known_defaults=known_defaults,
         env_hint={
-            "XCAGI_EMPLOYEE_VLM_PROVIDER": os.environ.get("XCAGI_EMPLOYEE_VLM_PROVIDER", "") or "(未设置)",
-            "XCAGI_EMPLOYEE_VLM_MODEL": os.environ.get("XCAGI_EMPLOYEE_VLM_MODEL", "") or "(未设置)",
+            "XCAGI_EMPLOYEE_VLM_PROVIDER": os.environ.get("XCAGI_EMPLOYEE_VLM_PROVIDER", "")
+            or "(未设置)",
+            "XCAGI_EMPLOYEE_VLM_MODEL": os.environ.get("XCAGI_EMPLOYEE_VLM_MODEL", "")
+            or "(未设置)",
             "FHD_TEMPLATE_VLM_ENRICH": os.environ.get("FHD_TEMPLATE_VLM_ENRICH", "") or "(未设置)",
         },
     )

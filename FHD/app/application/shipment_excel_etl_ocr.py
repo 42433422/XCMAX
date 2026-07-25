@@ -94,8 +94,10 @@ def grid_to_workbook_path(
 ) -> Path:
     from openpyxl import Workbook
 
-    path = Path(output_path) if output_path else Path(
-        tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1]
+    path = (
+        Path(output_path)
+        if output_path
+        else Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1])
     )
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,7 +166,9 @@ def _guess_meta_lines(grid: list[list[str]]) -> list[str]:
         joined = " ".join(str(c).strip() for c in row if str(c).strip())
         if not joined:
             continue
-        if re.search(r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order", joined, re.I):
+        if re.search(
+            r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order", joined, re.I
+        ):
             meta.append(joined)
     return meta[:3]
 

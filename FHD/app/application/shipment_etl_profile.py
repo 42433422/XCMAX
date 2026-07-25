@@ -140,7 +140,9 @@ def parse_profile_dict(data: dict[str, Any], *, source: str = "<dict>") -> Shipm
     detect = _as_dict(_require(data, "detect", source), f"{source}.detect")
     if "delivery" not in detect and "primary" in detect:
         detect = {**detect, "delivery": detect.get("primary")}
-    delivery = _as_dict(_require(detect, "delivery", f"{source}.detect"), f"{source}.detect.delivery")
+    delivery = _as_dict(
+        _require(detect, "delivery", f"{source}.detect"), f"{source}.detect.delivery"
+    )
 
     ledger_raw = detect.get("ledger")
     if ledger_raw is None:
@@ -173,9 +175,13 @@ def parse_profile_dict(data: dict[str, Any], *, source: str = "<dict>") -> Shipm
 
     columns_raw = _as_dict(_require(data, "columns", source), f"{source}.columns")
     ledger = _as_dict(data.get("ledger") or {}, f"{source}.ledger")
-    write = _as_dict(data.get("write") if isinstance(data.get("write"), dict) else {}, f"{source}.write")
+    write = _as_dict(
+        data.get("write") if isinstance(data.get("write"), dict) else {}, f"{source}.write"
+    )
 
-    title_patterns = _as_list(delivery.get("title_patterns") or [], f"{source}.detect.delivery.title_patterns")
+    title_patterns = _as_list(
+        delivery.get("title_patterns") or [], f"{source}.detect.delivery.title_patterns"
+    )
     meta_patterns = CompiledMetaPatterns(
         title=_compile_title_patterns(title_patterns, f"{source}.detect.delivery.title_patterns"),
         buyer=_compile(
@@ -243,8 +249,6 @@ def build_universal_profile_from_kb() -> ShipmentEtlProfile:
     )
 
     return _build()
-
-
 
 
 def profile_search_dirs() -> list[Path]:

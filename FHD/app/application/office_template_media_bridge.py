@@ -184,7 +184,12 @@ def _ocr_pdf_plaintext(file_path: str) -> dict[str, Any]:
                 lines.append("\t".join(cells))
         wb.close()
     except RECOVERABLE_ERRORS as exc:
-        return {"success": False, "text": "", "message": f"OCR 结果读取失败: {exc}", "engine": "ocr"}
+        return {
+            "success": False,
+            "text": "",
+            "message": f"OCR 结果读取失败: {exc}",
+            "engine": "ocr",
+        }
     text = "\n".join(lines)
     return {
         "success": True,
@@ -355,9 +360,7 @@ def build_pdf_template_analysis(
     if len(text.strip()) < 40 or _vlm_enrich_enabled():
         img_bytes = _maybe_pdf_page_image_bytes(file_path)
         if img_bytes:
-            vlm_sidecar = _sync_vlm_describe_first_image(
-                img_bytes, hint="这是 PDF 首页渲染图。"
-            )
+            vlm_sidecar = _sync_vlm_describe_first_image(img_bytes, hint="这是 PDF 首页渲染图。")
             if vlm_sidecar and vlm_sidecar.get("vlm_ok") and vlm_sidecar.get("description"):
                 # 把 VLM 描述并入文本，便于占位符/字段生成
                 text = f"{text}\n{vlm_sidecar['description']}".strip()

@@ -107,7 +107,7 @@ def test_knowledge_base_remembers_and_hits(tmp_path, monkeypatch):
     # 第二次应走 KB 命中
     second = parse_delivery_notes(path, include_ledger=False)
     assert second["note_count"] == 1
-    assist = (second["notes"][0].get("assist") or {})
+    assist = second["notes"][0].get("assist") or {}
     assert assist.get("reason") == "knowledge_base_hit"
     assert assist.get("cache_hit") is True
 

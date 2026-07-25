@@ -134,8 +134,7 @@ def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
     ws.title = "N1"
     ws["A1"] = "ALT Factory Delivery"
     ws["A2"] = (
-        "购货单位（乙方）：切换客户     联系人：李     "
-        "日期：2026年07月25日         订单编号：ALT-1"
+        "购货单位（乙方）：切换客户     联系人：李     日期：2026年07月25日         订单编号：ALT-1"
     )
     ws["A3"] = "SKU"
     ws["B3"] = "ItemName"

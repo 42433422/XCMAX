@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
 class UnsafeDownloadPathError(ValueError):
     """路径不在允许的根目录之下。"""
+
+
+def is_path_within(root: Path, candidate: Path) -> bool:
+    """判断 candidate 是否落在 root 之下（含 root 自身）。"""
+    try:
+        root_s = os.path.realpath(str(root))
+        cand_s = os.path.realpath(str(candidate))
+        return os.path.commonpath([root_s, cand_s]) == root_s
+    except (ValueError, OSError):
+        return False
 
 
 def resolve_under_allowed_dirs(file_arg: str, allowed_roots: list[Path]) -> Path:
@@ -29,9 +40,6 @@ def resolve_under_allowed_dirs(file_arg: str, allowed_roots: list[Path]) -> Path
         candidate = candidate.resolve()
 
     for root in roots:
-        try:
-            candidate.relative_to(root)
+        if is_path_within(root, candidate):
             return candidate
-        except ValueError:
-            continue
-    raise UnsafeDownloadPathError(f"path not under allowed dirs: {candidate}")
+    raise UnsafeDownloadPathError("path not under allowed dirs")

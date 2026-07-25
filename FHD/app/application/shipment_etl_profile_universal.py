@@ -123,4 +123,3 @@ def build_universal_profile_from_kb() -> ShipmentEtlProfile:
         "write": write,
     }
     return parse_profile_dict(data, source="<knowledge_base:universal>")
-

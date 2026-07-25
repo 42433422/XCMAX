@@ -38,7 +38,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-def _resolve_profile(profile: ShipmentEtlProfile | None = None, profile_id: str | None = None) -> ShipmentEtlProfile:
+def _resolve_profile(
+    profile: ShipmentEtlProfile | None = None, profile_id: str | None = None
+) -> ShipmentEtlProfile:
     if profile is not None:
         return profile
     return get_shipment_etl_profile(profile_id)
@@ -284,7 +286,7 @@ def _score_ledger_sheet(ws, profile: ShipmentEtlProfile) -> int:
 
 
 def _find_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
-    cfg = (profile.header_detect.get("delivery") or {})
+    cfg = profile.header_detect.get("delivery") or {}
     max_scan = int(cfg.get("max_scan_rows") or 12)
     groups = cfg.get("require_groups") or []
     for row in range(1, min(max_scan, int(ws.max_row or 0) + 1)):
@@ -317,7 +319,7 @@ def _find_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
 
 
 def _find_ledger_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
-    cfg = (profile.header_detect.get("ledger") or {})
+    cfg = profile.header_detect.get("ledger") or {}
     max_scan = int(cfg.get("max_scan_rows") or 16)
     groups = cfg.get("require_groups") or []
     and_any = cfg.get("and_any_groups") or []
@@ -397,7 +399,9 @@ def _infer_columns_from_samples(
                 pass
         if nums >= max(1, len(samples) // 2 + 1):
             kind = "number"
-        elif re.search(r"[A-Za-z0-9\-_/]{2,}", joined) and not re.search(r"[\u4e00-\u9fff]{2,}", joined):
+        elif re.search(r"[A-Za-z0-9\-_/]{2,}", joined) and not re.search(
+            r"[\u4e00-\u9fff]{2,}", joined
+        ):
             kind = "code"
         elif re.search(r"[\u4e00-\u9fff]", joined):
             kind = "name"
@@ -415,7 +419,9 @@ def _infer_columns_from_samples(
 
     _take(
         "model_number",
-        lambda c, s, k: k.startswith("code") or (k.startswith("text") and all(len(x) <= 24 for x in s)),
+        lambda c, s, k: (
+            k.startswith("code") or (k.startswith("text") and all(len(x) <= 24 for x in s))
+        ),
     )
     _take("product_name", lambda c, s, k: k.startswith("name") or k.startswith("text"))
     # 数值列：按从左到右依次填 数量/规格/公斤/单价/金额
@@ -809,11 +815,21 @@ def _apply_llm_assist_to_layout(
             new_mapping[field_name] = col
     # Prefer LLM columns when rules were incomplete for that field
     for field_name, col in (assist.columns or {}).items():
-        if field_name in {"product_name", "model_number", "order_number", "quantity_tins", "quantity_kg"}:
+        if field_name in {
+            "product_name",
+            "model_number",
+            "order_number",
+            "quantity_tins",
+            "quantity_kg",
+        }:
             if field_name not in mapping and isinstance(col, int) and col > 0:
                 new_mapping[field_name] = col
     new_meta = _merge_meta(dict(meta or {}), assist.meta or {}, prefer_overlay=True)
-    kind = assist.source_kind if assist.source_kind in {"delivery_note", "shipment_ledger", "ignore"} else prefer_kind
+    kind = (
+        assist.source_kind
+        if assist.source_kind in {"delivery_note", "shipment_ledger", "ignore"}
+        else prefer_kind
+    )
     return new_header, new_mapping, new_meta, kind, assist_public
 
 
@@ -1023,9 +1039,7 @@ def _parse_ledger_sheet(
             continue
         order_date = ""
         if "order_date" in mapping:
-            order_date = _excel_date_to_str(
-                ws.cell(row, mapping["order_date"]).value, profile
-            )
+            order_date = _excel_date_to_str(ws.cell(row, mapping["order_date"]).value, profile)
         bucket = groups.setdefault(
             order_no,
             {
@@ -1067,7 +1081,20 @@ def parse_delivery_notes(
 
     若路径是图片/PDF 且 allow_ocr=True，先走 OCR 桥接再解析。
     """
-    path = Path(file_path).expanduser().resolve()
+    from app.application.shipment_excel_etl_security import (
+        ShipmentEtlPathError,
+        resolve_etl_path,
+    )
+
+    try:
+        path = resolve_etl_path(file_path, must_exist=False)
+    except ShipmentEtlPathError:
+        return {
+            "success": False,
+            "message": "非法文件路径",
+            "notes": [],
+            "error_code": "unsafe_path",
+        }
     if allow_ocr:
         try:
             from app.application.shipment_excel_etl_ocr import is_ocr_source, parse_ocr_document
@@ -1089,12 +1116,12 @@ def parse_delivery_notes(
     try:
         from openpyxl import load_workbook
     except ImportError as exc:
-        return {"success": False, "message": f"缺少 openpyxl: {exc}", "notes": []}
+        return {"success": False, "message": "缺少 openpyxl，无法解析 Excel", "notes": []}
 
     try:
         wb = load_workbook(str(path), data_only=True)
     except RECOVERABLE_ERRORS as exc:
-        return {"success": False, "message": f"无法读取 Excel: {exc}", "notes": []}
+        return {"success": False, "message": "无法读取 Excel 文件", "notes": []}
 
     fallback_unit = (unit_name_hint or path.stem).strip() or path.stem
     delivery_notes: list[dict[str, Any]] = []
@@ -1357,7 +1384,6 @@ def parse_delivery_notes(
     }
 
 
-
 def preview_shipment_excel_etl(
     file_path: str | Path,
     *,
@@ -1378,7 +1404,7 @@ def preview_shipment_excel_etl(
     except ShipmentEtlPathError as exc:
         return {
             "success": False,
-            "message": f"非法文件路径: {exc}",
+            "message": "非法文件路径",
             "error_code": "unsafe_path",
             "notes": [],
         }
@@ -1488,7 +1514,7 @@ def execute_shipment_excel_etl(
         except ShipmentEtlPathError as exc:
             return {
                 "success": False,
-                "message": f"非法文件路径: {exc}",
+                "message": "非法文件路径",
                 "error_code": "unsafe_path",
             }
 
@@ -1545,12 +1571,7 @@ def execute_shipment_excel_etl(
         if str(n.get("profile_target") or "shipment").strip() not in {"", "shipment"}
     ]
     if non_shipment and import_shipments:
-        targets = sorted(
-            {
-                str(n.get("profile_target") or "preview_only")
-                for n in non_shipment
-            }
-        )
+        targets = sorted({str(n.get("profile_target") or "preview_only") for n in non_shipment})
         return {
             "success": False,
             "message": (
@@ -1633,7 +1654,7 @@ def execute_shipment_excel_etl(
         except RECOVERABLE_ERRORS as exc:
             return {
                 "success": False,
-                "message": f"发货单服务不可用: {exc}",
+                "message": "发货单服务不可用",
                 "product_result": product_result,
             }
 
@@ -1782,7 +1803,7 @@ def write_delivery_note_workbook(
     try:
         from openpyxl import Workbook
     except ImportError as exc:
-        return {"success": False, "message": f"缺少 openpyxl: {exc}"}
+        return {"success": False, "message": "缺少 openpyxl，无法解析 Excel"}
 
     prof = _resolve_profile(profile, profile_id)
     write_cfg = prof.write or {}
@@ -1790,7 +1811,9 @@ def write_delivery_note_workbook(
     headers = list(write_cfg.get("header_row") or [])
     item_cols = dict(write_cfg.get("item_columns") or {})
     date_fmt = str(write_cfg.get("date_format") or "%Y-%m-%d")
-    meta_tpl = str(write_cfg.get("meta_line_template") or "{unit} {contact} {order_date} {order_no}")
+    meta_tpl = str(
+        write_cfg.get("meta_line_template") or "{unit} {contact} {order_date} {order_no}"
+    )
     footer = str(write_cfg.get("footer_label") or "")
     default_sheet = str(write_cfg.get("default_sheet_name") or "Sheet1")
     sheet_prefix = str(write_cfg.get("sheet_name_prefix") or "S")
@@ -1905,7 +1928,7 @@ def write_ledger_workbook(
     try:
         from openpyxl import Workbook
     except ImportError as exc:
-        return {"success": False, "message": f"缺少 openpyxl: {exc}"}
+        return {"success": False, "message": "缺少 openpyxl，无法解析 Excel"}
 
     prof = _resolve_profile(profile, profile_id)
     write_cfg = prof.write or {}
@@ -1962,9 +1985,7 @@ def regenerate_delivery_notes_from_file(
 ) -> dict[str, Any]:
     """解析 → 按 profile 送货单版式再出单（模板反推闭环）。"""
     prof = _resolve_profile(profile, profile_id)
-    parsed = parse_delivery_notes(
-        file_path, include_ledger=include_ledger, profile=prof
-    )
+    parsed = parse_delivery_notes(file_path, include_ledger=include_ledger, profile=prof)
     if not parsed.get("success"):
         return parsed
     notes = parsed.get("notes") or []
@@ -2010,7 +2031,7 @@ def batch_preview_shipment_excel_etl(
     except ShipmentEtlPathError as exc:
         return {
             "success": False,
-            "message": f"非法目录: {exc}",
+            "message": "非法目录",
             "error_code": "unsafe_path",
             "files": [],
         }
@@ -2086,7 +2107,7 @@ def batch_execute_shipment_excel_etl(
     except ShipmentEtlPathError as exc:
         return {
             "success": False,
-            "message": f"非法目录: {exc}",
+            "message": "非法目录",
             "error_code": "unsafe_path",
             "files": [],
         }

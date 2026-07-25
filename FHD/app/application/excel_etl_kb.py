@@ -56,8 +56,7 @@ _SEED: dict[str, Any] = {
                 "日期：{order_date}         单号：{order_no}"
             ),
             "demo_meta_line": (
-                "客户：示例客户     联系人：测试        "
-                "日期：2026年07月25日         单号：DEMO-1"
+                "客户：示例客户     联系人：测试        日期：2026年07月25日         单号：DEMO-1"
             ),
             "header_row": ["型号", "名称", "数量", "规格", "数量KG", "单价", "金额"],
             "footer_label": "",
@@ -288,7 +287,9 @@ class ExcelEtlKnowledgeBase:
         with _LOCK:
             templates = self._data.setdefault("templates", {})
             prev = templates.get(fp) if isinstance(templates.get(fp), dict) else {}
-            merged = TemplateMemory.from_dict({**(prev or {}), **memory.to_dict(), "fingerprint": fp})
+            merged = TemplateMemory.from_dict(
+                {**(prev or {}), **memory.to_dict(), "fingerprint": fp}
+            )
             if prev:
                 merged.hit_count = max(int(prev.get("hit_count") or 0), merged.hit_count)
             templates[fp] = merged.to_dict()

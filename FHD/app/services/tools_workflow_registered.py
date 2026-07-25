@@ -922,8 +922,13 @@ def _registered_router_document_template(
         file_path = str(payload.get("file_path") or payload.get("original_file_path") or "").strip()
         file_body = payload.get("file_body")
         template_name = str(payload.get("template_name") or payload.get("name") or "").strip()
-        template_scope = str(payload.get("template_scope") or payload.get("business_scope") or "").strip()
-        source = str(payload.get("source") or "document_template_ingest").strip() or "document_template_ingest"
+        template_scope = str(
+            payload.get("template_scope") or payload.get("business_scope") or ""
+        ).strip()
+        source = (
+            str(payload.get("source") or "document_template_ingest").strip()
+            or "document_template_ingest"
+        )
         if isinstance(file_body, (bytes, bytearray)):
             data, status_code = ingest_office_bytes_to_template_library(
                 file_body=bytes(file_body),

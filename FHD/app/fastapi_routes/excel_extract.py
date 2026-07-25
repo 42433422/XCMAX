@@ -494,7 +494,9 @@ async def shipment_etl_preview(
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl preview failed: %s", e)
-        return JSONResponse({"success": False, "message": "单据预览失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "单据预览失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/shipment-etl/execute")
@@ -643,7 +645,9 @@ async def shipment_etl_execute(
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl execute failed: %s", e)
-        return JSONResponse({"success": False, "message": "单据入库失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "单据入库失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/shipment-etl/ocr-preview")
@@ -697,14 +701,20 @@ async def shipment_etl_ocr_preview(
                     include_ledger=_form_include_ledger(include_ledger, default="auto"),
                     workspace_root=str(workspace_root or "").strip() or None,
                 )
-                result = {**preview, "ocr": parsed.get("ocr"), "source_path": parsed.get("source_path")}
+                result = {
+                    **preview,
+                    "ocr": parsed.get("ocr"),
+                    "source_path": parsed.get("source_path"),
+                }
             else:
                 result = parsed
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl ocr-preview failed: %s", e)
-        return JSONResponse({"success": False, "message": "OCR 预览失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "OCR 预览失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/shipment-etl/batch-preview")
@@ -731,7 +741,9 @@ async def shipment_etl_batch_preview(
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl batch preview failed: %s", e)
-        return JSONResponse({"success": False, "message": "批量预览失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "批量预览失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/shipment-etl/batch-execute")
@@ -771,7 +783,9 @@ async def shipment_etl_batch_execute(
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl batch execute failed: %s", e)
-        return JSONResponse({"success": False, "message": "批量入库失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "批量入库失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/shipment-etl/generate-template")
@@ -800,9 +814,9 @@ async def shipment_etl_generate_template(
             )
         try:
             out = str(resolve_etl_output_path(out))
-        except ShipmentEtlPathError as exc:
+        except ShipmentEtlPathError:
             return JSONResponse(
-                {"success": False, "message": f"非法输出路径: {exc}", "error_code": "unsafe_path"},
+                {"success": False, "message": "非法输出路径", "error_code": "unsafe_path"},
                 status_code=400,
             )
         kind_norm = str(kind or "delivery").strip().lower()
@@ -835,7 +849,9 @@ async def shipment_etl_generate_template(
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl generate template failed: %s", e)
-        return JSONResponse({"success": False, "message": "单据处理失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "单据处理失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.post("/shipment-etl/regenerate")
@@ -863,9 +879,9 @@ async def shipment_etl_regenerate(
         wr = str(workspace_root or "").strip() or None
         try:
             src_resolved = str(resolve_etl_path(src, workspace_root=wr, must_exist=True))
-        except ShipmentEtlPathError as exc:
+        except ShipmentEtlPathError:
             return JSONResponse(
-                {"success": False, "message": f"非法文件路径: {exc}", "error_code": "unsafe_path"},
+                {"success": False, "message": "非法文件路径", "error_code": "unsafe_path"},
                 status_code=400,
             )
         out = str(output_path or "").strip()
@@ -876,9 +892,9 @@ async def shipment_etl_regenerate(
             )
         try:
             out = str(resolve_etl_output_path(out, workspace_root=wr))
-        except ShipmentEtlPathError as exc:
+        except ShipmentEtlPathError:
             return JSONResponse(
-                {"success": False, "message": f"非法输出路径: {exc}", "error_code": "unsafe_path"},
+                {"success": False, "message": "非法输出路径", "error_code": "unsafe_path"},
                 status_code=400,
             )
         result = get_shipment_excel_etl_app_service().regenerate(
@@ -889,7 +905,9 @@ async def shipment_etl_regenerate(
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl regenerate failed: %s", e)
-        return JSONResponse({"success": False, "message": "单据处理失败，请稍后重试"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": "单据处理失败，请稍后重试"}, status_code=500
+        )
 
 
 @router.get("/logs")

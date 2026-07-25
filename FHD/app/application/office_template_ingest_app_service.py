@@ -72,9 +72,7 @@ def _build_create_payload_from_analyze(
         or str(analyzed.get("template_name") or "").strip()
         or Path(filename or "template").stem
     )
-    file_path = (
-        str(preview.get("file_path") or preview.get("image_path") or "").strip() or None
-    )
+    file_path = str(preview.get("file_path") or preview.get("image_path") or "").strip() or None
     scope = str(template_scope or "").strip()
     return {
         "name": name,

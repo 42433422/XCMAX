@@ -203,13 +203,9 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
         path,
     )
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    denied = execute_shipment_excel_etl(
-        path, direct=True, dry_run=True, workspace_root=tmp_path
-    )
+    denied = execute_shipment_excel_etl(path, direct=True, dry_run=True, workspace_root=tmp_path)
     # dry_run 仍检查 direct 开关（非 dry 才拦）；确认非 dry 被拒
-    denied2 = execute_shipment_excel_etl(
-        path, direct=True, dry_run=False, workspace_root=tmp_path
-    )
+    denied2 = execute_shipment_excel_etl(path, direct=True, dry_run=False, workspace_root=tmp_path)
     assert denied2["success"] is False
     assert denied2["error_code"] == "direct_execute_denied"
     assert direct_execute_allowed() is False

@@ -147,9 +147,8 @@ def resolve_vlm_route() -> dict[str, Any]:
         }
 
     chat_provider = os.environ.get("XCAGI_LLM_PROVIDER", "").strip().lower()
-    chat_model = (
-        os.environ.get("XCAGI_EMPLOYEE_LLM_MODEL", "").strip()
-        or (os.environ.get(f"{chat_provider.upper()}_MODEL", "").strip() if chat_provider else "")
+    chat_model = os.environ.get("XCAGI_EMPLOYEE_LLM_MODEL", "").strip() or (
+        os.environ.get(f"{chat_provider.upper()}_MODEL", "").strip() if chat_provider else ""
     )
     if chat_provider and chat_model and model_looks_like_vlm(chat_model):
         return {
