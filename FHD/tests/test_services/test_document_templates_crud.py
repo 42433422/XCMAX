@@ -168,7 +168,7 @@ class TestBuildTemplatePayloadFromRow:
         row.template_name = "无效分类"
         row.template_type = ""
         row.original_file_path = None
-        row.analyzed_data = json.dumps({"category": "pdf"})
+        row.analyzed_data = json.dumps({"category": "foobar"})
         row.business_rules = json.dumps({})
         row.editable_config = None
 
@@ -351,7 +351,7 @@ class TestCreateTemplateWithPayload:
             result = create_template_with_payload(
                 {
                     "name": "无效分类",
-                    "category": "pdf",
+                    "category": "foobar",
                 }
             )
 

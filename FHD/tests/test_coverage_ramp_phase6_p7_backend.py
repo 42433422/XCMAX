@@ -261,7 +261,8 @@ def test_compat_ai_generate_recoverable_error_returns_500() -> None:
     assert resp.status_code == 500
     body = resp.json()
     assert body["success"] is False
-    assert "shipment service down" in body["message"]
+    assert body["message"] == "生成失败"
+    assert "shipment service down" not in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -706,7 +707,8 @@ def test_compat_print_diagnose_recoverable_error_returns_500() -> None:
     assert resp.status_code == 500
     body = resp.json()
     assert body["success"] is False
-    assert "printer driver crash" in body["message"]
+    assert body["message"] == "打印机诊断失败"
+    assert "printer driver crash" not in body["message"]
 
 
 # ---------------------------------------------------------------------------

@@ -380,7 +380,7 @@ class TestAnalyzeWordTemplate:
         from app.services.document_templates.analyzer import _analyze_word_template
 
         with patch(
-            "app.services.document_templates.analyzer._validate_required_terms",
+            "app.application.office_template_analyze_handlers._validate_required_terms",
             return_value=(False, ["产品名称"]),
         ):
             result = _analyze_word_template(docx_path, "test", "template.docx", "task-3")
