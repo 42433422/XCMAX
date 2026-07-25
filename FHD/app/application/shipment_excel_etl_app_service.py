@@ -1287,7 +1287,7 @@ def parse_delivery_notes(
 
     profiles = _profiles_for_parse(profile, profile_id)
     if not path.is_file():
-        return {"success": False, "message": f"文件不存在: {path}", "notes": []}
+        return {"success": False, "message": "文件不存在", "notes": []}
 
     try:
         from openpyxl import load_workbook

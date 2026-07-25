@@ -296,11 +296,13 @@ async def mod_employee_complete(
             parsed = _parse_chat_completions_response(raw)
             if parsed.get("success"):
                 if str(cand.get("provider") or "") != primary_provider or cand.get("vlm_preferred"):
+                    used_provider = str(cand.get("provider") or "")
+                    used_model = str(cand.get("model") or "")
                     logger.warning(
                         "mod_employee_complete: 主 LLM(%s) 不可用或改走 VLM，已使用 %s/%s",
                         primary_provider or "default",
-                        cand.get("provider"),
-                        cand.get("model"),
+                        used_provider,
+                        used_model,
                     )
                 return parsed
     if direct_candidates:

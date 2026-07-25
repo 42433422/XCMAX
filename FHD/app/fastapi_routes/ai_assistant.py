@@ -218,7 +218,7 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         )
     except RECOVERABLE_ERRORS as e:
         logger.error("兼容 /api/generate 失败: %s", e, exc_info=True)
-        return _fail(f"生成失败: {str(e)}", 500)
+        return _fail("生成失败", 500)
 
 
 @router.get("/api/shipment-records/units")
@@ -389,7 +389,7 @@ def compat_print_diagnose():
         return JSONResponse({"success": True, "diagnostic": base})
     except RECOVERABLE_ERRORS as e:
         logger.error("打印机诊断失败: %s", e, exc_info=True)
-        return _fail(f"打印机诊断失败: {str(e)}", 500)
+        return _fail("打印机诊断失败", 500)
 
 
 @router.post("/api/print/{filename:path}")

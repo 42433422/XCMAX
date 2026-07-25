@@ -46,10 +46,13 @@ def _trusted_base_roots() -> list[Path]:
 def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
     roots = list(_trusted_base_roots())
     wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
-    if wr:
-        wr_path = Path(wr).expanduser().resolve()
+    if wr and not any(ch in wr for ch in ("\x00", "\n", "\r")):
+        try:
+            wr_path = Path(os.path.realpath(wr))
+        except (OSError, ValueError):
+            wr_path = None
         # workspace_root 只能是受信根之下的子目录，禁止把任意用户路径抬升为根
-        if any(is_path_within(base, wr_path) for base in roots):
+        if wr_path is not None and any(is_path_within(base, wr_path) for base in roots):
             roots.append(wr_path)
     seen: set[str] = set()
     out: list[Path] = []
@@ -66,17 +69,22 @@ def _resolve_candidate(
     raw: str,
     *,
     workspace_root: str | Path | None,
-) -> Path:
-    candidate = Path(raw)
-    if candidate.is_absolute():
-        return candidate.resolve()
+) -> str:
+    """把相对路径接到受信 workspace 下，返回仍待沙箱校验的路径字符串。"""
+    text = str(raw or "").strip()
+    if not text:
+        return text
+    if os.path.isabs(text):
+        return text
     roots = etl_allowed_roots(workspace_root)
     wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
     if wr:
-        wr_path = Path(wr).expanduser().resolve()
+        wr_path = Path(os.path.realpath(str(Path(wr).expanduser())))
         if any(is_path_within(base, wr_path) for base in roots):
-            return (wr_path / raw).resolve()
-    return (roots[0] / raw).resolve()
+            # 只用路径片段拼接，避免把未校验绝对路径抬升为根
+            parts = [p for p in Path(text).parts if p not in ("", ".")]
+            return str(wr_path.joinpath(*parts)) if parts else str(wr_path)
+    return text
 
 
 def resolve_etl_path(
@@ -91,7 +99,7 @@ def resolve_etl_path(
         raise ShipmentEtlPathError("empty path")
     candidate = _resolve_candidate(raw, workspace_root=workspace_root)
     try:
-        resolved = resolve_under_allowed_dirs(str(candidate), etl_allowed_roots(workspace_root))
+        resolved = resolve_under_allowed_dirs(candidate, etl_allowed_roots(workspace_root))
     except UnsafeDownloadPathError as exc:
         raise ShipmentEtlPathError("path not under allowed dirs") from exc
     if must_exist and not resolved.is_file() and not resolved.is_dir():
@@ -109,13 +117,17 @@ def resolve_etl_output_path(
     if not raw:
         raise ShipmentEtlPathError("empty output path")
     candidate = _resolve_candidate(raw, workspace_root=workspace_root)
-    parent = candidate.parent
-    parent.mkdir(parents=True, exist_ok=True)
     try:
-        resolve_under_allowed_dirs(str(parent), etl_allowed_roots(workspace_root))
+        # 先校验父目录可落在沙箱；文件本身可能尚不存在
+        parent_raw = str(Path(candidate).parent)
+        parent = resolve_under_allowed_dirs(parent_raw, etl_allowed_roots(workspace_root))
     except UnsafeDownloadPathError as exc:
         raise ShipmentEtlPathError("path not under allowed dirs") from exc
-    return candidate
+    parent.mkdir(parents=True, exist_ok=True)
+    name = Path(candidate).name
+    if not name or name in (".", ".."):
+        raise ShipmentEtlPathError("invalid output name")
+    return parent / name
 
 
 def tenant_key_for_etl() -> str:
