@@ -87,6 +87,9 @@ def test_parse_merge_review_diff_char_count_and_memory_flag():
     assert parse_merge_review_diff_char_count(
         "devfleet/cursor/sub-1-327c02: diff-too-large:50140"
     ) == 50140
+    assert parse_merge_review_diff_char_count(
+        "devfleet/cursor/sub-1-3ee902: diff-too-large:59051"
+    ) == 59051
     memory = {
         "open_items": [
             {

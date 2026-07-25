@@ -89,8 +89,6 @@ def para_merge_review_max_diff_chars() -> int:
 
 
 def parse_merge_review_diff_char_count(detail: str) -> Optional[int]:
-    """Extract reported git diff size from merge-worker veto detail (diff-too-large:NNN)."""
-
     match = re.search(r"diff-too-large:(\d+)", str(detail or ""), re.IGNORECASE)
     if not match:
         return None

@@ -2309,8 +2309,6 @@ def _normalize_para_merge_review_veto_code(veto_code: str) -> str:
 
 
 def _classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
-    """Normalize Para merge-worker veto detail for loop remediation."""
-
     text = str(detail or "").strip()[:4000]
     lowered = text.lower()
     branch_hint = ""
@@ -2352,30 +2350,19 @@ def _classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
 def _indeterminate_merge_review_remediation_hint() -> str:
     return (
         "\n\n=== INDETERMINATE MERGE REVIEW VETO ===\n"
-        "The merge-worker reported indeterminate-review: Trae and MiniMax did not emit a "
-        "parseable APPROVE/REJECT verdict on the prior PR diff. This is not a dimensional "
-        "code-defect list. Remediation must be executable and reviewable:\n"
-        "1) Do not re-land duplicate KB/tests-only deltas when the production fix already "
-        "exists on the canonical base branch.\n"
-        "2) Ship a focused modstore_server production change plus regression tests that "
-        "make indeterminate vetoes classifiable in loop memory (this branch).\n"
-        "3) Keep the diff small and free of marker-only or status-only files so the "
-        "independent merge reviewer can emit a strict verdict."
+        "Trae/MiniMax did not emit a parseable APPROVE/REJECT verdict. "
+        "Ship a focused modstore_server production change plus regression tests; "
+        "do not re-land KB/tests-only deltas; keep the diff reviewable."
     )
 
 
 def _diff_too_large_merge_review_remediation_hint() -> str:
     return (
         "\n\n=== DIFF TOO LARGE MERGE REVIEW VETO ===\n"
-        "The merge-worker reported diff-too-large: the PR git diff exceeded the Para "
-        "merge-review character budget (default 30000, same as merge_worker.mjs). "
-        "Remediation must shrink the branch before re-requesting merge:\n"
-        "1) Rebase onto the current integration base and drop unrelated merge commits "
-        "(for example generated workflow or desktop feed deltas not part of this fix).\n"
-        "2) Keep modstore_server production changes plus focused tests; do not land "
-        "FHD/XCAGI/kb/* paths on this remediation branch (auto-merge blocks KB while "
-        "a diff-too-large open_item is active).\n"
-        "3) Confirm git diff character count stays under the budget before merge request."
+        "PR git diff exceeded the Para merge-review budget (default 30000). "
+        "Rebase onto integration base, drop unrelated deltas, keep modstore_server "
+        "production plus focused tests only (no FHD/XCAGI/kb on this branch), "
+        "and confirm git diff size stays under budget before merge request."
     )
 
 
@@ -4798,6 +4785,25 @@ def _assess_branch_auto_merge_policy(
     if diff_chars <= 0 and diff_excerpt:
         diff_chars = len(diff_excerpt)
     if diff_chars > max_review_chars:
+        if memory_has_diff_too_large_remediation(memory):
+            auxiliary_paths = [
+                file_name
+                for file_name in normalized_files
+                if file_name.startswith("FHD/XCAGI/kb/")
+                or is_auxiliary_self_maintenance_evidence_path(file_name)
+            ]
+            if auxiliary_paths:
+                return _decision(
+                    {
+                        "auxiliary_paths": auxiliary_paths,
+                        "changed_files": normalized_files,
+                        "git_diff_chars": diff_chars,
+                        "max_diff_chars": max_review_chars,
+                        "ok": False,
+                        "reason": "diff_too_large_remediation_drop_auxiliary_paths",
+                        "self_maintenance_requirement": requirement,
+                    }
+                )
         return _decision(
             {
                 "changed_files": normalized_files,
