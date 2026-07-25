@@ -486,7 +486,10 @@ def _parse_buyer_meta(ws, header_row: int, profile: ShipmentEtlProfile) -> dict[
             meta["title"] = text.strip()
         buyer = mp.buyer.search(text.replace("　", " "))
         if buyer and not meta["unit_name"]:
-            meta["unit_name"] = buyer.group(1).strip(" ：:　")
+            candidate = buyer.group(1).strip(" ：:　")
+            candidate = re.sub(r"\s*\([^)]*\)\s*$", "", candidate).strip()
+            if candidate and not _unit_name_looks_truncated(candidate):
+                meta["unit_name"] = candidate
         contact = mp.contact.search(text)
         if contact and not meta["contact_person"]:
             meta["contact_person"] = contact.group(1).strip(" ：:　")
@@ -507,7 +510,164 @@ def _parse_buyer_meta(ws, header_row: int, profile: ShipmentEtlProfile) -> dict[
                 chunk = mp.buyer_stop.split(after[1], maxsplit=1)[0]
                 meta["unit_name"] = chunk.strip(" ：:　")
                 break
+    adjacent = _extract_adjacent_buyer_meta(ws, header_row)
+    from app.application.shipment_excel_etl_llm import unit_name_is_weak
+
+    # 相邻格更准（Bill To / To: 分列）；整行拼接易吞到 Incoterms 等
+    if adjacent.get("unit_name"):
+        meta["unit_name"] = adjacent["unit_name"]
+    if not meta["contact_person"] and adjacent.get("contact_person"):
+        meta["contact_person"] = adjacent["contact_person"]
+    if not meta["order_number"] and adjacent.get("order_number"):
+        meta["order_number"] = adjacent["order_number"]
+    if meta["unit_name"]:
+        meta["unit_name"] = re.sub(r"\s*\([^)]*\)\s*$", "", meta["unit_name"]).strip()
+        meta["unit_name"] = re.split(
+            r"(?i)\s{2,}|\s+(?:Incoterms|Payment|Tel|Phone|地址|电话)\b",
+            meta["unit_name"],
+            maxsplit=1,
+        )[0].strip()
+    if meta["unit_name"] and (
+        _unit_name_looks_truncated(meta["unit_name"]) or unit_name_is_weak(meta["unit_name"])
+    ):
+        meta["unit_name"] = ""
     return meta
+
+
+_CORP_SUFFIX_ONLY = frozenset(
+    {
+        "ltd",
+        "ltd.",
+        "limited",
+        "inc",
+        "inc.",
+        "llc",
+        "pte",
+        "pte.",
+        "co",
+        "co.",
+        "corp",
+        "corp.",
+        "gmbh",
+        "公司",
+        "有限公司",
+        "股份有限公司",
+    }
+)
+
+
+def _unit_name_looks_truncated(unit: str) -> bool:
+    text = str(unit or "").strip()
+    if not text:
+        return True
+    if text.lower() in _CORP_SUFFIX_ONLY:
+        return True
+    # 单英词且过短，多为误切（如 Technologies→Ltd）
+    if " " not in text and re.fullmatch(r"[A-Za-z.]{1,6}", text):
+        return True
+    return False
+
+
+_BUYER_CELL_LABEL = re.compile(
+    r"^(?:to|bill\s*to|sold\s*to|ship\s*to|consignee|customer|buyer|"
+    r"购货单位|客户名称|客户|采购单位|收货单位|收货方|买方)\s*[:：]?$",
+    re.IGNORECASE,
+)
+_BUYER_INLINE = re.compile(
+    r"(?is)(?:bill\s*to|sold\s*to|ship\s*to|(?<![a-z])to|(?<![a-z])buyer|(?<![a-z])customer|"
+    r"购货单位|客户名称|客户|采购单位)"
+    r"\s*[:：]\s*([^\n·|]+?)(?=\s*(?:·|\||Incoterms|Payment|Tel|Phone|地址|电话)|$)"
+)
+_ATTN_CELL_LABEL = re.compile(r"^(?:attn|attention|联系人)\s*[:：]?$", re.IGNORECASE)
+_ORDER_INLINE = re.compile(
+    r"(?is)^(?:do\s*no|invoice\s*no|buyer\s*po|po\s*ref|订单号|订单编号|单号)\s*[:：]?\s*([A-Za-z0-9\-_/]+)"
+)
+
+
+def _extract_adjacent_buyer_meta(ws, header_row: int) -> dict[str, str]:
+    """英文 DO/PI 常见：标签在 A 列、公司名在同行右侧单元格。"""
+    from app.application.shipment_excel_etl_llm import unit_name_is_weak
+
+    out = {"unit_name": "", "contact_person": "", "order_number": ""}
+    max_col = min(int(getattr(ws, "max_column", 1) or 1), 16)
+    scan_to = max(2, min(int(header_row or 2), 30))
+    for row in range(1, scan_to):
+        for col in range(1, max_col + 1):
+            raw = str(ws.cell(row, col).value or "").strip()
+            if not raw:
+                continue
+            inline = _BUYER_INLINE.search(raw)
+            if inline and not out["unit_name"]:
+                candidate = inline.group(1).strip().split("\n")[0].strip(" ：:　")
+                # Bill To: Dukjil Trading Pte Ltd (BYR-001)
+                candidate = re.sub(r"\s*\([^)]*\)\s*$", "", candidate).strip()
+                if len(candidate) >= 2 and not unit_name_is_weak(candidate):
+                    out["unit_name"] = candidate
+                    continue
+            if _BUYER_CELL_LABEL.match(raw) and not out["unit_name"]:
+                for c2 in range(col + 1, min(col + 5, max_col + 1)):
+                    val = str(ws.cell(row, c2).value or "").strip()
+                    if not val or _BUYER_CELL_LABEL.match(val):
+                        continue
+                    candidate = val.split("\n")[0].strip()
+                    candidate = re.sub(r"\s*\([^)]*\)\s*$", "", candidate).strip()
+                    if candidate and not unit_name_is_weak(candidate):
+                        out["unit_name"] = candidate
+                    break
+                continue
+            if _ATTN_CELL_LABEL.match(raw) and not out["contact_person"]:
+                for c2 in range(col + 1, min(col + 4, max_col + 1)):
+                    val = str(ws.cell(row, c2).value or "").strip()
+                    if val:
+                        out["contact_person"] = val.split("\n")[0].strip()
+                        break
+                continue
+            order_m = _ORDER_INLINE.match(raw)
+            if order_m and not out["order_number"]:
+                out["order_number"] = order_m.group(1).strip()
+    return out
+
+
+_NON_PRODUCT_TOKENS = frozenset(
+    {
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "title",
+        "identifier",
+        "subject",
+        "description",
+        "notes",
+        "creator",
+        "accession",
+        "my title",
+        "another title",
+        "the best image ever",
+    }
+)
+
+
+def _looks_like_non_product_token(value: str) -> bool:
+    text = str(value or "").strip().lower()
+    return bool(text) and text in _NON_PRODUCT_TOKENS
+
+
+def _looks_like_titleish(value: str) -> bool:
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    if text in _NON_PRODUCT_TOKENS:
+        return True
+    return bool(re.fullmatch(r"[a-z][a-z\s\-']{2,40}", text)) and not re.search(r"\d", text)
 
 
 def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any] | None:
@@ -521,6 +681,9 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
         name, model = model, ""
     if not name and not model:
         return None
+    # 拦截明显非商品语义（月份/档案标题当品名）
+    if _looks_like_non_product_token(name) or _looks_like_non_product_token(model):
+        return None
     tins = (
         _to_int(ws.cell(row, mapping["quantity_tins"]).value) if "quantity_tins" in mapping else 0
     )
@@ -533,6 +696,9 @@ def _build_item_from_row(ws, row: int, mapping: dict[str, int]) -> dict[str, Any
     )
     amount = _to_float(ws.cell(row, mapping["amount"]).value) if "amount" in mapping else 0.0
     if tins <= 0 and qty_kg <= 0 and unit_price <= 0 and amount <= 0:
+        return None
+    # 年份当数量 + 标题当品名：档案表误入
+    if 1990 <= tins <= 2035 and not model and _looks_like_titleish(name):
         return None
     if tin_spec <= 0 and tins > 0 and qty_kg > 0:
         tin_spec = qty_kg / tins
@@ -762,6 +928,7 @@ def _apply_llm_assist_to_layout(
     mapping: dict[str, int],
     meta: dict[str, str] | None,
     prefer_kind: str | None,
+    fallback_unit: str = "",
 ) -> tuple[int | None, dict[str, int], dict[str, str], str | None, dict[str, Any]]:
     """低置信时请求 LLM；返回 (header_row, mapping, meta, source_kind, assist_public)."""
     from app.application.shipment_excel_etl_llm import (
@@ -777,6 +944,7 @@ def _apply_llm_assist_to_layout(
         mapping=mapping,
         meta=meta,
         prefer_kind=prefer_kind,
+        fallback_unit=fallback_unit,
     )
     assist_public: dict[str, Any] = {
         "used_llm": False,
@@ -868,7 +1036,11 @@ def _parse_delivery_sheet(
         "reason": "knowledge_base_hit" if kb_fp else "rules_only",
         "layout_fingerprint": kb_fp or "",
     }
-    if allow_llm and not kb_fp:
+    from app.application.shipment_excel_etl_llm import unit_name_is_weak
+
+    unit_weak = unit_name_is_weak(str((meta or {}).get("unit_name") or ""), fallback=fallback_unit)
+    # KB 命中但客户名仍弱/空时，仍允许 LLM 补 meta（不阻断规则列）
+    if allow_llm and (not kb_fp or unit_weak):
         header_row, mapping, meta, kind, assist_public = _apply_llm_assist_to_layout(
             ws,
             profile,
@@ -879,12 +1051,15 @@ def _parse_delivery_sheet(
             mapping=mapping,
             meta=meta,
             prefer_kind="delivery_note",
+            fallback_unit=fallback_unit,
         )
         if kind == "ignore":
             return None
         if kind == "shipment_ledger":
             # LLM reclassified as ledger — let caller handle via ledger path
             return None
+        if kb_fp and not assist_public.get("layout_fingerprint"):
+            assist_public["layout_fingerprint"] = kb_fp
 
     # 规则/LLM 仍缺关键列 → 样例启发式（陌生表头兜底；不编造数值）
     heuristic_on = str(os.environ.get("FHD_EXCEL_ETL_HEURISTIC") or "1").strip().lower() not in {
@@ -1002,6 +1177,7 @@ def _parse_ledger_sheet(
             mapping=mapping,
             meta=meta,
             prefer_kind="shipment_ledger",
+            fallback_unit=fallback_unit,
         )
         if kind == "ignore":
             return []

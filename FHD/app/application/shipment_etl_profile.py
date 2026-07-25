@@ -106,16 +106,27 @@ def _compile_title_patterns(patterns: list[Any], path: str) -> re.Pattern[str]:
 def _default_meta_from_kb() -> dict[str, str]:
     kb = get_excel_etl_kb()
     labels = kb.meta_labels()
-    unit_alts = "|".join(re.escape(x) for x in (labels.get("unit_name") or ["客户"]) if x)
+    # 按长度降序，避免 Bill To 被截断；去掉易误匹配的短英文标签
+    _BLOCKED_UNIT_LABELS = {"to", "buyer", "customer"}
+    unit_labels = [
+        str(x).strip()
+        for x in (labels.get("unit_name") or ["客户"])
+        if str(x).strip() and str(x).strip().lower() not in _BLOCKED_UNIT_LABELS
+    ]
+    unit_labels.sort(key=len, reverse=True)
+    unit_alts = "|".join(re.escape(x) for x in unit_labels) or "客户"
     contact_alts = "|".join(re.escape(x) for x in (labels.get("contact_person") or ["联系人"]) if x)
     date_alts = "|".join(re.escape(x) for x in (labels.get("order_date") or ["日期"]) if x)
     order_alts = "|".join(re.escape(x) for x in (labels.get("order_number") or ["单号"]) if x)
-    unit_label = (labels.get("unit_name") or ["客户"])[0]
+    unit_label = unit_labels[0] if unit_labels else "客户"
     stop = rf"{contact_alts}|{date_alts}|{order_alts}"
+    # 标签后禁止跨空格吞词；公司名允许多词直到 stop
     return {
-        # 禁止 [^)）]* 跨过首个字段值（会吞掉整行只剩末尾字符）
-        "buyer_pattern": rf"(?:{unit_alts})[（(]?[^)）:：]*[)）]?[：:\s]+([^\s]+?)(?=\s*(?:{stop})|$)",
-        "buyer_split_pattern": rf"(?:{unit_alts})[（(]?[^)）:：]*[)）]?[：:]",
+        "buyer_pattern": (
+            rf"(?:{unit_alts})[（(]?[^)）:：\s]*[)）]?[：:\s]+"
+            rf"(.+?)(?=\s{{2,}}|\s*(?:{stop})|$)"
+        ),
+        "buyer_split_pattern": rf"(?:{unit_alts})[（(]?[^)）:：\s]*[)）]?[：:]",
         "buyer_stop_pattern": stop,
         "buyer_label": unit_label,
         "contact_pattern": rf"(?:{contact_alts})[：:\s]*([^\s]+?)(?=\s*(?:{date_alts}|{order_alts})|$)",

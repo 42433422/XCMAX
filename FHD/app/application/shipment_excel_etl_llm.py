@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -127,12 +128,71 @@ def llm_timeout_seconds() -> float:
 
 def _has_llm_credentials() -> bool:
     try:
-        from app.infrastructure.llm.providers.credentials import resolve_openai_env_credentials
+        from app.infrastructure.llm.providers.credentials import (
+            resolve_deepseek_credentials,
+            resolve_openai_env_credentials,
+            resolve_xcauto_credentials,
+        )
 
         key, _base = resolve_openai_env_credentials()
-        return bool(str(key or "").strip())
+        if str(key or "").strip():
+            return True
+        if resolve_xcauto_credentials() is not None:
+            return True
+        if resolve_deepseek_credentials() is not None:
+            return True
     except RECOVERABLE_ERRORS:
         return False
+    return False
+
+
+_WEAK_UNIT_SUFFIXES = frozenset(
+    {
+        "ltd",
+        "ltd.",
+        "limited",
+        "inc",
+        "inc.",
+        "llc",
+        "pte",
+        "pte.",
+        "co",
+        "co.",
+        "corp",
+        "corp.",
+        "gmbh",
+        "公司",
+        "有限公司",
+        "股份有限公司",
+    }
+)
+
+
+def unit_name_is_weak(unit: str, *, fallback: str = "") -> bool:
+    """客户名是否弱到需要 LLM / 规则再抽（文件名、单号、空）。"""
+    u = str(unit or "").strip()
+    if not u:
+        return True
+    fb = str(fallback or "").strip()
+    if fb and u == fb:
+        return True
+    low = u.lower()
+    if low.startswith(("net_", "form_")):
+        return True
+    if low in _WEAK_UNIT_SUFFIXES:
+        return True
+    if " " not in u and re.fullmatch(r"[A-Za-z.]{1,6}", u):
+        return True
+    # 单号冒充客户名：PO: xxx / Buyer PO / DKJ-PO-…
+    if re.match(r"(?i)^(buyer\s*)?po\s*[:：#]?", u) or re.search(
+        r"(?i)\b(PO|SO|DN|PI|INV|DO)[-_]?\d", u
+    ):
+        if not re.search(r"(?i)(ltd|limited|inc|公司|贸易|科技)", u):
+            return True
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9\-_/]{2,31}", u) and " " not in u:
+        if re.search(r"(?i)(PO|SO|DN|PI|INV|DO)[-_]?\d", u):
+            return True
+    return False
 
 
 def llm_assist_enabled() -> bool:
@@ -254,6 +314,12 @@ def _validate_and_normalize(data: dict[str, Any], probe: SheetProbe) -> AssistRe
         "order_number": str(meta_in.get("order_number") or "").strip(),
         "title": str(meta_in.get("title") or "").strip(),
     }
+    if unit_name_is_weak(meta["unit_name"]):
+        meta["unit_name"] = ""
+    # 去掉 Bill To 行尾 (BYR-001)
+    if meta["unit_name"]:
+        meta["unit_name"] = re.sub(r"\s*\([^)]*\)\s*$", "", meta["unit_name"]).strip()
+
     try:
         confidence = float(data.get("confidence") or 0.0)
     except (TypeError, ValueError):
@@ -283,9 +349,11 @@ def _build_messages(probe: SheetProbe) -> list[dict[str, str]]:
         "rules": [
             "Only output JSON matching the schema",
             "source_kind must be delivery_note, shipment_ledger, or ignore",
-            "header_row is 1-based Excel row index",
+            "Use ignore for attendance, sales reports, archive catalogs, or non-shipment tables",
+            "header_row is 1-based Excel row index of the item table header",
             "columns values are 1-based Excel column indexes that appear in candidate_headers",
             "Do not invent column indexes",
+            "meta.unit_name must be the buyer/customer company (from To:/Bill To/购货单位/客户/采购单位), never the filename or sheet title",
             "Leave unknown meta fields as empty strings",
             "Do not invent quantities or amounts",
         ],
@@ -296,7 +364,8 @@ def _build_messages(probe: SheetProbe) -> list[dict[str, str]]:
             "role": "system",
             "content": (
                 "You are a spreadsheet layout mapper for delivery notes / shipment ledgers. "
-                "Return only JSON. Never invent cell values."
+                "Return only JSON. Never invent cell values. "
+                "Prefer extracting buyer from To:/Bill To/Sold To/客户/购货单位/采购单位 labels."
             ),
         },
         {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
@@ -349,6 +418,7 @@ def needs_llm_assist(
     mapping: dict[str, int],
     meta: dict[str, str] | None,
     prefer_kind: str | None = None,
+    fallback_unit: str = "",
 ) -> tuple[bool, str]:
     """判断是否进入灰色区间。"""
     gray_low = 40
@@ -356,6 +426,8 @@ def needs_llm_assist(
     incomplete = header_row is None or (
         "product_name" not in (mapping or {}) and "model_number" not in (mapping or {})
     )
+    unit = str((meta or {}).get("unit_name") or "").strip()
+    unit_weak = unit_name_is_weak(unit, fallback=fallback_unit)
     if prefer_kind == "delivery_note" or delivery_score >= gray_low:
         if gray_low <= delivery_score < min_score:
             return True, "delivery_score_gray"
@@ -364,7 +436,7 @@ def needs_llm_assist(
                 return True, "delivery_header_missing"
             if "product_name" not in mapping and "model_number" not in mapping:
                 return True, "delivery_columns_incomplete"
-            if meta is not None and not str(meta.get("unit_name") or "").strip():
+            if unit_weak:
                 return True, "delivery_unit_missing"
     if prefer_kind == "shipment_ledger" or (delivery_score < min_score and ledger_score >= 40):
         if header_row is None:
@@ -381,6 +453,10 @@ def needs_llm_assist(
             delivery_score >= 16 or ledger_score >= 16 or header_row is not None
         ):
             return True, "auto_unknown_headers"
+    if unit_weak and prefer_kind in {None, "delivery_note"} and (
+        delivery_score >= 16 or header_row is not None
+    ):
+        return True, "delivery_unit_weak"
     if delivery_score < gray_low and ledger_score < 40:
         return False, "scores_too_low"
     return False, "rules_confident"
@@ -395,4 +471,5 @@ __all__ = [
     "llm_assist_mode",
     "llm_timeout_seconds",
     "needs_llm_assist",
+    "unit_name_is_weak",
 ]

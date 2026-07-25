@@ -48,7 +48,29 @@ def test_llm_disabled_by_env(monkeypatch):
     assert out.reason == "llm_disabled"
 
 
-def test_needs_llm_assist_gray_and_missing_columns():
+def test_unit_name_is_weak_and_triggers_assist():
+    from app.application.shipment_excel_etl_llm import unit_name_is_weak
+
+    assert unit_name_is_weak("") is True
+    assert unit_name_is_weak("net_delivery_order", fallback="net_delivery_order") is True
+    assert unit_name_is_weak("DKJ-PO-2026-0007") is True
+    assert unit_name_is_weak("PO: DKJ-PO-2026-0007") is True
+    assert unit_name_is_weak("Ltd") is True
+    assert unit_name_is_weak("星光贸易有限公司") is False
+
+    need, reason = needs_llm_assist(
+        delivery_score=80,
+        ledger_score=0,
+        min_score=60,
+        header_row=5,
+        mapping={"product_name": 2, "model_number": 1},
+        meta={"unit_name": "net_delivery_order"},
+        prefer_kind="delivery_note",
+        fallback_unit="net_delivery_order",
+    )
+    assert need is True
+    assert reason in {"delivery_unit_missing", "delivery_unit_weak"}
+
     need, reason = needs_llm_assist(
         delivery_score=50,
         ledger_score=0,

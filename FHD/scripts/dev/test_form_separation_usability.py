@@ -10,6 +10,12 @@
 用法::
 
     cd FHD && .venv/bin/python scripts/dev/test_form_separation_usability.py
+
+LLM 助抽（可选，auto 模式下有密钥即启用）::
+
+    export FHD_SHIPMENT_ETL_LLM=auto   # off|auto|on，默认 auto
+    export OPENAI_API_KEY=...          # 或 XCAUTO_API_KEY / DEEPSEEK_API_KEY
+    export OPENAI_BASE_URL=https://xiu-ci.com/v1   # 走修茈网关时
 """
 
 from __future__ import annotations
@@ -95,6 +101,12 @@ def _unit_usable(unit: str, file_stem: str) -> bool:
         return False
     if re.fullmatch(r"[A-Z0-9\-_/]+", u) and len(u) < 24:
         # 像 DKJ-PO-2026-0007 这类更像单号
+        return False
+    if re.match(r"(?i)^(buyer\s*)?po\s*[:：#]?", u):
+        return False
+    if re.search(r"(?i)\b(PO|SO|DN|PI|INV|DO)[-_]?\d", u) and not re.search(
+        r"(?i)(ltd|limited|inc|公司|贸易|科技)", u
+    ):
         return False
     return True
 

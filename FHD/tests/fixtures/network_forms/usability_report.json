@@ -2,12 +2,12 @@
   "summary": {
     "total": 13,
     "usable_ab": 9,
-    "tech_ok_but_bad_semantics": 1,
+    "tech_ok_but_bad_semantics": 0,
     "grades": {
-      "A": 3,
-      "B": 6,
-      "C": 3,
-      "D": 1,
+      "A": 9,
+      "B": 0,
+      "C": 4,
+      "D": 0,
       "F": 0
     }
   },
@@ -144,7 +144,7 @@
     },
     {
       "file": "form_采购订单_七彩乐园.xlsx",
-      "grade": "B",
+      "grade": "A",
       "preview_ok": true,
       "note_count": 1,
       "layout_cols": [
@@ -156,8 +156,8 @@
         "单价",
         "金额"
       ],
-      "best_unit": "form_采购订单_七彩乐园",
-      "unit_ok": false,
+      "best_unit": "七彩乐园家私",
+      "unit_ok": true,
       "semantic_ok": true,
       "usable_items": 2,
       "item_preview": [
@@ -181,7 +181,7 @@
     },
     {
       "file": "net_PI_sample.xlsx",
-      "grade": "B",
+      "grade": "A",
       "preview_ok": true,
       "note_count": 1,
       "layout_cols": [
@@ -193,8 +193,8 @@
         "Unit Price",
         "Amount"
       ],
-      "best_unit": "DKJ-PO-2026-0007",
-      "unit_ok": false,
+      "best_unit": "Dukjil Trading Pte Ltd",
+      "unit_ok": true,
       "semantic_ok": true,
       "usable_items": 2,
       "item_preview": [
@@ -218,7 +218,7 @@
     },
     {
       "file": "net_PL_sample.xlsx",
-      "grade": "B",
+      "grade": "A",
       "preview_ok": true,
       "note_count": 1,
       "layout_cols": [
@@ -230,8 +230,8 @@
         "CBM",
         "L×W×H(cm)"
       ],
-      "best_unit": "net_PL_sample",
-      "unit_ok": false,
+      "best_unit": "Dukjil Trading Pte Ltd",
+      "unit_ok": true,
       "semantic_ok": true,
       "usable_items": 3,
       "item_preview": [
@@ -260,7 +260,7 @@
     },
     {
       "file": "net_PackPlan_sample.xlsx",
-      "grade": "B",
+      "grade": "A",
       "preview_ok": true,
       "note_count": 1,
       "layout_cols": [
@@ -273,8 +273,8 @@
         "L×W×H (cm)",
         "Fill%"
       ],
-      "best_unit": "net_PackPlan_sample",
-      "unit_ok": false,
+      "best_unit": "Dukjil Trading Pte Ltd",
+      "unit_ok": true,
       "semantic_ok": true,
       "usable_items": 6,
       "item_preview": [
@@ -303,7 +303,7 @@
     },
     {
       "file": "net_delivery_order.xlsx",
-      "grade": "B",
+      "grade": "A",
       "preview_ok": true,
       "note_count": 1,
       "layout_cols": [
@@ -312,8 +312,8 @@
         "DO No:",
         "TSH-1910-1340"
       ],
-      "best_unit": "net_delivery_order",
-      "unit_ok": false,
+      "best_unit": "Semiconductor Technologies && Instruments Pte Ltd",
+      "unit_ok": true,
       "semantic_ok": true,
       "usable_items": 6,
       "item_preview": [
@@ -344,7 +344,7 @@
       "file": "net_invoice_sample2.xlsx",
       "grade": "C",
       "preview_ok": true,
-      "note_count": 1,
+      "note_count": 0,
       "layout_cols": [
         "Title",
         "Identifier",
@@ -355,14 +355,14 @@
         "Creator",
         "Accession"
       ],
-      "best_unit": "net_invoice_sample2",
+      "best_unit": null,
       "unit_ok": false,
       "semantic_ok": false,
       "usable_items": 0,
       "item_preview": [],
       "create_ok": false,
-      "shipment_created": 1,
-      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "shipment_created": null,
+      "create_error": null,
       "generate_ok": false,
       "template_reason": null,
       "usable": false
@@ -393,41 +393,25 @@
     },
     {
       "file": "net_sample3.xlsx",
-      "grade": "D",
+      "grade": "C",
       "preview_ok": true,
-      "note_count": 1,
+      "note_count": 0,
       "layout_cols": [],
-      "best_unit": "net_sample3",
+      "best_unit": null,
       "unit_ok": false,
       "semantic_ok": false,
-      "usable_items": 3,
-      "item_preview": [
-        {
-          "name": "August",
-          "model": "August",
-          "qty": 7
-        },
-        {
-          "name": "October",
-          "model": "October",
-          "qty": 8
-        },
-        {
-          "name": "December",
-          "model": "December",
-          "qty": 9
-        }
-      ],
-      "create_ok": true,
-      "shipment_created": 1,
-      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
-      "generate_ok": true,
-      "template_reason": "resolved_by_id",
+      "usable_items": 0,
+      "item_preview": [],
+      "create_ok": false,
+      "shipment_created": null,
+      "create_error": null,
+      "generate_ok": false,
+      "template_reason": null,
       "usable": false
     },
     {
       "file": "net_tax_invoice.xlsx",
-      "grade": "B",
+      "grade": "A",
       "preview_ok": true,
       "note_count": 1,
       "layout_cols": [
@@ -436,8 +420,8 @@
         "Invoice No:",
         "TSH-1910-1289"
       ],
-      "best_unit": "net_tax_invoice",
-      "unit_ok": false,
+      "best_unit": "VDL Enabling Technologies Group (Singapore) Pte Ltd",
+      "unit_ok": true,
       "semantic_ok": true,
       "usable_items": 3,
       "item_preview": [

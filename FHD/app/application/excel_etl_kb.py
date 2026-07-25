@@ -41,10 +41,33 @@ _SEED: dict[str, Any] = {
         "remark": ["备注", "说明", "remark", "Remark"],
     },
     "meta_labels": {
-        "unit_name": ["客户", "购货单位", "收货方", "买方", "customer", "buyer"],
-        "contact_person": ["联系人", "经办人", "contact"],
-        "order_date": ["日期", "下单日", "date"],
-        "order_number": ["订单编号", "单号", "订单号", "order"],
+        "unit_name": [
+            "客户",
+            "客户名称",
+            "购货单位",
+            "采购单位",
+            "收货单位",
+            "收货方",
+            "买方",
+            # 勿用裸 buyer/customer：会误吃 "Buyer PO:"
+            "Bill To",
+            "Sold To",
+            "Ship To",
+            "Consignee",
+            # 裸 "To" 易误匹配 Technologies；由相邻格识别 To:
+        ],
+        "contact_person": ["联系人", "经办人", "Attn", "Attention", "contact"],
+        "order_date": ["日期", "下单日", "date", "Date"],
+        "order_number": [
+            "订单编号",
+            "单号",
+            "订单号",
+            "DO No",
+            "Invoice No",
+            "Buyer PO",
+            "PO Ref",
+            "order",
+        ],
     },
     "write_layouts": {
         "universal_table": {
@@ -234,8 +257,23 @@ class ExcelEtlKnowledgeBase:
         return {str(k): [str(x) for x in (v or [])] for k, v in raw.items()}
 
     def meta_labels(self) -> dict[str, list[str]]:
+        seed = (_SEED.get("meta_labels") or {}) if isinstance(_SEED, dict) else {}
         raw = self._data.get("meta_labels") or {}
-        return {str(k): [str(x) for x in (v or [])] for k, v in raw.items()}
+        out: dict[str, list[str]] = {}
+        keys = set(str(k) for k in seed) | set(str(k) for k in raw)
+        for key in keys:
+            merged: list[str] = []
+            seen: set[str] = set()
+            for src in (seed.get(key) or [], raw.get(key) or []):
+                for item in src:
+                    text = str(item or "").strip()
+                    low = text.lower()
+                    if not text or low in seen:
+                        continue
+                    seen.add(low)
+                    merged.append(text)
+            out[str(key)] = merged
+        return out
 
     def write_layout(self, name: str = "universal_table") -> dict[str, Any]:
         layouts = self._data.get("write_layouts") or {}
