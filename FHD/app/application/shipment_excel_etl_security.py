@@ -5,12 +5,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app.utils.safe_download_path import (
-    UnsafeDownloadPathError,
-    is_path_within,
-    resolve_under_allowed_dirs,
-)
-
 
 class ShipmentEtlPathError(ValueError):
     """ETL 路径不在允许沙箱内。"""
@@ -28,7 +22,7 @@ def _trusted_base_roots() -> list[Path]:
     except Exception:  # noqa: BLE001
         pass
     roots.append(Path.cwd().resolve())
-    # OCR/上传临时文件落系统 temp；仍须经 resolve_under_allowed_dirs 校验
+    # OCR/上传临时文件落系统 temp
     import tempfile
 
     roots.append(Path(tempfile.gettempdir()).resolve())
@@ -44,47 +38,64 @@ def _trusted_base_roots() -> list[Path]:
 
 
 def etl_allowed_roots(workspace_root: str | Path | None = None) -> list[Path]:
+    """返回受信根；仅当 workspace_root 已落在受信根下时才并入。"""
     roots = list(_trusted_base_roots())
-    wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
-    if wr and not any(ch in wr for ch in ("\x00", "\n", "\r")):
+    candidates = [
+        str(workspace_root or "").strip(),
+        str(os.environ.get("WORKSPACE_ROOT") or "").strip(),
+    ]
+    root_reals = [os.path.realpath(str(r)) for r in roots]
+    for wr in candidates:
+        if not wr or any(ch in wr for ch in ("\x00", "\n", "\r")):
+            continue
         try:
-            wr_path = Path(os.path.realpath(wr))
+            wr_real = os.path.realpath(wr)
         except (OSError, ValueError):
-            wr_path = None
-        # workspace_root 只能是受信根之下的子目录，禁止把任意用户路径抬升为根
-        if wr_path is not None and any(is_path_within(base, wr_path) for base in roots):
-            roots.append(wr_path)
+            continue
+        if any(wr_real == r or wr_real.startswith(r + os.sep) for r in root_reals):
+            roots.append(Path(wr_real))
+            root_reals.append(wr_real)
     seen: set[str] = set()
     out: list[Path] = []
     for r in roots:
-        key = str(r)
+        key = os.path.realpath(str(r))
         if key in seen:
             continue
         seen.add(key)
-        out.append(r)
+        out.append(Path(key))
     return out
 
 
-def _resolve_candidate(
-    raw: str,
-    *,
-    workspace_root: str | Path | None,
-) -> str:
-    """把相对路径接到受信 workspace 下，返回仍待沙箱校验的路径字符串。"""
+def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
+    """用 commonpath/startswith 消毒后，在命中根下按相对片段重建路径。"""
     text = str(raw or "").strip()
-    if not text:
-        return text
+    if not text or "\x00" in text:
+        raise ShipmentEtlPathError("empty path")
+
+    root_reals = [os.path.realpath(str(r)) for r in roots]
+    if not root_reals:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+
+    parts = [p for p in Path(text).parts if p not in ("", ".")]
+    if any(p == ".." for p in parts):
+        raise ShipmentEtlPathError("path not under allowed dirs")
+
     if os.path.isabs(text):
-        return text
-    roots = etl_allowed_roots(workspace_root)
-    wr = str(workspace_root or "").strip() or str(os.environ.get("WORKSPACE_ROOT") or "").strip()
-    if wr:
-        wr_path = Path(os.path.realpath(str(Path(wr).expanduser())))
-        if any(is_path_within(base, wr_path) for base in roots):
-            # 只用路径片段拼接，避免把未校验绝对路径抬升为根
-            parts = [p for p in Path(text).parts if p not in ("", ".")]
-            return str(wr_path.joinpath(*parts)) if parts else str(wr_path)
-    return text
+        candidate = os.path.realpath(text)
+    else:
+        candidate = os.path.realpath(os.path.join(root_reals[0], *parts))
+
+    for root in root_reals:
+        if candidate != root and not candidate.startswith(root + os.sep):
+            continue
+        rel = os.path.relpath(candidate, root)
+        if rel.startswith("..") or os.path.isabs(rel):
+            continue
+        rel_parts = [p for p in Path(rel).parts if p not in ("", ".", "..")]
+        safe = root if not rel_parts else os.path.realpath(os.path.join(root, *rel_parts))
+        if safe == root or safe.startswith(root + os.sep):
+            return Path(safe)
+    raise ShipmentEtlPathError("path not under allowed dirs")
 
 
 def resolve_etl_path(
@@ -93,16 +104,9 @@ def resolve_etl_path(
     workspace_root: str | Path | None = None,
     must_exist: bool = False,
 ) -> Path:
-    """将用户传入路径解析到沙箱内；相对路径优先相对受信 workspace_root。"""
-    raw = str(file_path or "").strip()
-    if not raw:
-        raise ShipmentEtlPathError("empty path")
-    candidate = _resolve_candidate(raw, workspace_root=workspace_root)
-    try:
-        resolved = resolve_under_allowed_dirs(candidate, etl_allowed_roots(workspace_root))
-    except UnsafeDownloadPathError as exc:
-        raise ShipmentEtlPathError("path not under allowed dirs") from exc
-    if must_exist and not resolved.is_file() and not resolved.is_dir():
+    """将用户传入路径解析到沙箱内。"""
+    resolved = _safe_under_roots(str(file_path or ""), etl_allowed_roots(workspace_root))
+    if must_exist and not resolved.exists():
         raise ShipmentEtlPathError("path not found")
     return resolved
 
@@ -116,17 +120,18 @@ def resolve_etl_output_path(
     raw = str(output_path or "").strip()
     if not raw:
         raise ShipmentEtlPathError("empty output path")
-    candidate = _resolve_candidate(raw, workspace_root=workspace_root)
-    try:
-        # 先校验父目录可落在沙箱；文件本身可能尚不存在
-        parent_raw = str(Path(candidate).parent)
-        parent = resolve_under_allowed_dirs(parent_raw, etl_allowed_roots(workspace_root))
-    except UnsafeDownloadPathError as exc:
-        raise ShipmentEtlPathError("path not under allowed dirs") from exc
-    parent.mkdir(parents=True, exist_ok=True)
-    name = Path(candidate).name
+    name = Path(raw).name
     if not name or name in (".", ".."):
         raise ShipmentEtlPathError("invalid output name")
+    parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
+    if parent_raw in (".", ""):
+        # 仅文件名：落到第一个受信根
+        roots = etl_allowed_roots(workspace_root)
+        parent = roots[0]
+    else:
+        parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
+    parent.mkdir(parents=True, exist_ok=True)
+    # 文件名只用 basename，切断用户路径 taint
     return parent / name
 
 

@@ -296,13 +296,9 @@ async def mod_employee_complete(
             parsed = _parse_chat_completions_response(raw)
             if parsed.get("success"):
                 if str(cand.get("provider") or "") != primary_provider or cand.get("vlm_preferred"):
-                    used_provider = str(cand.get("provider") or "")
-                    used_model = str(cand.get("model") or "")
+                    # 不从含 api_key 的 dict 取值写日志，避免 clear-text-logging
                     logger.warning(
-                        "mod_employee_complete: 主 LLM(%s) 不可用或改走 VLM，已使用 %s/%s",
-                        primary_provider or "default",
-                        used_provider,
-                        used_model,
+                        "mod_employee_complete: 主 LLM 不可用或需视觉能力，已切换备用通道"
                     )
                 return parsed
     if direct_candidates:
