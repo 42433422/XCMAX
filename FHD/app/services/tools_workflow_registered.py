@@ -533,8 +533,14 @@ def _registered_router_shipment_orders(
         }
         if params.get("template_name"):
             gen_kwargs["template_name"] = params.get("template_name")
+        elif params.get("template"):
+            gen_kwargs["template_name"] = params.get("template")
         if params.get("template_id"):
             gen_kwargs["template_id"] = params.get("template_id")
+        if params.get("preferred_template") or params.get("template"):
+            gen_kwargs["preferred_template"] = params.get("preferred_template") or params.get(
+                "template"
+            )
         if params.get("order_number"):
             gen_kwargs["order_number"] = params.get("order_number")
         return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))

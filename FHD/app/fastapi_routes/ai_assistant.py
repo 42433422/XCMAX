@@ -154,6 +154,8 @@ def compat_health():
 def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
     order_text = str(payload.get("order_text") or "").strip()
     template_name = payload.get("template_name")
+    template_id = payload.get("template_id")
+    preferred_template = payload.get("preferred_template") or payload.get("template")
 
     if not order_text:
         return _fail("请输入订单信息", 400)
@@ -175,6 +177,10 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
             unit_name=unit_name,
             products=products,
             template_name=template_name,
+            template_id=template_id,
+            preferred_template=preferred_template,
+            intent="shipment_generate",
+            raw_text=order_text,
         )
 
         if not result.get("success"):
@@ -199,6 +205,8 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
                     "order_number": result.get("order_number"),
                     "total_amount": result.get("total_amount"),
                     "total_quantity": result.get("total_quantity"),
+                    "template_resolution": result.get("template_resolution"),
+                    "products_source": result.get("products_source"),
                 },
                 message="发货单生成成功",
                 filename=doc_name,

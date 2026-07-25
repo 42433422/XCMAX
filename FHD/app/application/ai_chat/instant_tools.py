@@ -81,6 +81,18 @@ class AIChatInstantToolsMixin:
                     **ai_result.get("data", {}),
                     "products": effective_products,
                     "unit_name": effective_unit_name,
+                    "template_id": slots.get("template_id") or parsed_params.get("template_id"),
+                    "template_name": (
+                        slots.get("template_name")
+                        or slots.get("template")
+                        or parsed_params.get("template_name")
+                        or parsed_params.get("template")
+                    ),
+                    "preferred_template": (
+                        slots.get("preferred_template")
+                        or slots.get("template")
+                        or parsed_params.get("preferred_template")
+                    ),
                 },
             }
             response_data["response"] = ai_result.get("text", "")
@@ -383,8 +395,13 @@ class AIChatInstantToolsMixin:
                 doc_result = app_service.generate_shipment_document(
                     unit_name=parsed.get("unit_name", ""),
                     products=parsed.get("products") or [],
-                    template_name=parsed_params.get("template_name"),
+                    template_name=(
+                        parsed_params.get("template_name") or parsed_params.get("template")
+                    ),
                     template_id=parsed_params.get("template_id"),
+                    preferred_template=(
+                        parsed_params.get("preferred_template") or parsed_params.get("template")
+                    ),
                     date=parsed_params.get("date"),
                     order_number=parsed_params.get("order_number"),
                     intent="shipment_generate",
