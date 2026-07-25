@@ -1,13 +1,14 @@
-"""发货单 / 出货流水 Excel ETL：识别 → 预览 → 幂等入库 → 模板回写。
+"""Excel 单据 ETL：通用识别 → 知识库记忆 → 预览/入库 → 模板回写。
 
-版式（标题/表头别名/打分 token/写出模板）来自 YAML profile，
-见 ``app.application.shipment_etl_profile`` 与
-``resources/config/shipment_etl/profiles/``。
+默认不依赖仓库内置送货单 YAML；版式来自：
+- 知识库 ``excel_etl_kb``（同义词 + 可学习表头指纹）
+- 可选 ``FHD_EXCEL_ETL_PROFILE_DIR`` 用户 YAML
+- 仅当 ``FHD_EXCEL_ETL_ALLOW_BUILTIN=1`` 时加载 examples/
 
 闭环能力：
-- preview / execute（客户+产品+发货单，指纹幂等）
+- preview / execute（指纹幂等）
 - batch 目录扫描
-- 生成送货单/流水测试模板，并从 notes 反推再出单
+- 通用表写出 / 流水写出，并从 notes 反推再出单
 """
 
 from __future__ import annotations
@@ -15,11 +16,17 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.application.excel_etl_kb import (
+    TemplateMemory,
+    get_excel_etl_kb,
+    sheet_layout_fingerprint,
+)
 from app.application.shipment_etl_profile import (
     ShipmentEtlProfile,
     column_rule_matches,
@@ -57,7 +64,7 @@ def _profiles_for_parse(
     from app.application.shipment_etl_profile import load_all_profiles
 
     profiles = load_all_profiles()
-    return profiles or [get_shipment_etl_profile("default")]
+    return profiles or [get_shipment_etl_profile("universal")]
 
 
 def _pick_best_profile_for_sheet(
@@ -137,6 +144,81 @@ def _token_in_compact(token: str, compact: str) -> bool:
     return t.replace("/", "") in compact.replace("/", "").lower() or t.lower() in compact.lower()
 
 
+def _header_cell_texts(ws, header_row: int, max_col: int = 16) -> list[str]:
+    out: list[str] = []
+    for col in range(1, min(max_col, int(ws.max_column or 0) or max_col) + 1):
+        raw = ws.cell(header_row, col).value
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def _kb_resolve_layout(ws) -> tuple[int | None, dict[str, int], str]:
+    """按表头指纹查知识库；命中则返回 (header_row, columns, fingerprint)。"""
+    kb = get_excel_etl_kb()
+    max_row = int(ws.max_row or 0)
+    max_col = min(16, int(ws.max_column or 0) or 16)
+    for row in range(1, min(20, max_row) + 1):
+        headers = _header_cell_texts(ws, row, max_col=max_col)
+        if len(headers) < 2:
+            continue
+        fp = sheet_layout_fingerprint(
+            sheet_title=str(ws.title or ""),
+            header_cells=headers,
+        )
+        mem = kb.get_template(fp)
+        if mem is None or not mem.columns:
+            continue
+        if mem.header_row is not None and int(mem.header_row) != row:
+            # 指纹按当前行 headers 算；若记忆行号不一致仍以当前行为准
+            pass
+        if "product_name" not in mem.columns and "model_number" not in mem.columns:
+            continue
+        kb.touch(fp)
+        return row, {str(k): int(v) for k, v in mem.columns.items()}, fp
+    return None, {}, ""
+
+
+def _remember_sheet_layout(
+    ws,
+    *,
+    header_row: int,
+    mapping: dict[str, int],
+    profile: ShipmentEtlProfile,
+    source: str = "learned",
+) -> str:
+    """解析成功后把表头映射写入知识库。"""
+    if not mapping or header_row is None:
+        return ""
+    headers = _header_cell_texts(ws, header_row)
+    if len(headers) < 2:
+        return ""
+    fp = sheet_layout_fingerprint(
+        sheet_title=str(ws.title or ""),
+        header_cells=headers,
+    )
+    try:
+        get_excel_etl_kb().remember(
+            TemplateMemory(
+                fingerprint=fp,
+                label=str(profile.label or profile.id),
+                target=str(profile.target or "preview_only"),
+                header_row=int(header_row),
+                columns={str(k): int(v) for k, v in mapping.items()},
+                meta={},
+                write=dict(profile.write or {}),
+                source=source,
+            )
+        )
+    except RECOVERABLE_ERRORS:
+        logger.debug("excel etl kb remember skipped", exc_info=True)
+        return ""
+    return fp
+
+
 def _score_delivery_sheet(ws, profile: ShipmentEtlProfile) -> int:
     """内容指纹打分：规则来自 profile.detect.delivery。"""
     cfg = profile.detect.get("delivery") or {}
@@ -176,20 +258,28 @@ def _score_ledger_sheet(ws, profile: ShipmentEtlProfile) -> int:
     probe_rows = min(probe_n, int(ws.max_row or 0))
     blob = " ".join(_joined_row(ws, r) for r in range(1, probe_rows + 1))
     compact = _norm_cell(blob)
+    compact_l = compact.lower()
     score = 0
     sheet_hit = bool(profile.meta_patterns.ledger_sheet.search(str(ws.title or "")))
     content_tokens = [str(t) for t in (cfg.get("content_tokens") or [])]
-    if sheet_hit or any(t in compact for t in content_tokens if t):
+    if sheet_hit or any(t.lower() in compact_l for t in content_tokens if t):
         score += int(cfg.get("sheet_weight") or 20)
     hits = 0
     for token in cfg.get("hit_tokens") or []:
-        if str(token) in compact:
+        tok = str(token)
+        if tok and (tok in compact or tok.lower() in compact_l):
             hits += 1
     score += min(hits, int(cfg.get("hit_cap") or 6)) * int(cfg.get("hit_weight") or 10)
     bonus_req = str(cfg.get("bonus_require_token") or "")
     bonus_exc = str(cfg.get("bonus_exclude_token") or "")
     if bonus_req and bonus_req in compact and (not bonus_exc or bonus_exc not in compact):
         score += int(cfg.get("bonus_weight") or 0)
+    # 表头含「单号」列且无客户抬头 → 更像流水
+    header_row = _find_ledger_header_row(ws, profile)
+    if header_row is not None:
+        mapping = _map_headers(ws, header_row, profile)
+        if "order_number" in mapping and "客户" not in compact and "购货单位" not in compact:
+            score += 25
     return score
 
 
@@ -201,7 +291,29 @@ def _find_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
         compact = _norm_header(_joined_row(ws, row))
         if header_groups_match(compact, groups):
             return row
-    return None
+    # 陌生表头：选「非空单元格最多」的候选行（至少 3 列）
+    best_row = None
+    best_count = 0
+    for row in range(1, min(max_scan, int(ws.max_row or 0) + 1)):
+        count = 0
+        for col in range(1, min(16, int(ws.max_column or 0) or 16) + 1):
+            raw = ws.cell(row, col).value
+            if raw is not None and str(raw).strip():
+                count += 1
+        if count >= 3 and count > best_count:
+            # 下一行最好有数据，避免把纯标题当表头
+            has_body = False
+            for r in range(row + 1, min(row + 4, int(ws.max_row or 0) + 1)):
+                if any(
+                    ws.cell(r, c).value not in (None, "")
+                    for c in range(1, min(8, int(ws.max_column or 0) or 8) + 1)
+                ):
+                    has_body = True
+                    break
+            if has_body:
+                best_row = row
+                best_count = count
+    return best_row
 
 
 def _find_ledger_header_row(ws, profile: ShipmentEtlProfile) -> int | None:
@@ -239,6 +351,116 @@ def _map_headers(ws, header_row: int, profile: ShipmentEtlProfile) -> dict[str, 
                     mapping[field_name] = col
                     break
     return mapping
+
+
+def _sample_values(ws, header_row: int, col: int, *, limit: int = 5) -> list[str]:
+    out: list[str] = []
+    for row in range(header_row + 1, min(header_row + 8, int(ws.max_row or 0) + 1)):
+        raw = ws.cell(row, col).value
+        if raw is None or str(raw).strip() == "":
+            continue
+        out.append(str(raw).strip())
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _infer_columns_from_samples(
+    ws,
+    header_row: int,
+    mapping: dict[str, int],
+) -> dict[str, int]:
+    """陌生表头：用样例值类型补列（不编造数值，只猜列位）。"""
+    import os
+
+    flag = str(os.environ.get("FHD_EXCEL_ETL_HEURISTIC") or "1").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return dict(mapping)
+    out = dict(mapping)
+    max_col = min(16, int(ws.max_column or 0) or 16)
+    candidates: list[tuple[int, list[str], str]] = []
+    for col in range(1, max_col + 1):
+        if col in out.values():
+            continue
+        samples = _sample_values(ws, header_row, col)
+        if not samples:
+            continue
+        header = _norm_header(ws.cell(header_row, col).value)
+        joined = " ".join(samples)
+        kind = "text"
+        nums = 0
+        for s in samples:
+            try:
+                float(str(s).replace(",", ""))
+                nums += 1
+            except ValueError:
+                pass
+        if nums >= max(1, len(samples) // 2 + 1):
+            kind = "number"
+        elif re.search(r"[A-Za-z0-9\-_/]{2,}", joined) and not re.search(r"[\u4e00-\u9fff]{2,}", joined):
+            kind = "code"
+        elif re.search(r"[\u4e00-\u9fff]", joined):
+            kind = "name"
+        candidates.append((col, samples, kind if not header else f"{kind}:{header}"))
+
+    def _take(field: str, predicate) -> None:
+        if field in out:
+            return
+        for col, samples, kind in candidates:
+            if col in out.values():
+                continue
+            if predicate(col, samples, kind):
+                out[field] = col
+                return
+
+    _take(
+        "model_number",
+        lambda c, s, k: k.startswith("code") or (k.startswith("text") and all(len(x) <= 24 for x in s)),
+    )
+    _take("product_name", lambda c, s, k: k.startswith("name") or k.startswith("text"))
+    # 数值列：按从左到右依次填 数量/规格/公斤/单价/金额
+    num_cols = [c for c, s, k in candidates if k.startswith("number") and c not in out.values()]
+    for field in ("quantity_tins", "tin_spec", "quantity_kg", "unit_price", "amount"):
+        if field in out or not num_cols:
+            continue
+        out[field] = num_cols.pop(0)
+    _take(
+        "order_number",
+        lambda c, s, k: any(re.search(r"[A-Za-z].*\d|\d.*[A-Za-z]", x) for x in s),
+    )
+    return out
+
+
+def _classify_sheet_role(
+    ws,
+    profile: ShipmentEtlProfile,
+    *,
+    d_score: int,
+    l_score: int,
+) -> str:
+    """多表混排：给工作表打角色 delivery / ledger / ignore / unknown。"""
+    title = str(ws.title or "")
+    if re.search(r"报价|价目|cover|目录|说明|readme", title, re.I):
+        # 仍可能是单据；低分才忽略
+        if d_score < 24 and l_score < 24:
+            return "ignore"
+    if profile.has_ledger and l_score >= 40 and l_score > d_score:
+        return "ledger"
+    if d_score >= 32:
+        return "delivery"
+    header = _find_header_row(ws, profile)
+    ledger_header = _find_ledger_header_row(ws, profile) if profile.has_ledger else None
+    if ledger_header and (header is None or l_score >= d_score):
+        mapping = _map_headers(ws, ledger_header, profile)
+        if "order_number" in mapping:
+            return "ledger"
+    if header is not None:
+        mapping = _map_headers(ws, header, profile)
+        if "product_name" in mapping or "model_number" in mapping:
+            return "delivery"
+    if d_score < 16 and l_score < 16:
+        return "ignore"
+    return "unknown"
 
 
 def _parse_buyer_meta(ws, header_row: int, profile: ShipmentEtlProfile) -> dict[str, str]:
@@ -507,11 +729,18 @@ def _build_sheet_probe(
     )
 
 
-def _merge_meta(base: dict[str, str], overlay: dict[str, str]) -> dict[str, str]:
+def _merge_meta(
+    base: dict[str, str],
+    overlay: dict[str, str],
+    *,
+    prefer_overlay: bool = False,
+) -> dict[str, str]:
     out = dict(base)
     for key in ("unit_name", "contact_person", "order_date", "order_number", "title"):
         val = str((overlay or {}).get(key) or "").strip()
-        if val and not str(out.get(key) or "").strip():
+        if not val:
+            continue
+        if prefer_overlay or not str(out.get(key) or "").strip():
             out[key] = val
     return out
 
@@ -583,7 +812,7 @@ def _apply_llm_assist_to_layout(
         if field_name in {"product_name", "model_number", "order_number", "quantity_tins", "quantity_kg"}:
             if field_name not in mapping and isinstance(col, int) and col > 0:
                 new_mapping[field_name] = col
-    new_meta = _merge_meta(dict(meta or {}), assist.meta or {})
+    new_meta = _merge_meta(dict(meta or {}), assist.meta or {}, prefer_overlay=True)
     kind = assist.source_kind if assist.source_kind in {"delivery_note", "shipment_ledger", "ignore"} else prefer_kind
     return new_header, new_mapping, new_meta, kind, assist_public
 
@@ -597,8 +826,13 @@ def _parse_delivery_sheet(
 ) -> dict[str, Any] | None:
     d_score = _score_delivery_sheet(ws, profile)
     l_score = _score_ledger_sheet(ws, profile)
-    header_row = _find_header_row(ws, profile)
-    mapping = _map_headers(ws, header_row, profile) if header_row is not None else {}
+    kb_header, kb_mapping, kb_fp = _kb_resolve_layout(ws)
+    header_row = kb_header if kb_header is not None else _find_header_row(ws, profile)
+    mapping = (
+        dict(kb_mapping)
+        if kb_mapping
+        else (_map_headers(ws, header_row, profile) if header_row is not None else {})
+    )
     meta = (
         _parse_buyer_meta(ws, header_row, profile)
         if header_row is not None
@@ -612,12 +846,13 @@ def _parse_delivery_sheet(
     )
     assist_public: dict[str, Any] = {
         "used_llm": False,
-        "cache_hit": False,
-        "ok": False,
-        "confidence": 1.0,
-        "reason": "rules_only",
+        "cache_hit": bool(kb_fp),
+        "ok": bool(kb_fp and mapping),
+        "confidence": 1.0 if kb_fp else 1.0,
+        "reason": "knowledge_base_hit" if kb_fp else "rules_only",
+        "layout_fingerprint": kb_fp or "",
     }
-    if allow_llm:
+    if allow_llm and not kb_fp:
         header_row, mapping, meta, kind, assist_public = _apply_llm_assist_to_layout(
             ws,
             profile,
@@ -635,6 +870,29 @@ def _parse_delivery_sheet(
             # LLM reclassified as ledger — let caller handle via ledger path
             return None
 
+    # 规则/LLM 仍缺关键列 → 样例启发式（陌生表头兜底；不编造数值）
+    heuristic_on = str(os.environ.get("FHD_EXCEL_ETL_HEURISTIC") or "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    if (
+        heuristic_on
+        and header_row is not None
+        and ("product_name" not in mapping and "model_number" not in mapping)
+    ):
+        inferred = _infer_columns_from_samples(ws, header_row, mapping)
+        if "product_name" in inferred or "model_number" in inferred:
+            mapping = inferred
+            if not assist_public.get("used_llm"):
+                assist_public = {
+                    **assist_public,
+                    "ok": True,
+                    "confidence": 0.65,
+                    "reason": "heuristic_samples",
+                }
+
     if header_row is None:
         return None
     if "product_name" not in mapping and "model_number" not in mapping:
@@ -642,6 +900,15 @@ def _parse_delivery_sheet(
     items = _parse_items(ws, header_row, mapping, profile)
     if not items:
         return None
+    remembered_fp = _remember_sheet_layout(
+        ws,
+        header_row=header_row,
+        mapping=mapping,
+        profile=profile,
+        source="knowledge_base" if kb_fp else ("llm" if assist_public.get("used_llm") else "rules"),
+    )
+    if remembered_fp and not assist_public.get("layout_fingerprint"):
+        assist_public["layout_fingerprint"] = remembered_fp
     unit = meta.get("unit_name") or fallback_unit
     note = _enrich_note(
         {
@@ -686,8 +953,13 @@ def _parse_ledger_sheet(
 ) -> list[dict[str, Any]]:
     d_score = _score_delivery_sheet(ws, profile)
     l_score = _score_ledger_sheet(ws, profile)
-    header_row = _find_ledger_header_row(ws, profile)
-    mapping = _map_headers(ws, header_row, profile) if header_row is not None else {}
+    kb_header, kb_mapping, kb_fp = _kb_resolve_layout(ws)
+    header_row = kb_header if kb_header is not None else _find_ledger_header_row(ws, profile)
+    mapping = (
+        dict(kb_mapping)
+        if kb_mapping
+        else (_map_headers(ws, header_row, profile) if header_row is not None else {})
+    )
     meta: dict[str, str] = {
         "unit_name": "",
         "contact_person": "",
@@ -697,12 +969,13 @@ def _parse_ledger_sheet(
     }
     assist_public: dict[str, Any] = {
         "used_llm": False,
-        "cache_hit": False,
-        "ok": False,
+        "cache_hit": bool(kb_fp),
+        "ok": bool(kb_fp and mapping),
         "confidence": 1.0,
-        "reason": "rules_only",
+        "reason": "knowledge_base_hit" if kb_fp else "rules_only",
+        "layout_fingerprint": kb_fp or "",
     }
-    if allow_llm:
+    if allow_llm and not kb_fp:
         header_row, mapping, meta, kind, assist_public = _apply_llm_assist_to_layout(
             ws,
             profile,
@@ -725,6 +998,14 @@ def _parse_ledger_sheet(
         return []
     if "product_name" not in mapping and "model_number" not in mapping:
         return []
+
+    _remember_sheet_layout(
+        ws,
+        header_row=header_row,
+        mapping=mapping,
+        profile=profile,
+        source="knowledge_base" if kb_fp else ("llm" if assist_public.get("used_llm") else "rules"),
+    )
 
     title_tpl = str((profile.ledger or {}).get("title_template") or "{unit}/{order_no}")
     unit_fallback = str(meta.get("unit_name") or fallback_unit).strip() or fallback_unit
@@ -775,16 +1056,33 @@ def parse_delivery_notes(
     unit_name_hint: str | None = None,
     profile_id: str | None = None,
     profile: ShipmentEtlProfile | None = None,
+    allow_ocr: bool = True,
 ) -> dict[str, Any]:
-    """解析工作簿：多 profile 竞分识别（送货单/流水/通用表/自定义 YAML）。
+    """解析工作簿：多 profile 竞分识别（通用表/流水/自定义 YAML）。
 
     include_ledger:
     - True: 主表 + 流水都收
     - False: 只收主表
     - "auto": 有主表时忽略同簿流水；无主表时再解析流水
+
+    若路径是图片/PDF 且 allow_ocr=True，先走 OCR 桥接再解析。
     """
-    profiles = _profiles_for_parse(profile, profile_id)
     path = Path(file_path).expanduser().resolve()
+    if allow_ocr:
+        try:
+            from app.application.shipment_excel_etl_ocr import is_ocr_source, parse_ocr_document
+
+            if path.is_file() and is_ocr_source(path):
+                return parse_ocr_document(
+                    path,
+                    include_ledger=include_ledger,
+                    unit_name_hint=unit_name_hint,
+                    profile_id=profile_id,
+                )
+        except RECOVERABLE_ERRORS:
+            logger.debug("ocr auto-route skipped", exc_info=True)
+
+    profiles = _profiles_for_parse(profile, profile_id)
     if not path.is_file():
         return {"success": False, "message": f"文件不存在: {path}", "notes": []}
 
@@ -804,22 +1102,91 @@ def parse_delivery_notes(
     skipped: list[dict[str, Any]] = []
     assist_summaries: list[dict[str, Any]] = []
     profile_hits: list[dict[str, Any]] = []
+    sheet_roles: list[dict[str, Any]] = []
     try:
         for ws in wb.worksheets:
             prof, d_score, l_score, prefer = _pick_best_profile_for_sheet(ws, profiles)
+            role = _classify_sheet_role(ws, prof, d_score=d_score, l_score=l_score)
+            if role == "ledger":
+                prefer = "shipment_ledger"
+            elif role == "delivery":
+                prefer = "delivery_note"
             score_floor = int(min_score if min_score is not None else prof.delivery_min_score)
-            profile_hits.append(
-                {
-                    "sheet": ws.title,
-                    "profile_id": prof.id,
-                    "kind": prof.kind,
-                    "label": prof.label,
-                    "delivery_score": d_score,
-                    "ledger_score": l_score,
-                    "prefer": prefer,
-                }
-            )
-            if prefer == "delivery_note" and d_score >= 40:
+            hit = {
+                "sheet": ws.title,
+                "profile_id": prof.id,
+                "kind": prof.kind,
+                "label": prof.label,
+                "delivery_score": d_score,
+                "ledger_score": l_score,
+                "prefer": prefer,
+                "role": role,
+            }
+            profile_hits.append(hit)
+            sheet_roles.append({"sheet": ws.title, "role": role, "prefer": prefer})
+            if role == "ignore":
+                skipped.append(
+                    {
+                        "sheet": ws.title,
+                        "score": max(d_score, l_score),
+                        "reason": "sheet_ignored_mixed_workbook",
+                        "profile_id": prof.id,
+                        "role": role,
+                    }
+                )
+                continue
+            # 多表混排：角色已判定为单据时，允许较低分也尝试解析（陌生表头）
+            delivery_gate = 24 if role in {"delivery", "unknown"} else 40
+            if prefer == "delivery_note" and d_score >= delivery_gate:
+                note = _parse_delivery_sheet(
+                    ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
+                )
+                if note:
+                    note["profile_id"] = prof.id
+                    note["profile_kind"] = prof.kind
+                    note["profile_label"] = prof.label
+                    note["profile_target"] = prof.target
+                    note["sheet_role"] = role
+                    delivery_notes.append(note)
+                    if isinstance(note.get("assist"), dict):
+                        assist_summaries.append(
+                            {
+                                "sheet": ws.title,
+                                "profile_id": prof.id,
+                                **dict(note.get("assist") or {}),
+                            }
+                        )
+                    continue
+                if d_score >= score_floor:
+                    skipped.append(
+                        {
+                            "sheet": ws.title,
+                            "score": d_score,
+                            "reason": "delivery_parse_failed",
+                            "profile_id": prof.id,
+                            "role": role,
+                        }
+                    )
+                    continue
+
+            if prefer == "shipment_ledger" and prof.has_ledger and l_score >= 40:
+                parsed_ledger = _parse_ledger_sheet(
+                    ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
+                )
+                if parsed_ledger:
+                    for n in parsed_ledger:
+                        n["profile_id"] = prof.id
+                        n["profile_kind"] = prof.kind
+                        n["profile_label"] = prof.label
+                        n["profile_target"] = prof.target
+                    ledger_notes.extend(parsed_ledger)
+                    assist = (parsed_ledger[0] or {}).get("assist")
+                    if isinstance(assist, dict):
+                        assist_summaries.append(
+                            {"sheet": ws.title, "profile_id": prof.id, **assist}
+                        )
+                    continue
+                # 流水竞分失败 → 回退通用表解析（避免误伤单据表）
                 note = _parse_delivery_sheet(
                     ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
                 )
@@ -838,18 +1205,18 @@ def parse_delivery_notes(
                             }
                         )
                     continue
-                if d_score >= score_floor:
+                if l_score >= 50:
                     skipped.append(
                         {
                             "sheet": ws.title,
-                            "score": d_score,
-                            "reason": "delivery_parse_failed",
+                            "score": l_score,
+                            "reason": "ledger_empty",
                             "profile_id": prof.id,
                         }
                     )
                     continue
 
-            if prof.has_ledger and l_score >= 40:
+            if prof.has_ledger and l_score >= 40 and prefer != "shipment_ledger":
                 parsed_ledger = _parse_ledger_sheet(
                     ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
                 )
@@ -966,6 +1333,8 @@ def parse_delivery_notes(
         "profile_ids": used_profile_ids,
         "profiles_available": [p.id for p in profiles],
         "profile_hits": profile_hits,
+        "sheet_roles": sheet_roles,
+        "mixed_workbook": len({r.get("role") for r in sheet_roles}) > 1,
         "note_count": len(notes),
         "delivery_note_count": delivery_count,
         "ledger_note_count": ledger_count,
@@ -1079,17 +1448,33 @@ def execute_shipment_excel_etl(
     workspace_root: str | Path | None = None,
     profile_id: str | None = None,
     profile: ShipmentEtlProfile | None = None,
+    direct: bool = False,
+    force_shipment_target: bool = False,
 ) -> dict[str, Any]:
     """执行闭环：客户+产品+发货单（可幂等 / dry-run / 失败补偿）。
 
     生产默认 include_ledger=False；若要导入流水须 confirm_ledger=True。
     任一建单失败且 compensate_on_failure=True 时，取消本批已新建发货单并删除指纹。
+
+    direct=True：无预览直写（需 FHD_EXCEL_ETL_ALLOW_DIRECT=1）。
+    force_shipment_target=True：直写时把 preview_only notes 提升为 shipment。
     """
     from app.application.shipment_excel_etl_security import (
         ShipmentEtlPathError,
+        direct_execute_allowed,
         resolve_etl_path,
         tenant_key_for_etl,
     )
+
+    if direct and not dry_run and not direct_execute_allowed():
+        return {
+            "success": False,
+            "message": (
+                "无预览直写未开启。请设置 FHD_EXCEL_ETL_ALLOW_DIRECT=1 "
+                "（或 FHD_SHIPMENT_ETL_ALLOW_DIRECT=1）并确认权限后再执行。"
+            ),
+            "error_code": "direct_execute_denied",
+        }
 
     prof = _resolve_profile(profile, profile_id)
     path: Path | None = None
@@ -1125,7 +1510,14 @@ def execute_shipment_excel_etl(
         notes = [_enrich_note(n) for n in notes]
         ledger_available = sum(1 for n in notes if n.get("source_kind") == "shipment_ledger")
 
+    if direct and force_shipment_target:
+        for n in notes:
+            if str(n.get("profile_target") or "").strip() in {"", "preview_only"}:
+                n["profile_target"] = "shipment"
+                n["direct_target_promoted"] = True
+
     ledger_notes = [n for n in notes if n.get("source_kind") == "shipment_ledger"]
+    # 直写时可凭 confirm_ledger 放行流水；未确认仍拦截
     if ledger_notes and not confirm_ledger:
         return {
             "success": False,
@@ -1136,6 +1528,7 @@ def execute_shipment_excel_etl(
             "error_code": "ledger_confirm_required",
             "ledger_note_count": len(ledger_notes),
             "note_count": len(notes),
+            "direct": bool(direct),
         }
 
     if not notes:
@@ -1193,6 +1586,7 @@ def execute_shipment_excel_etl(
         return {
             "success": True,
             "dry_run": True,
+            "direct": bool(direct),
             "message": (
                 f"预演：将新建 {len(to_import)} 张，跳过重复 {len(skipped_duplicates)} 张；不会写库"
             ),
@@ -1361,6 +1755,7 @@ def execute_shipment_excel_etl(
         "closed_loop": True,
         "idempotent": idempotent,
         "dry_run": False,
+        "direct": bool(direct),
         "kind": "shipment_delivery_etl",
         "audit": {
             "tenant_key": tenant_key,
@@ -1369,6 +1764,8 @@ def execute_shipment_excel_etl(
             "failed": shipment_failed,
             "skipped": shipment_skipped,
             "compensated": len(compensated),
+            "direct": bool(direct),
+            "force_shipment_target": bool(force_shipment_target),
         },
     }
 
@@ -1789,6 +2186,11 @@ class ShipmentExcelEtlApplicationService:
         return regenerate_delivery_notes_from_file(
             file_path, output_path, **self._profile_kwargs(kwargs)
         )
+
+    def ocr_preview(self, file_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+        from app.application.shipment_excel_etl_ocr import parse_ocr_document
+
+        return parse_ocr_document(file_path, **self._profile_kwargs(kwargs))
 
 
 _svc: ShipmentExcelEtlApplicationService | None = None

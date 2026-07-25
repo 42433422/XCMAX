@@ -16,18 +16,27 @@ from app.infrastructure.llm.structured_output import StructuredResult
 
 
 @pytest.fixture(autouse=True)
-def _reset_llm_env(monkeypatch):
+def _reset_llm_env(monkeypatch, tmp_path):
     clear_assist_cache()
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ETL_HEURISTIC", "0")
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
+    from app.application.shipment_etl_profile import clear_profile_cache
+
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    clear_profile_cache()
     yield
     clear_assist_cache()
+    clear_profile_cache()
 
 
 def test_llm_disabled_by_env(monkeypatch):
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     assert llm_assist_enabled() is False
     probe = SheetProbe(
-        profile_id="default",
+        profile_id="universal",
         sheet_title="S1",
         probe_rows=[],
         candidate_headers=[],
@@ -101,7 +110,7 @@ def test_invalid_llm_columns_are_rejected(monkeypatch):
         _fake_complete,
     )
     probe = SheetProbe(
-        profile_id="default",
+        profile_id="universal",
         sheet_title="S1",
         probe_rows=[{"row": 1, "cells": [{"col": 1, "text": "送货单"}]}],
         candidate_headers=[
@@ -170,16 +179,16 @@ def test_llm_assist_fills_alt_headers(tmp_path, monkeypatch):
     wb = Workbook()
     ws = wb.active
     ws.title = "N1"
-    # 标题含送货单以进入灰色/可识别区间，但英文表头让默认规则列映射失败
-    ws["A1"] = "Factory Delivery Note 送货单"
+    # 故意使用知识库同义词未覆盖的表头，逼出 LLM 补列
+    ws["A1"] = "Factory Delivery Note"
     ws["A2"] = "Buyer：LLM客户     Contact：王        2026年07月25日         No：LLM-1"
-    ws["A3"] = "SKU"
-    ws["D3"] = "ItemName"
-    ws["E3"] = "QtyPcs"
-    ws["F3"] = "SpecKg"
-    ws["G3"] = "QtyKg"
-    ws["H3"] = "Price"
-    ws["I3"] = "Amount"
+    ws["A3"] = "PartCode"
+    ws["D3"] = "GoodsTitle"
+    ws["E3"] = "PcsCount"
+    ws["F3"] = "NetKgEach"
+    ws["G3"] = "TotalKg"
+    ws["H3"] = "UnitFee"
+    ws["I3"] = "LineSum"
     ws["A4"] = "SKU-1"
     ws["D4"] = "清漆"
     ws["E4"] = 2
@@ -190,7 +199,7 @@ def test_llm_assist_fills_alt_headers(tmp_path, monkeypatch):
     wb.save(path)
     wb.close()
 
-    # 无 LLM 时默认规则通常解析不出（英文表头）
+    # 无 LLM 时通用同义词不应识别这些表头
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     off = parse_delivery_notes(path, include_ledger=False)
     assert off["note_count"] == 0

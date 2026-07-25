@@ -53,6 +53,16 @@ class _MemoryRepo:
 
 @pytest.fixture()
 def orm_fp_db(tmp_path, monkeypatch):
+    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
+    from app.application.shipment_etl_profile import clear_profile_cache
+
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
+    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    clear_profile_cache()
+
     engine = create_engine(f"sqlite:///{tmp_path / 'etl_fp.db'}")
     Base.metadata.create_all(bind=engine, tables=[ShipmentEtlImportFingerprint.__table__])
     Session = sessionmaker(bind=engine)

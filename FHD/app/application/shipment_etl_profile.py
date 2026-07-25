@@ -1,8 +1,12 @@
-"""Excel 单据 ETL Profile：任意 kind 的 YAML 版式注册表。
+"""Excel ETL Profile：通用工具 + 知识库，不依赖仓库内置送货单 YAML。
 
-- 内置 + ``FHD_SHIPMENT_ETL_PROFILE_DIR`` / ``FHD_EXCEL_ETL_PROFILE_DIR`` 自定义目录
-- ``list_profiles`` / ``load_all_profiles`` 供多版式竞分识别
-- 引擎不硬编码行业字符串；自定义 = 丢 YAML 即可
+来源优先级：
+1. 显式 profile 对象 / profile_id（含 knowledge:* 记忆条目）
+2. ``FHD_EXCEL_ETL_PROFILE_DIR`` 用户自定义 YAML（可选）
+3. 知识库生成的 ``universal`` 通用 profile（默认）
+
+仓库 ``resources/config/shipment_etl/profiles`` 仅当
+``FHD_EXCEL_ETL_ALLOW_BUILTIN=1`` 时才加载（默认关闭）。
 """
 
 from __future__ import annotations
@@ -16,10 +20,12 @@ from typing import Any
 
 import yaml
 
+from app.application.excel_etl_kb import get_excel_etl_kb
+
 _BUILTIN_DIR = (
-    Path(__file__).resolve().parents[2] / "resources" / "config" / "shipment_etl" / "profiles"
+    Path(__file__).resolve().parents[2] / "resources" / "config" / "shipment_etl" / "examples"
 )
-_DEFAULT_PROFILE_ID = "default"
+_DEFAULT_PROFILE_ID = "universal"
 
 
 class ShipmentEtlProfileError(ValueError):
@@ -56,8 +62,8 @@ class ShipmentEtlProfile:
 
     @property
     def delivery_min_score(self) -> int:
-        primary = (self.detect.get("delivery") or self.detect.get("primary") or {})
-        return int(primary.get("min_score") or 60)
+        primary = self.detect.get("delivery") or self.detect.get("primary") or {}
+        return int(primary.get("min_score") or 40)
 
     @property
     def has_ledger(self) -> bool:
@@ -92,24 +98,32 @@ def _compile(pattern: str, path: str, *, flags: int = 0) -> re.Pattern[str]:
 def _compile_title_patterns(patterns: list[Any], path: str) -> re.Pattern[str]:
     parts = [str(p) for p in patterns if str(p).strip()]
     if not parts:
-        # 永不匹配：允许纯表头竞分的通用模板
         return _compile(r"(?!)", path)
     joined = "|".join(f"(?:{p})" for p in parts)
     return _compile(joined, path)
 
 
-def _default_meta() -> dict[str, str]:
+def _default_meta_from_kb() -> dict[str, str]:
+    kb = get_excel_etl_kb()
+    labels = kb.meta_labels()
+    unit_alts = "|".join(re.escape(x) for x in (labels.get("unit_name") or ["客户"]) if x)
+    contact_alts = "|".join(re.escape(x) for x in (labels.get("contact_person") or ["联系人"]) if x)
+    date_alts = "|".join(re.escape(x) for x in (labels.get("order_date") or ["日期"]) if x)
+    order_alts = "|".join(re.escape(x) for x in (labels.get("order_number") or ["单号"]) if x)
+    unit_label = (labels.get("unit_name") or ["客户"])[0]
+    stop = rf"{contact_alts}|{date_alts}|{order_alts}"
     return {
-        "buyer_pattern": r"客户[：:\s]*([^\s联系人日期订单编号]+)",
-        "buyer_split_pattern": r"客户[：:]",
-        "buyer_stop_pattern": r"联系人|日期|订单编号|单号",
-        "buyer_label": "客户",
-        "contact_pattern": r"联系人[：:\s]*([^\s日期订单编号客户]*)",
+        # 禁止 [^)）]* 跨过首个字段值（会吞掉整行只剩末尾字符）
+        "buyer_pattern": rf"(?:{unit_alts})[（(]?[^)）:：]*[)）]?[：:\s]+([^\s]+?)(?=\s*(?:{stop})|$)",
+        "buyer_split_pattern": rf"(?:{unit_alts})[（(]?[^)）:：]*[)）]?[：:]",
+        "buyer_stop_pattern": stop,
+        "buyer_label": unit_label,
+        "contact_pattern": rf"(?:{contact_alts})[：:\s]*([^\s]+?)(?=\s*(?:{date_alts}|{order_alts})|$)",
         "date_pattern": (
             r"((?:20)?\d{2}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|\d{4}[-/]\d{1,2}[-/]\d{1,2})"
         ),
-        "order_no_pattern": r"(?:订单编号|单号)[：:\s]*([A-Za-z0-9\-]+)",
-        "stop_row_pattern": r"合计|总计|小计|备注说明",
+        "order_no_pattern": rf"(?:{order_alts})[：:\s]*([A-Za-z0-9\-]+)",
+        "stop_row_pattern": r"合计|总计|小计|备注说明|grand\s*total|total",
     }
 
 
@@ -124,7 +138,6 @@ def parse_profile_dict(data: dict[str, Any], *, source: str = "<dict>") -> Shipm
     target = str(data.get("target") or "preview_only").strip() or "preview_only"
 
     detect = _as_dict(_require(data, "detect", source), f"{source}.detect")
-    # primary 别名：通用模板可用 detect.primary 代替 detect.delivery
     if "delivery" not in detect and "primary" in detect:
         detect = {**detect, "delivery": detect.get("primary")}
     delivery = _as_dict(_require(detect, "delivery", f"{source}.detect"), f"{source}.detect.delivery")
@@ -135,14 +148,24 @@ def parse_profile_dict(data: dict[str, Any], *, source: str = "<dict>") -> Shipm
     else:
         ledger_detect = _as_dict(ledger_raw, f"{source}.detect.ledger")
 
-    meta_defaults = _default_meta()
+    meta_defaults = _default_meta_from_kb()
     meta_in = data.get("meta") if isinstance(data.get("meta"), dict) else {}
     meta = {**meta_defaults, **(meta_in or {})}
 
+    header_detect_default = {
+        "delivery": {
+            "max_scan_rows": 20,
+            "require_groups": [
+                ["型号", "编号", "sku", "货号", "model"],
+                ["名称", "品名", "name", "产品"],
+                ["数量", "qty", "箱数", "件数"],
+            ],
+        }
+    }
     header_detect = _as_dict(
         data.get("header_detect")
         if isinstance(data.get("header_detect"), dict)
-        else {"delivery": {"max_scan_rows": 16, "require_groups": [["型号", "编号", "sku"], ["名称", "品名"], ["数量"]]}},
+        else header_detect_default,
         f"{source}.header_detect",
     )
     if "delivery" not in header_detect and "primary" in header_detect:
@@ -155,17 +178,38 @@ def parse_profile_dict(data: dict[str, Any], *, source: str = "<dict>") -> Shipm
     title_patterns = _as_list(delivery.get("title_patterns") or [], f"{source}.detect.delivery.title_patterns")
     meta_patterns = CompiledMetaPatterns(
         title=_compile_title_patterns(title_patterns, f"{source}.detect.delivery.title_patterns"),
-        buyer=_compile(str(meta["buyer_pattern"]), f"{source}.meta.buyer_pattern", flags=re.UNICODE),
-        buyer_split=_compile(str(meta["buyer_split_pattern"]), f"{source}.meta.buyer_split_pattern"),
-        buyer_stop=_compile(str(meta["buyer_stop_pattern"]), f"{source}.meta.buyer_stop_pattern"),
-        contact=_compile(str(meta["contact_pattern"]), f"{source}.meta.contact_pattern"),
+        buyer=_compile(
+            str(meta["buyer_pattern"]),
+            f"{source}.meta.buyer_pattern",
+            flags=re.UNICODE | re.IGNORECASE,
+        ),
+        buyer_split=_compile(
+            str(meta["buyer_split_pattern"]),
+            f"{source}.meta.buyer_split_pattern",
+            flags=re.IGNORECASE,
+        ),
+        buyer_stop=_compile(
+            str(meta["buyer_stop_pattern"]),
+            f"{source}.meta.buyer_stop_pattern",
+            flags=re.IGNORECASE,
+        ),
+        contact=_compile(
+            str(meta["contact_pattern"]),
+            f"{source}.meta.contact_pattern",
+            flags=re.UNICODE | re.IGNORECASE,
+        ),
         date=_compile(str(meta["date_pattern"]), f"{source}.meta.date_pattern"),
-        order_no=_compile(str(meta["order_no_pattern"]), f"{source}.meta.order_no_pattern"),
+        order_no=_compile(
+            str(meta["order_no_pattern"]),
+            f"{source}.meta.order_no_pattern",
+            flags=re.IGNORECASE,
+        ),
         stop_row=_compile(str(meta["stop_row_pattern"]), f"{source}.meta.stop_row_pattern"),
         buyer_label=str(meta.get("buyer_label") or "客户"),
         ledger_sheet=_compile(
             str(ledger_detect.get("sheet_name_pattern") or "(?!)"),
             f"{source}.detect.ledger.sheet_name_pattern",
+            flags=re.IGNORECASE,
         ),
     )
 
@@ -193,13 +237,131 @@ def parse_profile_dict(data: dict[str, Any], *, source: str = "<dict>") -> Shipm
     )
 
 
+def build_universal_profile_from_kb() -> ShipmentEtlProfile:
+    """从知识库同义词构造通用 profile（非送货单专用模板）。"""
+    kb = get_excel_etl_kb()
+    syn = kb.synonyms()
+    write = kb.write_layout("universal_table")
+
+    def _contains(field: str, *, exclude: list[str] | None = None) -> list[dict[str, Any]]:
+        tokens = list(syn.get(field) or [])
+        if not tokens:
+            return []
+        rule: dict[str, Any] = {"contains_any": tokens}
+        if exclude:
+            rule["exclude_any"] = exclude
+        return [rule]
+
+    columns: dict[str, list[dict[str, Any]]] = {}
+    columns["model_number"] = _contains("model_number", exclude=["订单", "单号", "order"])
+    columns["product_name"] = _contains("product_name")
+    # 件数 vs 公斤：先匹配带 kg 的列，件数用更严规则避免吞掉 数量KG
+    qty_kg_tokens = list(syn.get("quantity_kg") or ["数量kg", "数量/kg", "公斤"])
+    columns["quantity_kg"] = [
+        {"contains_all_groups": [["数量", "qty"], ["kg", "公斤", "KG"]]},
+        {"contains_any": qty_kg_tokens},
+    ]
+    columns["quantity_tins"] = [
+        {"contains_all_groups": [["数量", "qty"], ["件", "桶", "箱", "pcs"]]},
+        {
+            "exact": ["数量", "数量/", "qty", "qty/"],
+            "only_if_missing": ["quantity_tins", "quantity_kg"],
+        },
+        {
+            "contains_any": list(syn.get("quantity_tins") or ["数量"]),
+            "exclude_any": ["kg", "公斤", "金额", "单价"],
+            "only_if_missing": ["quantity_tins"],
+        },
+    ]
+    columns["tin_spec"] = _contains("tin_spec")
+    columns["unit_price"] = _contains("unit_price")
+    columns["amount"] = _contains("amount")
+    columns["order_number"] = _contains("order_number", exclude=["型号", "model"])
+    columns["order_date"] = _contains("order_date")
+    columns["remark"] = _contains("remark")
+
+    header_tokens: list[str] = []
+    for key in ("model_number", "product_name", "quantity_tins", "unit_price", "amount"):
+        header_tokens.extend(syn.get(key) or [])
+
+    data = {
+        "id": "universal",
+        "kind": "universal_document",
+        "label": "通用单据（知识库）",
+        "target": str(os.environ.get("FHD_EXCEL_ETL_DEFAULT_TARGET") or "preview_only").strip()
+        or "preview_only",
+        "detect": {
+            "primary": {
+                "title_patterns": [],
+                "title_weight": 0,
+                "buyer_token": (kb.meta_labels().get("unit_name") or ["客户"])[0],
+                "buyer_weight": 15,
+                "header_hit_tokens": header_tokens[:24],
+                "header_hit_weight": 8,
+                "header_hit_cap": 6,
+                "bonus_tokens": [{"token": t, "weight": 4} for t in (syn.get("amount") or [])[:3]],
+                "min_score": 32,
+                "probe_rows": 12,
+            },
+            "ledger": {
+                "sheet_name_pattern": r"ledger|流水|明细|出货|sheet",
+                "content_tokens": ["ledger", "流水", "明细"],
+                "sheet_weight": 20,
+                "hit_tokens": list(
+                    dict.fromkeys(
+                        (syn.get("order_date") or ["日期"])
+                        + (syn.get("order_number") or ["单号"])
+                        + (syn.get("model_number") or ["型号"])
+                        + (syn.get("product_name") or ["名称"])
+                        + (syn.get("quantity_tins") or ["数量"])
+                        + (syn.get("unit_price") or ["单价"])
+                        + (syn.get("amount") or ["金额"])
+                    )
+                )[:14],
+                "hit_weight": 10,
+                "hit_cap": 6,
+                # 通用表头本身也会抬高 delivery 分；勿因同分压制 ledger
+                "suppress_if_delivery_score_gte": 999,
+                "probe_rows": 10,
+            },
+        },
+        "header_detect": {
+            "primary": {
+                "max_scan_rows": 20,
+                "require_groups": [
+                    list(syn.get("model_number") or ["型号", "sku"]),
+                    list(syn.get("product_name") or ["名称", "品名"]),
+                    list(syn.get("quantity_tins") or ["数量", "qty"]),
+                ],
+            },
+            "ledger": {
+                "max_scan_rows": 16,
+                "require_groups": [
+                    list(syn.get("order_number") or ["单号", "订单号"]),
+                    list(syn.get("product_name") or ["名称", "品名"]),
+                    list(syn.get("quantity_tins") or ["数量", "qty"]),
+                ],
+                "and_any_groups": [
+                    list(syn.get("model_number") or ["型号", "sku"]),
+                    list(syn.get("tin_spec") or ["规格"]),
+                ],
+            },
+        },
+        "columns": columns,
+        "write": write,
+    }
+    return parse_profile_dict(data, source="<knowledge_base:universal>")
+
+
 def profile_search_dirs() -> list[Path]:
     dirs: list[Path] = []
     for env_key in ("FHD_EXCEL_ETL_PROFILE_DIR", "FHD_SHIPMENT_ETL_PROFILE_DIR"):
         override = str(os.environ.get(env_key) or "").strip()
         if override:
             dirs.append(Path(override).expanduser().resolve())
-    dirs.append(_BUILTIN_DIR.resolve())
+    allow_builtin = str(os.environ.get("FHD_EXCEL_ETL_ALLOW_BUILTIN") or "").strip().lower()
+    if allow_builtin in {"1", "true", "yes", "on"}:
+        dirs.append(_BUILTIN_DIR.resolve())
     seen: set[str] = set()
     out: list[Path] = []
     for d in dirs:
@@ -248,45 +410,75 @@ def _index_profiles() -> dict[str, Path]:
         pid = str(data.get("id") or "").strip()
         if pid:
             index[pid] = path
-        if stem in {"default_delivery", "default-delivery"} and "default" not in index:
-            index["default"] = path
     return index
 
 
 def _dir_cache_key() -> str:
-    parts = [
-        str(os.environ.get("FHD_EXCEL_ETL_PROFILE_DIR") or "").strip(),
-        str(os.environ.get("FHD_SHIPMENT_ETL_PROFILE_DIR") or "").strip(),
-    ]
-    return "|".join(parts)
+    return "|".join(
+        [
+            str(os.environ.get("FHD_EXCEL_ETL_PROFILE_DIR") or "").strip(),
+            str(os.environ.get("FHD_SHIPMENT_ETL_PROFILE_DIR") or "").strip(),
+            str(os.environ.get("FHD_EXCEL_ETL_ALLOW_BUILTIN") or "").strip(),
+            str(os.environ.get("FHD_EXCEL_ETL_KB_PATH") or "").strip(),
+        ]
+    )
 
 
 @lru_cache(maxsize=32)
 def _cached_load(profile_id: str, dir_key: str) -> ShipmentEtlProfile:
     _ = dir_key
+    if profile_id in {"universal", "default", "auto"}:
+        # default/auto → 通用知识库 profile（不再绑送货单 YAML）
+        return build_universal_profile_from_kb()
+    if profile_id.startswith("knowledge:"):
+        fp = profile_id.split(":", 1)[1]
+        mem = get_excel_etl_kb().lookup(fp)
+        if mem is None:
+            raise ShipmentEtlProfileError(f"unknown knowledge template: {fp}")
+        return _profile_from_memory(mem)
     index = _index_profiles()
     path = index.get(profile_id)
     if path is None:
-        available = ", ".join(sorted(set(index))) or "(none)"
+        available = ", ".join(sorted(set(index) | {"universal"})) or "universal"
         raise ShipmentEtlProfileError(
             f"unknown excel etl profile_id={profile_id!r}; available: {available}"
         )
     return load_profile_from_path(path)
 
 
+def _profile_from_memory(mem: Any) -> ShipmentEtlProfile:
+    base = build_universal_profile_from_kb()
+    write = dict(base.write)
+    write.update(dict(mem.write or {}))
+    # keep universal detect/columns; memory used at parse-time for concrete mapping
+    return ShipmentEtlProfile(
+        id=f"knowledge:{mem.fingerprint}",
+        kind="learned_template",
+        label=str(mem.label or f"learned:{mem.fingerprint[:8]}"),
+        target=str(mem.target or "preview_only"),
+        raw={"id": f"knowledge:{mem.fingerprint}", "memory": mem.to_dict()},
+        meta_patterns=base.meta_patterns,
+        detect=base.detect,
+        header_detect=base.header_detect,
+        columns=base.columns,
+        ledger=base.ledger,
+        write=write,
+    )
+
+
 @lru_cache(maxsize=8)
 def _cached_all(dir_key: str) -> tuple[ShipmentEtlProfile, ...]:
     _ = dir_key
-    seen_ids: set[str] = set()
-    out: list[ShipmentEtlProfile] = []
+    out: list[ShipmentEtlProfile] = [build_universal_profile_from_kb()]
+    seen = {"universal"}
     for path in _iter_profile_files():
         try:
             prof = load_profile_from_path(path)
         except ShipmentEtlProfileError:
             continue
-        if prof.id in seen_ids:
+        if prof.id in seen:
             continue
-        seen_ids.add(prof.id)
+        seen.add(prof.id)
         out.append(prof)
     return tuple(out)
 
@@ -309,8 +501,7 @@ def resolve_profile_id(explicit: str | None = None) -> str:
 def get_shipment_etl_profile(profile_id: str | None = None) -> ShipmentEtlProfile:
     pid = resolve_profile_id(profile_id)
     if pid.lower() in {"auto", "*"}:
-        # auto 不是具体 profile；调用方应走 load_all_profiles
-        return _cached_load(_DEFAULT_PROFILE_ID, _dir_cache_key())
+        return build_universal_profile_from_kb()
     return _cached_load(pid, _dir_cache_key())
 
 
@@ -319,7 +510,7 @@ def load_all_profiles() -> list[ShipmentEtlProfile]:
 
 
 def list_profiles() -> list[dict[str, Any]]:
-    return [
+    rows = [
         {
             "id": p.id,
             "kind": p.kind,
@@ -327,9 +518,24 @@ def list_profiles() -> list[dict[str, Any]]:
             "target": p.target,
             "has_ledger": p.has_ledger,
             "min_score": p.delivery_min_score,
+            "source": "yaml" if p.id != "universal" else "knowledge_base",
         }
         for p in load_all_profiles()
     ]
+    for mem in get_excel_etl_kb().list_templates():
+        rows.append(
+            {
+                "id": f"knowledge:{mem.fingerprint}",
+                "kind": "learned_template",
+                "label": mem.label or mem.fingerprint,
+                "target": mem.target,
+                "has_ledger": False,
+                "min_score": 0,
+                "source": "knowledge_base",
+                "hit_count": mem.hit_count,
+            }
+        )
+    return rows
 
 
 def column_rule_matches(key: str, rule: dict[str, Any]) -> bool:
@@ -338,32 +544,29 @@ def column_rule_matches(key: str, rule: dict[str, Any]) -> bool:
     exclude = [str(x) for x in (rule.get("exclude_any") or [])]
     if any(tok in key for tok in exclude if tok):
         return False
-
     if "exact" in rule:
         exacts = {str(x) for x in (rule.get("exact") or [])}
         return key in exacts
-
     if "contains_any" in rule:
         tokens = [str(x) for x in (rule.get("contains_any") or [])]
-        return any(tok in key for tok in tokens if tok)
-
+        return any(tok.lower() in key for tok in tokens if tok)
     if "contains_all_groups" in rule:
         groups = rule.get("contains_all_groups") or []
         if not isinstance(groups, list) or not groups:
             return False
         for group in groups:
             options = [str(x) for x in (group or [])]
-            if not any(tok in key for tok in options if tok):
+            if not any(tok.lower() in key for tok in options if tok):
                 return False
         return True
-
     return False
 
 
 def header_groups_match(compact: str, groups: list[Any]) -> bool:
+    low = compact.lower()
     for group in groups or []:
         options = [str(x) for x in (group or [])]
-        if not any(tok in compact for tok in options if tok):
+        if not any(tok.lower() in low for tok in options if tok):
             return False
     return True
 
@@ -372,6 +575,7 @@ __all__ = [
     "ShipmentEtlProfile",
     "ShipmentEtlProfileError",
     "CompiledMetaPatterns",
+    "build_universal_profile_from_kb",
     "clear_profile_cache",
     "column_rule_matches",
     "get_shipment_etl_profile",

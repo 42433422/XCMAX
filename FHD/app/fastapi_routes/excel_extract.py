@@ -493,9 +493,14 @@ async def shipment_etl_execute(
     include_ledger: str = Form("0"),
     confirm_ledger: str = Form("0"),
     dry_run: str = Form("0"),
+    direct: str = Form("0"),
+    force_shipment_target: str = Form("0"),
     _user: Any = Depends(require_identified_user),
 ):
-    """执行闭环：送货单 → 客户/产品/发货单（默认幂等；流水需 confirm_ledger）。"""
+    """执行闭环：单据 → 客户/产品/发货单（默认幂等；流水需 confirm_ledger）。
+
+    direct=1：无预览直写（需环境开关 FHD_EXCEL_ETL_ALLOW_DIRECT=1）。
+    """
     try:
         import json
 
@@ -591,6 +596,8 @@ async def shipment_etl_execute(
             include_ledger=_form_include_ledger(include_ledger, default="0"),
             confirm_ledger=_form_truthy(confirm_ledger, False),
             dry_run=_form_truthy(dry_run, False),
+            direct=_form_truthy(direct, False),
+            force_shipment_target=_form_truthy(force_shipment_target, False),
             notes=notes,
             workspace_root=str(workspace_root or "").strip() or None,
         )
@@ -599,9 +606,72 @@ async def shipment_etl_execute(
             status = 400
         if result.get("error_code") == "ledger_confirm_required":
             status = 409
+        if result.get("error_code") == "direct_execute_denied":
+            status = 403
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("shipment etl execute failed: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.post("/shipment-etl/ocr-preview")
+async def shipment_etl_ocr_preview(
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
+):
+    """扫描件/图片/PDF OCR → 表格 → 单据预览。"""
+    try:
+        from app.application.shipment_excel_etl_ocr import parse_ocr_document
+        from app.application.shipment_excel_etl_app_service import preview_shipment_excel_etl
+
+        path = str(file_path or "").strip()
+        if file is not None and (file.filename or "").strip():
+            raw = await file.read()
+            name = Path(str(file.filename or "scan.png")).name
+            path = os.path.join(
+                TEMP_EXCEL_DIR, f"etl_ocr_{datetime.now().strftime('%Y%m%d%H%M%S')}_{name}"
+            )
+            with open(path, "wb") as fh:
+                fh.write(raw)
+        if not path:
+            return JSONResponse(
+                {"success": False, "message": "请上传扫描件或提供 file_path"},
+                status_code=400,
+            )
+        # 图片/PDF 走 OCR；xlsx 仍可用 preview
+        suffix = Path(path).suffix.lower()
+        if suffix in {".xlsx", ".xlsm", ".xls"}:
+            result = preview_shipment_excel_etl(
+                path,
+                include_ledger=_form_include_ledger(include_ledger, default="auto"),
+                workspace_root=str(workspace_root or "").strip() or None,
+            )
+        else:
+            parsed = parse_ocr_document(
+                path,
+                include_ledger=_form_include_ledger(include_ledger, default="auto"),
+                workspace_root=str(workspace_root or "").strip() or None,
+            )
+            if not parsed.get("success"):
+                return JSONResponse(parsed, status_code=400)
+            # 复用 preview 的 duplicate 标记
+            ocr_xlsx = (parsed.get("ocr") or {}).get("file_path") or ""
+            if ocr_xlsx:
+                preview = preview_shipment_excel_etl(
+                    ocr_xlsx,
+                    include_ledger=_form_include_ledger(include_ledger, default="auto"),
+                    workspace_root=str(workspace_root or "").strip() or None,
+                )
+                result = {**preview, "ocr": parsed.get("ocr"), "source_path": parsed.get("source_path")}
+            else:
+                result = parsed
+        status = 200 if result.get("success") else 400
+        return JSONResponse(result, status_code=status)
+    except RECOVERABLE_ERRORS as e:
+        logger.error("shipment etl ocr-preview failed: %s", e)
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 

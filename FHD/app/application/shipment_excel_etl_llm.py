@@ -352,6 +352,10 @@ def needs_llm_assist(
 ) -> tuple[bool, str]:
     """判断是否进入灰色区间。"""
     gray_low = 40
+    mode = llm_assist_mode()
+    incomplete = header_row is None or (
+        "product_name" not in (mapping or {}) and "model_number" not in (mapping or {})
+    )
     if prefer_kind == "delivery_note" or delivery_score >= gray_low:
         if gray_low <= delivery_score < min_score:
             return True, "delivery_score_gray"
@@ -371,6 +375,12 @@ def needs_llm_assist(
             return True, "ledger_order_missing"
         if "product_name" not in mapping and "model_number" not in mapping:
             return True, "ledger_columns_incomplete"
+    # 陌生表头：强制开，或 auto 模式下有候选内容但列未识别
+    if incomplete and prefer_kind in {None, "delivery_note", "shipment_ledger"}:
+        if mode == "on":
+            return True, "forced_on_incomplete_layout"
+        if mode == "auto" and (delivery_score >= 16 or ledger_score >= 16 or header_row is not None):
+            return True, "auto_unknown_headers"
     if delivery_score < gray_low and ledger_score < 40:
         return False, "scores_too_low"
     return False, "rules_confident"

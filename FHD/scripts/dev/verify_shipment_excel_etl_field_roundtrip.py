@@ -18,6 +18,13 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
+    import os
+
+    # 字段复验走通用知识库；execute 需 shipment target
+    os.environ.setdefault("FHD_SHIPMENT_ETL_LLM", "0")
+    os.environ.setdefault("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
+    os.environ.pop("FHD_EXCEL_ETL_ALLOW_BUILTIN", None)
+
     from openpyxl import load_workbook
 
     from app.application.shipment_excel_etl_app_service import (
@@ -27,7 +34,8 @@ def main() -> int:
         write_delivery_note_workbook,
         write_ledger_workbook,
     )
-    from app.application.shipment_etl_profile import get_shipment_etl_profile
+    from app.application.shipment_etl_profile import clear_profile_cache, get_shipment_etl_profile
+    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     errors: list[str] = []
     oks: list[str] = []
@@ -37,6 +45,11 @@ def main() -> int:
 
     def ok(msg: str) -> None:
         oks.append(msg)
+
+    td_kb = Path(tempfile.mkdtemp(prefix="etl_kb_"))
+    os.environ["FHD_EXCEL_ETL_KB_PATH"] = str(td_kb / "kb.json")
+    reset_excel_etl_kb_for_tests(td_kb / "kb.json")
+    clear_profile_cache()
 
     prof = get_shipment_etl_profile()
     write_cfg = prof.write

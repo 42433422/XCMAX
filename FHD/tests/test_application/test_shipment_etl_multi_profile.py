@@ -1,4 +1,4 @@
-"""多模板竞分：通用表 / 自定义 YAML profile。"""
+"""通用知识库 + 自定义 YAML；默认无内置送货单模板。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,10 @@ from pathlib import Path
 
 import yaml
 
+from app.application.excel_etl_kb import (
+    reset_excel_etl_kb_for_tests,
+    sheet_layout_fingerprint,
+)
 from app.application.shipment_etl_profile import clear_profile_cache, list_profiles
 from app.application.shipment_excel_etl_app_service import (
     parse_delivery_notes,
@@ -13,14 +17,22 @@ from app.application.shipment_excel_etl_app_service import (
 )
 
 
-def test_list_profiles_includes_builtin_kinds():
+def test_list_profiles_default_is_universal(tmp_path, monkeypatch):
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    monkeypatch.delenv("FHD_EXCEL_ETL_PROFILE_DIR", raising=False)
+    monkeypatch.delenv("FHD_SHIPMENT_ETL_PROFILE_DIR", raising=False)
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     ids = {p["id"] for p in list_profiles()}
-    assert "default" in ids
-    assert "generic_table" in ids
+    assert "universal" in ids
+    assert "default" not in ids
+    assert "generic_table" not in ids
 
 
-def test_generic_table_recognized_without_delivery_title(tmp_path):
+def test_universal_recognizes_generic_table_without_delivery_title(tmp_path, monkeypatch):
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     from openpyxl import Workbook
 
@@ -49,14 +61,61 @@ def test_generic_table_recognized_without_delivery_title(tmp_path):
     assert out["success"] is True
     assert out["note_count"] == 1
     note = out["notes"][0]
-    assert note.get("profile_id") == "generic_table"
+    assert note.get("profile_id") == "universal"
     assert note["unit_name"] == "竞分客户甲"
     assert note["items"][0]["model_number"] == "GT-01"
     assert note["items"][0]["quantity_tins"] == 2
 
 
+def test_knowledge_base_remembers_and_hits(tmp_path, monkeypatch):
+    kb_path = tmp_path / "kb.json"
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(kb_path))
+    kb = reset_excel_etl_kb_for_tests(kb_path)
+    clear_profile_cache()
+    from openpyxl import Workbook
+
+    path = tmp_path / "learn.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "S1"
+    ws["A1"] = "Document"
+    ws["A2"] = "客户：学习客户     联系人：钱     日期：2026年07月25日         单号：L-1"
+    ws["A3"] = "型号"
+    ws["B3"] = "名称"
+    ws["C3"] = "数量"
+    ws["D3"] = "单价"
+    ws["E3"] = "金额"
+    ws["A4"] = "KB-01"
+    ws["B4"] = "样品"
+    ws["C4"] = 3
+    ws["D4"] = 9
+    ws["E4"] = 27
+    wb.save(path)
+    wb.close()
+
+    first = parse_delivery_notes(path, include_ledger=False)
+    assert first["note_count"] == 1
+    fp = sheet_layout_fingerprint(
+        sheet_title="S1",
+        header_cells=["型号", "名称", "数量", "单价", "金额"],
+    )
+    mem = kb.get_template(fp)
+    assert mem is not None
+    assert mem.columns.get("model_number") == 1
+    assert mem.columns.get("product_name") == 2
+
+    # 第二次应走 KB 命中
+    second = parse_delivery_notes(path, include_ledger=False)
+    assert second["note_count"] == 1
+    assist = (second["notes"][0].get("assist") or {})
+    assert assist.get("reason") == "knowledge_base_hit"
+    assert assist.get("cache_hit") is True
+
+
 def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
     """把自定义 YAML 丢进 PROFILE_DIR 即可识别新模板。"""
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     data = {
         "id": "custom_pack_slip",
@@ -160,7 +219,9 @@ def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
     assert note["items"][0]["quantity_tins"] == 4
 
 
-def test_delivery_still_wins_over_generic(tmp_path):
+def test_universal_write_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     path = tmp_path / "delivery.xlsx"
     write_delivery_note_workbook(
@@ -187,4 +248,5 @@ def test_delivery_still_wins_over_generic(tmp_path):
     )
     out = parse_delivery_notes(path, include_ledger=False)
     assert out["note_count"] == 1
-    assert out["notes"][0].get("profile_id") == "default"
+    assert out["notes"][0].get("profile_id") == "universal"
+    assert out["notes"][0]["unit_name"] == "送货优先客户"

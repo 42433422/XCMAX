@@ -111,3 +111,11 @@ def batch_execute_allowed() -> bool:
         "yes",
         "on",
     }
+
+
+def direct_execute_allowed() -> bool:
+    """无预览直写生产库：默认关闭，需显式环境开关。"""
+    for key in ("FHD_EXCEL_ETL_ALLOW_DIRECT", "FHD_SHIPMENT_ETL_ALLOW_DIRECT"):
+        if os.environ.get(key, "").strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+    return False
