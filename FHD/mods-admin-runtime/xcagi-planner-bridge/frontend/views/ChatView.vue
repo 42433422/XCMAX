@@ -428,6 +428,7 @@
         </label>
         <label
           data-tutorial-id="star-auto-refresh-toggle"
+          title="需主动勾选后启用：小C才会感知星标会话新消息（约每分钟拉取）"
           style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
         >
           <input
@@ -435,7 +436,7 @@
             v-model="autoRefreshStarredWechat"
             @change="persistAutoRefreshWechatSetting"
           >
-          星标聊天自动刷新（1分钟）
+          主动意识启用
         </label>
         <label
           title="开启后 AI 回复将自动语音播报"
@@ -605,7 +606,7 @@ const AUTO_REFRESH_STARRED_WECHAT_KEY = 'xcagi_auto_refresh_starred_wechat'
 const PRO_INTENT_EXPERIENCE_KEY = 'xcagi_pro_intent_experience'
 const CHAT_RIGHT_PANE_MQ = '(max-width: 1023px)'
 // 默认开启星标轮询（首次无 localStorage 时视为 '1'）；用户可手动关闭
-const autoRefreshStarredWechat = ref(localStorage.getItem(AUTO_REFRESH_STARRED_WECHAT_KEY) !== '0')
+const autoRefreshStarredWechat = ref(localStorage.getItem(AUTO_REFRESH_STARRED_WECHAT_KEY) === '1')
 const proIntentExperienceEnabled = ref(localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1')
 const isTaskPaneResizable = ref(true)
 let taskPaneViewportMedia: MediaQueryList | null = null

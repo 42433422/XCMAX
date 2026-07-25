@@ -9,14 +9,20 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.absorption_state import closed_loop_proof
-from retort_engine.bounded_agent_loop import detect_stuck_pattern, run_bounded_agent_loop
+from retort_engine.bounded_agent_loop import (
+    detect_stuck_pattern,
+    run_bounded_agent_loop,
+)
 from retort_engine.issue_capability_benchmark import (
     evaluate_issue_instances,
     run_heldout_oracle_suite,
     synthesize_verified_issue_tasks,
 )
 from retort_engine.process_safety import probe_timeout_kills_child
-from retort_engine.repository_intelligence import build_ranked_repository_map, compare_repository_gaps
+from retort_engine.repository_intelligence import (
+    build_ranked_repository_map,
+    compare_repository_gaps,
+)
 
 
 FRONTIER_SOURCES: tuple[dict[str, Any], ...] = (
@@ -68,10 +74,22 @@ FRONTIER_SOURCES: tuple[dict[str, Any], ...] = (
 )
 
 LAYER_IMPLEMENTATIONS = {
-    "repository_intelligence": ("retort_engine/repository_intelligence.py", "tests/test_repository_intelligence.py"),
-    "bounded_execution": ("retort_engine/bounded_agent_loop.py", "tests/test_bounded_agent_loop.py"),
-    "reproducible_evaluation": ("retort_engine/issue_capability_benchmark.py", "tests/test_issue_capability_benchmark.py"),
-    "verified_task_synthesis": ("retort_engine/issue_capability_benchmark.py", "tests/test_issue_capability_benchmark.py"),
+    "repository_intelligence": (
+        "retort_engine/repository_intelligence.py",
+        "tests/test_repository_intelligence.py",
+    ),
+    "bounded_execution": (
+        "retort_engine/bounded_agent_loop.py",
+        "tests/test_bounded_agent_loop.py",
+    ),
+    "reproducible_evaluation": (
+        "retort_engine/issue_capability_benchmark.py",
+        "tests/test_issue_capability_benchmark.py",
+    ),
+    "verified_task_synthesis": (
+        "retort_engine/issue_capability_benchmark.py",
+        "tests/test_issue_capability_benchmark.py",
+    ),
 }
 TRACKED_MANIFEST = Path("docs") / "self_bootstrap_absorption_manifest.json"
 PRE_FRONTIER_BASELINE = Path(".retort") / "pre_frontier_baseline.json"
@@ -97,12 +115,16 @@ def build_self_bootstrap_plan(project: str | Path) -> dict[str, Any]:
             {
                 **source,
                 "behavior_implemented": bool(check["passed"]),
-                "strict_source_recorded": _source_recorded(root, str(source["source_id"])),
+                "strict_source_recorded": _source_recorded(
+                    root, str(source["source_id"])
+                ),
                 "implementation_files": list(LAYER_IMPLEMENTATIONS[layer]),
             }
         )
     return {
-        "status": "ready_for_other_modules" if report["external_improvement_allowed"] else "self_deepening_only",
+        "status": "ready_for_other_modules"
+        if report["external_improvement_allowed"]
+        else "self_deepening_only",
         "project": str(root),
         "policy": {
             "mode": "retort_self_first",
@@ -112,8 +134,12 @@ def build_self_bootstrap_plan(project: str | Path) -> dict[str, Any]:
         "sources": rows,
         "summary": {
             "source_count": len(rows),
-            "implemented_source_count": sum(1 for row in rows if row["behavior_implemented"]),
-            "strictly_recorded_source_count": sum(1 for row in rows if row["strict_source_recorded"]),
+            "implemented_source_count": sum(
+                1 for row in rows if row["behavior_implemented"]
+            ),
+            "strictly_recorded_source_count": sum(
+                1 for row in rows if row["strict_source_recorded"]
+            ),
         },
         "depth_report": report,
     }
@@ -122,7 +148,10 @@ def build_self_bootstrap_plan(project: str | Path) -> dict[str, Any]:
 def build_self_depth_report(project: str | Path) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     layers = _behavior_layers(root)
-    source_records = {source["source_id"]: _source_recorded(root, str(source["source_id"])) for source in FRONTIER_SOURCES}
+    source_records = {
+        source["source_id"]: _source_recorded(root, str(source["source_id"]))
+        for source in FRONTIER_SOURCES
+    }
     proof = closed_loop_proof(root)
     benchmark = _comparative_benchmark(root)
     landing = _landing_proof(root)
@@ -131,16 +160,28 @@ def build_self_depth_report(project: str | Path) -> dict[str, Any]:
     strict_passed = bool(proof["verified"])
     benchmark_passed = bool(benchmark["passed"])
     landing_passed = bool(landing["verified"])
-    allowed = behavior_passed and sources_passed and strict_passed and benchmark_passed and landing_passed
+    allowed = (
+        behavior_passed
+        and sources_passed
+        and strict_passed
+        and benchmark_passed
+        and landing_passed
+    )
     missing: list[str] = []
-    missing.extend(f"behavior:{name}" for name, row in layers.items() if not row["passed"])
-    missing.extend(f"source:{name}" for name, passed in source_records.items() if not passed)
+    missing.extend(
+        f"behavior:{name}" for name, row in layers.items() if not row["passed"]
+    )
+    missing.extend(
+        f"source:{name}" for name, passed in source_records.items() if not passed
+    )
     missing.extend(f"closed_loop:{name}" for name in proof["missing"])
     if not benchmark_passed:
         missing.append("comparative_benchmark:absorbed_behavior_must_beat_baseline")
     missing.extend(f"landing:{name}" for name in landing["missing"])
     return {
-        "status": "strongest_depth_verified" if allowed else "self_deepening_incomplete",
+        "status": "strongest_depth_verified"
+        if allowed
+        else "self_deepening_incomplete",
         "project": str(root),
         "external_improvement_allowed": allowed,
         "layers": layers,
@@ -150,7 +191,10 @@ def build_self_depth_report(project: str | Path) -> dict[str, Any]:
         "landing_proof": landing,
         "maturity_snapshot": {
             "blind_pass_rate_floor": 0.85,
-            "behavior_patches": ["absorbed_review_rank_weights", "absorbed_hunk_semantic_rules"],
+            "behavior_patches": [
+                "absorbed_review_rank_weights",
+                "absorbed_hunk_semantic_rules",
+            ],
             "gap_driven_tasks": "tasks_from_repository_gaps",
             "apply_quality_gate": "absorption_quality_gate",
             "agent_fail_to_pass": "run_agent_oracle_loop",
@@ -158,9 +202,13 @@ def build_self_depth_report(project: str | Path) -> dict[str, Any]:
         },
         "summary": {
             "behavior_layer_count": len(layers),
-            "behavior_layer_passed_count": sum(1 for row in layers.values() if row["passed"]),
+            "behavior_layer_passed_count": sum(
+                1 for row in layers.values() if row["passed"]
+            ),
             "frontier_source_count": len(source_records),
-            "frontier_source_recorded_count": sum(1 for passed in source_records.values() if passed),
+            "frontier_source_recorded_count": sum(
+                1 for passed in source_records.values() if passed
+            ),
             "strict_closed_loop_verified": strict_passed,
             "comparative_benchmark_verified": benchmark_passed,
             "landing_verified": landing_passed,
@@ -169,10 +217,16 @@ def build_self_depth_report(project: str | Path) -> dict[str, Any]:
     }
 
 
-def external_improvement_gate(project: str | Path, target: str | Path) -> dict[str, Any]:
+def external_improvement_gate(
+    project: str | Path, target: str | Path
+) -> dict[str, Any]:
     # Unit/integration tests spawn CLI subprocesses; monkeypatches do not cross process
     # boundaries. Allow an explicit env bypass for those hermetic runs only.
-    if os.environ.get("RETORT_ALLOW_EXTERNAL_IMPROVEMENT", "").strip().lower() in {"1", "true", "yes"}:
+    if os.environ.get("RETORT_ALLOW_EXTERNAL_IMPROVEMENT", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
         return {
             "status": "allowed",
             "target": str(Path(target).expanduser().resolve()),
@@ -185,7 +239,9 @@ def external_improvement_gate(project: str | Path, target: str | Path) -> dict[s
     return {
         "status": "allowed" if allowed else "blocked",
         "target": str(Path(target).expanduser().resolve()),
-        "reason": "retort_self_depth_verified" if allowed else "retort_must_deepen_itself_before_improving_other_modules",
+        "reason": "retort_self_depth_verified"
+        if allowed
+        else "retort_must_deepen_itself_before_improving_other_modules",
         "missing": report["summary"]["missing"],
         "depth_status": report["status"],
     }
@@ -200,17 +256,23 @@ def record_frontier_source_absorption(
 ) -> dict[str, Any]:
     """Record a source only when its exact revision and local behavior layer verify."""
     root = Path(project).expanduser().resolve()
-    source = next((row for row in FRONTIER_SOURCES if row["source_id"] == source_id), None)
+    source = next(
+        (row for row in FRONTIER_SOURCES if row["source_id"] == source_id), None
+    )
     if source is None:
         raise ValueError(f"unknown frontier source: {source_id}")
     if source_revision != source["revision"]:
-        raise ValueError("source revision does not match the reviewed frontier revision")
+        raise ValueError(
+            "source revision does not match the reviewed frontier revision"
+        )
     layer = str(source["layer"])
     behavior = _behavior_layers(root)[layer]
     implementation_files = [root / rel for rel in LAYER_IMPLEMENTATIONS[layer]]
     missing_files = [str(path) for path in implementation_files if not path.is_file()]
     if not behavior["passed"] or missing_files or not gate_evidence:
-        raise ValueError("behavior layer, implementation files, and gate evidence are required")
+        raise ValueError(
+            "behavior layer, implementation files, and gate evidence are required"
+        )
     result = {
         "status": "recorded",
         "source_id": source_id,
@@ -228,7 +290,10 @@ def record_frontier_source_absorption(
     path = root / ".retort" / "self_bootstrap_absorptions" / f"{source_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     result["record_path"] = str(path)
-    path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return result
 
 
@@ -237,7 +302,12 @@ def package_root() -> Path:
 
 
 def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
-    repo_map = build_ranked_repository_map(root, focus_terms=("absorb", "benchmark", "agent", "oracle", "pagerank"), max_files=24, max_chars=24_000)
+    repo_map = build_ranked_repository_map(
+        root,
+        focus_terms=("absorb", "benchmark", "agent", "oracle", "pagerank"),
+        max_files=24,
+        max_chars=24_000,
+    )
     focus_paths = {str(row["path"]) for row in repo_map.get("files") or []}
     repo_impl = root / "retort_engine" / "repository_intelligence.py"
     repo_text = repo_impl.read_text(encoding="utf-8") if repo_impl.is_file() else ""
@@ -271,8 +341,15 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
         )
         error_loop = run_bounded_agent_loop(
             "detect repeated errors",
-            planner=lambda _objective, trajectory: {"command": f"retry-{len(trajectory) % 2}"},
-            executor=lambda action: {"ok": False, "returncode": 1, "error": "same boom", "output": "error"},
+            planner=lambda _objective, trajectory: {
+                "command": f"retry-{len(trajectory) % 2}"
+            },
+            executor=lambda action: {
+                "ok": False,
+                "returncode": 1,
+                "error": "same boom",
+                "output": "error",
+            },
             judge=lambda _objective, _trajectory: {"complete": False, "score": 0},
             max_steps=6,
             wall_time_limit_sec=5,
@@ -280,7 +357,9 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
             trajectory_dir=trajectory_dir,
             run_id="self-depth-error",
         )
-        stuck_ok = error_loop["status"] == "stuck" and bool(detect_stuck_pattern(error_loop["trajectory"], repeat_limit=3))
+        stuck_ok = error_loop["status"] == "stuck" and bool(
+            detect_stuck_pattern(error_loop["trajectory"], repeat_limit=3)
+        )
         process_probe = probe_timeout_kills_child(timeout_sec=0.5)
         from retort_engine.agent_oracle_loop import run_agent_oracle_loop
 
@@ -296,11 +375,16 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
             and bool(agent_oracle.get("summary", {}).get("completed"))
         )
     oracle = run_heldout_oracle_suite(root)
-    evaluation_ready = bool(oracle["summary"]["all_resolved"] and oracle["summary"]["case_count"] >= 2)
+    evaluation_ready = bool(
+        oracle["summary"]["all_resolved"] and oracle["summary"]["case_count"] >= 2
+    )
     synthesis_ready = bool(
         oracle["summary"]["verified_task_count"] >= 2
         and oracle["summary"]["tasks_match_resolutions"]
-        and all(task.get("oracle") == "verified_fail_to_pass" for task in oracle["verified_tasks"])
+        and all(
+            task.get("oracle") == "verified_fail_to_pass"
+            for task in oracle["verified_tasks"]
+        )
     )
     return {
         "repository_intelligence": {
@@ -322,13 +406,17 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
         },
         "verified_task_synthesis": {
             "passed": synthesis_ready,
-            "metrics": {"verified_task_count": oracle["summary"]["verified_task_count"]},
+            "metrics": {
+                "verified_task_count": oracle["summary"]["verified_task_count"]
+            },
         },
     }
 
 
 def _source_recorded(root: Path, source_id: str) -> bool:
-    source = next((row for row in FRONTIER_SOURCES if row["source_id"] == source_id), None)
+    source = next(
+        (row for row in FRONTIER_SOURCES if row["source_id"] == source_id), None
+    )
     if source is None:
         return False
     payload = _source_record_payload(root, source_id)
@@ -345,11 +433,15 @@ def _source_recorded(root: Path, source_id: str) -> bool:
 
 def _source_record_payload(root: Path, source_id: str) -> dict[str, Any]:
     manifest = _read_json(root / TRACKED_MANIFEST)
-    tracked = manifest.get("sources") if isinstance(manifest.get("sources"), list) else []
+    tracked = (
+        manifest.get("sources") if isinstance(manifest.get("sources"), list) else []
+    )
     for row in tracked:
         if isinstance(row, dict) and row.get("source_id") == source_id:
             return row
-    return _read_json(root / ".retort" / "self_bootstrap_absorptions" / f"{source_id}.json")
+    return _read_json(
+        root / ".retort" / "self_bootstrap_absorptions" / f"{source_id}.json"
+    )
 
 
 def _implementation_hashes(root: Path, layer: str) -> dict[str, str]:
@@ -370,8 +462,12 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _comparative_benchmark(root: Path) -> dict[str, Any]:
-    repo_map = build_ranked_repository_map(root, focus_terms=("absorb", "agent"), max_files=8, max_chars=8_000)
-    gap = compare_repository_gaps(root, root, focus_terms=("absorb", "agent"), max_files=8)
+    repo_map = build_ranked_repository_map(
+        root, focus_terms=("absorb", "agent"), max_files=8, max_chars=8_000
+    )
+    gap = compare_repository_gaps(
+        root, root, focus_terms=("absorb", "agent"), max_files=8
+    )
     repeating = run_bounded_agent_loop(
         "detect repeated failure",
         planner=lambda _objective, _trajectory: {"command": "repeat"},
@@ -392,31 +488,54 @@ def _comparative_benchmark(root: Path) -> dict[str, Any]:
     )
     synthesized = synthesize_verified_issue_tasks(
         [
-            {"test_id": "verified", "failing_output": "failed", "patch": "fix", "before_passed": False, "after_passed": True},
-            {"test_id": "unverified", "failing_output": "failed", "patch": "fix", "before_passed": False, "after_passed": False},
+            {
+                "test_id": "verified",
+                "failing_output": "failed",
+                "patch": "fix",
+                "before_passed": False,
+                "after_passed": True,
+            },
+            {
+                "test_id": "unverified",
+                "failing_output": "failed",
+                "patch": "fix",
+                "before_passed": False,
+                "after_passed": False,
+            },
         ]
     )
     cases = {
-        "dependency_ranked_repository_map": repo_map["summary"]["dependency_edge_count"] > 0 and repo_map["summary"]["selected_file_count"] >= 2,
-        "repetitive_agent_loop_stopped": repeating["status"] == "stuck" and repeating["summary"]["step_count"] == 3,
+        "dependency_ranked_repository_map": repo_map["summary"]["dependency_edge_count"]
+        > 0
+        and repo_map["summary"]["selected_file_count"] >= 2,
+        "repetitive_agent_loop_stopped": repeating["status"] == "stuck"
+        and repeating["summary"]["step_count"] == 3,
         "false_positive_patch_rejected": evaluation["summary"]["resolved_count"] == 1,
-        "unverified_synthetic_task_rejected": len(synthesized) == 1 and synthesized[0]["test_id"] == "verified",
-        "graph_gap_extraction_ready": gap["status"] in {"ready", "partial"} and gap["summary"]["decision_source"] == "repository_graph_gap",
+        "unverified_synthetic_task_rejected": len(synthesized) == 1
+        and synthesized[0]["test_id"] == "verified",
+        "graph_gap_extraction_ready": gap["status"] in {"ready", "partial"}
+        and gap["summary"]["decision_source"] == "repository_graph_gap",
     }
     feature_hits = {
         name: _feature_present(root, name, rel)
         for name, rel in DEPTH_FEATURE_FILES.items()
     }
-    absorbed_score = sum(1 for passed in cases.values() if passed) + sum(1 for passed in feature_hits.values() if passed)
+    absorbed_score = sum(1 for passed in cases.values() if passed) + sum(
+        1 for passed in feature_hits.values() if passed
+    )
     baseline = _pre_frontier_baseline(root)
     baseline_score = int(baseline.get("baseline_score") or 0)
     return {
-        "passed": absorbed_score == len(cases) + len(feature_hits) and absorbed_score > baseline_score,
+        "passed": absorbed_score == len(cases) + len(feature_hits)
+        and absorbed_score > baseline_score,
         "baseline": baseline.get("label") or "pre-frontier registry-only era",
         "baseline_score": baseline_score,
         "absorbed_score": absorbed_score,
         "case_count": len(cases) + len(feature_hits),
-        "cases": {**cases, **{f"feature:{name}": passed for name, passed in feature_hits.items()}},
+        "cases": {
+            **cases,
+            **{f"feature:{name}": passed for name, passed in feature_hits.items()},
+        },
     }
 
 
@@ -463,11 +582,19 @@ def _landing_proof(root: Path) -> dict[str, Any]:
     gate_evidence = str(manifest.get("full_gate_evidence") or "")
     if not _gate_evidence_ok(gate_evidence):
         missing.append("full_gate_evidence_missing")
-    return {"verified": not missing, "landing_commit": landing_commit, "missing": missing, "manifest": str(root / TRACKED_MANIFEST)}
+    return {
+        "verified": not missing,
+        "landing_commit": landing_commit,
+        "missing": missing,
+        "manifest": str(root / TRACKED_MANIFEST),
+    }
 
 
 def _gate_evidence_ok(gate_evidence: str) -> bool:
-    if "ruff all checks passed" not in gate_evidence.lower() and "ruff" not in gate_evidence.lower():
+    if (
+        "ruff all checks passed" not in gate_evidence.lower()
+        and "ruff" not in gate_evidence.lower()
+    ):
         # Accept either explicit ruff phrase or a pytest summary with passed count.
         if not re.search(r"\b\d+\s+passed\b", gate_evidence):
             return False
@@ -477,12 +604,25 @@ def _gate_evidence_ok(gate_evidence: str) -> bool:
 
 
 def _git_ok(root: Path, *args: str) -> bool:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=False).returncode == 0
+    return (
+        subprocess.run(
+            ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+        ).returncode
+        == 0
+    )
 
 
 def _merge_after_commit(root: Path, commit: str) -> bool:
     result = subprocess.run(
-        ["git", "-C", str(root), "rev-list", "--merges", "--ancestry-path", f"{commit}..HEAD"],
+        [
+            "git",
+            "-C",
+            str(root),
+            "rev-list",
+            "--merges",
+            "--ancestry-path",
+            f"{commit}..HEAD",
+        ],
         capture_output=True,
         text=True,
         check=False,

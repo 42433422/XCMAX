@@ -90,6 +90,8 @@
         "input_schema": {"type": "object", "required": ["requests"], "properties": {"requests": {"type": "array", "minItems": 1}}},
         "output_schema": {"type": "object", "required": ["ok", "status", "summary", "routing_plan", "issues", "evidence", "read_only", "side_effects"]},
         "burn_in_fixture": {
+          "burn_in": true,
+          "burn_in_read_only": true,
           "requests": [
             {"id": "request-1", "text": "核对员工包运行时契约", "route_hint": "employee-pack-curator"},
             {"id": "request-2", "text": "核对员工包运行时契约", "route_hint": "employee-pack-curator"}

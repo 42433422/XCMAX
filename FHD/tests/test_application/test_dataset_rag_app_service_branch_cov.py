@@ -2783,6 +2783,39 @@ class TestExtractFileTextBoundary:
         assert parser == "text_file"
         assert metadata["extension"] == ".log"
 
+    def test_xlsx_file(self, tmp_path):
+        from openpyxl import Workbook
+
+        svc = _make_svc(tmp_path)
+        file_path = tmp_path / "kb.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "产品"
+        ws.append(["型号", "数量"])
+        ws.append(["A-01", 12])
+        wb.save(file_path)
+        text, parser, metadata = svc._extract_file_text(file_path)
+        assert parser == "openpyxl"
+        assert metadata["extension"] == ".xlsx"
+        assert metadata["sheet_count"] == 1
+        assert "型号" in text and "A-01" in text
+        assert "[sheet 产品]" in text
+
+    def test_xlsx_ingest_document(self, tmp_path):
+        from openpyxl import Workbook
+
+        svc = _make_svc(tmp_path)
+        file_path = tmp_path / "ship.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["客户", "金额"])
+        ws.append(["修茈", 100])
+        wb.save(file_path)
+        result = svc.ingest_document(dataset_id="ds", file_path=str(file_path), source="ship.xlsx")
+        assert result["success"] is True
+        assert result["document"]["parser"] == "openpyxl"
+        assert result["chunk_count"] >= 1
+
 
 # ─────────────── _extract_pdf_text 边界 ──────────────────────────
 
@@ -2812,6 +2845,18 @@ class TestExtractDocxTextBoundary:
         with patch("builtins.__import__", side_effect=ImportError("no docx")):
             with pytest.raises(RuntimeError, match="python-docx is required"):
                 svc._extract_docx_text(file_path)
+
+
+class TestExtractExcelTextBoundary:
+    """_extract_excel_text 的 Excel 提取。"""
+
+    def test_xlsx_import_error_raises_runtime_error(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        file_path = tmp_path / "test.xlsx"
+        file_path.write_bytes(b"fake")
+        with patch("builtins.__import__", side_effect=ImportError("no openpyxl")):
+            with pytest.raises(RuntimeError, match="openpyxl is required"):
+                svc._extract_xlsx_text(file_path)
 
 
 # ─────────────── _split_text 边界 ────────────────────────────────

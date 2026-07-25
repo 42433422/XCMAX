@@ -110,17 +110,31 @@ def build_external_merge_landing(
         "min_case_count": min_cases,
         "ready_case_count": len(ready_cases),
         "real_git_repo_count": 1 if repo.is_dir() else 0,
-        "cached_source_count": sum(1 for item in results if item.get("external_source_exists")),
-        "branch_diff_count": sum(1 for item in results if item.get("branch_diff_verified")),
+        "cached_source_count": sum(
+            1 for item in results if item.get("external_source_exists")
+        ),
+        "branch_diff_count": sum(
+            1 for item in results if item.get("branch_diff_verified")
+        ),
         "merge_commit_count": sum(1 for item in results if item.get("merge_commit")),
-        "post_merge_test_passed_count": sum(1 for item in results if item.get("post_merge_tests_passed")),
-        "all_branch_diff_merge_tests_passed": bool(results) and all(item.get("ready") for item in results),
-        "source_family_count": len({str(item.get("family") or "") for item in results if item.get("family")}),
-        "source_families": sorted({str(item.get("family") or "") for item in results if item.get("family")}),
+        "post_merge_test_passed_count": sum(
+            1 for item in results if item.get("post_merge_tests_passed")
+        ),
+        "all_branch_diff_merge_tests_passed": bool(results)
+        and all(item.get("ready") for item in results),
+        "source_family_count": len(
+            {str(item.get("family") or "") for item in results if item.get("family")}
+        ),
+        "source_families": sorted(
+            {str(item.get("family") or "") for item in results if item.get("family")}
+        ),
         "duration_sec": round(time.monotonic() - started, 3),
     }
     report = {
-        "status": "ready" if len(ready_cases) >= min_cases and summary["all_branch_diff_merge_tests_passed"] else "blocked",
+        "status": "ready"
+        if len(ready_cases) >= min_cases
+        and summary["all_branch_diff_merge_tests_passed"]
+        else "blocked",
         "project": str(root),
         "summary": summary,
         "cases": results,
@@ -135,7 +149,10 @@ def build_external_merge_landing(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return report
 
 
@@ -145,7 +162,9 @@ def _seed_repo(repo: Path) -> None:
     (repo / "retort_engine").mkdir(parents=True)
     (repo / "tests").mkdir()
     (repo / "retort_engine" / "__init__.py").write_text("", encoding="utf-8")
-    (repo / ".gitignore").write_text("__pycache__/\n*.pyc\n.pytest_cache/\n", encoding="utf-8")
+    (repo / ".gitignore").write_text(
+        "__pycache__/\n*.pyc\n.pytest_cache/\n", encoding="utf-8"
+    )
     _write_policy(repo, [])
     _write_policy_test(repo, [])
     _run(["git", "init"], repo)
@@ -156,7 +175,13 @@ def _seed_repo(repo: Path) -> None:
     _run(["git", "commit", "-m", "seed retort merge landing proof"], repo)
 
 
-def _land_case(root: Path, repo: Path, case: dict[str, str], index: int, previous_rules: list[dict[str, str]]) -> dict[str, Any]:
+def _land_case(
+    root: Path,
+    repo: Path,
+    case: dict[str, str],
+    index: int,
+    previous_rules: list[dict[str, str]],
+) -> dict[str, Any]:
     source = str(case.get("source") or f"source-{index}")
     family = str(case.get("family") or "external_project")
     source_path = root / str(case.get("source_path") or "")
@@ -187,13 +212,33 @@ def _land_case(root: Path, repo: Path, case: dict[str, str], index: int, previou
     commands.append(_run(["git", "commit", "-m", f"absorb {source} review rule"], repo))
     branch_commit = _run(["git", "rev-parse", "HEAD"], repo)
     diff_files_result = _run(["git", "diff", "--name-only", "main...HEAD"], repo)
-    diff_files = [line.strip() for line in diff_files_result.get("stdout", "").splitlines() if line.strip()]
+    diff_files = [
+        line.strip()
+        for line in diff_files_result.get("stdout", "").splitlines()
+        if line.strip()
+    ]
     commands.append(_run(["git", "checkout", "main"], repo))
-    commands.append(_run(["git", "merge", "--no-ff", branch, "-m", f"merge absorbed {source} rule"], repo))
+    commands.append(
+        _run(
+            ["git", "merge", "--no-ff", branch, "-m", f"merge absorbed {source} rule"],
+            repo,
+        )
+    )
     merge_commit = _run(["git", "rev-parse", "HEAD"], repo)
-    post_tests = _run([sys.executable, "-m", "pytest", "tests", "-q"], repo, env={**os.environ, "PYTHONPATH": str(repo)})
-    branch_diff_verified = {"retort_engine/review_policy.py", "tests/test_review_policy.py"}.issubset(set(diff_files))
-    merge_commit_text = merge_commit.get("stdout", "").strip() if merge_commit.get("returncode") == 0 else ""
+    post_tests = _run(
+        [sys.executable, "-m", "pytest", "tests", "-q"],
+        repo,
+        env={**os.environ, "PYTHONPATH": str(repo)},
+    )
+    branch_diff_verified = {
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py",
+    }.issubset(set(diff_files))
+    merge_commit_text = (
+        merge_commit.get("stdout", "").strip()
+        if merge_commit.get("returncode") == 0
+        else ""
+    )
     tests_passed = post_tests.get("returncode") == 0
     return {
         "source": source,
@@ -248,7 +293,9 @@ def _write_policy_test(repo: Path, rules: list[dict[str, str]]) -> None:
 def _source_fingerprint(path: Path) -> str:
     if not path.is_dir():
         return "missing"
-    names = sorted(str(item.relative_to(path)) for item in path.rglob("*") if item.is_file())[:40]
+    names = sorted(
+        str(item.relative_to(path)) for item in path.rglob("*") if item.is_file()
+    )[:40]
     return f"files={len(names)};sample={','.join(names[:6])}"
 
 
@@ -262,11 +309,26 @@ def _remove_runtime_caches(repo: Path) -> None:
 
 
 def _slug(value: str) -> str:
-    return "".join(char if char.isalnum() else "-" for char in value.lower()).strip("-")[:48] or "external"
+    return (
+        "".join(char if char.isalnum() else "-" for char in value.lower()).strip("-")[
+            :48
+        ]
+        or "external"
+    )
 
 
-def _run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> dict[str, Any]:
-    completed = subprocess.run(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+def _run(
+    command: list[str], cwd: Path, env: dict[str, str] | None = None
+) -> dict[str, Any]:
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
     return {
         "command": command,
         "cwd": str(cwd),

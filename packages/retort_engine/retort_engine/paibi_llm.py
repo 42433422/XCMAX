@@ -9,15 +9,27 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from retort_engine.paibi_prompting import build_retort_paibi_panel_prompt as _prompting_build_retort_paibi_panel_prompt
-from retort_engine.paibi_prompting import build_retort_paibi_prompt as _prompting_build_retort_paibi_prompt
+from retort_engine.paibi_prompting import (
+    build_retort_paibi_panel_prompt as _prompting_build_retort_paibi_panel_prompt,
+)
+from retort_engine.paibi_prompting import (
+    build_retort_paibi_prompt as _prompting_build_retort_paibi_prompt,
+)
 from retort_engine.paibi_status import analyze_task_blockers as _analyze_task_blockers
-from retort_engine.paibi_status import extract_last_json_object as _parser_extract_last_json_object
-from retort_engine.paibi_status import normalize_llm_scores as _parser_normalize_llm_scores
+from retort_engine.paibi_status import (
+    extract_last_json_object as _parser_extract_last_json_object,
+)
+from retort_engine.paibi_status import (
+    normalize_llm_scores as _parser_normalize_llm_scores,
+)
 from retort_engine.paibi_status import parallel_summary as _parallel_summary
-from retort_engine.paibi_status import status_has_stale_dispatch as _status_has_stale_dispatch
+from retort_engine.paibi_status import (
+    status_has_stale_dispatch as _status_has_stale_dispatch,
+)
 from retort_engine.paibi_status import summarize_task as _summarize_task
-from retort_engine.paibi_status import unblock_tasks_from_blockers as _unblock_tasks_from_blockers
+from retort_engine.paibi_status import (
+    unblock_tasks_from_blockers as _unblock_tasks_from_blockers,
+)
 
 
 DEFAULT_PAIBI_API_URL = "http://127.0.0.1:3001"
@@ -48,7 +60,9 @@ def request_paibi_llm_review(
         metadata=metadata or {},
     )
     client = PaibiLLMClient()
-    result = client.dispatch(prompt=prompt, project=root, title=f"[report-only] 反问 Retort {mode} LLM 评分")
+    result = client.dispatch(
+        prompt=prompt, project=root, title=f"[report-only] 反问 Retort {mode} LLM 评分"
+    )
     payload = {
         "provider": "paibi",
         "mode": mode,
@@ -61,11 +75,15 @@ def request_paibi_llm_review(
     return payload
 
 
-def record_paibi_llm_deep_result(*, project: str | Path, mode: str, review: dict[str, Any], status: dict[str, Any]) -> None:
+def record_paibi_llm_deep_result(
+    *, project: str | Path, mode: str, review: dict[str, Any], status: dict[str, Any]
+) -> None:
     if not status.get("scores"):
         return
     root = Path(project).expanduser().resolve()
-    dispatch = review.get("dispatch") if isinstance(review.get("dispatch"), dict) else {}
+    dispatch = (
+        review.get("dispatch") if isinstance(review.get("dispatch"), dict) else {}
+    )
     _record_llm_review(
         root,
         {
@@ -114,10 +132,14 @@ def request_paibi_parallel_review(
     record: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
-    selected = list(panels or DEFAULT_PARALLEL_PANELS)[: max(1, min(8, int(max_parallel or 3)))]
+    selected = list(panels or DEFAULT_PARALLEL_PANELS)[
+        : max(1, min(8, int(max_parallel or 3)))
+    ]
     prompts = []
     for panel in selected:
-        panel_id = str(panel.get("panel_id") or panel.get("id") or f"panel_{len(prompts) + 1}")
+        panel_id = str(
+            panel.get("panel_id") or panel.get("id") or f"panel_{len(prompts) + 1}"
+        )
         title = str(panel.get("title") or panel_id)
         focus = str(panel.get("focus") or "")
         prompts.append(
@@ -139,13 +161,17 @@ def request_paibi_parallel_review(
             }
         )
     client = PaibiLLMClient()
-    dispatch = client.dispatch_group(project=root, title=f"[parallel] 反问 Retort {mode}", prompts=prompts)
+    dispatch = client.dispatch_group(
+        project=root, title=f"[parallel] 反问 Retort {mode}", prompts=prompts
+    )
     payload = {
         "provider": "paibi",
         "mode": mode,
         "status": dispatch.get("status", "unknown"),
         "parallel": True,
-        "panels": [{"panel_id": item["panel_id"], "title": item["title"]} for item in prompts],
+        "panels": [
+            {"panel_id": item["panel_id"], "title": item["title"]} for item in prompts
+        ],
         "dispatch": dispatch,
     }
     if record:
@@ -181,7 +207,11 @@ def wait_for_paibi_llm_review(
     client = PaibiLLMClient()
     status = _summarize_task(client.fetch_task(task_id))
     stale_since: float | None = None
-    while time.monotonic() < deadline and not status.get("json_result") and status.get("status") not in {"completed", "failed"}:
+    while (
+        time.monotonic() < deadline
+        and not status.get("json_result")
+        and status.get("status") not in {"completed", "failed"}
+    ):
         if _status_has_stale_dispatch(status):
             now = time.monotonic()
             stale_since = now if stale_since is None else stale_since
@@ -248,10 +278,38 @@ def build_retort_paibi_prompt(
 class PaibiLLMClient:
     _token_cache = ""
 
-    def __init__(self, api_url: str = "", token: str = "", timeout: float | None = None) -> None:
-        self.api_url = (api_url or _env("RETORT_PAIBI_API_URL", "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL", "MODSTORE_PARA_API_URL", "DEVFLEET_API_URL") or DEFAULT_PAIBI_API_URL).strip().rstrip("/")
-        self.token = (token or _env("RETORT_PAIBI_TOKEN", "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN", "MODSTORE_PARA_TOKEN", "DEVFLEET_TOKEN") or self._token_cache).strip()
-        self.timeout = timeout if timeout is not None else float(os.environ.get("RETORT_PAIBI_TIMEOUT_SEC") or "8")
+    def __init__(
+        self, api_url: str = "", token: str = "", timeout: float | None = None
+    ) -> None:
+        self.api_url = (
+            (
+                api_url
+                or _env(
+                    "RETORT_PAIBI_API_URL",
+                    "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_API_URL",
+                    "MODSTORE_PARA_API_URL",
+                    "DEVFLEET_API_URL",
+                )
+                or DEFAULT_PAIBI_API_URL
+            )
+            .strip()
+            .rstrip("/")
+        )
+        self.token = (
+            token
+            or _env(
+                "RETORT_PAIBI_TOKEN",
+                "XCMAX_CODEX_SUPER_EMPLOYEE_PARA_TOKEN",
+                "MODSTORE_PARA_TOKEN",
+                "DEVFLEET_TOKEN",
+            )
+            or self._token_cache
+        ).strip()
+        self.timeout = (
+            timeout
+            if timeout is not None
+            else float(os.environ.get("RETORT_PAIBI_TIMEOUT_SEC") or "8")
+        )
 
     def dispatch(self, *, prompt: str, project: Path, title: str) -> dict[str, Any]:
         if self.api_url.lower() in {"", "0", "false", "off", "none", "disabled"}:
@@ -259,10 +317,14 @@ class PaibiLLMClient:
         try:
             health = self._request("GET", "/api/health")
             token = self.token or self._guest_token()
-            devices = self._request("GET", "/api/devices", token=token).get("devices") or []
+            devices = (
+                self._request("GET", "/api/devices", token=token).get("devices") or []
+            )
             slot = self._select_slot(devices)
             if not slot:
-                return self._outbox(project, title, prompt, "paibi_no_online_tool_slot", health=health)
+                return self._outbox(
+                    project, title, prompt, "paibi_no_online_tool_slot", health=health
+                )
             device = slot["device"]
             tool_name = str(slot["tool_name"])
             body = {
@@ -276,7 +338,9 @@ class PaibiLLMClient:
                 "report_only": True,
             }
             task_body = self._request("POST", "/api/tasks", token=token, json_body=body)
-            task = task_body.get("task") if isinstance(task_body.get("task"), dict) else {}
+            task = (
+                task_body.get("task") if isinstance(task_body.get("task"), dict) else {}
+            )
             return {
                 "status": "accepted",
                 "accepted": True,
@@ -284,24 +348,52 @@ class PaibiLLMClient:
                 "api_url": self.api_url,
                 "task_id": str(task.get("id") or ""),
                 "task_status": str(task.get("status") or ""),
-                "device": {"id": str(device.get("id") or ""), "name": str(device.get("name") or ""), "tool_name": tool_name},
+                "device": {
+                    "id": str(device.get("id") or ""),
+                    "name": str(device.get("name") or ""),
+                    "tool_name": tool_name,
+                },
                 "response": task_body,
             }
         except Exception as exc:  # noqa: BLE001
-            return self._outbox(project, title, prompt, f"paibi_dispatch_error: {str(exc)[:400]}")
+            return self._outbox(
+                project, title, prompt, f"paibi_dispatch_error: {str(exc)[:400]}"
+            )
 
-    def dispatch_group(self, *, prompts: list[dict[str, str]], project: Path, title: str, sequential: bool = False) -> dict[str, Any]:
+    def dispatch_group(
+        self,
+        *,
+        prompts: list[dict[str, str]],
+        project: Path,
+        title: str,
+        sequential: bool = False,
+    ) -> dict[str, Any]:
         if self.api_url.lower() in {"", "0", "false", "off", "none", "disabled"}:
             return self._group_outbox(project, title, prompts, "paibi_disabled")
         if not prompts:
-            return {"status": "empty", "accepted": False, "dispatcher": "paibi_para_api", "dispatches": []}
+            return {
+                "status": "empty",
+                "accepted": False,
+                "dispatcher": "paibi_para_api",
+                "dispatches": [],
+            }
         try:
             health = self._request("GET", "/api/health")
             token = self.token or self._guest_token()
-            slots = self._select_slots(self._request("GET", "/api/devices", token=token).get("devices") or [])
+            slots = self._select_slots(
+                self._request("GET", "/api/devices", token=token).get("devices") or []
+            )
             if not slots:
-                return self._group_outbox(project, title, prompts, "paibi_no_online_tool_slot", health=health)
-            single_device_serialized = len(slots) == 1 and len(prompts) > 1 and not sequential and os.environ.get("RETORT_PAIBI_ALLOW_SINGLE_DEVICE_PARALLEL") not in {"1", "true", "yes"}
+                return self._group_outbox(
+                    project, title, prompts, "paibi_no_online_tool_slot", health=health
+                )
+            single_device_serialized = (
+                len(slots) == 1
+                and len(prompts) > 1
+                and not sequential
+                and os.environ.get("RETORT_PAIBI_ALLOW_SINGLE_DEVICE_PARALLEL")
+                not in {"1", "true", "yes"}
+            )
             effective_sequential = sequential or single_device_serialized
             task_id = ""
             previous_subtask_id = ""
@@ -310,7 +402,11 @@ class PaibiLLMClient:
                 slot = slots[index % len(slots)]
                 device = slot["device"]
                 tool_name = str(slot["tool_name"])
-                depends_on = [previous_subtask_id] if effective_sequential and previous_subtask_id else []
+                depends_on = (
+                    [previous_subtask_id]
+                    if effective_sequential and previous_subtask_id
+                    else []
+                )
                 body = {
                     "title": title[:120],
                     "prompt": str(item.get("prompt") or ""),
@@ -325,9 +421,19 @@ class PaibiLLMClient:
                     body["task_id"] = task_id
                 if depends_on:
                     body["depends_on"] = depends_on
-                task_body = self._request("POST", "/api/tasks", token=token, json_body=body)
-                task = task_body.get("task") if isinstance(task_body.get("task"), dict) else {}
-                subtask = task_body.get("subtask") if isinstance(task_body.get("subtask"), dict) else {}
+                task_body = self._request(
+                    "POST", "/api/tasks", token=token, json_body=body
+                )
+                task = (
+                    task_body.get("task")
+                    if isinstance(task_body.get("task"), dict)
+                    else {}
+                )
+                subtask = (
+                    task_body.get("subtask")
+                    if isinstance(task_body.get("subtask"), dict)
+                    else {}
+                )
                 task_id = str(task.get("id") or task_id)
                 previous_subtask_id = str(subtask.get("id") or previous_subtask_id)
                 dispatches.append(
@@ -336,12 +442,22 @@ class PaibiLLMClient:
                         "title": str(item.get("title") or ""),
                         "task_id": task_id,
                         "subtask_id": previous_subtask_id,
-                        "device": {"id": str(device.get("id") or ""), "name": str(device.get("name") or ""), "tool_name": tool_name},
+                        "device": {
+                            "id": str(device.get("id") or ""),
+                            "name": str(device.get("name") or ""),
+                            "tool_name": tool_name,
+                        },
                         "depends_on": depends_on,
                     }
                 )
-            unique_devices = {row["device"]["id"] for row in dispatches if row["device"]["id"]}
-            unique_slots = {(row["device"]["id"], row["device"].get("tool_name")) for row in dispatches if row["device"]["id"]}
+            unique_devices = {
+                row["device"]["id"] for row in dispatches if row["device"]["id"]
+            }
+            unique_slots = {
+                (row["device"]["id"], row["device"].get("tool_name"))
+                for row in dispatches
+                if row["device"]["id"]
+            }
             return {
                 "status": "accepted",
                 "accepted": True,
@@ -353,11 +469,15 @@ class PaibiLLMClient:
                 "device_count": len(unique_devices),
                 "tool_slot_count": len(slots),
                 "parallelism": len(unique_slots),
-                "degraded_reason": "single_device_serialized_to_avoid_workspace_clone_race" if single_device_serialized else "",
+                "degraded_reason": "single_device_serialized_to_avoid_workspace_clone_race"
+                if single_device_serialized
+                else "",
                 "dispatches": dispatches,
             }
         except Exception as exc:  # noqa: BLE001
-            return self._group_outbox(project, title, prompts, f"paibi_dispatch_error: {str(exc)[:400]}")
+            return self._group_outbox(
+                project, title, prompts, f"paibi_dispatch_error: {str(exc)[:400]}"
+            )
 
     def fetch_task(self, task_id: str) -> dict[str, Any]:
         if self.api_url.lower() in {"", "0", "false", "off", "none", "disabled"}:
@@ -374,12 +494,25 @@ class PaibiLLMClient:
         PaibiLLMClient._token_cache = token
         return token
 
-    def _request(self, method: str, path: str, *, token: str = "", json_body: dict[str, Any] | None = None) -> dict[str, Any]:
-        data = None if json_body is None else json.dumps(json_body, ensure_ascii=False).encode("utf-8")
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        token: str = "",
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = (
+            None
+            if json_body is None
+            else json.dumps(json_body, ensure_ascii=False).encode("utf-8")
+        )
         headers = {"Content-Type": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        request = urllib.request.Request(f"{self.api_url}{path}", data=data, headers=headers, method=method)
+        request = urllib.request.Request(
+            f"{self.api_url}{path}", data=data, headers=headers, method=method
+        )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = response.read().decode("utf-8")
@@ -417,7 +550,13 @@ class PaibiLLMClient:
                 continue
             for tool_name in self._device_tool_candidates(item):
                 selected.append({"device": item, "tool_name": tool_name})
-        worker_slots = [slot for slot in selected if not bool(slot["device"].get("isPrimary") or slot["device"].get("is_primary"))]
+        worker_slots = [
+            slot
+            for slot in selected
+            if not bool(
+                slot["device"].get("isPrimary") or slot["device"].get("is_primary")
+            )
+        ]
         return worker_slots or selected
 
     def _device_tool_candidates(self, device: dict[str, Any]) -> list[str]:
@@ -430,7 +569,9 @@ class PaibiLLMClient:
             if name not in PAIBI_SUPPORTED_TOOLS:
                 continue
             status = str(tool.get("status") or "idle")
-            current_task = str(tool.get("currentTask") or tool.get("current_task") or "")
+            current_task = str(
+                tool.get("currentTask") or tool.get("current_task") or ""
+            )
             if status == "not_installed" or (status == "running" and current_task):
                 continue
             available.append(name)
@@ -446,7 +587,11 @@ class PaibiLLMClient:
                 ordered.append(name)
         if ordered:
             return ordered
-        capabilities = device.get("capabilities") if isinstance(device.get("capabilities"), dict) else {}
+        capabilities = (
+            device.get("capabilities")
+            if isinstance(device.get("capabilities"), dict)
+            else {}
+        )
         if dev_tool in PAIBI_SUPPORTED_TOOLS and not tools:
             return [dev_tool]
         if capabilities.get("codex_cli") is True:
@@ -454,7 +599,9 @@ class PaibiLLMClient:
         return []
 
     def _preferred_tools(self) -> list[str]:
-        raw = _env("RETORT_PAIBI_TOOL", "RETORT_PAIBI_TOOL_NAME", "RETORT_PAIBI_PREFERRED_TOOL")
+        raw = _env(
+            "RETORT_PAIBI_TOOL", "RETORT_PAIBI_TOOL_NAME", "RETORT_PAIBI_PREFERRED_TOOL"
+        )
         if not raw:
             return []
         tools = []
@@ -464,7 +611,9 @@ class PaibiLLMClient:
                 tools.append(name)
         return tools
 
-    def _outbox(self, project: Path, title: str, prompt: str, reason: str, **extra: Any) -> dict[str, Any]:
+    def _outbox(
+        self, project: Path, title: str, prompt: str, reason: str, **extra: Any
+    ) -> dict[str, Any]:
         outbox = project / ".retort" / "paibi_llm_outbox.jsonl"
         outbox.parent.mkdir(parents=True, exist_ok=True)
         row = {
@@ -477,14 +626,41 @@ class PaibiLLMClient:
         }
         with outbox.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-        return {"status": "queued_outbox", "accepted": False, "dispatcher": "paibi_outbox", "reason": reason, "outbox_path": str(outbox)}
+        return {
+            "status": "queued_outbox",
+            "accepted": False,
+            "dispatcher": "paibi_outbox",
+            "reason": reason,
+            "outbox_path": str(outbox),
+        }
 
-    def _group_outbox(self, project: Path, title: str, prompts: list[dict[str, str]], reason: str, **extra: Any) -> dict[str, Any]:
+    def _group_outbox(
+        self,
+        project: Path,
+        title: str,
+        prompts: list[dict[str, str]],
+        reason: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
         dispatches = []
         for item in prompts:
-            result = self._outbox(project, f"{title} / {item.get('title') or item.get('panel_id')}", str(item.get("prompt") or ""), reason, **extra)
-            dispatches.append({"panel_id": item.get("panel_id"), "title": item.get("title"), **result})
-        return {"status": "queued_outbox", "accepted": False, "dispatcher": "paibi_outbox", "reason": reason, "dispatches": dispatches}
+            result = self._outbox(
+                project,
+                f"{title} / {item.get('title') or item.get('panel_id')}",
+                str(item.get("prompt") or ""),
+                reason,
+                **extra,
+            )
+            dispatches.append(
+                {"panel_id": item.get("panel_id"), "title": item.get("title"), **result}
+            )
+        return {
+            "status": "queued_outbox",
+            "accepted": False,
+            "dispatcher": "paibi_outbox",
+            "reason": reason,
+            "dispatches": dispatches,
+        }
 
 
 def _record_llm_review(root: Path, payload: dict[str, Any]) -> None:

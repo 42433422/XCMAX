@@ -11,7 +11,9 @@ from retort_engine.external_advantage_repeat import build_external_advantage_rep
 from retort_engine.service import RetortService
 
 
-def test_external_advantage_repeat_proves_stable_replay_manifest(tmp_path: Path) -> None:
+def test_external_advantage_repeat_proves_stable_replay_manifest(
+    tmp_path: Path,
+) -> None:
     result = build_external_advantage_repeat(tmp_path, repeat_count=2)
 
     assert result["status"] == "ready"
@@ -20,7 +22,9 @@ def test_external_advantage_repeat_proves_stable_replay_manifest(tmp_path: Path)
     assert result["summary"]["stable_case_set"] is True
     assert result["summary"]["stable_score_delta"] is True
     assert result["summary"]["minimum_score_delta"] >= 35
-    assert validate_contract("external_advantage_repeat_result", result)["valid"] is True
+    assert (
+        validate_contract("external_advantage_repeat_result", result)["valid"] is True
+    )
 
 
 def test_external_advantage_repeat_writes_report(tmp_path: Path) -> None:
@@ -34,7 +38,9 @@ def test_external_advantage_repeat_writes_report(tmp_path: Path) -> None:
 
 
 def test_external_advantage_repeat_service_surface(tmp_path: Path) -> None:
-    result = RetortService().external_advantage_repeat({"project": str(tmp_path), "repeats": 2})
+    result = RetortService().external_advantage_repeat(
+        {"project": str(tmp_path), "repeats": 2}
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["all_runs_ready"] is True
@@ -60,4 +66,6 @@ def test_external_advantage_repeat_cli_outputs_contract(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
 
     assert payload["status"] == "ready"
-    assert validate_contract("external_advantage_repeat_result", payload)["valid"] is True
+    assert (
+        validate_contract("external_advantage_repeat_result", payload)["valid"] is True
+    )

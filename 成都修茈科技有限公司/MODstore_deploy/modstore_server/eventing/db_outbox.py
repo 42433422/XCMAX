@@ -134,11 +134,16 @@ def enqueue(
         attempts=0,
         last_error="",
     )
-    session.add(row)
+    # 先做幂等短路，避免在主事务中产生重复入账。
+    existing = session.query(OutboxEvent).filter(OutboxEvent.event_id == eid).first()
+    if existing is not None:
+        logger.debug("outbox enqueue idempotent skip event_id=%s", eid)
+        return None
+
     try:
+        session.add(row)
         session.flush()
     except IntegrityError:
-        session.rollback()
         existing = session.query(OutboxEvent).filter(OutboxEvent.event_id == eid).first()
         if existing is None:
             raise

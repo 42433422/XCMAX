@@ -333,13 +333,34 @@ def answer_pending_question(
         row.answer = answer
         row.answered_by_user_id = answered_by_user_id
         row.answered_at = datetime.now(timezone.utc)
+        employee_id = row.employee_id
+        context = _safe_json(row.context_json)
         session.commit()
-        return {
-            "ok": True,
-            "question_id": question_id,
-            "employee_id": row.employee_id,
-            "status": "answered",
-        }
+
+    retort_bridge: Dict[str, Any] = {}
+    if isinstance(context, dict) and context.get("kind") == "retort_clarification":
+        session_id = str(context.get("session_id") or "").strip()
+        if session_id:
+            try:
+                from modstore_server.retort_clarification_gate import answer_clarification
+
+                retort_bridge = answer_clarification(
+                    session_id,
+                    answers=answer,
+                    answered_by=f"user:{answered_by_user_id}",
+                )
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - answering inbox must not fail closed on bridge
+                retort_bridge = {"ok": False, "error": type(exc).__name__}
+
+    return {
+        "ok": True,
+        "question_id": question_id,
+        "employee_id": employee_id,
+        "status": "answered",
+        "retort_clarification": retort_bridge,
+    }
 
 
 def answer_latest_pending_for_employee(

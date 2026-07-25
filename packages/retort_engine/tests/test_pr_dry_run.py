@@ -17,8 +17,14 @@ index 1111111..2222222 100644
 
 
 def test_pr_diff_url_normalizes_github_pull_url() -> None:
-    assert pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12") == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
-    assert pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff") == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
+    assert (
+        pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12")
+        == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
+    )
+    assert (
+        pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff")
+        == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
+    )
 
 
 def test_review_pr_url_fetches_diff_and_returns_contract(monkeypatch) -> None:
@@ -28,7 +34,9 @@ def test_review_pr_url_fetches_diff_and_returns_contract(monkeypatch) -> None:
 
     monkeypatch.setattr("retort_engine.pr_dry_run._fetch_diff", fake_fetch)
 
-    result = review_pr_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12", max_comments=5)
+    result = review_pr_url(
+        "https://github.com/sourcefuse/ai-pr-reviewer/pull/12", max_comments=5
+    )
 
     assert result["status"] == "reviewed"
     assert result["summary"]["file_count"] == 1

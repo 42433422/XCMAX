@@ -11,17 +11,51 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from retort_engine.architecture_memory import build_architecture_record, update_architecture_memory
-from retort_engine.architecture_refactor import build_core_refactor_plan, write_core_refactor_plan
+from retort_engine.architecture_memory import (
+    build_architecture_record,
+    update_architecture_memory,
+)
+from retort_engine.architecture_refactor import (
+    build_core_refactor_plan,
+    write_core_refactor_plan,
+)
 from retort_engine.codebase_graph import build_absorption_focus_map
 from retort_engine.feedback_audit import audit_feedback_closure
 from retort_engine.license_gate import license_gate
-from retort_engine.real_absorption_run_proof import build_per_run_code_graph_proof, code_graph_proof_gate, record_real_absorption_run
+from retort_engine.real_absorption_run_proof import (
+    build_per_run_code_graph_proof,
+    code_graph_proof_gate,
+    record_real_absorption_run,
+)
 from retort_engine.review_pipeline import build_absorption_review_report
 
 
-SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
-SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
+SOURCE_SUFFIXES = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".html",
+    ".css",
+    ".md",
+    ".toml",
+    ".yml",
+    ".yaml",
+    ".json",
+    ".go",
+}
+SKIP_PARTS = {
+    ".git",
+    ".retort",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    "dist",
+    "build",
+}
 CAPABILITY_MODEL_SIGNALS = {
     "review_pipeline",
     "file_grouping",
@@ -45,7 +79,16 @@ VISUAL_FRONTEND_SIGNALS = {
     "elevation_bump_map",
     "specular_ocean",
 }
-VISUAL_FRONTEND_SUFFIXES = {".css", ".glsl", ".html", ".js", ".jsx", ".ts", ".tsx", ".wgsl"}
+VISUAL_FRONTEND_SUFFIXES = {
+    ".css",
+    ".glsl",
+    ".html",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".wgsl",
+}
 VISUAL_FRONTEND_PATH_MARKERS = (
     "atmosphere",
     "bump",
@@ -65,7 +108,11 @@ VISUAL_FRONTEND_PATH_MARKERS = (
 
 
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
-    root = Path(str(payload.get("own_project") or payload.get("project") or ".")).expanduser().resolve()
+    root = (
+        Path(str(payload.get("own_project") or payload.get("project") or "."))
+        .expanduser()
+        .resolve()
+    )
     keep_residue = bool(payload.get("keep_runtime_residue"))
     result: dict[str, Any] | None = None
     try:
@@ -74,22 +121,34 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     finally:
         if keep_residue:
             if isinstance(result, dict):
-                result["workspace_closure"] = {"status": "skipped_keep_runtime_residue", "summary": {"closed": False}}
+                result["workspace_closure"] = {
+                    "status": "skipped_keep_runtime_residue",
+                    "summary": {"closed": False},
+                }
         else:
             from retort_engine.workspace_hygiene import close_run_workspace
 
-            closure = close_run_workspace(root, run_id=str((result or {}).get("run_id") or ""))
+            closure = close_run_workspace(
+                root, run_id=str((result or {}).get("run_id") or "")
+            )
             if isinstance(result, dict):
                 result["workspace_closure"] = closure
                 result["employee_results_path"] = ""
                 result["run_record_path"] = ""
-                if not closure["summary"]["closed"] and result.get("status") in {"applied", "noop"}:
+                if not closure["summary"]["closed"] and result.get("status") in {
+                    "applied",
+                    "noop",
+                }:
                     result["status"] = "applied_but_workspace_dirty"
 
 
 def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
-    root = Path(str(payload.get("own_project") or payload.get("project") or ".")).expanduser().resolve()
+    root = (
+        Path(str(payload.get("own_project") or payload.get("project") or "."))
+        .expanduser()
+        .resolve()
+    )
     package_root = Path(__file__).resolve().parents[1]
     if root != package_root:
         from retort_engine.self_bootstrap import external_improvement_gate
@@ -97,26 +156,71 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
         policy_gate = external_improvement_gate(package_root, root)
         if policy_gate["status"] != "allowed":
             return {
-                **_execution_result("blocked_by_self_depth_gate", root, str(payload.get("source") or ""), started, [], [], [], "Retort must deepen itself before improving another module."),
+                **_execution_result(
+                    "blocked_by_self_depth_gate",
+                    root,
+                    str(payload.get("source") or ""),
+                    started,
+                    [],
+                    [],
+                    [],
+                    "Retort must deepen itself before improving another module.",
+                ),
                 "external_improvement_gate": policy_gate,
             }
     external_path = Path(str(payload.get("external_path") or "")).expanduser().resolve()
-    source = str(payload.get("source") or payload.get("github_url") or payload.get("external_path") or "")
+    source = str(
+        payload.get("source")
+        or payload.get("github_url")
+        or payload.get("external_path")
+        or ""
+    )
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
     if not external_path.is_dir():
-        return _execution_result("skipped_no_external_project", root, source, started, [], [], [], "External project was not materialized locally.")
+        return _execution_result(
+            "skipped_no_external_project",
+            root,
+            source,
+            started,
+            [],
+            [],
+            [],
+            "External project was not materialized locally.",
+        )
     if not tasks:
-        return _execution_result("skipped_no_tasks", root, source, started, [], [], [], "No absorption tasks were generated.")
+        return _execution_result(
+            "skipped_no_tasks",
+            root,
+            source,
+            started,
+            [],
+            [],
+            [],
+            "No absorption tasks were generated.",
+        )
 
     run_id = _run_id(source)
     external_profile = _external_profile(external_path)
     from retort_engine.repository_intelligence import compare_repository_gaps
 
     graph_gap = compare_repository_gaps(root, external_path)
-    external_profile = {**external_profile, "graph_gap": graph_gap, "decision_source": "repository_graph_gap"}
+    external_profile = {
+        **external_profile,
+        "graph_gap": graph_gap,
+        "decision_source": "repository_graph_gap",
+    }
     semantic_review = _semantic_review(root, external_path)
-    pre_absorption_focus = build_absorption_focus_map(root, external_path, tasks=tasks, signals=list(external_profile.get("signals") or []))
-    focus_paths = [str(item.get("path") or "") for item in (graph_gap.get("own_top_targets") or [])[:3] if item.get("path")]
+    pre_absorption_focus = build_absorption_focus_map(
+        root,
+        external_path,
+        tasks=tasks,
+        signals=list(external_profile.get("signals") or []),
+    )
+    focus_paths = [
+        str(item.get("path") or "")
+        for item in (graph_gap.get("own_top_targets") or [])[:3]
+        if item.get("path")
+    ]
     if focus_paths:
         pre_absorption_focus = {
             **pre_absorption_focus,
@@ -156,37 +260,85 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     if writes_frontend_visual:
         tracked_paths.extend([frontend_app_path, frontend_visual_test_path])
     before = _snapshot(tracked_paths)
-    review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review, pre_absorption_focus)
+    review_report = _review_report(
+        root,
+        run_id,
+        source,
+        external_path,
+        tasks,
+        external_profile,
+        semantic_review,
+        pre_absorption_focus,
+    )
     _write_absorption_quality_helper(absorption_quality_path)
     module_path.parent.mkdir(parents=True, exist_ok=True)
-    module_path.write_text(_module_content(run_id, source, external_path, tasks, external_profile), encoding="utf-8")
+    module_path.write_text(
+        _module_content(run_id, source, external_path, tasks, external_profile),
+        encoding="utf-8",
+    )
     if writes_capability_model:
         capability_path.parent.mkdir(parents=True, exist_ok=True)
-        capability_path.write_text(_capability_module_content(run_id, source, external_path, tasks, external_profile, review_report), encoding="utf-8")
+        capability_path.write_text(
+            _capability_module_content(
+                run_id, source, external_path, tasks, external_profile, review_report
+            ),
+            encoding="utf-8",
+        )
         capability_test_path.parent.mkdir(parents=True, exist_ok=True)
-        capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
+        capability_test_path.write_text(
+            _capability_test_content(
+                _capability_import_name(root, capability_path), source
+            ),
+            encoding="utf-8",
+        )
     writes_review_context_bias = _should_absorb_review_context_bias(external_profile)
     if writes_review_context_bias:
-        existing_review_context_bias = _existing_review_context_bias(review_context_bias_path)
+        existing_review_context_bias = _existing_review_context_bias(
+            review_context_bias_path
+        )
         review_context_bias_path.parent.mkdir(parents=True, exist_ok=True)
         review_context_bias_path.write_text(
-            _review_context_bias_content(run_id, source, external_path, external_profile, existing=existing_review_context_bias),
+            _review_context_bias_content(
+                run_id,
+                source,
+                external_path,
+                external_profile,
+                existing=existing_review_context_bias,
+            ),
             encoding="utf-8",
         )
         review_context_bias_test_path.parent.mkdir(parents=True, exist_ok=True)
-        review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source), encoding="utf-8")
+        review_context_bias_test_path.write_text(
+            _review_context_bias_test_content(
+                _capability_import_name(root, review_context_bias_path), source
+            ),
+            encoding="utf-8",
+        )
         review_policy_path.parent.mkdir(parents=True, exist_ok=True)
-        review_policy_path.write_text(_review_policy_content(run_id, source, external_path, external_profile), encoding="utf-8")
+        review_policy_path.write_text(
+            _review_policy_content(run_id, source, external_path, external_profile),
+            encoding="utf-8",
+        )
         review_policy_test_path.parent.mkdir(parents=True, exist_ok=True)
-        review_policy_test_path.write_text(_review_policy_test_content(_capability_import_name(root, review_policy_path), source), encoding="utf-8")
+        review_policy_test_path.write_text(
+            _review_policy_test_content(
+                _capability_import_name(root, review_policy_path), source
+            ),
+            encoding="utf-8",
+        )
     if writes_frontend_visual:
-        _write_frontend_visual_profile(frontend_app_path, run_id, source, external_path, external_profile)
+        _write_frontend_visual_profile(
+            frontend_app_path, run_id, source, external_path, external_profile
+        )
         frontend_visual_test_path.parent.mkdir(parents=True, exist_ok=True)
-        frontend_visual_test_path.write_text(_frontend_visual_test_content(source), encoding="utf-8")
+        frontend_visual_test_path.write_text(
+            _frontend_visual_test_content(source), encoding="utf-8"
+        )
     from retort_engine.absorption_synthesizer import synthesize_behavior_absorption
 
     can_synthesize_behavior = (root / "retort_engine").is_dir() and (
-        (root / "retort_engine" / "pr_review.py").is_file() or (root / "retort_engine" / "repository_intelligence.py").is_file()
+        (root / "retort_engine" / "pr_review.py").is_file()
+        or (root / "retort_engine" / "repository_intelligence.py").is_file()
     )
     behavior_synthesis: dict[str, Any]
     weights_module = root / "retort_engine" / "absorbed_review_rank_weights.py"
@@ -210,57 +362,215 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
             "changed_files": behavior_synthesis.get("changed_files"),
         }
     else:
-        behavior_synthesis = {"status": "skipped_incomplete_retort_runtime", "changed_files": []}
+        behavior_synthesis = {
+            "status": "skipped_incomplete_retort_runtime",
+            "changed_files": [],
+        }
         review_report["behavior_synthesis"] = behavior_synthesis
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
-    report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    report_path.write_text(
+        json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     changed_files = _changed_files(before, tracked_paths)
     gates = [
-        _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(absorption_quality_path)], root, timeout=60),
-        _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60),
+        _run_command(
+            [
+                _python(payload),
+                "-c",
+                "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                str(absorption_quality_path),
+            ],
+            root,
+            timeout=60,
+        ),
+        _run_command(
+            [
+                _python(payload),
+                "-c",
+                "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                str(module_path),
+            ],
+            root,
+            timeout=60,
+        ),
     ]
     if can_synthesize_behavior:
         gates.extend(
             [
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(weights_module)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(weights_test.relative_to(root)), "-q"], root, timeout=120),
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(rules_module)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(rules_test.relative_to(root)), "-q"], root, timeout=120),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-c",
+                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                        str(weights_module),
+                    ],
+                    root,
+                    timeout=60,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-m",
+                        "pytest",
+                        str(weights_test.relative_to(root)),
+                        "-q",
+                    ],
+                    root,
+                    timeout=120,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-c",
+                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                        str(rules_module),
+                    ],
+                    root,
+                    timeout=60,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-m",
+                        "pytest",
+                        str(rules_test.relative_to(root)),
+                        "-q",
+                    ],
+                    root,
+                    timeout=120,
+                ),
             ]
         )
     if writes_capability_model:
         gates.extend(
             [
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-c",
+                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                        str(capability_path),
+                    ],
+                    root,
+                    timeout=60,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-m",
+                        "pytest",
+                        str(capability_test_path.relative_to(root)),
+                        "-q",
+                    ],
+                    root,
+                    timeout=120,
+                ),
             ]
         )
     elif capability_path.is_file() and capability_test_path.is_file():
         gates.extend(
             [
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-c",
+                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                        str(capability_path),
+                    ],
+                    root,
+                    timeout=60,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-m",
+                        "pytest",
+                        str(capability_test_path.relative_to(root)),
+                        "-q",
+                    ],
+                    root,
+                    timeout=120,
+                ),
             ]
         )
     if writes_review_context_bias:
         gates.extend(
             [
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(review_context_bias_path)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(review_context_bias_test_path.relative_to(root)), "-q"], root, timeout=120),
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(review_policy_path)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(review_policy_test_path.relative_to(root)), "-q"], root, timeout=120),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-c",
+                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                        str(review_context_bias_path),
+                    ],
+                    root,
+                    timeout=60,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-m",
+                        "pytest",
+                        str(review_context_bias_test_path.relative_to(root)),
+                        "-q",
+                    ],
+                    root,
+                    timeout=120,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-c",
+                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+                        str(review_policy_path),
+                    ],
+                    root,
+                    timeout=60,
+                ),
+                _run_command(
+                    [
+                        _python(payload),
+                        "-m",
+                        "pytest",
+                        str(review_policy_test_path.relative_to(root)),
+                        "-q",
+                    ],
+                    root,
+                    timeout=120,
+                ),
             ]
         )
     if writes_frontend_visual:
-        gates.append(_run_command([_python(payload), "-m", "pytest", str(frontend_visual_test_path.relative_to(root)), "-q"], root, timeout=120))
+        gates.append(
+            _run_command(
+                [
+                    _python(payload),
+                    "-m",
+                    "pytest",
+                    str(frontend_visual_test_path.relative_to(root)),
+                    "-q",
+                ],
+                root,
+                timeout=120,
+            )
+        )
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     changed_files = _changed_files(before, tracked_paths)
-    code_graph_proof = build_per_run_code_graph_proof(root, run_id=run_id, changed_files=changed_files, pre_absorption_focus=pre_absorption_focus)
+    code_graph_proof = build_per_run_code_graph_proof(
+        root,
+        run_id=run_id,
+        changed_files=changed_files,
+        pre_absorption_focus=pre_absorption_focus,
+    )
     gates.append(code_graph_proof_gate(code_graph_proof, run_id=run_id))
     review_report["code_graph_proof"] = code_graph_proof
-    report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    report_path.write_text(
+        json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     architecture_record = build_architecture_record(
         run_id=run_id,
         source=source,
@@ -272,9 +582,24 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
         gates=gates,
         code_graph_proof=code_graph_proof,
     )
-    architecture_memory = update_architecture_memory(architecture_memory_path, architecture_record)
-    gates.append(_run_command([_python(payload), "-c", "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('summary')", str(architecture_memory_path)], root, timeout=60))
-    core_refactor_plan = build_core_refactor_plan(architecture_memory, project_root=root)
+    architecture_memory = update_architecture_memory(
+        architecture_memory_path, architecture_record
+    )
+    gates.append(
+        _run_command(
+            [
+                _python(payload),
+                "-c",
+                "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('summary')",
+                str(architecture_memory_path),
+            ],
+            root,
+            timeout=60,
+        )
+    )
+    core_refactor_plan = build_core_refactor_plan(
+        architecture_memory, project_root=root
+    )
     write_core_refactor_plan(core_refactor_plan_path, core_refactor_plan)
     gates.append(
         _run_command(
@@ -292,7 +617,13 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     diff_summary = _git_diff_summary(root, changed_files)
     from retort_engine.absorption_quality import absorption_quality_gate
 
-    ranked = [{"signal": str(item), "weight": 30} for item in (behavior_synthesis.get("dimensions") or ["diff_hunk_review", "review_pipeline"])]
+    ranked = [
+        {"signal": str(item), "weight": 30}
+        for item in (
+            behavior_synthesis.get("dimensions")
+            or ["diff_hunk_review", "review_pipeline"]
+        )
+    ]
     quality = absorption_quality_gate(
         changed_files,
         gates,
@@ -327,28 +658,58 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     result["semantic_review"] = semantic_review
     result["pre_absorption_focus"] = pre_absorption_focus
     result["code_graph_proof"] = code_graph_proof
-    result["capability_module_path"] = str(capability_path) if writes_capability_model else ""
-    result["capability_test_path"] = str(capability_test_path) if writes_capability_model else ""
+    result["capability_module_path"] = (
+        str(capability_path) if writes_capability_model else ""
+    )
+    result["capability_test_path"] = (
+        str(capability_test_path) if writes_capability_model else ""
+    )
     result["capability_model_preserved"] = not writes_capability_model
     result["architecture_memory_path"] = str(architecture_memory_path)
     result["architecture_memory_summary"] = architecture_memory.get("summary") or {}
     result["core_refactor_plan_path"] = str(core_refactor_plan_path)
     result["core_refactor_plan_summary"] = core_refactor_plan.get("summary") or {}
-    result["review_context_bias_path"] = str(review_context_bias_path) if writes_review_context_bias else ""
-    result["review_context_bias_test_path"] = str(review_context_bias_test_path) if writes_review_context_bias else ""
-    result["review_policy_path"] = str(review_policy_path) if writes_review_context_bias else ""
-    result["review_policy_test_path"] = str(review_policy_test_path) if writes_review_context_bias else ""
-    result["frontend_visual_absorption_path"] = str(frontend_app_path) if writes_frontend_visual else ""
-    result["frontend_visual_absorption_test_path"] = str(frontend_visual_test_path) if writes_frontend_visual else ""
+    result["review_context_bias_path"] = (
+        str(review_context_bias_path) if writes_review_context_bias else ""
+    )
+    result["review_context_bias_test_path"] = (
+        str(review_context_bias_test_path) if writes_review_context_bias else ""
+    )
+    result["review_policy_path"] = (
+        str(review_policy_path) if writes_review_context_bias else ""
+    )
+    result["review_policy_test_path"] = (
+        str(review_policy_test_path) if writes_review_context_bias else ""
+    )
+    result["frontend_visual_absorption_path"] = (
+        str(frontend_app_path) if writes_frontend_visual else ""
+    )
+    result["frontend_visual_absorption_test_path"] = (
+        str(frontend_visual_test_path) if writes_frontend_visual else ""
+    )
     result["review_report_path"] = str(report_path)
-    result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
+    result["reproducibility"] = {
+        "command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"
+    }
     employee_queue = _employee_queue_path(root, payload)
     history_store = _history_store_path(root, payload)
-    worker_payload = {**payload, "employee_queue": employee_queue, "history_store": history_store}
-    result["queue_records_written"] = _write_execution_queue_records(employee_queue, run_id, source, tasks)
-    employee_results_path = _write_employee_results(root, run_id, source, tasks, result, worker_payload)
+    worker_payload = {
+        **payload,
+        "employee_queue": employee_queue,
+        "history_store": history_store,
+    }
+    result["queue_records_written"] = _write_execution_queue_records(
+        employee_queue, run_id, source, tasks
+    )
+    employee_results_path = _write_employee_results(
+        root, run_id, source, tasks, result, worker_payload
+    )
     result["employee_results_path"] = str(employee_results_path)
-    result["feedback_audit"] = audit_feedback_closure(queue_path=employee_queue, history_store=history_store, employee_results_dir=employee_results_path.parent)
+    result["feedback_audit"] = audit_feedback_closure(
+        queue_path=employee_queue,
+        history_store=history_store,
+        employee_results_dir=employee_results_path.parent,
+    )
     record_path = record_real_absorption_run(root, result)
     result["run_record_path"] = str(record_path)
     return result
@@ -358,7 +719,14 @@ def _implementation_target(root: Path) -> Path:
     retort_package = root / "retort_engine"
     if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
         return retort_package / "absorbed_external_patterns.py"
-    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    packages = [
+        path
+        for path in root.iterdir()
+        if path.is_dir()
+        and (path / "__init__.py").is_file()
+        and not path.name.startswith(".")
+        and path.name != "tests"
+    ]
     if len(packages) == 1:
         return packages[0] / "retort_absorbed_patterns.py"
     return root / "retort_absorbed_patterns.py"
@@ -368,7 +736,14 @@ def _absorption_quality_target(root: Path) -> Path:
     retort_package = root / "retort_engine"
     if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
         return retort_package / "absorption_quality.py"
-    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    packages = [
+        path
+        for path in root.iterdir()
+        if path.is_dir()
+        and (path / "__init__.py").is_file()
+        and not path.name.startswith(".")
+        and path.name != "tests"
+    ]
     if len(packages) == 1:
         return packages[0] / "absorption_quality.py"
     return root / "absorption_quality.py"
@@ -386,7 +761,14 @@ def _capability_target(root: Path) -> Path:
     retort_package = root / "retort_engine"
     if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
         return retort_package / "absorbed_capabilities.py"
-    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    packages = [
+        path
+        for path in root.iterdir()
+        if path.is_dir()
+        and (path / "__init__.py").is_file()
+        and not path.name.startswith(".")
+        and path.name != "tests"
+    ]
     if len(packages) == 1:
         return packages[0] / "absorbed_capabilities.py"
     return root / "absorbed_capabilities.py"
@@ -408,7 +790,14 @@ def _review_context_bias_target(root: Path) -> Path:
     retort_package = root / "retort_engine"
     if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
         return retort_package / "review_context_bias.py"
-    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    packages = [
+        path
+        for path in root.iterdir()
+        if path.is_dir()
+        and (path / "__init__.py").is_file()
+        and not path.name.startswith(".")
+        and path.name != "tests"
+    ]
     if len(packages) == 1:
         return packages[0] / "review_context_bias.py"
     return root / "review_context_bias.py"
@@ -422,7 +811,14 @@ def _review_policy_target(root: Path) -> Path:
     retort_package = root / "retort_engine"
     if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
         return retort_package / "absorbed_review_policy.py"
-    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    packages = [
+        path
+        for path in root.iterdir()
+        if path.is_dir()
+        and (path / "__init__.py").is_file()
+        and not path.name.startswith(".")
+        and path.name != "tests"
+    ]
     if len(packages) == 1:
         return packages[0] / "absorbed_review_policy.py"
     return root / "absorbed_review_policy.py"
@@ -448,7 +844,13 @@ def _capability_import_name(root: Path, capability_path: Path) -> str:
     return ".".join(parts)
 
 
-def _module_content(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any]) -> str:
+def _module_content(
+    run_id: str,
+    source: str,
+    external_path: Path,
+    tasks: list[dict[str, Any]],
+    profile: dict[str, Any],
+) -> str:
     payload = {
         "run_id": run_id,
         "source": source,
@@ -465,7 +867,9 @@ def _module_content(run_id: str, source: str, external_path: Path, tasks: list[d
             for task in tasks
         ],
     }
-    payload_text = repr(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
+    payload_text = repr(
+        json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True)
+    )
     return f'''"""Retort-applied external absorption patterns.
 
 This file is generated by `retort apply-absorption`. It records project-local
@@ -492,7 +896,18 @@ def _should_absorb_review_context_bias(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
     if _is_visual_dominant_profile(profile):
         return False
-    return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review", "safety_policy", "static_analysis", "context_packaging", "semantic_index"})
+    return bool(
+        signals
+        & {
+            "review_pipeline",
+            "file_grouping",
+            "diff_hunk_review",
+            "safety_policy",
+            "static_analysis",
+            "context_packaging",
+            "semantic_index",
+        }
+    )
 
 
 def _should_absorb_capability_model(profile: dict[str, Any]) -> bool:
@@ -526,7 +941,9 @@ def _has_frontend_visual_evidence(signal: str, paths: list[Any]) -> bool:
         suffix = Path(rel).suffix
         if suffix not in VISUAL_FRONTEND_SUFFIXES:
             continue
-        if signal == "planet_frontend" or any(marker in rel for marker in VISUAL_FRONTEND_PATH_MARKERS):
+        if signal == "planet_frontend" or any(
+            marker in rel for marker in VISUAL_FRONTEND_PATH_MARKERS
+        ):
             return True
     return False
 
@@ -535,16 +952,32 @@ def _is_visual_dominant_profile(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
     if not _should_absorb_frontend_visual(profile):
         return False
-    depth_signals = signals & {"file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface"}
+    depth_signals = signals & {
+        "file_grouping",
+        "diff_hunk_review",
+        "benchmarking",
+        "plugin_surface",
+    }
     if depth_signals:
         return False
     non_visual_signals = signals - VISUAL_FRONTEND_SIGNALS - {"multi_provider"}
     return non_visual_signals <= {"review_pipeline"}
 
 
-def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any], *, existing: dict[str, Any] | None = None) -> str:
-    payload = _merged_review_context_bias_payload(run_id, source, external_path, profile, existing=existing or {})
-    payload_text = repr(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
+def _review_context_bias_content(
+    run_id: str,
+    source: str,
+    external_path: Path,
+    profile: dict[str, Any],
+    *,
+    existing: dict[str, Any] | None = None,
+) -> str:
+    payload = _merged_review_context_bias_payload(
+        run_id, source, external_path, profile, existing=existing or {}
+    )
+    payload_text = repr(
+        json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True)
+    )
     return f'''from __future__ import annotations
 
 import json
@@ -602,12 +1035,23 @@ def _merged_review_context_bias_payload(
     *,
     existing: dict[str, Any],
 ) -> dict[str, Any]:
-    signals = _ordered_union(existing.get("signals") or [], profile.get("signals") or [])
-    signal_evidence = _merge_signal_evidence(existing.get("signal_evidence"), profile.get("signal_evidence"))
+    signals = _ordered_union(
+        existing.get("signals") or [], profile.get("signals") or []
+    )
+    signal_evidence = _merge_signal_evidence(
+        existing.get("signal_evidence"), profile.get("signal_evidence")
+    )
     focus = _context_focus_from_signals(signals)
-    sources = _ordered_union(existing.get("sources") or [existing.get("source")], [source])
-    external_paths = _ordered_union(existing.get("external_paths") or [existing.get("external_path")], [str(external_path)])
-    run_ids = _ordered_union(existing.get("run_ids") or [existing.get("run_id")], [run_id])
+    sources = _ordered_union(
+        existing.get("sources") or [existing.get("source")], [source]
+    )
+    external_paths = _ordered_union(
+        existing.get("external_paths") or [existing.get("external_path")],
+        [str(external_path)],
+    )
+    run_ids = _ordered_union(
+        existing.get("run_ids") or [existing.get("run_id")], [run_id]
+    )
     payload = {
         "run_id": run_id,
         "run_ids": run_ids,
@@ -637,10 +1081,18 @@ def _existing_review_context_bias(path: Path) -> dict[str, Any]:
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             target_name = node.target.id
             value = node.value
-        elif isinstance(node, ast.Assign) and node.targets and isinstance(node.targets[0], ast.Name):
+        elif (
+            isinstance(node, ast.Assign)
+            and node.targets
+            and isinstance(node.targets[0], ast.Name)
+        ):
             target_name = node.targets[0].id
             value = node.value
-        if target_name != "REVIEW_CONTEXT_BIAS" or not isinstance(value, ast.Call) or not value.args:
+        if (
+            target_name != "REVIEW_CONTEXT_BIAS"
+            or not isinstance(value, ast.Call)
+            or not value.args
+        ):
             continue
         if not _is_json_loads_call(value):
             continue
@@ -656,7 +1108,12 @@ def _existing_review_context_bias(path: Path) -> dict[str, Any]:
 
 def _is_json_loads_call(value: ast.Call) -> bool:
     func = value.func
-    return isinstance(func, ast.Attribute) and func.attr == "loads" and isinstance(func.value, ast.Name) and func.value.id == "json"
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "loads"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "json"
+    )
 
 
 def _merge_signal_evidence(existing: Any, current: Any) -> dict[str, list[str]]:
@@ -668,7 +1125,9 @@ def _merge_signal_evidence(existing: Any, current: Any) -> dict[str, list[str]]:
             if not signal:
                 continue
             values = paths if isinstance(paths, list) else [paths]
-            merged[str(signal)] = _ordered_union(merged.get(str(signal)) or [], values)[:8]
+            merged[str(signal)] = _ordered_union(merged.get(str(signal)) or [], values)[
+                :8
+            ]
     return merged
 
 
@@ -692,7 +1151,7 @@ def _ordered_union(*groups: Any) -> list[str]:
 
 def _review_context_bias_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
-    return f'''from __future__ import annotations
+    return f"""from __future__ import annotations
 
 from {import_name} import context_rank_weights, context_signal_strength, review_context_bias
 
@@ -708,10 +1167,12 @@ def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
     assert context_signal_strength() >= 20
     assert max(context_rank_weights().values()) >= 20
     assert context_rank_weights()["runtime"] >= 20
-'''
+"""
 
 
-def _review_policy_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
+def _review_policy_content(
+    run_id: str, source: str, external_path: Path, profile: dict[str, Any]
+) -> str:
     signals = list(profile.get("signals") or [])
     payload = {
         "enabled": bool(signals),
@@ -722,8 +1183,10 @@ def _review_policy_content(run_id: str, source: str, external_path: Path, profil
         "context_rank_overrides": _review_policy_context_weights(signals),
         "reason": "absorbed external review policy affects PR comment ordering",
     }
-    payload_text = repr(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
-    return f'''from __future__ import annotations
+    payload_text = repr(
+        json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True)
+    )
+    return f"""from __future__ import annotations
 
 import json
 from typing import Any
@@ -760,12 +1223,24 @@ def policy_summary() -> dict[str, Any]:
         "weighted_context_count": sum(1 for value in weights.values() if value > 0),
         "max_context_weight": max(weights.values() or [0]),
     }}
-'''
+"""
 
 
 def _review_policy_context_weights(signals: list[str]) -> dict[str, int]:
     signal_set = set(signals)
-    weights = {context: 0 for context in ("security", "runtime", "tests", "ci_config", "config", "frontend", "docs", "other")}
+    weights = {
+        context: 0
+        for context in (
+            "security",
+            "runtime",
+            "tests",
+            "ci_config",
+            "config",
+            "frontend",
+            "docs",
+            "other",
+        )
+    }
     if signal_set & {"review_pipeline", "file_grouping", "diff_hunk_review"}:
         weights["runtime"] += 20
         weights["tests"] += 20
@@ -785,7 +1260,7 @@ def _review_policy_context_weights(signals: list[str]) -> dict[str, int]:
 
 def _review_policy_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
-    return f'''from __future__ import annotations
+    return f"""from __future__ import annotations
 
 from {import_name} import absorbed_review_policy, policy_context_rank_weight, policy_context_rank_weights, policy_summary
 
@@ -802,7 +1277,7 @@ def test_absorbed_review_policy_changes_ranking_weights() -> None:
     assert policy_summary()["max_context_weight"] >= 15
     assert max(weights.values()) >= 15
     assert policy_context_rank_weight("runtime") >= 15
-'''
+"""
 
 
 def _context_focus_from_signals(signals: list[str]) -> list[str]:
@@ -827,7 +1302,13 @@ def _context_focus_from_signals(signals: list[str]) -> list[str]:
     return list(dict.fromkeys(focus))
 
 
-def _write_frontend_visual_profile(app_path: Path, run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> None:
+def _write_frontend_visual_profile(
+    app_path: Path,
+    run_id: str,
+    source: str,
+    external_path: Path,
+    profile: dict[str, Any],
+) -> None:
     if not app_path.is_file():
         return
     signals = set(str(item) for item in profile.get("signals") or [])
@@ -840,25 +1321,42 @@ def _write_frontend_visual_profile(app_path: Path, run_id: str, source: str, ext
         "absorbed_signals": sorted(signals & VISUAL_FRONTEND_SIGNALS),
         "palette": _planet_palette(signals),
         "layers": {
-            "atmospheric_rim": "atmosphere_shader" in signals or "planet_frontend" in signals,
-            "procedural_landmasses": "procedural_surface" in signals or "planet_frontend" in signals,
-            "translucent_clouds": "atmosphere_shader" in signals or "webgl_scene" in signals,
+            "atmospheric_rim": "atmosphere_shader" in signals
+            or "planet_frontend" in signals,
+            "procedural_landmasses": "procedural_surface" in signals
+            or "planet_frontend" in signals,
+            "translucent_clouds": "atmosphere_shader" in signals
+            or "webgl_scene" in signals,
             "orbital_rings": "webgl_scene" in signals or "planet_frontend" in signals,
             "day_night_terminator": "day_night_textures" in signals,
             "cloud_shadow_layer": "cloud_texture_layer" in signals,
-            "fresnel_glow": "fresnel_atmosphere" in signals or "atmosphere_shader" in signals,
-            "terrain_relief": "elevation_bump_map" in signals or "procedural_surface" in signals,
+            "fresnel_glow": "fresnel_atmosphere" in signals
+            or "atmosphere_shader" in signals,
+            "terrain_relief": "elevation_bump_map" in signals
+            or "procedural_surface" in signals,
             "ocean_specular": "specular_ocean" in signals,
             "city_lights": "day_night_textures" in signals,
             "terminator_shadow": True,
         },
         "license_boundary": "visual principles only; no external source or texture copied",
     }
-    replacement = "const ABSORBED_PLANET_VISUAL_PROFILE = " + json.dumps(visual_profile, ensure_ascii=False, indent=2, sort_keys=True) + ";"
+    replacement = (
+        "const ABSORBED_PLANET_VISUAL_PROFILE = "
+        + json.dumps(visual_profile, ensure_ascii=False, indent=2, sort_keys=True)
+        + ";"
+    )
     text = _read(app_path)
-    updated, count = re.subn(r"const ABSORBED_PLANET_VISUAL_PROFILE = \{.*?\n\};", replacement, text, count=1, flags=re.S)
+    updated, count = re.subn(
+        r"const ABSORBED_PLANET_VISUAL_PROFILE = \{.*?\n\};",
+        replacement,
+        text,
+        count=1,
+        flags=re.S,
+    )
     if count != 1:
-        raise RuntimeError("Could not update ABSORBED_PLANET_VISUAL_PROFILE in frontend app.js")
+        raise RuntimeError(
+            "Could not update ABSORBED_PLANET_VISUAL_PROFILE in frontend app.js"
+        )
     app_path.write_text(updated, encoding="utf-8")
 
 
@@ -905,7 +1403,7 @@ def _planet_palette(signals: set[str]) -> dict[str, str]:
 
 def _frontend_visual_test_content(source: str) -> str:
     source_text = repr(source)
-    return f'''from __future__ import annotations
+    return f"""from __future__ import annotations
 
 import json
 import re
@@ -948,21 +1446,40 @@ def test_planet_renderer_uses_absorbed_visual_layers() -> None:
     assert "fresnel_glow" in text
     assert "city_lights" in text
     assert "rgbaHex(palette.rim" in text
-'''
+"""
 
 
-def _capability_module_content(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], review_report: dict[str, Any]) -> str:
+def _capability_module_content(
+    run_id: str,
+    source: str,
+    external_path: Path,
+    tasks: list[dict[str, Any]],
+    profile: dict[str, Any],
+    review_report: dict[str, Any],
+) -> str:
     capability_payload = {
         "run_id": run_id,
         "source": source,
         "external_path": str(external_path),
         "signals": list(profile.get("signals") or []),
         "signal_evidence": dict(profile.get("signal_evidence") or {}),
-        "component_gaps": list((review_report.get("review_pipeline") or {}).get("component_gaps") or [])[:12],
-        "prioritized_absorptions": list((review_report.get("review_pipeline") or {}).get("prioritized_absorptions") or [])[:12],
-        "depth_absorption_workflow": dict((review_report.get("review_pipeline") or {}).get("depth_absorption_workflow") or {}),
+        "component_gaps": list(
+            (review_report.get("review_pipeline") or {}).get("component_gaps") or []
+        )[:12],
+        "prioritized_absorptions": list(
+            (review_report.get("review_pipeline") or {}).get("prioritized_absorptions")
+            or []
+        )[:12],
+        "depth_absorption_workflow": dict(
+            (review_report.get("review_pipeline") or {}).get(
+                "depth_absorption_workflow"
+            )
+            or {}
+        ),
         "pre_absorption_focus": dict(review_report.get("pre_absorption_focus") or {}),
-        "benchmark": dict((review_report.get("review_pipeline") or {}).get("benchmark") or {}),
+        "benchmark": dict(
+            (review_report.get("review_pipeline") or {}).get("benchmark") or {}
+        ),
         "tasks": [
             {
                 "task_id": str(task.get("task_id") or ""),
@@ -974,7 +1491,9 @@ def _capability_module_content(run_id: str, source: str, external_path: Path, ta
             for task in tasks
         ],
     }
-    payload_text = repr(json.dumps(capability_payload, ensure_ascii=True, indent=2, sort_keys=True))
+    payload_text = repr(
+        json.dumps(capability_payload, ensure_ascii=True, indent=2, sort_keys=True)
+    )
     return f'''"""Runtime behavior absorbed from external review tools.
 
 This module is rewritten by `retort apply-absorption` when an external project
@@ -1128,7 +1647,7 @@ def multi_project_reproduction_index(sources: list[str]) -> dict[str, Any]:
 
 def _capability_test_content(import_name: str, source: str) -> str:
     source_text = repr(source)
-    return f'''from __future__ import annotations
+    return f"""from __future__ import annotations
 
 from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, deferred_breadth_queue, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
@@ -1254,10 +1773,17 @@ def test_multi_project_reproduction_index_requires_three_sources() -> None:
     index = multi_project_reproduction_index(["a", "b", "a", "c"])
     assert index["unique_source_count"] == 3
     assert index["ready_for_product_score"] is True
-'''
+"""
 
 
-def _append_log(log_path: Path, run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any]) -> None:
+def _append_log(
+    log_path: Path,
+    run_id: str,
+    source: str,
+    external_path: Path,
+    tasks: list[dict[str, Any]],
+    profile: dict[str, Any],
+) -> None:
     lines = [
         "",
         f"## {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')} {run_id}",
@@ -1269,8 +1795,12 @@ def _append_log(log_path: Path, run_id: str, source: str, external_path: Path, t
         "- Applied tasks:",
     ]
     for task in tasks:
-        lines.append(f"  - `{task.get('task_id', '')}` {task.get('title', '')} [{task.get('dimension', '')}]")
-    log_path.write_text((_read(log_path) + "\n".join(lines) + "\n").lstrip(), encoding="utf-8")
+        lines.append(
+            f"  - `{task.get('task_id', '')}` {task.get('title', '')} [{task.get('dimension', '')}]"
+        )
+    log_path.write_text(
+        (_read(log_path) + "\n".join(lines) + "\n").lstrip(), encoding="utf-8"
+    )
 
 
 def _external_profile(root: Path) -> dict[str, Any]:
@@ -1287,25 +1817,146 @@ def _external_profile(root: Path) -> dict[str, Any]:
             lowered_file = text.lower()
             rel = str(path.relative_to(root))
             for signal, markers in {
-                "review_pipeline": ("code review", "review pipeline", "reviewer", "reflection", "localization"),
-                "file_grouping": ("file group", "group files", "changed files", "diff hunk", "patch set"),
-                "benchmarking": ("benchmark", "precision", "recall", "eval", "evaluation"),
-                "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports"),
+                "review_pipeline": (
+                    "code review",
+                    "review pipeline",
+                    "reviewer",
+                    "reflection",
+                    "localization",
+                ),
+                "file_grouping": (
+                    "file group",
+                    "group files",
+                    "changed files",
+                    "diff hunk",
+                    "patch set",
+                ),
+                "benchmarking": (
+                    "benchmark",
+                    "precision",
+                    "recall",
+                    "eval",
+                    "evaluation",
+                ),
+                "codebase_graph": (
+                    "code graph",
+                    "codebase graph",
+                    "dependency graph",
+                    "call graph",
+                    "symbol graph",
+                    "imports",
+                ),
                 "plugin_surface": ("plugin", "cli", "github action", "codex"),
-                "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
-                "safety_policy": ("license", "security", "policy", "permission", "sandbox", "secret"),
-                "static_analysis": ("static analysis", "security scan", "scanner", "taint", "rule engine", "vulnerability"),
-                "context_packaging": ("repo map", "repository context", "codebase context", "context pack", "prompt context", "code digest"),
-                "semantic_index": ("semantic index", "symbol index", "language server", "definition", "reference", "xref", "scip", "lsif"),
-                "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
-                "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
-                "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
-                "webgl_scene": ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit"),
-                "day_night_textures": ("daytexture", "nighttexture", "day texture", "night texture", "daymap", "nightmap", "day / night", "day + night"),
-                "cloud_texture_layer": ("cloudstexture", "clouds texture", "cloudsmap", "earth-clouds", "cloud layer", "clouds"),
-                "fresnel_atmosphere": ("fresnel", "reflectionfactor", "additiveblending", "atmosphere glow", "glowmesh"),
-                "elevation_bump_map": ("bump", "bump elevation", "bumpmap", "height map", "roughness"),
-                "specular_ocean": ("specular", "reflection", "roughness", "ocean", "sunorientation"),
+                "multi_provider": (
+                    "provider",
+                    "model",
+                    "openai",
+                    "anthropic",
+                    "ollama",
+                ),
+                "safety_policy": (
+                    "license",
+                    "security",
+                    "policy",
+                    "permission",
+                    "sandbox",
+                    "secret",
+                ),
+                "static_analysis": (
+                    "static analysis",
+                    "security scan",
+                    "scanner",
+                    "taint",
+                    "rule engine",
+                    "vulnerability",
+                ),
+                "context_packaging": (
+                    "repo map",
+                    "repository context",
+                    "codebase context",
+                    "context pack",
+                    "prompt context",
+                    "code digest",
+                ),
+                "semantic_index": (
+                    "semantic index",
+                    "symbol index",
+                    "language server",
+                    "definition",
+                    "reference",
+                    "xref",
+                    "scip",
+                    "lsif",
+                ),
+                "planet_frontend": (
+                    "planet",
+                    "spheregeometry",
+                    "procedural planet",
+                    "terrain",
+                    "cloud layer",
+                ),
+                "atmosphere_shader": (
+                    "atmosphere",
+                    "fresnel",
+                    "rim light",
+                    "shader",
+                    "cloud",
+                ),
+                "procedural_surface": (
+                    "noise",
+                    "texture",
+                    "height map",
+                    "landmass",
+                    "terrain",
+                ),
+                "webgl_scene": (
+                    "webgl",
+                    "three.js",
+                    "threejs",
+                    "renderer",
+                    "scene",
+                    "camera",
+                    "orbit",
+                ),
+                "day_night_textures": (
+                    "daytexture",
+                    "nighttexture",
+                    "day texture",
+                    "night texture",
+                    "daymap",
+                    "nightmap",
+                    "day / night",
+                    "day + night",
+                ),
+                "cloud_texture_layer": (
+                    "cloudstexture",
+                    "clouds texture",
+                    "cloudsmap",
+                    "earth-clouds",
+                    "cloud layer",
+                    "clouds",
+                ),
+                "fresnel_atmosphere": (
+                    "fresnel",
+                    "reflectionfactor",
+                    "additiveblending",
+                    "atmosphere glow",
+                    "glowmesh",
+                ),
+                "elevation_bump_map": (
+                    "bump",
+                    "bump elevation",
+                    "bumpmap",
+                    "height map",
+                    "roughness",
+                ),
+                "specular_ocean": (
+                    "specular",
+                    "reflection",
+                    "roughness",
+                    "ocean",
+                    "sunorientation",
+                ),
             }.items():
                 if any(marker in lowered_file for marker in markers):
                     signal_evidence.setdefault(signal, [])
@@ -1313,28 +1964,135 @@ def _external_profile(root: Path) -> dict[str, Any]:
                         signal_evidence[signal].append(rel)
     lowered = "\n".join(text_parts).lower()
     signal_map = {
-        "review_pipeline": ("code review", "review pipeline", "reviewer", "reflection", "localization"),
-        "file_grouping": ("file group", "group files", "changed files", "diff hunk", "patch set"),
+        "review_pipeline": (
+            "code review",
+            "review pipeline",
+            "reviewer",
+            "reflection",
+            "localization",
+        ),
+        "file_grouping": (
+            "file group",
+            "group files",
+            "changed files",
+            "diff hunk",
+            "patch set",
+        ),
         "benchmarking": ("benchmark", "precision", "recall", "eval", "evaluation"),
-        "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports"),
+        "codebase_graph": (
+            "code graph",
+            "codebase graph",
+            "dependency graph",
+            "call graph",
+            "symbol graph",
+            "imports",
+        ),
         "plugin_surface": ("plugin", "cli", "github action", "codex"),
         "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
-        "safety_policy": ("license", "security", "policy", "permission", "sandbox", "secret"),
-        "static_analysis": ("static analysis", "security scan", "scanner", "taint", "rule engine", "vulnerability"),
-        "context_packaging": ("repo map", "repository context", "codebase context", "context pack", "prompt context", "code digest"),
-        "semantic_index": ("semantic index", "symbol index", "language server", "definition", "reference", "xref", "scip", "lsif"),
-        "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
+        "safety_policy": (
+            "license",
+            "security",
+            "policy",
+            "permission",
+            "sandbox",
+            "secret",
+        ),
+        "static_analysis": (
+            "static analysis",
+            "security scan",
+            "scanner",
+            "taint",
+            "rule engine",
+            "vulnerability",
+        ),
+        "context_packaging": (
+            "repo map",
+            "repository context",
+            "codebase context",
+            "context pack",
+            "prompt context",
+            "code digest",
+        ),
+        "semantic_index": (
+            "semantic index",
+            "symbol index",
+            "language server",
+            "definition",
+            "reference",
+            "xref",
+            "scip",
+            "lsif",
+        ),
+        "planet_frontend": (
+            "planet",
+            "spheregeometry",
+            "procedural planet",
+            "terrain",
+            "cloud layer",
+        ),
         "atmosphere_shader": ("atmosphere", "fresnel", "rim light", "shader", "cloud"),
         "procedural_surface": ("noise", "texture", "height map", "landmass", "terrain"),
-        "webgl_scene": ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit"),
-        "day_night_textures": ("daytexture", "nighttexture", "day texture", "night texture", "daymap", "nightmap", "day / night", "day + night"),
-        "cloud_texture_layer": ("cloudstexture", "clouds texture", "cloudsmap", "earth-clouds", "cloud layer", "clouds"),
-        "fresnel_atmosphere": ("fresnel", "reflectionfactor", "additiveblending", "atmosphere glow", "glowmesh"),
-        "elevation_bump_map": ("bump", "bump elevation", "bumpmap", "height map", "roughness"),
-        "specular_ocean": ("specular", "reflection", "roughness", "ocean", "sunorientation"),
+        "webgl_scene": (
+            "webgl",
+            "three.js",
+            "threejs",
+            "renderer",
+            "scene",
+            "camera",
+            "orbit",
+        ),
+        "day_night_textures": (
+            "daytexture",
+            "nighttexture",
+            "day texture",
+            "night texture",
+            "daymap",
+            "nightmap",
+            "day / night",
+            "day + night",
+        ),
+        "cloud_texture_layer": (
+            "cloudstexture",
+            "clouds texture",
+            "cloudsmap",
+            "earth-clouds",
+            "cloud layer",
+            "clouds",
+        ),
+        "fresnel_atmosphere": (
+            "fresnel",
+            "reflectionfactor",
+            "additiveblending",
+            "atmosphere glow",
+            "glowmesh",
+        ),
+        "elevation_bump_map": (
+            "bump",
+            "bump elevation",
+            "bumpmap",
+            "height map",
+            "roughness",
+        ),
+        "specular_ocean": (
+            "specular",
+            "reflection",
+            "roughness",
+            "ocean",
+            "sunorientation",
+        ),
     }
-    signals = [name for name, markers in signal_map.items() if any(marker in lowered for marker in markers)]
-    return {"file_count": len(files), "suffix_counts": suffix_counts, "signals": signals, "signal_evidence": signal_evidence, "git_revision": _git_revision(root)}
+    signals = [
+        name
+        for name, markers in signal_map.items()
+        if any(marker in lowered for marker in markers)
+    ]
+    return {
+        "file_count": len(files),
+        "suffix_counts": suffix_counts,
+        "signals": signals,
+        "signal_evidence": signal_evidence,
+        "git_revision": _git_revision(root),
+    }
 
 
 def _semantic_review(own: Path, external: Path) -> dict[str, Any]:
@@ -1349,17 +2107,36 @@ def _semantic_review(own: Path, external: Path) -> dict[str, Any]:
 
 
 def _code_profile(root: Path) -> dict[str, int]:
-    profile = {"source_files": 0, "functions": 0, "classes": 0, "cli_markers": 0, "test_markers": 0, "workflow_markers": 0}
+    profile = {
+        "source_files": 0,
+        "functions": 0,
+        "classes": 0,
+        "cli_markers": 0,
+        "test_markers": 0,
+        "workflow_markers": 0,
+    }
     for path in _project_files(root)[:800]:
         if path.suffix.lower() not in SOURCE_SUFFIXES:
             continue
         text = _read(path)
         profile["source_files"] += 1
-        profile["functions"] += text.count("def ") + text.count("function ") + text.count("func ")
+        profile["functions"] += (
+            text.count("def ") + text.count("function ") + text.count("func ")
+        )
         profile["classes"] += text.count("class ") + text.count("type ")
-        profile["cli_markers"] += text.count("add_parser(") + text.lower().count("cobra.command") + text.lower().count("commander")
-        profile["test_markers"] += text.count("def test_") + text.count("it(") + text.count("describe(")
-        profile["workflow_markers"] += text.lower().count("workflow") + text.lower().count("pipeline") + text.lower().count("review")
+        profile["cli_markers"] += (
+            text.count("add_parser(")
+            + text.lower().count("cobra.command")
+            + text.lower().count("commander")
+        )
+        profile["test_markers"] += (
+            text.count("def test_") + text.count("it(") + text.count("describe(")
+        )
+        profile["workflow_markers"] += (
+            text.lower().count("workflow")
+            + text.lower().count("pipeline")
+            + text.lower().count("review")
+        )
     return profile
 
 
@@ -1379,7 +2156,11 @@ def _review_report(
         "source": source,
         "external_path": str(external_path),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "external_snapshot": {"git_revision": profile.get("git_revision"), "file_count": profile.get("file_count"), "suffix_counts": profile.get("suffix_counts")},
+        "external_snapshot": {
+            "git_revision": profile.get("git_revision"),
+            "file_count": profile.get("file_count"),
+            "suffix_counts": profile.get("suffix_counts"),
+        },
         "license_review": _absorption_license_review(external_path),
         "absorbed_signals": profile.get("signals", []),
         "signal_evidence": profile.get("signal_evidence", {}),
@@ -1387,7 +2168,9 @@ def _review_report(
         "pre_absorption_focus": pre_absorption_focus,
         "review_pipeline": pipeline_report,
         "tasks": tasks,
-        "replay": {"command": f"retort absorb --own-project <main-project> --external-path {external_path} --run-local-gates --branch-workflow --merge-after"},
+        "replay": {
+            "command": f"retort absorb --own-project <main-project> --external-path {external_path} --run-local-gates --branch-workflow --merge-after"
+        },
     }
 
 
@@ -1425,14 +2208,28 @@ def _local_gate_commands(root: Path, payload: dict[str, Any]) -> list[dict[str, 
     commands: list[dict[str, Any]] = []
     python = _python(payload)
     if (root / "tests").is_dir():
-        commands.append(_run_command([python, "-m", "pytest", "tests", "-q"], root, timeout=int(payload.get("gate_timeout_sec") or 600)))
+        commands.append(
+            _run_command(
+                [python, "-m", "pytest", "tests", "-q"],
+                root,
+                timeout=int(payload.get("gate_timeout_sec") or 600),
+            )
+        )
     return commands
 
 
 def _run_command(cmd: list[str], cwd: Path, *, timeout: int) -> dict[str, Any]:
     started = time.monotonic()
     try:
-        result = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
         return {
             "command": cmd,
             "cwd": str(cwd),
@@ -1449,8 +2246,12 @@ def _run_command(cmd: list[str], cwd: Path, *, timeout: int) -> dict[str, Any]:
             "exit_code": 124,
             "ok": False,
             "duration_sec": round(time.monotonic() - started, 3),
-            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
-            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+            "stdout_tail": (exc.stdout or "")[-4000:]
+            if isinstance(exc.stdout, str)
+            else "",
+            "stderr_tail": (exc.stderr or "")[-4000:]
+            if isinstance(exc.stderr, str)
+            else "",
             "timeout": True,
         }
 
@@ -1472,10 +2273,22 @@ def _git_diff_summary(root: Path, changed_files: list[str]) -> list[str]:
     git_root = _git_root(root)
     if git_root is None or not changed_files:
         return []
-    rels = [str(Path(path).resolve().relative_to(git_root)) for path in changed_files if Path(path).resolve().is_relative_to(git_root)]
+    rels = [
+        str(Path(path).resolve().relative_to(git_root))
+        for path in changed_files
+        if Path(path).resolve().is_relative_to(git_root)
+    ]
     if not rels:
         return []
-    result = subprocess.run(["git", "diff", "--stat", "--", *rels], cwd=git_root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False)
+    result = subprocess.run(
+        ["git", "diff", "--stat", "--", *rels],
+        cwd=git_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        timeout=30,
+        check=False,
+    )
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     if lines:
         return lines
@@ -1496,10 +2309,20 @@ def _employee_diff_text(root: Path, changed_files: list[str]) -> str:
             if path.is_relative_to(git_root):
                 rels.append(str(path.relative_to(git_root)))
         if rels:
-            result = subprocess.run(["git", "diff", "--", *rels], cwd=git_root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False)
+            result = subprocess.run(
+                ["git", "diff", "--", *rels],
+                cwd=git_root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=30,
+                check=False,
+            )
             if result.stdout.strip():
                 return result.stdout
-    return "\n".join(filter(None, (_synthetic_file_diff(root, Path(item)) for item in changed_files)))
+    return "\n".join(
+        filter(None, (_synthetic_file_diff(root, Path(item)) for item in changed_files))
+    )
 
 
 def _synthetic_file_diff(root: Path, path: Path) -> str:
@@ -1517,20 +2340,41 @@ def _synthetic_file_diff(root: Path, path: Path) -> str:
 
 
 def _git_root(path: Path) -> Path | None:
-    result = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=path, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=5, check=False)
-    return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    return (
+        Path(result.stdout.strip())
+        if result.returncode == 0 and result.stdout.strip()
+        else None
+    )
 
 
 def _record_execution(root: Path, result: dict[str, Any]) -> None:
     record_real_absorption_run(root, result)
 
 
-def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[dict[str, Any]], result: dict[str, Any], payload: dict[str, Any]) -> Path:
+def _write_employee_results(
+    root: Path,
+    run_id: str,
+    source: str,
+    tasks: list[dict[str, Any]],
+    result: dict[str, Any],
+    payload: dict[str, Any],
+) -> Path:
     path = root / ".retort" / "employee_results" / f"{run_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     queue_path = str(payload.get("employee_queue") or "")
     history_store = str(payload.get("history_store") or "")
-    worker_payload_path = root / ".retort" / "employee_runtime_requests" / f"{run_id}.json"
+    worker_payload_path = (
+        root / ".retort" / "employee_runtime_requests" / f"{run_id}.json"
+    )
     worker_payload_path.parent.mkdir(parents=True, exist_ok=True)
     worker_payload = {
         "run_id": run_id,
@@ -1546,31 +2390,57 @@ def _write_employee_results(root: Path, run_id: str, source: str, tasks: list[di
         "project": str(root),
         "patch_closure": {"enabled": True, "project": str(root)},
     }
-    worker_payload_path.write_text(json.dumps(worker_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    worker_payload_path.write_text(
+        json.dumps(worker_payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     package_root = str(Path(__file__).resolve().parents[1])
     worker_code = f"import sys; sys.path.insert(0, {package_root!r}); from retort_engine.employee_runtime_worker import main; raise SystemExit(main())"
-    worker = _run_command([_python(payload), "-c", worker_code, "--payload-file", str(worker_payload_path)], root, timeout=120)
+    worker = _run_command(
+        [
+            _python(payload),
+            "-c",
+            worker_code,
+            "--payload-file",
+            str(worker_payload_path),
+        ],
+        root,
+        timeout=120,
+    )
     if not path.is_file():
         fallback = {
             "run_id": run_id,
             "source": source,
             "execution_mode": "employee_runtime_worker_failed",
-            "runtime_evidence": {"worker": worker, "worker_payload": str(worker_payload_path), "result_path": str(path)},
+            "runtime_evidence": {
+                "worker": worker,
+                "worker_payload": str(worker_payload_path),
+                "result_path": str(path),
+            },
             "results": [],
         }
-        path.write_text(json.dumps(fallback, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        path.write_text(
+            json.dumps(fallback, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return path
 
 
 def _employee_queue_path(root: Path, payload: dict[str, Any]) -> str:
-    return str(payload.get("employee_queue") or root / ".retort" / "employee_queue.jsonl")
+    return str(
+        payload.get("employee_queue") or root / ".retort" / "employee_queue.jsonl"
+    )
 
 
 def _history_store_path(root: Path, payload: dict[str, Any]) -> str:
-    return str(payload.get("history_store") or root / ".retort" / "retort_history.sqlite")
+    return str(
+        payload.get("history_store") or root / ".retort" / "retort_history.sqlite"
+    )
 
 
-def _write_execution_queue_records(queue_path: str, run_id: str, source: str, tasks: list[dict[str, Any]]) -> int:
+def _write_execution_queue_records(
+    queue_path: str, run_id: str, source: str, tasks: list[dict[str, Any]]
+) -> int:
     if not queue_path:
         return 0
     path = Path(queue_path)
@@ -1578,12 +2448,34 @@ def _write_execution_queue_records(queue_path: str, run_id: str, source: str, ta
     count = 0
     with path.open("a", encoding="utf-8") as handle:
         for task in tasks:
-            handle.write(json.dumps({"queue_id": str(uuid.uuid4()), "run_id": run_id, "source": source, "status": "executing", "task": task}, ensure_ascii=False, sort_keys=True) + "\n")
+            handle.write(
+                json.dumps(
+                    {
+                        "queue_id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "source": source,
+                        "status": "executing",
+                        "task": task,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
             count += 1
     return count
 
 
-def _execution_result(status: str, root: Path, source: str, started: float, changed_files: list[str], gates: list[dict[str, Any]], diff_summary: list[str], summary: str) -> dict[str, Any]:
+def _execution_result(
+    status: str,
+    root: Path,
+    source: str,
+    started: float,
+    changed_files: list[str],
+    gates: list[dict[str, Any]],
+    diff_summary: list[str],
+    summary: str,
+) -> dict[str, Any]:
     return {
         "status": status,
         "source": source,
@@ -1613,7 +2505,15 @@ def _git_revision(root: Path) -> str:
     git_root = _git_root(root)
     if git_root is None:
         return ""
-    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=5, check=False)
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=git_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        timeout=5,
+        check=False,
+    )
     return result.stdout.strip() if result.returncode == 0 else ""
 
 

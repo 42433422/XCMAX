@@ -151,11 +151,36 @@ def build_trajectory(
     return out
 
 
+def _calendar_today() -> str:
+    """行动板日历日：上海时区，避免 UTC 跨日把大厅 day 粘在昨天。"""
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
 def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
     """构建官网可读的双看板快照（patch=断点清单，update=工作目标）。"""
     from modstore_server.digest_action_items import latest_day, list_action_items, stats
 
-    use_day = day or latest_day() or None
+    calendar_day = _calendar_today()
+    day_stale = False
+    source_day = latest_day() or ""
+    if day:
+        use_day = day
+    else:
+        # 优先「今天」；今天无条目再回退 latest，并显式标记 stale，禁止静默粘旧日。
+        today_any = list_action_items(day=calendar_day, limit=1)
+        if today_any:
+            use_day = calendar_day
+        elif source_day:
+            use_day = source_day
+            day_stale = source_day != calendar_day
+        else:
+            use_day = calendar_day
+
     patches_raw = list_action_items(kind="patch", day=use_day, limit=100) if use_day else []
     updates_raw = list_action_items(kind="update", day=use_day, limit=100) if use_day else []
     patches = [_public_item(x) for x in patches_raw]
@@ -178,6 +203,8 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
         "schema": "xcagi.public_action_board/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "day": use_day,
+        "calendar_day": calendar_day,
+        "day_stale": day_stale,
         "readonly": True,
         "note": "公开只读进度看板；不含源码路径与内部标识。",
         "breakpoints": {

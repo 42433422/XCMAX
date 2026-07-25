@@ -208,3 +208,7 @@
 [routes->services] app/fastapi_routes/voice_routes.py:361
 # 2026-07-21 PR #241: ai_assistant.py 新增 /api/tts/translate 兼容端点（朗读字幕短译），后续应在 app/application 增加 translator app service
 [routes->services] app/fastapi_routes/ai_assistant.py:496
+[routes->services] app/fastapi_routes/document_templates_compat.py:160
+[giant-file] app/fastapi_routes/excel_extract.py
+[giant-file] app/application/shipment_excel_etl_app_service.py
+[giant-file] app/infrastructure/templates/template_store_impl.py

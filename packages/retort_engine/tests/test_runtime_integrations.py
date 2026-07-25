@@ -13,15 +13,29 @@ from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
 from retort_engine.semantic_reviewer import semantic_compare
 from retort_engine.service import RetortService, create_app
 from retort_engine.ui_server import RetortUIServer
-from tests.test_evidence_evaluator import create_focused_tool_package, create_incomplete_package, write_file
+from tests.test_evidence_evaluator import (
+    create_focused_tool_package,
+    create_incomplete_package,
+    write_file,
+)
 
 
 def test_employee_runtime_adapter_dispatches_and_records(tmp_path: Path) -> None:
     queue_path = tmp_path / "employee_queue.jsonl"
     history_path = tmp_path / "retort_history.sqlite"
     dispatched = []
-    task = ImprovementTask("retort-absorb-adapter", "Adapter", "employee_execution_integration", "why", "act", "accept", "fhd-core-maintainer")
-    adapter = RetortEmployeeRuntimeAdapter(queue_path, history_store=history_path, dispatch_hook=dispatched.append)
+    task = ImprovementTask(
+        "retort-absorb-adapter",
+        "Adapter",
+        "employee_execution_integration",
+        "why",
+        "act",
+        "accept",
+        "fhd-core-maintainer",
+    )
+    adapter = RetortEmployeeRuntimeAdapter(
+        queue_path, history_store=history_path, dispatch_hook=dispatched.append
+    )
     records = adapter.submit_tasks((task,), source="unit")
     assert records[0].task.task_id == task.task_id
     assert dispatched[0].task.task_id == task.task_id
@@ -32,8 +46,20 @@ def test_employee_runtime_adapter_dispatches_and_records(tmp_path: Path) -> None
 def test_feedback_ingest_accepts_result_file(tmp_path: Path) -> None:
     result_file = tmp_path / "employee_result.json"
     history_path = tmp_path / "retort_history.sqlite"
-    result_file.write_text(json.dumps({"task_id": "task-1", "status": "completed", "summary": "ok", "score_after": {"feedback_loop_closure": 92}}), encoding="utf-8")
-    result = feedback_ingest(history_store=str(history_path), result_file=str(result_file))
+    result_file.write_text(
+        json.dumps(
+            {
+                "task_id": "task-1",
+                "status": "completed",
+                "summary": "ok",
+                "score_after": {"feedback_loop_closure": 92},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = feedback_ingest(
+        history_store=str(history_path), result_file=str(result_file)
+    )
     assert result.score_after["feedback_loop_closure"] == 92
 
 
@@ -74,11 +100,29 @@ def test_product_service_and_blackhole_ui_surface(tmp_path: Path, monkeypatch) -
 
     monkeypatch.setattr(
         "retort_engine.core.request_paibi_llm_review",
-        lambda **kwargs: {"provider": "paibi", "enabled": True, "status": "accepted", "dispatch": {"status": "accepted", "task_id": "task-product"}},
+        lambda **kwargs: {
+            "provider": "paibi",
+            "enabled": True,
+            "status": "accepted",
+            "dispatch": {"status": "accepted", "task_id": "task-product"},
+        },
     )
-    monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", lambda task_id, **kwargs: {"provider": "paibi", "task_id": task_id, "status": "running"})
+    monkeypatch.setattr(
+        "retort_engine.core.wait_for_paibi_llm_review",
+        lambda task_id, **kwargs: {
+            "provider": "paibi",
+            "task_id": task_id,
+            "status": "running",
+        },
+    )
 
-    payload = RetortService().assess({"project": str(project), "context_policy": "provided", "gate_results": {"lint": True, "test": True}})
+    payload = RetortService().assess(
+        {
+            "project": str(project),
+            "context_policy": "provided",
+            "gate_results": {"lint": True, "test": True},
+        }
+    )
     assert payload["scores"] == []
     assert payload["metadata"]["score_source"] == "paibi_llm_pending"
     assert payload["metadata"]["score_authority"] == "paibi_llm_prompt_only"
@@ -92,27 +136,49 @@ def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:
     project = tmp_path / "project"
     package = project / "retort_engine"
     package.mkdir(parents=True)
-    write_file(package / "flow.py", "def target():\n    return 1\n\ndef caller():\n    return target()\n")
+    write_file(
+        package / "flow.py",
+        "def target():\n    return 1\n\ndef caller():\n    return target()\n",
+    )
 
     report = RetortService().codebase_graph_report({"project": str(project)})
 
     assert report["status"] == "ready"
     assert report["summary"]["call_edge_count"] == 1
-    assert any(edge["kind"] == "calls" and edge["to"].endswith(":target") for edge in report["edges"])
-    assert CoreRetortService().codebase_graph_report({"project": str(project)})["status"] == "ready"
+    assert any(
+        edge["kind"] == "calls" and edge["to"].endswith(":target")
+        for edge in report["edges"]
+    )
+    assert (
+        CoreRetortService().codebase_graph_report({"project": str(project)})["status"]
+        == "ready"
+    )
 
 
 def test_service_exposes_context_pack_report(tmp_path: Path) -> None:
     project = tmp_path / "project"
     package = project / "retort_engine"
     package.mkdir(parents=True)
-    write_file(package / "review.py", "def review():\n    return 'absorb context graph review review'\n")
+    write_file(
+        package / "review.py",
+        "def review():\n    return 'absorb context graph review review'\n",
+    )
 
     report = RetortService().context_pack_report(
-        {"project": str(project), "focus_terms": ["review", "context"], "max_files": 2, "max_chars": 200}
+        {
+            "project": str(project),
+            "focus_terms": ["review", "context"],
+            "max_files": 2,
+            "max_chars": 200,
+        }
     )
     core_report = CoreRetortService().context_pack_report(
-        {"project": str(project), "focus_terms": ["review", "context"], "max_files": 2, "max_chars": 200}
+        {
+            "project": str(project),
+            "focus_terms": ["review", "context"],
+            "max_files": 2,
+            "max_chars": 200,
+        }
     )
 
     assert report["status"] == "ready"
@@ -142,7 +208,9 @@ def test_service_exposes_architecture_contract_report(tmp_path: Path) -> None:
     write_file(package / "codebase_graph.py", "import ast\n")
 
     report = RetortService().architecture_contract_report({"project": str(project)})
-    core_report = CoreRetortService().architecture_contract_report({"project": str(project)})
+    core_report = CoreRetortService().architecture_contract_report(
+        {"project": str(project)}
+    )
 
     assert report["status"] == "passed"
     assert report["summary"]["violation_count"] == 0

@@ -25,7 +25,9 @@ def build_ranked_repository_map(
     root = Path(project).expanduser().resolve()
     files = _python_files(root)
     module_index = _module_index(root, files)
-    edges: dict[str, set[str]] = {path.relative_to(root).as_posix(): set() for path in files}
+    edges: dict[str, set[str]] = {
+        path.relative_to(root).as_posix(): set() for path in files
+    }
     symbols: dict[str, list[str]] = {}
     parse_errors: list[str] = []
     for path in files:
@@ -36,7 +38,9 @@ def build_ranked_repository_map(
             parse_errors.append(rel)
             continue
         symbols[rel] = sorted(
-            node.name for node in tree.body if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
         )
         for imported in _imports(tree):
             target = _resolve_module(imported, module_index)
@@ -105,7 +109,8 @@ def _python_files(root: Path) -> list[Path]:
     return [
         path
         for path in sorted(root.rglob("*.py"))
-        if path.is_file() and not any(part in SKIP_DIRS for part in path.relative_to(root).parts)
+        if path.is_file()
+        and not any(part in SKIP_DIRS for part in path.relative_to(root).parts)
     ]
 
 
@@ -148,12 +153,23 @@ def compare_repository_gaps(
     own_project: str | Path,
     external_project: str | Path,
     *,
-    focus_terms: Sequence[str] = ("absorb", "agent", "benchmark", "evaluation", "repository", "task"),
+    focus_terms: Sequence[str] = (
+        "absorb",
+        "agent",
+        "benchmark",
+        "evaluation",
+        "repository",
+        "task",
+    ),
     max_files: int = 16,
 ) -> dict[str, Any]:
     """Compare own vs external repository maps and emit symbol/file gaps for absorption."""
-    own_map = build_ranked_repository_map(own_project, focus_terms=focus_terms, max_files=max_files, max_chars=16_000)
-    external_map = build_ranked_repository_map(external_project, focus_terms=focus_terms, max_files=max_files, max_chars=16_000)
+    own_map = build_ranked_repository_map(
+        own_project, focus_terms=focus_terms, max_files=max_files, max_chars=16_000
+    )
+    external_map = build_ranked_repository_map(
+        external_project, focus_terms=focus_terms, max_files=max_files, max_chars=16_000
+    )
     own_symbols = {
         symbol
         for row in own_map.get("files") or []
@@ -161,8 +177,12 @@ def compare_repository_gaps(
     }
     gaps: list[dict[str, Any]] = []
     for row in external_map.get("files") or []:
-        missing_symbols = [symbol for symbol in row.get("symbols") or [] if symbol not in own_symbols]
-        if not missing_symbols and row["path"] in {item["path"] for item in own_map.get("files") or []}:
+        missing_symbols = [
+            symbol for symbol in row.get("symbols") or [] if symbol not in own_symbols
+        ]
+        if not missing_symbols and row["path"] in {
+            item["path"] for item in own_map.get("files") or []
+        }:
             continue
         gaps.append(
             {
@@ -178,13 +198,23 @@ def compare_repository_gaps(
                 ),
             }
         )
-    gaps.sort(key=lambda item: (-float(item["page_rank"]), -int(item["focus_hits"]), str(item["external_path"])))
+    gaps.sort(
+        key=lambda item: (
+            -float(item["page_rank"]),
+            -int(item["focus_hits"]),
+            str(item["external_path"]),
+        )
+    )
     return {
-        "status": "ready" if own_map["status"] == "ready" and external_map["status"] == "ready" else "partial",
+        "status": "ready"
+        if own_map["status"] == "ready" and external_map["status"] == "ready"
+        else "partial",
         "summary": {
             "gap_count": len(gaps),
             "own_selected_file_count": own_map["summary"]["selected_file_count"],
-            "external_selected_file_count": external_map["summary"]["selected_file_count"],
+            "external_selected_file_count": external_map["summary"][
+                "selected_file_count"
+            ],
             "decision_source": "repository_graph_gap",
             "marker_scan_is_auxiliary": True,
         },
@@ -208,7 +238,11 @@ def tasks_from_repository_gaps(
         if not isinstance(row, dict):
             continue
         missing = [str(item) for item in row.get("missing_symbols") or []][:12]
-        targets = [item for item in row.get("suggested_own_targets") or [] if isinstance(item, dict)]
+        targets = [
+            item
+            for item in row.get("suggested_own_targets") or []
+            if isinstance(item, dict)
+        ]
         if not targets:
             targets = fallback_targets
         paths = [str(item.get("path") or "") for item in targets if item.get("path")]
@@ -217,7 +251,9 @@ def tasks_from_repository_gaps(
             {
                 "task_id": f"retort-gap-{index:02d}",
                 "title": f"Close repository gap from {external_path or 'external module'}",
-                "dimension": "diff_hunk_review" if missing else "comparative_analysis_depth",
+                "dimension": "diff_hunk_review"
+                if missing
+                else "comparative_analysis_depth",
                 "why": (
                     f"External exposes symbols missing locally: {', '.join(missing[:5])}."
                     if missing
@@ -240,7 +276,9 @@ def tasks_from_repository_gaps(
     return tasks
 
 
-def task_targets_from_map(repo_map: dict[str, Any], *, limit: int = 5) -> list[dict[str, Any]]:
+def task_targets_from_map(
+    repo_map: dict[str, Any], *, limit: int = 5
+) -> list[dict[str, Any]]:
     """Turn a ranked repository map into absorption task target_files/symbols."""
     targets: list[dict[str, Any]] = []
     for row in (repo_map.get("files") or [])[: max(0, limit)]:
@@ -269,7 +307,10 @@ def _suggested_own_targets_for_gap(
     for row in own_map.get("files") or []:
         if not isinstance(row, dict):
             continue
-        score = float(row.get("page_rank") or 0.0) * 1000.0 + float(row.get("focus_hits") or 0) * 5.0
+        score = (
+            float(row.get("page_rank") or 0.0) * 1000.0
+            + float(row.get("focus_hits") or 0) * 5.0
+        )
         if Path(str(row.get("path") or "")).name == external_name:
             score += 500.0
         scored.append((score, row))
@@ -290,7 +331,9 @@ def _suggested_own_targets_for_gap(
     return targets
 
 
-def _page_rank(edges: dict[str, set[str]], *, damping: float = 0.85, rounds: int = 30) -> dict[str, float]:
+def _page_rank(
+    edges: dict[str, set[str]], *, damping: float = 0.85, rounds: int = 30
+) -> dict[str, float]:
     nodes = sorted(edges)
     if not nodes:
         return {}
@@ -304,7 +347,12 @@ def _page_rank(edges: dict[str, set[str]], *, damping: float = 0.85, rounds: int
         dangling = sum(ranks[node] for node in nodes if not edges[node]) / len(nodes)
         next_ranks: dict[str, float] = {}
         for node in nodes:
-            link_rank = sum(ranks[parent] / len(edges[parent]) for parent in incoming.get(node, set()))
-            next_ranks[node] = (1.0 - damping) / len(nodes) + damping * (dangling + link_rank)
+            link_rank = sum(
+                ranks[parent] / len(edges[parent])
+                for parent in incoming.get(node, set())
+            )
+            next_ranks[node] = (1.0 - damping) / len(nodes) + damping * (
+                dangling + link_rank
+            )
         ranks = next_ranks
     return ranks

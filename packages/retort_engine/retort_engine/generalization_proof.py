@@ -21,13 +21,30 @@ LANGUAGE_SUFFIXES = {
     ".sh": "shell",
     ".tf": "terraform",
 }
-SKIP_PARTS = {".git", "node_modules", ".venv", "venv", "myvenv", "__pycache__", ".pytest_cache", ".ruff_cache", "target", "dist", "build"}
+SKIP_PARTS = {
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "myvenv",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    "target",
+    "dist",
+    "build",
+}
 
 
-def build_generalization_proof(project: str | Path, *, max_projects: int = 40, max_files_per_project: int = 2500) -> dict[str, Any]:
+def build_generalization_proof(
+    project: str | Path, *, max_projects: int = 40, max_files_per_project: int = 2500
+) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     external_projects = _external_projects(root)[:max_projects]
-    profiles = [_project_profile(path, max_files=max_files_per_project) for path in external_projects]
+    profiles = [
+        _project_profile(path, max_files=max_files_per_project)
+        for path in external_projects
+    ]
     language_counts: dict[str, int] = {}
     for profile in profiles:
         for language, count in profile["languages"].items():
@@ -35,7 +52,11 @@ def build_generalization_proof(project: str | Path, *, max_projects: int = 40, m
     complex_pr = _read_json(root / "docs" / "retort_complex_pr_replay.json")
     pr_dry_run = _read_json(root / "docs" / "retort_pr_dry_run_report.json")
     ci_projects = [profile for profile in profiles if profile["ci_file_count"] > 0]
-    large_projects = [profile for profile in profiles if profile["file_count"] >= 500 or profile["source_file_count"] >= 250]
+    large_projects = [
+        profile
+        for profile in profiles
+        if profile["file_count"] >= 500 or profile["source_file_count"] >= 250
+    ]
     checks = [
         {
             "id": "multi_external_project_materialized",
@@ -59,31 +80,45 @@ def build_generalization_proof(project: str | Path, *, max_projects: int = 40, m
         },
         {
             "id": "pr_runtime_replay_available",
-            "passed": complex_pr.get("status") == "ready" or pr_dry_run.get("status") == "reviewed",
+            "passed": complex_pr.get("status") == "ready"
+            or pr_dry_run.get("status") == "reviewed",
             "evidence": f"complex_pr_status={complex_pr.get('status', '')}; pr_dry_run_status={pr_dry_run.get('status', '')}",
         },
     ]
     return {
-        "status": "ready" if all(item["passed"] for item in checks) else "needs_more_generalization",
+        "status": "ready"
+        if all(item["passed"] for item in checks)
+        else "needs_more_generalization",
         "summary": {
             "external_project_count": len(profiles),
             "language_count": len(language_counts),
             "languages": language_counts,
             "ci_project_count": len(ci_projects),
             "large_project_count": len(large_projects),
-            "pr_replay_status": complex_pr.get("status") or pr_dry_run.get("status") or "",
+            "pr_replay_status": complex_pr.get("status")
+            or pr_dry_run.get("status")
+            or "",
         },
         "checks": checks,
         "projects": profiles,
     }
 
 
-def write_generalization_proof(project: str | Path, output: str | Path | None = None) -> dict[str, Any]:
+def write_generalization_proof(
+    project: str | Path, output: str | Path | None = None
+) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     result = build_generalization_proof(root)
-    target = Path(output).expanduser().resolve() if output else root / "docs" / "retort_generalization_proof.json"
+    target = (
+        Path(output).expanduser().resolve()
+        if output
+        else root / "docs" / "retort_generalization_proof.json"
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    target.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     result["output"] = str(target)
     return result
 
@@ -123,7 +158,11 @@ def _project_profile(path: Path, *, max_files: int) -> dict[str, Any]:
             languages[language] = languages.get(language, 0) + 1
             source_count += 1
         rel = file_path.relative_to(path).as_posix().lower()
-        if rel.startswith(".github/workflows/") or rel in {"jenkinsfile", ".gitlab-ci.yml", "azure-pipelines.yml"}:
+        if rel.startswith(".github/workflows/") or rel in {
+            "jenkinsfile",
+            ".gitlab-ci.yml",
+            "azure-pipelines.yml",
+        }:
             ci_count += 1
     return {
         "name": "/".join(path.parts[-2:]),

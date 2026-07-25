@@ -52,12 +52,38 @@
     </section>
 
     <section v-show="tab === 'questions'" class="card">
-      <div v-for="q in questions" :key="String(q.id)" class="qa-item">
-        <div class="qa-q">{{ q.question || q.content || q.title }}</div>
-        <div class="qa-meta">{{ q.employee_id || '—' }} · {{ q.created_at || '' }}</div>
-        <div class="qa-answer">
-          <input v-model="answers[String(q.id)]" type="text" placeholder="输入答复" />
-          <button type="button" class="btn btn-primary" @click="answerOne(q.id)">提交</button>
+      <div v-if="retortStats.open" class="retort-banner" :class="retortStats.critical ? 'critical' : ''">
+        Retort 待澄清 {{ retortStats.open }} 条
+        <template v-if="retortStats.critical"> · 其中 {{ retortStats.critical }} 条即将超时</template>
+      </div>
+      <div v-for="q in questions" :key="String(q.id)" class="qa-item" :class="urgencyClass(q)">
+        <div class="qa-q">
+          <span v-if="isRetortQuestion(q)" class="retort-tag">Retort 澄清</span>
+          <span v-if="urgencyLabel(q)" class="urgency-tag" :class="urgencyClass(q)">{{ urgencyLabel(q) }}</span>
+          {{ q.question || q.content || q.title }}
+        </div>
+        <div class="qa-meta">
+          {{ q.employee_id || '—' }} · {{ q.asked_at || q.created_at || '' }}
+          <template v-if="countdownText(q)"> · {{ countdownText(q) }}</template>
+          <template v-else-if="q.expires_at"> · 截止 {{ q.expires_at }}</template>
+        </div>
+        <div v-if="structuredQuestions(q).length" class="qa-multi">
+          <div v-for="sub in structuredQuestions(q)" :key="String(sub.id)" class="qa-sub">
+            <label>{{ sub.question || sub.id }}</label>
+            <input
+              v-model="structuredAnswers[answerKey(q.id, sub.id)]"
+              type="text"
+              :placeholder="sub.blocking === false ? '可选补充' : '必答：确认意图/风险边界'"
+            />
+          </div>
+          <div class="qa-answer">
+            <input v-model="answers[String(q.id)]" type="text" placeholder="或统一答复（覆盖全部必答题）" />
+            <button type="button" class="btn btn-primary" @click="answerOne(q)">提交</button>
+          </div>
+        </div>
+        <div v-else class="qa-answer">
+          <input v-model="answers[String(q.id)]" type="text" placeholder="输入答复（确认意图/风险边界）" />
+          <button type="button" class="btn btn-primary" @click="answerOne(q)">提交</button>
         </div>
       </div>
       <div v-if="!questions.length" class="empty">暂无待答问题</div>
@@ -92,9 +118,12 @@ export default { name: 'EmployeeAutonomyView' }
 </script>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { xcmaxEmployeeAutonomyApi } from '@/api/xcmaxEmployeeAutonomy'
 import { appAlert, appPrompt } from '@/utils/appDialog'
+
+const route = useRoute()
 
 type Row = Record<string, any>
 
@@ -107,12 +136,85 @@ const questions = ref<Row[]>([])
 const scorecard = ref<Row[]>([])
 const selectedIds = ref<Array<string | number>>([])
 const answers = reactive<Record<string, string>>({})
+const structuredAnswers = reactive<Record<string, string>>({})
+const nowMs = ref(Date.now())
+const retortMeta = ref({ open: 0, critical: 0 })
+let tickTimer: ReturnType<typeof setInterval> | undefined
+
+const retortStats = computed(() => ({
+  open: Number(retortMeta.value.open || 0),
+  critical: Number(retortMeta.value.critical || 0),
+}))
 
 function formatRate(value: unknown) {
   if (value == null || value === '') return '—'
   const n = Number(value)
   if (Number.isNaN(n)) return String(value)
   return n <= 1 ? `${(n * 100).toFixed(1)}%` : `${n.toFixed(1)}%`
+}
+
+function isRetortQuestion(q: Row) {
+  const employee = String(q.employee_id || '')
+  const kind = String((q.context && q.context.kind) || q.source || '')
+  return employee === 'retort-clarification' || kind.includes('retort_clarification') || String(q.id || '').startsWith('retort:')
+}
+
+function structuredQuestions(q: Row): Row[] {
+  return Array.isArray(q.questions) ? q.questions.filter((item) => item && typeof item === 'object') : []
+}
+
+function answerKey(questionId: string | number, subId: unknown) {
+  return `${String(questionId)}::${String(subId || '')}`
+}
+
+function secondsRemaining(q: Row): number | null {
+  if (typeof q.seconds_remaining === 'number') {
+    const asked = q.asked_at || q.created_at
+    if (!asked || !q.expires_at) return Math.max(0, q.seconds_remaining)
+  }
+  const expires = String(q.expires_at || '').trim()
+  if (!expires) return typeof q.seconds_remaining === 'number' ? Math.max(0, q.seconds_remaining) : null
+  const end = new Date(expires).getTime()
+  if (Number.isNaN(end)) return typeof q.seconds_remaining === 'number' ? Math.max(0, q.seconds_remaining) : null
+  return Math.max(0, Math.floor((end - nowMs.value) / 1000))
+}
+
+function urgencyOf(q: Row): string {
+  const explicit = String(q.urgency || '')
+  if (explicit && explicit !== 'none') return explicit
+  const secs = secondsRemaining(q)
+  if (secs == null) return ''
+  if (secs <= 0) return 'expired'
+  if (secs <= 300) return 'critical'
+  if (secs <= 900) return 'soon'
+  return 'normal'
+}
+
+function urgencyClass(q: Row) {
+  const u = urgencyOf(q)
+  return u ? `urgency-${u}` : ''
+}
+
+function urgencyLabel(q: Row) {
+  const map: Record<string, string> = {
+    critical: '即将超时',
+    soon: '临近截止',
+    expired: '已过期',
+    normal: '待答',
+  }
+  return map[urgencyOf(q)] || ''
+}
+
+function countdownText(q: Row) {
+  const secs = secondsRemaining(q)
+  if (secs == null) return ''
+  if (secs <= 0) return '已到期'
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  if (h > 0) return `剩余 ${h}h ${m}m`
+  if (m > 0) return `剩余 ${m}m ${s}s`
+  return `剩余 ${s}s`
 }
 
 function asList(payload: unknown, keys: string[] = ['items', 'suggestions', 'questions', 'rows', 'data']): Row[] {
@@ -142,6 +244,12 @@ async function refresh() {
     suggestions.value = asList(sug)
     questions.value = asList(qs)
     scorecard.value = asList(sc)
+    const meta = (qs && typeof qs === 'object' ? qs : {}) as Record<string, unknown>
+    retortMeta.value = {
+      open: Number(meta.retort_open_count || 0),
+      critical: Number(meta.retort_critical_count || 0),
+    }
+    nowMs.value = Date.now()
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -189,16 +297,42 @@ async function batchApprove() {
   }
 }
 
-async function answerOne(id: string | number) {
-  const text = String(answers[String(id)] || '').trim()
-  if (!text) {
+async function answerOne(qOrId: Row | string | number) {
+  const q = typeof qOrId === 'object' && qOrId ? qOrId : { id: qOrId }
+  const id = q.id as string | number
+  const freeform = String(answers[String(id)] || '').trim()
+  const subs = structuredQuestions(q)
+  const perQuestion: Record<string, string> = {}
+  for (const sub of subs) {
+    const sid = String(sub.id || '')
+    if (!sid) continue
+    const text = String(structuredAnswers[answerKey(id, sid)] || '').trim()
+    if (text) perQuestion[sid] = text
+  }
+  const blockingIds = subs
+    .filter((sub) => sub.blocking !== false)
+    .map((sub) => String(sub.id || ''))
+    .filter(Boolean)
+  const missing = blockingIds.filter((sid) => !perQuestion[sid])
+  if (!freeform && missing.length) {
+    await appAlert(`请先回答全部必答题（还差 ${missing.length} 题），或填写统一答复`)
+    return
+  }
+  if (!freeform && !Object.keys(perQuestion).length) {
     await appAlert('请输入答复')
     return
   }
   acting.value = true
   try {
-    await xcmaxEmployeeAutonomyApi.answerQuestion(id, text)
+    await xcmaxEmployeeAutonomyApi.answerQuestion(
+      id,
+      freeform,
+      Object.keys(perQuestion).length ? perQuestion : undefined,
+    )
     answers[String(id)] = ''
+    for (const key of Object.keys(structuredAnswers)) {
+      if (key.startsWith(`${String(id)}::`)) structuredAnswers[key] = ''
+    }
     await refresh()
   } catch (e: unknown) {
     await appAlert(e instanceof Error ? e.message : String(e))
@@ -207,8 +341,28 @@ async function answerOne(id: string | number) {
   }
 }
 
+function applyTabFromRoute() {
+  const requested = String(route.query.tab || '')
+  if (requested === 'questions' || requested === 'scorecard' || requested === 'suggestions') {
+    tab.value = requested
+  }
+}
+
+watch(
+  () => route.query.tab,
+  () => applyTabFromRoute(),
+)
+
 onMounted(() => {
+  applyTabFromRoute()
   void refresh()
+  tickTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (tickTimer) clearInterval(tickTimer)
 })
 </script>
 
@@ -264,11 +418,56 @@ onMounted(() => {
 .empty { padding: 28px; text-align: center; color: #94a3b8; }
 .link { border: none; background: none; color: #1890ff; cursor: pointer; }
 .link.danger { color: #cf1322; }
-.qa-item { border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
-.qa-q { font-weight: 600; color: #172033; }
-.qa-meta { color: #94a3b8; font-size: 12px; margin: 4px 0 8px; }
-.qa-answer { display: flex; gap: 8px; }
-.qa-answer input {
-  flex: 1; border: 1px solid #d0d7e2; border-radius: 8px; padding: 8px 10px;
+.retort-banner {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  color: #ad6800;
+  font-size: 13px;
+  font-weight: 600;
 }
+.retort-banner.critical {
+  background: #fff1f0;
+  border-color: #ffa39e;
+  color: #cf1322;
+}
+.qa-item { border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.qa-item.urgency-critical { border-color: #ffa39e; background: #fffafa; }
+.qa-item.urgency-soon { border-color: #ffd591; background: #fffdf8; }
+.qa-item.urgency-expired { border-color: #d9d9d9; opacity: 0.85; }
+.qa-q { font-weight: 600; color: #172033; }
+.retort-tag,
+.urgency-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.retort-tag {
+  background: #fff7e6;
+  color: #d46b08;
+  border: 1px solid #ffd591;
+}
+.urgency-tag.urgency-critical { background: #fff1f0; color: #cf1322; border: 1px solid #ffa39e; }
+.urgency-tag.urgency-soon { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; }
+.urgency-tag.urgency-expired { background: #f5f5f5; color: #8c8c8c; border: 1px solid #d9d9d9; }
+.urgency-tag.urgency-normal { background: #e6f4ff; color: #0958d9; border: 1px solid #91caff; }
+.qa-meta { color: #94a3b8; font-size: 12px; margin: 4px 0 8px; }
+.qa-multi { display: grid; gap: 8px; }
+.qa-sub { display: grid; gap: 4px; }
+.qa-sub label { font-size: 12px; color: #475569; font-weight: 600; }
+.qa-sub input,
+.qa-answer input {
+  width: 100%;
+  border: 1px solid #d0d7e2;
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+.qa-answer { display: flex; gap: 8px; margin-top: 4px; }
+.qa-answer input { flex: 1; }
 </style>

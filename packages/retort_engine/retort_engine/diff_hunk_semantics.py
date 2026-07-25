@@ -4,12 +4,39 @@ import re
 from typing import Any
 
 
-CONTROL_FLOW_MARKERS = ("except ", "try:", "subprocess.", "requests.", "thread", "process", "timeout", "publish", "create_review")
-VALIDATION_MARKERS = ("validate", "sanitize", "permission", "auth", "token", "secret", "assert", "raise", "check")
-WRITE_PERMISSION_MARKERS = ("pull_request_target", "pull-requests: write", "contents: write", "issues: write")
+CONTROL_FLOW_MARKERS = (
+    "except ",
+    "try:",
+    "subprocess.",
+    "requests.",
+    "thread",
+    "process",
+    "timeout",
+    "publish",
+    "create_review",
+)
+VALIDATION_MARKERS = (
+    "validate",
+    "sanitize",
+    "permission",
+    "auth",
+    "token",
+    "secret",
+    "assert",
+    "raise",
+    "check",
+)
+WRITE_PERMISSION_MARKERS = (
+    "pull_request_target",
+    "pull-requests: write",
+    "contents: write",
+    "issues: write",
+)
 
 
-def analyze_hunk_semantics(file_path: str, hunk: dict[str, Any], review_context: str) -> dict[str, Any]:
+def analyze_hunk_semantics(
+    file_path: str, hunk: dict[str, Any], review_context: str
+) -> dict[str, Any]:
     """Classify behavior changes by comparing added lines with deleted/context lines inside one diff hunk."""
     changes = [item for item in hunk.get("changes") or [] if isinstance(item, dict)]
     added = [_line(item) for item in changes if item.get("type") == "add"]
@@ -17,9 +44,13 @@ def analyze_hunk_semantics(file_path: str, hunk: dict[str, Any], review_context:
     context = [_line(item) for item in changes if item.get("type") == "context"]
     findings: list[dict[str, Any]] = []
     findings.extend(_permission_broadening(file_path, added, context, review_context))
-    findings.extend(_validation_regression(file_path, added, deleted, context, review_context))
+    findings.extend(
+        _validation_regression(file_path, added, deleted, context, review_context)
+    )
     findings.extend(_test_weakening(file_path, added, deleted, review_context))
-    findings.extend(_crash_or_timeout_regression(file_path, added, context, review_context))
+    findings.extend(
+        _crash_or_timeout_regression(file_path, added, context, review_context)
+    )
     findings.extend(_absorbed_token_rules(added, review_context))
     return {
         "status": "semantic_findings" if findings else "no_semantic_regression",
@@ -30,27 +61,49 @@ def analyze_hunk_semantics(file_path: str, hunk: dict[str, Any], review_context:
         "deleted_line_count": len(deleted),
         "context_line_count": len(context),
         "finding_count": len(findings),
-        "max_confidence": max([int(item.get("confidence") or 0) for item in findings] or [0]),
+        "max_confidence": max(
+            [int(item.get("confidence") or 0) for item in findings] or [0]
+        ),
         "findings": findings,
     }
 
 
 def summarize_hunk_semantics(analyses: list[dict[str, Any]]) -> dict[str, Any]:
-    findings = [finding for item in analyses for finding in item.get("findings") or [] if isinstance(finding, dict)]
-    types = sorted({str(item.get("type") or "") for item in findings if item.get("type")})
-    contexts = sorted({str(item.get("review_context") or "") for item in findings if item.get("review_context")})
+    findings = [
+        finding
+        for item in analyses
+        for finding in item.get("findings") or []
+        if isinstance(finding, dict)
+    ]
+    types = sorted(
+        {str(item.get("type") or "") for item in findings if item.get("type")}
+    )
+    contexts = sorted(
+        {
+            str(item.get("review_context") or "")
+            for item in findings
+            if item.get("review_context")
+        }
+    )
     return {
         "status": "active" if findings else "no_findings",
         "hunk_analysis_count": len(analyses),
         "finding_count": len(findings),
         "finding_types": types,
         "review_contexts": contexts,
-        "max_confidence": max([int(item.get("confidence") or 0) for item in findings] or [0]),
+        "max_confidence": max(
+            [int(item.get("confidence") or 0) for item in findings] or [0]
+        ),
         "core_behavior_active": bool(findings),
     }
 
 
-def _permission_broadening(file_path: str, added: list[dict[str, Any]], context: list[dict[str, Any]], review_context: str) -> list[dict[str, Any]]:
+def _permission_broadening(
+    file_path: str,
+    added: list[dict[str, Any]],
+    context: list[dict[str, Any]],
+    review_context: str,
+) -> list[dict[str, Any]]:
     joined_added = "\n".join(item["lowered"] for item in added)
     joined_context = "\n".join(item["lowered"] for item in context)
     if not any(marker in joined_added for marker in WRITE_PERMISSION_MARKERS):
@@ -80,11 +133,17 @@ def _validation_regression(
 ) -> list[dict[str, Any]]:
     if review_context == "tests" or "test" in file_path.replace("\\", "/").lower():
         return []
-    deleted_validation = [item for item in deleted if any(marker in item["lowered"] for marker in VALIDATION_MARKERS)]
+    deleted_validation = [
+        item
+        for item in deleted
+        if any(marker in item["lowered"] for marker in VALIDATION_MARKERS)
+    ]
     added_bypass = [
         item
         for item in added
-        if re.search(r"\b(pass|return\s+true|return\s+none|continue)\b", item["lowered"])
+        if re.search(
+            r"\b(pass|return\s+true|return\s+none|continue)\b", item["lowered"]
+        )
         or "create_review" in item["lowered"]
         or "publish(" in item["lowered"]
     ]
@@ -106,12 +165,26 @@ def _validation_regression(
     ]
 
 
-def _test_weakening(file_path: str, added: list[dict[str, Any]], deleted: list[dict[str, Any]], review_context: str) -> list[dict[str, Any]]:
+def _test_weakening(
+    file_path: str,
+    added: list[dict[str, Any]],
+    deleted: list[dict[str, Any]],
+    review_context: str,
+) -> list[dict[str, Any]]:
     normalized = file_path.replace("\\", "/").lower()
     if review_context != "tests" and "test" not in normalized:
         return []
-    removed_asserts = [item for item in deleted if "assert" in item["lowered"] or "expect(" in item["lowered"]]
-    added_weakening = [item for item in added if re.search(r"\b(pass|return\s+true)\b", item["lowered"]) or "skip" in item["lowered"]]
+    removed_asserts = [
+        item
+        for item in deleted
+        if "assert" in item["lowered"] or "expect(" in item["lowered"]
+    ]
+    added_weakening = [
+        item
+        for item in added
+        if re.search(r"\b(pass|return\s+true)\b", item["lowered"])
+        or "skip" in item["lowered"]
+    ]
     if not removed_asserts or not added_weakening:
         return []
     return [
@@ -128,7 +201,9 @@ def _test_weakening(file_path: str, added: list[dict[str, Any]], deleted: list[d
     ]
 
 
-def _absorbed_token_rules(added: list[dict[str, Any]], review_context: str) -> list[dict[str, Any]]:
+def _absorbed_token_rules(
+    added: list[dict[str, Any]], review_context: str
+) -> list[dict[str, Any]]:
     from retort_engine.absorbed_hunk_semantic_rules import match_absorbed_hunk_findings
 
     texts = [str(item.get("text") or "") for item in added]
@@ -136,16 +211,29 @@ def _absorbed_token_rules(added: list[dict[str, Any]], review_context: str) -> l
     resolved: list[dict[str, Any]] = []
     for finding in findings:
         index = int(finding.get("line") or 0) - 1
-        line = int(added[index]["line"] or 0) if 0 <= index < len(added) else int(added[0]["line"] or 0) if added else 0
+        line = (
+            int(added[index]["line"] or 0)
+            if 0 <= index < len(added)
+            else int(added[0]["line"] or 0)
+            if added
+            else 0
+        )
         resolved.append({**finding, "line": line})
     return resolved
 
 
-def _crash_or_timeout_regression(file_path: str, added: list[dict[str, Any]], context: list[dict[str, Any]], review_context: str) -> list[dict[str, Any]]:
+def _crash_or_timeout_regression(
+    file_path: str,
+    added: list[dict[str, Any]],
+    context: list[dict[str, Any]],
+    review_context: str,
+) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     for item in added:
         lowered = item["lowered"]
-        if ("subprocess.run" in lowered or "requests." in lowered) and "timeout" not in lowered:
+        if (
+            "subprocess.run" in lowered or "requests." in lowered
+        ) and "timeout" not in lowered:
             findings.append(
                 _finding(
                     "missing_timeout",
@@ -158,7 +246,10 @@ def _crash_or_timeout_regression(file_path: str, added: list[dict[str, Any]], co
                 )
             )
         if "except exception" in lowered:
-            pass_like = any(re.search(r"\b(pass|return\s+none|continue)\b", later["lowered"]) for later in added)
+            pass_like = any(
+                re.search(r"\b(pass|return\s+none|continue)\b", later["lowered"])
+                for later in added
+            )
             if pass_like:
                 findings.append(
                     _finding(
@@ -174,7 +265,9 @@ def _crash_or_timeout_regression(file_path: str, added: list[dict[str, Any]], co
     return findings[:2]
 
 
-def _semantic_context(review_context: str, file_path: str, context: list[dict[str, Any]]) -> str:
+def _semantic_context(
+    review_context: str, file_path: str, context: list[dict[str, Any]]
+) -> str:
     if review_context and review_context != "other":
         return review_context
     normalized = file_path.replace("\\", "/").lower()
@@ -183,7 +276,10 @@ def _semantic_context(review_context: str, file_path: str, context: list[dict[st
         return "ci_config"
     if "test" in normalized:
         return "tests"
-    if any(marker in normalized or marker in joined_context for marker in ("auth", "token", "secret", "permission")):
+    if any(
+        marker in normalized or marker in joined_context
+        for marker in ("auth", "token", "secret", "permission")
+    ):
         return "security"
     if any(marker in joined_context for marker in CONTROL_FLOW_MARKERS):
         return "runtime"
@@ -226,4 +322,8 @@ def _first_line(lines: list[dict[str, Any]], markers: tuple[str, ...]) -> int:
 
 
 def _matching_texts(lines: list[dict[str, Any]], markers: tuple[str, ...]) -> list[str]:
-    return [item["text"] for item in lines if any(marker in item["lowered"] for marker in markers)][:4]
+    return [
+        item["text"]
+        for item in lines
+        if any(marker in item["lowered"] for marker in markers)
+    ][:4]

@@ -74,8 +74,19 @@ def _load_retort_alignment() -> Callable[..., dict[str, Any]]:
 
 
 def _retort_result(
-    changed_files: Sequence[Any], strategy_intent: str
-) -> tuple[dict[str, Any], list[str]]:
+    changed_files: Sequence[Any],
+    strategy_intent: str,
+    *,
+    proposal_id: str = "",
+    run_id: str = "",
+    package_id: str = "",
+    change_request_id: int | None = None,
+) -> tuple[dict[str, Any], list[str], str]:
+    """Evaluate Retort seat with clarification gate.
+
+    Returns ``(role_payload, blockers, effective_strategy_intent)``.
+    """
+
     blockers: list[str] = []
     normalized: list[dict[str, Any]] = []
     for item in changed_files:
@@ -94,21 +105,69 @@ def _retort_result(
                 )
     if not normalized:
         blockers.append("retort_changed_files_missing")
-    if not strategy_intent:
+
+    effective_intent = strategy_intent
+    clarification: dict[str, Any] = {}
+    try:
+        from modstore_server.retort_clarification_gate import (
+            evaluate_retort_clarification_gate,
+            gate_enabled,
+        )
+
+        if gate_enabled():
+            gate = evaluate_retort_clarification_gate(
+                strategy_intent=strategy_intent,
+                changed_files=normalized,
+                change_request_id=change_request_id,
+                proposal_id=proposal_id,
+                run_id=run_id,
+                package_id=package_id,
+                auto_open=True,
+            )
+            effective_intent = _text(gate.get("effective_strategy_intent") or strategy_intent, 4000)
+            clarification = (
+                gate.get("clarification") if isinstance(gate.get("clarification"), dict) else {}
+            )
+            blockers.extend(list(gate.get("blockers") or []))
+            assessment = gate.get("assessment") if isinstance(gate.get("assessment"), dict) else {}
+            engine_available = True
+        else:
+            raise RuntimeError("clarification_gate_disabled")
+    except Exception:
+        # Fallback to legacy keyword alignment when gate import/runtime fails.
+        if not strategy_intent:
+            blockers.append("retort_strategy_intent_missing")
+        try:
+            assess = _load_retort_alignment()
+            assessment = assess(normalized, issue_context=strategy_intent)
+            engine_available = True
+        except Exception as exc:  # noqa: BLE001 - engine failures must become a closed gate
+            assessment = {"status": "engine_unavailable", "error": type(exc).__name__}
+            engine_available = False
+            blockers.append("retort_engine_unavailable")
+        if engine_available and assessment.get("status") != "aligned":
+            blockers.append("retort_intent_misaligned")
+
+    if not effective_intent and "retort_strategy_intent_missing" not in blockers:
         blockers.append("retort_strategy_intent_missing")
 
-    try:
-        assess = _load_retort_alignment()
-        assessment = assess(normalized, issue_context=strategy_intent)
-        engine_available = True
-    except Exception as exc:  # noqa: BLE001 - engine failures must become a closed gate
-        assessment = {"status": "engine_unavailable", "error": type(exc).__name__}
-        engine_available = False
-        blockers.append("retort_engine_unavailable")
+    aligned = (
+        engine_available
+        and assessment.get("status") == "aligned"
+        and "retort_clarification_pending" not in blockers
+        and "retort_clarification_expired" not in blockers
+        and "retort_clarification_cancelled" not in blockers
+        and "retort_intent_misaligned" not in blockers
+        and "retort_engine_unavailable" not in blockers
+    )
+    if engine_available and assessment.get("status") != "aligned":
+        if (
+            "retort_intent_misaligned" not in blockers
+            and "retort_clarification_pending" not in blockers
+        ):
+            blockers.append("retort_intent_misaligned")
 
-    aligned = engine_available and assessment.get("status") == "aligned"
-    if engine_available and not aligned:
-        blockers.append("retort_intent_misaligned")
+    blockers = list(dict.fromkeys(blockers))
     summary = assessment.get("summary") if isinstance(assessment.get("summary"), dict) else {}
     return (
         {
@@ -118,8 +177,13 @@ def _retort_result(
             "overlap_keyword_count": int(summary.get("overlap_keyword_count") or 0),
             "changed_file_count": len(normalized),
             "changed_files_sha256": _digest([item["path"] for item in normalized]),
+            "clarification_status": _text(clarification.get("status"), 32),
+            "clarification_session_id": _text(clarification.get("session_id"), 128),
+            "clarification_question_count": len(clarification.get("questions") or []),
+            "effective_strategy_intent_sha256": _digest(effective_intent),
         },
         blockers,
+        effective_intent,
     )
 
 
@@ -287,6 +351,7 @@ def build_strategic_council_receipt(
     persy_evidence: Mapping[str, Any],
     para_evidence: Mapping[str, Any],
     veto_state: Mapping[str, Any],
+    change_request_id: int | None = None,
 ) -> dict[str, Any]:
     """Validate the three seats and append one content-addressed receipt."""
 
@@ -319,7 +384,14 @@ def build_strategic_council_receipt(
         loop_run_id=loop_run_id,
         para_task_id=para_task_id,
     )
-    retort, retort_blockers = _retort_result(changed_files, strategy_intent)
+    retort, retort_blockers, effective_intent = _retort_result(
+        changed_files,
+        strategy_intent,
+        proposal_id=proposal_id,
+        run_id=run_id,
+        package_id=package_id,
+        change_request_id=change_request_id,
+    )
     veto, veto_blockers = _veto_result(veto_state)
     blockers.extend(persy_blockers + para_blockers + retort_blockers + veto_blockers)
     blockers = list(dict.fromkeys(blockers))
@@ -334,6 +406,7 @@ def build_strategic_council_receipt(
         "loop_run_id": loop_run_id,
         "para_task_id": para_task_id,
         "strategy_intent_sha256": _digest(strategy_intent),
+        "effective_strategy_intent_sha256": _digest(effective_intent),
         "persy_evidence_sha256": persy["evidence_sha256"],
         "para_evidence_sha256": para["evidence_sha256"],
         "retort_evidence_sha256": _digest(retort),
@@ -548,6 +621,18 @@ def _public_receipt(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def strategic_council_status(*, limit: int = 20) -> dict[str, Any]:
+    clarification_summary: dict[str, Any] = {}
+    try:
+        from modstore_server.retort_clarification_gate import (
+            list_clarifications,
+            sweep_expired_clarifications,
+        )
+
+        sweep_expired_clarifications()
+        clarification_summary = list_clarifications(include_terminal=False, limit=20)
+    except Exception as exc:  # noqa: BLE001 - status must still return council ledger
+        clarification_summary = {"ok": False, "error": type(exc).__name__, "open_count": 0}
+
     path = strategic_council_ledger_path()
     if not path.is_file():
         return {
@@ -561,6 +646,7 @@ def strategic_council_status(*, limit: int = 20) -> dict[str, Any]:
             "roles": {},
             "latest_receipt": {},
             "recent_receipts": [],
+            "retort_clarifications": clarification_summary,
         }
     with path.open("r", encoding="utf-8") as file_obj:
         rows = _read_rows_unlocked(file_obj)
@@ -580,6 +666,7 @@ def strategic_council_status(*, limit: int = 20) -> dict[str, Any]:
         "roles": roles,
         "latest_receipt": _public_receipt(latest) if latest else {},
         "recent_receipts": [_public_receipt(row) for row in rows[-bounded:]],
+        "retort_clarifications": clarification_summary,
     }
 
 

@@ -105,7 +105,13 @@ def build_founder_autonomy_snapshot(
     pending_total = local_pending + strategic_pending
     knowledge_documents = _first_number(
         knowledge,
-        ("documents", "document_count", "indexed_documents", "sources", "indexed_sources"),
+        (
+            "documents",
+            "document_count",
+            "indexed_documents",
+            "sources",
+            "indexed_sources",
+        ),
     )
     knowledge_chunks = _first_number(knowledge, ("chunks", "chunk_count", "indexed_chunks"))
 
@@ -293,6 +299,14 @@ def build_founder_autonomy_snapshot(
     modstore_deployed = any(_is_strong_modstore_deployment(row) for row in all_rows)
     council_roles = _as_dict(strategic_council.get("roles"))
     council_latest = _as_dict(strategic_council.get("latest_receipt"))
+    retort_clarifications = _as_dict(strategic_council.get("retort_clarifications"))
+    retort_open = _as_int(retort_clarifications.get("open_count"))
+    retort_critical = _as_int(retort_clarifications.get("critical_count"))
+    retort_healthy = (
+        bool(retort_clarifications.get("healthy"))
+        if "healthy" in retort_clarifications
+        else retort_open == 0
+    )
     council_ready = (
         bool(strategic_council.get("ready"))
         and all(
@@ -341,6 +355,8 @@ def build_founder_autonomy_snapshot(
         planned=planned,
         proven_employees=proven_employees,
         shell_employees=shell_employees,
+        retort_open=retort_open,
+        retort_critical=retort_critical,
     )
 
     return {
@@ -354,6 +370,7 @@ def build_founder_autonomy_snapshot(
             "total": sum(_as_int(item.get("count")) for item in attention_items),
             "items": attention_items,
             "human_intervention_rare": pending_total <= 5
+            and retort_open == 0
             and governance_clear
             and workforce_ready
             and runtime_provenance_ok,
@@ -423,15 +440,24 @@ def build_founder_autonomy_snapshot(
             "strategic_council_receipts": _as_int(strategic_council.get("verified_receipt_count")),
             "strategic_council_roles": council_roles,
             "strategic_council_latest": council_latest,
+            "retort_clarifications_open": retort_open,
+            "retort_clarifications_critical": retort_critical,
+            "retort_clarifications_healthy": retort_healthy,
         },
         "truth_domains": {
             "source_capability": {"available": True, "label": "当前源码能力"},
-            "local_runtime": {"available": bool(runtime.get("ok")), "label": "本机实际运行"},
+            "local_runtime": {
+                "available": bool(runtime.get("ok")),
+                "label": "本机实际运行",
+            },
             "deployment_runtime": {
                 "available": real_deploy_dispatched or deploy_attempted,
                 "label": "部署派发/验证",
             },
-            "production_value": {"available": outcome_verified, "label": "真实客户付费与价值"},
+            "production_value": {
+                "available": outcome_verified,
+                "label": "真实客户付费与价值",
+            },
         },
     }
 

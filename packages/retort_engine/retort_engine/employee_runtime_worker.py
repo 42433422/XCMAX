@@ -25,11 +25,18 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
     worker_review = _write_worker_review_artifact(payload, output_path)
     patch_closure = _run_patch_closure(payload, output_path)
     patch_closure_ready = not patch_closure or patch_closure.get("status") == "ready"
-    synthesis_ready = synthesis.get("status") in {"synthesized", "skipped_no_external", "not_requested"}
+    synthesis_ready = synthesis.get("status") in {
+        "synthesized",
+        "skipped_no_external",
+        "not_requested",
+    }
     task_results = []
     for task in tasks:
-        completed = gates_passed and patch_closure_ready and synthesis_ready and (
-            synthesis.get("status") != "failed"
+        completed = (
+            gates_passed
+            and patch_closure_ready
+            and synthesis_ready
+            and (synthesis.get("status") != "failed")
         )
         task_results.append(
             {
@@ -57,7 +64,10 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"behavior_synthesis_files={','.join(str(item) for item in synthesis.get('changed_files') or [])}",
                     "employee_execution_mode=independent_synthesis_runtime",
                 ],
-                "score_after": {"employee_execution_integration": 95.0 if completed else 70.0, "feedback_loop_closure": 95.0 if completed else 70.0},
+                "score_after": {
+                    "employee_execution_integration": 95.0 if completed else 70.0,
+                    "feedback_loop_closure": 95.0 if completed else 70.0,
+                },
             }
         )
     result = {
@@ -78,7 +88,10 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
         },
         "results": task_results,
     }
-    output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     history_store = str(payload.get("history_store") or "")
     if history_store:
         store = RetortHistoryStore(history_store)
@@ -89,20 +102,31 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     status=str(item.get("status") or ""),
                     summary=str(item.get("summary") or ""),
                     evidence=tuple(str(row) for row in item.get("evidence") or []),
-                    score_after={str(k): float(v) for k, v in (item.get("score_after") or {}).items()},
+                    score_after={
+                        str(k): float(v)
+                        for k, v in (item.get("score_after") or {}).items()
+                    },
                 )
             )
     return result
 
 
-def _apply_behavior_synthesis(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
+def _apply_behavior_synthesis(
+    payload: dict[str, Any], output_path: Path
+) -> dict[str, Any]:
     request = payload.get("behavior_synthesis")
     if request is False:
         return {"status": "not_requested", "changed_files": []}
-    project = Path(str(payload.get("project") or payload.get("own_project") or "")).expanduser()
+    project = Path(
+        str(payload.get("project") or payload.get("own_project") or "")
+    ).expanduser()
     external = Path(str(payload.get("external_path") or "")).expanduser()
     if not str(project) or not project.is_dir():
-        project = (output_path.parents[2] if len(output_path.parents) > 2 else output_path.parent).resolve()
+        project = (
+            output_path.parents[2]
+            if len(output_path.parents) > 2
+            else output_path.parent
+        ).resolve()
     if not external.is_dir():
         return {"status": "skipped_no_external", "changed_files": []}
     from retort_engine.absorption_synthesizer import synthesize_behavior_absorption
@@ -112,28 +136,45 @@ def _apply_behavior_synthesis(payload: dict[str, Any], output_path: Path) -> dic
             project,
             source=str(payload.get("source") or ""),
             external_path=external,
-            tasks=[item for item in payload.get("tasks") or [] if isinstance(item, dict)],
+            tasks=[
+                item for item in payload.get("tasks") or [] if isinstance(item, dict)
+            ],
             run_id=str(payload.get("run_id") or "employee-runtime"),
         )
         artifact = output_path.with_suffix(".behavior_synthesis.json")
-        artifact.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        artifact.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         result["artifact"] = str(artifact)
         return result
     except Exception as exc:  # noqa: BLE001 - worker must report failure without crashing the parent
         return {"status": "failed", "error": str(exc), "changed_files": []}
 
 
-def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: Path) -> dict[str, Any]:
+def _process_boundary(
+    payload: dict[str, Any], payload_path: Path, output_path: Path
+) -> dict[str, Any]:
     expected_parent_pid = int(payload.get("parent_pid") or 0)
     worker_pid = os.getpid()
     parent_pid = os.getppid()
     payload_nonce = str(payload.get("runtime_context_nonce") or "")
-    expected_payload_path = Path(str(payload.get("payload_path") or payload_path)).expanduser().resolve()
-    expected_output_path = Path(str(payload.get("output_path") or output_path)).expanduser().resolve()
-    payload_path_verified = payload_path == expected_payload_path and payload_path.is_file()
+    expected_payload_path = (
+        Path(str(payload.get("payload_path") or payload_path)).expanduser().resolve()
+    )
+    expected_output_path = (
+        Path(str(payload.get("output_path") or output_path)).expanduser().resolve()
+    )
+    payload_path_verified = (
+        payload_path == expected_payload_path and payload_path.is_file()
+    )
     result_path_verified = output_path.expanduser().resolve() == expected_output_path
     crash_probe = _crash_isolation_probe(payload)
-    crash_required = bool((payload.get("crash_isolation_probe") or {}).get("enabled")) if isinstance(payload.get("crash_isolation_probe"), dict) else False
+    crash_required = (
+        bool((payload.get("crash_isolation_probe") or {}).get("enabled"))
+        if isinstance(payload.get("crash_isolation_probe"), dict)
+        else False
+    )
     crash_verified = not crash_required or bool(crash_probe.get("verified"))
     return {
         "runtime_boundary": "subprocess_payload_file_contract",
@@ -141,7 +182,8 @@ def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: 
         "parent_pid": parent_pid,
         "expected_parent_pid": expected_parent_pid,
         "pid_differs_from_parent": worker_pid != expected_parent_pid,
-        "parent_pid_matches_launcher": expected_parent_pid == 0 or parent_pid == expected_parent_pid,
+        "parent_pid_matches_launcher": expected_parent_pid == 0
+        or parent_pid == expected_parent_pid,
         "payload_path": str(payload_path),
         "expected_payload_path": str(expected_payload_path),
         "payload_path_verified": payload_path_verified,
@@ -152,7 +194,11 @@ def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: 
         "payload_nonce_verified": bool(payload_nonce),
         "crash_isolation_probe": crash_probe,
         "crash_isolation_verified": crash_verified,
-        "runtime_boundary_verified": payload_path_verified and result_path_verified and bool(payload_nonce) and worker_pid != expected_parent_pid and crash_verified,
+        "runtime_boundary_verified": payload_path_verified
+        and result_path_verified
+        and bool(payload_nonce)
+        and worker_pid != expected_parent_pid
+        and crash_verified,
     }
 
 
@@ -186,7 +232,9 @@ def _run_patch_closure(payload: dict[str, Any], output_path: Path) -> dict[str, 
 
     project = _patch_closure_project(payload, request, output_path)
     output = output_path.with_suffix(".patch_closure.json")
-    result = run_employee_patch_closure_suite(project, output=output, run_id=str(payload.get("run_id") or "employee-runtime"))
+    result = run_employee_patch_closure_suite(
+        project, output=output, run_id=str(payload.get("run_id") or "employee-runtime")
+    )
     safety = probe_timeout_kills_child(timeout_sec=0.4)
     if isinstance(result, dict):
         result = {
@@ -200,20 +248,37 @@ def _run_patch_closure(payload: dict[str, Any], output_path: Path) -> dict[str, 
     return result
 
 
-def _patch_closure_project(payload: dict[str, Any], request: dict[str, Any], output_path: Path) -> Path:
+def _patch_closure_project(
+    payload: dict[str, Any], request: dict[str, Any], output_path: Path
+) -> Path:
     project = request.get("project") or payload.get("project")
     if project:
         return Path(str(project)).expanduser().resolve()
-    return (output_path.parents[2] if len(output_path.parents) > 2 else output_path.parent).expanduser().resolve()
+    return (
+        (output_path.parents[2] if len(output_path.parents) > 2 else output_path.parent)
+        .expanduser()
+        .resolve()
+    )
 
 
-def _write_worker_review_artifact(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
+def _write_worker_review_artifact(
+    payload: dict[str, Any], output_path: Path
+) -> dict[str, Any]:
     diff_text = str(payload.get("diff_text") or "")
     if not diff_text.strip():
-        return {"status": "no_diff", "artifact": "", "comment_count": 0, "file_count": 0, "task_group_count": 0}
+        return {
+            "status": "no_diff",
+            "artifact": "",
+            "comment_count": 0,
+            "file_count": 0,
+            "task_group_count": 0,
+        }
     review = review_diff(diff_text, max_comments=12)
     artifact_path = output_path.with_suffix(".worker_review.json")
-    artifact_path.write_text(json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    artifact_path.write_text(
+        json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return {
         "status": str(review.get("status") or ""),
         "artifact": str(artifact_path),
@@ -227,7 +292,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="retort-employee-runtime-worker")
     parser.add_argument("--payload-file", required=True)
     args = parser.parse_args(argv)
-    print(json.dumps(write_employee_runtime_results(args.payload_file), ensure_ascii=False, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            write_employee_runtime_results(args.payload_file),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 

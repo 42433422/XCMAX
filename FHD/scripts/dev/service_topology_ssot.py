@@ -83,9 +83,13 @@ def compute_model(src: dict[str, Any]) -> dict[str, Any]:
         if svc.get("listen_port") is not None:
             port_consts.append((f"{cid}_LISTEN_PORT", int(svc["listen_port"])))
         if svc.get("nginx_upstream_port") is not None:
-            port_consts.append((f"{cid}_UPSTREAM_PORT", int(svc["nginx_upstream_port"])))
+            port_consts.append(
+                (f"{cid}_UPSTREAM_PORT", int(svc["nginx_upstream_port"]))
+            )
 
-    must_run = [str(p["name"]) for p in (src.get("processes") or []) if p.get("must_run")]
+    must_run = [
+        str(p["name"]) for p in (src.get("processes") or []) if p.get("must_run")
+    ]
 
     return {
         "host": host,
@@ -96,6 +100,7 @@ def compute_model(src: dict[str, Any]) -> dict[str, Any]:
         "services": services,
         "nginx_routes": src.get("nginx_routes") or [],
         "processes": src.get("processes") or [],
+        "systemd_units": src.get("systemd_units") or [],
         "env_overrides": src.get("env_overrides") or {},
     }
 
@@ -106,7 +111,11 @@ def _ts_array(items: list[str]) -> str:
 
 
 def render_python(m: dict[str, Any]) -> str:
-    lines = [PY_HEADER, '"""服务拓扑常量（派生自 SSOT，零业务依赖，可被任意层 import）。"""', ""]
+    lines = [
+        PY_HEADER,
+        '"""服务拓扑常量（派生自 SSOT，零业务依赖，可被任意层 import）。"""',
+        "",
+    ]
     lines.append(f'PRODUCTION_HOST = "{m["host"]}"')
     lines.append(f'PRODUCTION_SCHEME = "{m["scheme"]}"')
     lines.append("")
@@ -133,7 +142,9 @@ def render_ts(m: dict[str, Any]) -> str:
     for name, val in m["port_consts"]:
         lines.append(f"export const {name} = {val};")
     lines.append("")
-    lines.append(f"export const MUST_RUN_PROCESSES: string[] = {_ts_array(m['must_run'])};")
+    lines.append(
+        f"export const MUST_RUN_PROCESSES: string[] = {_ts_array(m['must_run'])};"
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -144,7 +155,11 @@ def _dart_name(name: str) -> str:
 
 
 def render_dart(m: dict[str, Any]) -> str:
-    lines = [JS_HEADER, "class XcagiMobileTopology {", "  const XcagiMobileTopology._();"]
+    lines = [
+        JS_HEADER,
+        "class XcagiMobileTopology {",
+        "  const XcagiMobileTopology._();",
+    ]
     lines.append(f"  static const productionHost = '{m['host']}';")
     lines.append(f"  static const productionScheme = '{m['scheme']}';")
     for name, val in m["url_consts"]:
@@ -167,6 +182,7 @@ def render_json(m: dict[str, Any]) -> str:
         "services": m["services"],
         "nginx_routes": m["nginx_routes"],
         "processes": m["processes"],
+        "systemd_units": m["systemd_units"],
         "must_run_processes": m["must_run"],
         "env_overrides": m["env_overrides"],
     }
@@ -226,7 +242,8 @@ def cmd_generate(*, apply: bool, only: str | None) -> int:
     targets = [t for t in TARGETS if only is None or t[0] == only]
     if only is not None and not targets:
         print(
-            f"未知 --target '{only}'（可选: {', '.join(t[0] for t in TARGETS)}）", file=sys.stderr
+            f"未知 --target '{only}'（可选: {', '.join(t[0] for t in TARGETS)}）",
+            file=sys.stderr,
         )
         return EXIT_CONFIG
 

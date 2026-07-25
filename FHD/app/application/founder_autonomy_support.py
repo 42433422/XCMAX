@@ -335,6 +335,8 @@ def _build_attention_items(
     planned: int,
     proven_employees: int,
     shell_employees: int,
+    retort_open: int = 0,
+    retort_critical: int = 0,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     if local_pending:
@@ -344,6 +346,19 @@ def _build_attention_items(
                 "count": local_pending,
                 "label": "本地审批待处理",
                 "route": "approval-hub",
+            }
+        )
+    if retort_open:
+        label = "Retort 待澄清（Boss 问答）"
+        if retort_critical:
+            label = f"Retort 待澄清（{retort_critical} 条即将超时）"
+        items.append(
+            {
+                "kind": "retort_clarification",
+                "count": retort_open,
+                "label": label,
+                "route": "employee-autonomy",
+                "query": {"tab": "questions"},
             }
         )
     if strategic_pending:

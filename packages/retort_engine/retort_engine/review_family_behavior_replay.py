@@ -30,7 +30,7 @@ FAMILY_CASES: tuple[dict[str, str], ...] = (
         "case_id": "typescript_secret_config",
         "source_project": "mopemope/pr-ai-review-bot",
         "language_family": "typescript",
-        "diff": "diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -0,0 +1 @@\n+export const GITHUB_TOKEN = \"live-secret-value\";\n",
+        "diff": 'diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -0,0 +1 @@\n+export const GITHUB_TOKEN = "live-secret-value";\n',
         "expected_context": "security",
         "expected_severity": "high",
     },
@@ -62,13 +62,25 @@ def build_review_family_behavior_replay(
         "language_families": language_families,
         "source_project_count": len(source_projects),
         "source_projects": source_projects,
-        "typescript_case_count": sum(1 for case in cases if case["language_family"] == "typescript"),
-        "python_case_count": sum(1 for case in cases if case["language_family"] == "python"),
-        "all_before_failed_after_passed": bool(cases) and all(case["before_failed_after_passed"] for case in cases),
-        "all_direct_review_outputs_verified": bool(cases) and all(case["post_absorption"]["output_assertions_passed"] for case in cases),
-        "publishable_case_count": sum(1 for case in cases if case["post_absorption"]["publishable_comment_count"] > 0),
+        "typescript_case_count": sum(
+            1 for case in cases if case["language_family"] == "typescript"
+        ),
+        "python_case_count": sum(
+            1 for case in cases if case["language_family"] == "python"
+        ),
+        "all_before_failed_after_passed": bool(cases)
+        and all(case["before_failed_after_passed"] for case in cases),
+        "all_direct_review_outputs_verified": bool(cases)
+        and all(case["post_absorption"]["output_assertions_passed"] for case in cases),
+        "publishable_case_count": sum(
+            1
+            for case in cases
+            if case["post_absorption"]["publishable_comment_count"] > 0
+        ),
         "independent_adjudication_status": adjudication["status"],
-        "independent_accepted_case_count": adjudication["summary"]["accepted_case_count"],
+        "independent_accepted_case_count": adjudication["summary"][
+            "accepted_case_count"
+        ],
         "independent_all_cases_accepted": adjudication["summary"]["all_cases_accepted"],
     }
     ready = (
@@ -96,24 +108,45 @@ def build_review_family_behavior_replay(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
 def _evaluate_case(lab: Path, case: dict[str, str]) -> dict[str, Any]:
-    review = review_diff(case["diff"], issue_context=f"{case['language_family']} family behavior absorption", max_comments=8)
+    review = review_diff(
+        case["diff"],
+        issue_context=f"{case['language_family']} family behavior absorption",
+        max_comments=8,
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = summary.get("extension_policy") if isinstance(summary.get("extension_policy"), dict) else {}
-    contexts = {str(item.get("review_context") or "") for item in comments if item.get("review_context")}
-    contexts.update(str(item) for item in extension_policy.get("review_contexts") or [] if str(item))
-    severities = {str(item.get("severity") or "") for item in comments if item.get("severity")}
+    extension_policy = (
+        summary.get("extension_policy")
+        if isinstance(summary.get("extension_policy"), dict)
+        else {}
+    )
+    contexts = {
+        str(item.get("review_context") or "")
+        for item in comments
+        if item.get("review_context")
+    }
+    contexts.update(
+        str(item) for item in extension_policy.get("review_contexts") or [] if str(item)
+    )
+    severities = {
+        str(item.get("severity") or "") for item in comments if item.get("severity")
+    }
     family = str(case["language_family"])
     expected_context = str(case["expected_context"])
     expected_severity = str(case["expected_severity"])
     publishable_count = sum(1 for item in comments if item.get("publishable"))
     assertions = {
-        "language_family_detected": family in {str(item) for item in extension_policy.get("language_families") or []} or family == str(extension_policy.get("family") or ""),
+        "language_family_detected": family
+        in {str(item) for item in extension_policy.get("language_families") or []}
+        or family == str(extension_policy.get("family") or ""),
         "context_matched": expected_context in contexts,
         "severity_matched": expected_severity in severities,
         "publishable_output": publishable_count > 0,
@@ -121,7 +154,10 @@ def _evaluate_case(lab: Path, case: dict[str, str]) -> dict[str, Any]:
     case_lab = lab / str(case["case_id"])
     case_lab.mkdir(parents=True, exist_ok=True)
     (case_lab / "input.diff").write_text(case["diff"], encoding="utf-8")
-    (case_lab / "review_output.json").write_text(json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    (case_lab / "review_output.json").write_text(
+        json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return {
         "case_id": str(case["case_id"]),
         "source_project": str(case["source_project"]),
@@ -152,15 +188,30 @@ def _evaluate_case(lab: Path, case: dict[str, str]) -> dict[str, Any]:
 def _adjudicate(cases: list[dict[str, Any]]) -> dict[str, Any]:
     rows = []
     for case in cases:
-        assertions = case.get("output_assertions") if isinstance(case.get("output_assertions"), dict) else {}
-        artifact_paths = [Path(str(path)) for path in (case.get("artifacts") or {}).values()]
+        assertions = (
+            case.get("output_assertions")
+            if isinstance(case.get("output_assertions"), dict)
+            else {}
+        )
+        artifact_paths = [
+            Path(str(path)) for path in (case.get("artifacts") or {}).values()
+        ]
         checks = {
-            "family_is_ts_or_python": str(case.get("language_family") or "") in {"typescript", "python"},
+            "family_is_ts_or_python": str(case.get("language_family") or "")
+            in {"typescript", "python"},
             "before_after": bool(case.get("before_failed_after_passed")),
-            "assertions_passed": bool(assertions) and all(bool(value) for value in assertions.values()),
-            "artifacts_materialized": bool(artifact_paths) and all(path.is_file() for path in artifact_paths),
+            "assertions_passed": bool(assertions)
+            and all(bool(value) for value in assertions.values()),
+            "artifacts_materialized": bool(artifact_paths)
+            and all(path.is_file() for path in artifact_paths),
         }
-        rows.append({"case_id": str(case.get("case_id") or ""), "checks": checks, "accepted": all(checks.values())})
+        rows.append(
+            {
+                "case_id": str(case.get("case_id") or ""),
+                "checks": checks,
+                "accepted": all(checks.values()),
+            }
+        )
     accepted = [row for row in rows if row["accepted"]]
     return {
         "status": "ready" if rows and len(accepted) == len(rows) else "needs_attention",

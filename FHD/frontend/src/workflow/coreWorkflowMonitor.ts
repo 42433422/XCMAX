@@ -43,7 +43,7 @@ export function buildCoreWorkflowMonitorLine(
   if (empId === 'wechat_msg') {
     const refreshOn = isStarredChatAutoRefreshOn()
     if (!refreshOn) {
-      return '监控已暂停：未开启「星标聊天自动刷新」，无法定时拉取星标会话。'
+      return '监控已暂停：未开启「主动意识」，无法定时感知星标会话。'
     }
     if (monitor?.lastPolledAt) {
       const t = formatWorkflowClock(monitor.lastPolledAt)
@@ -61,7 +61,7 @@ export function buildCoreWorkflowMonitorLine(
   if (empId === 'label_print') {
     const refreshOn = isStarredChatAutoRefreshOn()
     if (!refreshOn) {
-      return '未开星标自动刷新：无法从微信侧接收标签/打印信号。'
+      return '未开主动意识：无法从微信侧接收标签/打印信号。'
     }
     if (lastLabelPrint) {
       const line = lastLabelPrint.line.slice(0, 100)
@@ -83,7 +83,7 @@ export function buildCoreWorkflowMonitorLine(
   if (empId === 'receipt_confirm') {
     const refreshOn = isStarredChatAutoRefreshOn()
     if (!refreshOn) {
-      return '未开星标自动刷新：无法从微信侧接收客户收货/对账类反馈。'
+      return '未开主动意识：无法从微信侧接收客户收货/对账类反馈。'
     }
     if (lastReceiptFeedback) {
       const line = lastReceiptFeedback.line.slice(0, 100)
@@ -107,7 +107,7 @@ export function buildCoreWorkflowStepsForEmployee(
     const preface = proIntent ? '调用 POST /api/ai/intent/test' : '本地关键词规则（inferWechatCustomerIntent）'
     return [
       { id: 'wx1', label: '① 副窗「一键托管」启用「微信消息处理 AI 员工」', status: 'done' },
-      { id: 'wx2', label: '② 智能对话勾选「星标聊天自动刷新（1分钟）」', status: refreshOn ? 'done' : 'active' },
+      { id: 'wx2', label: '② 智能对话勾选「主动意识启用」', status: refreshOn ? 'done' : 'active' },
       {
         id: 'wx3',
         label: '③ 定时拉取星标联系人最新消息，并同步副窗「推送」提醒',
@@ -134,7 +134,7 @@ export function buildCoreWorkflowStepsForEmployee(
         id: 'lp2',
         label: refreshOn
           ? '② 星标新消息 → 意图预处理（与微信消息员工同源）'
-          : '② 请开启「星标聊天自动刷新」以接收微信侧信号',
+          : '② 请开启「主动意识启用」以接收微信侧信号',
         status: refreshOn ? (sig ? 'done' : 'active') : 'active',
       },
       {
@@ -173,7 +173,7 @@ export function buildCoreWorkflowStepsForEmployee(
         id: 'rc2',
         label: refreshOn
           ? '② 星标微信 → 意图预处理（与微信消息员工同源），捕捉收货/对账类客户反馈'
-          : '② 请开启「星标聊天自动刷新」以接收客户侧业务进程',
+          : '② 请开启「主动意识启用」以接收客户侧业务进程',
         status: refreshOn ? (sig ? 'done' : 'active') : 'active',
       },
       {
@@ -201,7 +201,7 @@ export function computeCoreWorkflowCurrentHint(
   if (empId === 'wechat_msg') {
     const refreshOn = isStarredChatAutoRefreshOn()
     if (!refreshOn) {
-      return '请先勾选「星标聊天自动刷新」以启动监控轮询。'
+      return '请先勾选「主动意识启用」以启动监控轮询。'
     }
     if (lastWechat) {
       return `最近一条客户消息已预处理并写入列表：${lastWechat.line.slice(0, 120)}${lastWechat.line.length > 120 ? '…' : ''}`
@@ -214,7 +214,7 @@ export function computeCoreWorkflowCurrentHint(
   if (empId === 'label_print') {
     const refreshOn = isStarredChatAutoRefreshOn()
     if (!refreshOn) {
-      return '请先勾选「星标聊天自动刷新」；标签打印员工仅从星标微信链路接收「标签/打印」类信号。'
+      return '请先勾选「主动意识启用」；标签打印员工仅从星标微信链路接收「标签/打印」类信号。'
     }
     if (lastLabelPrint) {
       return `最近命中标签/打印意图：${lastLabelPrint.line.slice(0, 120)}${lastLabelPrint.line.length > 120 ? '…' : ''}`
@@ -231,7 +231,7 @@ export function computeCoreWorkflowCurrentHint(
   if (empId === 'receipt_confirm') {
     const refreshOn = isStarredChatAutoRefreshOn()
     if (!refreshOn) {
-      return '请先勾选「星标聊天自动刷新」；收货确认员工依赖微信消息员工同源链路获取客户反馈。'
+      return '请先勾选「主动意识启用」；收货确认员工依赖微信消息员工同源链路获取客户反馈。'
     }
     if (lastReceiptFeedback) {
       const d = String(lastReceiptFeedback.detail || lastReceiptFeedback.line || '').trim()
@@ -247,18 +247,18 @@ export function computeCoreWorkflowStageLine(
   ctx?: CoreWorkflowEmployeeCtx,
 ): string {
   if (empId === 'wechat_msg') {
-    if (!isStarredChatAutoRefreshOn()) return '等待开启星标自动刷新'
+    if (!isStarredChatAutoRefreshOn()) return '等待开启主动意识'
     return ctx?.lastWechat ? '监控中 · 最近已处理' : '监控中 · 等待新消息'
   }
   if (empId === 'label_print') {
-    if (!isStarredChatAutoRefreshOn()) return '等待开启星标自动刷新'
+    if (!isStarredChatAutoRefreshOn()) return '等待开启主动意识'
     return ctx?.lastLabelPrint ? '已收微信侧标签/打印信号' : '等待微信侧标签/打印信号'
   }
   if (empId === 'shipment_mgmt') {
     return ctx?.lastShipmentAudit ? '已审计 · 建议核对出货记录' : '待命 · 等待打印完成后审计'
   }
   if (empId === 'receipt_confirm') {
-    if (!isStarredChatAutoRefreshOn()) return '等待开启星标自动刷新'
+    if (!isStarredChatAutoRefreshOn()) return '等待开启主动意识'
     return ctx?.lastReceiptFeedback ? '已收客户侧业务进程反馈' : '等待微信侧收货/对账类反馈'
   }
   return ''
@@ -290,7 +290,7 @@ export function computeCoreWorkflowProgressState(
         progressPct: 0,
         progressLabel: isStarredChatAutoRefreshOn()
           ? '尚未进入处理：等待新消息'
-          : '尚未进入处理：请先开启星标自动刷新',
+          : '尚未进入处理：请先开启主动意识',
         workflowProgressStarted: false,
       }
     }
@@ -299,7 +299,7 @@ export function computeCoreWorkflowProgressState(
         progressPct: 0,
         progressLabel: isStarredChatAutoRefreshOn()
           ? '尚未进入执行：等待微信侧标签/打印类消息'
-          : '尚未进入执行：请先开启星标自动刷新',
+          : '尚未进入执行：请先开启主动意识',
         workflowProgressStarted: false,
       }
     }
@@ -314,7 +314,7 @@ export function computeCoreWorkflowProgressState(
       progressPct: 0,
       progressLabel: isStarredChatAutoRefreshOn()
         ? '尚未收到客户侧收货/对账类反馈'
-        : '尚未进入：请先开启星标自动刷新',
+        : '尚未进入：请先开启主动意识',
       workflowProgressStarted: false,
     }
   }

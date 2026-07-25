@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.domain.neuro.processors.coordinator import ProcessorType
-from app.domain.neuro.reflex_arc import IntentReflexArc, ReflexResult, ReflexType, get_reflex_arc
+from app.domain.neuro.reflex_arc import (
+    IntentReflexArc,
+    ReflexResult,
+    ReflexType,
+    get_reflex_arc,
+)
 from app.neuro_bus.domains.intent_domain import get_intent_domain
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -126,7 +131,7 @@ class NeuroIntentRecognizer:
         cognitive_decision, trace_id = cognitive_router.route(
             text,
             extra={
-                "intent_confidence": reflex_result.confidence if reflex_result.triggered else 0.0,
+                "intent_confidence": (reflex_result.confidence if reflex_result.triggered else 0.0),
             },
         )
 
@@ -231,6 +236,103 @@ class NeuroIntentRecognizer:
             recognizer_result=None,
         )
 
+    def _try_conscious_processor(
+        self,
+        text: str,
+        user_id: str,
+        context_data: dict[str, Any] | None,
+        processor_type: ProcessorType,
+        start_time: float,
+    ) -> NeuroIntentResult | None:
+        """Invoke ConsciousProcessor ``intent.process`` when handlers are registered.
+
+        Production dialogue previously skipped ProcessorCoordinator entirely; this
+        path makes registered cognition handlers reachable, with unified fallback.
+        """
+        try:
+            from app.domain.neuro.processors.conscious import get_conscious_processor
+            from app.neuro_async_bridge import run_coroutine_on_neuro_loop
+            from app.neuro_bus.events.base import (
+                EventMetadata,
+                EventPriority,
+                NeuroEvent,
+            )
+
+            processor = get_conscious_processor()
+            handlers = getattr(processor, "_handlers", {}) or {}
+            if "intent.process" not in handlers:
+                return None
+
+            event = NeuroEvent(
+                event_type="intent.process",
+                payload={
+                    "text": text,
+                    "user_id": user_id,
+                    "context": dict(context_data or {}),
+                    "processor_type": processor_type.value,
+                },
+                priority=EventPriority.NORMAL,
+                metadata=EventMetadata(
+                    domain="intent",
+                    source="neuro_intent_recognizer",
+                ),
+            )
+            report = run_coroutine_on_neuro_loop(processor.process(event), timeout=8.0)
+            if not getattr(report, "success", False):
+                return None
+
+            data = getattr(report, "data", None)
+            intent = "unknown"
+            confidence = 0.55
+            entities: dict[str, Any] = {}
+            if isinstance(data, dict):
+                intent = str(
+                    data.get("intent")
+                    or data.get("primary_intent")
+                    or data.get("response_intent")
+                    or "conscious_processed"
+                )
+                try:
+                    confidence = float(data.get("confidence") or confidence)
+                except (TypeError, ValueError):
+                    confidence = 0.55
+                if isinstance(data.get("entities"), dict):
+                    entities = dict(data["entities"])
+            elif data is not None:
+                intent = "conscious_processed"
+                entities = {"processor_data": str(data)[:500]}
+
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            try:
+                get_intent_domain().emit_intent_recognized(
+                    intent_type=intent,
+                    confidence=confidence,
+                    entities=entities,
+                    raw_text=text,
+                    processor_used=processor_type.value,
+                    latency_ms=latency_ms,
+                )
+            except RECOVERABLE_ERRORS:
+                logger.debug("emit_intent_recognized skipped", exc_info=True)
+
+            return NeuroIntentResult(
+                intent=intent,
+                confidence=confidence,
+                source="conscious_processor",
+                processor_type=processor_type,
+                latency_ms=latency_ms,
+                entities=entities,
+                reflex_used=False,
+                ai_enhanced=True,
+                recognizer_result=None,
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("conscious processor path failed; fallback unified", exc_info=True)
+            return None
+        except Exception:  # noqa: BLE001
+            logger.debug("conscious processor path failed; fallback unified", exc_info=True)
+            return None
+
     def _build_conscious_result(
         self,
         text: str,
@@ -240,8 +342,14 @@ class NeuroIntentRecognizer:
         start_time: float,
         processor_type: ProcessorType = ProcessorType.CONSCIOUS,
     ) -> NeuroIntentResult:
-        """走 unified_recognizer 构建 Conscious/Subconscious 结果并 emit 事件。"""
+        """先走 ConsciousProcessor（若已注册），失败则 fallback unified_recognizer。"""
         from app.services.unified_intent_recognizer import RecognizerResult
+
+        processed = self._try_conscious_processor(
+            text, user_id, context_data, processor_type, start_time
+        )
+        if processed is not None:
+            return processed
 
         base_result = self._base.recognize(text, context=context, context_data=context_data)
         latency_ms = (time.perf_counter() - start_time) * 1000

@@ -165,9 +165,26 @@ def defer_write_as_change_request(
     try:
         from modstore_server.auto_approve_policy import maybe_auto_approve
 
-        maybe_auto_approve(cid)
+        auto_result = maybe_auto_approve(cid, skip_retort_block_check=True)
     except Exception:
         logger.exception("auto_approve check failed for CR %d", cid)
+        auto_result = {"auto_approved": False}
+
+    if not auto_result.get("auto_approved"):
+        try:
+            from modstore_server.retort_clarification_gate import (
+                open_clarification_for_change_request,
+            )
+
+            open_clarification_for_change_request(
+                cid,
+                strategy_intent=summary,
+                changed_files=[path],
+                source_employee_id=source_employee_id,
+                risk_level=risk_level,
+            )
+        except Exception:
+            logger.exception("retort clarification open failed for CR %d", cid)
 
     return cid
 

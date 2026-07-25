@@ -28,11 +28,17 @@ def build_external_process_adjudication(
     lab.mkdir(parents=True, exist_ok=True)
     matrix = build_external_advantage_matrix(root, min_cases=min_cases)
     rows = [row for row in matrix.get("matrix") or [] if isinstance(row, dict)]
-    external_input = {"min_delta": min_delta, "cases": [_redacted_case(row) for row in rows]}
+    external_input = {
+        "min_delta": min_delta,
+        "cases": [_redacted_case(row) for row in rows],
+    }
     input_path = lab / "adjudicator_input.json"
     output_path = lab / "adjudicator_output.json"
     script_path = lab / "independent_adjudicator.py"
-    input_path.write_text(json.dumps(external_input, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    input_path.write_text(
+        json.dumps(external_input, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     script_path.write_text(_ADJUDICATOR_SCRIPT, encoding="utf-8")
     completed = subprocess.run(
         [sys.executable, str(script_path), str(input_path), str(output_path)],
@@ -44,7 +50,11 @@ def build_external_process_adjudication(
         check=False,
     )
     adjudication = _read_json(output_path)
-    summary = adjudication.get("summary") if isinstance(adjudication.get("summary"), dict) else {}
+    summary = (
+        adjudication.get("summary")
+        if isinstance(adjudication.get("summary"), dict)
+        else {}
+    )
     script_text = script_path.read_text(encoding="utf-8")
     result_summary = {
         "case_count": len(rows),
@@ -94,7 +104,10 @@ def build_external_process_adjudication(
     if output:
         report_path = Path(output)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -108,9 +121,11 @@ def _redacted_case(row: dict[str, Any]) -> dict[str, Any]:
         "retort_observation": {
             "severity_matched": retort.get("severity_matched") is True,
             "context_matched": retort.get("context_matched") is True,
-            "publishable_comment": int(retort.get("publishable_comment_count") or 0) > 0,
+            "publishable_comment": int(retort.get("publishable_comment_count") or 0)
+            > 0,
             "task_group": int(retort.get("task_group_count") or 0) > 0,
-            "extension_policy": int(retort.get("extension_policy_known_count") or 0) > 0,
+            "extension_policy": int(retort.get("extension_policy_known_count") or 0)
+            > 0,
         },
     }
 
@@ -133,7 +148,7 @@ def _run_id(prefix: str) -> str:
     return f"{prefix}-{timestamp}-{uuid.uuid4().hex[:8]}"
 
 
-_ADJUDICATOR_SCRIPT = r'''
+_ADJUDICATOR_SCRIPT = r"""
 from __future__ import annotations
 
 import json
@@ -182,4 +197,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+"""

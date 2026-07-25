@@ -985,24 +985,43 @@ html[data-workbench-theme='light'] .wb-direct-voice-cancel {
   color: rgba(0, 0, 0, 0.72);
 }
 
-html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment {
+html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment,
+html[data-workbench-theme='light'] .wb-llm-inline .wb-mode-segment,
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet .wb-mode-segment {
   background: rgba(0, 0, 0, 0.04);
   border-color: rgba(0, 0, 0, 0.1);
 }
 
-html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment__btn {
-  color: rgba(0, 0, 0, 0.45);
+html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment__btn,
+html[data-workbench-theme='light'] .wb-llm-inline .wb-mode-segment__btn,
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet .wb-mode-segment__btn {
+  color: rgba(0, 0, 0, 0.55);
 }
 
-html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment__btn:hover {
-  color: rgba(0, 0, 0, 0.72);
+html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment__btn:hover,
+html[data-workbench-theme='light'] .wb-llm-inline .wb-mode-segment__btn:hover,
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet .wb-mode-segment__btn:hover {
+  color: rgba(0, 0, 0, 0.82);
   background: rgba(0, 0, 0, 0.04);
 }
 
-html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment__btn--on {
+html[data-workbench-theme='light'] .wb-direct-composer-row .wb-mode-segment__btn--on,
+html[data-workbench-theme='light'] .wb-llm-inline .wb-mode-segment__btn--on,
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet .wb-mode-segment__btn--on {
   color: #1d1d1f;
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] .wb-llm-inline .wb-dd-trigger,
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet .wb-dd-trigger {
+  color: #1d1d1f;
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+html[data-workbench-theme='light'] .wb-llm-mobile-trigger__text {
+  color: #1d1d1f;
 }
 
 html[data-workbench-theme='light'] .wb-direct-send-btn:not(:disabled) {
@@ -1139,6 +1158,20 @@ html[data-workbench-theme='light'] .wb-direct-send-hint {
   font-size: 1.25rem;
   cursor: pointer;
   padding: 4px 8px;
+}
+
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet {
+  background: #ffffff;
+  color: #1d1d1f;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet__title {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .wb-llm-mobile-sheet__close {
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .wb-plan-loading-steps {

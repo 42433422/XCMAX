@@ -12,7 +12,9 @@ def evaluate_issue_patch_case(case: dict[str, Any]) -> dict[str, Any]:
     """Evaluate one SWE-bench-style issue patch prediction."""
     expected_patch = str(case.get("gold_patch") or case.get("expected_patch") or "")
     predicted_patch = str(case.get("predicted_patch") or case.get("patch") or "")
-    test_results = {str(key): value for key, value in dict(case.get("test_results") or {}).items()}
+    test_results = {
+        str(key): value for key, value in dict(case.get("test_results") or {}).items()
+    }
     fail_to_pass = [str(item) for item in case.get("fail_to_pass") or []]
     pass_to_pass = [str(item) for item in case.get("pass_to_pass") or []]
     expected_files = touched_files_from_patch(expected_patch)
@@ -23,12 +25,23 @@ def evaluate_issue_patch_case(case: dict[str, Any]) -> dict[str, Any]:
     regressed_tests = sorted(set(pass_to_pass) - set(pass_preserved))
     has_patch = bool(predicted_files) and bool(_meaningful_added_lines(predicted_patch))
     overlap = sorted(set(expected_files) & set(predicted_files))
-    patch_overlap = len(overlap) / len(expected_files) if expected_files else (1.0 if predicted_files else 0.0)
-    resolved = has_patch and not missing_fail_to_pass and not regressed_tests and (not expected_files or bool(overlap))
+    patch_overlap = (
+        len(overlap) / len(expected_files)
+        if expected_files
+        else (1.0 if predicted_files else 0.0)
+    )
+    resolved = (
+        has_patch
+        and not missing_fail_to_pass
+        and not regressed_tests
+        and (not expected_files or bool(overlap))
+    )
     return {
         "case_id": str(case.get("instance_id") or case.get("case_id") or ""),
         "repo": str(case.get("repo") or ""),
-        "status": _case_status(has_patch, missing_fail_to_pass, regressed_tests, expected_files, overlap),
+        "status": _case_status(
+            has_patch, missing_fail_to_pass, regressed_tests, expected_files, overlap
+        ),
         "resolved": resolved,
         "has_patch": has_patch,
         "expected_files": expected_files,
@@ -59,16 +72,26 @@ def build_issue_patch_benchmark(cases: list[dict[str, Any]]) -> dict[str, Any]:
     resolved_count = sum(1 for item in results if item["resolved"])
     no_patch_count = sum(1 for item in results if item["status"] == "no_patch")
     return {
-        "status": "ready" if results and resolved_count == len(results) and regression_count == 0 else "needs_attention",
+        "status": "ready"
+        if results and resolved_count == len(results) and regression_count == 0
+        else "needs_attention",
         "summary": {
             "case_count": len(results),
             "resolved_count": resolved_count,
             "unresolved_count": len(results) - resolved_count,
             "regression_count": regression_count,
             "no_patch_count": no_patch_count,
-            "fail_to_pass_pass_rate": round(fail_passed / fail_total, 4) if fail_total else 1.0,
-            "pass_to_pass_pass_rate": round(pass_passed / pass_total, 4) if pass_total else 1.0,
-            "average_patch_overlap": round(sum(float(item["patch_overlap"]) for item in results) / len(results), 4) if results else 0.0,
+            "fail_to_pass_pass_rate": round(fail_passed / fail_total, 4)
+            if fail_total
+            else 1.0,
+            "pass_to_pass_pass_rate": round(pass_passed / pass_total, 4)
+            if pass_total
+            else 1.0,
+            "average_patch_overlap": round(
+                sum(float(item["patch_overlap"]) for item in results) / len(results), 4
+            )
+            if results
+            else 0.0,
         },
         "cases": results,
         "evidence": {
@@ -122,7 +145,11 @@ def _clean_path(path: str) -> str:
 
 
 def _meaningful_added_lines(patch: str) -> list[str]:
-    return [line for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++") and line[1:].strip()]
+    return [
+        line
+        for line in patch.splitlines()
+        if line.startswith("+") and not line.startswith("+++") and line[1:].strip()
+    ]
 
 
 def _passed(value: Any) -> bool:

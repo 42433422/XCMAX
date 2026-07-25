@@ -7,16 +7,42 @@ from typing import Any
 from retort_engine.pr_review import review_diff
 
 
-def build_review_adjudication_calibration(project: str | Path, *, output: str | Path = "") -> dict[str, Any]:
+def build_review_adjudication_calibration(
+    project: str | Path, *, output: str | Path = ""
+) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     cases = [_evaluate_case(case) for case in _calibration_cases()]
     passed = [case for case in cases if case["passed"]]
     pre_passed = [case for case in cases if case["pre_calibration"]["passed"]]
-    false_negatives = [case for case in cases if case["expectation"]["expected_blocker"] and not case["passed"]]
-    false_positives = [case for case in cases if not case["expectation"]["expected_blocker"] and not case["passed"]]
-    pre_false_negatives = [case for case in cases if case["expectation"]["expected_blocker"] and not case["pre_calibration"]["passed"]]
-    pre_false_positives = [case for case in cases if not case["expectation"]["expected_blocker"] and not case["pre_calibration"]["passed"]]
-    contexts = sorted({str(case["expectation"].get("expected_context") or "") for case in cases if case["expectation"].get("expected_context")})
+    false_negatives = [
+        case
+        for case in cases
+        if case["expectation"]["expected_blocker"] and not case["passed"]
+    ]
+    false_positives = [
+        case
+        for case in cases
+        if not case["expectation"]["expected_blocker"] and not case["passed"]
+    ]
+    pre_false_negatives = [
+        case
+        for case in cases
+        if case["expectation"]["expected_blocker"]
+        and not case["pre_calibration"]["passed"]
+    ]
+    pre_false_positives = [
+        case
+        for case in cases
+        if not case["expectation"]["expected_blocker"]
+        and not case["pre_calibration"]["passed"]
+    ]
+    contexts = sorted(
+        {
+            str(case["expectation"].get("expected_context") or "")
+            for case in cases
+            if case["expectation"].get("expected_context")
+        }
+    )
     pre_pass_rate = round(len(pre_passed) / len(cases), 3) if cases else 0.0
     post_pass_rate = round(len(passed) / len(cases), 3) if cases else 0.0
     summary = {
@@ -33,21 +59,34 @@ def build_review_adjudication_calibration(project: str | Path, *, output: str | 
         "pre_calibration_pass_rate": pre_pass_rate,
         "post_calibration_pass_rate": post_pass_rate,
         "calibration_improvement_delta": round(post_pass_rate - pre_pass_rate, 3),
-        "positive_case_count": sum(1 for case in cases if case["expectation"]["expected_blocker"]),
-        "negative_case_count": sum(1 for case in cases if not case["expectation"]["expected_blocker"]),
+        "positive_case_count": sum(
+            1 for case in cases if case["expectation"]["expected_blocker"]
+        ),
+        "negative_case_count": sum(
+            1 for case in cases if not case["expectation"]["expected_blocker"]
+        ),
         "false_negative_count": len(false_negatives),
         "false_positive_count": len(false_positives),
         "pre_calibration_false_negative_count": len(pre_false_negatives),
         "pre_calibration_false_positive_count": len(pre_false_positives),
-        "false_negative_reduction": max(0, len(pre_false_negatives) - len(false_negatives)),
-        "false_positive_reduction": max(0, len(pre_false_positives) - len(false_positives)),
+        "false_negative_reduction": max(
+            0, len(pre_false_negatives) - len(false_negatives)
+        ),
+        "false_positive_reduction": max(
+            0, len(pre_false_positives) - len(false_positives)
+        ),
         "context_count": len(contexts),
         "contexts": contexts,
-        "publishable_comment_count": sum(int(case["review_summary"].get("publishable_comment_count") or 0) for case in cases),
+        "publishable_comment_count": sum(
+            int(case["review_summary"].get("publishable_comment_count") or 0)
+            for case in cases
+        ),
         "feedback_recalibration_applied": post_pass_rate > pre_pass_rate,
     }
     result = {
-        "status": "ready" if summary["calibration_label_count"] >= 50 and summary["pass_rate"] >= 0.9 else "needs_attention",
+        "status": "ready"
+        if summary["calibration_label_count"] >= 50 and summary["pass_rate"] >= 0.9
+        else "needs_attention",
         "project": str(root),
         "summary": summary,
         "cases": cases,
@@ -62,12 +101,19 @@ def build_review_adjudication_calibration(project: str | Path, *, output: str | 
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
 def _evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
-    review = review_diff(str(case["diff"]), max_comments=6, issue_context=str(case.get("issue_context") or ""))
+    review = review_diff(
+        str(case["diff"]),
+        max_comments=6,
+        issue_context=str(case.get("issue_context") or ""),
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     expectation = {
         "expected_blocker": bool(case["expected_blocker"]),
@@ -82,33 +128,55 @@ def _evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
         "passed": passed,
         "expectation": expectation,
         "pre_calibration": pre_calibration,
-        "post_calibration": {"passed": passed, "model": "retort_review_calibration_policy"},
+        "post_calibration": {
+            "passed": passed,
+            "model": "retort_review_calibration_policy",
+        },
         "observed": {
             "comment_count": len(comments),
-            "actionable_count": sum(1 for comment in comments if comment.get("employee_actionable")),
-            "contexts": sorted({str(comment.get("review_context") or "") for comment in comments}),
-            "severities": sorted({str(comment.get("severity") or "") for comment in comments}),
+            "actionable_count": sum(
+                1 for comment in comments if comment.get("employee_actionable")
+            ),
+            "contexts": sorted(
+                {str(comment.get("review_context") or "") for comment in comments}
+            ),
+            "severities": sorted(
+                {str(comment.get("severity") or "") for comment in comments}
+            ),
         },
-        "review_summary": _compact_review_summary(review.get("summary") if isinstance(review.get("summary"), dict) else {}),
+        "review_summary": _compact_review_summary(
+            review.get("summary") if isinstance(review.get("summary"), dict) else {}
+        ),
     }
 
 
 def _case_passed(comments: list[dict[str, Any]], expectation: dict[str, Any]) -> bool:
     if not expectation["expected_blocker"]:
-        return not any(str(comment.get("severity") or "") in {"high", "medium"} for comment in comments)
+        return not any(
+            str(comment.get("severity") or "") in {"high", "medium"}
+            for comment in comments
+        )
     expected_context = str(expectation.get("expected_context") or "")
     expected_severity = str(expectation.get("expected_severity") or "")
     for comment in comments:
-        if expected_context and str(comment.get("review_context") or "") != expected_context:
+        if (
+            expected_context
+            and str(comment.get("review_context") or "") != expected_context
+        ):
             continue
-        if expected_severity and str(comment.get("severity") or "") != expected_severity:
+        if (
+            expected_severity
+            and str(comment.get("severity") or "") != expected_severity
+        ):
             continue
         if comment.get("employee_actionable") or expected_severity in {"low", "info"}:
             return True
     return False
 
 
-def _pre_calibration_outcome(case: dict[str, Any], expectation: dict[str, Any]) -> dict[str, Any]:
+def _pre_calibration_outcome(
+    case: dict[str, Any], expectation: dict[str, Any]
+) -> dict[str, Any]:
     diff = str(case.get("diff") or "").lower()
     detected_severity = ""
     detected_context = ""
@@ -125,7 +193,9 @@ def _pre_calibration_outcome(case: dict[str, Any], expectation: dict[str, Any]) 
     if not expected_blocker:
         passed = detected_severity not in {"high", "medium"}
     else:
-        passed = detected_context == str(expectation.get("expected_context") or "") and detected_severity == str(expectation.get("expected_severity") or "")
+        passed = detected_context == str(
+            expectation.get("expected_context") or ""
+        ) and detected_severity == str(expectation.get("expected_severity") or "")
     return {
         "model": "pre_calibration_keyword_context_guess",
         "passed": passed,
