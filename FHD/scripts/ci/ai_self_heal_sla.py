@@ -31,6 +31,11 @@
 
 Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 
+合并失败处理（2026-07-25）：
+- 合并前先查 mergeable；冲突 / 403 / 其它 HTTP 错误分开文案，不再笼统写「权限不足」
+- 失败评论按 `❌ 自动合并失败` 去重，避免 schedule 每 30 分钟刷屏
+- 冲突时自动打 `needs-human` + `hold-merge`
+
 全部动作写 metrics/ai-self-heal-stale.jsonl。
 
 环境变量：
@@ -70,6 +75,9 @@ DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
 AI_REVIEW_WORKFLOW_NAME = "AI Review"
 AI_REVIEW_PASSED_LABEL = "ai-review: passed"
 HOLD_MERGE_LABEL = "hold-merge"
+NEEDS_HUMAN_LABEL = "needs-human"
+# 合并失败评论去重标记（勿改文案前缀，否则会再次刷屏）
+MERGE_FAIL_COMMENT_MARKER = "❌ 自动合并失败"
 
 # ai-self-heal / ai-generated 标签（用于区分普通 PR）
 AI_PR_LABELS = ("ai-self-heal", "ai-generated")
@@ -260,10 +268,69 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()["head"]["sha"]
 
-    def merge_pr(self, pr_number: int, method: str = "squash") -> bool:
+    def get_pr_mergeability(self, pr_number: int) -> tuple[bool | None, str]:
+        """查询 PR 是否可合并。
+
+        返回 (mergeable, reason)：
+        - (True, "ok")：可合并
+        - (False, "conflict")：有冲突
+        - (None, "unknown")：GitHub 仍在计算 / API 异常，调用方应跳过本轮
+        """
+        url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}"
+        resp = self.client.get(url)
+        if resp.status_code != 200:
+            return None, f"mergeability_api_error_{resp.status_code}"
+        data = resp.json()
+        mergeable = data.get("mergeable")
+        if mergeable is True:
+            return True, "ok"
+        if mergeable is False:
+            return False, "conflict"
+        return None, "unknown"
+
+    def merge_pr(self, pr_number: int, method: str = "squash") -> tuple[bool, str]:
+        """尝试 squash/merge。返回 (ok, reason)。
+
+        reason 取值：ok / conflict / permission / http_<code>:<message>
+        """
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/merge"
         resp = self.client.put(url, json={"merge_method": method})
-        return resp.status_code == 200
+        if resp.status_code == 200:
+            return True, "ok"
+        message = ""
+        try:
+            message = str((resp.json() or {}).get("message") or "")
+        except Exception:
+            message = (resp.text or "")[:200]
+        lowered = message.lower()
+        if resp.status_code in (405, 409) or "conflict" in lowered:
+            return False, "conflict"
+        if resp.status_code == 403 or "resource not accessible" in lowered or "permission" in lowered:
+            return False, "permission"
+        detail = message.replace("\n", " ").strip() or "no_message"
+        return False, f"http_{resp.status_code}:{detail[:160]}"
+
+    def has_issue_comment_containing(self, pr_number: int, needle: str) -> bool:
+        """是否已有包含 needle 的 issue/PR 评论（用于合并失败评论去重）。"""
+        if not needle:
+            return False
+        url = f"{GITHUB_API}/repos/{self.repo}/issues/{pr_number}/comments"
+        page = 1
+        while page <= 5:
+            resp = self.client.get(url, params={"per_page": 100, "page": page})
+            if resp.status_code != 200:
+                return False
+            items = resp.json() or []
+            if not items:
+                break
+            for item in items:
+                body = str(item.get("body") or "")
+                if needle in body:
+                    return True
+            if len(items) < 100:
+                break
+            page += 1
+        return False
 
     def close_pr(self, pr_number: int) -> bool:
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}"
@@ -295,6 +362,115 @@ def _extract_login(user: Any) -> str:
     if not isinstance(user, dict):
         return ""
     return str(user.get("login") or "")
+
+
+def _merge_failure_comment(reason: str) -> str:
+    """按失败原因生成准确评论（避免把冲突误报成权限不足）。"""
+    if reason == "conflict":
+        return (
+            f"{MERGE_FAIL_COMMENT_MARKER}：PR 存在合并冲突（非权限问题）。"
+            f"请 rebase/解决冲突后去掉 `{NEEDS_HUMAN_LABEL}` 再重试。"
+        )
+    if reason == "permission":
+        return (
+            f"{MERGE_FAIL_COMMENT_MARKER}：GitHub token 权限不足（403）。"
+            "请检查 Actions `contents: write` / branch protection / fine-grained token 权限。"
+        )
+    if reason == "unknown":
+        return (
+            f"{MERGE_FAIL_COMMENT_MARKER}：GitHub 尚未算出 mergeable 状态，本轮跳过。"
+        )
+    return f"{MERGE_FAIL_COMMENT_MARKER}：{reason}，请人工处理。"
+
+
+def _notify_merge_failure_once(
+    client: GitHubClient,
+    pr: PRInfo,
+    reason: str,
+    *,
+    extra_labels: list[str] | None = None,
+) -> None:
+    """合并失败时：准确评论（去重）+ 打 needs-human，避免每 30 分钟刷屏。"""
+    body = _merge_failure_comment(reason)
+    already = False
+    try:
+        already = client.has_issue_comment_containing(pr.number, MERGE_FAIL_COMMENT_MARKER)
+    except Exception as ex:  # noqa: BLE001 — 去重失败不应阻断打标
+        print(f"  warn: comment dedup check failed: {ex}")
+    if already:
+        print(f"  skip comment: already notified merge failure on #{pr.number}")
+    else:
+        client.comment(pr.number, body)
+    labels = [NEEDS_HUMAN_LABEL]
+    if extra_labels:
+        labels.extend(extra_labels)
+    # 冲突时额外 hold，防止门禁仍绿却反复尝试 merge
+    if reason == "conflict" and HOLD_MERGE_LABEL not in labels:
+        labels.append(HOLD_MERGE_LABEL)
+    client.add_labels(pr.number, labels)
+
+
+def _try_auto_merge(
+    client: GitHubClient,
+    pr: PRInfo,
+    *,
+    success_comment: str,
+    success_action: str,
+    failure_action: str,
+    metric_extra: dict[str, Any] | None = None,
+) -> str:
+    """统一 auto-merge 路径：先查 mergeable，再 merge，失败分类+去重通知。
+
+    返回 auto_merged / merge_failed / skipped。
+    """
+    mergeable, mreason = client.get_pr_mergeability(pr.number)
+    if mergeable is None:
+        print(f"  skip: mergeable 未知 ({mreason})")
+        _append_stale({
+            "pr": pr.number,
+            "kind": pr.kind,
+            "author": pr.author,
+            "action": "mergeability_unknown",
+            "reason": mreason,
+            **(metric_extra or {}),
+        })
+        return "skipped"
+    if mergeable is False:
+        print(f"  merge blocked: {mreason}")
+        _notify_merge_failure_once(client, pr, mreason)
+        _append_stale({
+            "pr": pr.number,
+            "kind": pr.kind,
+            "author": pr.author,
+            "action": failure_action,
+            "reason": mreason,
+            **(metric_extra or {}),
+        })
+        return "merge_failed"
+
+    ok, reason = client.merge_pr(pr.number, method="squash")
+    if ok:
+        client.comment(pr.number, success_comment)
+        _append_stale({
+            "pr": pr.number,
+            "kind": pr.kind,
+            "author": pr.author,
+            "action": success_action,
+            **(metric_extra or {}),
+        })
+        return "auto_merged"
+
+    print(f"  merge failed: {reason}")
+    _notify_merge_failure_once(client, pr, reason)
+    _append_stale({
+        "pr": pr.number,
+        "kind": pr.kind,
+        "author": pr.author,
+        "action": failure_action,
+        "reason": reason,
+        **(metric_extra or {}),
+    })
+    return "merge_failed"
 
 
 # =====================================================================
@@ -508,29 +684,16 @@ def process_regular_pr(
 
     print(f"  三重门禁通过 ({reason})，auto-merge (squash)")
     if not dry_run:
-        ok = client.merge_pr(pr.number, method="squash")
-        if ok:
-            client.comment(
-                pr.number,
+        return _try_auto_merge(
+            client,
+            pr,
+            success_comment=(
                 "✅ 三重门禁通过（ai-review:passed + ci:passed + author:trusted），"
-                "自动 squash merge。",
-            )
-            _append_stale({
-                "pr": pr.number,
-                "kind": "regular",
-                "author": pr.author,
-                "action": "regular_auto_merged",
-            })
-            return "auto_merged"
-        else:
-            client.comment(pr.number, "❌ 自动合并失败（可能冲突或权限不足），请人工处理。")
-            _append_stale({
-                "pr": pr.number,
-                "kind": "regular",
-                "author": pr.author,
-                "action": "regular_auto_merge_failed",
-            })
-            return "merge_failed"
+                "自动 squash merge。"
+            ),
+            success_action="regular_auto_merged",
+            failure_action="regular_auto_merge_failed",
+        )
     return "auto_merged_dry"
 
 
@@ -610,15 +773,16 @@ def process_pr(
 
         print(f"  二次守卫通过，auto-merge ({pr.kind} {risk} {threshold}h)")
         if not dry_run:
-            ok = client.merge_pr(pr.number, method="squash")
-            if ok:
-                client.comment(pr.number, f"✅ 二次守卫通过，{pr.kind} {risk} 等级 {threshold}h 到期，自动合并。")
-                _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": "auto_merged"})
-                return "auto_merged"
-            else:
-                client.comment(pr.number, "❌ 自动合并失败（可能冲突），请人工处理。")
-                _append_stale({"pr": pr.number, "risk": risk, "action": "auto_merge_failed"})
-                return "merge_failed"
+            return _try_auto_merge(
+                client,
+                pr,
+                success_comment=(
+                    f"✅ 二次守卫通过，{pr.kind} {risk} 等级 {threshold}h 到期，自动合并。"
+                ),
+                success_action="auto_merged",
+                failure_action="auto_merge_failed",
+                metric_extra={"risk": risk},
+            )
         return "auto_merged_dry"
 
     # ===== R2 / R3: 人工合并最终策略（永不 auto-merge）=====
