@@ -37,6 +37,50 @@ def _resolve_profile(profile: ShipmentEtlProfile | None = None, profile_id: str 
     return get_shipment_etl_profile(profile_id)
 
 
+def _profiles_for_parse(
+    profile: ShipmentEtlProfile | None = None,
+    profile_id: str | None = None,
+) -> list[ShipmentEtlProfile]:
+    """解析用 profile 列表：显式指定则单 profile；否则加载全部做竞分。"""
+    if profile is not None:
+        return [profile]
+    raw = str(profile_id or "").strip()
+    if not raw:
+        import os
+
+        raw = (
+            str(os.environ.get("FHD_EXCEL_ETL_PROFILE") or "").strip()
+            or str(os.environ.get("FHD_SHIPMENT_ETL_PROFILE") or "").strip()
+        )
+    if raw and raw.lower() not in {"auto", "*"}:
+        return [get_shipment_etl_profile(raw)]
+    from app.application.shipment_etl_profile import load_all_profiles
+
+    profiles = load_all_profiles()
+    return profiles or [get_shipment_etl_profile("default")]
+
+
+def _pick_best_profile_for_sheet(
+    ws, profiles: list[ShipmentEtlProfile]
+) -> tuple[ShipmentEtlProfile, int, int, str]:
+    """返回 (profile, delivery_score, ledger_score, prefer_kind)."""
+    best: tuple[ShipmentEtlProfile, int, int, str] | None = None
+    best_score = -1
+    for prof in profiles:
+        d = _score_delivery_sheet(ws, prof)
+        l = _score_ledger_sheet(ws, prof) if prof.has_ledger else 0
+        if d >= l and d > best_score:
+            best = (prof, d, l, "delivery_note")
+            best_score = d
+        elif l > best_score:
+            best = (prof, d, l, "shipment_ledger")
+            best_score = l
+    if best is None:
+        fallback = profiles[0]
+        return fallback, 0, 0, "delivery_note"
+    return best
+
+
 def _norm_cell(value: Any) -> str:
     if value is None:
         return ""
@@ -732,15 +776,14 @@ def parse_delivery_notes(
     profile_id: str | None = None,
     profile: ShipmentEtlProfile | None = None,
 ) -> dict[str, Any]:
-    """解析工作簿中的送货单表；可选同时解析出货流水并按单号分组。
+    """解析工作簿：多 profile 竞分识别（送货单/流水/通用表/自定义 YAML）。
 
     include_ledger:
-    - True: 送货单 + 流水都收
-    - False: 只收送货单
-    - \"auto\": 有送货单时忽略同簿流水（避免历史出货记录误入库）；无送货单时再解析流水
+    - True: 主表 + 流水都收
+    - False: 只收主表
+    - "auto": 有主表时忽略同簿流水；无主表时再解析流水
     """
-    prof = _resolve_profile(profile, profile_id)
-    score_floor = int(min_score if min_score is not None else prof.delivery_min_score)
+    profiles = _profiles_for_parse(profile, profile_id)
     path = Path(file_path).expanduser().resolve()
     if not path.is_file():
         return {"success": False, "message": f"文件不存在: {path}", "notes": []}
@@ -760,55 +803,113 @@ def parse_delivery_notes(
     ledger_notes: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     assist_summaries: list[dict[str, Any]] = []
+    profile_hits: list[dict[str, Any]] = []
     try:
         for ws in wb.worksheets:
-            d_score = _score_delivery_sheet(ws, prof)
-            l_score = _score_ledger_sheet(ws, prof)
-            # 高分或灰色区间都尝试送货单解析（灰色区间可能靠 LLM 补列映射）
-            if d_score >= 40:
+            prof, d_score, l_score, prefer = _pick_best_profile_for_sheet(ws, profiles)
+            score_floor = int(min_score if min_score is not None else prof.delivery_min_score)
+            profile_hits.append(
+                {
+                    "sheet": ws.title,
+                    "profile_id": prof.id,
+                    "kind": prof.kind,
+                    "label": prof.label,
+                    "delivery_score": d_score,
+                    "ledger_score": l_score,
+                    "prefer": prefer,
+                }
+            )
+            if prefer == "delivery_note" and d_score >= 40:
                 note = _parse_delivery_sheet(
                     ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
                 )
                 if note:
+                    note["profile_id"] = prof.id
+                    note["profile_kind"] = prof.kind
+                    note["profile_label"] = prof.label
+                    note["profile_target"] = prof.target
                     delivery_notes.append(note)
                     if isinstance(note.get("assist"), dict):
                         assist_summaries.append(
-                            {"sheet": ws.title, **dict(note.get("assist") or {})}
+                            {
+                                "sheet": ws.title,
+                                "profile_id": prof.id,
+                                **dict(note.get("assist") or {}),
+                            }
                         )
                     continue
                 if d_score >= score_floor:
                     skipped.append(
-                        {"sheet": ws.title, "score": d_score, "reason": "delivery_parse_failed"}
+                        {
+                            "sheet": ws.title,
+                            "score": d_score,
+                            "reason": "delivery_parse_failed",
+                            "profile_id": prof.id,
+                        }
                     )
                     continue
 
-            if l_score >= 40:
+            if prof.has_ledger and l_score >= 40:
                 parsed_ledger = _parse_ledger_sheet(
                     ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
                 )
                 if parsed_ledger:
+                    for n in parsed_ledger:
+                        n["profile_id"] = prof.id
+                        n["profile_kind"] = prof.kind
+                        n["profile_label"] = prof.label
+                        n["profile_target"] = prof.target
                     ledger_notes.extend(parsed_ledger)
                     assist = (parsed_ledger[0] or {}).get("assist")
                     if isinstance(assist, dict):
-                        assist_summaries.append({"sheet": ws.title, **assist})
+                        assist_summaries.append(
+                            {"sheet": ws.title, "profile_id": prof.id, **assist}
+                        )
                 elif l_score >= 50:
-                    skipped.append({"sheet": ws.title, "score": l_score, "reason": "ledger_empty"})
+                    skipped.append(
+                        {
+                            "sheet": ws.title,
+                            "score": l_score,
+                            "reason": "ledger_empty",
+                            "profile_id": prof.id,
+                        }
+                    )
                 else:
                     skipped.append(
                         {
                             "sheet": ws.title,
                             "score": max(d_score, l_score),
-                            "reason": "not_delivery_or_ledger",
+                            "reason": "not_matched",
+                            "profile_id": prof.id,
                         }
                     )
             else:
-                skipped.append(
-                    {
-                        "sheet": ws.title,
-                        "score": max(d_score, l_score),
-                        "reason": "not_delivery_or_ledger",
-                    }
+                note = _parse_delivery_sheet(
+                    ws, fallback_unit=fallback_unit, profile=prof, allow_llm=True
                 )
+                if note:
+                    note["profile_id"] = prof.id
+                    note["profile_kind"] = prof.kind
+                    note["profile_label"] = prof.label
+                    note["profile_target"] = prof.target
+                    delivery_notes.append(note)
+                    if isinstance(note.get("assist"), dict):
+                        assist_summaries.append(
+                            {
+                                "sheet": ws.title,
+                                "profile_id": prof.id,
+                                **dict(note.get("assist") or {}),
+                            }
+                        )
+                else:
+                    skipped.append(
+                        {
+                            "sheet": ws.title,
+                            "score": max(d_score, l_score),
+                            "reason": "not_matched",
+                            "profile_id": prof.id,
+                        }
+                    )
     finally:
         wb.close()
 
@@ -831,7 +932,6 @@ def parse_delivery_notes(
                 {"sheet": n.get("sheet"), "score": n.get("score"), "reason": "ledger_disabled"}
             )
     else:
-        # auto
         if delivery_notes:
             notes = delivery_notes
             for n in ledger_notes:
@@ -849,11 +949,23 @@ def parse_delivery_notes(
     delivery_count = sum(1 for n in notes if n.get("source_kind") == "delivery_note")
     ledger_count = sum(1 for n in notes if n.get("source_kind") == "shipment_ledger")
     used_llm = any(bool(a.get("used_llm") and a.get("ok")) for a in assist_summaries)
+    used_profile_ids = sorted(
+        {str(n.get("profile_id") or "") for n in notes if n.get("profile_id")}
+    )
+    if len(used_profile_ids) == 1:
+        result_profile_id = used_profile_ids[0]
+    elif len(profiles) == 1:
+        result_profile_id = profiles[0].id
+    else:
+        result_profile_id = "auto"
     return {
         "success": True,
         "file_path": str(path),
         "file_name": path.name,
-        "profile_id": prof.id,
+        "profile_id": result_profile_id,
+        "profile_ids": used_profile_ids,
+        "profiles_available": [p.id for p in profiles],
+        "profile_hits": profile_hits,
         "note_count": len(notes),
         "delivery_note_count": delivery_count,
         "ledger_note_count": ledger_count,
@@ -866,11 +978,15 @@ def parse_delivery_notes(
             "sheets": assist_summaries,
         },
         "message": (
-            f"识别到 {len(notes)} 张单据（送货单 {delivery_count} / 流水分组 {ledger_count}）"
+            (
+                f"识别到 {len(notes)} 张单据（主表 {delivery_count} / 流水分组 {ledger_count}）"
+                + (f"；profile={','.join(used_profile_ids)}" if used_profile_ids else "")
+            )
             if notes
-            else "未识别到送货单或出货流水"
+            else "未识别到可匹配的单据模板（可自定义 YAML profile）"
         ),
     }
+
 
 
 def preview_shipment_excel_etl(
@@ -1025,8 +1141,35 @@ def execute_shipment_excel_etl(
     if not notes:
         return {
             "success": False,
-            "message": "没有可导入的送货单",
+            "message": "没有可导入的单据",
             "error_code": "no_delivery_notes",
+        }
+
+    # 非 shipment target 的自定义模板：只允许 preview / 产品导入，禁止误建发货单
+    non_shipment = [
+        n
+        for n in notes
+        if str(n.get("profile_target") or "shipment").strip() not in {"", "shipment"}
+    ]
+    if non_shipment and import_shipments:
+        targets = sorted(
+            {
+                str(n.get("profile_target") or "preview_only")
+                for n in non_shipment
+            }
+        )
+        return {
+            "success": False,
+            "message": (
+                "识别到非发货单模板（target="
+                + ",".join(targets)
+                + "）。请改用 preview，或为该 YAML 设置 target: shipment。"
+            ),
+            "error_code": "unsupported_profile_target",
+            "profile_ids": sorted(
+                {str(n.get("profile_id") or "") for n in non_shipment if n.get("profile_id")}
+            ),
+            "note_count": len(notes),
         }
 
     tenant_key = tenant_key_for_etl()

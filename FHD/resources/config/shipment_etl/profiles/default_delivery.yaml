@@ -1,6 +1,8 @@
 # 送货单 / 出货流水 ETL 默认版式（外置，引擎不硬编码这些字符串）
 id: default
 kind: delivery_note
+label: 送货单/出货流水
+target: shipment
 
 detect:
   delivery:
