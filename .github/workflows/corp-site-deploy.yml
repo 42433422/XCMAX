@@ -77,11 +77,23 @@ jobs:
             # Always republish static chrome into the nginx live root (immutable
             # release symlink). Git sync alone only updates /root/XCMAX.
             export XCMAX_FORCE_SITE_PUBLISH=1
+            # workflow_dispatch / path-push deploy must not be blocked by the
+            # cron "hotfix hold" that skips overwrite when live release SHA
+            # differs from origin/<branch>.
+            export XCMAX_FORCE_AUTO_UPDATE=1
+            # Explicitly sync the deploy branch before auto-update / publish so
+            # live chrome never copies a stale worktree after an early exit.
+            # Server worktrees often have local dirty files from prior hotfixes;
+            # force checkout so deploy is not blocked.
+            git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}" --prune
+            git -C "${REMOTE_ROOT}" checkout -f -B "${BRANCH}" "origin/${BRANCH}"
+            git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+            git -C "${REMOTE_ROOT}" clean -fd
+            echo "[info] worktree $(git -C "${REMOTE_ROOT}" rev-parse --short HEAD) on ${BRANCH}"
             AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
             if [ ! -f "${AUTO_SCRIPT}" ]; then
               echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
-              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
-              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
+              exit 1
             fi
             bash "${AUTO_SCRIPT}"
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
@@ -93,8 +105,8 @@ jobs:
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
-              mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
-              chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
+              mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" "${LIVE_SITE}/corp-butler"
+              chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" "${LIVE_SITE}/corp-butler" 2>/dev/null || true
               # Runtime DB projections (action-board / company-hall JSON) must not be
               # overwritten by git snapshots — refresh them after publish instead.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" "${GIT_SITE}/visualization.js" \
@@ -111,8 +123,15 @@ jobs:
               if [ -d "${GIT_SITE}/assets" ]; then
                 cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
               fi
+              if [ -d "${GIT_SITE}/corp-butler" ]; then
+                cp -af "${GIT_SITE}/corp-butler/." "${LIVE_SITE}/corp-butler/"
+              fi
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
+              echo "[verify] published main.js head:"
+              sed -n '246,249p' "${LIVE_SITE}/main.js" || true
+              echo "[verify] download.html title:"
+              grep -E '<title>' "${LIVE_SITE}/download.html" | head -1 || true
             else
               echo "[info] live site root coincides with git tree or missing; skip publish copy"
             fi
