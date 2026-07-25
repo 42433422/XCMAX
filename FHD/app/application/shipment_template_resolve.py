@@ -342,9 +342,7 @@ def resolve_shipment_template(
                 unit_name=unit or None,
             )
             if log_usage:
-                _log_template_usage(
-                    out["template_id"], action="resolve", result_text=out["reason"]
-                )
+                _log_template_usage(out["template_id"], action="resolve", result_text=out["reason"])
             return out
 
     # 2) 显式路径 / 文件名
@@ -376,9 +374,7 @@ def resolve_shipment_template(
                 unit_name=unit or None,
             )
             if log_usage:
-                _log_template_usage(
-                    out["template_id"], action="resolve", result_text=out["reason"]
-                )
+                _log_template_usage(out["template_id"], action="resolve", result_text=out["reason"])
             return out
         # 交给 legacy 按文件名搜索（非 strict）
         if not strict_mode:
@@ -408,14 +404,14 @@ def resolve_shipment_template(
         for row in rows:
             score = _score_template(row, preferred_types=preferred_types, unit_name=unit)
             # 仅当客户名真正命中才走本分支（避免被通用高分抢走）
-            name_token = _normalize_unit_token(
-                str(row.get("name") or row.get("filename") or "")
-            )
+            name_token = _normalize_unit_token(str(row.get("name") or row.get("filename") or ""))
             unit_token = _normalize_unit_token(unit)
             unit_hit = bool(
                 unit_token
                 and name_token
-                and (unit_token == name_token or unit_token in name_token or name_token in unit_token)
+                and (
+                    unit_token == name_token or unit_token in name_token or name_token in unit_token
+                )
             )
             if unit_hit and score > best_unit_score:
                 best_unit_score = score
@@ -434,9 +430,7 @@ def resolve_shipment_template(
                 unit_name=unit,
             )
             if log_usage:
-                _log_template_usage(
-                    out["template_id"], action="resolve", result_text=out["reason"]
-                )
+                _log_template_usage(out["template_id"], action="resolve", result_text=out["reason"])
             return out
 
     # 4) 意图默认打分
@@ -487,9 +481,7 @@ def resolve_shipment_template(
                 unit_name=unit or None,
             )
             if log_usage:
-                _log_template_usage(
-                    out["template_id"], action="resolve", result_text=out["reason"]
-                )
+                _log_template_usage(out["template_id"], action="resolve", result_text=out["reason"])
             return out
 
     return _result(

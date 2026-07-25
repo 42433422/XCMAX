@@ -475,8 +475,10 @@ def needs_llm_assist(
             delivery_score >= 16 or ledger_score >= 16 or header_row is not None
         ):
             return True, "auto_unknown_headers"
-    if unit_weak and prefer_kind in {None, "delivery_note"} and (
-        delivery_score >= 16 or header_row is not None
+    if (
+        unit_weak
+        and prefer_kind in {None, "delivery_note"}
+        and (delivery_score >= 16 or header_row is not None)
     ):
         return True, "delivery_unit_weak"
     if delivery_score < gray_low and ledger_score < 40:

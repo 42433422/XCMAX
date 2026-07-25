@@ -41,9 +41,7 @@ def _category_from_filename(filename: str, analyzed_type: str = "") -> str:
     return "excel"
 
 
-def _template_type_for_ingest(
-    *, template_scope: str, analyzed_type: str, source: str = ""
-) -> str:
+def _template_type_for_ingest(*, template_scope: str, analyzed_type: str, source: str = "") -> str:
     scope = str(template_scope or "").strip()
     if scope in _SCOPE_TEMPLATE_TYPES:
         return _SCOPE_TEMPLATE_TYPES[scope]

@@ -47,10 +47,7 @@ def test_pi_bill_to_not_buyer_po(tmp_path, monkeypatch):
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
 
     fixture = (
-        Path(__file__).resolve().parents[1]
-        / "fixtures"
-        / "network_forms"
-        / "net_PI_sample.xlsx"
+        Path(__file__).resolve().parents[1] / "fixtures" / "network_forms" / "net_PI_sample.xlsx"
     )
     if not fixture.is_file():
         return
