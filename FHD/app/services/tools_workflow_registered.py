@@ -526,14 +526,18 @@ def _registered_router_shipment_orders(
             return {"success": False, "message": "缺少 unit_name"}
         if not isinstance(products, list) or not products:
             return {"success": False, "message": "products 须为非空数组"}
-        return cast(
-            "dict[Any, Any]",
-            svc.generate_shipment_document(
-                unit_name=unit_name,
-                products=products,
-                date=params.get("date"),
-            ),
-        )
+        gen_kwargs: dict[str, Any] = {
+            "unit_name": unit_name,
+            "products": products,
+            "date": params.get("date"),
+        }
+        if params.get("template_name"):
+            gen_kwargs["template_name"] = params.get("template_name")
+        if params.get("template_id"):
+            gen_kwargs["template_id"] = params.get("template_id")
+        if params.get("order_number"):
+            gen_kwargs["order_number"] = params.get("order_number")
+        return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
 
     if action == "generate_batch":
         shipments = params.get("shipments") or []
@@ -556,11 +560,16 @@ def _registered_router_shipment_orders(
                 errors.append({"index": idx, "error": "产品列表不能为空"})
                 continue
             try:
-                result = svc.generate_shipment_document(
-                    unit_name=unit_name,
-                    products=products,
-                    date=shipment.get("date"),
-                )
+                batch_kwargs: dict[str, Any] = {
+                    "unit_name": unit_name,
+                    "products": products,
+                    "date": shipment.get("date"),
+                }
+                if shipment.get("template_name"):
+                    batch_kwargs["template_name"] = shipment.get("template_name")
+                if shipment.get("template_id"):
+                    batch_kwargs["template_id"] = shipment.get("template_id")
+                result = svc.generate_shipment_document(**batch_kwargs)
                 if result.get("success"):
                     ok_count += 1
                 else:

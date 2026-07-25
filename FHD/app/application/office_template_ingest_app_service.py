@@ -41,11 +41,17 @@ def _category_from_filename(filename: str, analyzed_type: str = "") -> str:
     return "excel"
 
 
-def _template_type_for_ingest(*, template_scope: str, analyzed_type: str) -> str:
+def _template_type_for_ingest(
+    *, template_scope: str, analyzed_type: str, source: str = ""
+) -> str:
     scope = str(template_scope or "").strip()
     if scope in _SCOPE_TEMPLATE_TYPES:
         return _SCOPE_TEMPLATE_TYPES[scope]
     kind = str(analyzed_type or "").strip().lower()
+    src = str(source or "").strip().lower()
+    # Shipment ETL / 打单相关入库：默认标为「发货单」，便于 get_default_for_type
+    if "shipment" in src and kind in {"", "excel"}:
+        return "发货单"
     if kind == "word":
         return "Word"
     if kind == "label":
@@ -78,7 +84,7 @@ def _build_create_payload_from_analyze(
         "name": name,
         "template_name": name,
         "template_type": _template_type_for_ingest(
-            template_scope=scope, analyzed_type=analyzed_type
+            template_scope=scope, analyzed_type=analyzed_type, source=source
         ),
         "business_scope": scope,
         "fields": analyzed.get("fields") if isinstance(analyzed.get("fields"), list) else [],

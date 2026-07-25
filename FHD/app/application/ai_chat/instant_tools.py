@@ -383,7 +383,13 @@ class AIChatInstantToolsMixin:
                 doc_result = app_service.generate_shipment_document(
                     unit_name=parsed.get("unit_name", ""),
                     products=parsed.get("products") or [],
-                    template_name=None,
+                    template_name=parsed_params.get("template_name"),
+                    template_id=parsed_params.get("template_id"),
+                    date=parsed_params.get("date"),
+                    order_number=parsed_params.get("order_number"),
+                    intent="shipment_generate",
+                    allow_products_from_db=True,
+                    raw_text=order_text,
                 )
                 response_data["data"]["data"] = {"document": doc_result}
 

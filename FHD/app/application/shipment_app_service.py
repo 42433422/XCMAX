@@ -559,8 +559,16 @@ class ShipmentApplicationService:
         date: str | None = None,
         template_name: str | None = None,
         order_number: str | None = None,
+        template_id: str | None = None,
+        intent: str = "shipment_generate",
+        allow_products_from_db: bool = False,
+        raw_text: str = "",
     ) -> dict[str, Any]:
-        """生成发货单文档（用例编排）。"""
+        """生成发货单文档（用例编排）。
+
+        未指定模版时从模版库按意图解析默认模版，闭合
+        ingest → templates → 打单 断点。
+        """
         if not self._document_generator:
             return {
                 "success": False,
@@ -568,22 +576,63 @@ class ShipmentApplicationService:
                 "doc_name": None,
                 "file_path": None,
             }
+
+        product_rows = list(products or [])
+        if not product_rows and allow_products_from_db:
+            from app.application.shipment_template_resolve import resolve_products_for_unit
+
+            product_rows = resolve_products_for_unit(unit_name)
+        if not product_rows:
+            return {
+                "success": False,
+                "message": "产品列表不能为空",
+                "doc_name": None,
+                "file_path": None,
+            }
+
+        resolved_template = template_name
+        template_meta: dict[str, Any] = {}
+        needs_resolve = bool(str(template_id or "").strip()) or not str(template_name or "").strip()
+        if needs_resolve:
+            from app.application.shipment_template_resolve import resolve_shipment_template
+
+            try:
+                resolved = resolve_shipment_template(
+                    template_id=template_id,
+                    template_name=template_name,
+                    intent=intent,
+                )
+                template_meta = resolved
+                if resolved.get("path"):
+                    resolved_template = str(resolved["path"])
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("模版库解析失败，回退 legacy: %s", exc)
+
         result = self._document_generator.generate(
             unit_name=unit_name,
-            products=products,
+            products=product_rows,
             date=date,
-            template_name=template_name,
+            template_name=resolved_template,
             order_number=order_number,
         )
+        if isinstance(result, dict) and template_meta:
+            result["template_resolution"] = {
+                "template_id": template_meta.get("template_id"),
+                "template_name": template_meta.get("template_name"),
+                "template_type": template_meta.get("template_type"),
+                "source": template_meta.get("source"),
+                "reason": template_meta.get("reason"),
+                "path": template_meta.get("path"),
+            }
         if result.get("success") and self._record_store:
             try:
-                record_products = result.get("parsed_products") or products
+                record_products = result.get("parsed_products") or product_rows
                 record_result = self._record_store.record_document_generation(
                     unit_name=result.get("purchase_unit") or unit_name,
                     unit_id=result.get("unit_id"),
                     products=record_products,
                     document_result=result,
-                    raw_text="",
+                    raw_text=str(raw_text or ""),
                 )
                 record_id = (record_result or {}).get("record_id")
                 if record_id:

@@ -116,3 +116,32 @@ def test_attach_template_ingest_skips_when_etl_failed() -> None:
     )
     assert out["template_ingest"]["skipped"] is True
     assert out["template_ingest"]["ingested"] is False
+
+
+def test_shipment_etl_source_tags_template_type_as_shipment() -> None:
+    analyzed = {
+        "success": True,
+        "template_name": "送货单",
+        "template_type": "excel",
+        "fields": [],
+        "preview_data": {"file_path": "/tmp/ship.xlsx"},
+    }
+    created = {"success": True, "template": {"id": "db:3"}}
+    with (
+        patch(
+            "app.fastapi_routes.document_templates_compat.run_archive_template_analyze",
+            return_value=(analyzed, 200),
+        ),
+        patch(
+            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            return_value=(created, 200),
+        ) as create_mock,
+    ):
+        data, code = ingest_office_bytes_to_template_library(
+            file_body=b"fake",
+            filename="ship.xlsx",
+            source="shipment_excel_etl",
+        )
+    assert code == 200
+    assert data["ingested"] is True
+    assert create_mock.call_args.args[0]["template_type"] == "发货单"
