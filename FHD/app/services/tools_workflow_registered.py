@@ -1094,8 +1094,8 @@ def _registered_router_template_preview(
         template_key = (
             f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
         )
+        from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
         from app.infrastructure.tenant_scope import TenantScopeError
-        from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
 
         try:
             tenant_id = templates_tenant_id_for_insert()

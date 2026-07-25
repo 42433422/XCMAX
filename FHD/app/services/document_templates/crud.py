@@ -35,7 +35,7 @@ def _normalize_db_template_id(raw_id):
 def _ensure_template_tables_ready():
     try:
         from app.db.init_db import init_template_tables
-        from app.services.document_templates.tenant_scope import ensure_templates_tenant_column
+        from app.infrastructure.templates.tenant_scope import ensure_templates_tenant_column
 
         init_template_tables()
         ensure_templates_tenant_column()
@@ -138,8 +138,8 @@ def _create_template_with_payload_inner(payload: dict):
         template_key = (
             f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
         )
+        from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
         from app.infrastructure.tenant_scope import TenantScopeError
-        from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
 
         try:
             tenant_id = templates_tenant_id_for_insert()
@@ -232,7 +232,7 @@ def _update_template_with_payload_inner(payload: dict):
         db_id = _normalize_db_template_id(payload.get("id"))
         if db_id is None:
             return _j({"success": False, "message": "模板 id 无效"}, 400)
-        from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:

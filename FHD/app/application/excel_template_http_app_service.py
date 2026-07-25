@@ -473,7 +473,7 @@ def excel_templates_test():
 def get_template(template_id: int):
     try:
         from app.db.session import get_db
-        from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
@@ -512,7 +512,7 @@ def get_template(template_id: int):
 def update_template(template_id: int, data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.db.session import get_db
-        from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
@@ -565,7 +565,7 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
 def delete_template(template_id: int):
     try:
         from app.db.session import get_db
-        from app.services.document_templates.tenant_scope import templates_tenant_where_sql
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:

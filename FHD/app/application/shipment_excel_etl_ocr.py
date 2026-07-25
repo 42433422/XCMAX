@@ -122,8 +122,8 @@ def _load_image_arrays(path: Path) -> list[Any]:
     """返回可 OCR 的图像数组列表（PDF 多页）。"""
     suffix = path.suffix.lower()
     if suffix in _IMAGE_SUFFIXES:
-        from PIL import Image
         import numpy as np
+        from PIL import Image
 
         image = Image.open(path).convert("RGB")
         return [np.array(image)]
@@ -131,8 +131,8 @@ def _load_image_arrays(path: Path) -> list[Any]:
     if suffix in _PDF_SUFFIXES:
         # 优先 pypdfium2（轻）；否则 pdf2image
         try:
-            import pypdfium2 as pdfium
             import numpy as np
+            import pypdfium2 as pdfium
 
             pdf = pdfium.PdfDocument(str(path))
             pages = []
@@ -145,8 +145,8 @@ def _load_image_arrays(path: Path) -> list[Any]:
         except RECOVERABLE_ERRORS:
             logger.debug("pypdfium2 pdf render unavailable", exc_info=True)
         try:
-            from pdf2image import convert_from_path
             import numpy as np
+            from pdf2image import convert_from_path
 
             max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
             images = convert_from_path(str(path), first_page=1, last_page=max_pages)

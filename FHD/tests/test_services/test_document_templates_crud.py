@@ -88,7 +88,7 @@ class TestEnsureTemplateTablesReady:
         with (
             patch("app.db.init_db.init_template_tables") as mock_init,
             patch(
-                "app.services.document_templates.tenant_scope.ensure_templates_tenant_column"
+                "app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"
             ) as mock_ensure,
         ):
             from app.services.document_templates.crud import _ensure_template_tables_ready

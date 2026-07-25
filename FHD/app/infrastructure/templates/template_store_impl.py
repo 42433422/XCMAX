@@ -197,7 +197,7 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def _db_templates(self) -> list[dict]:
         """从 templates 表读取模板元数据（按当前租户隔离；若表不存在则返回空列表）。"""
-        from app.services.document_templates.tenant_scope import (
+        from app.infrastructure.templates.tenant_scope import (
             ensure_templates_tenant_column,
             templates_tenant_where_sql,
         )
@@ -372,7 +372,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         try:
             from sqlalchemy import text as sql_text
 
-            from app.services.document_templates.tenant_scope import (
+            from app.infrastructure.templates.tenant_scope import (
                 templates_tenant_id_for_insert,
                 templates_tenant_where_sql,
             )
@@ -457,8 +457,8 @@ class FileSystemTemplateStore(TemplateStorePort):
         original_file_path = template_data.get("original_file_path") or ""
 
         try:
+            from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
             from app.infrastructure.tenant_scope import TenantScopeError
-            from app.services.document_templates.tenant_scope import templates_tenant_id_for_insert
 
             tenant_id = templates_tenant_id_for_insert()
             with get_db() as db:

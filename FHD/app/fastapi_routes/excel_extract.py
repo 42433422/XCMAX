@@ -493,8 +493,8 @@ async def shipment_etl_preview(
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl preview failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl preview failed: %s", e)
+        return JSONResponse({"success": False, "message": "单据预览失败，请稍后重试"}, status_code=500)
 
 
 @router.post("/shipment-etl/execute")
@@ -642,8 +642,8 @@ async def shipment_etl_execute(
             status = 403
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl execute failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl execute failed: %s", e)
+        return JSONResponse({"success": False, "message": "单据入库失败，请稍后重试"}, status_code=500)
 
 
 @router.post("/shipment-etl/ocr-preview")
@@ -656,8 +656,8 @@ async def shipment_etl_ocr_preview(
 ):
     """扫描件/图片/PDF OCR → 表格 → 单据预览。"""
     try:
-        from app.application.shipment_excel_etl_ocr import parse_ocr_document
         from app.application.shipment_excel_etl_app_service import preview_shipment_excel_etl
+        from app.application.shipment_excel_etl_ocr import parse_ocr_document
 
         path = str(file_path or "").strip()
         if file is not None and (file.filename or "").strip():
@@ -703,8 +703,8 @@ async def shipment_etl_ocr_preview(
         status = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl ocr-preview failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl ocr-preview failed: %s", e)
+        return JSONResponse({"success": False, "message": "OCR 预览失败，请稍后重试"}, status_code=500)
 
 
 @router.post("/shipment-etl/batch-preview")
@@ -730,8 +730,8 @@ async def shipment_etl_batch_preview(
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl batch preview failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl batch preview failed: %s", e)
+        return JSONResponse({"success": False, "message": "批量预览失败，请稍后重试"}, status_code=500)
 
 
 @router.post("/shipment-etl/batch-execute")
@@ -770,8 +770,8 @@ async def shipment_etl_batch_execute(
             status = 403
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl batch execute failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl batch execute failed: %s", e)
+        return JSONResponse({"success": False, "message": "批量入库失败，请稍后重试"}, status_code=500)
 
 
 @router.post("/shipment-etl/generate-template")
@@ -834,8 +834,8 @@ async def shipment_etl_generate_template(
             )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl generate template failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl generate template failed: %s", e)
+        return JSONResponse({"success": False, "message": "单据处理失败，请稍后重试"}, status_code=500)
 
 
 @router.post("/shipment-etl/regenerate")
@@ -888,8 +888,8 @@ async def shipment_etl_regenerate(
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
-        logger.error("shipment etl regenerate failed: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        logger.exception("shipment etl regenerate failed: %s", e)
+        return JSONResponse({"success": False, "message": "单据处理失败，请稍后重试"}, status_code=500)
 
 
 @router.get("/logs")

@@ -157,7 +157,7 @@ def run_archive_template_delete(
 
         from app.db.init_db import init_template_tables
         from app.db.session import get_db
-        from app.services.document_templates.tenant_scope import (
+        from app.infrastructure.templates.tenant_scope import (
             ensure_templates_tenant_column,
             templates_tenant_where_sql,
         )

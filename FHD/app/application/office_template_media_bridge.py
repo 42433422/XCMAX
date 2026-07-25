@@ -124,8 +124,11 @@ def extract_pptx_document_text(file_path: str) -> dict[str, Any]:
     try:
         text, slide_count = _extract_pptx_text_via_lib(file_path)
         engine = "python-pptx"
-    except (RECOVERABLE_ERRORS, ImportError, ModuleNotFoundError):
+    except ImportError:
         logger.debug("python-pptx unavailable, fallback zip", exc_info=True)
+        text, slide_count = _extract_pptx_text_via_zip(file_path)
+    except RECOVERABLE_ERRORS:
+        logger.debug("python-pptx parse failed, fallback zip", exc_info=True)
         text, slide_count = _extract_pptx_text_via_zip(file_path)
     return {
         "text": text,
@@ -266,9 +269,11 @@ def _sync_vlm_describe_first_image(image_bytes: bytes, *, hint: str) -> dict[str
 
 def _maybe_pdf_page_image_bytes(file_path: str) -> bytes | None:
     try:
-        from app.application.shipment_excel_etl_ocr import _load_image_arrays
-        from PIL import Image
         import io
+
+        from PIL import Image
+
+        from app.application.shipment_excel_etl_ocr import _load_image_arrays
 
         images = _load_image_arrays(Path(file_path))
         if not images:
