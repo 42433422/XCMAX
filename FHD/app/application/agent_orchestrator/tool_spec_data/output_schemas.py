@@ -976,6 +976,30 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "http_status_code": {"type": "integer"},
         },
     },
+    ("document_template", "ingest"): {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "ingested": {"type": "boolean"},
+            "template": {"type": "object"},
+            "analyzed": {"type": "object"},
+            "http_status_code": {"type": "integer"},
+        },
+    },
+    ("document_template", "upload"): {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "ingested": {"type": "boolean"},
+            "template": {"type": "object"},
+            "analyzed": {"type": "object"},
+            "http_status_code": {"type": "integer"},
+        },
+    },
     ("template_extract", "extract"): {
         "type": "object",
         "required": ["success", "file_path", "fields", "sample_rows"],

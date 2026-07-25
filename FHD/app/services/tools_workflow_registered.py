@@ -913,6 +913,34 @@ def _registered_router_document_template(
             payload,
             base_dir=str(runtime_context.get("template_base_dir") or "") or None,
         )
+    elif action in ("ingest", "upload"):
+        from app.application.office_template_ingest_app_service import (
+            ingest_office_bytes_to_template_library,
+            ingest_office_path_to_template_library,
+        )
+
+        file_path = str(payload.get("file_path") or payload.get("original_file_path") or "").strip()
+        file_body = payload.get("file_body")
+        template_name = str(payload.get("template_name") or payload.get("name") or "").strip()
+        template_scope = str(payload.get("template_scope") or payload.get("business_scope") or "").strip()
+        source = str(payload.get("source") or "document_template_ingest").strip() or "document_template_ingest"
+        if isinstance(file_body, (bytes, bytearray)):
+            data, status_code = ingest_office_bytes_to_template_library(
+                file_body=bytes(file_body),
+                filename=str(payload.get("filename") or "upload.bin"),
+                template_name=template_name,
+                template_scope=template_scope,
+                source=source,
+            )
+        elif file_path:
+            data, status_code = ingest_office_path_to_template_library(
+                file_path,
+                template_name=template_name,
+                template_scope=template_scope,
+                source=source,
+            )
+        else:
+            return {"success": False, "message": "缺少 file_path 或 file_body"}
     else:
         return {"success": False, "message": f"未知 document_template action: {action}"}
     result = dict(data or {})

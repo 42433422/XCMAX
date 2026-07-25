@@ -444,9 +444,18 @@ async def shipment_etl_preview(
     file_path: str = Form(""),
     workspace_root: str = Form(""),
     include_ledger: str = Form("auto"),
+    save_as_template: str = Form("0"),
+    template_name: str = Form(""),
+    template_scope: str = Form(""),
 ):
-    """预览：按内容指纹识别送货单/出货流水并抽取抬头+明细（不写库）。"""
+    """预览：按内容指纹识别送货单/出货流水并抽取抬头+明细（不写业务库）。
+
+    ``save_as_template=1`` 时额外把源办公文件解析入库模版库。
+    """
     try:
+        from app.application.office_template_ingest_app_service import (
+            attach_template_ingest_to_etl_result,
+        )
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
         )
@@ -474,6 +483,14 @@ async def shipment_etl_preview(
         )
         if tmp_path:
             result["uploaded_temp_path"] = tmp_path
+        result = attach_template_ingest_to_etl_result(
+            result,
+            file_path=path,
+            save_as_template=_form_truthy(save_as_template, False),
+            template_name=str(template_name or "").strip(),
+            template_scope=str(template_scope or "").strip(),
+            source="shipment_excel_etl_preview",
+        )
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.error("shipment etl preview failed: %s", e)
@@ -495,15 +512,22 @@ async def shipment_etl_execute(
     dry_run: str = Form("0"),
     direct: str = Form("0"),
     force_shipment_target: str = Form("0"),
+    save_as_template: str = Form("0"),
+    template_name: str = Form(""),
+    template_scope: str = Form(""),
     _user: Any = Depends(require_identified_user),
 ):
     """执行闭环：单据 → 客户/产品/发货单（默认幂等；流水需 confirm_ledger）。
 
     direct=1：无预览直写（需环境开关 FHD_EXCEL_ETL_ALLOW_DIRECT=1）。
+    save_as_template=1：额外把源办公文件解析入库模版库。
     """
     try:
         import json
 
+        from app.application.office_template_ingest_app_service import (
+            attach_template_ingest_to_etl_result,
+        )
         from app.application.shipment_excel_etl_app_service import (
             get_shipment_excel_etl_app_service,
         )
@@ -600,6 +624,14 @@ async def shipment_etl_execute(
             force_shipment_target=_form_truthy(force_shipment_target, False),
             notes=notes,
             workspace_root=str(workspace_root or "").strip() or None,
+        )
+        result = attach_template_ingest_to_etl_result(
+            result,
+            file_path=path,
+            save_as_template=_form_truthy(save_as_template, False),
+            template_name=str(template_name or "").strip(),
+            template_scope=str(template_scope or "").strip(),
+            source="shipment_excel_etl_execute",
         )
         status = 200 if result.get("success") or result.get("dry_run") else 400
         if result.get("error_code") == "unsafe_path":
