@@ -243,8 +243,10 @@ function loadCorpButler() {
     root.id = 'xc-corp-butler-root'
     document.body.appendChild(root)
   }
-  const ver = '20260723l'
-  const wantCss = `/corp-butler/corp-butler.css?v=20260723l'link[data-xc-corp-butler-css]')
+  const ver = '20260725a'
+  const wantCss = `/corp-butler/corp-butler.css?v=${ver}`
+  const wantJs = `/corp-butler/corp-butler.js?v=${ver}`
+  const existingCss = document.querySelector('link[data-xc-corp-butler-css]')
   if (!existingCss) {
     const css = document.createElement('link')
     css.rel = 'stylesheet'
