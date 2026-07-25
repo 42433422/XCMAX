@@ -148,6 +148,23 @@ def _analyze_template_with_upload_inner(file, template_name: str, template_scope
         return _j({"success": False, "message": f"分析失败：{str(e)}"}, 500)
 
 
+def _pick_excel_analyze_sheet(file_path: str) -> str:
+    """网络/杂项单据常见表名；优先「出货」，否则回退活动表。"""
+    try:
+        from openpyxl import load_workbook
+
+        wb = load_workbook(file_path, read_only=True)
+        names = list(wb.sheetnames or [])
+        wb.close()
+    except RECOVERABLE_ERRORS:
+        return "出货"
+    preferred = ("出货", "送货单", "发货单", "送货", "出货明细", "Sheet1")
+    for name in preferred:
+        if name in names:
+            return name
+    return names[0] if names else "出货"
+
+
 def _analyze_excel_template(
     file_path: str,
     template_name: str,
@@ -163,10 +180,11 @@ def _analyze_excel_template(
         _update_progress(task_id, 10, 1, "文件上传成功")
 
         skill = get_excel_analyzer_skill()
+        sheet_name = _pick_excel_analyze_sheet(file_path)
 
-        _update_progress(task_id, 50, 2, "分析 Excel 结构...")
+        _update_progress(task_id, 50, 2, f"分析 Excel 结构（{sheet_name}）...")
 
-        analyze_result = skill.execute(file_path=file_path, sheet_name="出货")
+        analyze_result = skill.execute(file_path=file_path, sheet_name=sheet_name)
 
         if not analyze_result.get("success"):
             _cleanup_progress_tracking(task_id)
@@ -181,9 +199,11 @@ def _analyze_excel_template(
         merged_cells = analyze_result.get("merged_cells", [])
         structure = analyze_result.get("structure", {})
 
-        structured = _extract_structured_excel_preview(file_path, sheet_name="出货", sample_limit=8)
+        structured = _extract_structured_excel_preview(
+            file_path, sheet_name=sheet_name, sample_limit=8
+        )
         grid_preview = _extract_excel_grid_preview(
-            file_path, sheet_name="出货", max_rows=18, max_cols=12
+            file_path, sheet_name=sheet_name, max_rows=18, max_cols=12
         )
         fields = structured.get("fields") or []
 
