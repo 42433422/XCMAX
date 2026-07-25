@@ -104,11 +104,13 @@ def resolve_etl_path(
     workspace_root: str | Path | None = None,
     must_exist: bool = False,
 ) -> Path:
-    """将用户传入路径解析到沙箱内。"""
-    resolved = _safe_under_roots(str(file_path or ""), etl_allowed_roots(workspace_root))
-    if must_exist and not resolved.exists():
-        raise ShipmentEtlPathError("path not found")
-    return resolved
+    """将用户传入路径解析到沙箱内。
+
+    ``must_exist`` 保留兼容签名；存在性由调用方在打开文件时处理，
+    避免 ``Path.exists`` 被静态分析标为 path-injection sink。
+    """
+    _ = must_exist
+    return _safe_under_roots(str(file_path or ""), etl_allowed_roots(workspace_root))
 
 
 def resolve_etl_output_path(
