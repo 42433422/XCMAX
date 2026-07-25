@@ -6,8 +6,8 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from app.application.shipment_excel_etl_app_service import parse_delivery_notes
 from app.application.shipment_etl_profile import clear_profile_cache
+from app.application.shipment_excel_etl_app_service import parse_delivery_notes
 
 
 def test_english_to_adjacent_buyer(tmp_path, monkeypatch):

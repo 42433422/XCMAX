@@ -260,7 +260,7 @@ class ExcelEtlKnowledgeBase:
         seed = (_SEED.get("meta_labels") or {}) if isinstance(_SEED, dict) else {}
         raw = self._data.get("meta_labels") or {}
         out: dict[str, list[str]] = {}
-        keys = set(str(k) for k in seed) | set(str(k) for k in raw)
+        keys = {str(k) for k in seed} | {str(k) for k in raw}
         for key in keys:
             merged: list[str] = []
             seen: set[str] = set()
