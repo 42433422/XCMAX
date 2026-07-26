@@ -216,13 +216,18 @@ def _sqlite_desktop_mode() -> bool:
 
 def _create_engine_for_url(url: str):
     if url.startswith("sqlite"):
-        # 桌面单用户：StaticPool 复用单连接，降低 NullPool 每次请求的开销。
-        # 服务端/多写场景仍用 NullPool，减轻 database is locked。
+        # 桌面端既有请求线程，也有 ETL 等后台线程。StaticPool 会让这些线程
+        # 共享同一个 sqlite3.Connection，导致请求收尾提交与后台写入互相
+        # 回滚，甚至出现 "SQL statements in progress"。WAL 下使用小型
+        # QueuePool，让并发事务拥有独立连接。
         if _sqlite_desktop_mode():
             return create_engine(
                 url,
                 connect_args={"check_same_thread": False, "timeout": 45},
-                poolclass=pool.StaticPool,
+                poolclass=pool.QueuePool,
+                pool_size=5,
+                max_overflow=5,
+                pool_pre_ping=True,
                 echo=False,
             )
         return create_engine(

@@ -17,6 +17,7 @@ from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
 from app.application.etl.parsers import parse_file
 from app.application.etl.service import EtlService, mark_interrupted_runs_on_startup
 from app.application.etl.targets import (
+    CustomerAdapter,
     ExportCsvAdapter,
     KnowledgeAdapter,
     ProductAdapter,
@@ -34,7 +35,6 @@ from app.application.etl.transforms import (
 from app.application.excel_etl_kb import ExcelEtlKnowledgeBase, TemplateMemory
 from app.application.shipment_excel_etl_app_service import write_delivery_note_workbook
 from app.db.base import Base
-from app.db.models.customer import Customer
 from app.db.models.etl import (
     EtlRun,
     EtlRunRow,
@@ -46,6 +46,7 @@ from app.db.models.etl import (
 from app.db.models.inventory import Warehouse
 from app.db.models.product import Product
 from app.db.models.purchase import PurchaseOrder, PurchaseOrderItem, Supplier
+from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.infrastructure.tenant_scope import tenant_scope
@@ -65,7 +66,7 @@ def etl_db(tmp_path, monkeypatch):
             EtlRun.__table__,
             EtlRunRow.__table__,
             EtlTargetConfig.__table__,
-            Customer.__table__,
+            PurchaseUnit.__table__,
             Product.__table__,
             Supplier.__table__,
             Warehouse.__table__,
@@ -191,6 +192,59 @@ def test_delivery_profile_converts_to_general_etl_rows(tmp_path, monkeypatch):
     assert {row["product_name"] for row in values} == {"底漆", "面漆"}
     assert len({row["source_fingerprint"] for row in values}) == 2
     assert len({row["legacy_note_fingerprint"] for row in values}) == 1
+
+
+def test_delivery_profile_skips_filename_fallback_sheets_and_total_rows(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "855237eb-59a4-419e-b22c-360ea04a8a56.xlsx"
+    path.write_bytes(b"placeholder")
+    notes = [
+        {
+            "sheet": "送货单",
+            "unit_name": "甲公司",
+            "order_number": "A-1",
+            "score": 50,
+            "assist": {"ok": True},
+            "profile_id": "universal",
+            "fingerprint": "good",
+            "contact_person": "日期：2026年01月19日",
+            "items": [
+                {"product_name": "底漆", "model_number": "P-1", "unit_price": 10},
+                {
+                    "product_name": "100",
+                    "model_number": "大 写 人 民 币",
+                    "unit_price": 0,
+                },
+            ],
+        },
+        {
+            "sheet": "回款明细",
+            "unit_name": path.stem,
+            "order_number": "",
+            "score": 12,
+            "assist": {"ok": False},
+            "profile_id": "universal",
+            "fingerprint": "bad",
+            "items": [{"product_name": "伪产品", "model_number": ""}],
+        },
+    ]
+    monkeypatch.setattr(
+        "app.application.shipment_excel_etl_app_service.preview_shipment_excel_etl",
+        lambda *_args, **_kwargs: {"success": True, "notes": notes},
+    )
+
+    customers = parse_file(path, target_type="customers")
+    products = parse_file(path, target_type="products")
+
+    assert [row.values["customer_name"] for row in customers.rows] == ["甲公司"]
+    assert "contact_person" not in customers.rows[0].values
+    assert [row.values["name"] for row in products.rows] == ["底漆"]
+    assert customers.source_features["skipped_note_count"] == 1
+    assert any(
+        warning["code"] == "ETL_COMPATIBILITY_LOW_CONFIDENCE_SHEETS_SKIPPED"
+        for warning in customers.warnings
+    )
 
 
 def test_macos_vision_fallback_returns_auditable_positioned_blocks(monkeypatch):
@@ -329,11 +383,11 @@ def test_preview_blocks_invalid_rows_execute_valid_rows_and_rollback(etl_db, mon
         )
         assert completed["status"] == "completed"
         assert completed["receipt"]["partial"] is True
-        assert db.query(Customer).filter(Customer.customer_name == "甲公司").count() == 1
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 1
 
         rolled_back = service.rollback(db, run_id=run["id"], owner_user_id=11)
         assert rolled_back["rollback_status"] == "completed"
-        assert db.query(Customer).filter(Customer.customer_name == "甲公司").count() == 0
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 0
         db.close()
 
 
@@ -395,8 +449,8 @@ def test_internal_partial_failure_retries_only_unfinished_rows(etl_db, monkeypat
         )
         assert failed["status"] == "failed"
         assert failed["error"]["code"] == "ETL_TEST_TRANSIENT"
-        assert db.query(Customer).filter(Customer.customer_name == "甲公司").count() == 1
-        assert db.query(Customer).filter(Customer.customer_name == "乙公司").count() == 0
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 1
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "乙公司").count() == 0
 
         retried = service.retry(db, run_id=run["id"], owner_user_id=12)
         assert retried["status"] == "preview_ready"
@@ -408,10 +462,10 @@ def test_internal_partial_failure_retries_only_unfinished_rows(etl_db, monkeypat
             valid_rows_only=False,
         )
         assert completed["summary"]["executed"] == 2
-        assert db.query(Customer).count() == 2
+        assert db.query(PurchaseUnit).count() == 2
 
         service.rollback(db, run_id=run["id"], owner_user_id=12)
-        assert db.query(Customer).count() == 0
+        assert db.query(PurchaseUnit).count() == 0
         db.close()
 
 
@@ -511,6 +565,58 @@ def test_product_adapter_requires_confirmed_update_fields_and_rolls_back(etl_db)
         )
         db.commit()
         assert str(db.get(Product, int(created["match_ref"])).price) == "10.00"
+        db.close()
+
+
+def test_customer_adapter_uses_visible_purchase_units_and_tenant_scope(etl_db):
+    adapter = CustomerAdapter()
+    with tenant_scope(13):
+        db = etl_db()
+        original = PurchaseUnit(
+            tenant_id=13,
+            unit_name="同名客户",
+            contact_phone="100",
+            is_active=True,
+        )
+        db.add(original)
+        db.commit()
+        preview = adapter.preview(
+            db,
+            {"customer_name": "同名客户", "contact_phone": "200"},
+            allowed_update_fields={"contact_phone"},
+            context={},
+        )
+        assert preview.action == "update"
+        updated = adapter.execute_row(
+            db,
+            {"customer_name": "同名客户", "contact_phone": "200"},
+            action="update",
+            match_ref=preview.match_ref,
+            allowed_update_fields={"contact_phone"},
+            context={},
+        )
+        db.commit()
+        assert original.contact_phone == "200"
+        adapter.rollback_row(
+            db,
+            match_ref=preview.match_ref,
+            before=preview.before or {},
+            after=updated["after"],
+            context={},
+        )
+        db.commit()
+        assert original.contact_phone == "100"
+        db.close()
+
+    with tenant_scope(14):
+        db = etl_db()
+        isolated = adapter.preview(
+            db,
+            {"customer_name": "同名客户"},
+            allowed_update_fields=set(),
+            context={},
+        )
+        assert isolated.action == "new"
         db.close()
 
 
@@ -959,7 +1065,7 @@ def test_duplicate_customers_inside_one_file_are_skipped(etl_db, monkeypatch):
             valid_rows_only=False,
         )
         assert completed["summary"]["executed"] == 1
-        assert db.query(Customer).filter(Customer.customer_name == "甲公司").count() == 1
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 1
         db.close()
 
 

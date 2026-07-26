@@ -12,7 +12,6 @@ from sqlalchemy.orm import sessionmaker
 import app.fastapi_routes.etl as etl_routes
 from app.application.etl.service import EtlService
 from app.db.base import Base
-from app.db.models.customer import Customer
 from app.db.models.etl import (
     EtlRun,
     EtlRunRow,
@@ -21,6 +20,7 @@ from app.db.models.etl import (
     EtlTemplateVersion,
     EtlUpload,
 )
+from app.db.models.purchase_unit import PurchaseUnit
 from app.fastapi_routes.shipment_etl_compat import shipment_etl_preview
 from app.infrastructure.tenant_scope import tenant_scope
 
@@ -38,7 +38,7 @@ def _test_app(tmp_path, monkeypatch):
             EtlRun.__table__,
             EtlRunRow.__table__,
             EtlTargetConfig.__table__,
-            Customer.__table__,
+            PurchaseUnit.__table__,
         ],
     )
     maker = sessionmaker(bind=engine, expire_on_commit=False)

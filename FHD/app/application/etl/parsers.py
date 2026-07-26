@@ -226,6 +226,57 @@ def _parse_delivery_note_with_compat_profile(
 
     rows: list[ParsedRow] = []
     headers: list[str] = []
+    skipped_sheets: list[str] = []
+    inherited_unit_sheets: list[str] = []
+
+    def note_uses_unreliable_filename_fallback(note: dict[str, Any]) -> bool:
+        unit_name = str(note.get("unit_name") or "").strip()
+        assist = note.get("assist") if isinstance(note.get("assist"), dict) else {}
+        used_filename_fallback = bool(unit_name) and unit_name == path.stem
+        lacks_business_identity = (
+            not str(note.get("order_number") or "").strip()
+            and not bool(assist.get("ok"))
+        )
+        return used_filename_fallback and lacks_business_identity
+
+    def note_is_reliable(note: dict[str, Any]) -> bool:
+        return bool(str(note.get("unit_name") or "").strip()) and not (
+            note_uses_unreliable_filename_fallback(note)
+        )
+
+    primary_units = {
+        str(note.get("unit_name") or "").strip()
+        for note in notes
+        if isinstance(note, dict) and note_is_reliable(note)
+    }
+
+    def resolved_unit_name(note: dict[str, Any], sheet: str) -> tuple[str, bool]:
+        unit_name = str(note.get("unit_name") or "").strip()
+        if note_is_reliable(note):
+            return unit_name, False
+        finance_sheet = bool(re.search(r"回款|付款|收款|对账|统计|汇总|余额|账龄", sheet))
+        if (
+            target_type == "products"
+            and note_uses_unreliable_filename_fallback(note)
+            and len(primary_units) == 1
+            and not finance_sheet
+        ):
+            return next(iter(primary_units)), True
+        return "", False
+
+    def item_is_business_row(item: dict[str, Any]) -> bool:
+        name = str(item.get("product_name") or "").strip()
+        model = re.sub(r"\s+", "", str(item.get("model_number") or ""))
+        if not name or "大写人民币" in model:
+            return False
+        return name not in {"合计", "总计", "金额合计", "人民币合计"}
+
+    def resolved_contact_person(note: dict[str, Any]) -> str | None:
+        value = str(note.get("contact_person") or "").strip()
+        compact = re.sub(r"\s+", "", value)
+        if not value or re.match(r"^(日期|制单日期)[:：]?\d{4}[年./-]", compact):
+            return None
+        return value
 
     def append(sheet: str, values: dict[str, Any], source: dict[str, Any]) -> None:
         if len(rows) >= max_rows:
@@ -258,21 +309,34 @@ def _parse_delivery_note_with_compat_profile(
         if not isinstance(note, dict):
             continue
         sheet = str(note.get("sheet") or note.get("sheet_name") or "送货单")
-        unit_name = str(note.get("unit_name") or "").strip()
+        unit_name, inherited_unit = resolved_unit_name(note, sheet)
+        if not unit_name:
+            skipped_sheets.append(sheet)
+            continue
+        source_note = note
+        if inherited_unit:
+            inherited_unit_sheets.append(sheet)
+            source_note = {
+                **note,
+                "compatibility_unit_inherited": True,
+                "inherited_unit_name": unit_name,
+            }
         if target_type == "customers":
             append(
                 sheet,
                 {
                     "customer_name": unit_name,
-                    "contact_person": note.get("contact_person"),
+                    "contact_person": resolved_contact_person(note),
                     "contact_phone": note.get("contact_phone") or note.get("phone"),
                     "contact_address": note.get("contact_address") or note.get("address"),
                 },
-                note,
+                source_note,
             )
             continue
         for item_index, item in enumerate(note.get("items") or [], start=1):
             if not isinstance(item, dict):
+                continue
+            if not item_is_business_row(item):
                 continue
             if target_type == "products":
                 values = {
@@ -314,10 +378,32 @@ def _parse_delivery_note_with_compat_profile(
                     "unit_price": item.get("unit_price"),
                     "amount": item.get("amount"),
                 }
-            append(sheet, values, note)
+            append(sheet, values, source_note)
 
     if not rows:
         return None
+    warnings = [
+        {
+            "code": "ETL_COMPATIBILITY_PROFILE_APPLIED",
+            "message": "已使用原送货单兼容预设解析；执行仍需在通用 ETL 中预演确认。",
+        }
+    ]
+    if skipped_sheets:
+        warnings.append(
+            {
+                "code": "ETL_COMPATIBILITY_LOW_CONFIDENCE_SHEETS_SKIPPED",
+                "message": f"已跳过 {len(skipped_sheets)} 个无法可靠识别业务主体的工作表。",
+                "sheets": skipped_sheets[:20],
+            }
+        )
+    if inherited_unit_sheets:
+        warnings.append(
+            {
+                "code": "ETL_COMPATIBILITY_UNIT_INHERITED",
+                "message": f"有 {len(inherited_unit_sheets)} 个产品明细表沿用同文件已确认的客户名称。",
+                "sheets": inherited_unit_sheets[:20],
+            }
+        )
     return ParsedDataset(
         headers=headers,
         rows=rows,
@@ -331,15 +417,12 @@ def _parse_delivery_note_with_compat_profile(
                     if isinstance(note, dict)
                 }
             ),
-            "note_count": len(notes),
+            "note_count": len(notes) - len(skipped_sheets),
+            "skipped_note_count": len(skipped_sheets),
+            "inherited_unit_note_count": len(inherited_unit_sheets),
             "headers": headers,
         },
-        warnings=[
-            {
-                "code": "ETL_COMPATIBILITY_PROFILE_APPLIED",
-                "message": "已使用原送货单兼容预设解析；执行仍需在通用 ETL 中预演确认。",
-            }
-        ],
+        warnings=warnings,
     )
 
 

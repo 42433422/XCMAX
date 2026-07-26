@@ -59,6 +59,15 @@
               </option>
             </select>
           </label>
+          <div v-if="['customers', 'products'].includes(targetType)" class="etl-target-scope-note">
+            <strong>
+              本次只写入{{ targetType === 'customers' ? '客户库' : '产品库' }}
+            </strong>
+            <span>
+              不会同时写入{{ targetType === 'customers' ? '产品库' : '客户库' }}；
+              同一文件需要切换目标后再预演、确认一次。
+            </span>
+          </div>
           <label>
             个人模板
             <select v-model="templateId" :disabled="busy">
@@ -412,6 +421,18 @@
           <div><dt>进度</dt><dd>{{ currentRun.progress }}%</dd></div>
           <div><dt>撤销能力</dt><dd>{{ currentRun.reversible ? '内部目标可撤销' : '外部目标不可撤销' }}</dd></div>
         </dl>
+        <div
+          v-if="currentRun.status === 'completed' && ['customers', 'products'].includes(currentRun.target_type)"
+          class="etl-target-scope-note"
+        >
+          <strong>
+            已写入{{ currentRun.target_type === 'customers' ? '客户库' : '产品库' }}
+          </strong>
+          <span>
+            本次没有写入{{ currentRun.target_type === 'customers' ? '产品库' : '客户库' }}。
+            如需同时导入，请回到“上传文件”并切换目标再运行一次。
+          </span>
+        </div>
         <pre>{{ JSON.stringify(currentRun.receipt, null, 2) }}</pre>
       </article>
     </section>

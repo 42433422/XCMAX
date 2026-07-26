@@ -22,6 +22,8 @@
 .etl-dropzone span { color: #7b8796; font-size: 12px; }
 .etl-form-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid #e2e7ef; border-radius: 14px; }
 .etl-form-card label, .etl-webhook-form label { display: grid; gap: 7px; font-size: 13px; color: #4d5d72; }
+.etl-target-scope-note { display: grid; gap: 4px; padding: 11px 12px; color: #725114; border: 1px solid #ebd593; border-radius: 9px; background: #fff8e6; font-size: 12px; }
+.etl-target-scope-note strong { font-size: 13px; }
 .etl-compat-note { margin: 14px 2px 0; color: #65758a; font-size: 12px; }
 select, input { min-height: 38px; padding: 7px 10px; border: 1px solid #ced7e3; border-radius: 8px; color: #26364a; background: #fff; }
 .etl-mapping-table textarea { width: 100%; min-width: 180px; margin-top: 6px; padding: 7px; border: 1px solid #ced7e3; border-radius: 7px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
@@ -87,6 +89,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .etl-receipt dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .etl-receipt dl div { padding: 10px; border-radius: 8px; background: #fff; }
 .etl-receipt dt { color: #778397; font-size: 12px; }.etl-receipt dd { margin: 4px 0 0; }
+.etl-receipt .etl-target-scope-note { margin: 12px 0; }
 .etl-receipt pre { max-height: 300px; overflow: auto; padding: 12px; border-radius: 8px; color: #d9e7ef; background: #152431; }
 .etl-empty { padding: 60px 20px; text-align: center; color: #8390a1; }
 @media (max-width: 900px) {

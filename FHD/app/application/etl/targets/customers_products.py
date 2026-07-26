@@ -20,9 +20,45 @@ from app.application.etl.targets.helpers import (
     model_values,
     optional_text,
 )
-from app.db.models.customer import Customer
 from app.db.models.product import Product
-from app.infrastructure.tenant_scope import tenant_id_for_write
+from app.db.models.purchase_unit import PurchaseUnit
+from app.infrastructure.tenant_scope import apply_tenant_filter, tenant_id_for_write
+
+_CUSTOMER_MODEL_FIELDS = {
+    "customer_name": "unit_name",
+    "contact_person": "contact_person",
+    "contact_phone": "contact_phone",
+    "contact_address": "address",
+}
+
+
+def _customer_values(obj: PurchaseUnit) -> dict[str, Any]:
+    return json_safe(
+        {
+            target: getattr(obj, model_field, None)
+            for target, model_field in _CUSTOMER_MODEL_FIELDS.items()
+        }
+    )
+
+
+def _customer_image_matches(
+    obj: PurchaseUnit,
+    expected: dict[str, Any],
+    *,
+    keys: set[str] | None = None,
+) -> bool:
+    current = _customer_values(obj)
+    selected = keys if keys is not None else set(expected)
+    return all(
+        (current.get(key) is None and expected.get(key) is None)
+        or str(current.get(key)) == str(expected.get(key))
+        for key in selected
+        if key in expected
+    )
+
+
+def _owned_query(db: Session, model: Any):
+    return apply_tenant_filter(db.query(model), model)
 
 
 class CustomerAdapter(TargetAdapter):
@@ -47,7 +83,7 @@ class CustomerAdapter(TargetAdapter):
         cache = context.setdefault("_preview_cache", {})
         index = cache.get("customer_by_name")
         if index is None:
-            index = {str(item.customer_name): item for item in db.query(Customer).all()}
+            index = {str(item.unit_name): item for item in _owned_query(db, PurchaseUnit).all()}
             cache["customer_by_name"] = index
         customer_name = str(data["customer_name"])
         obj = index.get(customer_name)
@@ -61,7 +97,7 @@ class CustomerAdapter(TargetAdapter):
                 after=json_safe(obj),
                 reason="duplicate_in_source_file",
             )
-        before = model_values(obj, self.fields)
+        before = _customer_values(obj)
         updates = {
             key: data.get(key)
             for key in allowed_update_fields
@@ -84,8 +120,8 @@ class CustomerAdapter(TargetAdapter):
     def execute_row(self, db, data, *, action, match_ref, allowed_update_fields, context):
         if action == "new":
             existing = (
-                db.query(Customer)
-                .filter(Customer.customer_name == str(data["customer_name"]))
+                _owned_query(db, PurchaseUnit)
+                .filter(PurchaseUnit.unit_name == str(data["customer_name"]))
                 .first()
             )
             if existing:
@@ -94,37 +130,62 @@ class CustomerAdapter(TargetAdapter):
                     "客户在预演后已存在，请重新预演",
                     status_code=409,
                 )
-            obj = Customer(
+            obj = PurchaseUnit(
                 tenant_id=tenant_id_for_write(),
-                customer_name=str(data["customer_name"]),
+                unit_name=str(data["customer_name"]),
                 contact_person=optional_text(data.get("contact_person")),
                 contact_phone=optional_text(data.get("contact_phone")),
-                contact_address=optional_text(data.get("contact_address")),
+                address=optional_text(data.get("contact_address")),
+                is_active=True,
             )
             db.add(obj)
             db.flush()
-            return {"match_ref": str(obj.id), "after": model_values(obj, self.fields)}
-        obj = db.get(Customer, int(match_ref))
+            return {"match_ref": str(obj.id), "after": _customer_values(obj)}
+        obj = (
+            _owned_query(db, PurchaseUnit)
+            .filter(PurchaseUnit.id == int(match_ref))
+            .first()
+        )
         if not obj:
             raise EtlError("ETL_MATCH_DISAPPEARED", "预演匹配的客户已不存在", status_code=409)
         if action == "update":
             for key in allowed_update_fields:
-                if hasattr(obj, key) and data.get(key) not in (None, ""):
-                    setattr(obj, key, data[key])
+                model_field = _CUSTOMER_MODEL_FIELDS.get(key)
+                if model_field and data.get(key) not in (None, ""):
+                    setattr(obj, model_field, data[key])
             db.flush()
-        return {"match_ref": str(obj.id), "after": model_values(obj, self.fields)}
+        return {"match_ref": str(obj.id), "after": _customer_values(obj)}
 
     def rollback_row(self, db, *, match_ref, before, after, context):
-        obj = db.get(Customer, int(match_ref))
+        obj = (
+            _owned_query(db, PurchaseUnit)
+            .filter(PurchaseUnit.id == int(match_ref))
+            .first()
+        )
         if before:
             if not obj:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "客户撤销目标已不存在")
-            assert_rollback_image_matches(obj, before, after, self.fields, "客户")
-            for field in self.fields:
-                if field.key in before:
-                    setattr(obj, field.key, before[field.key])
+            changed = {
+                key
+                for key in before
+                if key in after and str(before.get(key)) != str(after.get(key))
+            }
+            if not _customer_image_matches(obj, after, keys=changed):
+                raise EtlError(
+                    "ETL_ROLLBACK_CONCURRENT_CHANGE",
+                    "客户在本次导入后又被修改，已停止撤销以避免覆盖新数据",
+                    status_code=409,
+                )
+            for key, model_field in _CUSTOMER_MODEL_FIELDS.items():
+                if key in before:
+                    setattr(obj, model_field, before[key])
         elif obj:
-            assert_created_row_unchanged(obj, after, self.fields, "客户")
+            if not _customer_image_matches(obj, after):
+                raise EtlError(
+                    "ETL_ROLLBACK_CONCURRENT_CHANGE",
+                    "客户在本次导入后又被修改，已停止撤销以避免删除新数据",
+                    status_code=409,
+                )
             db.delete(obj)
 
 
@@ -157,7 +218,7 @@ class ProductAdapter(TargetAdapter):
     )
 
     def _match(self, db: Session, data: dict[str, Any]) -> Product | None:
-        query = db.query(Product).filter(Product.unit == str(data.get("unit") or ""))
+        query = _owned_query(db, Product).filter(Product.unit == str(data.get("unit") or ""))
         model = str(data.get("model_number") or "").strip()
         if model:
             return query.filter(Product.model_number == model).first()
@@ -178,7 +239,7 @@ class ProductAdapter(TargetAdapter):
                         "name": item.name,
                     }
                 ): item
-                for item in db.query(Product).all()
+                for item in _owned_query(db, Product).all()
             }
             cache["product_by_match_key"] = index
         match_key = self._match_key(data)
@@ -235,7 +296,7 @@ class ProductAdapter(TargetAdapter):
             db.add(obj)
             db.flush()
             return {"match_ref": str(obj.id), "after": model_values(obj, self.fields)}
-        obj = db.get(Product, int(match_ref))
+        obj = _owned_query(db, Product).filter(Product.id == int(match_ref)).first()
         if not obj:
             raise EtlError("ETL_MATCH_DISAPPEARED", "预演匹配的产品已不存在", status_code=409)
         if action == "update":
@@ -246,7 +307,7 @@ class ProductAdapter(TargetAdapter):
         return {"match_ref": str(obj.id), "after": model_values(obj, self.fields)}
 
     def rollback_row(self, db, *, match_ref, before, after, context):
-        obj = db.get(Product, int(match_ref))
+        obj = _owned_query(db, Product).filter(Product.id == int(match_ref)).first()
         if before:
             if not obj:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "产品撤销目标已不存在")
