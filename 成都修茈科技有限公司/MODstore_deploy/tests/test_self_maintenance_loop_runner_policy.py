@@ -1165,12 +1165,11 @@ def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_onl
 @pytest.mark.parametrize(
     "hold_reason",
     [
-        "structured_review_blocking_findings",
         "structured_qa_verdict_not_pass",
         "structured_qa_blocking_findings",
     ],
 )
-def test_resume_review_qa_candidate_retries_structured_findings_on_existing_branch(
+def test_resume_review_qa_candidate_retries_structured_qa_on_existing_branch(
     hold_reason: str,
 ):
     memory = {
@@ -1296,7 +1295,17 @@ def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
     assert memory["open_items"] == []
 
 
-def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_review_dimension_fail",
+        "structured_review_high_severity",
+    ],
+)
+def test_resume_candidate_rebuilds_structured_review_rejection_from_clean_base(
+    hold_reason: str,
+):
     memory = {
         "open_items": [
             {
@@ -1310,7 +1319,7 @@ def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
             {
                 "branch": "devfleet/trae/current-review",
                 "kind": "automated_remediation",
-                "reason": "structured_review_blocking_findings",
+                "reason": hold_reason,
                 "run_id": "run-current",
                 "task_id": "task-current",
             },
@@ -1322,12 +1331,12 @@ def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
 
     assert result == {
         "branch": "devfleet/trae/current-review",
-        "continue_existing_code_task": True,
         "failed_run_id": "run-current",
         "failed_steps": ["code"],
         "para_task_id": "task-current",
         "reason": "resume_automated_remediation_candidate",
     }
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
 
 
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
