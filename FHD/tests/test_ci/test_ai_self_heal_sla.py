@@ -184,7 +184,8 @@ def _mock_client(
     client.get_pr_head_sha.return_value = "abc123"
     client.get_pr_mergeability.return_value = (True, "ok")
     client.has_issue_comment_containing.return_value = False
-    client.merge_pr.return_value = (True, "ok")
+    client.merge_pr.return_value = (True, "ok", "a" * 40)
+    client.dispatch_workflow.return_value = (True, "ok")
     return client
 
 
@@ -276,12 +277,27 @@ class TestProcessRegularPr:
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
         client.get_pr_mergeability.return_value = (True, "ok")
-        client.merge_pr.return_value = (True, "ok")
+        client.merge_pr.return_value = (True, "ok", "a" * 40)
         client.comment.return_value = True
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
         assert action == "auto_merged"
         client.merge_pr.assert_called_once_with(100, method="squash")
+        assert client.dispatch_workflow.call_count == 2
+        client.dispatch_workflow.assert_any_call(
+            "fhd-ci-cd.yml",
+            ref="main",
+            inputs={
+                "release_channel": "stable",
+                "push_to_cvm": "true",
+                "push_image_tar": "false",
+            },
+        )
+        client.dispatch_workflow.assert_any_call(
+            "modstore-ci-backend-python.yml",
+            ref="main",
+            inputs={},
+        )
         client.comment.assert_called()
 
     def test_gates_fail_skips_merge(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -290,7 +306,7 @@ class TestProcessRegularPr:
 
         pr = _make_pr(labels=["hold-merge"], author="octocat")
         client = _mock_client()
-        client.merge_pr.return_value = (True, "ok")
+        client.merge_pr.return_value = (True, "ok", "a" * 40)
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
         assert action == "skipped"
@@ -302,7 +318,7 @@ class TestProcessRegularPr:
 
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
-        client.merge_pr.return_value = (True, "ok")
+        client.merge_pr.return_value = (True, "ok", "a" * 40)
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=True)
         assert action == "auto_merged_dry"
@@ -318,7 +334,7 @@ class TestProcessRegularPr:
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
         client.get_pr_mergeability.return_value = (True, "ok")
-        client.merge_pr.return_value = (False, "permission")
+        client.merge_pr.return_value = (False, "permission", "")
         client.has_issue_comment_containing.return_value = False
         client.comment.return_value = True
         client.add_labels.return_value = True
@@ -331,6 +347,31 @@ class TestProcessRegularPr:
         body = client.comment.call_args.args[1]
         assert "权限不足" in body
         client.add_labels.assert_called()
+
+    def test_post_merge_dispatch_failure_is_not_counted_as_closed_loop(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        stale = tmp_path / "stale.jsonl"
+        monkeypatch.setattr(sla, "STALE_JSONL", stale)
+
+        pr = _make_pr(labels=["ai-review: passed"], author="octocat")
+        client = _mock_client()
+        client.merge_pr.return_value = (True, "ok", "b" * 40)
+        client.dispatch_workflow.side_effect = [
+            (True, "ok"),
+            (False, "http_403:Resource not accessible by integration"),
+        ]
+
+        action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
+
+        assert action == "post_merge_dispatch_failed"
+        client.add_labels.assert_called_once_with(100, ["needs-human"])
+        assert sla.POST_MERGE_DISPATCH_FAIL_MARKER in client.comment.call_args.args[1]
+        record = __import__("json").loads(stale.read_text(encoding="utf-8"))
+        assert record["action"] == "post_merge_dispatch_failed"
+        assert record["merge_sha"] == "b" * 40
+        assert "modstore-ci-backend-python.yml" in record["reason"]
 
     def test_conflict_blocks_before_merge_and_dedupes_comment(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -649,6 +690,62 @@ class TestGetWorkflowRunConclusion:
 
 
 # =====================================================================
+# merge + workflow_dispatch API contract tests
+# =====================================================================
+
+
+class TestPostMergeDispatchApi:
+    def test_merge_returns_exact_sha_from_github(self) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"merged": True, "sha": "c" * 40}
+        mock_http.put.return_value = response
+        client.client = mock_http
+
+        assert client.merge_pr(42, method="squash") == (True, "ok", "c" * 40)
+        mock_http.put.assert_called_once_with(
+            "https://api.github.com/repos/test/repo/pulls/42/merge",
+            json={"merge_method": "squash"},
+        )
+
+    def test_dispatch_posts_ref_and_inputs(self) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        response = MagicMock()
+        response.status_code = 204
+        mock_http.post.return_value = response
+        client.client = mock_http
+
+        result = client.dispatch_workflow(
+            "fhd-ci-cd.yml",
+            ref="main",
+            inputs={"push_to_cvm": "true"},
+        )
+
+        assert result == (True, "ok")
+        mock_http.post.assert_called_once_with(
+            "https://api.github.com/repos/test/repo/actions/workflows/fhd-ci-cd.yml/dispatches",
+            json={"ref": "main", "inputs": {"push_to_cvm": "true"}},
+        )
+
+    def test_dispatch_failure_preserves_api_reason(self) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        response = MagicMock()
+        response.status_code = 403
+        response.json.return_value = {"message": "Resource not accessible by integration"}
+        mock_http.post.return_value = response
+        client.client = mock_http
+
+        ok, reason = client.dispatch_workflow("fhd-ci-cd.yml")
+
+        assert ok is False
+        assert reason == "http_403:Resource not accessible by integration"
+
+
+# =====================================================================
 # main 测试（端到端，mock GitHubClient）
 # =====================================================================
 
@@ -724,8 +821,9 @@ class TestMainScanRegularPrs:
         created_client.get_pr_check_runs.return_value = (True, "ok")
         created_client.get_workflow_run_conclusion.return_value = (True, "ok")
         created_client.get_pr_head_sha.return_value = "sha-42"
-        created_client.merge_pr.return_value = (True, "ok")
+        created_client.merge_pr.return_value = (True, "ok", "a" * 40)
         created_client.get_pr_mergeability.return_value = (True, "ok")
+        created_client.dispatch_workflow.return_value = (True, "ok")
         created_client.comment.return_value = True
         monkeypatch.setattr(sla, "GitHubClient", lambda repo, token: created_client)
 
@@ -733,3 +831,30 @@ class TestMainScanRegularPrs:
         assert rc == 0
         created_client.list_regular_prs.assert_called_once()
         created_client.merge_pr.assert_called_once_with(42, method="squash")
+
+    def test_post_merge_dispatch_failure_makes_workflow_fail(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", "fake")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test/repo")
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        monkeypatch.setattr(sla, "STALE_JSONL", tmp_path / "stale.jsonl")
+
+        allowlist = tmp_path / "allowlist.yaml"
+        allowlist.write_text(
+            "enabled: true\ntrusted_authors:\n  - octocat\n",
+            encoding="utf-8",
+        )
+        pr = _make_pr(number=43, labels=["ai-review: passed"], author="octocat")
+        created_client = _mock_client()
+        created_client.list_self_heal_prs.return_value = []
+        created_client.list_regular_prs.return_value = [pr]
+        created_client.dispatch_workflow.side_effect = [
+            (True, "ok"),
+            (False, "http_403:denied"),
+        ]
+        monkeypatch.setattr(sla, "GitHubClient", lambda repo, token: created_client)
+
+        rc = sla.main(["--scan-regular-prs", "--allowlist-path", str(allowlist)])
+
+        assert rc == 1

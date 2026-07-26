@@ -36,6 +36,12 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 - 失败评论按 `❌ 自动合并失败` 去重，避免 schedule 每 30 分钟刷屏
 - 冲突时自动打 `needs-human` + `hold-merge`
 
+合并后发布闭环（2026-07-26）：
+- `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须显式
+  workflow_dispatch FHD CI/CD 与 MODstore 主干 CI
+- 任一派发失败都记为 `post_merge_dispatch_failed`、标记 `needs-human`，
+  并让本次 SLA workflow 失败，禁止把“已合并”冒充“已发布”
+
 全部动作写 metrics/ai-self-heal-stale.jsonl。
 
 环境变量：
@@ -78,6 +84,19 @@ HOLD_MERGE_LABEL = "hold-merge"
 NEEDS_HUMAN_LABEL = "needs-human"
 # 合并失败评论去重标记（勿改文案前缀，否则会再次刷屏）
 MERGE_FAIL_COMMENT_MARKER = "❌ 自动合并失败"
+POST_MERGE_DISPATCH_FAIL_MARKER = "❌ 自动合并后发布派发失败"
+
+POST_MERGE_WORKFLOWS: tuple[tuple[str, dict[str, str]], ...] = (
+    (
+        "fhd-ci-cd.yml",
+        {
+            "release_channel": "stable",
+            "push_to_cvm": "true",
+            "push_image_tar": "false",
+        },
+    ),
+    ("modstore-ci-backend-python.yml", {}),
+)
 
 # ai-self-heal / ai-generated 标签（用于区分普通 PR）
 AI_PR_LABELS = ("ai-self-heal", "ai-generated")
@@ -181,7 +200,13 @@ class GitHubClient:
         while True:
             resp = self.client.get(
                 url,
-                params={"state": "open", "per_page": 100, "page": page, "sort": "created", "direction": "desc"},
+                params={
+                    "state": "open",
+                    "per_page": 100,
+                    "page": page,
+                    "sort": "created",
+                    "direction": "desc",
+                },
             )
             resp.raise_for_status()
             items = resp.json()
@@ -288,15 +313,21 @@ class GitHubClient:
             return False, "conflict"
         return None, "unknown"
 
-    def merge_pr(self, pr_number: int, method: str = "squash") -> tuple[bool, str]:
-        """尝试 squash/merge。返回 (ok, reason)。
+    def merge_pr(self, pr_number: int, method: str = "squash") -> tuple[bool, str, str]:
+        """尝试 squash/merge。返回 (ok, reason, merge_sha)。
 
         reason 取值：ok / conflict / permission / http_<code>:<message>
         """
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/merge"
         resp = self.client.put(url, json={"merge_method": method})
         if resp.status_code == 200:
-            return True, "ok"
+            try:
+                merge_sha = str((resp.json() or {}).get("sha") or "").strip()
+            except Exception:
+                merge_sha = ""
+            if len(merge_sha) != 40 or any(ch not in "0123456789abcdef" for ch in merge_sha):
+                return True, "ok_missing_merge_sha", ""
+            return True, "ok", merge_sha
         message = ""
         try:
             message = str((resp.json() or {}).get("message") or "")
@@ -304,9 +335,36 @@ class GitHubClient:
             message = (resp.text or "")[:200]
         lowered = message.lower()
         if resp.status_code in (405, 409) or "conflict" in lowered:
-            return False, "conflict"
-        if resp.status_code == 403 or "resource not accessible" in lowered or "permission" in lowered:
-            return False, "permission"
+            return False, "conflict", ""
+        if (
+            resp.status_code == 403
+            or "resource not accessible" in lowered
+            or "permission" in lowered
+        ):
+            return False, "permission", ""
+        detail = message.replace("\n", " ").strip() or "no_message"
+        return False, f"http_{resp.status_code}:{detail[:160]}", ""
+
+    def dispatch_workflow(
+        self,
+        workflow_file: str,
+        *,
+        ref: str = "main",
+        inputs: dict[str, str] | None = None,
+    ) -> tuple[bool, str]:
+        """显式派发 workflow_dispatch，绕过 GITHUB_TOKEN push 事件抑制。"""
+
+        url = f"{GITHUB_API}/repos/{self.repo}/actions/workflows/{workflow_file}/dispatches"
+        payload: dict[str, Any] = {"ref": ref}
+        if inputs:
+            payload["inputs"] = inputs
+        resp = self.client.post(url, json=payload)
+        if resp.status_code == 204:
+            return True, "ok"
+        try:
+            message = str((resp.json() or {}).get("message") or "")
+        except Exception:
+            message = (resp.text or "")[:200]
         detail = message.replace("\n", " ").strip() or "no_message"
         return False, f"http_{resp.status_code}:{detail[:160]}"
 
@@ -377,9 +435,7 @@ def _merge_failure_comment(reason: str) -> str:
             "请检查 Actions `contents: write` / branch protection / fine-grained token 权限。"
         )
     if reason == "unknown":
-        return (
-            f"{MERGE_FAIL_COMMENT_MARKER}：GitHub 尚未算出 mergeable 状态，本轮跳过。"
-        )
+        return f"{MERGE_FAIL_COMMENT_MARKER}：GitHub 尚未算出 mergeable 状态，本轮跳过。"
     return f"{MERGE_FAIL_COMMENT_MARKER}：{reason}，请人工处理。"
 
 
@@ -421,55 +477,100 @@ def _try_auto_merge(
 ) -> str:
     """统一 auto-merge 路径：先查 mergeable，再 merge，失败分类+去重通知。
 
-    返回 auto_merged / merge_failed / skipped。
+    返回 auto_merged / post_merge_dispatch_failed / merge_failed / skipped。
     """
     mergeable, mreason = client.get_pr_mergeability(pr.number)
     if mergeable is None:
         print(f"  skip: mergeable 未知 ({mreason})")
-        _append_stale({
-            "pr": pr.number,
-            "kind": pr.kind,
-            "author": pr.author,
-            "action": "mergeability_unknown",
-            "reason": mreason,
-            **(metric_extra or {}),
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": "mergeability_unknown",
+                "reason": mreason,
+                **(metric_extra or {}),
+            }
+        )
         return "skipped"
     if mergeable is False:
         print(f"  merge blocked: {mreason}")
         _notify_merge_failure_once(client, pr, mreason)
-        _append_stale({
-            "pr": pr.number,
-            "kind": pr.kind,
-            "author": pr.author,
-            "action": failure_action,
-            "reason": mreason,
-            **(metric_extra or {}),
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": failure_action,
+                "reason": mreason,
+                **(metric_extra or {}),
+            }
+        )
         return "merge_failed"
 
-    ok, reason = client.merge_pr(pr.number, method="squash")
+    ok, reason, merge_sha = client.merge_pr(pr.number, method="squash")
     if ok:
+        dispatch_failures: list[str] = []
+        if not merge_sha:
+            dispatch_failures.append(f"merge_sha:{reason}")
+        else:
+            for workflow_file, inputs in POST_MERGE_WORKFLOWS:
+                dispatched, dispatch_reason = client.dispatch_workflow(
+                    workflow_file,
+                    ref="main",
+                    inputs=inputs,
+                )
+                if not dispatched:
+                    dispatch_failures.append(f"{workflow_file}:{dispatch_reason}")
+
+        if dispatch_failures:
+            failure_summary = "; ".join(dispatch_failures)
+            client.comment(
+                pr.number,
+                f"{POST_MERGE_DISPATCH_FAIL_MARKER}\n\n"
+                f"合并已完成，但主干 CI/CD 未全部派发：`{failure_summary}`。"
+                "已标记 `needs-human`；不得把本次动作计为生产闭环。",
+            )
+            client.add_labels(pr.number, [NEEDS_HUMAN_LABEL])
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "author": pr.author,
+                    "action": "post_merge_dispatch_failed",
+                    "merge_sha": merge_sha,
+                    "reason": failure_summary,
+                    **(metric_extra or {}),
+                }
+            )
+            return "post_merge_dispatch_failed"
+
         client.comment(pr.number, success_comment)
-        _append_stale({
-            "pr": pr.number,
-            "kind": pr.kind,
-            "author": pr.author,
-            "action": success_action,
-            **(metric_extra or {}),
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": success_action,
+                "merge_sha": merge_sha,
+                "dispatched_workflows": [item[0] for item in POST_MERGE_WORKFLOWS],
+                **(metric_extra or {}),
+            }
+        )
         return "auto_merged"
 
     print(f"  merge failed: {reason}")
     _notify_merge_failure_once(client, pr, reason)
-    _append_stale({
-        "pr": pr.number,
-        "kind": pr.kind,
-        "author": pr.author,
-        "action": failure_action,
-        "reason": reason,
-        **(metric_extra or {}),
-    })
+    _append_stale(
+        {
+            "pr": pr.number,
+            "kind": pr.kind,
+            "author": pr.author,
+            "action": failure_action,
+            "reason": reason,
+            **(metric_extra or {}),
+        }
+    )
     return "merge_failed"
 
 
@@ -561,7 +662,7 @@ GUARD_CONFIG = {
         "allowed_suffixes": (".py", ".md"),
     },
     "ai_generated": {
-        "max_changed_files": 5,   # allowlist 域已预过滤低风险，放宽
+        "max_changed_files": 5,  # allowlist 域已预过滤低风险，放宽
         "max_diff_lines": 100,
         "allowed_suffixes": (".py", ".md", ".ts", ".vue", ".js", ".json", ".yaml", ".yml"),
     },
@@ -673,13 +774,15 @@ def process_regular_pr(
     passed, reason = check_regular_pr_gates(client, pr, trusted_authors)
     if not passed:
         print(f"  skip: 三重门禁未通过 ({reason})")
-        _append_stale({
-            "pr": pr.number,
-            "kind": "regular",
-            "author": pr.author,
-            "action": "regular_skipped",
-            "reason": reason,
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": "regular",
+                "author": pr.author,
+                "action": "regular_skipped",
+                "reason": reason,
+            }
+        )
         return "skipped"
 
     print(f"  三重门禁通过 ({reason})，auto-merge (squash)")
@@ -737,17 +840,21 @@ def process_pr(
     if not risk:
         risk = "r2" if pr.kind == "ai_generated" else "r3"
 
-    print(f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}")
+    print(
+        f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}"
+    )
 
     # ===== hold-merge veto（人工强制 hold，普适）=====
     if HOLD_MERGE_LABEL in pr.labels:
         print(f"  skip: 标 {HOLD_MERGE_LABEL} label，不自动合并/关闭")
-        _append_stale({
-            "pr": pr.number,
-            "kind": pr.kind,
-            "risk": risk,
-            "action": "hold_merge_vetoed",
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "risk": risk,
+                "action": "hold_merge_vetoed",
+            }
+        )
         return "skipped"
 
     # ===== R0 / R1: auto-merge 候选 =====
@@ -768,7 +875,15 @@ def process_pr(
                     f"⚠️ 二次守卫未通过（`{reason}`），自动升级为 `risk:r2`，"
                     f"转 stale→close 流程（7d 提醒 / 14d 关闭）。",
                 )
-                _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": "upgraded_to_r2", "reason": reason})
+                _append_stale(
+                    {
+                        "pr": pr.number,
+                        "kind": pr.kind,
+                        "risk": risk,
+                        "action": "upgraded_to_r2",
+                        "reason": reason,
+                    }
+                )
             return "upgraded"
 
         print(f"  二次守卫通过，auto-merge ({pr.kind} {risk} {threshold}h)")
@@ -801,7 +916,14 @@ def process_pr(
                 f"指纹已记录，如需重新触发请推送新提交。",
             )
             client.close_pr(pr.number)
-            _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": f"closed_{close_threshold}d"})
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "risk": risk,
+                    "action": f"closed_{close_threshold}d",
+                }
+            )
         return "closed"
 
     if age_days >= stale_threshold:
@@ -812,7 +934,14 @@ def process_pr(
                 f"⏰ 该 PR 已 stale {int(age_days)} 天（risk:{risk}），"
                 f"将于 {close_threshold} 天后自动关闭，请尽快 review。",
             )
-            _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": f"stale_warned_{stale_threshold}d"})
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "risk": risk,
+                    "action": f"stale_warned_{stale_threshold}d",
+                }
+            )
         return "stale_warned"
 
     print(f"  skip: 未达 stale 阈值 ({age_days:.1f}d < {stale_threshold}d)")
@@ -868,7 +997,14 @@ def main(argv: list[str] | None = None) -> int:
         f"(ai-self-heal={by_kind['self_heal']} ai-generated={by_kind['ai_generated']})"
     )
 
-    stats = {"auto_merged": 0, "upgraded": 0, "stale_warned": 0, "closed": 0, "skipped": 0}
+    stats = {
+        "auto_merged": 0,
+        "post_merge_dispatch_failed": 0,
+        "upgraded": 0,
+        "stale_warned": 0,
+        "closed": 0,
+        "skipped": 0,
+    }
     for pr in prs:
         try:
             action = process_pr(
@@ -889,6 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[sla] AI PR 处理完成: {stats}")
 
     # ===== 普通 PR: 三重门禁 auto-merge（opt-in）=====
+    regular_stats: dict[str, int] = {}
     if args.scan_regular_prs:
         allowlist_path = Path(args.allowlist_path) if args.allowlist_path else None
         trusted_authors = load_trusted_authors(allowlist_path)
@@ -904,7 +1041,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"[sla] 发现 {len(regular_prs)} 个 open 普通 PR "
                 f"(trusted_authors={len(trusted_authors)})"
             )
-            regular_stats = {"auto_merged": 0, "skipped": 0, "merge_failed": 0}
+            regular_stats = {
+                "auto_merged": 0,
+                "post_merge_dispatch_failed": 0,
+                "skipped": 0,
+                "merge_failed": 0,
+            }
             for pr in regular_prs:
                 try:
                     action = process_regular_pr(
@@ -918,6 +1060,15 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"[error] 普通 PR #{pr.number} 处理失败: {e}", file=sys.stderr)
             print(f"[sla] 普通 PR 处理完成: {regular_stats}")
 
+    dispatch_failures = stats.get("post_merge_dispatch_failed", 0) + regular_stats.get(
+        "post_merge_dispatch_failed", 0
+    )
+    if dispatch_failures:
+        print(
+            f"[error] {dispatch_failures} 个已合并 PR 未完成主干发布派发",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
