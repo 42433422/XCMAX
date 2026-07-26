@@ -161,6 +161,12 @@ test.describe('P0 critical paths', () => {
       );
       // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    } else {
+      // Finish the authenticated shell bootstrap before Agent-backed CRUD work.
+      // Starting a second shell while that work is settling creates a false UI
+      // race in slower CI environments.
+      await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     }
 
     const createResp = await fetchJson('/api/orders', {
@@ -213,8 +219,24 @@ test.describe('P0 critical paths', () => {
       expect((await exportResp.body()).byteLength).toBeGreaterThan(100);
     }
 
-    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    if (!isFullStack()) {
+      await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    } else {
+      const orderSearch = page.locator('#view-orders .search-box input');
+      const searchResponse = page.waitForResponse(
+        (response) => /\/api\/(?:mod\/[^/]+\/)?orders\/search(?:\?|$)/.test(response.url()),
+        { timeout: 20_000 }
+      );
+      await orderSearch.fill('__e2e_refresh__');
+      await searchResponse;
+      const listResponse = page.waitForResponse(
+        (response) => /\/api\/(?:mod\/[^/]+\/)?orders(?:\?|$)/.test(response.url()),
+        { timeout: 20_000 }
+      );
+      await orderSearch.fill('');
+      await listResponse;
+    }
     await expect(page.getByText(updatedUnitName, { exact: true })).toBeVisible({ timeout: 20_000 });
 
     await captureEvidence(page, '06-order-data-loop.png');
@@ -255,6 +277,28 @@ test.describe('P0 critical paths', () => {
       };
     };
 
+    // A clean E2E tenant hides the materials sidebar until host-pack onboarding.
+    // Warm the authenticated ERP bridge through the always-available orders route,
+    // then keep the real materials page mounted while Agent-backed CRUD runs.
+    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
+    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
+    try {
+      await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
+    } catch (error) {
+      await captureEvidence(page, '07-material-data-loop-failure.png').catch(() => undefined);
+      const bodyText = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '<body unavailable>');
+      const original = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${original}\nMaterial page diagnostics:\n${browserErrors.join('\n') || '<no browser errors>'}\nBody:\n${bodyText.slice(0, 4000)}`
+      );
+    }
+
     const stamp = Date.now();
     const materialName = `E2E材料-${stamp}`;
     const updatedName = `${materialName}-已编辑`;
@@ -291,27 +335,7 @@ test.describe('P0 critical paths', () => {
     expect(exported.headers()['content-type'] || '').toContain('spreadsheetml');
     expect((await exported.body()).byteLength).toBeGreaterThan(100);
 
-    // A clean E2E tenant hides the materials sidebar until host-pack onboarding.
-    // Warm the authenticated ERP bridge through the always-available orders route,
-    // then verify the real materials deep link without weakening its assertion.
-    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
-    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
-    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
-    try {
-      await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
-    } catch (error) {
-      await captureEvidence(page, '07-material-data-loop-failure.png').catch(() => undefined);
-      const bodyText = await page
-        .locator('body')
-        .innerText()
-        .catch(() => '<body unavailable>');
-      const original = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `${original}\nMaterial page diagnostics:\n${browserErrors.join('\n') || '<no browser errors>'}\nBody:\n${bodyText.slice(0, 4000)}`
-      );
-    }
+    await page.locator('#view-materials .search-box input').fill(updatedName);
     await expect(page.getByText(updatedName, { exact: true })).toBeVisible({ timeout: 20_000 });
     await captureEvidence(page, '07-material-data-loop.png');
   });
