@@ -12,6 +12,7 @@ type BrowserCookie = Awaited<ReturnType<APIRequestContext['storageState']>>['coo
 
 const loginCookieCache = new Map<string, Promise<BrowserCookie[]>>();
 
+class InvalidE2ESessionError extends Error {}
 export function isFullStack(): boolean {
   return process.env.E2E_FULL_STACK === '1';
 }
@@ -99,14 +100,10 @@ export async function csrfHeaders(
   };
 }
 
-export async function loginBrowserSession(page: Page, apiBase = ''): Promise<void> {
-  const base = (apiBase || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(
-    /\/$/,
-    ''
-  );
-  let cookiePromise = loginCookieCache.get(base);
-  if (!cookiePromise) {
-    cookiePromise = (async () => {
+async function createLoginCookies(page: Page, base: string): Promise<BrowserCookie[]> {
+  let lastTransientError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
       const headers = await csrfHeaders(page.request, {}, base);
       const resp = await page.request.post(`${base}/api/auth/login`, {
         headers,
@@ -118,14 +115,78 @@ export async function loginBrowserSession(page: Page, apiBase = ''): Promise<voi
         timeout: 20_000,
       });
       const body = await resp.json().catch(() => ({}));
-      if (resp.status() >= 500 || body?.success !== true) {
+      if (resp.status() >= 500) {
+        throw new Error(
+          `E2E login transient failure: status=${resp.status()} body=${JSON.stringify(body)}`
+        );
+      }
+      if (body?.success !== true) {
         throw new Error(`E2E login failed: status=${resp.status()} body=${JSON.stringify(body)}`);
       }
       return (await page.request.storageState()).cookies;
-    })();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isTransient =
+        message.includes('transient failure') ||
+        message.includes('Timeout') ||
+        message.includes('timed out') ||
+        message.includes('ECONNRESET') ||
+        message.includes('ECONNREFUSED');
+      if (!isTransient || attempt === 2) throw error;
+      lastTransientError = error;
+    }
+  }
+
+  throw lastTransientError;
+}
+
+async function assertCurrentBrowserSession(page: Page, base: string): Promise<void> {
+  const meResp = await page.request.get(`${base}/api/auth/me`, { timeout: 20_000 });
+  const meBody = await meResp.json().catch(() => ({}));
+  if (meResp.status() >= 500) {
+    throw new Error(
+      `E2E auth verification transient failure: status=${meResp.status()} body=${JSON.stringify(meBody)}`
+    );
+  }
+  if (meBody?.success !== true || !meBody?.data?.user) {
+    throw new InvalidE2ESessionError(
+      `E2E auth verification failed: status=${meResp.status()} body=${JSON.stringify(meBody)}`
+    );
+  }
+}
+
+export async function loginBrowserSession(page: Page, apiBase = ''): Promise<void> {
+  const base = (apiBase || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(
+    /\/$/,
+    ''
+  );
+  let cookiePromise = loginCookieCache.get(base);
+  if (!cookiePromise) {
+    cookiePromise = createLoginCookies(page, base);
     loginCookieCache.set(base, cookiePromise);
   }
-  await page.context().addCookies(await cookiePromise);
+
+  let cookies: BrowserCookie[];
+  try {
+    cookies = await cookiePromise;
+  } catch (error) {
+    if (loginCookieCache.get(base) === cookiePromise) loginCookieCache.delete(base);
+    throw error;
+  }
+  await page.context().addCookies(cookies);
+
+  try {
+    await assertCurrentBrowserSession(page, base);
+  } catch (error) {
+    if (!(error instanceof InvalidE2ESessionError)) throw error;
+    loginCookieCache.delete(base);
+    await page.context().clearCookies();
+    const freshCookiePromise = createLoginCookies(page, base);
+    loginCookieCache.set(base, freshCookiePromise);
+    const freshCookies = await freshCookiePromise;
+    await page.context().addCookies(freshCookies);
+    await assertCurrentBrowserSession(page, base);
+  }
 }
 
 export async function imUserHeaders(

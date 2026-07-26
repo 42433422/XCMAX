@@ -103,6 +103,13 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     rows = [
         {
             "run_id": "incident-1",
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "incident_event",
+            "force": False,
+        },
+        {
+            "run_id": "incident-1",
             "phase": "step",
             "step": "code",
             "status": "success",
@@ -148,6 +155,13 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
             "triggered_by": "incident_event",
             "status": "healthy",
             "ok": True,
+        },
+        {
+            "run_id": "evolution-1",
+            "phase": "start",
+            "triggered_by": "proactive_signal",
+            "force": False,
+            "status": "running",
         },
         {
             "run_id": "evolution-1",
@@ -456,11 +470,38 @@ def test_untrusted_runtime_provenance_caps_founder_and_system_truth() -> None:
         "participants": [{"employee_id": "writer"}],
         "evidence": {
             "open_run_ids": [],
-            "latest_complete": {"status": "completed"},
+            "latest_complete": {"run_id": "scheduler-run", "status": "completed"},
             "recent_rows": [
-                {"step": "code", "status": "success", "ok": True},
-                {"step": "review", "status": "success", "ok": True},
-                {"step": "qa", "status": "success", "ok": True},
+                {
+                    "run_id": "scheduler-run",
+                    "phase": "start",
+                    "status": "running",
+                    "triggered_by": "scheduler",
+                    "force": False,
+                },
+                {
+                    "run_id": "scheduler-run",
+                    "step": "code",
+                    "status": "success",
+                    "ok": True,
+                },
+                {
+                    "run_id": "scheduler-run",
+                    "step": "review",
+                    "status": "success",
+                    "ok": True,
+                },
+                {
+                    "run_id": "scheduler-run",
+                    "step": "qa",
+                    "status": "success",
+                    "ok": True,
+                },
+                {
+                    "run_id": "scheduler-run",
+                    "phase": "complete",
+                    "status": "completed",
+                },
             ],
         },
     }
@@ -514,12 +555,26 @@ def test_unrelated_or_staging_only_deploy_receipts_do_not_prove_production() -> 
     rows = [
         {
             "run_id": "run-a",
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "scheduler",
+            "force": False,
+        },
+        {
+            "run_id": "run-a",
             "event": "deploy_dispatch",
             "environment": "staging",
             "status": "accepted",
             "ok": True,
             "merge_sha": "a" * 40,
             "workflow_run_id": "workflow-a",
+        },
+        {
+            "run_id": "run-b",
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "scheduler",
+            "force": False,
         },
         {
             "run_id": "run-b",
@@ -616,6 +671,13 @@ def test_time_bounded_milestones_survive_idle_feed_churn() -> None:
                 "milestone_rows": [
                     {
                         "run_id": "recent-work",
+                        "phase": "start",
+                        "status": "running",
+                        "triggered_by": "scheduler",
+                        "force": False,
+                    },
+                    {
+                        "run_id": "recent-work",
                         "phase": "step",
                         "step": "code",
                         "status": "success",
@@ -638,7 +700,7 @@ def test_time_bounded_milestones_survive_idle_feed_churn() -> None:
                 ],
                 "milestone_window": {
                     "window_days": 30,
-                    "selected_rows": 3,
+                    "selected_rows": 4,
                 },
             }
         },
@@ -651,8 +713,98 @@ def test_time_bounded_milestones_survive_idle_feed_churn() -> None:
         "review",
         "qa",
     }
-    assert snapshot["live_summary"]["milestone_evidence_rows"] == 3
+    assert snapshot["live_summary"]["milestone_evidence_rows"] == 4
     assert snapshot["live_summary"]["milestone_evidence_window"]["window_days"] == 30
+
+
+def test_forced_history_cannot_inflate_unattended_code_progress() -> None:
+    forced_rows = [
+        {
+            "run_id": "forced-run",
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "gha-force-self-maintenance",
+            "force": True,
+        },
+        *[
+            {
+                "run_id": "forced-run",
+                "phase": "step",
+                "step": step,
+                "status": "success",
+                "ok": True,
+            }
+            for step in ("code", "review", "qa")
+        ],
+        {
+            "run_id": "forced-run",
+            "phase": "complete",
+            "status": "completed_merged",
+        },
+        {
+            "run_id": "forced-run",
+            "event": "deploy_dispatch",
+            "environment": "production",
+            "status": "accepted",
+            "ok": True,
+            "merge_sha": "a" * 40,
+            "workflow_run_id": "workflow-forced",
+        },
+        {
+            "run_id": "forced-run",
+            "event": "post_deploy_verified",
+            "environment": "production",
+            "status": "verified",
+            "ok": True,
+            "identity_verified": True,
+            "merge_sha": "a" * 40,
+            "workflow_run_id": "workflow-forced",
+        },
+    ]
+    autonomous_rows = [
+        {
+            "run_id": "scheduler-run",
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "scheduler",
+            "force": False,
+        },
+        *[
+            {
+                "run_id": "scheduler-run",
+                "phase": "step",
+                "step": step,
+                "status": "success",
+                "ok": True,
+            }
+            for step in ("code", "review", "qa")
+        ],
+        {
+            "run_id": "scheduler-run",
+            "phase": "complete",
+            "status": "completed_merge_requested",
+        },
+    ]
+
+    snapshot = build_founder_autonomy_snapshot(
+        runtime={
+            "evidence": {
+                "recent_rows": [*forced_rows, *autonomous_rows],
+                "latest_complete": forced_rows[4],
+                "open_run_ids": [],
+            }
+        },
+        generated_at=NOW,
+    )
+    code = _dimensions(snapshot)["code"]
+
+    assert code["progress"] == 45
+    assert {gate["key"] for gate in code["evidence"]} == {"write", "review", "qa"}
+    assert snapshot["live_summary"]["real_deploy_dispatched"] is False
+    assert snapshot["live_summary"]["deploy_verified"] is False
+    assert snapshot["live_summary"]["latest_autonomous_complete_status"] == (
+        "completed_merge_requested"
+    )
 
 
 def test_fault_loop_cannot_mix_repair_and_recovery_across_run_ids() -> None:
@@ -666,6 +818,7 @@ def test_fault_loop_cannot_mix_repair_and_recovery_across_run_ids() -> None:
                         "run_id": "incident-repair",
                         "phase": "start",
                         "triggered_by": "incident_event",
+                        "force": False,
                         "status": "running",
                     },
                     {
