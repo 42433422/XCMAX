@@ -1,5 +1,7 @@
 import { test, expect, type Route } from '@playwright/test';
 import {
+  E2E_PASSWORD,
+  E2E_USER,
   installE2eShellMocks,
   captureEvidence,
   csrfHeaders,
@@ -161,6 +163,12 @@ test.describe('P0 critical paths', () => {
       );
       // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    } else {
+      // Finish the authenticated shell bootstrap before Agent-backed CRUD work.
+      // Starting a second shell while that work is settling creates a false UI
+      // race in slower CI environments.
+      await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     }
 
     const createResp = await fetchJson('/api/orders', {
@@ -213,8 +221,24 @@ test.describe('P0 critical paths', () => {
       expect((await exportResp.body()).byteLength).toBeGreaterThan(100);
     }
 
-    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    if (!isFullStack()) {
+      await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    } else {
+      const orderSearch = page.locator('#view-orders .search-box input');
+      const searchResponse = page.waitForResponse(
+        (response) => /\/api\/(?:mod\/[^/]+\/)?orders\/search(?:\?|$)/.test(response.url()),
+        { timeout: 20_000 }
+      );
+      await orderSearch.fill('__e2e_refresh__');
+      await searchResponse;
+      const listResponse = page.waitForResponse(
+        (response) => /\/api\/(?:mod\/[^/]+\/)?orders(?:\?|$)/.test(response.url()),
+        { timeout: 20_000 }
+      );
+      await orderSearch.fill('');
+      await listResponse;
+    }
     await expect(page.getByText(updatedUnitName, { exact: true })).toBeVisible({ timeout: 20_000 });
 
     await captureEvidence(page, '06-order-data-loop.png');
@@ -222,6 +246,18 @@ test.describe('P0 critical paths', () => {
 
   test('07 material data loop — 创建、编辑、导出并回读材料', async ({ page }) => {
     test.skip(!isFullStack(), 'covered by the mandatory release full-stack job');
+    const browserErrors: string[] = [];
+    page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+    page.on('console', (message) => {
+      if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
+    });
+    page.on('requestfailed', (request) => {
+      if (request.resourceType() === 'script') {
+        browserErrors.push(
+          `script: ${request.url()} (${request.failure()?.errorText || 'request failed'})`
+        );
+      }
+    });
     const apiBase = (
       process.env.MOD_PILOT_FHD_API ||
       process.env.PLAYWRIGHT_BASE_URL ||
@@ -242,6 +278,45 @@ test.describe('P0 critical paths', () => {
         body: JSON.parse(text || '{}') as Record<string, any>,
       };
     };
+
+    // Establish this page's session through the real login UI. Reusing only a
+    // cookie leaves the browser-side enterprise session cache cold, so a deep
+    // link can block on redundant remote validation while the Agent-backed
+    // order work is settling. Login marks that cache valid without weakening
+    // any auth, route, or CRUD assertion.
+    await page.goto('/login?redirect=%2Forders', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
+    });
+    await page.locator('#lv-username').fill(E2E_USER);
+    await page.locator('#lv-password').fill(E2E_PASSWORD);
+    const loginResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
+      { timeout: 30_000 }
+    );
+    await page.locator('.login-submit').click();
+    const loginResponse = await loginResponsePromise;
+    const loginText = await loginResponse.text();
+    expect(loginResponse.status(), loginText).toBe(200);
+    expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
+    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
+    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
+    try {
+      await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
+    } catch (error) {
+      await captureEvidence(page, '07-material-data-loop-failure.png').catch(() => undefined);
+      const bodyText = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '<body unavailable>');
+      const original = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${original}\nMaterial page diagnostics:\n${browserErrors.join('\n') || '<no browser errors>'}\nBody:\n${bodyText.slice(0, 4000)}`
+      );
+    }
 
     const stamp = Date.now();
     const materialName = `E2E材料-${stamp}`;
@@ -279,8 +354,7 @@ test.describe('P0 critical paths', () => {
     expect(exported.headers()['content-type'] || '').toContain('spreadsheetml');
     expect((await exported.body()).byteLength).toBeGreaterThan(100);
 
-    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
+    await page.locator('#view-materials .search-box input').fill(updatedName);
     await expect(page.getByText(updatedName, { exact: true })).toBeVisible({ timeout: 20_000 });
     await captureEvidence(page, '07-material-data-loop.png');
   });

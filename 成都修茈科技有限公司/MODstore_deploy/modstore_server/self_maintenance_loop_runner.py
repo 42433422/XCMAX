@@ -7372,6 +7372,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "review_blocking_findings": (review.get("blocking_findings") if review else []),
             "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
+            "triggered_by": str(row.get("triggered_by") or "").strip(),
+            "force": row.get("force") if isinstance(row.get("force"), bool) else None,
         }
 
     def _milestone_item(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -7385,6 +7387,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "event",
             "event_type",
             "final_status",
+            "force",
             "identity_verified",
             "installability_verified",
             "merge_sha",
