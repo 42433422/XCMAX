@@ -178,9 +178,14 @@ def _qa_child_env(project: Path, temp_dir: Path) -> Dict[str, str]:
     child.setdefault("HOME", str(Path.home()))
     child.setdefault("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
     python_paths = [str(project)]
-    shared_package = project.parent / "packages" / "xcagi_common"
-    if shared_package.exists():
-        python_paths.append(str(shared_package.parent))
+    shared_candidates = (
+        project.parent / "packages" / "xcagi_common",
+        project.parents[1] / "packages" / "xcagi_common",
+    )
+    for shared_package in shared_candidates:
+        if shared_package.is_dir():
+            python_paths.append(str(shared_package))
+            break
     child["PYTHONPATH"] = os.pathsep.join(python_paths)
     child["PYTHONNOUSERSITE"] = "1"
     child["COVERAGE_FILE"] = str(temp_dir / ".coverage")

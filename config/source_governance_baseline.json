@@ -1267,15 +1267,14 @@
     }
   },
   "duplicate_metrics": {
-    "groups": 25,
-    "redundant_files": 25,
-    "redundant_lines": 3767,
-    "redundant_bytes": 140150
+    "groups": 21,
+    "redundant_files": 21,
+    "redundant_lines": 3516,
+    "redundant_bytes": 131914
   },
   "duplicate_excluded_prefixes": [
     "FHD/XCAGI/mods/",
     "FHD/mods-admin-runtime/",
-    "FHD/templates/",
-    "成都修茈科技有限公司/packages/xcagi_common/build/"
+    "FHD/templates/"
   ]
 }
