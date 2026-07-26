@@ -115,6 +115,18 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
                 [rel],
             )
 
+    def test_detects_vendored_xcagi_common_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            rel = "成都修茈科技有限公司/packages/xcagi_common/xcagi_common/csrf.py"
+            path = repo_root / rel
+            path.parent.mkdir(parents=True)
+            path.write_text("TOKEN = 'duplicate'\n", encoding="utf-8")
+            self.assertEqual(
+                source_governance._forbidden_source_mirrors(repo_root, [rel]),
+                [rel],
+            )
+
     def test_ignored_tracked_paths_skip_pending_deletions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
