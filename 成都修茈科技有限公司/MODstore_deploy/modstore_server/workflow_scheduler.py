@@ -15,8 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from modstore_server import payment_orders
-from modstore_server.founder_scorecard_publisher import register_founder_scorecard_job
+from modstore_server import autonomy_scheduler, payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
@@ -59,17 +58,14 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "retention_janitor_daily",
         "scheduler_heartbeat",
         "self_evolution_metrics",
-        "self_maintenance_heartbeat",
-        "self_maintenance_loop_daily",
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
     }
 )
 _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
     "daily_digest": "daily_ops_digest_email",
-    "founder_scorecard_refresh": "founder_scorecard_refresh",
-    "self_maintenance_loop_daily": "self_maintenance_loop_daily",
     "boss_daily_im_report": "boss_daily_im_report",
+    **autonomy_scheduler.CRITICAL_RUNTIME_JOBS,
 }
 
 
@@ -94,7 +90,7 @@ def _cleanup_misfire_grace_time() -> int:
 
 
 def required_scheduler_job_ids() -> tuple[str, ...]:
-    required = set(_REQUIRED_CORE_JOB_IDS) | {"founder_scorecard_refresh"}
+    required = set(_REQUIRED_CORE_JOB_IDS) | set(autonomy_scheduler.REQUIRED_JOB_IDS)
     if _env_bool("MODSTORE_EMPLOYEE_BURN_IN_SCHEDULER_ENABLED", True):
         required.add("duty_workforce_burnin")
     if _env_bool("MODSTORE_BOSS_IM_REPORT_ENABLED", True):
@@ -414,7 +410,7 @@ def start_scheduler() -> None:
     )
     _scheduler_heartbeat_job()
 
-    register_founder_scorecard_job(_scheduler)
+    autonomy_scheduler.register_autonomy_jobs(_scheduler, _scheduler_startup_recovery_deadlines)
 
     def _dead_letter_reconcile_job() -> None:
         try:
