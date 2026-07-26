@@ -5,8 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from retort_engine.contracts import validate_contract
-from retort_engine.external_merge_landing import build_external_merge_landing
+from retort_engine.external_merge_landing import _run, build_external_merge_landing
 from retort_engine.service import RetortService
 
 
@@ -60,6 +62,13 @@ def test_external_merge_landing_runs_real_branch_merge_and_pytest(
     ).stdout
     assert "merge absorbed owner/agent-a rule" in log
     assert "merge absorbed owner/agent-b rule" in log
+
+
+def test_external_merge_landing_rejects_unapproved_commands(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unapproved"):
+        _run(["sh", "-c", "echo unsafe"], tmp_path)
+    with pytest.raises(ValueError, match="unapproved"):
+        _run(["git", "checkout", "--orphan", "unsafe"], tmp_path)
 
 
 def test_external_merge_landing_blocks_missing_cache(tmp_path: Path) -> None:

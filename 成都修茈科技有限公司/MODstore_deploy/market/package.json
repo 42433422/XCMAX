@@ -47,12 +47,17 @@
     "vue-router": "^4.3.0"
   },
   "overrides": {
-    "protobufjs": "7.6.3",
-    "dompurify": "3.4.11",
+    "brace-expansion@^1.0.0": "1.1.16",
+    "brace-expansion@^2.0.0": "2.1.2",
+    "brace-expansion@>=5.0.0": "5.0.8",
+    "protobufjs": "7.6.5",
+    "dompurify": "3.4.12",
     "esbuild": "0.28.1",
     "glob": "10.5.0",
     "js-cookie": "3.0.7",
-    "js-yaml": "4.2.0",
+    "js-yaml": "4.3.0",
+    "postcss": "8.5.18",
+    "sharp": "0.35.0",
     "uuid": "11.1.1",
     "ws": "8.21.0",
     "adm-zip": "0.6.0"

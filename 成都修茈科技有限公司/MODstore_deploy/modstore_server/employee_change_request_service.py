@@ -733,7 +733,7 @@ def reject_employee_change_request(
     rejected_reason: str,
     rejected_by_user_id: int,
 ) -> Dict[str, Any]:
-    from modstore_server.models import EmployeeChangeRequest, get_session_factory
+    from modstore_server.models import EmployeeChangeRequest, User, get_session_factory
 
     src = ""
     sf = get_session_factory()
@@ -746,7 +746,8 @@ def reject_employee_change_request(
         src = str(row.source_employee_id or "")
         row.status = "rejected"
         row.rejected_reason = (rejected_reason or "")[:4000]
-        row.approved_by_user_id = int(rejected_by_user_id)
+        actor_id = int(rejected_by_user_id or 0)
+        row.approved_by_user_id = actor_id if actor_id > 0 and session.get(User, actor_id) else None
         row.approved_at = datetime.now(timezone.utc)
         session.commit()
 

@@ -97,6 +97,11 @@ def test_scheduler_health_endpoint_exposes_partial_registration(monkeypatch):
     )
     monkeypatch.setattr(scheduler, "_scheduler_registration_complete", False)
     monkeypatch.setattr(scheduler, "_scheduler_startup_probe_failures", [])
+    monkeypatch.setattr(
+        scheduler,
+        "scheduler_runtime_health_status",
+        lambda: {"ok": True, "jobs": [], "unhealthy_jobs": [], "recovering_jobs": []},
+    )
 
     response = asyncio.run(scheduler_health())
 
@@ -117,6 +122,11 @@ def test_scheduler_health_endpoint_accepts_complete_registration(monkeypatch):
     monkeypatch.setattr(scheduler, "_scheduler", _FakeScheduler(required))
     monkeypatch.setattr(scheduler, "_scheduler_registration_complete", True)
     monkeypatch.setattr(scheduler, "_scheduler_startup_probe_failures", [])
+    monkeypatch.setattr(
+        scheduler,
+        "scheduler_runtime_health_status",
+        lambda: {"ok": True, "jobs": [], "unhealthy_jobs": [], "recovering_jobs": []},
+    )
 
     response = asyncio.run(scheduler_health())
 
@@ -126,3 +136,39 @@ def test_scheduler_health_endpoint_accepts_complete_registration(monkeypatch):
     assert response["data"]["scheduler_healthy"] is True
     assert response["data"]["registration_complete"] is True
     assert response["data"]["missing_required_jobs"] == []
+
+
+def test_stale_daily_job_gets_bounded_startup_catch_up(monkeypatch):
+    import modstore_server.scheduler_runtime as runtime
+    import modstore_server.workflow_scheduler as scheduler
+
+    monkeypatch.setattr(scheduler, "_scheduler_startup_recovery_deadlines", {})
+    monkeypatch.setattr(
+        runtime,
+        "get_runtime_status",
+        lambda **_kwargs: {
+            "ok": True,
+            "jobs": [{"job_id": "daily_digest", "state": "stale"}],
+        },
+    )
+
+    kwargs = scheduler._startup_recovery_kwargs("daily_digest", delay_seconds=5)
+
+    assert kwargs["next_run_time"] > datetime.now(timezone.utc)
+    assert "daily_digest" in scheduler._scheduler_startup_recovery_deadlines
+
+
+def test_healthy_daily_job_keeps_normal_cron_schedule(monkeypatch):
+    import modstore_server.scheduler_runtime as runtime
+    import modstore_server.workflow_scheduler as scheduler
+
+    monkeypatch.setattr(
+        runtime,
+        "get_runtime_status",
+        lambda **_kwargs: {
+            "ok": True,
+            "jobs": [{"job_id": "daily_digest", "state": "healthy"}],
+        },
+    )
+
+    assert scheduler._startup_recovery_kwargs("daily_digest", delay_seconds=5) == {}

@@ -1,0 +1,90 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /FHD
+    schedule:
+      interval: weekly
+    groups:
+      fhd-python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /成都修茈科技有限公司/MODstore_deploy
+    schedule:
+      interval: weekly
+    groups:
+      modstore-python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /成都修茈科技有限公司/vibe-coding
+    schedule:
+      interval: weekly
+    groups:
+      vibe-python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /packages/retort_engine
+    schedule:
+      interval: weekly
+    groups:
+      retort-python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /FHD/frontend
+    schedule:
+      interval: weekly
+    groups:
+      frontend-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /FHD/desktop
+    schedule:
+      interval: weekly
+    groups:
+      desktop-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /FHD/XCAGI
+    schedule:
+      interval: weekly
+    groups:
+      xcagi-tooling-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /成都修茈科技有限公司
+    schedule:
+      interval: weekly
+    groups:
+      company-frontend-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /成都修茈科技有限公司/MODstore_deploy/market
+    schedule:
+      interval: weekly
+    groups:
+      market-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /成都修茈科技有限公司/MODstore_deploy/desktop-shell
+    schedule:
+      interval: weekly
+    groups:
+      market-desktop-minor-patch:
+        update-types: [minor, patch]
