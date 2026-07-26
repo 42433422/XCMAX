@@ -1090,8 +1090,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         pass
     open_items = memory.get("open_items")
     recent_runs = memory.get("recent_runs")
-    if not isinstance(open_items, list) or not isinstance(recent_runs, list):
+    if not isinstance(open_items, list):
         return None
+    if not isinstance(recent_runs, list):
+        recent_runs = []
 
     # First check for code step failures that need retry (before review/qa)
     for item in reversed(open_items):

@@ -1087,6 +1087,32 @@ def test_resume_review_qa_candidate_retries_structured_findings_on_existing_bran
     )
 
 
+def test_resume_review_qa_candidate_resumes_structured_hold_without_recent_runs_key():
+    memory = {
+        "last_policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-no-recent-runs",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-no-recent",
+                "task_id": "task-no-recent",
+            }
+        ],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-no-recent-runs",
+        "continue_existing_code_task": True,
+        "failed_run_id": "r-no-recent",
+        "failed_steps": ["code"],
+        "para_task_id": "task-no-recent",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
     memory = {
         "open_items": [

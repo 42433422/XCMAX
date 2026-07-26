@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-26T15:18:00+00:00",
+  "symptom": "自维护循环内存中存在可执行的 automated_remediation（如 structured_qa_verdict_not_pass）且 last_policy_decision=loop_not_completed，但 _resume_review_qa_candidate 仍返回 None，调度器无法在原分支继续 code 修复。",
+  "root_cause": "_resume_review_qa_candidate 在 open_items 与 recent_runs 联合守卫处要求 recent_runs 必须为 list；当循环内存缺少 recent_runs 键（旧格式、部分写入或仅含 open_items 的 JSON）时提前返回 None，即使 automated_remediation 恢复路径不依赖 recent_runs。",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n@@ -1090,8 +1090,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An\n         pass\n     open_items = memory.get(\"open_items\")\n     recent_runs = memory.get(\"recent_runs\")\n-    if not isinstance(open_items, list) or not isinstance(recent_runs, list):\n+    if not isinstance(open_items, list):\n         return None\n+    if not isinstance(recent_runs, list):\n+        recent_runs = []\n \n     # First check for code step failures that need retry (before review/qa)\n     for item in reversed(open_items):\ndiff --git a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n--- a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n@@ -1087,6 +1087,32 @@ def test_resume_review_qa_candidate_retries_structured_findings_on_existing_bran\n     )\n \n \n+def test_resume_review_qa_candidate_resumes_structured_hold_without_recent_runs_key():\n+    memory = {\n+        \"last_policy_decision\": {\"action\": \"stop\", \"reason\": \"loop_not_completed\"},\n+        \"open_items\": [\n+            {\n+                \"branch\": \"devfleet/cursor/sub-1-no-recent-runs\",\n+                \"kind\": \"automated_remediation\",\n+                \"reason\": \"structured_qa_verdict_not_pass\",\n+                \"run_id\": \"r-no-recent\",\n+                \"task_id\": \"task-no-recent\",\n+            }\n+        ],\n+    }\n+\n+    result = _resume_review_qa_candidate(memory)\n+\n+    assert result == {\n+        \"branch\": \"devfleet/cursor/sub-1-no-recent-runs\",\n+        \"continue_existing_code_task\": True,\n+        \"failed_run_id\": \"r-no-recent\",\n+        \"failed_steps\": [\"code\"],\n+        \"para_task_id\": \"task-no-recent\",\n+        \"reason\": \"resume_automated_remediation_candidate\",\n+    }\n+\n+\n def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "Loop memory has kind=automated_remediation with structured_* hold reason and branch/task_id, but recent_runs is missing or not a list and _resume_review_qa_candidate returns None while pending_automated_remediation still finds the item.",
+    "patch_strategy": "Treat non-list recent_runs as an empty list in _resume_review_qa_candidate so automated_remediation resume is not blocked; keep requiring open_items to be a list.",
+    "rollback_plan": "Restore the combined guard that returns None when recent_runs is not a list.",
+    "required_tests": [
+      "test_self_maintenance_loop_runner_policy.py::test_resume_review_qa_candidate_resumes_structured_hold_without_recent_runs_key",
+      "test_self_maintenance_loop_runner_policy.py::test_resume_review_qa_candidate_retries_structured_findings_on_existing_branch"
+    ]
+  }
+}
