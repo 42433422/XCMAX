@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from apscheduler.triggers.interval import IntervalTrigger
@@ -41,6 +43,29 @@ def _int_env(name: str, default: int, *, minimum: int = 0) -> int:
     except ValueError:
         value = default
     return max(minimum, value)
+
+
+def _rollout_recovery_deadline() -> datetime | None:
+    """Anchor cross-stack startup grace to the immutable release, not process restarts."""
+    if str(os.environ.get("MODSTORE_DEPLOY_TIER") or "").strip().lower() != "production":
+        return None
+    configured = str(os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
+    manifest_path = (
+        Path(configured) if configured else Path("/opt/xcmax/current/.xcmax-release.json")
+    )
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        built_at = datetime.fromisoformat(str(payload["built_at"]).replace("Z", "+00:00"))
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if built_at.tzinfo is None:
+        built_at = built_at.replace(tzinfo=timezone.utc)
+    grace_seconds = min(
+        4 * 3600,
+        _int_env("MODSTORE_AUTONOMY_ROLLOUT_GRACE_SECONDS", 90 * 60, minimum=300),
+    )
+    deadline = built_at.astimezone(timezone.utc) + timedelta(seconds=grace_seconds)
+    return deadline if deadline > datetime.now(timezone.utc) else None
 
 
 def self_maintenance_cooldown_minutes(triggered_by: str) -> int:
@@ -115,8 +140,15 @@ def run_pending_automated_remediation() -> dict[str, Any]:
     return result
 
 
-def register_autonomy_jobs(scheduler: Any) -> None:
+def register_autonomy_jobs(
+    scheduler: Any,
+    recovery_deadlines: dict[str, datetime] | None = None,
+) -> None:
     """Register scorecard publication and active self-maintenance remediation."""
+    deadline = _rollout_recovery_deadline()
+    if deadline is not None and recovery_deadlines is not None:
+        recovery_deadlines["founder_scorecard_refresh"] = deadline
+        recovery_deadlines["self_maintenance_remediation_loop"] = deadline
     register_founder_scorecard_job(scheduler)
 
     from modstore_server.scheduler_runtime import track_job_run

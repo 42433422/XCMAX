@@ -1,3 +1,5 @@
+import json
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -130,6 +132,44 @@ def test_registers_scorecard_and_remediation_as_single_instance(
     assert kwargs["coalesce"] is True
     assert kwargs["max_instances"] == 1
     assert str(scheduler.add_job.call_args.args[1]) == "interval[0:20:00]"
+
+
+def test_cross_stack_rollout_grace_is_anchored_to_release_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    built_at = datetime.now(timezone.utc)
+    manifest = tmp_path / ".xcmax-release.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "built_at": built_at.isoformat(),
+                "git_sha": "a" * 40,
+                "release_id": "a" * 40,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_DEPLOY_TIER", "production")
+    monkeypatch.setenv("MODSTORE_RELEASE_MANIFEST", str(manifest))
+    monkeypatch.setenv("MODSTORE_AUTONOMY_ROLLOUT_GRACE_SECONDS", "600")
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.register_founder_scorecard_job",
+        lambda _scheduler: None,
+    )
+    scheduler = MagicMock()
+    recovery_deadlines: dict[str, datetime] = {}
+
+    register_autonomy_jobs(scheduler, recovery_deadlines)
+
+    expected = built_at.timestamp() + 600
+    assert recovery_deadlines["founder_scorecard_refresh"].timestamp() == pytest.approx(
+        expected, abs=1
+    )
+    assert (
+        recovery_deadlines["self_maintenance_remediation_loop"]
+        == recovery_deadlines["founder_scorecard_refresh"]
+    )
 
 
 def test_remediation_job_is_required_and_critical() -> None:

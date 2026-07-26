@@ -410,7 +410,7 @@ def start_scheduler() -> None:
     )
     _scheduler_heartbeat_job()
 
-    autonomy_scheduler.register_autonomy_jobs(_scheduler)
+    autonomy_scheduler.register_autonomy_jobs(_scheduler, _scheduler_startup_recovery_deadlines)
 
     def _dead_letter_reconcile_job() -> None:
         try:
