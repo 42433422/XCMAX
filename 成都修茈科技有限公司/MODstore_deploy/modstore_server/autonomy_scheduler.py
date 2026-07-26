@@ -86,7 +86,7 @@ def self_maintenance_cooldown_minutes(triggered_by: str) -> int:
 
 
 def pending_automated_remediation() -> dict[str, Any] | None:
-    """Return one executable remediation receipt without mutating loop memory."""
+    """Return one executable unattended repair receipt without mutating loop memory."""
     from modstore_server.self_maintenance_loop_runner import (
         _automated_remediation_resume_plan,
         _load_loop_memory,
@@ -97,9 +97,39 @@ def pending_automated_remediation() -> dict[str, Any] | None:
     if not isinstance(open_items, list):
         return None
     for item in reversed(open_items):
-        if not isinstance(item, dict) or item.get("kind") != "automated_remediation":
+        if not isinstance(item, dict):
             continue
         if item.get("escalated"):
+            continue
+        kind = str(item.get("kind") or "").strip()
+        branch = str(item.get("branch") or "").strip()
+        task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        if kind == "failed_steps":
+            raw_steps = item.get("steps")
+            steps = (
+                [str(step) for step in raw_steps if str(step) in {"code", "review", "qa"}]
+                if isinstance(raw_steps, list)
+                else []
+            )
+            try:
+                retry_count = int(item.get("retry_count") or 1)
+            except (TypeError, ValueError):
+                continue
+            max_retries = _int_env(
+                "MODSTORE_SELF_MAINTENANCE_MAX_RETRIES",
+                3,
+                minimum=1,
+            )
+            if steps and retry_count < max_retries and branch and task_id:
+                return {
+                    "branch": branch,
+                    "reason": f"failed_steps:{','.join(steps)}",
+                    "run_id": str(item.get("run_id") or "").strip(),
+                    "steps": steps,
+                    "task_id": task_id,
+                }
+            continue
+        if kind != "automated_remediation":
             continue
         reason = str(item.get("reason") or "").strip()
         resumable = (
@@ -107,8 +137,6 @@ def pending_automated_remediation() -> dict[str, Any] | None:
             or reason in _SCORE_REMEDIATION_REASONS
             or _automated_remediation_resume_plan(reason) is not None
         )
-        branch = str(item.get("branch") or "").strip()
-        task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         if resumable and branch and task_id:
             return {
                 "branch": branch,
