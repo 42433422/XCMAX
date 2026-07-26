@@ -49,12 +49,15 @@ from modstore_server.self_maintenance_loop_runner import (
 )
 from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
+    matches_isort_check_command,
     matches_source_governance_command,
 )
 
 QUALITY_CHECKS_JSON = (
     '"quality_checks":{'
     '"black":{"command":"python3 -m black --check modman/ modstore_server/ tests/",'
+    '"exit_code":0,"status":"passed"},'
+    '"isort":{"command":"python3 -m isort --check-only --diff modman/ modstore_server/ tests/",'
     '"exit_code":0,"status":"passed"},'
     '"source_governance":{"command":"python3 scripts/dev/source_governance.py --top 10",'
     '"exit_code":0,"status":"passed"}},'
@@ -1259,12 +1262,14 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "same focused test file" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
     assert "python -m black --check modman/ modstore_server/ tests/" in qa
+    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in qa
     assert "python scripts/dev/source_governance.py --top 10" in qa
     assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
     assert "python -m black --check modman/ modstore_server/ tests/" in code
+    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in code
     assert "python scripts/dev/source_governance.py --top 10" in code
     assert "executable_template object" in code
     assert "validate_kb_payload" in code
@@ -1441,7 +1446,7 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
     assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
 
 
-def test_structured_report_gate_requires_black_and_source_governance(monkeypatch):
+def test_structured_report_gate_requires_black_isort_and_source_governance(monkeypatch):
     focused = "runtime-python -m pytest focused.py -q"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
 
@@ -1462,15 +1467,37 @@ def test_structured_report_gate_requires_black_and_source_governance(monkeypatch
         ]
 
     missing_black = {
+        "isort": {
+            "command": ("python3 -m isort --check-only --diff modman/ modstore_server/ tests/"),
+            "exit_code": 0,
+            "status": "passed",
+        },
         "source_governance": {
             "command": "python3 scripts/dev/source_governance.py --top 10",
             "exit_code": 0,
             "status": "passed",
-        }
+        },
+    }
+    missing_isort = {
+        "black": {
+            "command": "python3 -m black --check modman/ modstore_server/ tests/",
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 0,
+            "status": "passed",
+        },
     }
     failed_governance = {
         "black": {
             "command": "python3 -m black --check modman/ modstore_server/ tests/",
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "isort": {
+            "command": ("python3 -m isort --check-only --diff modman/ modstore_server/ tests/"),
             "exit_code": 0,
             "status": "passed",
         },
@@ -1484,6 +1511,10 @@ def test_structured_report_gate_requires_black_and_source_governance(monkeypatch
     assert (
         _structured_report_gate(qa_report(missing_black))["reason"]
         == "structured_qa_black_not_passed"
+    )
+    assert (
+        _structured_report_gate(qa_report(missing_isort))["reason"]
+        == "structured_qa_isort_not_passed"
     )
     assert (
         _structured_report_gate(qa_report(failed_governance))["reason"]
@@ -1500,6 +1531,12 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         "echo python3 -m black --check modman/ modstore_server/ tests/"
     )
     assert not matches_black_check_command("python3 -m black --check modstore_server/ tests/")
+    assert matches_isort_check_command(
+        "python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
+    )
+    assert not matches_isort_check_command(
+        "echo python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
+    )
     assert matches_source_governance_command("python3 scripts/dev/source_governance.py --top 10")
     assert not matches_source_governance_command(
         "echo python3 scripts/dev/source_governance.py --top 10"

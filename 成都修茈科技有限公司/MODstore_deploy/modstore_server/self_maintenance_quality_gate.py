@@ -125,6 +125,30 @@ def matches_black_check_command(command: Any) -> bool:
     return False
 
 
+def matches_isort_check_command(command: Any) -> bool:
+    """Require a real isort check over every MODstore Python source scope."""
+
+    tokens = _safe_command_tokens(str(command or "").strip())
+    if tokens is None:
+        return False
+    for segment in _shell_command_segments(tokens):
+        args: list[str]
+        if len(segment) >= 3 and _is_python_executable(segment[0]):
+            if segment[1:3] != ["-m", "isort"]:
+                continue
+            args = segment[3:]
+        elif segment and Path(segment[0]).name in {"isort", "isort.exe"}:
+            args = segment[1:]
+        else:
+            continue
+        if "--check-only" not in args or "--diff" not in args:
+            continue
+        scope_names = {_scope_name(token) for token in args if not token.startswith("-")}
+        if {"modman", "modstore_server", "tests"} <= scope_names:
+            return True
+    return False
+
+
 def matches_source_governance_command(command: Any) -> bool:
     """Require execution of the repository source-governance ratchet."""
 
@@ -167,6 +191,8 @@ def quality_check_failure(qa_json: dict[str, Any]) -> Optional[str]:
         return "structured_qa_black_not_passed"
     if not _reported_check_passed(checks.get("black"), matches_black_check_command):
         return "structured_qa_black_not_passed"
+    if not _reported_check_passed(checks.get("isort"), matches_isort_check_command):
+        return "structured_qa_isort_not_passed"
     if not _reported_check_passed(
         checks.get("source_governance"),
         matches_source_governance_command,

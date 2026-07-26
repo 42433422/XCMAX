@@ -38,10 +38,6 @@ from .employee_executor import execute_employee_task
 from .models import EmployeeExecutionMetric, IncidentEvent, User, get_session_factory
 from .platform_llm_scope import platform_llm_scoped
 from .runtime_provenance import collect_runtime_provenance
-from .self_maintenance_quality_gate import (
-    matches_focused_test_command as _matches_focused_test_command,
-)
-from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
 from .self_evolution_knowledge import (
     build_self_evolution_context,
     collect_proactive_signals,
@@ -51,6 +47,10 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_quality_gate import (
+    matches_focused_test_command as _matches_focused_test_command,
+)
+from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
 
 logger = logging.getLogger(__name__)
 
@@ -904,6 +904,7 @@ _AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
         "para_merge_task_failed",
         "structured_qa_blocking_findings",
         "structured_qa_black_not_passed",
+        "structured_qa_isort_not_passed",
         "structured_qa_new_errors",
         "structured_qa_new_failures",
         "structured_qa_source_governance_not_passed",
@@ -2740,8 +2741,10 @@ def _code_task_text(
         "and require exit code 0. "
         "Also run `python -m black --check modman/ modstore_server/ tests/` from "
         "`成都修茈科技有限公司/MODstore_deploy` and "
+        "`python -m isort --check-only --diff modman/ modstore_server/ tests/` "
+        "from the same directory, plus "
         "`python scripts/dev/source_governance.py --top 10` from the repository root; "
-        "both are mandatory merge-readiness gates and must exit 0. "
+        "all three are mandatory merge-readiness gates and must exit 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
@@ -2938,7 +2941,9 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "absolute Python path is unavailable when the equivalent focused command passes. "
         "From the target branch archive, you MUST also run "
         "`python -m black --check modman/ modstore_server/ tests/` from "
-        "`成都修茈科技有限公司/MODstore_deploy` and "
+        "`成都修茈科技有限公司/MODstore_deploy`, "
+        "`python -m isort --check-only --diff modman/ modstore_server/ tests/` "
+        "from the same directory, and "
         "`python scripts/dev/source_governance.py --top 10` from the repository root. "
         "Record their exact commands, real exit codes, and statuses in quality_checks. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
@@ -2953,6 +2958,7 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         '"tested_commands":[{"command":"...","exit_code":0,"status":"passed|failed"}],'
         '"quality_checks":{'
         '"black":{"command":"...","exit_code":0,"status":"passed|failed"},'
+        '"isort":{"command":"...","exit_code":0,"status":"passed|failed"},'
         '"source_governance":{"command":"...","exit_code":0,"status":"passed|failed"}},'
         '"target_branch_available":true,'
         '"test_delta":{"baseline_id":"...","new_failures":[],"new_errors":[]},'
