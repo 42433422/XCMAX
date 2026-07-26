@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -59,6 +61,31 @@ def test_host_probe_rejects_unapproved_host_before_network() -> None:
             specialized.probe_mod_host(
                 "https://unapproved.example.test",
                 allowed_hosts={"approved.example.test"},
+            )
+        )
+
+
+def test_host_probe_rejects_allowlisted_dns_name_resolving_private_network() -> None:
+    with patch.object(
+        socket,
+        "getaddrinfo",
+        return_value=[(0, 0, 0, "", ("169.254.169.254", 0))],
+    ):
+        with pytest.raises(ValueError, match="禁用网段"):
+            asyncio.run(
+                specialized.probe_mod_host(
+                    "https://approved.example.test",
+                    allowed_hosts={"approved.example.test"},
+                )
+            )
+
+
+def test_host_probe_always_rejects_metadata_literal() -> None:
+    with pytest.raises(ValueError, match="永久禁用网段"):
+        asyncio.run(
+            specialized.probe_mod_host(
+                "http://169.254.169.254",
+                allowed_hosts={"169.254.169.254"},
             )
         )
 

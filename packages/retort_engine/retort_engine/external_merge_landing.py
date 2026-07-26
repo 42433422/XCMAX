@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -9,7 +10,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
 
 DEFAULT_EXTERNAL_MERGE_CASES: tuple[dict[str, str], ...] = (
     {
@@ -131,10 +131,12 @@ def build_external_merge_landing(
         "duration_sec": round(time.monotonic() - started, 3),
     }
     report = {
-        "status": "ready"
-        if len(ready_cases) >= min_cases
-        and summary["all_branch_diff_merge_tests_passed"]
-        else "blocked",
+        "status": (
+            "ready"
+            if len(ready_cases) >= min_cases
+            and summary["all_branch_diff_merge_tests_passed"]
+            else "blocked"
+        ),
         "project": str(root),
         "summary": summary,
         "cases": results,
@@ -320,6 +322,7 @@ def _slug(value: str) -> str:
 def _run(
     command: list[str], cwd: Path, env: dict[str, str] | None = None
 ) -> dict[str, Any]:
+    _validate_command(command)
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -337,3 +340,61 @@ def _run(
         "stderr": (completed.stderr or "")[-1200:],
         "ok": completed.returncode == 0,
     }
+
+
+def _validate_command(command: list[str]) -> None:
+    """Allow only the exact git/pytest command shapes used by this proof runner."""
+
+    if not command or any(
+        not isinstance(part, str)
+        or not part
+        or len(part) > 4_096
+        or "\x00" in part
+        or "\n" in part
+        or "\r" in part
+        for part in command
+    ):
+        raise ValueError("invalid external command")
+    executable, *arguments = command
+    if executable == sys.executable:
+        if arguments != ["-m", "pytest", "tests", "-q"]:
+            raise ValueError("unapproved Python command")
+        return
+    if executable != "git" or not arguments:
+        raise ValueError("unapproved executable")
+
+    subcommand, *values = arguments
+    fixed_shapes = {
+        ("init",),
+        ("checkout", "main"),
+        ("checkout", "-b", "main"),
+        ("config", "user.email", "retort@example.test"),
+        ("config", "user.name", "Retort Merge Proof"),
+        ("add", "."),
+        ("commit", "-m", "seed retort merge landing proof"),
+        ("rev-parse", "HEAD"),
+        ("diff", "--name-only", "main...HEAD"),
+    }
+    if tuple(arguments) in fixed_shapes:
+        return
+    branch_pattern = re.compile(r"absorb/[a-z0-9-]{1,48}-[1-9]\d*")
+    if (
+        subcommand == "checkout"
+        and len(values) == 2
+        and values[0] == "-b"
+        and branch_pattern.fullmatch(values[1])
+    ):
+        return
+    if subcommand == "commit" and len(values) == 2 and values[0] == "-m":
+        if re.fullmatch(r"absorb [^\x00\r\n]{1,512} review rule", values[1]):
+            return
+    if (
+        subcommand == "merge"
+        and len(values) == 4
+        and values[0] == "--no-ff"
+        and branch_pattern.fullmatch(values[1])
+        and values[2] == "-m"
+        and re.fullmatch(r"merge absorbed [^\x00\r\n]{1,512} rule", values[3])
+    ):
+        return
+    raise ValueError("unapproved git command")

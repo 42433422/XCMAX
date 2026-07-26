@@ -6,9 +6,12 @@ from urllib.request import Request, urlopen
 
 from retort_engine.pr_review import review_diff
 
-
 GITHUB_PR_RE = re.compile(
-    r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)(?:[/?#].*)?$"
+    r"^https://github\.com/"
+    r"(?P<owner>[A-Za-z0-9_.-]+)/"
+    r"(?P<repo>[A-Za-z0-9_.-]+)/pull/"
+    r"(?P<number>[1-9]\d*)"
+    r"(?P<diff>\.diff)?/?$"
 )
 PROVIDER_FALLBACK_ORDER = ("openai", "anthropic", "gemini", "groq", "local_static")
 PROMPT_INJECTION_MARKERS = (
@@ -54,9 +57,11 @@ def review_pr_url(
         "provider_fallback_terminal": PROVIDER_FALLBACK_ORDER[-1],
     }
     return {
-        "status": "reviewed"
-        if review.get("status") in {"reviewed", "no_new_changes"}
-        else str(review.get("status") or "failed"),
+        "status": (
+            "reviewed"
+            if review.get("status") in {"reviewed", "no_new_changes"}
+            else str(review.get("status") or "failed")
+        ),
         "pr_url": pr_url,
         "diff_url": diff_url,
         "summary": summary,
@@ -87,11 +92,9 @@ def prepare_review_input(diff_text: str, *, max_bytes: int = 500_000) -> dict[st
 
 def pr_diff_url(pr_url: str) -> str:
     value = pr_url.strip()
-    if value.endswith(".diff"):
-        return value
     match = GITHUB_PR_RE.match(value)
     if not match:
-        raise ValueError("review-pr expects a GitHub pull request URL or a .diff URL")
+        raise ValueError("review-pr expects an exact github.com pull request URL")
     return f"https://github.com/{match.group('owner')}/{match.group('repo')}/pull/{match.group('number')}.diff"
 
 

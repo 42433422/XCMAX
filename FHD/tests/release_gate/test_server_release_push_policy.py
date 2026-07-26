@@ -235,8 +235,8 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '1' || '0' }}"
         ) in workflow
-        assert 'FHD_CVM_PUSH_TIMEOUT: "55m"' in workflow
-        assert "timeout-minutes: 65" in workflow
+        assert 'FHD_CVM_PUSH_TIMEOUT: "75m"' in workflow
+        assert "timeout-minutes: 90" in workflow
 
 
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:

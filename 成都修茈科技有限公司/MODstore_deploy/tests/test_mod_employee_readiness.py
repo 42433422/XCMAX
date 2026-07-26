@@ -29,7 +29,20 @@ def _reset_db(monkeypatch, tmp_path):
     models._engine = None
     models._SessionFactory = None
     models.init_db()
-    return models.get_session_factory()
+    session_factory = models.get_session_factory()
+    with session_factory() as session:
+        if session.get(models.User, 1) is None:
+            session.add(
+                models.User(
+                    id=1,
+                    username="readiness-admin",
+                    email="readiness-admin@pytest.local",
+                    password_hash="x",
+                    is_admin=True,
+                )
+            )
+            session.commit()
+    return session_factory
 
 
 def _write_workflow_employee(library, mod_id: str, row: dict) -> None:

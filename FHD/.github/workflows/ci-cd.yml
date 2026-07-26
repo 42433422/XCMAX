@@ -537,7 +537,7 @@ jobs:
       group: cvm-push-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
       cancel-in-progress: true
     # 正常发布只推必需 tarball + manifest；离线镜像归档仅手动显式启用。
-    timeout-minutes: 65
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -558,7 +558,7 @@ jobs:
           # The production link currently needs roughly 42-50 minutes for the
           # normal release tarball. Keep a measured transfer margin while the
           # rsync .part file preserves progress across interrupted runs.
-          FHD_CVM_PUSH_TIMEOUT: "55m"
+          FHD_CVM_PUSH_TIMEOUT: "75m"
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then

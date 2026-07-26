@@ -31,16 +31,36 @@ class Base(DeclarativeBase):
 
 _engine: Optional[Engine] = None
 _SessionFactory: Optional[sessionmaker[Session]] = None
+_compatibility_engine_override: Optional[Engine] = None
+
+
+def _models_module() -> Any | None:
+    try:
+        from modstore_server import models as _models
+
+        return _models
+    except ImportError:
+        return None
 
 
 def _models_globals() -> tuple[Optional[Engine], Optional[sessionmaker[Session]]]:
     """单测常仅 patch ``modstore_server.models`` 上的全局；与 ``db.base`` 绑分解绑后仍可路由到临时引擎。"""
-    try:
-        from modstore_server import models as _models
-
-        return getattr(_models, "_engine", None), getattr(_models, "_SessionFactory", None)
-    except ImportError:
+    models_module = _models_module()
+    if models_module is None:
         return None, None
+    return (
+        getattr(models_module, "_engine", None),
+        getattr(models_module, "_SessionFactory", None),
+    )
+
+
+def _publish_database_state() -> None:
+    """Keep the legacy ``models`` compatibility attributes bound to canonical state."""
+    models_module = _models_module()
+    if models_module is None:
+        return
+    models_module._engine = _engine
+    models_module._SessionFactory = _SessionFactory
 
 
 def default_db_path() -> Path:
@@ -61,18 +81,50 @@ def database_url(db_path: Optional[Path] = None) -> str:
 
 
 def get_engine(db_path: Optional[Path] = None) -> Engine:
-    global _engine, _SessionFactory
-    models_engine, _ = _models_globals()
-    if models_engine is not None and models_engine is not _engine:
-        return models_engine
-
+    global _compatibility_engine_override, _engine, _SessionFactory
     url = database_url(db_path)
-    if _engine is not None and str(_engine.url) != url:
+    models_engine, models_session_factory = _models_globals()
+    models_module = _models_module()
+    compatibility_engine_injected = False
+
+    if models_module is not None and models_engine is None and _engine is not None:
+        # Assigning ``models._engine = None`` is the long-standing reset API
+        # used by integrations and tests. Honor it across the compatibility
+        # module boundary instead of silently retaining db.base's stale engine.
         _engine.dispose()
         _engine = None
         _SessionFactory = None
+        _compatibility_engine_override = None
+    elif models_engine is not None and models_engine is not _engine:
+        # ``models._engine`` remains a supported compatibility injection
+        # point (notably for in-memory integrations). Adopt an explicitly
+        # replaced engine even when its URL differs from the environment.
+        if _engine is not None:
+            _engine.dispose()
+        _engine = models_engine
+        _compatibility_engine_override = models_engine
+        compatibility_engine_injected = True
+        if (
+            models_session_factory is not None
+            and getattr(models_session_factory, "kw", {}).get("bind") is models_engine
+        ):
+            _SessionFactory = models_session_factory
+        else:
+            _SessionFactory = None
+
+    if (
+        _engine is not None
+        and not compatibility_engine_injected
+        and _engine is not _compatibility_engine_override
+        and str(_engine.url) != url
+    ):
+        _engine.dispose()
+        _engine = None
+        _SessionFactory = None
+        _compatibility_engine_override = None
 
     if _engine is None:
+        _compatibility_engine_override = None
         if url.startswith("sqlite:///"):
             p = Path(url.replace("sqlite:///", "", 1))
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -85,18 +137,23 @@ def get_engine(db_path: Optional[Path] = None) -> Engine:
                 pool_size=int(os.environ.get("MODSTORE_DB_POOL_SIZE", "10")),
                 max_overflow=int(os.environ.get("MODSTORE_DB_MAX_OVERFLOW", "20")),
             )
+    _publish_database_state()
     return _engine
 
 
 def get_session_factory(db_path: Optional[Path] = None) -> sessionmaker[Session]:
     global _SessionFactory
+    engine = get_engine(db_path)
     _, models_sf = _models_globals()
-    if models_sf is not None and models_sf is not _SessionFactory:
-        return models_sf
-
-    if _SessionFactory is None:
-        engine = get_engine(db_path)
+    if (
+        models_sf is not None
+        and models_sf is not _SessionFactory
+        and getattr(models_sf, "kw", {}).get("bind") is engine
+    ):
+        _SessionFactory = models_sf
+    if _SessionFactory is None or getattr(_SessionFactory, "kw", {}).get("bind") is not engine:
         _SessionFactory = sessionmaker(bind=engine)
+    _publish_database_state()
     return _SessionFactory
 
 

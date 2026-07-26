@@ -27,6 +27,18 @@ def _make_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     models._engine = None
     models._SessionFactory = None
     models.init_db()
+    session_factory = models.get_session_factory()
+    with session_factory() as session:
+        if session.get(models.User, 1) is None:
+            session.add(
+                models.User(
+                    id=1,
+                    username="payment-notify-user",
+                    email="payment-notify@pytest.local",
+                    password_hash="x",
+                )
+            )
+            session.commit()
 
     app = create_app(load_default_config())
     return TestClient(app)

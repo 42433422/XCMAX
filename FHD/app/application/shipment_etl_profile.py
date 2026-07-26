@@ -293,7 +293,14 @@ def _iter_profile_files(directories: list[Path] | None = None) -> list[Path]:
 
 
 def load_profile_from_path(path: str | Path) -> ShipmentEtlProfile:
-    p = Path(path).expanduser().resolve()
+    raw_path = Path(path).expanduser()
+    p = raw_path.resolve()
+    if not p.is_file() and not raw_path.is_absolute():
+        # Callers may run from the monorepo root or an installed launcher
+        # instead of FHD/. Keep repository-relative profile paths stable.
+        project_relative = (Path(__file__).resolve().parents[2] / raw_path).resolve()
+        if project_relative.is_file():
+            p = project_relative
     if not p.is_file():
         raise ShipmentEtlProfileError(f"profile file not found: {p}")
     try:

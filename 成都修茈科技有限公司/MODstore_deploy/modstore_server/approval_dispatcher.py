@@ -15,7 +15,13 @@ from modstore_server.integrations.ops_action_handlers import (
     APPROVAL_DISPATCHER_EMPLOYEE_ID,
     dispatch_ops_handler,
 )
-from modstore_server.models import OpsApprovalToken, OpsStagedChange, User, get_session_factory
+from modstore_server.models import (
+    OpsActionAuditLog,
+    OpsApprovalToken,
+    OpsStagedChange,
+    User,
+    get_session_factory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +185,10 @@ def _mark_staged_deployed(
             row.status = "deployed"
             row.deployed_at = now
             row.approved_at = row.approved_at or now
-            row.deploy_audit_id = probe_audit_id
+            audit_id = int(probe_audit_id or 0)
+            row.deploy_audit_id = (
+                audit_id if audit_id > 0 and session.get(OpsActionAuditLog, audit_id) else None
+            )
             session.commit()
 
 

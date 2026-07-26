@@ -5,6 +5,9 @@
 Android 与 iOS 共用 [`FHD/mobile-flutter-poc/`](../../mobile-flutter-poc/) 的 Flutter 业务代码。
 `android/` 目录只承担 Flutter Runner、Manifest、平台通道、签名和打包，不是独立产品实现。
 
+当前交付等级：**实验骨架·非签约级**。自动化测试和构建通过不能替代真机二维码/深链、
+真实审批流、推送与正式签名安装证据；这些证据全部闭环后才能提升对外等级。
+
 ## 本地验证
 
 ```bash

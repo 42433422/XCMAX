@@ -32,10 +32,12 @@ def _ms_get_workdir():
 
 
 _MS_WORK_DIR = _ms_get_workdir()
+_MS_PATH_CHECK_DEPTH = 0
 
 
 def _ms_within(path):
     """True 表示 path 解析后位于 _MS_WORK_DIR（含自身）之下。"""
+    global _MS_PATH_CHECK_DEPTH
     if path is None:
         return False
     if isinstance(path, (bytes, bytearray)):
@@ -50,7 +52,14 @@ def _ms_within(path):
         rp = _MsPath(_ms_os.fspath(path)).expanduser()
         if not rp.is_absolute():
             rp = (_MS_WORK_DIR / rp)
-        rp = rp.resolve(strict=False)
+        # ``Path.resolve`` itself calls os.stat/lstat/readlink. Those
+        # functions are wrapped below, so mark this internal resolution to
+        # prevent the wrappers from recursively validating their own probes.
+        _MS_PATH_CHECK_DEPTH += 1
+        try:
+            rp = rp.resolve(strict=False)
+        finally:
+            _MS_PATH_CHECK_DEPTH -= 1
     except Exception:
         return False
     try:
@@ -177,6 +186,8 @@ def _ms_wrap_path1(name):
         return
 
     def _wrapped(path, *args, **kwargs):
+        if _MS_PATH_CHECK_DEPTH > 0:
+            return fn(path, *args, **kwargs)
         _ms_assert_within(path, "os." + name)
         return fn(path, *args, **kwargs)
 
