@@ -89,6 +89,12 @@ class PreviewServiceMixin:
             stage="queued",
             progress=0,
             file_sha256=upload.sha256,
+            summary_json=dump_json(
+                {
+                    "file_name": upload.file_name,
+                    "file_sha256": upload.sha256,
+                }
+            ),
             draft_json=dump_json(draft),
             reversible=adapter.reversible,
         )
@@ -140,7 +146,12 @@ class PreviewServiceMixin:
                 run.draft_json = dump_json(draft)
             run.total_rows = len(dataset.rows)
             run.source_features_json = dump_json(dataset.source_features)
-            run.summary_json = dump_json({"warnings": dataset.warnings})
+            run.summary_json = dump_json(
+                {
+                    **load_json(run.summary_json, {}),
+                    "warnings": dataset.warnings,
+                }
+            )
             run.stage = "validating"
             run.progress = 20
             db.query(EtlRunRow).filter(

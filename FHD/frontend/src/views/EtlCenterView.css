@@ -61,6 +61,10 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .etl-summary-grid button { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; text-align: left; padding: 13px; border: 1px solid #e0e6ee; border-radius: 10px; background: #fff; cursor: pointer; }
 .etl-summary-grid strong { font-size: 23px; }
 .etl-summary-grid small { color: #728096; }
+.etl-business-context { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(130px, .6fr) minmax(260px, 1.5fr); gap: 10px; margin-bottom: 14px; }
+.etl-business-context > div { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #dce7ed; border-radius: 10px; background: #f7fbfd; }
+.etl-business-context small { color: #718096; }
+.etl-business-context strong { overflow-wrap: anywhere; }
 .etl-dot { grid-row: 1 / 3; width: 7px; margin-right: 10px; border-radius: 999px; background: #9aa6b2; }
 .etl-dot--new { background: #2b8a68; }.etl-dot--update { background: #2d6ecf; }.etl-dot--skip { background: #9aa6b2; }.etl-dot--error { background: #c9484f; }
 .etl-alert { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 14px 0; padding: 12px 14px; border-radius: 9px; font-size: 13px; }
@@ -91,12 +95,16 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .etl-receipt dt { color: #778397; font-size: 12px; }.etl-receipt dd { margin: 4px 0 0; }
 .etl-receipt .etl-target-scope-note { margin: 12px 0; }
 .etl-receipt pre { max-height: 300px; overflow: auto; padding: 12px; border-radius: 8px; color: #d9e7ef; background: #152431; }
+.etl-result-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.etl-result-links a { display: inline-flex; padding: 7px 10px; color: #245f78; border: 1px solid #9fc4d3; border-radius: 7px; background: #fff; text-decoration: none; }
+.etl-technical-receipt { margin-top: 12px; }
+.etl-technical-receipt summary { color: #5f6f7e; cursor: pointer; font-size: 13px; }
 .etl-empty { padding: 60px 20px; text-align: center; color: #8390a1; }
 @media (max-width: 900px) {
   .etl-center { padding: 12px; }
   .etl-hero, .etl-panel__title, .etl-receipt header { flex-direction: column; }
   .etl-hero__limits { justify-content: flex-start; }
   .etl-upload-grid, .etl-webhook-form { grid-template-columns: 1fr; }
-  .etl-summary-grid, .etl-receipt dl { grid-template-columns: repeat(2, 1fr); }
+  .etl-summary-grid, .etl-receipt dl, .etl-business-context { grid-template-columns: repeat(2, 1fr); }
   .etl-tabs button { font-size: 0; }.etl-tabs button span { margin: 0; font-size: 13px; }
 }

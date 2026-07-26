@@ -51,6 +51,8 @@ export type EtlCapabilities = {
 export type EtlRun = {
   id: string
   upload_id: string
+  file_name: string
+  file_sha256: string
   template_id?: string | null
   template_version_id?: string | null
   target_type: string

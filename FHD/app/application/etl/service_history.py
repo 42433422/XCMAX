@@ -27,7 +27,8 @@ class HistoryServiceMixin:
             run.error_code = "ETL_EXECUTION_INTERRUPTED"
             run.error_message = "上次执行被意外中断，请重新预演或重试"
             db.commit()
-        return self.run_dict(run)
+        upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
+        return self.run_dict(run, file_name=upload.file_name)
 
     def list_runs(
         self, db: Session, *, owner_user_id: int, limit: int = 50
@@ -50,7 +51,20 @@ class HistoryServiceMixin:
                 interrupted = True
         if interrupted:
             db.commit()
-        return [self.run_dict(run) for run in rows]
+        upload_ids = {run.upload_id for run in rows}
+        upload_names = {
+            upload.id: upload.file_name
+            for upload in db.query(EtlUpload)
+            .filter(
+                EtlUpload.owner_user_id == owner_user_id,
+                EtlUpload.id.in_(upload_ids),
+            )
+            .all()
+        }
+        return [
+            self.run_dict(run, file_name=upload_names.get(run.upload_id))
+            for run in rows
+        ]
 
     def cleanup_retention(self, db: Session, *, owner_user_id: int) -> dict[str, int]:
         now = utcnow()
@@ -113,10 +127,13 @@ class HistoryServiceMixin:
             updated = updated.replace(tzinfo=UTC)
         return updated < utcnow() - timedelta(minutes=5)
 
-    def run_dict(self, run: EtlRun) -> dict[str, Any]:
+    def run_dict(self, run: EtlRun, *, file_name: str | None = None) -> dict[str, Any]:
+        details = load_json(run.summary_json, {})
         return {
             "id": run.id,
             "upload_id": run.upload_id,
+            "file_name": str(file_name or details.get("file_name") or ""),
+            "file_sha256": run.file_sha256,
             "template_id": run.template_id,
             "template_version_id": run.template_version_id,
             "target_type": run.target_type,
@@ -132,7 +149,7 @@ class HistoryServiceMixin:
                 "error": run.error_rows,
                 "executed": run.executed_rows,
             },
-            "details": load_json(run.summary_json, {}),
+            "details": details,
             "source_features": load_json(run.source_features_json, {}),
             "draft": load_json(run.draft_json, {}),
             "receipt": load_json(run.receipt_json, {}),

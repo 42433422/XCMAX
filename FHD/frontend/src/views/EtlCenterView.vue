@@ -80,6 +80,26 @@ const summaryCards = computed(() => [
   { action: 'skip', label: '跳过', count: currentRun.value?.summary.skip || 0 },
   { action: 'error', label: '错误', count: currentRun.value?.summary.error || 0 },
 ])
+const linkedCustomerNames = computed(() => {
+  const names = runRows.value
+    .map((row) => String(row.normalized.customer_name || '').trim())
+    .filter(Boolean)
+  return [...new Set(names)]
+})
+const plannedBusinessRows = computed(() => {
+  if (!currentRun.value) return 0
+  return currentRun.value.summary.new
+    + currentRun.value.summary.update
+    + currentRun.value.summary.skip
+})
+const runOutcomeText = computed(() => {
+  if (!currentRun.value) return ''
+  const summary = currentRun.value.summary
+  if (currentRun.value.status === 'completed') {
+    return `已写入 ${summary.executed} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
+  }
+  return `计划处理 ${plannedBusinessRows.value} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
+})
 
 async function bootstrap() {
   busy.value = true

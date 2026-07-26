@@ -786,6 +786,15 @@ def test_customer_products_service_executes_one_confirmed_linked_run(etl_db, mon
             target_type="customer_products",
         )
         assert run["status"] == "preview_ready"
+        assert run["file_name"] == "linked.csv"
+        assert run["file_sha256"] == upload["sha256"]
+        persisted_run = db.get(EtlRun, run["id"])
+        persisted_run.summary_json = "{}"
+        db.commit()
+        assert (
+            service.get_run(db, run_id=run["id"], owner_user_id=21)["file_name"]
+            == "linked.csv"
+        )
         assert run["summary"]["new"] == 2
         completed = service.execute(
             db,

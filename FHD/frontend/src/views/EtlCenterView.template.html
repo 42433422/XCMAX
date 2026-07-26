@@ -247,6 +247,23 @@
       </div>
       <div v-if="!currentRun" class="etl-empty">暂无预演任务。</div>
       <template v-else>
+        <div class="etl-business-context">
+          <div>
+            <small>本次文件</small>
+            <strong>{{ currentRun.file_name || `任务 ${currentRun.id.slice(0, 8)}` }}</strong>
+          </div>
+          <div>
+            <small>写入目标</small>
+            <strong>{{ targetLabel(currentRun.target_type) }}</strong>
+          </div>
+          <div v-if="currentRun.target_type === 'customer_products'">
+            <small>客户 → 产品关系</small>
+            <strong>
+              {{ linkedCustomerNames.length ? linkedCustomerNames.join('、') : '按客户名称创建或复用' }}
+              → {{ plannedBusinessRows }} 个产品行
+            </strong>
+          </div>
+        </div>
         <div class="etl-summary-grid">
           <button v-for="item in summaryCards" :key="item.action" type="button" @click="rowActionFilter = item.action">
             <span :class="`etl-dot etl-dot--${item.action}`"></span>
@@ -377,11 +394,15 @@
         >
           <div>
             <strong>{{ targetLabel(run.target_type) }}</strong>
-            <span>{{ run.id.slice(0, 8) }} · {{ formatTime(run.created_at) }}</span>
+            <span>{{ run.file_name || `任务 ${run.id.slice(0, 8)}` }}</span>
+            <small>{{ formatTime(run.created_at) }}</small>
           </div>
           <div>
             <span :class="`etl-status etl-status--${run.status}`">{{ statusLabel(run.status) }}</span>
-            <small>{{ run.summary.executed }}/{{ run.total_rows }} · {{ run.progress }}%</small>
+            <small>
+              新增 {{ run.summary.new }} · 更新 {{ run.summary.update }} ·
+              跳过 {{ run.summary.skip }} · 错误 {{ run.summary.error }}
+            </small>
           </div>
         </button>
       </div>
@@ -416,15 +437,19 @@
           </div>
         </header>
         <dl>
+          <div><dt>文件</dt><dd>{{ currentRun.file_name || '历史任务' }}</dd></div>
           <div><dt>状态</dt><dd>{{ statusLabel(currentRun.status) }}</dd></div>
           <div><dt>目标</dt><dd>{{ targetLabel(currentRun.target_type) }}</dd></div>
-          <div><dt>已执行</dt><dd>{{ currentRun.summary.executed }} 行</dd></div>
-          <div><dt>进度</dt><dd>{{ currentRun.progress }}%</dd></div>
+          <div><dt>业务结果</dt><dd>{{ runOutcomeText }}</dd></div>
           <div><dt>撤销能力</dt><dd>{{ currentRun.reversible ? '内部目标可撤销' : '外部目标不可撤销' }}</dd></div>
         </dl>
         <div v-if="currentRun.status === 'completed' && currentRun.target_type === 'customer_products'" class="etl-target-scope-note">
           <strong>已关联写入客户库和产品库</strong>
           <span>产品的购买单位与客户名称使用同一规范值，可从客户页直接衔接到该客户的产品。</span>
+          <div class="etl-result-links">
+            <RouterLink to="/customers">查看客户</RouterLink>
+            <RouterLink to="/products">查看产品</RouterLink>
+          </div>
         </div>
         <div v-else-if="currentRun.status === 'completed' && ['customers', 'products'].includes(currentRun.target_type)" class="etl-target-scope-note">
           <strong>
@@ -434,7 +459,10 @@
             本次为单一主数据维护；需要建立客户与产品关系时请选择“客户及产品”。
           </span>
         </div>
-        <pre>{{ JSON.stringify(currentRun.receipt, null, 2) }}</pre>
+        <details class="etl-technical-receipt">
+          <summary>查看技术回执</summary>
+          <pre>{{ JSON.stringify(currentRun.receipt, null, 2) }}</pre>
+        </details>
       </article>
     </section>
   </main>

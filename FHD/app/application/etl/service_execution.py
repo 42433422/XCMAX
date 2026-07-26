@@ -406,7 +406,7 @@ class ExecutionServiceMixin:
                 run.receipt_json = dump_json(receipt)
                 db.commit()
                 self._record_rollback_metric(run.target_type, "success")
-                return self.run_dict(run)
+                return self.run_dict(run, file_name=upload.file_name)
             for row in rows:
                 adapter.rollback_row(
                     db,
@@ -429,7 +429,7 @@ class ExecutionServiceMixin:
             run.receipt_json = dump_json(receipt)
             db.commit()
             self._record_rollback_metric(run.target_type, "success")
-            return self.run_dict(run)
+            return self.run_dict(run, file_name=upload.file_name)
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             code, message = safe_error(exc)
