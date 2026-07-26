@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import tempfile
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -18,27 +15,14 @@ from app.application.etl.service import get_etl_service
 from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import require_identified_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-TEMP_EXCEL_DIR = os.path.join(get_app_data_dir(), "temp_excel")
 
 
 def _form_truthy(value: str, default: bool = True) -> bool:
     text = str(value if value is not None else "").strip().lower()
     return default if not text else text in {"1", "true", "yes", "on"}
-
-
-def _form_include_ledger(value: str, default: str = "auto") -> bool | str:
-    text = str(value if value is not None else "").strip().lower()
-    if not text:
-        text = str(default or "auto").strip().lower()
-    if text in {"1", "true", "yes", "on"}:
-        return True
-    if text in {"0", "false", "no", "off"}:
-        return False
-    return "auto"
 
 
 def _user_id(user: Any) -> int:
@@ -85,21 +69,6 @@ def _store_general_upload(db: Session, file: UploadFile, *, owner_user_id: int) 
     return upload
 
 
-def _safe_legacy_temp_copy(file: UploadFile) -> str:
-    suffix = Path(file.filename or "shipment.xlsx").suffix[:16] or ".xlsx"
-    os.makedirs(TEMP_EXCEL_DIR, exist_ok=True)
-    file.file.seek(0)
-    with tempfile.NamedTemporaryFile(
-        mode="wb",
-        prefix="shipment_etl_",
-        suffix=suffix,
-        dir=TEMP_EXCEL_DIR,
-        delete=False,
-    ) as handle:
-        shutil.copyfileobj(file.file, handle, length=1024 * 1024)
-        return handle.name
-
-
 def _shipment_write_permission_error(request: Request) -> JSONResponse | None:
     """Preserve the legacy production RBAC guard around shipment writes."""
     from app.application.facades.session_facade import get_auth_service
@@ -144,63 +113,44 @@ async def shipment_etl_preview(
     db: Session = Depends(get_db_dependency),
     user: Any = Depends(require_identified_user),
 ):
-    """Return a legacy shipment preview plus universal ETL preview runs."""
+    """Create universal ETL previews without reading caller-selected paths."""
+    _ = (
+        workspace_root,
+        include_ledger,
+        template_name,
+        template_scope,
+    )
     try:
-        from app.application.office_template_ingest_app_service import (
-            attach_template_ingest_to_etl_result,
-        )
-        from app.application.shipment_excel_etl_app_service import (
-            get_shipment_excel_etl_app_service,
-        )
-
         owner_user_id = _user_id(user)
-        path = str(file_path or "").strip()
-        upload = None
-        temp_path = ""
-        if file is not None and (file.filename or "").strip():
-            upload = _store_general_upload(db, file, owner_user_id=owner_user_id)
-            temp_path = _safe_legacy_temp_copy(file)
-            path = temp_path
-        if not path:
+        if file is None or not (file.filename or "").strip():
             return JSONResponse(
-                {"success": False, "message": "请上传文件或提供 file_path"},
-                status_code=400,
+                {
+                    "success": False,
+                    "error_code": "ETL_UPLOAD_REQUIRED",
+                    "message": "为防止读取任意本地路径，请重新上传源文件后预演",
+                    "file_path_ignored": bool(str(file_path or "").strip()),
+                },
+                status_code=409,
             )
-        result = get_shipment_excel_etl_app_service().preview(
-            path,
-            include_ledger=_form_include_ledger(include_ledger),
-            workspace_root=str(workspace_root or "").strip() or None,
+        upload = _store_general_upload(db, file, owner_user_id=owner_user_id)
+        return JSONResponse(
+            {
+                "success": True,
+                "message": "旧接口已升级为通用 ETL：请在数据对接中心检查预演",
+                "general_etl": {
+                    "preview_required": True,
+                    "confirmation_required": True,
+                    "runs": _create_runs(
+                        db,
+                        owner_user_id=owner_user_id,
+                        upload_id=upload["upload_id"],
+                        target_types=["customers", "products", "shipment_records"],
+                    ),
+                },
+                "save_as_template_ignored": _form_truthy(save_as_template, False),
+            },
+            status_code=200,
         )
-        if temp_path:
-            result["uploaded_temp_path"] = temp_path
-        result = attach_template_ingest_to_etl_result(
-            result,
-            file_path=path,
-            save_as_template=_form_truthy(save_as_template, False),
-            template_name=str(template_name or "").strip(),
-            template_scope=str(template_scope or "").strip(),
-            source="shipment_excel_etl_preview",
-        )
-        if result.get("success") and upload:
-            result["general_etl"] = {
-                "preview_required": True,
-                "confirmation_required": True,
-                "runs": _create_runs(
-                    db,
-                    owner_user_id=owner_user_id,
-                    upload_id=upload["upload_id"],
-                    target_types=["customers", "products", "shipment_records"],
-                ),
-            }
-        elif result.get("success"):
-            result["general_etl"] = {
-                "preview_required": True,
-                "confirmation_required": True,
-                "runs": [],
-                "upload_required": True,
-                "message": "本地路径仅保留旧预览；进入数据对接中心前请重新上传文件",
-            }
-        return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except EtlError as exc:
         return JSONResponse(
             {"success": False, "error_code": exc.code, "message": exc.message},

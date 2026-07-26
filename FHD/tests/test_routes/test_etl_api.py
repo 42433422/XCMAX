@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -19,6 +21,7 @@ from app.db.models.etl import (
     EtlTemplateVersion,
     EtlUpload,
 )
+from app.fastapi_routes.shipment_etl_compat import shipment_etl_preview
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -141,3 +144,22 @@ def test_etl_api_is_fail_closed_when_feature_flag_is_missing(tmp_path, monkeypat
     response = client.get("/api/etl/capabilities")
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "ETL_CENTER_DISABLED"
+
+
+@pytest.mark.asyncio
+async def test_legacy_shipment_preview_rejects_caller_selected_path():
+    response = await shipment_etl_preview(
+        file=None,
+        file_path="/etc/passwd",
+        workspace_root="/",
+        include_ledger="auto",
+        save_as_template="1",
+        template_name="unsafe",
+        template_scope="global",
+        db=object(),
+        user=SimpleNamespace(id=101),
+    )
+    payload = json.loads(response.body)
+    assert response.status_code == 409
+    assert payload["error_code"] == "ETL_UPLOAD_REQUIRED"
+    assert payload["file_path_ignored"] is True

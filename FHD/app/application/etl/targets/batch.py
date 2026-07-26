@@ -56,17 +56,15 @@ class AttendanceAdapter(TargetAdapter):
         try:
             conn.execute("BEGIN")
             deleted = 0
-            for table in (
-                "attendance_daily_records",
-                "attendance_employees",
-                "attendance_departments",
-                "products",
-                "customers",
+            for statement in (
+                "DELETE FROM attendance_daily_records WHERE source_file = ?",
+                "DELETE FROM attendance_employees WHERE source_file = ?",
+                "DELETE FROM attendance_departments WHERE source_file = ?",
+                "DELETE FROM products WHERE source_file = ?",
+                "DELETE FROM customers WHERE source_file = ?",
             ):
                 try:
-                    cursor = conn.execute(
-                        f"DELETE FROM {table} WHERE source_file = ?", (source_file,)
-                    )
+                    cursor = conn.execute(statement, (source_file,))
                     deleted += int(cursor.rowcount or 0)
                 except sqlite3.OperationalError:
                     continue
