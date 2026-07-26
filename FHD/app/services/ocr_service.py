@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 
 from app.infrastructure.ocr_analysis import OCRAnalysisMixin
-from app.services.ocr_text_blocks import (
+from app.infrastructure.ocr_text_blocks import (
     recognize_macos_vision_blocks,
     recognize_tesseract_blocks,
 )

@@ -10,6 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlConflict, EtlError
+from app.application.etl.parsers import MAX_ROWS
 from app.application.etl.service_support import (
     EXECUTOR,
     SUBMITTED,
@@ -149,12 +150,14 @@ class ExecutionServiceMixin:
 
                 def normalized_rows():
                     last_id = 0
-                    while True:
+                    page_size = 500
+                    max_pages = (MAX_ROWS + page_size - 1) // page_size + 1
+                    for _page_number in range(max_pages):
                         page = (
                             db.query(EtlRunRow)
                             .filter(*eligible_filters, EtlRunRow.id > last_id)
                             .order_by(EtlRunRow.id)
-                            .limit(500)
+                            .limit(page_size)
                             .all()
                         )
                         if not page:

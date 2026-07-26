@@ -1,4 +1,4 @@
-"""Platform OCR fallbacks that preserve text-block geometry."""
+"""Infrastructure adapters for OCR fallbacks that preserve text-block geometry."""
 
 from __future__ import annotations
 

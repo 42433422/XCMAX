@@ -54,10 +54,7 @@ class UploadServiceMixin:
         total = 0
         try:
             with destination.open("xb") as handle:
-                while True:
-                    chunk = stream.read(1024 * 1024)
-                    if not chunk:
-                        break
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     total += len(chunk)
                     if total > MAX_FILE_BYTES:
                         raise EtlError(

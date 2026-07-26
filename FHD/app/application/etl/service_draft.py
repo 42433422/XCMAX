@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
+from app.application.etl.parsers import MAX_ROWS
 from app.application.etl.service_support import (
     ALLOWED_VALIDATION_OPS,
     EXECUTOR,
@@ -207,7 +208,8 @@ class DraftServiceMixin:
         preview_cache: dict[str, Any] = {}
         last_id = 0
         processed = 0
-        while True:
+        page_size = 500
+        for _page_number in range((MAX_ROWS + page_size - 1) // page_size + 1):
             rows = (
                 db.query(EtlRunRow)
                 .filter(
@@ -216,7 +218,7 @@ class DraftServiceMixin:
                     EtlRunRow.id > last_id,
                 )
                 .order_by(EtlRunRow.id)
-                .limit(500)
+                .limit(page_size)
                 .all()
             )
             if not rows:

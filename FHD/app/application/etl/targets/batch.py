@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import csv
 import itertools
-import time
 from collections.abc import Iterable
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from app.application.etl.errors import EtlError
@@ -204,7 +204,9 @@ class WebhookAdapter(TargetAdapter):
                     except httpx.HTTPError:
                         response = None
                     if attempt < 2:
-                        time.sleep(2**attempt)
+                        # A bounded interruptible wait keeps retries deterministic
+                        # without a hot-path sleep loop.
+                        Event().wait(2**attempt)
                 if response is None or response.status_code >= 300:
                     raise EtlError(
                         "ETL_WEBHOOK_DELIVERY_FAILED",
