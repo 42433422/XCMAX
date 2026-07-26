@@ -17,6 +17,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 APPLY_TARBALL="$SCRIPT_DIR/fhd-apply-release.sh"
 APPLY_COMPOSE="$SCRIPT_DIR/fhd-apply-release-compose.sh"
 LOG="${FHD_DEPLOY_LOG:-/var/log/fhd-auto-update.log}"
+if [[ -f "$SCRIPT_DIR/lib/dora_event.sh" ]]; then
+  # shellcheck source=lib/dora_event.sh
+  . "$SCRIPT_DIR/lib/dora_event.sh"
+else
+  dora_emit_deployment() {
+    echo "DORA event helper is missing; deployment outcome was not persisted" >&2
+    return 1
+  }
+fi
 
 MANIFEST="${FHD_MANIFEST_PATH:-/var/www/update/releases/stable/server/fhd-manifest.json}"
 ARTIFACT_DIR="${FHD_ARTIFACT_DIR:-$(dirname "$MANIFEST")}"
@@ -31,6 +40,23 @@ fi
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
+}
+
+record_dora_deployment() {
+  local status="$1"
+  local environment="staging"
+  [[ "${CHANNEL:-}" == "stable" ]] && environment="production"
+  if ! dora_emit_deployment \
+    "$status" \
+    "${GIT_SHA:-}" \
+    "${COMMIT_AT:-${BUILT_AT:-}}" \
+    "$environment" \
+    "${DEPLOY_MODE:-unknown}" \
+    "${VERSION:-}" \
+    "fhd-auto-update"; then
+    log "ERROR: DORA 部署事件写入失败 status=$status sha=${GIT_SHA:-unknown}"
+    return 1
+  fi
 }
 
 authorize_production_release() {
@@ -118,7 +144,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 0
 fi
 
-IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 <<<"$(
+IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 BUILT_AT COMMIT_AT <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -132,6 +158,8 @@ values = [
     str(doc.get("image_digest", "")),
     str(doc.get("channel", "")),
     str(doc.get("admin_console_sha256", "")),
+    str(doc.get("built_at", "")),
+    str(doc.get("commit_at", "")),
 ]
 if any("|" in value or "\n" in value for value in values):
     raise SystemExit("manifest contains an invalid field delimiter")
@@ -182,9 +210,11 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   [[ -n "${FHD_ENV_FILE:-}" ]] && APPLY_ENV+=("FHD_ENV_FILE=$FHD_ENV_FILE")
   if env "${APPLY_ENV[@]}" bash "$APPLY_COMPOSE"; then
     audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$IMAGE_DIGEST}" "executed"
+    record_dora_deployment "success"
   else
     status=$?
     audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$IMAGE_DIGEST}" "execution_failed"
+    record_dora_deployment "failed" || true
     exit "$status"
   fi
   log "compose 自动更新完成 version=$VERSION"
@@ -245,9 +275,11 @@ APPLY_ENV=(
 [[ -n "${FHD_HEALTH_PORT:-}" ]] && APPLY_ENV+=("FHD_HEALTH_PORT=$FHD_HEALTH_PORT")
 if env "${APPLY_ENV[@]}" bash "$APPLY_TARBALL"; then
   audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}" "executed"
+  record_dora_deployment "success"
 else
   status=$?
   audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}" "execution_failed"
+  record_dora_deployment "failed" || true
   exit "$status"
 fi
 log "tarball 自动更新完成 version=$VERSION"
