@@ -279,7 +279,14 @@ test.describe('P0 critical paths', () => {
     expect(exported.headers()['content-type'] || '').toContain('spreadsheetml');
     expect((await exported.body()).byteLength).toBeGreaterThan(100);
 
+    // A clean E2E tenant hides the materials sidebar until host-pack onboarding.
+    // Warm the authenticated ERP bridge through the always-available orders route,
+    // then verify the real materials deep link without weakening its assertion.
+    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
+    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
     await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(updatedName, { exact: true })).toBeVisible({ timeout: 20_000 });
     await captureEvidence(page, '07-material-data-loop.png');
