@@ -56,6 +56,66 @@ def test_pending_remediation_requires_executable_branch_and_task(
     assert pending_automated_remediation() is None
 
 
+def test_pending_remediation_prefers_latest_executable_failed_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    memory = {
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "older-run",
+                "branch": "devfleet/trae/older",
+                "task_id": "older-task",
+            },
+            {
+                "kind": "failed_steps",
+                "run_id": "latest-run",
+                "branch": "devfleet/cursor/latest",
+                "para_task_id": "latest-task",
+                "retry_count": 1,
+                "steps": ["review"],
+            },
+        ]
+    }
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        lambda: memory,
+    )
+
+    assert pending_automated_remediation() == {
+        "branch": "devfleet/cursor/latest",
+        "reason": "failed_steps:review",
+        "run_id": "latest-run",
+        "steps": ["review"],
+        "task_id": "latest-task",
+    }
+
+
+def test_pending_remediation_skips_exhausted_failed_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "run_id": "run-42",
+                "branch": "devfleet/cursor/review",
+                "para_task_id": "task-42",
+                "retry_count": 3,
+                "steps": ["review"],
+            }
+        ]
+    }
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        lambda: memory,
+    )
+
+    assert pending_automated_remediation() is None
+
+
 def test_pending_remediation_resumes_without_force(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
