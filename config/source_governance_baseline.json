@@ -10,7 +10,7 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py": {
       "stack": "modstore_backend",
-      "lines": 8622,
+      "lines": 8611,
       "soft_cap": 800
     },
     "FHD/admin-console/src/components/workflow/DutyRosterGraphPanel.vue": {
@@ -53,15 +53,15 @@
       "lines": 3357,
       "soft_cap": 800
     },
-    "FHD/app/fastapi_routes/xcmax_admin.py": {
-      "stack": "fhd_backend",
-      "lines": 3243,
-      "soft_cap": 800
-    },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
       "stack": "fhd_vue",
       "lines": 3236,
       "soft_cap": 500
+    },
+    "FHD/app/fastapi_routes/xcmax_admin.py": {
+      "stack": "fhd_backend",
+      "lines": 3137,
+      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner.py": {
       "stack": "modstore_backend",
@@ -210,7 +210,7 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler.py": {
       "stack": "modstore_backend",
-      "lines": 2029,
+      "lines": 2025,
       "soft_cap": 800
     },
     "FHD/app/db/init_db.py": {
@@ -1152,7 +1152,7 @@
   "oversized_routers": {
     "FHD/app/fastapi_routes/xcmax_admin.py": {
       "stack": "fhd_backend",
-      "routes": 79,
+      "routes": 78,
       "soft_cap": 20
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes.py": {
@@ -1267,15 +1267,14 @@
     }
   },
   "duplicate_metrics": {
-    "groups": 29,
-    "redundant_files": 29,
-    "redundant_lines": 4478,
-    "redundant_bytes": 163782
+    "groups": 21,
+    "redundant_files": 21,
+    "redundant_lines": 3516,
+    "redundant_bytes": 131914
   },
   "duplicate_excluded_prefixes": [
     "FHD/XCAGI/mods/",
     "FHD/mods-admin-runtime/",
-    "FHD/templates/",
-    "成都修茈科技有限公司/packages/xcagi_common/build/"
+    "FHD/templates/"
   ]
 }

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from FHD.scripts.dev import count_big_files
 from scripts.dev import source_governance
@@ -99,6 +102,46 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
         current = current_state(mirrors=["FHD/static/js/legacy.js"])
         errors, _ = source_governance.evaluate(current, baseline_state())
         self.assertTrue(any("retired source mirror" in item for item in errors))
+
+    def test_detects_retired_online_update_daemon_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            rel = "FHD/scripts/dev/online_update_daemon.py"
+            path = repo_root / rel
+            path.parent.mkdir(parents=True)
+            path.write_text("print('duplicate')\n", encoding="utf-8")
+            self.assertEqual(
+                source_governance._forbidden_source_mirrors(repo_root, [rel]),
+                [rel],
+            )
+
+    def test_detects_vendored_xcagi_common_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            rel = "成都修茈科技有限公司/packages/xcagi_common/xcagi_common/csrf.py"
+            path = repo_root / rel
+            path.parent.mkdir(parents=True)
+            path.write_text("TOKEN = 'duplicate'\n", encoding="utf-8")
+            self.assertEqual(
+                source_governance._forbidden_source_mirrors(repo_root, [rel]),
+                [rel],
+            )
+
+    def test_ignored_tracked_paths_skip_pending_deletions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            live = repo_root / "generated/live.py"
+            live.parent.mkdir(parents=True)
+            live.write_text("print('tracked')\n", encoding="utf-8")
+            with patch.object(
+                source_governance,
+                "_git_paths",
+                return_value=["generated/live.py", "generated/deleted.py"],
+            ):
+                self.assertEqual(
+                    source_governance._ignored_tracked_paths(repo_root),
+                    ["generated/live.py"],
+                )
 
 
 class FhdBigFileRatchetV2Tests(unittest.TestCase):

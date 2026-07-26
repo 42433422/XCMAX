@@ -32,6 +32,29 @@ The former `FHD/static` JS/CSS mirror is retired. The directory may contain
 non-source binary assets (currently the VBCABLE driver archive), but CI rejects
 new source files there.
 
+## Retired recovery and runtime sources
+
+`FHD/scripts/deploy/online_update_daemon.py` is the only online-update daemon.
+The former `FHD/scripts/dev` copy is retired and rejected by CI.
+
+Transcript recovery trees under `FHD/_recovered-*` and
+`FHD/_restored-from-transcript-*` are local evidence, not source roots. The
+recovered code has already been integrated into the active Vue applications.
+
+MODstore workbench executions under
+`modstore_server/workbench_script_runs/` are ephemeral sandbox output with their
+own retention lifecycle. They must not be tracked, including copied runtime SDKs
+or generated scripts.
+
+Package `__init__.py` files expose stable imports through explicit re-exports.
+They must not copy an implementation module wholesale; the implementation module
+remains the single source of truth.
+
+`packages/xcagi_common` is the canonical repository-wide authentication/session
+utility package for FHD and MODstore. Product trees reference that package; they
+do not keep vendored source copies. Python package `build/` and `*.egg-info/`
+directories are generated locally and stay untracked.
+
 When an oversized file is reduced, update the baseline so the improvement cannot
 regress:
 

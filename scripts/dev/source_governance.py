@@ -57,13 +57,19 @@ DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
     "FHD/mods-admin-runtime/",
     "FHD/templates/",
-    "成都修茈科技有限公司/packages/xcagi_common/build/",
 )
 
-# This legacy mirror was never loaded by the Vue build or FastAPI static route.
-# Keep non-source binary assets there when needed, but do not recreate a second
-# editable JS/CSS source tree.
-FORBIDDEN_SOURCE_MIRROR_PREFIXES = ("FHD/static/",)
+# These retired recovery/runtime trees are not editing sources. Keep the
+# generated workbench executions and transcript recovery snapshots outside Git.
+# FHD/static may retain non-source binary assets, but not a second JS/CSS tree.
+FORBIDDEN_SOURCE_MIRROR_PREFIXES = (
+    "FHD/static/",
+    "FHD/_recovered-",
+    "FHD/_restored-from-transcript-",
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_script_runs/",
+    "成都修茈科技有限公司/packages/xcagi_common/",
+)
+FORBIDDEN_SOURCE_MIRROR_PATHS = ("FHD/scripts/dev/online_update_daemon.py",)
 
 
 @dataclass(frozen=True)
@@ -130,7 +136,11 @@ def _tracked_paths(repo_root: Path) -> list[str]:
 
 
 def _ignored_tracked_paths(repo_root: Path) -> list[str]:
-    return _git_paths(repo_root, "ls-files", "-ci", "--exclude-standard")
+    return [
+        rel
+        for rel in _git_paths(repo_root, "ls-files", "-ci", "--exclude-standard")
+        if (repo_root / rel).is_file()
+    ]
 
 
 def _is_excluded_source(rel: str) -> bool:
@@ -260,7 +270,12 @@ def _forbidden_source_mirrors(repo_root: Path, tracked: list[str]) -> list[str]:
         for rel in tracked
         if (repo_root / rel).is_file()
         and Path(rel).suffix.lower() in MIRROR_SOURCE_EXTENSIONS
-        and any(rel.startswith(prefix) for prefix in FORBIDDEN_SOURCE_MIRROR_PREFIXES)
+        and (
+            rel in FORBIDDEN_SOURCE_MIRROR_PATHS
+            or any(
+                rel.startswith(prefix) for prefix in FORBIDDEN_SOURCE_MIRROR_PREFIXES
+            )
+        )
     )
 
 
