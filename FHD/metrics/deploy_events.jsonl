@@ -1,5 +1,1 @@
-{"deploy_id":"seed-1","deployed_at":"2026-05-28T10:00:00Z","commit_at":"2026-05-28T08:30:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
-{"deploy_id":"seed-2","deployed_at":"2026-06-01T14:20:00Z","commit_at":"2026-06-01T12:00:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
-{"deploy_id":"seed-3","deployed_at":"2026-06-02T09:15:00Z","commit_at":"2026-06-02T07:00:00Z","status":"failed","restored_at":"2026-06-02T16:40:00Z","source_workflow":"CI/CD Pipeline","head_branch":"main"}
-{"deploy_id":"seed-4","deployed_at":"2026-06-02T16:40:00Z","commit_at":"2026-06-02T15:10:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
-{"deploy_id":"seed-5","deployed_at":"2026-06-03T11:00:00Z","commit_at":"2026-06-03T09:45:00Z","status":"success","restored_at":null,"source_workflow":"Deploy","head_branch":"main"}
+{"deploy_id":"5aab891a86e1","deployed_at":"2026-07-26T12:40:48Z","commit_at":"2026-07-26T19:43:44+08:00","status":"success","restored_at":null,"source_workflow":"fhd-auto-update","head_branch":"main","environment":"production","git_sha":"4ece076909cc854d058b0232f7769d29064f1b7d","deploy_mode":"tarball","version":"1.0.0.0"}
