@@ -290,7 +290,16 @@ test.describe('P0 critical paths', () => {
     });
     await page.locator('#lv-username').fill(E2E_USER);
     await page.locator('#lv-password').fill(E2E_PASSWORD);
+    const loginResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
+      { timeout: 30_000 }
+    );
     await page.locator('.login-submit').click();
+    const loginResponse = await loginResponsePromise;
+    const loginText = await loginResponse.text();
+    expect(loginResponse.status(), loginText).toBe(200);
+    expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
     await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
