@@ -7,6 +7,7 @@ pytestmark = pytest.mark.release_gate
 
 from modstore_server.founder_scorecard_publisher import (  # noqa: E402
     publish_founder_scorecard,
+    register_founder_scorecard_job,
 )
 
 
@@ -75,3 +76,20 @@ def test_publisher_fails_closed_without_autonomy_token(
 
     with pytest.raises(RuntimeError, match="no autonomy webhook token"):
         publish_founder_scorecard()
+
+
+def test_registers_tracked_refresh_as_single_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODSTORE_FOUNDER_SCORECARD_REFRESH_MINUTES", "7")
+    scheduler = MagicMock()
+
+    register_founder_scorecard_job(scheduler)
+
+    assert scheduler.add_job.call_count == 1
+    kwargs = scheduler.add_job.call_args.kwargs
+    assert kwargs["id"] == "founder_scorecard_refresh"
+    assert kwargs["replace_existing"] is True
+    assert kwargs["coalesce"] is True
+    assert kwargs["max_instances"] == 1
+    assert str(scheduler.add_job.call_args.args[1]) == "interval[0:07:00]"

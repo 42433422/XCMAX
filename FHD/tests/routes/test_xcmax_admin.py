@@ -14,7 +14,9 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+import app.fastapi_routes.founder_autonomy_api as founder_routes
 import app.fastapi_routes.xcmax_admin as admin_routes
+from app.fastapi_routes.founder_autonomy_api import router as founder_autonomy_router
 from app.fastapi_routes.xcmax_admin import router
 
 
@@ -22,6 +24,7 @@ from app.fastapi_routes.xcmax_admin import router
 def app_with_router() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
+    app.include_router(founder_autonomy_router)
     return app
 
 
@@ -1336,7 +1339,7 @@ class TestOpsFounderAutonomy:
         }
         publication = {"ok": True, "written": ["public.json"], "errors": []}
         with patch.object(
-            admin_routes,
+            founder_routes,
             "_build_and_publish_founder_autonomy",
             new_callable=AsyncMock,
             return_value=(snapshot, publication),
