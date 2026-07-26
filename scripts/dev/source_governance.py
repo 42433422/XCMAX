@@ -34,6 +34,7 @@ ROUTE_PATTERN = re.compile(
     re.MULTILINE,
 )
 SOURCE_EXTENSIONS = {".py", ".ts", ".tsx", ".vue", ".js", ".jsx", ".dart"}
+MIRROR_SOURCE_EXTENSIONS = SOURCE_EXTENSIONS | {".css"}
 TEST_DIRS = {"test", "tests", "__tests__", "test-fixtures", "fixtures"}
 GENERATED_DIRS = {
     ".dart_tool",
@@ -58,6 +59,11 @@ DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/templates/",
     "成都修茈科技有限公司/packages/xcagi_common/build/",
 )
+
+# This legacy mirror was never loaded by the Vue build or FastAPI static route.
+# Keep non-source binary assets there when needed, but do not recreate a second
+# editable JS/CSS source tree.
+FORBIDDEN_SOURCE_MIRROR_PREFIXES = ("FHD/static/",)
 
 
 @dataclass(frozen=True)
@@ -135,7 +141,9 @@ def _is_excluded_source(rel: str) -> bool:
         return True
     if any(marker in name for marker in GENERATED_NAME_MARKERS):
         return True
-    return name.startswith("test_") or any(marker in name for marker in TEST_NAME_MARKERS)
+    return name.startswith("test_") or any(
+        marker in name for marker in TEST_NAME_MARKERS
+    )
 
 
 def _stack_rule(rel: str) -> tuple[StackRule, int] | None:
@@ -246,6 +254,16 @@ def _measure_duplicates(repo_root: Path, tracked: list[str]) -> tuple[dict, list
     return metrics, groups
 
 
+def _forbidden_source_mirrors(repo_root: Path, tracked: list[str]) -> list[str]:
+    return sorted(
+        rel
+        for rel in tracked
+        if (repo_root / rel).is_file()
+        and Path(rel).suffix.lower() in MIRROR_SOURCE_EXTENSIONS
+        and any(rel.startswith(prefix) for prefix in FORBIDDEN_SOURCE_MIRROR_PREFIXES)
+    )
+
+
 def measure(repo_root: Path) -> dict:
     tracked = _tracked_paths(repo_root)
     oversized, oversized_routes = _measure_sizes(repo_root, tracked)
@@ -255,6 +273,7 @@ def measure(repo_root: Path) -> dict:
         "oversized_routers": oversized_routes,
         "duplicate_metrics": duplicate_metrics,
         "duplicate_groups": duplicate_groups,
+        "forbidden_source_mirrors": _forbidden_source_mirrors(repo_root, tracked),
         "ignored_tracked_files": sorted(_ignored_tracked_paths(repo_root)),
     }
 
@@ -347,6 +366,14 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             )
         )
 
+    if current.get("forbidden_source_mirrors", []):
+        errors.append(
+            "retired source mirror contains tracked source files:\n"
+            + "\n".join(
+                f"    - {item}" for item in current["forbidden_source_mirrors"][:20]
+            )
+        )
+
     current_file_names = {item["file"] for item in current["oversized_files"]}
     removed_file_debt = sorted(set(file_limits) - current_file_names)
     if removed_file_debt:
@@ -361,6 +388,7 @@ def _summary(current: dict) -> dict:
         "oversized_files": len(current["oversized_files"]),
         "oversized_routers": len(current["oversized_routers"]),
         "duplicate_metrics": current["duplicate_metrics"],
+        "forbidden_source_mirrors": len(current.get("forbidden_source_mirrors", [])),
         "ignored_tracked_files": len(current["ignored_tracked_files"]),
     }
 
