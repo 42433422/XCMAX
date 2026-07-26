@@ -896,6 +896,8 @@ _AUTOMATED_REMEDIATION_QA_ONLY_REASONS = frozenset(
 )
 _AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
     {
+        "para_merge_conflict",
+        "para_merge_task_failed",
         "structured_qa_blocking_findings",
         "structured_qa_new_errors",
         "structured_qa_new_failures",
@@ -1093,11 +1095,11 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             if branch and para_task_id:
                 return {
                     "branch": branch,
-                    "continue_existing_code_task": True,
                     "failed_run_id": str(item.get("run_id") or "").strip(),
                     "failed_steps": ["code"],
                     "para_task_id": para_task_id,
                     "reason": "resume_para_ai_review_rejection",
+                    "rejected_branch": branch,
                     "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
                         :4000
                     ],
@@ -1219,7 +1221,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "para_task_id": para_task_id,
                 "reason": "resume_automated_remediation_candidate",
             }
-            if continue_existing_code_task:
+            if reason.startswith("para_merge_"):
+                candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+                candidate["remediation_reason"] = reason
+            if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
                 candidate["continue_existing_code_task"] = True
             return candidate
     return None
@@ -1247,7 +1252,10 @@ def _resume_dispatch_context(
 
     Code retries must use a fresh Para task. A score remediation still keeps
     the prior candidate branch as its base so the production fix survives.
-    Review/QA-only retries keep the original task and branch for evidence.
+    A merge-review rejection starts from the configured clean base and treats
+    the rejected branch as reference only; otherwise each rejection compounds
+    the previous diff until the reviewer can never accept it. Review/QA-only
+    retries keep the original task and branch for evidence.
     """
 
     if not resume_candidate:
@@ -2304,8 +2312,10 @@ def _reconcile_requested_merge_feedback(
     """Settle requested merges from Para without confusing request with success.
 
     ``completed_merge_requested`` remains open until Para reports a real merged
-    SHA.  An independent merge-review veto becomes an automated remediation
-    item containing the exact findings, so the next code employee can fix them.
+    SHA. Any terminal merge failure becomes an automated remediation item with
+    the exact findings. The next code employee starts from the configured clean
+    base and uses the rejected branch only as evidence, preventing retries from
+    accumulating an ever-larger inherited diff.
     """
 
     base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
@@ -2366,25 +2376,42 @@ def _reconcile_requested_merge_feedback(
                 changed = True
             merged += 1
             continue
-        if task_status != "merge_conflict":
+        terminal_failure_statuses = {
+            "cancelled",
+            "dispatch_error",
+            "dispatch_failed",
+            "failed",
+            "merge_conflict",
+        }
+        if task_status not in terminal_failure_statuses:
             continue
         conflict = task.get("merge_conflict")
         if not isinstance(conflict, dict):
             conflict = {}
         source = str(conflict.get("source") or "").strip()
-        detail = str(conflict.get("detail") or task.get("fail_reason") or "").strip()[:4000]
-        reason = "para_ai_review_rejected" if source == "ai-review-veto" else "para_merge_conflict"
+        detail = str(
+            conflict.get("detail")
+            or task.get("fail_reason")
+            or task.get("error")
+            or f"Para merge task ended with status={task_status}"
+        ).strip()[:4000]
+        if source == "ai-review-veto":
+            reason = "para_ai_review_rejected"
+        elif task_status == "merge_conflict":
+            reason = "para_merge_conflict"
+        else:
+            reason = "para_merge_task_failed"
         existing_receipt = run.get("merge_reconciliation")
         receipt = {
             "detail": detail,
             "reconciled_at": _iso(_utc_now()),
             "source": source,
-            "status": "merge_conflict",
+            "status": task_status,
             "task_id": task_id,
         }
         if not (
             isinstance(existing_receipt, dict)
-            and existing_receipt.get("status") == "merge_conflict"
+            and existing_receipt.get("status") == task_status
             and existing_receipt.get("task_id") == task_id
             and existing_receipt.get("source") == source
             and existing_receipt.get("detail") == detail
@@ -2397,18 +2424,22 @@ def _reconcile_requested_merge_feedback(
             and item.get("reason") == reason
             for item in open_items
         )
-        if source == "ai-review-veto" and detail and not already_open:
+        if not already_open:
+            rejected_branch = str(conflict.get("branch_name") or branch).strip()
             open_items.append(
                 {
-                    "branch": str(conflict.get("branch_name") or branch).strip(),
+                    "branch": rejected_branch,
                     "created_at": _iso(_utc_now()),
                     "detail": detail,
                     "kind": "automated_remediation",
                     "para_task_id": task_id,
                     "reason": reason,
-                    "review_feedback": detail,
+                    "rejected_branch": rejected_branch,
+                    "resume_from_clean_baseline": True,
+                    "review_feedback": detail if source == "ai-review-veto" else "",
                     "run_id": str(run.get("run_id") or "").strip(),
                     "source": source,
+                    "task_status": task_status,
                     "task_id": task_id,
                 }
             )
@@ -2568,14 +2599,39 @@ def _code_task_text(
         and resume_candidate.get("reason") == "resume_para_ai_review_rejection"
     ):
         feedback = str(resume_candidate.get("review_feedback") or "").strip()[:4000]
+        rejected_branch = str(
+            resume_candidate.get("rejected_branch") or resume_candidate.get("branch") or ""
+        ).strip()
         external_review_remediation = (
             "\n\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\n"
             "The independent Para merge reviewer vetoed the previous candidate. "
-            "Your current isolated work branch is based on that rejected branch. "
-            "Address every finding below in production code and focused regression tests; "
-            "do not remove the original fix, weaken safety gates, or merely rewrite comments. "
+            "Your current isolated work branch starts from the configured clean base, not from "
+            "the rejected branch. Treat the rejected branch as read-only reference and reproduce "
+            "only the smallest production fix needed to address the original symptom and every "
+            "finding below; do not inherit or cherry-pick the whole rejected diff. "
+            "Do not weaken safety gates or merely rewrite comments. "
             "After the fix, run the mandatory policy suite, commit, and push the current work branch. "
+            f"Rejected reference branch: {rejected_branch or '(missing)'}. "
             f"Exact reviewer findings: {feedback or '(missing feedback: fail closed and inspect the parent diff)'}"
+        )
+    external_merge_remediation = ""
+    if (
+        isinstance(resume_candidate, dict)
+        and resume_candidate.get("reason") == "resume_automated_remediation_candidate"
+        and str(resume_candidate.get("remediation_reason") or "").startswith("para_merge_")
+    ):
+        rejected_branch = str(resume_candidate.get("branch") or "").strip()
+        remediation_reason = str(resume_candidate.get("remediation_reason") or "").strip()
+        feedback = str(resume_candidate.get("remediation_feedback") or "").strip()[:4000]
+        external_merge_remediation = (
+            "\n\n=== EXTERNAL MERGE FAILURE REMEDIATION ===\n"
+            "The previous Para merge task ended in a terminal failure. Start from the configured "
+            "clean base. Use the rejected branch only as read-only evidence, then reproduce the "
+            "smallest valid production fix and focused regression test; do not inherit or cherry-pick "
+            "the whole rejected diff. "
+            f"Reason: {remediation_reason or '(missing)'}. "
+            f"Rejected reference branch: {rejected_branch or '(missing)'}. "
+            f"Exact failure detail: {feedback or '(missing)'}"
         )
     score_remediation = ""
     if isinstance(selected_remediation, dict):
@@ -2703,6 +2759,7 @@ def _code_task_text(
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"{score_remediation}"
         f"{external_review_remediation}"
+        f"{external_merge_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
