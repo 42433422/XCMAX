@@ -73,7 +73,7 @@ jobs:
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
-          # 远端命令：curl health endpoint，解析 JSON，判定 scheduler_running + pending_job_count
+          # 远端命令：curl health endpoint，解析 JSON，判定完整注册 + 运行 + 待执行任务
           # 任一不满足 → 视为卡死，重启服务（除非 dry_run=true）
           # 远端通过 echo "::MARKER::value" 输出，runner 端解析后写入 $GITHUB_OUTPUT
           REMOTE_CMD=$(cat <<'EOF'
@@ -102,12 +102,15 @@ jobs:
           else
             # 解析 JSON（python3 在 CVM 上一定有）
             running="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("scheduler_running", False)).lower())' 2>/dev/null || echo "parse_fail")"
+            healthy="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
+            complete="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("registration_complete", False)).lower())' 2>/dev/null || echo "parse_fail")"
             pending="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("data") or {}).get("pending_job_count", -1))' 2>/dev/null || echo "-1")"
-            echo "scheduler_running=$running pending_job_count=$pending"
-            if [ "$running" = "true" ] && [ "$pending" -ge 1 ] 2>/dev/null; then
+            missing="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len((d.get("data") or {}).get("missing_required_jobs") or []))' 2>/dev/null || echo "-1")"
+            echo "healthy=$healthy scheduler_running=$running registration_complete=$complete pending_job_count=$pending missing_required_jobs=$missing"
+            if [ "$healthy" = "true" ] && [ "$running" = "true" ] && [ "$complete" = "true" ] && [ "$pending" -ge 1 ] && [ "$missing" -eq 0 ] 2>/dev/null; then
               ok=1
             else
-              reason="scheduler_running=$running pending_job_count=$pending (expected running=true and pending>=1)"
+              reason="healthy=$healthy scheduler_running=$running registration_complete=$complete pending_job_count=$pending missing_required_jobs=$missing"
             fi
           fi
 
@@ -131,12 +134,15 @@ jobs:
           systemctl restart "$SVC"
           sleep 5
           # 重启后再探一次，确认恢复
-          resp2="$(curl -sS --max-time "$TIMEOUT" -o /dev/null -w '%{http_code}' "$URL" 2>/dev/null || echo "000")"
-          echo "post-restart http=$resp2"
-          if [ "$resp2" = "200" ]; then
+          resp2="$(curl -sS --max-time "$TIMEOUT" -w '\n__HTTP_CODE__%{http_code}' "$URL" 2>/dev/null || true)"
+          code2="$(printf '%s' "$resp2" | sed -n 's/.*__HTTP_CODE__//p' | tail -n1)"
+          body2="$(printf '%s' "$resp2" | sed 's/__HTTP_CODE__[0-9]*$//')"
+          ok2="$(printf '%s' "$body2" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
+          echo "post-restart http=$code2 ok=$ok2"
+          if [ "$code2" = "200" ] && [ "$ok2" = "true" ]; then
             echo "RECOVERED"
           else
-            echo "STILL_UNHEALTHY after restart (http=$resp2) — needs human investigation"
+            echo "STILL_UNHEALTHY after restart (http=$code2 ok=$ok2) — needs human investigation"
           fi
           EOF
           )
