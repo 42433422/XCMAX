@@ -15,6 +15,7 @@ from app.application.etl.targets.batch import (
 )
 from app.application.etl.targets.customers_products import (
     CustomerAdapter,
+    CustomerProductsAdapter,
     ProductAdapter,
 )
 from app.application.etl.targets.knowledge import KnowledgeAdapter
@@ -25,6 +26,7 @@ _ADAPTERS: dict[str, TargetAdapter] = {
     adapter.type: adapter
     for adapter in (
         KnowledgeAdapter(),
+        CustomerProductsAdapter(),
         CustomerAdapter(),
         ProductAdapter(),
         PurchaseOrderAdapter(),

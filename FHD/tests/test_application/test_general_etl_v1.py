@@ -18,6 +18,7 @@ from app.application.etl.parsers import parse_file
 from app.application.etl.service import EtlService, mark_interrupted_runs_on_startup
 from app.application.etl.targets import (
     CustomerAdapter,
+    CustomerProductsAdapter,
     ExportCsvAdapter,
     KnowledgeAdapter,
     ProductAdapter,
@@ -236,10 +237,17 @@ def test_delivery_profile_skips_filename_fallback_sheets_and_total_rows(
 
     customers = parse_file(path, target_type="customers")
     products = parse_file(path, target_type="products")
+    linked = parse_file(path, target_type="customer_products")
 
     assert [row.values["customer_name"] for row in customers.rows] == ["甲公司"]
     assert "contact_person" not in customers.rows[0].values
     assert [row.values["name"] for row in products.rows] == ["底漆"]
+    assert linked.rows[0].values == {
+        "customer_name": "甲公司",
+        "model_number": "P-1",
+        "name": "底漆",
+        "price": 10,
+    }
     assert customers.source_features["skipped_note_count"] == 1
     assert any(
         warning["code"] == "ETL_COMPATIBILITY_LOW_CONFIDENCE_SHEETS_SKIPPED"
@@ -568,6 +576,323 @@ def test_product_adapter_requires_confirmed_update_fields_and_rolls_back(etl_db)
         db.close()
 
 
+def test_customer_products_adapter_links_parent_and_children_and_rolls_back(etl_db):
+    adapter = CustomerProductsAdapter()
+    first = {
+        "customer_name": "甲公司",
+        "contact_person": "张总",
+        "model_number": "A1",
+        "name": "底漆",
+        "price": "10",
+    }
+    second = {
+        "customer_name": "甲公司",
+        "contact_person": "张总",
+        "model_number": "A2",
+        "name": "面漆",
+        "price": "20",
+    }
+    with tenant_scope(121):
+        db = etl_db()
+        preview_context = {"_preview_cache": {}}
+        first_preview = adapter.preview(
+            db,
+            first,
+            allowed_update_fields=set(),
+            context=preview_context,
+        )
+        second_preview = adapter.preview(
+            db,
+            second,
+            allowed_update_fields=set(),
+            context=preview_context,
+        )
+        repeated_preview = adapter.preview(
+            db,
+            first,
+            allowed_update_fields=set(),
+            context=preview_context,
+        )
+        conflicting_parent = adapter.preview(
+            db,
+            {
+                **first,
+                "contact_person": "李总",
+                "model_number": "A3",
+                "name": "清漆",
+            },
+            allowed_update_fields=set(),
+            context=preview_context,
+        )
+        assert first_preview.action == "new"
+        assert second_preview.action == "new"
+        assert repeated_preview.action == "skip"
+        assert conflicting_parent.action == "error"
+        assert conflicting_parent.issues[0]["code"] == "ETL_PARENT_FIELDS_CONFLICT"
+
+        execution_context = {"_execution_cache": {}}
+        first_result = adapter.execute_row(
+            db,
+            first,
+            action="new",
+            match_ref=first_preview.match_ref,
+            allowed_update_fields=set(),
+            context=execution_context,
+        )
+        second_result = adapter.execute_row(
+            db,
+            second,
+            action="new",
+            match_ref=second_preview.match_ref,
+            allowed_update_fields=set(),
+            context=execution_context,
+        )
+        db.commit()
+
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 1
+        products = (
+            db.query(Product)
+            .filter(Product.unit == "甲公司")
+            .order_by(Product.model_number)
+            .all()
+        )
+        assert [item.model_number for item in products] == ["A1", "A2"]
+        assert first_result["after"]["_etl"]["customer_created"] is True
+        assert second_result["after"]["_etl"]["customer_created"] is False
+
+        duplicate = adapter.preview(
+            db,
+            first,
+            allowed_update_fields=set(),
+            context={"_preview_cache": {}},
+        )
+        assert duplicate.action == "skip"
+
+        adapter.rollback_row(
+            db,
+            match_ref=second_result["match_ref"],
+            before=second_preview.before or {},
+            after=second_result["after"],
+            context={},
+        )
+        db.commit()
+        adapter.rollback_row(
+            db,
+            match_ref=first_result["match_ref"],
+            before=first_preview.before or {},
+            after=first_result["after"],
+            context={},
+        )
+        db.commit()
+        assert db.query(Product).count() == 0
+        assert db.query(PurchaseUnit).count() == 0
+        db.close()
+
+
+def test_customer_products_adapter_updates_both_images_and_restores_them(etl_db):
+    adapter = CustomerProductsAdapter()
+    with tenant_scope(123):
+        db = etl_db()
+        customer = PurchaseUnit(
+            tenant_id=123,
+            unit_name="甲公司",
+            contact_person="旧联系人",
+            is_active=True,
+        )
+        product = Product(
+            tenant_id=123,
+            unit="甲公司",
+            model_number="A1",
+            name="底漆",
+            price="10",
+        )
+        db.add_all([customer, product])
+        db.commit()
+        data = {
+            "customer_name": "甲公司",
+            "contact_person": "新联系人",
+            "model_number": "A1",
+            "name": "底漆",
+            "price": "12",
+        }
+        preview = adapter.preview(
+            db,
+            data,
+            allowed_update_fields={"contact_person", "price"},
+            context={"_preview_cache": {}},
+        )
+        assert preview.action == "update"
+        result = adapter.execute_row(
+            db,
+            data,
+            action="update",
+            match_ref=preview.match_ref,
+            allowed_update_fields={"contact_person", "price"},
+            context={"_execution_cache": {}},
+        )
+        db.commit()
+        assert customer.contact_person == "新联系人"
+        assert float(product.price) == 12
+
+        adapter.rollback_row(
+            db,
+            match_ref=result["match_ref"],
+            before=preview.before or {},
+            after=result["after"],
+            context={},
+        )
+        db.commit()
+        assert customer.contact_person == "旧联系人"
+        assert float(product.price) == 10
+        db.close()
+
+
+def test_customer_products_service_executes_one_confirmed_linked_run(etl_db, monkeypatch):
+    service = EtlService()
+    monkeypatch.setattr(
+        service,
+        "_submit_preview",
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
+            run_id, owner_user_id
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_submit_execution",
+        lambda run_id, _tenant_id, owner_user_id, valid_rows_only: (
+            service._execute_worker(run_id, owner_user_id, valid_rows_only)
+        ),
+    )
+    with tenant_scope(122):
+        db = etl_db()
+        upload = service.save_upload(
+            db,
+            owner_user_id=21,
+            file_name="linked.csv",
+            content_type="text/csv",
+            stream=BytesIO(
+                (
+                    "客户名称,联系人,产品型号,产品名称,价格\n"
+                    "甲公司,张总,A1,底漆,10\n"
+                    "甲公司,张总,A2,面漆,20\n"
+                ).encode()
+            ),
+        )
+        db.commit()
+        run = service.create_preview(
+            db,
+            owner_user_id=21,
+            upload_id=upload["upload_id"],
+            target_type="customer_products",
+        )
+        assert run["status"] == "preview_ready"
+        assert run["summary"]["new"] == 2
+        completed = service.execute(
+            db,
+            run_id=run["id"],
+            owner_user_id=21,
+            confirmed=True,
+            valid_rows_only=False,
+        )
+        assert completed["status"] == "completed"
+        assert completed["summary"]["executed"] == 2
+        assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 1
+        assert db.query(Product).filter(Product.unit == "甲公司").count() == 2
+
+        rolled_back = service.rollback(db, run_id=run["id"], owner_user_id=21)
+        assert rolled_back["rollback_status"] == "completed"
+        assert db.query(PurchaseUnit).count() == 0
+        assert db.query(Product).count() == 0
+        db.close()
+
+
+def test_customer_products_retry_replays_parent_without_orphaning(etl_db, monkeypatch):
+    service = EtlService()
+    monkeypatch.setattr(
+        service,
+        "_submit_preview",
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
+            run_id, owner_user_id
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_submit_execution",
+        lambda run_id, _tenant_id, owner_user_id, valid_rows_only: (
+            service._execute_worker(run_id, owner_user_id, valid_rows_only)
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_submit_revalidation",
+        lambda run_id, _tenant_id, owner_user_id, _overrides=None: (
+            service._revalidate_existing_rows(db, run_id, owner_user_id)
+        ),
+    )
+    adapter = get_adapter("customer_products")
+    original_execute = adapter.execute_row
+    failed_once = False
+
+    def fail_second_product(db, data, **kwargs):
+        nonlocal failed_once
+        if data.get("model_number") == "A2" and not failed_once:
+            failed_once = True
+            raise EtlError("ETL_TEST_TRANSIENT", "模拟关联产品瞬时失败")
+        return original_execute(db, data, **kwargs)
+
+    monkeypatch.setattr(adapter, "execute_row", fail_second_product)
+    with tenant_scope(124):
+        db = etl_db()
+        upload = service.save_upload(
+            db,
+            owner_user_id=22,
+            file_name="linked-retry.csv",
+            content_type="text/csv",
+            stream=BytesIO(
+                (
+                    "客户名称,产品型号,产品名称\n"
+                    "甲公司,A1,底漆\n"
+                    "甲公司,A2,面漆\n"
+                ).encode()
+            ),
+        )
+        db.commit()
+        run = service.create_preview(
+            db,
+            owner_user_id=22,
+            upload_id=upload["upload_id"],
+            target_type="customer_products",
+        )
+        failed = service.execute(
+            db,
+            run_id=run["id"],
+            owner_user_id=22,
+            confirmed=True,
+            valid_rows_only=False,
+        )
+        assert failed["status"] == "failed"
+        assert db.query(PurchaseUnit).count() == 1
+        assert db.query(Product).filter(Product.unit == "甲公司").count() == 1
+
+        retried = service.retry(db, run_id=run["id"], owner_user_id=22)
+        assert retried["status"] == "preview_ready"
+        completed = service.execute(
+            db,
+            run_id=run["id"],
+            owner_user_id=22,
+            confirmed=True,
+            valid_rows_only=False,
+        )
+        assert completed["status"] == "completed"
+        assert db.query(PurchaseUnit).count() == 1
+        assert db.query(Product).filter(Product.unit == "甲公司").count() == 2
+
+        service.rollback(db, run_id=run["id"], owner_user_id=22)
+        assert db.query(PurchaseUnit).count() == 0
+        assert db.query(Product).count() == 0
+        db.close()
+
+
 def test_customer_adapter_uses_visible_purchase_units_and_tenant_scope(etl_db):
     adapter = CustomerAdapter()
     with tenant_scope(13):
@@ -811,6 +1136,7 @@ def test_target_contract_catalog_covers_v1_targets_without_secret_fields():
     capabilities = {item["type"]: item for item in target_capabilities()}
     assert set(capabilities) == {
         "knowledge",
+        "customer_products",
         "customers",
         "products",
         "purchase_orders",
@@ -820,6 +1146,7 @@ def test_target_contract_catalog_covers_v1_targets_without_secret_fields():
         "export_csv",
         "webhook",
     }
+    assert capabilities["customer_products"]["reversible"] is True
     assert capabilities["customers"]["reversible"] is True
     assert capabilities["attendance"]["reversible"] is True
     assert capabilities["webhook"]["reversible"] is False

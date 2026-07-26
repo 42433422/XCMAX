@@ -34,7 +34,7 @@
       <div class="etl-panel__title">
         <div>
           <h2>上传与目标</h2>
-          <p>每个任务只绑定一个目标；需要多目标时复制为多个运行。</p>
+          <p>每个任务绑定一个逻辑目标；客户及产品作为同一业务对象关联写入。</p>
         </div>
       </div>
       <div class="etl-upload-grid">
@@ -59,14 +59,15 @@
               </option>
             </select>
           </label>
-          <div v-if="['customers', 'products'].includes(targetType)" class="etl-target-scope-note">
-            <strong>
-              本次只写入{{ targetType === 'customers' ? '客户库' : '产品库' }}
-            </strong>
+          <div v-if="targetType === 'customer_products'" class="etl-target-scope-note">
+            <strong>一次关联写入客户库和产品库</strong>
             <span>
-              不会同时写入{{ targetType === 'customers' ? '产品库' : '客户库' }}；
-              同一文件需要切换目标后再预演、确认一次。
+              先创建或复用购买单位，再将每个产品挂到同名购买单位下；一次预演、一次确认、可整次撤销。
             </span>
+          </div>
+          <div v-else-if="['customers', 'products'].includes(targetType)" class="etl-target-scope-note">
+            <strong>仅写入{{ targetType === 'customers' ? '客户主数据' : '产品主数据' }}</strong>
+            <span>适用于只维护单一主数据的文件；送货单、报价单等业务文件建议选择“客户及产品”。</span>
           </div>
           <label>
             个人模板
@@ -421,16 +422,16 @@
           <div><dt>进度</dt><dd>{{ currentRun.progress }}%</dd></div>
           <div><dt>撤销能力</dt><dd>{{ currentRun.reversible ? '内部目标可撤销' : '外部目标不可撤销' }}</dd></div>
         </dl>
-        <div
-          v-if="currentRun.status === 'completed' && ['customers', 'products'].includes(currentRun.target_type)"
-          class="etl-target-scope-note"
-        >
+        <div v-if="currentRun.status === 'completed' && currentRun.target_type === 'customer_products'" class="etl-target-scope-note">
+          <strong>已关联写入客户库和产品库</strong>
+          <span>产品的购买单位与客户名称使用同一规范值，可从客户页直接衔接到该客户的产品。</span>
+        </div>
+        <div v-else-if="currentRun.status === 'completed' && ['customers', 'products'].includes(currentRun.target_type)" class="etl-target-scope-note">
           <strong>
             已写入{{ currentRun.target_type === 'customers' ? '客户库' : '产品库' }}
           </strong>
           <span>
-            本次没有写入{{ currentRun.target_type === 'customers' ? '产品库' : '客户库' }}。
-            如需同时导入，请回到“上传文件”并切换目标再运行一次。
+            本次为单一主数据维护；需要建立客户与产品关系时请选择“客户及产品”。
           </span>
         </div>
         <pre>{{ JSON.stringify(currentRun.receipt, null, 2) }}</pre>

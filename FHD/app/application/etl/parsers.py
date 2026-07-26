@@ -210,7 +210,12 @@ def _parse_delivery_note_with_compat_profile(
 
     if path.suffix.lower() not in {".xlsx", ".xlsm"}:
         return None
-    if target_type not in {"customers", "products", "shipment_records"}:
+    if target_type not in {
+        "customer_products",
+        "customers",
+        "products",
+        "shipment_records",
+    }:
         return None
     try:
         from app.application.shipment_excel_etl_app_service import (
@@ -256,7 +261,7 @@ def _parse_delivery_note_with_compat_profile(
             return unit_name, False
         finance_sheet = bool(re.search(r"回款|付款|收款|对账|统计|汇总|余额|账龄", sheet))
         if (
-            target_type == "products"
+            target_type in {"customer_products", "products"}
             and note_uses_unreliable_filename_fallback(note)
             and len(primary_units) == 1
             and not finance_sheet
@@ -338,15 +343,27 @@ def _parse_delivery_note_with_compat_profile(
                 continue
             if not item_is_business_row(item):
                 continue
-            if target_type == "products":
+            if target_type in {"customer_products", "products"}:
                 values = {
-                    "unit": unit_name,
                     "model_number": item.get("model_number"),
                     "name": item.get("product_name"),
                     "specification": item.get("specification") or item.get("tin_spec"),
                     "price": item.get("unit_price"),
                     "description": item.get("description"),
                 }
+                if target_type == "customer_products":
+                    values.update(
+                        {
+                            "customer_name": unit_name,
+                            "contact_person": resolved_contact_person(note),
+                            "contact_phone": note.get("contact_phone")
+                            or note.get("phone"),
+                            "contact_address": note.get("contact_address")
+                            or note.get("address"),
+                        }
+                    )
+                else:
+                    values["unit"] = unit_name
             else:
                 note_fingerprint = str(note.get("fingerprint") or "")
                 item_fingerprint = hashlib.sha256(

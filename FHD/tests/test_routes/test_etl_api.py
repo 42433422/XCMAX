@@ -91,6 +91,7 @@ def test_etl_api_upload_preview_execute_and_owner_isolation(tmp_path, monkeypatc
     capabilities = client.get("/api/etl/capabilities")
     assert capabilities.status_code == 200
     assert {row["type"] for row in capabilities.json()["data"]["targets"]} >= {
+        "customer_products",
         "customers",
         "products",
         "shipment_records",

@@ -31,7 +31,7 @@ const targetConfigs = ref<EtlTargetConfig[]>([])
 const runs = ref<EtlRun[]>([])
 const currentRun = ref<EtlRun | null>(null)
 const selectedFile = ref<File | null>(null)
-const targetType = ref('customers')
+const targetType = ref('customer_products')
 const templateId = ref('')
 const targetConfigId = ref('')
 const runRows = ref<EtlRunRow[]>([])
@@ -96,7 +96,7 @@ async function bootstrap() {
     runs.value = history
     targetConfigs.value = configs
     if (!caps.targets.some((item) => item.type === targetType.value)) {
-      targetType.value = caps.targets[0]?.type || 'customers'
+      targetType.value = caps.targets[0]?.type || 'customer_products'
     }
     const requestedRun = String(route.query.run_id || '')
     if (requestedRun) {
