@@ -409,6 +409,7 @@ async def _market_admin_proxy(
     *,
     json_body: dict[str, Any] | None = None,
     require_admin_session: bool = True,
+    authorization_override: str = "",
 ):
     """Proxy server-function calls through the market token bound to the local session."""
     if require_admin_session:
@@ -438,6 +439,7 @@ async def _market_admin_proxy(
                 )
     try:
         from app.fastapi_routes.market_account import (
+            _auth_header,
             _authorization_from_request_resolved,
             _error_message,
             _proxy_json,
@@ -449,7 +451,9 @@ async def _market_admin_proxy(
         )
 
     body_for_auth = json_body if isinstance(json_body, dict) else {}
-    authorization = await _authorization_from_request_resolved(request, body_for_auth)
+    authorization = _auth_header(authorization_override)
+    if not authorization:
+        authorization = await _authorization_from_request_resolved(request, body_for_auth)
     if not authorization:
         return JSONResponse(
             {
@@ -2341,6 +2345,12 @@ async def _build_and_publish_founder_autonomy(
     from app.application.ops_closure_status import build_ops_closure_status
     from app.fastapi_routes.knowledge_v1 import _knowledge_runtime_snapshot
 
+    machine_authorization = (
+        str(request.headers.get("Authorization") or "").strip()
+        if not require_admin_session
+        else ""
+    )
+
     async def _safe_proxy(path: str) -> dict[str, Any]:
         try:
             if require_admin_session:
@@ -2351,6 +2361,7 @@ async def _build_and_publish_founder_autonomy(
                     "GET",
                     path,
                     require_admin_session=False,
+                    authorization_override=machine_authorization,
                 )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("founder autonomy evidence unavailable path=%s: %s", path, exc)

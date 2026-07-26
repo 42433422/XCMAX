@@ -1678,6 +1678,37 @@ class TestMarketAdminProxy:
         assert isinstance(result, dict)
         assert result["success"] is True
 
+    def test_authorization_override_does_not_reuse_session_token(self) -> None:
+        from starlette.requests import Request
+
+        request = MagicMock(spec=Request)
+        with (
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request_resolved",
+                new_callable=AsyncMock,
+            ) as resolve_session_token,
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"success": True},
+            ) as proxy,
+        ):
+            import asyncio
+
+            result = asyncio.get_event_loop().run_until_complete(
+                admin_routes._market_admin_proxy(
+                    request,
+                    "GET",
+                    "/api/test",
+                    require_admin_session=False,
+                    authorization_override="Bearer machine-market-token",
+                )
+            )
+
+        assert result == {"success": True}
+        resolve_session_token.assert_not_awaited()
+        assert proxy.await_args.kwargs["authorization"] == "Bearer machine-market-token"
+
 
 # ---------------------------------------------------------------------------
 # _remote_duty_health
