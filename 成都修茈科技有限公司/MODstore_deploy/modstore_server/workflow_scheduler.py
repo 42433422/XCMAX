@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _scheduler: Optional[BackgroundScheduler] = None
 _scheduler_registration_complete = False
 _scheduler_startup_probe_failures: list[dict[str, str]] = []
+_scheduler_startup_recovery_deadlines: dict[str, datetime] = {}
 
 _JOB_PREFIX = "wf_trigger_"
 _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
@@ -63,6 +64,11 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "time_rail_observability_sync",
     }
 )
+_CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
+    "daily_digest": "daily_ops_digest_email",
+    "self_maintenance_loop_daily": "self_maintenance_loop_daily",
+    "boss_daily_im_report": "boss_daily_im_report",
+}
 
 
 def _env_int(name: str, default: int) -> int:
@@ -153,6 +159,102 @@ def _run_scheduler_startup_probe(stage: str, fn: Callable[[], Any]) -> bool:
             failure["message"],
         )
         return False
+
+
+def _startup_recovery_kwargs(job_id: str, *, delay_seconds: int) -> dict[str, datetime]:
+    """Schedule one catch-up run when a critical daily job is missing or stale."""
+
+    if not _env_bool("MODSTORE_SCHEDULER_STARTUP_RECOVERY_ENABLED", True):
+        return {}
+    stale_after = max(
+        3600,
+        _env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_STALE_SECONDS", 26 * 3600),
+    )
+    due = True
+    state = "missing"
+    try:
+        from modstore_server.scheduler_runtime import get_runtime_status
+
+        runtime = get_runtime_status(stale_after_seconds=stale_after)
+        row = next(
+            (item for item in runtime.get("jobs") or [] if item.get("job_id") == job_id),
+            None,
+        )
+        state = str((row or {}).get("state") or "missing")
+        due = not runtime.get("ok") or row is None or state in {"stale", "failing"}
+    except Exception:
+        logger.exception("scheduler startup recovery status failed: job_id=%s", job_id)
+    if not due:
+        return {}
+
+    now = datetime.now(timezone.utc)
+    recovery_at = now + timedelta(seconds=max(1, delay_seconds))
+    grace_seconds = max(
+        300,
+        _env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_GRACE_SECONDS", 3600),
+    )
+    _scheduler_startup_recovery_deadlines[job_id] = now + timedelta(seconds=grace_seconds)
+    logger.warning(
+        "scheduler startup catch-up scheduled: job_id=%s state=%s run_at=%s",
+        job_id,
+        state,
+        recovery_at.isoformat(),
+    )
+    return {"next_run_time": recovery_at}
+
+
+def scheduler_runtime_health_status() -> dict[str, Any]:
+    """Return health for active, critical daily jobs only.
+
+    Historical rows from disabled jobs do not poison health. A startup catch-up
+    is reported as ``recovering`` for a bounded grace period instead of causing
+    the watchdog to restart the process while the recovery job is running.
+    """
+
+    from modstore_server.scheduler_runtime import get_runtime_status
+
+    integrity = scheduler_integrity_status()
+    active_required = set(required_scheduler_job_ids())
+    monitored = {
+        runtime_id: scheduler_id
+        for runtime_id, scheduler_id in _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID.items()
+        if scheduler_id in active_required
+    }
+    runtime = get_runtime_status()
+    rows = {
+        str(item.get("job_id") or ""): dict(item)
+        for item in runtime.get("jobs") or []
+        if str(item.get("job_id") or "") in monitored
+    }
+    now = datetime.now(timezone.utc)
+    unhealthy: list[str] = []
+    recovering: list[str] = []
+    jobs: list[dict[str, Any]] = []
+    for runtime_id in sorted(monitored):
+        row = rows.get(runtime_id) or {
+            "job_id": runtime_id,
+            "state": "missing",
+            "last_status": None,
+            "last_run_at": None,
+            "last_success_at": None,
+            "consecutive_failures": 0,
+        }
+        state = str(row.get("state") or "missing")
+        deadline = _scheduler_startup_recovery_deadlines.get(runtime_id)
+        if state in {"missing", "stale", "failing"} and deadline and now <= deadline:
+            row = {**row, "state": "recovering", "recovery_deadline": deadline.isoformat()}
+            recovering.append(runtime_id)
+        elif state in {"missing", "stale", "failing"}:
+            unhealthy.append(runtime_id)
+        jobs.append(row)
+    return {
+        "ok": bool(runtime.get("ok")) and not unhealthy,
+        "integrity_ok": bool(integrity.get("ok")),
+        "jobs": jobs,
+        "unhealthy_jobs": unhealthy,
+        "recovering_jobs": recovering,
+        "generated_at": runtime.get("generated_at"),
+    }
 
 
 def _daily_pipeline_lock_wait_seconds(stage: str) -> int:
@@ -271,10 +373,12 @@ def _run_collector_with_timeout(
 
 def start_scheduler() -> None:
     global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
+    global _scheduler_startup_recovery_deadlines
     if _scheduler is not None:
         return
     _scheduler_registration_complete = False
     _scheduler_startup_probe_failures = []
+    _scheduler_startup_recovery_deadlines = {}
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     try:
@@ -682,6 +786,7 @@ def start_scheduler() -> None:
             misfire_grace_time=_business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
+            **_startup_recovery_kwargs("daily_digest", delay_seconds=20),
         )
     except Exception:
         logger.exception("register daily digest cron failed")
@@ -769,6 +874,7 @@ def start_scheduler() -> None:
             misfire_grace_time=_business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
+            **_startup_recovery_kwargs("self_maintenance_loop_daily", delay_seconds=40),
         )
     except Exception:
         logger.exception("register self-maintenance loop cron failed")
@@ -1248,6 +1354,7 @@ def start_scheduler() -> None:
                 misfire_grace_time=_business_misfire_grace_time(),
                 coalesce=True,
                 max_instances=1,
+                **_startup_recovery_kwargs("boss_daily_im_report", delay_seconds=60),
             )
     except Exception:
         logger.exception("register boss daily im report cron failed")
@@ -1814,12 +1921,14 @@ def reload_employee_cron_jobs() -> dict:
 
 def stop_scheduler() -> None:
     global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
+    global _scheduler_startup_recovery_deadlines
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
         logger.info("workflow scheduler stopped")
     _scheduler_registration_complete = False
     _scheduler_startup_probe_failures = []
+    _scheduler_startup_recovery_deadlines = {}
 
 
 def _job_id(trigger_id: int) -> str:

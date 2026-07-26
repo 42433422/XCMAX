@@ -7,7 +7,8 @@ answer loops live in Modstore ``retort_clarification_gate``.
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 _SENSITIVE_PATH_RE = re.compile(
     r"(^|/)("
@@ -231,9 +232,7 @@ def clarification_needed(
     ):
         return True
     risk = str(risk_level or "").strip().lower()
-    if _RISK_ORDER.get(risk, 0) >= _RISK_ORDER["high"] or len(files) >= 12:
-        return True
-    return False
+    return bool(_RISK_ORDER.get(risk, 0) >= _RISK_ORDER["high"] or len(files) >= 12)
 
 
 def _normalize_paths(changed_files: Sequence[Any] | None) -> list[str]:
@@ -266,7 +265,7 @@ def _added_line_samples(
                 if change.get("type") != "add":
                     continue
                 text = str(change.get("text") or "").strip()
-                if not text or text.startswith("+++") or text.startswith("---"):
+                if not text or text.startswith(("+++", "---")):
                     continue
                 # Never keep likely secret values in samples.
                 redacted = _SECRET_LINE_RE.sub(r"\1=<redacted>", text)

@@ -18,10 +18,12 @@ client subclassing :class:`MODstoreClient`.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import mimetypes
 import os
 import secrets
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_TIMEOUT_S: float = 30.0
+_RESERVED_TEST_SUFFIXES = (".example", ".example.com", ".example.test")
 
 
 class MODstoreError(RuntimeError):
@@ -72,8 +75,13 @@ class MODstoreClient:
         access_token: str | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         verify_ssl: bool = True,
+        allow_private_network: bool = False,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.allow_private_network = bool(allow_private_network)
+        self.base_url = _validated_base_url(
+            base_url,
+            allow_private_network=self.allow_private_network,
+        )
         self.access_token = access_token
         self.timeout_s = float(timeout_s)
         self.verify_ssl = bool(verify_ssl)
@@ -88,12 +96,14 @@ class MODstoreClient:
         *,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         verify_ssl: bool = True,
+        allow_private_network: bool = False,
     ) -> MODstoreClient:
         return cls(
             base_url=base_url,
             access_token=access_token,
             timeout_s=timeout_s,
             verify_ssl=verify_ssl,
+            allow_private_network=allow_private_network,
         )
 
     @classmethod
@@ -109,7 +119,14 @@ class MODstoreClient:
             raise MODstoreAuthError(
                 f"set {base_url_var} and {token_var} or pass them explicitly"
             )
-        return cls(base_url=base, access_token=token)
+        allow_private = (
+            os.environ.get("MODSTORE_ALLOW_PRIVATE_NETWORK", "").strip().lower()
+        )
+        return cls(
+            base_url=base,
+            access_token=token,
+            allow_private_network=allow_private in {"1", "true", "yes", "on"},
+        )
 
     # -------------------------------------------------------------------- auth
 
@@ -165,9 +182,7 @@ class MODstoreClient:
         except OSError as exc:
             raise MODstoreError(f"cannot stat archive {path}: {exc}") from exc
         if size_bytes > 100 * 1024 * 1024:
-            raise MODstoreError(
-                f"archive {path} exceeds the 100 MiB upload limit"
-            )
+            raise MODstoreError(f"archive {path} exceeds the 100 MiB upload limit")
 
         boundary = "----vibe-coding-" + secrets.token_hex(16)
         body, content_type = _build_multipart(
@@ -221,7 +236,16 @@ class MODstoreClient:
         headers: dict[str, str] | None = None,
         require_auth: bool = False,
     ) -> dict[str, Any]:
+        if not path.startswith("/") or path.startswith("//"):
+            raise MODstoreError("request path must be an origin-relative path")
+        parsed_path = urllib.parse.urlsplit(path)
+        if parsed_path.scheme or parsed_path.netloc:
+            raise MODstoreError("request path must not override the configured origin")
         url = self.base_url + path
+        _assert_outbound_destination_safe(
+            self.base_url,
+            allow_private_network=self.allow_private_network,
+        )
         h = dict(headers or {})
         if require_auth:
             if not self.access_token:
@@ -230,7 +254,9 @@ class MODstoreClient:
         req = urllib.request.Request(url=url, data=body, method=method, headers=h)
         try:
             ctx = self._ssl_context()
-            with urllib.request.urlopen(req, timeout=self.timeout_s, context=ctx) as resp:
+            with urllib.request.urlopen(
+                req, timeout=self.timeout_s, context=ctx
+            ) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
                 return _parse_json_response(raw)
         except urllib.error.HTTPError as exc:
@@ -253,6 +279,69 @@ class MODstoreClient:
 
 
 # ---------------------------------------------------------------------- pure
+
+
+def _validated_base_url(base_url: str, *, allow_private_network: bool) -> str:
+    raw = str(base_url or "").strip().rstrip("/")
+    if not raw or len(raw) > 2048:
+        raise MODstoreError("base_url is missing or too long")
+    parsed = urllib.parse.urlsplit(raw)
+    host = str(parsed.hostname or "").strip().lower()
+    if parsed.scheme not in {"http", "https"} or not host:
+        raise MODstoreError("base_url must be an absolute http/https origin")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise MODstoreError("base_url must not contain credentials, query, or fragment")
+    if parsed.path not in {"", "/"}:
+        raise MODstoreError("base_url must not contain a path")
+    if parsed.scheme != "https" and not allow_private_network:
+        raise MODstoreError("plain HTTP requires allow_private_network=True")
+    _assert_outbound_destination_safe(raw, allow_private_network=allow_private_network)
+    return raw
+
+
+def _assert_outbound_destination_safe(
+    base_url: str,
+    *,
+    allow_private_network: bool,
+) -> None:
+    host = str(urllib.parse.urlsplit(base_url).hostname or "").strip().lower()
+    if not host:
+        raise MODstoreError("base_url is missing a host")
+    if host.endswith(_RESERVED_TEST_SUFFIXES):
+        return
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address]
+    if literal is not None:
+        addresses = [literal]
+    else:
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror as exc:
+            raise MODstoreError(
+                f"base_url host cannot be safely resolved: {host}"
+            ) from exc
+        addresses = []
+        for info in infos:
+            sockaddr = info[4]
+            if sockaddr:
+                addresses.append(ipaddress.ip_address(sockaddr[0]))
+        if not addresses:
+            raise MODstoreError(f"base_url host has no addresses: {host}")
+    if allow_private_network:
+        return
+    for address in addresses:
+        if (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_reserved
+            or address.is_unspecified
+        ):
+            raise MODstoreError(f"base_url resolves to a blocked network: {address}")
 
 
 def _parse_json_response(raw: str) -> dict[str, Any]:
@@ -284,10 +373,7 @@ def _build_multipart(
         parts.append((value or "").encode("utf-8") + crlf)
     parts.append(b"--" + boundary.encode("ascii") + crlf)
     filename = file_path.name
-    content_type = (
-        mimetypes.guess_type(str(file_path))[0]
-        or "application/octet-stream"
-    )
+    content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
     disp = (
         f'Content-Disposition: form-data; name="{file_field}"; '
         f'filename="{filename}"'

@@ -6,7 +6,6 @@ from typing import Any
 
 from retort_engine.codebase_graph import build_codebase_graph
 
-
 CORE_COMPONENT_CONTRACTS = {
     "review_pipeline": {
         "modules": ["retort_engine/review_pipeline.py", "retort_engine/pr_review.py"],
@@ -299,7 +298,7 @@ def _refactor_steps(component: str) -> list[str]:
 def _safe_code_graph(root: Path) -> dict[str, Any]:
     try:
         return build_codebase_graph(root, include_tests=True, max_files=400)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - graph adapters are an isolation boundary
         return {
             "status": "error",
             "summary": {"error": type(exc).__name__},

@@ -14,19 +14,7 @@ def test_codebase_graph_tracks_imports_definitions_and_calls(tmp_path: Path) -> 
     package = project / "retort_engine"
     package.mkdir()
     (package / "worker.py").write_text(
-        "\n".join(
-            [
-                "import json",
-                "from pathlib import Path",
-                "",
-                "def helper():",
-                "    return Path.cwd()",
-                "",
-                "def run():",
-                "    helper()",
-                "    json.dumps({'ok': True})",
-            ]
-        ),
+        "import json\nfrom pathlib import Path\n\ndef helper():\n    return Path.cwd()\n\ndef run():\n    helper()\n    json.dumps({'ok': True})",
         encoding="utf-8",
     )
 

@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 PythonResolver = Callable[[], str]
 GitRootResolver = Callable[[Path], Path | None]
@@ -77,8 +77,7 @@ def run_real_absorption_cli(
             cmd,
             cwd=own,
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=timeout,
             check=False,

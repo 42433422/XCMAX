@@ -36,6 +36,7 @@ CURL_RETRY_ARGS=(
   --retry-all-errors
   --retry-delay 2
   --connect-timeout 15
+  --noproxy "${FHD_VERIFY_DOWNLOAD_NO_PROXY:-127.0.0.1,localhost,::1}"
 )
 
 if [ ! -f "$MANIFEST" ]; then

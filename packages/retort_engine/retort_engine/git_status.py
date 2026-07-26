@@ -3,7 +3,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 GENERATED_ABSORPTION_NAMES = {
     "retort_absorption_log.md",
     "retort_external_review_report.json",
@@ -108,8 +107,7 @@ def _git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
         cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=30,
         check=False,

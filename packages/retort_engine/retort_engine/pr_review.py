@@ -19,14 +19,14 @@ from retort_engine.absorbed_review_rank_weights import (
     external_source_boost,
 )
 from retort_engine.cross_language_transfer import build_cross_language_transfer
-from retort_engine.diff_hunk_semantics import (
-    analyze_hunk_semantics,
-    summarize_hunk_semantics,
-)
 from retort_engine.diff_extension_policy import (
     extension_policy_for_path,
     extension_policy_summary,
     extension_review_context,
+)
+from retort_engine.diff_hunk_semantics import (
+    analyze_hunk_semantics,
+    summarize_hunk_semantics,
 )
 from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.review_calibration_policy import (
@@ -42,7 +42,6 @@ from retort_engine.review_context_bias import (
     review_context_bias,
 )
 from retort_engine.static_analysis_gate import scan_static_analysis_findings
-
 
 SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private_key")
 REVIEW_STAGES = (
@@ -254,9 +253,9 @@ def review_diff(
         "deep_review_pipeline": True,
         "comment_ranking_model": "severity_context_transfer_publishability_v5_external_diagnostics",
         "large_diff_chunking": large_diff_chunking,
-        "large_diff_chunk_count": len(context_groups)
-        if large_diff_chunking
-        else (1 if files else 0),
+        "large_diff_chunk_count": (
+            len(context_groups) if large_diff_chunking else (1 if files else 0)
+        ),
         "large_diff_context_balancing": large_diff_chunking,
         "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
         "ready_for_employee_tasking": bool(files and comments),
@@ -323,7 +322,7 @@ def parse_unified_diff(diff_text: str) -> list[dict[str, Any]]:
                 {
                     "type": "context",
                     "line": new_line,
-                    "text": raw[1:] if raw.startswith(" ") else raw,
+                    "text": raw.removeprefix(" "),
                 }
             )
             new_line += 1
@@ -409,9 +408,11 @@ def group_related_files_for_review(
     return sorted(
         buckets.values(),
         key=lambda group: (
-            REVIEW_CONTEXTS.index(str(group["context"]))
-            if group["context"] in REVIEW_CONTEXTS
-            else 99,
+            (
+                REVIEW_CONTEXTS.index(str(group["context"]))
+                if group["context"] in REVIEW_CONTEXTS
+                else 99
+            ),
             str(group["context"]),
         ),
     )
@@ -703,9 +704,9 @@ def _normalize_external_diagnostics(
         )
     source_projects = sorted({str(item["source_project"]) for item in normalized})
     return {
-        "status": "mapped"
-        if normalized
-        else ("dropped" if diagnostics else "not_requested"),
+        "status": (
+            "mapped" if normalized else ("dropped" if diagnostics else "not_requested")
+        ),
         "summary": {
             "requested_count": len(diagnostics),
             "accepted_count": len(normalized),
@@ -914,17 +915,21 @@ def _comment(
         "review_stage": stage,
         "employee_actionable": severity in {"high", "medium"},
         "publishable": publishable,
-        "comment_anchor": {"path": file_path, "line": line, "side": "RIGHT"}
-        if publishable
-        else {"path": file_path, "side": "FILE"},
-        "publish_payload": {
-            "path": file_path,
-            "line": line,
-            "side": "RIGHT",
-            "body": message,
-        }
-        if publishable
-        else {"path": file_path, "body": message},
+        "comment_anchor": (
+            {"path": file_path, "line": line, "side": "RIGHT"}
+            if publishable
+            else {"path": file_path, "side": "FILE"}
+        ),
+        "publish_payload": (
+            {
+                "path": file_path,
+                "line": line,
+                "side": "RIGHT",
+                "body": message,
+            }
+            if publishable
+            else {"path": file_path, "body": message}
+        ),
         "hunk_header": str((hunk or {}).get("header") or ""),
         "line_text_excerpt": line_text[:160],
     }
@@ -1223,9 +1228,11 @@ def _build_task_groups(
     return sorted(
         [{"context": key, **value} for key, value in buckets.items()],
         key=lambda group: (
-            REVIEW_CONTEXTS.index(str(group["context"]))
-            if group["context"] in REVIEW_CONTEXTS
-            else 99,
+            (
+                REVIEW_CONTEXTS.index(str(group["context"]))
+                if group["context"] in REVIEW_CONTEXTS
+                else 99
+            ),
             str(group["context"]),
         ),
     )

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from retort_engine.project_assessment import project_files
 
-
 PROFILE_SUFFIXES = {
     ".py",
     ".ts",
@@ -55,8 +54,7 @@ def parse_github_url(source: str) -> tuple[str, str] | None:
 def run_git_clone(url: str, target: Path) -> None:
     result = subprocess.run(
         ["git", "clone", "--depth", "1", url, str(target)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=180,
         check=False,

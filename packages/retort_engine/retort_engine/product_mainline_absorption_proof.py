@@ -91,8 +91,7 @@ def _git(args: list[str], cwd: Path) -> dict[str, Any]:
     completed = subprocess.run(
         ["git", *args],
         cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

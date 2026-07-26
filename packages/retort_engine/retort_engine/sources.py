@@ -70,8 +70,7 @@ def clone_or_update(
             ["git", "clone", "--depth", "1", repo.clone_url, str(target)],
             check=True,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
     if ref:
         subprocess.run(
@@ -79,15 +78,13 @@ def clone_or_update(
             cwd=target,
             check=False,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "checkout", ref],
             cwd=target,
             check=True,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
     return target

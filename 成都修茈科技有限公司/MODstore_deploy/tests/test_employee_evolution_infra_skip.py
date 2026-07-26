@@ -12,7 +12,7 @@ import pytest
 
 from modstore_server import employee_autonomy_service as svc
 from modstore_server.llm_failure_classifier import classify_failure_kind
-from modstore_server.models import EmployeeExecutionMetric, get_session_factory, init_db
+from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory, init_db
 
 
 @pytest.fixture(autouse=True)
@@ -24,10 +24,19 @@ def _db():
 def _add_failures(session, employee_id: str, n: int, error: str) -> None:
     now = datetime.now(timezone.utc)
     kind = classify_failure_kind(error)
+    user = session.query(User).order_by(User.id.asc()).first()
+    if user is None:
+        user = User(
+            username="evolution-infra-test",
+            email="evolution-infra@pytest.local",
+            password_hash="x",
+        )
+        session.add(user)
+        session.flush()
     for _ in range(n):
         session.add(
             EmployeeExecutionMetric(
-                user_id=0,
+                user_id=int(user.id),
                 employee_id=employee_id,
                 task="t",
                 status="failed",
@@ -46,10 +55,11 @@ def test_evolution_excludes_infra_quota_failures():
         _add_failures(s, "emp-ratelimit", 5, "429 rate limit exceeded")  # 基建：应排除
         _add_failures(s, "emp-real", 4, "tool call returned invalid json")  # 真 prompt 失败：入选
         _add_failures(s, "emp-fewreal", 2, "bad output format")  # 真但 < 阈值：不入选
+        user_id = int(s.query(User.id).order_by(User.id.asc()).first()[0])
         for _ in range(6):
             s.add(
                 EmployeeExecutionMetric(
-                    user_id=0,
+                    user_id=user_id,
                     employee_id="emp-lifecycle",
                     task="Incident team role=fix. Event=employee.evolution.suggested.",
                     status="failed",
@@ -61,7 +71,7 @@ def test_evolution_excludes_infra_quota_failures():
         for _ in range(6):
             s.add(
                 EmployeeExecutionMetric(
-                    user_id=0,
+                    user_id=user_id,
                     employee_id="vibe-coding-maintainer",
                     task="Incident team role=fix. Event=on_error.",
                     status="failed",

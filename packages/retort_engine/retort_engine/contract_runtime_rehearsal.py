@@ -9,7 +9,6 @@ from typing import Any
 
 from retort_engine.contracts import validate_contract
 
-
 DEFAULT_CONTRACT_CASES: tuple[dict[str, Any], ...] = (
     {
         "case_id": "pr_review_missing_comments",

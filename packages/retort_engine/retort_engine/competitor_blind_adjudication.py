@@ -43,8 +43,7 @@ def build_competitor_blind_adjudication(
     completed = subprocess.run(
         [sys.executable, str(script_path), str(input_path), str(output_path)],
         cwd=lab,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=60,
         check=False,
@@ -181,10 +180,12 @@ def _redacted_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
             runtime.get("external_process_returncode") or 0
         ),
         "output": output,
-        "output_sha256": _sha256(Path(str(runtime.get("output_path") or "")))
-        if runtime.get("output_path")
-        and Path(str(runtime.get("output_path"))).is_file()
-        else "",
+        "output_sha256": (
+            _sha256(Path(str(runtime.get("output_path") or "")))
+            if runtime.get("output_path")
+            and Path(str(runtime.get("output_path"))).is_file()
+            else ""
+        ),
         "source_sha256": str(runtime.get("source_sha256") or ""),
         "live_upstream_materialized": live.get("materialized") is True,
         "live_upstream_source_sha": str(live.get("source_sha") or ""),

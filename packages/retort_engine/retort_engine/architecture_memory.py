@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 ARCHITECTURE_SIGNAL_COMPONENTS = {
     "review_pipeline": ("review_pipeline", "context_localization"),
     "file_grouping": ("context_partitioning", "diff_locality"),

@@ -104,13 +104,15 @@ jobs:
             running="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("scheduler_running", False)).lower())' 2>/dev/null || echo "parse_fail")"
             healthy="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
             complete="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("registration_complete", False)).lower())' 2>/dev/null || echo "parse_fail")"
+            runtime_healthy="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str((d.get("data") or {}).get("runtime_healthy", False)).lower())' 2>/dev/null || echo "parse_fail")"
             pending="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("data") or {}).get("pending_job_count", -1))' 2>/dev/null || echo "-1")"
             missing="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len((d.get("data") or {}).get("missing_required_jobs") or []))' 2>/dev/null || echo "-1")"
-            echo "healthy=$healthy scheduler_running=$running registration_complete=$complete pending_job_count=$pending missing_required_jobs=$missing"
-            if [ "$healthy" = "true" ] && [ "$running" = "true" ] && [ "$complete" = "true" ] && [ "$pending" -ge 1 ] && [ "$missing" -eq 0 ] 2>/dev/null; then
+            stale="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len((d.get("data") or {}).get("unhealthy_runtime_jobs") or []))' 2>/dev/null || echo "-1")"
+            echo "healthy=$healthy scheduler_running=$running registration_complete=$complete runtime_healthy=$runtime_healthy pending_job_count=$pending missing_required_jobs=$missing unhealthy_runtime_jobs=$stale"
+            if [ "$healthy" = "true" ] && [ "$running" = "true" ] && [ "$complete" = "true" ] && [ "$runtime_healthy" = "true" ] && [ "$pending" -ge 1 ] && [ "$missing" -eq 0 ] && [ "$stale" -eq 0 ] 2>/dev/null; then
               ok=1
             else
-              reason="healthy=$healthy scheduler_running=$running registration_complete=$complete pending_job_count=$pending missing_required_jobs=$missing"
+              reason="healthy=$healthy scheduler_running=$running registration_complete=$complete runtime_healthy=$runtime_healthy pending_job_count=$pending missing_required_jobs=$missing unhealthy_runtime_jobs=$stale"
             fi
           fi
 
@@ -132,12 +134,18 @@ jobs:
 
           echo "[restart] systemctl restart $SVC"
           systemctl restart "$SVC"
-          sleep 5
-          # 重启后再探一次，确认恢复
-          resp2="$(curl -sS --max-time "$TIMEOUT" -w '\n__HTTP_CODE__%{http_code}' "$URL" 2>/dev/null || true)"
-          code2="$(printf '%s' "$resp2" | sed -n 's/.*__HTTP_CODE__//p' | tail -n1)"
-          body2="$(printf '%s' "$resp2" | sed 's/__HTTP_CODE__[0-9]*$//')"
-          ok2="$(printf '%s' "$body2" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
+          code2="000"
+          ok2="false"
+          for _attempt in $(seq 1 24); do
+            sleep 5
+            resp2="$(curl -sS --max-time "$TIMEOUT" -w '\n__HTTP_CODE__%{http_code}' "$URL" 2>/dev/null || true)"
+            code2="$(printf '%s' "$resp2" | sed -n 's/.*__HTTP_CODE__//p' | tail -n1)"
+            body2="$(printf '%s' "$resp2" | sed 's/__HTTP_CODE__[0-9]*$//')"
+            ok2="$(printf '%s' "$body2" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("ok", False)).lower())' 2>/dev/null || echo "parse_fail")"
+            if [ "$code2" = "200" ] && [ "$ok2" = "true" ]; then
+              break
+            fi
+          done
           echo "post-restart http=$code2 ok=$ok2"
           if [ "$code2" = "200" ] && [ "$ok2" = "true" ]; then
             echo "RECOVERED"

@@ -4,9 +4,9 @@ import json
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 GitHubFetcher = Callable[[str], dict[str, Any]]
 
@@ -267,8 +267,7 @@ def _empty_probe() -> dict[str, Any]:
 def _gh_api(path: str) -> dict[str, Any]:
     completed = subprocess.run(
         [_gh_executable(), "api", path],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=30,
         check=False,

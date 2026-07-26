@@ -11,7 +11,6 @@ from retort_engine.external_advantage_adjudicator import (
 from retort_engine.external_advantage_regression import verify_external_advantage_rows
 from retort_engine.pr_review import review_diff
 
-
 DEFAULT_ADVANTAGE_CASES: tuple[dict[str, Any], ...] = (
     {
         "case_id": "pr-agent-secret-context",

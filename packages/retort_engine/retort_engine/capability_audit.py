@@ -8,7 +8,6 @@ from typing import Any
 
 from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
 
-
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 MIN_TEST_TO_SOURCE_RATIO = 0.8
 
@@ -533,7 +532,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             adjudication_false_negative_count = int(
                 adjudication_summary.get("false_negative_count") or 0
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional audit evidence must fail closed
             sample_comment_count = 0
     return {
         "runtime": source.is_file()
@@ -542,7 +541,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "cli": "review-diff" in read_text(cli),
         "api": "/api/review-diff" in read_text(ui_server),
         "contract": "pr_review_result" in read_text(contracts),
-        "test_function_count": len(re.findall(r"^\s*def\s+test_", test_text, re.M)),
+        "test_function_count": len(
+            re.findall(r"^\s*def\s+test_", test_text, re.MULTILINE)
+        ),
         "sample_comment_count": sample_comment_count,
         "publishable_comment_count": publishable_comment_count,
         "comment_ranking_model": comment_ranking_model,
@@ -614,7 +615,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "dry_run_api": "/api/review-pr" in read_text(ui_server),
         "dry_run_contract": "pr_dry_run_result" in read_text(contracts),
         "dry_run_test_function_count": len(
-            re.findall(r"^\s*def\s+test_", dry_test_text, re.M)
+            re.findall(r"^\s*def\s+test_", dry_test_text, re.MULTILINE)
         ),
         "dry_run_report_status": str(dry_report_payload.get("status") or ""),
         "dry_run_report_pr_url": str(dry_report_payload.get("pr_url") or ""),
@@ -886,8 +887,7 @@ def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{merge_commit}..HEAD", "--", *pathspec],
         cwd=git_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

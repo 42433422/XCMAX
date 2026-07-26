@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import ast
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
-
+from typing import Any
 
 SKIP_DIRS = {".git", ".retort", ".venv", "__pycache__", "node_modules", "dist", "build"}
 
@@ -206,9 +206,11 @@ def compare_repository_gaps(
         )
     )
     return {
-        "status": "ready"
-        if own_map["status"] == "ready" and external_map["status"] == "ready"
-        else "partial",
+        "status": (
+            "ready"
+            if own_map["status"] == "ready" and external_map["status"] == "ready"
+            else "partial"
+        ),
         "summary": {
             "gap_count": len(gaps),
             "own_selected_file_count": own_map["summary"]["selected_file_count"],
@@ -251,9 +253,9 @@ def tasks_from_repository_gaps(
             {
                 "task_id": f"retort-gap-{index:02d}",
                 "title": f"Close repository gap from {external_path or 'external module'}",
-                "dimension": "diff_hunk_review"
-                if missing
-                else "comparative_analysis_depth",
+                "dimension": (
+                    "diff_hunk_review" if missing else "comparative_analysis_depth"
+                ),
                 "why": (
                     f"External exposes symbols missing locally: {', '.join(missing[:5])}."
                     if missing

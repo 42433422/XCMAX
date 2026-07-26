@@ -112,6 +112,8 @@ RSYNC_EXCLUDES=(
   --exclude '.secrets'
   --exclude '.env'
   --exclude '.env.*'
+  --exclude 'routing_policies/routing_decisions.jsonl'
+  --exclude 'routing_policies/.online_update_state.json'
 )
 
 for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
@@ -131,6 +133,7 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
   "$SCRIPT_DIR/online_update_daemon.py" \
+  "$SCRIPT_DIR/prune_release_cache.py" \
   "$STAGING/scripts/deploy/"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \

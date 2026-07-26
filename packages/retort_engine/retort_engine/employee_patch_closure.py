@@ -61,8 +61,10 @@ def run_employee_patch_closure_suite(
             [
                 sys.executable,
                 "-c",
-                "from pathlib import Path; text = Path('{target_file}').read_text(); "
-                "raise SystemExit(0 if 'ALLOW_WRITE = False' in text else 1)",
+                (
+                    "from pathlib import Path; text = Path('{target_file}').read_text(); "
+                    "raise SystemExit(0 if 'ALLOW_WRITE = False' in text else 1)"
+                ),
             ],
         ],
         run_id=suite_id,
@@ -78,8 +80,10 @@ def run_employee_patch_closure_suite(
             [
                 sys.executable,
                 "-c",
-                "from pathlib import Path; text = Path('{target_file}').read_text(); "
-                "raise SystemExit(1 if 'ALLOW_WRITE = True' in text else 0)",
+                (
+                    "from pathlib import Path; text = Path('{target_file}').read_text(); "
+                    "raise SystemExit(1 if 'ALLOW_WRITE = True' in text else 0)"
+                ),
             ],
         ],
         run_id=suite_id,
@@ -440,20 +444,22 @@ def run_multi_file_employee_patch_closure_case(
                 except FileNotFoundError:
                     pass
         rollback_verified = all(
-            (target.read_text(encoding="utf-8") == before)
-            if before
-            else not target.exists()
+            (
+                (target.read_text(encoding="utf-8") == before)
+                if before
+                else not target.exists()
+            )
             for target, before in before_texts.items()
         )
     retained_change = gates_passed and all(
         Path(item).is_file() for item in changed_files
     )
     return {
-        "status": "patch_verified"
-        if retained_change
-        else "patch_rolled_back"
-        if rollback_verified
-        else "patch_failed",
+        "status": (
+            "patch_verified"
+            if retained_change
+            else "patch_rolled_back" if rollback_verified else "patch_failed"
+        ),
         "project": str(root),
         "target": ",".join(changed_files),
         "summary": {
@@ -563,9 +569,7 @@ def run_employee_patch_closure_case(
     status = (
         "patch_verified"
         if retained_change
-        else "patch_rolled_back"
-        if rollback_verified
-        else "patch_failed"
+        else "patch_rolled_back" if rollback_verified else "patch_failed"
     )
     return {
         "status": status,
@@ -623,8 +627,7 @@ def _run_gates(
             completed = subprocess.run(
                 expanded,
                 cwd=root,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=120,
                 check=False,

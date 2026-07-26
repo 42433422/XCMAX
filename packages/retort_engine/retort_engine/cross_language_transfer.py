@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
 LANGUAGE_FAMILY_BY_SUFFIX = {
     ".py": "python",
     ".ts": "typescript",

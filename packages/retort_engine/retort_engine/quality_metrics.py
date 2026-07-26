@@ -8,7 +8,6 @@ from retort_engine.quality_policy import (
     test_source_ratio_status,
 )
 
-
 GENERATED_ABSORPTION_NAMES = {
     "retort_absorption_log.md",
     "retort_external_review_report.json",

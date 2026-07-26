@@ -31,7 +31,6 @@ from retort_engine.paibi_status import (
     unblock_tasks_from_blockers as _unblock_tasks_from_blockers,
 )
 
-
 DEFAULT_PAIBI_API_URL = "http://127.0.0.1:3001"
 PAIBI_SUPPORTED_TOOLS = ("codex", "cursor", "trae", "claude_code")
 
@@ -469,9 +468,11 @@ class PaibiLLMClient:
                 "device_count": len(unique_devices),
                 "tool_slot_count": len(slots),
                 "parallelism": len(unique_slots),
-                "degraded_reason": "single_device_serialized_to_avoid_workspace_clone_race"
-                if single_device_serialized
-                else "",
+                "degraded_reason": (
+                    "single_device_serialized_to_avoid_workspace_clone_race"
+                    if single_device_serialized
+                    else ""
+                ),
                 "dispatches": dispatches,
             }
         except Exception as exc:  # noqa: BLE001

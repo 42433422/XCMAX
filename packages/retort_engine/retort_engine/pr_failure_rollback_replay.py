@@ -4,8 +4,9 @@ import json
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from retort_engine.pr_dry_run import review_pr_url
 
@@ -160,7 +161,7 @@ def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
 def _safe_review(url: str, reviewer: Reviewer) -> dict[str, Any]:
     try:
         return reviewer(url)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - injected reviewers are untrusted adapters
         return {
             "status": "failed",
             "pr_url": url,
@@ -194,8 +195,7 @@ def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
     completed = subprocess.run(
         command,
         cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
         timeout=60,

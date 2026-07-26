@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,31 +30,31 @@ def build_absorption_continuity_probe(
         "min_run_count": min_runs,
         "ready_run_count": len(ready_runs),
         "distinct_source_count": len({item["source"] for item in inspected}),
-        "all_have_behavior_diff": all(
-            item["checks"]["behavior_diff"] for item in inspected
-        )
-        if inspected
-        else False,
-        "all_have_behavior_tests": all(
-            item["checks"]["behavior_tests"] for item in inspected
-        )
-        if inspected
-        else False,
-        "all_have_employee_results": all(
-            item["checks"]["employee_results"] for item in inspected
-        )
-        if inspected
-        else False,
-        "all_have_gates_passed": all(
-            item["checks"]["gates_passed"] for item in inspected
-        )
-        if inspected
-        else False,
-        "all_have_per_run_code_graph_proof": all(
-            item["checks"]["per_run_code_graph_proof"] for item in inspected
-        )
-        if inspected
-        else False,
+        "all_have_behavior_diff": (
+            all(item["checks"]["behavior_diff"] for item in inspected)
+            if inspected
+            else False
+        ),
+        "all_have_behavior_tests": (
+            all(item["checks"]["behavior_tests"] for item in inspected)
+            if inspected
+            else False
+        ),
+        "all_have_employee_results": (
+            all(item["checks"]["employee_results"] for item in inspected)
+            if inspected
+            else False
+        ),
+        "all_have_gates_passed": (
+            all(item["checks"]["gates_passed"] for item in inspected)
+            if inspected
+            else False
+        ),
+        "all_have_per_run_code_graph_proof": (
+            all(item["checks"]["per_run_code_graph_proof"] for item in inspected)
+            if inspected
+            else False
+        ),
         "latest_closed_loop_verified": latest_closed_loop["verified"],
         "latest_merge_commit": latest_closed_loop["merge_commit"],
         "continuity_span_minutes": span_minutes,
@@ -67,9 +67,9 @@ def build_absorption_continuity_probe(
         and summary["latest_closed_loop_verified"]
     )
     result = {
-        "status": "ready"
-        if summary["continuity_gate_passed"]
-        else "needs_more_continuity",
+        "status": (
+            "ready" if summary["continuity_gate_passed"] else "needs_more_continuity"
+        ),
         "project": str(root),
         "summary": summary,
         "runs": inspected,
@@ -254,7 +254,9 @@ def _evidence_value(evidence: list[str], key: str) -> str:
 
 def _run_time(run_id: str) -> datetime | None:
     try:
-        return datetime.strptime(run_id.split("-", 1)[0], "%Y%m%d%H%M%S")
+        return datetime.strptime(run_id.split("-", 1)[0], "%Y%m%d%H%M%S").replace(
+            tzinfo=timezone.utc
+        )
     except ValueError:
         return None
 

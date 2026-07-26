@@ -77,7 +77,7 @@ make -f Makefile.win dev
 
 **测试命名 SSOT**：[`specs/test-naming.md`](specs/test-naming.md)（禁止新增 `test_coverage_ramp_phase*`；pre-commit 钩子 `guard-no-new-coverage-ramp`）。
 
-覆盖率 SSOT：[`FHD/docs/reports/COVERAGE_RAMP.md`](FHD/docs/reports/COVERAGE_RAMP.md) · HEAD **85.07%** 行 / WIP **74.56%**（`metrics/coverage-dual-summary.json`）。
+覆盖率 SSOT：[`FHD/metrics/coverage-dual-summary.json`](FHD/metrics/coverage-dual-summary.json) · 最近 CI 实测：后端 **88.19% 行 / 81.5% 分支**，前端 **93.21% 行 / 82.45% 分支**。禁止从历史报告复制旧数字。
 
 ## Python 依赖锁定
 
