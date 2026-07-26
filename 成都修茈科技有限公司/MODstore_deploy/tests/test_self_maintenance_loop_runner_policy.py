@@ -1087,6 +1087,40 @@ def test_resume_review_qa_candidate_retries_structured_findings_on_existing_bran
     )
 
 
+def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/old-veto",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "old finding",
+                "run_id": "run-old",
+                "task_id": "task-old",
+            },
+            {
+                "branch": "devfleet/trae/current-review",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-current",
+                "task_id": "task-current",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/trae/current-review",
+        "continue_existing_code_task": True,
+        "failed_run_id": "run-current",
+        "failed_steps": ["code"],
+        "para_task_id": "task-current",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
     memory = {
         "open_items": [
