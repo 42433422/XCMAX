@@ -85,13 +85,26 @@ def self_maintenance_cooldown_minutes(triggered_by: str) -> int:
     return _int_env("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360, minimum=0)
 
 
+def _reconcile_completed_loop_memory_safely() -> None:
+    """Best-effort settlement must never prevent the next scheduler decision."""
+    try:
+        from modstore_server.self_maintenance_memory_reconciliation import (
+            reconcile_completed_loop_memory_from_ledger,
+        )
+
+        reconcile_completed_loop_memory_from_ledger()
+    except Exception:
+        logger.exception("failed to reconcile verified self-maintenance merge receipts")
+
+
 def pending_automated_remediation() -> dict[str, Any] | None:
-    """Return one executable unattended repair receipt without mutating loop memory."""
+    """Settle verified receipts, then return one executable unattended repair."""
     from modstore_server.self_maintenance_loop_runner import (
         _automated_remediation_resume_plan,
         _load_loop_memory,
     )
 
+    _reconcile_completed_loop_memory_safely()
     memory = _load_loop_memory()
     open_items = memory.get("open_items") if isinstance(memory, dict) else None
     if not isinstance(open_items, list):
