@@ -434,3 +434,47 @@ def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path)
     )
     assert result["blocked"] is True
     assert result["reason"] == "retort_clarification_pending"
+
+
+def test_self_maintenance_review_gate_uses_cleanup_safe_workspace(monkeypatch, tmp_path) -> None:
+    from modstore_server import retort_clarification_gate as retort_gate
+    from modstore_server import self_maintenance_loop_runner as loop
+
+    runtime_dir = tmp_path / "runtime"
+    captured = {}
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+    monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/fake.git")
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+
+    def changed_files(**kwargs):
+        workspace = kwargs["workspace"]
+        captured["workspace"] = workspace
+        workspace.mkdir(parents=True)
+        (workspace / "partial-clone").write_text("created", encoding="utf-8")
+        return ["app/example.py"]
+
+    monkeypatch.setattr(loop, "_changed_files_for_branch", changed_files)
+    monkeypatch.setattr(retort_gate, "gate_enabled", lambda: True)
+    monkeypatch.setattr(
+        retort_gate,
+        "evaluate_retort_clarification_gate",
+        lambda **_kwargs: {
+            "aligned": True,
+            "blockers": [],
+            "clarification": None,
+        },
+    )
+
+    result = loop._evaluate_retort_clarification_before_review(
+        run_id="run-cleanup",
+        branch="feature/fix",
+        para_task_id="para-1",
+        memory={},
+    )
+
+    expected_root = runtime_dir / loop.DEFAULT_MERGE_WORKSPACE_ROOT
+    assert expected_root in captured["workspace"].parents
+    assert not captured["workspace"].exists()
+    assert result["blocked"] is False
