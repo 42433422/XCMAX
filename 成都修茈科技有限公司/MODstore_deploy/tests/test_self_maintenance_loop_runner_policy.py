@@ -939,6 +939,47 @@ def test_resume_review_qa_candidate_uses_failed_review_branch():
     }
 
 
+def test_resume_candidate_prefers_newer_same_task_code_hold_over_old_review_failure():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-quality",
+                "kind": "failed_steps",
+                "para_task_id": "task-quality",
+                "retry_count": 1,
+                "run_id": "run-old-review",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-quality",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_black_not_passed",
+                "run_id": "run-new-quality-hold",
+                "task_id": "task-quality",
+            },
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-quality",
+                "para_task_id": "task-quality",
+                "run_id": "run-old-review",
+                "status": "failed",
+            }
+        ],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-quality",
+        "continue_existing_code_task": True,
+        "failed_run_id": "run-new-quality-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-quality",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 def test_resume_steps_rerun_failed_step_and_downstream_chain():
     assert _resume_steps(None) == {"code", "review", "qa"}
     assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
