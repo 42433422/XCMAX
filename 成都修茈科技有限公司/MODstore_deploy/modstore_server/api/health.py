@@ -12,11 +12,9 @@ router = APIRouter(tags=["health"])
 
 def _scheduler_status() -> bool | None:
     try:
-        from modstore_server.workflow_scheduler import _scheduler as _sch
+        from modstore_server.workflow_scheduler import scheduler_integrity_status
 
-        if _sch is not None and getattr(_sch, "running", False):
-            return True
-        return False
+        return bool(scheduler_integrity_status()["ok"])
     except Exception:
         return None
 
