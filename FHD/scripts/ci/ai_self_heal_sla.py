@@ -36,6 +36,13 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 - 失败评论按 `❌ 自动合并失败` 去重，避免 schedule 每 30 分钟刷屏
 - 冲突时自动打 `needs-human` + `hold-merge`
 
+严格分支保护恢复（2026-07-26）：
+- mergeable=true 但 mergeable_state=behind 时，调用 GitHub update-branch API
+- 更新后停止本轮合并，等待新 head SHA 的 AI Review + CI 全量重跑
+- expected_head_sha 防止并发覆盖；更新失败 fail closed，不绕过 required checks
+- update-branch 必须使用独立 `BRANCH_UPDATE_TOKEN`，避免 `GITHUB_TOKEN`
+  触发的 PR 更新进入需要人工批准的 workflow 状态
+
 合并后发布闭环（2026-07-26）：
 - `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须显式
   workflow_dispatch FHD CI/CD 与 MODstore 主干 CI
@@ -47,6 +54,7 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 环境变量：
   GITHUB_TOKEN    必填
   GITHUB_REPOSITORY  必填（如 "owner/repo"）
+  BRANCH_UPDATE_TOKEN  behind PR 更新专用 token（CI 使用 CI_COMMIT_TOKEN）
   AUTO_IMPLEMENT_ALLOWLIST_PATH  可选，覆盖 allowlist 路径（默认 <repo_root>/config/auto-implement-allowlist.yaml）
 """
 
@@ -146,6 +154,18 @@ class GitHubClient:
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",
             },
+        )
+        branch_update_token = (os.environ.get("BRANCH_UPDATE_TOKEN") or "").strip()
+        self.branch_update_client = (
+            httpx.Client(
+                timeout=30.0,
+                headers={
+                    "Authorization": f"Bearer {branch_update_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            if branch_update_token
+            else None
         )
 
     def list_self_heal_prs(self) -> list[PRInfo]:
@@ -298,6 +318,7 @@ class GitHubClient:
 
         返回 (mergeable, reason)：
         - (True, "ok")：可合并
+        - (True, "behind")：无冲突但落后主干，应先 update-branch 并重跑检查
         - (False, "conflict")：有冲突
         - (None, "unknown")：GitHub 仍在计算 / API 异常，调用方应跳过本轮
         """
@@ -308,10 +329,40 @@ class GitHubClient:
         data = resp.json()
         mergeable = data.get("mergeable")
         if mergeable is True:
+            if str(data.get("mergeable_state") or "").lower() == "behind":
+                return True, "behind"
             return True, "ok"
         if mergeable is False:
             return False, "conflict"
         return None, "unknown"
+
+    def update_pr_branch(self, pr_number: int, expected_head_sha: str) -> tuple[bool, str]:
+        """让 GitHub 把 base 合入 PR 分支；不绕过保护规则。
+
+        expected_head_sha 是并发守卫：PR head 已变化时 GitHub 会拒绝本次更新，
+        治理器下一轮重新读取新 head 后再评估。
+        """
+        if self.branch_update_client is None:
+            return False, "branch_update_token_missing"
+        url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/update-branch"
+        resp = self.branch_update_client.put(url, json={"expected_head_sha": expected_head_sha})
+        if resp.status_code == 202:
+            return True, "ok"
+        try:
+            message = str((resp.json() or {}).get("message") or "")
+        except Exception:
+            message = (resp.text or "")[:200]
+        lowered = message.lower()
+        if resp.status_code == 409 or "conflict" in lowered:
+            return False, "conflict"
+        if (
+            resp.status_code == 403
+            or "resource not accessible" in lowered
+            or "permission" in lowered
+        ):
+            return False, "permission"
+        detail = message.replace("\n", " ").strip() or "no_message"
+        return False, f"http_{resp.status_code}:{detail[:160]}"
 
     def merge_pr(self, pr_number: int, method: str = "squash") -> tuple[bool, str, str]:
         """尝试 squash/merge。返回 (ok, reason, merge_sha)。
@@ -475,9 +526,10 @@ def _try_auto_merge(
     failure_action: str,
     metric_extra: dict[str, Any] | None = None,
 ) -> str:
-    """统一 auto-merge 路径：先查 mergeable，再 merge，失败分类+去重通知。
+    """统一 auto-merge 路径：先查 mergeable/behind，再 merge。
 
-    返回 auto_merged / post_merge_dispatch_failed / merge_failed / skipped。
+    返回 auto_merged / branch_updated / post_merge_dispatch_failed /
+    merge_failed / skipped。
     """
     mergeable, mreason = client.get_pr_mergeability(pr.number)
     if mergeable is None:
@@ -507,6 +559,54 @@ def _try_auto_merge(
             }
         )
         return "merge_failed"
+
+    if mreason == "behind":
+        expected_head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+        if not expected_head_sha:
+            print("  skip: behind 但缺少 expected_head_sha")
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "author": pr.author,
+                    "action": "branch_update_failed",
+                    "reason": "missing_head_sha",
+                    **(metric_extra or {}),
+                }
+            )
+            return "skipped"
+        updated, update_reason = client.update_pr_branch(pr.number, expected_head_sha)
+        if updated:
+            print(
+                f"  branch update requested: head={expected_head_sha}; "
+                "等待新 head 的 AI Review + CI"
+            )
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "author": pr.author,
+                    "action": "branch_update_requested",
+                    "previous_head_sha": expected_head_sha,
+                    **(metric_extra or {}),
+                }
+            )
+            return "branch_updated"
+        print(f"  branch update failed: {update_reason}")
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": "branch_update_failed",
+                "previous_head_sha": expected_head_sha,
+                "reason": update_reason,
+                **(metric_extra or {}),
+            }
+        )
+        # 并发 head 变化或 GitHub 瞬时错误均由下一轮重新读取状态后重试；
+        # 不把 behind 误报为代码冲突，也不自动添加 hold-merge。
+        return "skipped"
 
     ok, reason, merge_sha = client.merge_pr(pr.number, method="squash")
     if ok:
@@ -763,7 +863,8 @@ def process_regular_pr(
 ) -> str:
     """处理单个普通 PR：通过三重门禁 → squash merge；否则 skip。
 
-    返回动作：auto_merged / auto_merged_dry / skipped / merge_failed。
+    返回动作：auto_merged / branch_updated / auto_merged_dry / skipped /
+    merge_failed。
     不做 stale/close（普通 PR 由人工 review 兜底）。
     """
     print(
@@ -999,6 +1100,7 @@ def main(argv: list[str] | None = None) -> int:
 
     stats = {
         "auto_merged": 0,
+        "branch_updated": 0,
         "post_merge_dispatch_failed": 0,
         "upgraded": 0,
         "stale_warned": 0,
@@ -1043,6 +1145,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             regular_stats = {
                 "auto_merged": 0,
+                "branch_updated": 0,
                 "post_merge_dispatch_failed": 0,
                 "skipped": 0,
                 "merge_failed": 0,
