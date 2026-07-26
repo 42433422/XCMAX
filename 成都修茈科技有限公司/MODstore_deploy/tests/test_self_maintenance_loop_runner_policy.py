@@ -1706,9 +1706,7 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
         ),
     ],
 )
-def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(
-    task, expected_reason
-):
+def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, expected_reason):
     memory = {
         "closed_items": [],
         "open_items": [],
