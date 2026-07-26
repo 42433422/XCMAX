@@ -62,12 +62,16 @@ function Wait-XcagiReady {
   while ((Get-Date) -lt $deadline) {
     try {
       $resp = Invoke-WebRequest -Uri ($BaseUrl.TrimEnd('/') + '/api/health') -UseBasicParsing -TimeoutSec 2
-      if ($resp.StatusCode -eq 200) { return }
-    } catch {
-      Start-Sleep -Seconds 2
-    }
+      if ($resp.StatusCode -eq 200) {
+        $status = Invoke-XcagiJson '/api/desktop/status' -TimeoutSec 2
+        if ($status.readyForUi -and $status.modsReady) {
+          return
+        }
+      }
+    } catch {}
+    Start-Sleep -Seconds 2
   }
-  throw "Backend did not become ready: $BaseUrl/api/health"
+  throw "Desktop runtime did not become ready: $BaseUrl/api/desktop/status"
 }
 
 function Invoke-Check {
