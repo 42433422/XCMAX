@@ -48,6 +48,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "employee_autonomy_dispatch_loop",
         "employee_evolution_scan_loop",
         "employee_health_scan_loop",
+        "founder_scorecard_refresh",
         "incident_collect_extended",
         "incident_collect_nginx",
         "incident_collect_pytest_cursor",
@@ -66,6 +67,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
 )
 _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
     "daily_digest": "daily_ops_digest_email",
+    "founder_scorecard_refresh": "founder_scorecard_refresh",
     "self_maintenance_loop_daily": "self_maintenance_loop_daily",
     "boss_daily_im_report": "boss_daily_im_report",
 }
@@ -415,6 +417,41 @@ def start_scheduler() -> None:
         max_instances=1,
     )
     _scheduler_heartbeat_job()
+
+    def _founder_scorecard_refresh_job() -> None:
+        try:
+            from modstore_server.founder_scorecard_publisher import (
+                publish_founder_scorecard,
+            )
+
+            result = _run_tracked_scheduler_job(
+                "founder_scorecard_refresh",
+                publish_founder_scorecard,
+            )
+            logger.info(
+                "founder scorecard refreshed generated_at=%s overall=%s targets=%s",
+                result.get("generated_at"),
+                result.get("overall_progress"),
+                result.get("published_target_count"),
+            )
+        except Exception:
+            logger.exception("founder scorecard refresh failed")
+
+    _scheduler.add_job(
+        _founder_scorecard_refresh_job,
+        IntervalTrigger(
+            minutes=max(
+                5,
+                _env_int("MODSTORE_FOUNDER_SCORECARD_REFRESH_MINUTES", 15),
+            )
+        ),
+        id="founder_scorecard_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=60),
+        misfire_grace_time=_business_misfire_grace_time(),
+        coalesce=True,
+        max_instances=1,
+    )
 
     def _dead_letter_reconcile_job() -> None:
         try:

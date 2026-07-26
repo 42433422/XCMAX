@@ -1312,6 +1312,48 @@ class TestOpsFounderAutonomy:
         assert build_snapshot.call_args.kwargs["strategic_council"]["data"]["ready"] is True
         publish_projection.assert_called_once_with(snapshot)
 
+    def test_internal_refresh_requires_independent_automation_token(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AUTONOMY_WEBHOOK_TOKEN", "automation-secret")
+        resp = client.post(
+            "/api/xcmax/ops/founder-autonomy/refresh-internal",
+            headers={"Authorization": "Bearer market-admin-jwt"},
+        )
+        assert resp.status_code == 401
+
+    def test_internal_refresh_publishes_with_market_bearer_and_automation_token(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AUTONOMY_WEBHOOK_TOKEN", "automation-secret")
+        snapshot = {
+            "schema_version": "founder_autonomy_status.v1",
+            "dimensions": [{"id": str(index)} for index in range(7)],
+        }
+        publication = {"ok": True, "written": ["public.json"], "errors": []}
+        with patch.object(
+            admin_routes,
+            "_build_and_publish_founder_autonomy",
+            new_callable=AsyncMock,
+            return_value=(snapshot, publication),
+        ) as refresh:
+            resp = client.post(
+                "/api/xcmax/ops/founder-autonomy/refresh-internal",
+                headers={
+                    "Authorization": "Bearer market-admin-jwt",
+                    "X-Autonomy-Token": "automation-secret",
+                },
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["publication"]["ok"] is True
+        refresh.assert_awaited_once()
+        assert refresh.await_args.kwargs["require_admin_session"] is False
+
 
 class TestOpsStaffingOnboard:
     def test_onboard_with_employee_ids(self, client: TestClient) -> None:

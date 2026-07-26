@@ -775,8 +775,18 @@ def _login_surface_audit_sync(
             or demo_password
         )
     else:
-        user = user or os.environ.get("MODSTORE_SURFACE_AUDIT_USER") or "admin"
-        password = password or os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD") or "admin123"
+        user = (
+            user
+            or os.environ.get("MODSTORE_SURFACE_AUDIT_USER")
+            or os.environ.get("MODSTORE_DIGEST_ADMIN_USER")
+            or "admin"
+        )
+        password = (
+            password
+            or os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD")
+            or os.environ.get("MODSTORE_DIGEST_ADMIN_PASSWORD")
+            or "admin123"
+        )
     user = str(user).strip()
     password = str(password).strip()
 

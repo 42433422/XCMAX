@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -2326,19 +2327,12 @@ async def ops_runtime_inventory(request: Request):
     }
 
 
-@router.get("/ops/founder-autonomy", response_model=None)
-async def ops_founder_autonomy(request: Request):
-    """Aggregate the seven founder-autonomy dimensions from live evidence.
-
-    Each upstream is fail-soft: an unavailable evidence domain lowers the
-    corresponding score instead of making the management page unavailable or
-    silently converting source capability into runtime proof.
-    """
-
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-
+async def _build_and_publish_founder_autonomy(
+    request: Request,
+    *,
+    require_admin_session: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build one scorecard from live evidence and atomically publish its projection."""
     from app.application.autonomy.approval_resume import list_pending_actions
     from app.application.founder_autonomy_status import (
         build_founder_autonomy_snapshot,
@@ -2349,7 +2343,15 @@ async def ops_founder_autonomy(request: Request):
 
     async def _safe_proxy(path: str) -> dict[str, Any]:
         try:
-            payload = await _market_admin_proxy(request, "GET", path)
+            if require_admin_session:
+                payload = await _market_admin_proxy(request, "GET", path)
+            else:
+                payload = await _market_admin_proxy(
+                    request,
+                    "GET",
+                    path,
+                    require_admin_session=False,
+                )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("founder autonomy evidence unavailable path=%s: %s", path, exc)
             return {}
@@ -2433,7 +2435,78 @@ async def ops_founder_autonomy(request: Request):
             publication.get("written"),
             publication.get("errors"),
         )
+    return snapshot, publication
+
+
+@router.get("/ops/founder-autonomy", response_model=None)
+async def ops_founder_autonomy(request: Request):
+    """Aggregate the seven founder-autonomy dimensions from live evidence.
+
+    Each upstream is fail-soft: an unavailable evidence domain lowers the
+    corresponding score instead of making the management page unavailable or
+    silently converting source capability into runtime proof.
+    """
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+
+    snapshot, _publication = await _build_and_publish_founder_autonomy(
+        request,
+        require_admin_session=True,
+    )
     return {"success": True, "data": snapshot}
+
+
+@router.post("/ops/founder-autonomy/refresh-internal", response_model=None)
+async def ops_founder_autonomy_refresh_internal(
+    request: Request,
+):
+    """Machine-only scorecard refresh used by the production scheduler.
+
+    ``Authorization`` remains the short-lived MODstore admin bearer used for
+    upstream evidence calls.  The independent ``X-Autonomy-Token`` proves the
+    caller is an authorised automation worker, so a leaked market bearer alone
+    cannot turn this into an unauthenticated publishing endpoint.
+    """
+
+    expected = str(
+        os.environ.get("AUTONOMY_WEBHOOK_TOKEN")
+        or os.environ.get("MODSTORE_OPS_INGEST_TOKEN")
+        or ""
+    ).strip()
+    supplied = str(request.headers.get("X-Autonomy-Token") or "").strip()
+    if not expected or not supplied or not hmac.compare_digest(expected, supplied):
+        return JSONResponse(
+            {"success": False, "message": "invalid autonomy webhook token"},
+            status_code=401,
+        )
+    authorization = str(request.headers.get("Authorization") or "").strip()
+    if not authorization.lower().startswith("bearer "):
+        return JSONResponse(
+            {"success": False, "message": "market admin bearer is required"},
+            status_code=401,
+        )
+
+    snapshot, publication = await _build_and_publish_founder_autonomy(
+        request,
+        require_admin_session=False,
+    )
+    if not publication.get("ok"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "founder autonomy projection was not fully published",
+                "data": snapshot,
+                "publication": publication,
+            },
+            status_code=503,
+        )
+    return {
+        "success": True,
+        "data": snapshot,
+        "publication": publication,
+    }
 
 
 @router.post("/ops/staffing/onboard", response_model=None)
