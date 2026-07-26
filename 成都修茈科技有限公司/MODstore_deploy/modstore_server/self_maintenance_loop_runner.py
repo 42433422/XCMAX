@@ -1126,6 +1126,58 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "reason": "resume_failed_code_step",
             }
 
+    # A later structured hold on the same branch/task supersedes an older
+    # review/QA failed_steps receipt.  Otherwise the older receipt is selected
+    # first forever and the loop repeatedly re-runs review/QA without ever
+    # reaching the code remediation requested by the latest quality gate.
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
+            continue
+        reason = str(item.get("reason") or "")
+        if _stored_qa_target_ref_missing(memory, item):
+            reason = "structured_qa_target_branch_unavailable"
+        resume_plan = _automated_remediation_resume_plan(reason)
+        if resume_plan is None:
+            continue
+        failed_steps, continue_existing_code_task = resume_plan
+        if "code" not in failed_steps:
+            continue
+        branch = str(item.get("branch") or "").strip()
+        para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        if not branch or not para_task_id:
+            continue
+        matching_older_failure = any(
+            isinstance(failed_item, dict)
+            and failed_item.get("kind") == "failed_steps"
+            and any(
+                str(step) in {"review", "qa"}
+                for step in (
+                    failed_item.get("steps") if isinstance(failed_item.get("steps"), list) else []
+                )
+            )
+            and (
+                str(failed_item.get("branch") or "").strip() == branch
+                or str(failed_item.get("para_task_id") or failed_item.get("task_id") or "").strip()
+                == para_task_id
+            )
+            for failed_item in open_items
+        )
+        if not matching_older_failure:
+            continue
+        candidate: Dict[str, Any] = {
+            "branch": branch,
+            "failed_run_id": str(item.get("run_id") or "").strip(),
+            "failed_steps": list(failed_steps),
+            "para_task_id": para_task_id,
+            "reason": "resume_automated_remediation_candidate",
+        }
+        if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
+            candidate["continue_existing_code_task"] = True
+        return candidate
+
     # Then check for review/qa failures
     review_failed_run_ids = set()
     for item in open_items:
