@@ -5,7 +5,7 @@
   - coverage-dual-summary.json：committed_head.* / ratchet_floors.* / targets.* / _retired.values
   - coverage-history.jsonl：最后一行为最新趋势
   - sla-snapshot.json：/api/health 健康探针
-  - dora-20260613.json：DORA 指标
+  - dora-YYYYMMDD.json：最新 DORA 指标
   - pyproject.toml：fail_under 正则交叉校验后端行 floor
   - VERSION.md『各端交付等级』表 vs docs/guides/MOBILE_ANDROID.md 实际状态
   - frontend/e2e/*.spec.ts：E2E spec 数
@@ -61,6 +61,33 @@ def _read_jsonl_last(path: Path) -> dict:
         return json.loads(lines[-1])
     except json.JSONDecodeError:
         return {}
+
+
+def _latest_dora_snapshot(metrics_dir: Path = METRICS_DIR) -> tuple[dict, Path | None]:
+    candidates = sorted(
+        path
+        for path in metrics_dir.glob("dora-*.json")
+        if re.fullmatch(r"dora-\d{8}\.json", path.name)
+    )
+    if not candidates:
+        return {}, None
+    latest = candidates[-1]
+    return _read_json(latest), latest
+
+
+def _snapshot_age_days(
+    generated_at: str,
+    *,
+    now: datetime.datetime | None = None,
+) -> int | None:
+    try:
+        generated = datetime.datetime.fromisoformat(
+            generated_at.replace("Z", "+00:00")
+        )
+    except (AttributeError, TypeError, ValueError):
+        return None
+    now = now or datetime.datetime.now(datetime.UTC)
+    return max(0, (now - generated).days)
 
 
 def _fail_under_from_pyproject() -> int | None:
@@ -136,7 +163,7 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
 
     hist = _read_jsonl_last(METRICS_DIR / "coverage-history.jsonl")
     sla = _read_json(METRICS_DIR / "sla-snapshot.json")
-    dora = _read_json(METRICS_DIR / "dora-20260613.json")
+    dora, dora_path = _latest_dora_snapshot()
     fail_under = _fail_under_from_pyproject()
 
     rows: list[list[str]] = []
@@ -267,13 +294,27 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
     # --- DORA ---
     if dora:
         ev = dora.get("event_count", 0)
+        generated_at = dora.get("generated_at", "")
+        age_days = _snapshot_age_days(generated_at)
+        stale = age_days is None or age_days > 2
+        freshness = (
+            "采集时间未知"
+            if age_days is None
+            else f"数据已过期 {age_days} 天"
+            if stale
+            else f"{age_days} 天内采集"
+        )
         rows.append(
             [
                 "DORA 部署频率",
                 "持续交付",
-                f"窗口 {dora.get('window_days')}d / 事件 {ev} / 频率 {dora.get('deployment_frequency_per_day')}/d",
-                "dora-20260613.json",
-                ST_GREEN if ev and ev > 0 else ST_YELLOW,
+                (
+                    f"环境 {dora.get('environment', '未标注')} / "
+                    f"窗口 {dora.get('window_days')}d / 事件 {ev} / "
+                    f"频率 {dora.get('deployment_frequency_per_day')}/d / {freshness}"
+                ),
+                dora_path.name if dora_path else "dora-YYYYMMDD.json",
+                ST_GREEN if ev and ev > 0 and not stale else ST_YELLOW,
             ]
         )
 

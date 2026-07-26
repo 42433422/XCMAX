@@ -61,21 +61,67 @@ jobs:
           PY
           }
 
-      - name: Collect DORA metrics
+      - name: Fetch authoritative production deploy events
+        id: dora_source
+        continue-on-error: true
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
         run: |
-          python3 scripts/observability/collect_dora.py --window-days 7
-
-      - name: Ensure deploy_events.jsonl exists
-        run: |
-          if [ ! -f metrics/deploy_events.jsonl ]; then
-            cp metrics/deploy_events.seed.jsonl metrics/deploy_events.jsonl
-            echo "Bootstrapped deploy_events.jsonl from seed"
+          set -euo pipefail
+          if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
+            echo "::error::FHD_PUSH_HOST and FHD_PUSH_SSH_KEY are required for authoritative DORA collection."
+            exit 1
           fi
+          key_file="${RUNNER_TEMP}/fhd_dora_metrics_key"
+          tmp_events="${RUNNER_TEMP}/dora-deploy-events.jsonl"
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key_file"
+          chmod 600 "$key_file"
+          ssh -i "$key_file" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}" \
+            "test -r /var/lib/xcagi/autonomy/dora-deploy-events.jsonl && cat /var/lib/xcagi/autonomy/dora-deploy-events.jsonl" \
+            > "$tmp_events"
+          python3 - "$tmp_events" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+          if not lines:
+              raise SystemExit("production DORA event source is empty")
+          for line in lines:
+              event = json.loads(line)
+              for key in ("deploy_id", "deployed_at", "status", "environment", "git_sha"):
+                  if not event.get(key):
+                      raise SystemExit(f"invalid DORA event: missing {key}")
+          print(f"validated {len(lines)} production deployment events")
+          PY
+          mv "$tmp_events" metrics/deploy_events.jsonl
+
+      - name: Collect DORA metrics
+        if: steps.dora_source.outcome == 'success'
+        run: |
+          python3 scripts/observability/collect_dora.py \
+            --window-days 7 \
+            --environment production
+
+      - name: Report unavailable DORA source
+        if: steps.dora_source.outcome != 'success'
+        run: |
+          echo "::warning::Production deployment evidence was unavailable; preserving the last DORA snapshot instead of publishing a false zero."
 
       - name: Commit metrics
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add metrics/slo-measured-*.json metrics/sla-snapshot.json metrics/deploy_events.jsonl metrics/dora-*.json
-          git diff --staged --quiet || git commit -m "chore(metrics): slo measured $(date -u +%Y%m%d)"
-          git push || true
+          if git diff --staged --quiet; then
+            exit 0
+          fi
+          git commit -m "chore(metrics): measured snapshot $(date -u +%Y%m%d)"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
