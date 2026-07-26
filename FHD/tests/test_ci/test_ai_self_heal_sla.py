@@ -6,6 +6,7 @@
 - _parse_allowlist_fallback: 极简 yaml 解析（无 PyYAML 时）
 - check_regular_pr_gates: 三重门禁（ai-review + ci + author）+ hold-merge veto
 - process_regular_pr: 通过/失败/合并失败/dry-run 各路径
+- behind PR: update-branch 后等待新 head 全量重检，不直接 merge
 - list_regular_prs: 排除 ai-self-heal / ai-generated label 的 PR
 - get_workflow_run_conclusion: workflow run 各状态判定
 - PRInfo: kind="regular" 字段填充
@@ -348,6 +349,55 @@ class TestProcessRegularPr:
         assert "权限不足" in body
         client.add_labels.assert_called()
 
+    def test_behind_updates_branch_then_waits_for_new_checks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        stale = tmp_path / "stale.jsonl"
+        monkeypatch.setattr(sla, "STALE_JSONL", stale)
+
+        pr = _make_pr(
+            labels=["ai-review: passed"],
+            author="octocat",
+            head_sha="d" * 40,
+        )
+        client = _mock_client()
+        client.get_pr_mergeability.return_value = (True, "behind")
+        client.update_pr_branch.return_value = (True, "ok")
+
+        action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
+
+        assert action == "branch_updated"
+        client.update_pr_branch.assert_called_once_with(100, "d" * 40)
+        client.merge_pr.assert_not_called()
+        client.comment.assert_not_called()
+        client.add_labels.assert_not_called()
+        record = __import__("json").loads(stale.read_text(encoding="utf-8"))
+        assert record["action"] == "branch_update_requested"
+        assert record["previous_head_sha"] == "d" * 40
+
+    def test_behind_update_failure_fails_closed_without_hold(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        stale = tmp_path / "stale.jsonl"
+        monkeypatch.setattr(sla, "STALE_JSONL", stale)
+
+        pr = _make_pr(labels=["ai-review: passed"], author="octocat")
+        client = _mock_client()
+        client.get_pr_mergeability.return_value = (True, "behind")
+        client.update_pr_branch.return_value = (False, "http_422:Head branch was modified")
+
+        action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
+
+        assert action == "skipped"
+        client.merge_pr.assert_not_called()
+        client.comment.assert_not_called()
+        client.add_labels.assert_not_called()
+        record = __import__("json").loads(stale.read_text(encoding="utf-8"))
+        assert record["action"] == "branch_update_failed"
+        assert record["reason"].startswith("http_422")
+
     def test_post_merge_dispatch_failure_is_not_counted_as_closed_loop(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -548,6 +598,7 @@ def _make_real_client() -> sla.GitHubClient:
     client = sla.GitHubClient.__new__(sla.GitHubClient)
     client.repo = "test/repo"
     client.token = "fake-token"
+    client.branch_update_client = None
     return client
 
 
@@ -694,7 +745,46 @@ class TestGetWorkflowRunConclusion:
 # =====================================================================
 
 
-class TestPostMergeDispatchApi:
+class TestMergeAndDispatchApi:
+    def test_mergeability_reports_behind_state(self) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {
+            "mergeable": True,
+            "mergeable_state": "behind",
+        }
+        mock_http.get.return_value = response
+        client.client = mock_http
+
+        assert client.get_pr_mergeability(42) == (True, "behind")
+
+    def test_update_branch_sends_expected_head_sha(self) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        response = MagicMock()
+        response.status_code = 202
+        mock_http.put.return_value = response
+        client.client = mock_http
+        client.branch_update_client = mock_http
+
+        assert client.update_pr_branch(42, "d" * 40) == (True, "ok")
+        mock_http.put.assert_called_once_with(
+            "https://api.github.com/repos/test/repo/pulls/42/update-branch",
+            json={"expected_head_sha": "d" * 40},
+        )
+
+    def test_update_branch_without_dedicated_token_fails_closed(self) -> None:
+        client = _make_real_client()
+        client.client = MagicMock()
+
+        assert client.update_pr_branch(42, "d" * 40) == (
+            False,
+            "branch_update_token_missing",
+        )
+        client.client.put.assert_not_called()
+
     def test_merge_returns_exact_sha_from_github(self) -> None:
         client = _make_real_client()
         mock_http = MagicMock()

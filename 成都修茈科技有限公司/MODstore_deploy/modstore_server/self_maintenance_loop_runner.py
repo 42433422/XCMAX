@@ -47,6 +47,10 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_quality_gate import (
+    matches_focused_test_command as _matches_focused_test_command,
+)
+from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
 
 logger = logging.getLogger(__name__)
 
@@ -899,8 +903,11 @@ _AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
         "para_merge_conflict",
         "para_merge_task_failed",
         "structured_qa_blocking_findings",
+        "structured_qa_black_not_passed",
+        "structured_qa_isort_not_passed",
         "structured_qa_new_errors",
         "structured_qa_new_failures",
+        "structured_qa_source_governance_not_passed",
         "structured_qa_verdict_not_pass",
         "structured_review_blocking_findings",
         "structured_review_dimension_fail",
@@ -1118,6 +1125,58 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "para_task_id": para_task_id,
                 "reason": "resume_failed_code_step",
             }
+
+    # A later structured hold on the same branch/task supersedes an older
+    # review/QA failed_steps receipt.  Otherwise the older receipt is selected
+    # first forever and the loop repeatedly re-runs review/QA without ever
+    # reaching the code remediation requested by the latest quality gate.
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
+            continue
+        reason = str(item.get("reason") or "")
+        if _stored_qa_target_ref_missing(memory, item):
+            reason = "structured_qa_target_branch_unavailable"
+        resume_plan = _automated_remediation_resume_plan(reason)
+        if resume_plan is None:
+            continue
+        failed_steps, continue_existing_code_task = resume_plan
+        if "code" not in failed_steps:
+            continue
+        branch = str(item.get("branch") or "").strip()
+        para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        if not branch or not para_task_id:
+            continue
+        matching_older_failure = any(
+            isinstance(failed_item, dict)
+            and failed_item.get("kind") == "failed_steps"
+            and any(
+                str(step) in {"review", "qa"}
+                for step in (
+                    failed_item.get("steps") if isinstance(failed_item.get("steps"), list) else []
+                )
+            )
+            and (
+                str(failed_item.get("branch") or "").strip() == branch
+                or str(failed_item.get("para_task_id") or failed_item.get("task_id") or "").strip()
+                == para_task_id
+            )
+            for failed_item in open_items
+        )
+        if not matching_older_failure:
+            continue
+        candidate: Dict[str, Any] = {
+            "branch": branch,
+            "failed_run_id": str(item.get("run_id") or "").strip(),
+            "failed_steps": list(failed_steps),
+            "para_task_id": para_task_id,
+            "reason": "resume_automated_remediation_candidate",
+        }
+        if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
+            candidate["continue_existing_code_task"] = True
+        return candidate
 
     # Then check for review/qa failures
     review_failed_run_ids = set()
@@ -2732,6 +2791,12 @@ def _code_task_text(
         "- Report every verification command with its real exit code and concise passing output.\n"
         f"Before reporting completion, execute `{focused_test_command}` in the target branch "
         "and require exit code 0. "
+        "Also run `python -m black --check modman/ modstore_server/ tests/` from "
+        "`成都修茈科技有限公司/MODstore_deploy` and "
+        "`python -m isort --check-only --diff modman/ modstore_server/ tests/` "
+        "from the same directory, plus "
+        "`python scripts/dev/source_governance.py --top 10` from the repository root; "
+        "all three are mandatory merge-readiness gates and must exit 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
@@ -2790,12 +2855,9 @@ def _evaluate_retort_clarification_before_review(
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     target = str(branch or "").strip()
     if repo_url and base_branch and target:
+        workspace_root = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT
+        workspace = workspace_root / "retort-review-gate" / str(run_id or "run")
         try:
-            workspace = (
-                Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
-                / "retort-review-gate"
-                / str(run_id or "run")
-            )
             changed_files = _changed_files_for_branch(
                 repo_url=repo_url,
                 base_branch=base_branch,
@@ -2808,7 +2870,8 @@ def _evaluate_retort_clarification_before_review(
                 run_id,
                 type(exc).__name__,
             )
-            changed_files = []
+        finally:
+            _cleanup_merge_workspace(workspace)
 
     if not changed_files:
         mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
@@ -2928,6 +2991,13 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "command is valid evidence only when it executes the same pytest target successfully; a syntax-only "
         "check or a different test target is not a substitute. Do not fail solely because the scheduler's "
         "absolute Python path is unavailable when the equivalent focused command passes. "
+        "From the target branch archive, you MUST also run "
+        "`python -m black --check modman/ modstore_server/ tests/` from "
+        "`成都修茈科技有限公司/MODstore_deploy`, "
+        "`python -m isort --check-only --diff modman/ modstore_server/ tests/` "
+        "from the same directory, and "
+        "`python scripts/dev/source_governance.py --top 10` from the repository root. "
+        "Record their exact commands, real exit codes, and statuses in quality_checks. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
         "FAIL only for new failures, missing target branch, blocking findings, or unsafe evidence. "
         "Do not fail only because the final terminal ledger record for this in-flight run does not exist yet; "
@@ -2938,6 +3008,10 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         f"{STRUCTURED_QA_MARKER}: with schema "
         '{"verdict":"PASS|FAIL","blocking_findings":[],'
         '"tested_commands":[{"command":"...","exit_code":0,"status":"passed|failed"}],'
+        '"quality_checks":{'
+        '"black":{"command":"...","exit_code":0,"status":"passed|failed"},'
+        '"isort":{"command":"...","exit_code":0,"status":"passed|failed"},'
+        '"source_governance":{"command":"...","exit_code":0,"status":"passed|failed"}},'
         '"target_branch_available":true,'
         '"test_delta":{"baseline_id":"...","new_failures":[],"new_errors":[]},'
         '"changed_files_scope":"low|medium|high",'
@@ -3108,98 +3182,6 @@ def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, 
     return True, ""
 
 
-def _safe_command_tokens(command: str) -> Optional[List[str]]:
-    """Tokenize a reported command without guessing past malformed quoting."""
-
-    try:
-        return shlex.split(command)
-    except ValueError:
-        return None
-
-
-def _shell_command_segments(tokens: List[str]) -> List[List[str]]:
-    segments: List[List[str]] = [[]]
-    for token in tokens:
-        if token in {"&&", "||", ";"}:
-            if segments[-1]:
-                segments.append([])
-            continue
-        segments[-1].append(token)
-    return [segment for segment in segments if segment]
-
-
-def _trim_trailing_qa_note(tokens: List[str]) -> List[str]:
-    """Drop only a balanced, trailing ``(...)`` report annotation.
-
-    This intentionally operates on tokens instead of deleting every parenthesized
-    substring from the command, so quoted paths and pytest expressions containing
-    parentheses remain intact.
-    """
-
-    for index, token in enumerate(tokens):
-        suffix = " ".join(tokens[index:])
-        if (
-            token.startswith("(")
-            and suffix.endswith(")")
-            and suffix.count("(") == suffix.count(")")
-        ):
-            return tokens[:index]
-    return tokens
-
-
-def _pytest_target_names(tokens: List[str]) -> set[str]:
-    trimmed = _trim_trailing_qa_note(tokens)
-    names: set[str] = set()
-    for token in trimmed:
-        target = token.split("::", 1)[0]
-        if target.endswith(".py"):
-            names.add(Path(target).name)
-    return names
-
-
-def _focused_pytest_target_names(tokens: List[str]) -> set[str]:
-    names: set[str] = set()
-    for segment in _shell_command_segments(tokens):
-        for index in range(len(segment) - 1):
-            if segment[index : index + 2] == ["-m", "pytest"]:
-                names.update(_pytest_target_names(segment[index + 2 :]))
-    return names
-
-
-def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
-    """Accept the focused pytest target across different worker runtimes.
-
-    Para workers may run on a different operating system from the scheduler, so
-    the scheduler's absolute Python path is not portable.  Keep exact matching
-    as the fast path, then accept only a real ``python -m pytest`` invocation
-    of the same focused test file.
-    """
-
-    raw = str(command or "").strip()
-    if not raw:
-        return False
-    tokens = _safe_command_tokens(raw)
-    focused_tokens = _safe_command_tokens(str(focused_command or "").strip())
-    if tokens is None or focused_tokens is None:
-        return False
-    if raw == focused_command:
-        return True
-
-    target_names = _focused_pytest_target_names(focused_tokens)
-    if not target_names:
-        return False
-
-    python_name = re.compile(r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE)
-    for segment in _shell_command_segments(tokens):
-        if len(segment) < 4 or segment[1:3] != ["-m", "pytest"]:
-            continue
-        if python_name.fullmatch(Path(segment[0]).name) is None:
-            continue
-        if target_names <= _pytest_target_names(segment[3:]):
-            return True
-    return False
-
-
 def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
@@ -3288,6 +3270,13 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "ok": False,
                 "reason": "structured_qa_focused_command_not_passed",
                 "focused_command": focused_command,
+                "qa": qa_json,
+            }
+        quality_failure = _quality_check_failure(qa_json)
+        if quality_failure:
+            return {
+                "ok": False,
+                "reason": quality_failure,
                 "qa": qa_json,
             }
         test_delta = (

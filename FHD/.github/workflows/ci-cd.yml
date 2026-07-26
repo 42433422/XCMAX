@@ -535,7 +535,10 @@ jobs:
       contents: read
     concurrency:
       group: cvm-push-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
-      cancel-in-progress: true
+      # The CVM link needs tens of minutes. Cancelling a runner does not
+      # reliably terminate its remote rsync receiver, so serialize releases
+      # instead of leaving orphan transfers that compete with the next SHA.
+      cancel-in-progress: false
     # 正常发布只推必需 tarball + manifest；离线镜像归档仅手动显式启用。
     timeout-minutes: 90
     steps:
