@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """NeuroBus NN 路由策略在线更新 daemon。
 
 定期从 routing_decisions.jsonl 读取带 reward 的样本（规则路由的实际 SLA/success），
@@ -10,10 +9,10 @@ reward 计算：reward = sla_hit * 0.6 + success * 0.4
 
 运行方式：
   # 单次运行（cron/CronJob 触发）
-  python scripts/dev/online_update_daemon.py --once
+  python scripts/deploy/online_update_daemon.py --once
 
   # 常驻 daemon（systemd 服务）
-  python scripts/dev/online_update_daemon.py --interval 300
+  python scripts/deploy/online_update_daemon.py --interval 300
 
 触发频率建议：
   - 低流量（<1K/天）：每小时一次
@@ -22,8 +21,9 @@ reward 计算：reward = sla_hit * 0.6 + success * 0.4
 
 K8s CronJob 示例：
   schedule: "*/5 * * * *"
-  command: python scripts/dev/online_update_daemon.py --once
+  command: python scripts/deploy/online_update_daemon.py --once
 """
+
 from __future__ import annotations
 
 import argparse
@@ -49,7 +49,7 @@ _RUNNING = True
 # 自动切灰度阈值（NN 准确率 vs 规则基线）
 # 影子模式 → 10% 灰度 → 50% 灰度 → 全量
 CANARY_THRESHOLDS = [
-    (0.70, 1.0, "full"),    # 准确率 ≥ 70% → 全量
+    (0.70, 1.0, "full"),  # 准确率 ≥ 70% → 全量
     (0.60, 0.5, "canary"),  # 准确率 ≥ 60% → 50% 灰度
     (0.50, 0.1, "canary"),  # 准确率 ≥ 50% → 10% 灰度
     (0.00, 0.0, "shadow"),  # 准确率 < 50% → 影子模式
@@ -164,21 +164,27 @@ def _auto_adjust_canary(accuracy: float) -> tuple[float, str]:
     return 0.0, "shadow"
 
 
-def _write_canary_state(canary_ratio: float, mode: str, accuracy: float, version: int | None) -> None:
+def _write_canary_state(
+    canary_ratio: float, mode: str, accuracy: float, version: int | None
+) -> None:
     """写入 canary_state.json，policy_router 会动态读取。"""
     import datetime
+
     state = {
         "canary_ratio": canary_ratio,
         "mode": mode,
         "nn_accuracy": round(accuracy, 4),
         "active_version": version,
-        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "updated_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
     try:
         CANARY_STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
         logger.info(
             "canary_state 已更新：mode=%s ratio=%.2f accuracy=%.4f version=%s",
-            mode, canary_ratio, accuracy, version,
+            mode,
+            canary_ratio,
+            accuracy,
+            version,
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("写入 canary_state 失败：%s", e)
@@ -252,7 +258,11 @@ def run_once(args: argparse.Namespace) -> dict:
 
     logger.info(
         "读取 %d 条，喂入 %d 条，跳过 %d 条；窗口 %d/%d",
-        len(samples), fed, skipped, len(learner._window), args.update_threshold,
+        len(samples),
+        fed,
+        skipped,
+        len(learner._window),
+        args.update_threshold,
     )
 
     # 检查是否触发更新
@@ -275,14 +285,17 @@ def run_once(args: argparse.Namespace) -> dict:
             result["canary_ratio"] = canary_ratio
             logger.info(
                 "自动切灰度：accuracy=%.4f → mode=%s ratio=%.2f",
-                accuracy, mode, canary_ratio,
+                accuracy,
+                mode,
+                canary_ratio,
             )
         else:
             logger.warning("在线更新失败")
     else:
         logger.info(
             "窗口 %d/%d，未达阈值，不更新",
-            len(learner._window), args.update_threshold,
+            len(learner._window),
+            args.update_threshold,
         )
         # 即使不更新，也评估当前 policy 准确率并调整 canary
         accuracy = _evaluate_nn_accuracy(samples)
@@ -302,7 +315,9 @@ def run_daemon(args: argparse.Namespace) -> int:
 
     logger.info(
         "在线更新 daemon 启动：interval=%ds, threshold=%d, log=%s",
-        args.interval, args.update_threshold, args.log_path,
+        args.interval,
+        args.update_threshold,
+        args.log_path,
     )
 
     global _RUNNING
@@ -334,10 +349,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--interval", type=int, default=300, help="daemon 轮询间隔秒数（默认 300）")
     parser.add_argument("--log-path", default=str(DEFAULT_LOG), help="路由日志路径")
     parser.add_argument("--window-size", type=int, default=10000, help="滑动窗口大小")
-    parser.add_argument("--update-threshold", type=int, default=1000, help="触发更新的样本阈值（默认 1000）")
+    parser.add_argument(
+        "--update-threshold", type=int, default=1000, help="触发更新的样本阈值（默认 1000）"
+    )
     parser.add_argument("--epsilon", type=float, default=0.1, help="ε-greedy 探索率")
     parser.add_argument("--lr", type=float, default=0.001, help="在线学习率")
-    parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
+    parser.add_argument(
+        "--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR")
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
