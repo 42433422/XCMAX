@@ -1,0 +1,46 @@
+name: Source Governance
+
+on:
+  pull_request:
+    branches: [main, develop, master]
+  push:
+    branches: [main, develop, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-governance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test source governance rules
+        run: python -m unittest scripts.dev.test_source_governance
+      - name: Check cross-stack source debt
+        run: python scripts/dev/source_governance.py --top 10
+
+  sunbird-source-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --prefix FHD/frontend
+      - name: Rebuild Sunbird console from source
+        run: npm --prefix FHD/sunbird-console run build
+      - name: Verify generated entrypoint
+        run: |
+          test -s FHD/templates/sunbird-vue-dist/index.html
+          grep -q '/sunbird/assets/' FHD/templates/sunbird-vue-dist/index.html
