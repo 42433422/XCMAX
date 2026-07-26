@@ -22,10 +22,47 @@ from modstore_server.workflow_event_runner import run_workflow_for_trigger
 logger = logging.getLogger(__name__)
 
 _scheduler: Optional[BackgroundScheduler] = None
+_scheduler_registration_complete = False
+_scheduler_startup_probe_failures: list[dict[str, str]] = []
 
 _JOB_PREFIX = "wf_trigger_"
 _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
 _LAST_TIME_RAIL_OBSERVABILITY_MISSING = -1
+
+_REQUIRED_CORE_JOB_IDS = frozenset(
+    {
+        "auto_fix_event_bindings_refresh",
+        "auto_merge_audit_sampling",
+        "auto_version_bump_daily",
+        "autonomy_metrics_snapshot",
+        "autonomy_posthoc_audit",
+        "customer_value_reconciler",
+        "daily_backup_job",
+        "daily_ops_digest_email",
+        "daily_orchestrator_job",
+        "dead_letter_reconciler",
+        "dr_recovery_probe_job",
+        "duty_workforce_learning",
+        "email_intake_poll",
+        "employee_autonomy_dispatch_loop",
+        "employee_evolution_scan_loop",
+        "employee_health_scan_loop",
+        "incident_collect_extended",
+        "incident_collect_nginx",
+        "incident_collect_pytest_cursor",
+        "inbox_approval_poll",
+        "kb_self_maintenance",
+        "payment_orders_expire",
+        "predictive_maintenance_forecast",
+        "retention_janitor_daily",
+        "scheduler_heartbeat",
+        "self_evolution_metrics",
+        "self_maintenance_heartbeat",
+        "self_maintenance_loop_daily",
+        "telemetry_backlog_scan",
+        "time_rail_observability_sync",
+    }
+)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -48,6 +85,74 @@ def _business_misfire_grace_time() -> int:
 
 def _cleanup_misfire_grace_time() -> int:
     return max(60, _env_int("MODSTORE_SCHEDULER_CLEANUP_MISFIRE_GRACE_SECONDS", 4 * 3600))
+
+
+def required_scheduler_job_ids() -> tuple[str, ...]:
+    """Return the jobs required by the current scheduler configuration."""
+
+    required = set(_REQUIRED_CORE_JOB_IDS)
+    if _env_bool("MODSTORE_EMPLOYEE_BURN_IN_SCHEDULER_ENABLED", True):
+        required.add("duty_workforce_burnin")
+    if _env_bool("MODSTORE_BOSS_IM_REPORT_ENABLED", True):
+        required.add("boss_daily_im_report")
+    if _env_bool("MODSTORE_LLM_AUTOPILOT_ENABLED", False):
+        required.add("llm_route_autopilot")
+    if _env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
+        required.update(
+            {
+                "daily_release_train_orchestrator_job",
+                "daily_vibe_line_execute_job",
+            }
+        )
+    if _env_bool("MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED", False):
+        required.add("post_deploy_smoke_interval")
+    return tuple(sorted(required))
+
+
+def scheduler_integrity_status() -> dict[str, Any]:
+    """Report scheduler engine and registration completeness separately."""
+
+    required = required_scheduler_job_ids()
+    active: set[str] = set()
+    engine_running = False
+    if _scheduler is not None:
+        engine_running = bool(getattr(_scheduler, "running", False))
+        try:
+            active = {str(job.id) for job in _scheduler.get_jobs()}
+        except Exception:
+            logger.exception("scheduler integrity: get_jobs failed")
+    missing = sorted(set(required) - active)
+    complete = bool(_scheduler_registration_complete)
+    return {
+        "ok": engine_running and complete and not missing,
+        "engine_running": engine_running,
+        "registration_complete": complete,
+        "required_job_count": len(required),
+        "active_job_count": len(active),
+        "missing_required_jobs": missing,
+        "startup_probe_failures": list(_scheduler_startup_probe_failures),
+    }
+
+
+def _run_scheduler_startup_probe(stage: str, fn: Callable[[], Any]) -> bool:
+    """Run an eager probe without allowing one dependency to truncate registration."""
+
+    try:
+        fn()
+        return True
+    except Exception as exc:
+        failure = {
+            "stage": stage,
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:240],
+        }
+        _scheduler_startup_probe_failures.append(failure)
+        logger.warning(
+            "scheduler startup probe failed; registration continues: stage=%s error=%s",
+            stage,
+            failure["message"],
+        )
+        return False
 
 
 def _daily_pipeline_lock_wait_seconds(stage: str) -> int:
@@ -165,9 +270,11 @@ def _run_collector_with_timeout(
 
 
 def start_scheduler() -> None:
-    global _scheduler
+    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
     if _scheduler is not None:
         return
+    _scheduler_registration_complete = False
+    _scheduler_startup_probe_failures = []
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     try:
@@ -286,7 +393,10 @@ def start_scheduler() -> None:
         coalesce=True,
         max_instances=1,
     )
-    _customer_value_reconcile_job()
+    _run_scheduler_startup_probe(
+        "customer_value_reconciler",
+        _customer_value_reconcile_job,
+    )
 
     def _close_stale_orders() -> None:
         try:
@@ -1413,7 +1523,21 @@ def start_scheduler() -> None:
     except Exception:
         logger.exception("register post_deploy_smoke cron failed")
 
-    logger.info("workflow scheduler started")
+    _scheduler_registration_complete = True
+    integrity = scheduler_integrity_status()
+    if integrity["ok"]:
+        logger.info(
+            "workflow scheduler started: active=%s required=%s",
+            integrity["active_job_count"],
+            integrity["required_job_count"],
+        )
+    else:
+        logger.error(
+            "workflow scheduler registration incomplete: active=%s required=%s missing=%s",
+            integrity["active_job_count"],
+            integrity["required_job_count"],
+            integrity["missing_required_jobs"],
+        )
 
 
 _EMPLOYEE_CRON_JOB_PREFIX = "emp_cron_"
@@ -1689,11 +1813,13 @@ def reload_employee_cron_jobs() -> dict:
 
 
 def stop_scheduler() -> None:
-    global _scheduler
+    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
         logger.info("workflow scheduler stopped")
+    _scheduler_registration_complete = False
+    _scheduler_startup_probe_failures = []
 
 
 def _job_id(trigger_id: int) -> str:

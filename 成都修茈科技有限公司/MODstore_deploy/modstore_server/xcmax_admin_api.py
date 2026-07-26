@@ -270,7 +270,7 @@ async def remote_status() -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # 调度器健康：watchdog（scheduler-watchdog.yml）每 10 分钟探一次。
-# 关键判定：``scheduler.running == True`` 且 ``pending_job_count > 0``（即未停摆且仍有排期）。
+# 关键判定：引擎运行、注册完整、必需任务无缺失且仍有排期。
 # 任一不满足 → watchdog SSH 进 CVM 重启 modstore-scheduler.service。
 # ---------------------------------------------------------------------------
 
@@ -284,7 +284,7 @@ async def scheduler_health() -> dict[str, Any]:
     因此同时输出每 job 的 ``next_run_time``，watchdog 可基于此判定是否停摆。
     """
     try:
-        from modstore_server.workflow_scheduler import _scheduler
+        from modstore_server.workflow_scheduler import _scheduler, scheduler_integrity_status
 
         if _scheduler is None:
             return {
@@ -318,14 +318,21 @@ async def scheduler_health() -> dict[str, Any]:
             logger.exception("scheduler_health: get_jobs failed")
 
         running = bool(getattr(_scheduler, "running", False))
+        integrity = scheduler_integrity_status()
+        healthy = bool(integrity["ok"]) and pending > 0
         return {
             "success": True,
-            "ok": running,
+            "ok": healthy,
             "data": {
                 "scheduler_started": True,
                 "scheduler_running": running,
+                "scheduler_healthy": healthy,
                 "job_count": len(jobs_payload),
                 "pending_job_count": pending,
+                "registration_complete": integrity["registration_complete"],
+                "required_job_count": integrity["required_job_count"],
+                "missing_required_jobs": integrity["missing_required_jobs"],
+                "startup_probe_failures": integrity["startup_probe_failures"],
                 "jobs": jobs_payload,
                 "reported_at": datetime.now(timezone.utc).isoformat(),
             },
