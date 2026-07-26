@@ -49,6 +49,7 @@ backups/
 
 # 运行期产物：outbox / webhook 投递记录，生产走 /data 挂载，禁止进入源码树
 modstore_server/webhook_events/
+modstore_server/workbench_script_runs/
 modstore_server/data/event_outbox.jsonl
 modstore_server/data/event_outbox_*.jsonl
 modstore_server/data/payment_orders/
