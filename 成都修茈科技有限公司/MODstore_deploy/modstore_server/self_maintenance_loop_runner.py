@@ -57,6 +57,7 @@ from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
 )
+from .self_maintenance_retry import is_transient_dispatch_failure
 
 logger = logging.getLogger(__name__)
 
@@ -2056,18 +2057,7 @@ def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
     # 20260723T062851Z-fix-accepted-para-timeout-duplicate-code-retry).
     if _is_accepted_para_wait_timeout(result):
         return False
-    text = _extract_report_excerpt(result).lower()
-    transient_terms = (
-        "connection refused",
-        "econnrefused",
-        "para api 调用失败",
-        "para_api_failed_outboxed",
-        "para_api_rejected_outboxed",
-        "未在线",
-        "disconnected",
-        "timeout waiting for para",
-    )
-    return any(term in text for term in transient_terms)
+    return is_transient_dispatch_failure(result)
 
 
 def _coerce_truthy_flag(value: Any) -> bool:
@@ -4987,6 +4977,7 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
+            # fmt: off
             row = conn.execute("""
                 select id, email
                 from users
@@ -4995,6 +4986,7 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
                 """).fetchone()
+            # fmt: on
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint",

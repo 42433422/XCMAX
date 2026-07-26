@@ -700,6 +700,65 @@ def test_transient_para_api_outbox_failure_is_retryable():
     assert _is_transient_employee_dispatch_failure(result) is True
 
 
+def test_report_only_cursor_tls_failure_is_retryable():
+    error = (
+        ("echoed report-only prompt without transport evidence " * 300)
+        + "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: "
+        + "Client network socket disconnected before secure TLS connection was established"
+    )
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "error": error,
+                    "ok": False,
+                }
+            ]
+        }
+    }
+
+    assert _is_transient_employee_dispatch_failure(result) is True
+
+
+def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
+    attempts = [
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "error": (
+                            "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: "
+                            "Client network socket disconnected before secure TLS "
+                            "connection was established"
+                        ),
+                        "ok": False,
+                    }
+                ]
+            }
+        },
+        {"result": {"ok": True}},
+    ]
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "2")
+    monkeypatch.setattr(loop_runner, "_wait_for_para_device_online", lambda: {"online": True})
+    monkeypatch.setattr(loop_runner.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        loop_runner,
+        "execute_employee_task",
+        lambda *_args, **_kwargs: attempts.pop(0),
+    )
+
+    result = loop_runner._execute_employee_task_with_retries(
+        "test-qa-runner",
+        "report-only QA",
+        {},
+        user_id=0,
+    )
+
+    assert result["self_maintenance_retry_attempts"] == 2
+    assert result["result"]["ok"] is True
+    assert attempts == []
+
+
 def test_business_failure_is_not_retryable():
     result = {"result": {"outputs": [{"error": "pytest failed: assertion error"}]}}
 
