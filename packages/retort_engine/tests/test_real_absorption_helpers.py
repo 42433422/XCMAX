@@ -29,8 +29,7 @@ def git(repo: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
         cwd=repo,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -218,10 +217,7 @@ def test_project_files_filters_suffixes_and_skip_parts(tmp_path: Path) -> None:
     rels = {path.relative_to(tmp_path).as_posix() for path in files}
     assert rels == {"keep.py", "keep.md", "skip.txt"}
     assert not any(
-        path.startswith(".pytest_cache/")
-        or path.startswith("dist/")
-        or path.startswith("node_modules/")
-        for path in rels
+        path.startswith((".pytest_cache/", "dist/", "node_modules/")) for path in rels
     )
 
 

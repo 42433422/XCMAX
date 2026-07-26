@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_SUFFIXES = (".py",)
 SKIP_DIRS = {
     ".git",
@@ -79,9 +78,9 @@ def build_codebase_graph(
         "include_tests": include_tests,
     }
     return {
-        "status": "ready"
-        if files and not parse_errors
-        else ("partial" if files else "empty"),
+        "status": (
+            "ready" if files and not parse_errors else ("partial" if files else "empty")
+        ),
         "project": str(root),
         "summary": summary,
         "nodes": nodes,
@@ -117,9 +116,11 @@ def build_absorption_focus_map(
     own_hotspots = _hotspot_rows(own_graph)
     external_hotspots = _hotspot_rows(external_graph)
     return {
-        "status": "ready"
-        if own_graph["status"] != "empty" and external_graph["status"] != "empty"
-        else "empty",
+        "status": (
+            "ready"
+            if own_graph["status"] != "empty" and external_graph["status"] != "empty"
+            else "empty"
+        ),
         "focus_terms": terms,
         "own_summary": own_graph["summary"],
         "external_summary": external_graph["summary"],

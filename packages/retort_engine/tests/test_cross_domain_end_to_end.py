@@ -48,8 +48,7 @@ def test_cross_domain_end_to_end_cli_outputs_contract(tmp_path: Path) -> None:
             str(tmp_path),
             "--json",
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

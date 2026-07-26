@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-
 DEPTH_TERMS = {
     "pr": 10,
     "pull request": 16,
@@ -161,7 +160,9 @@ def run_similar_project_loop(
                     }
                 )
                 runs.append(_loop_run_summary(candidate, result))
-            except Exception as exc:
+            except (
+                Exception  # noqa: BLE001 - one candidate must not abort the loop
+            ) as exc:
                 runs.append(_loop_failure_summary(candidate, exc))
     else:
         runs = [{"candidate": candidate, "status": "dry_run"} for candidate in selected]
@@ -280,9 +281,11 @@ def build_absorption_saturation_report(
     elif saturated and no_strong_remaining:
         saturation_basis = "remaining_candidates_below_min_score"
     return {
-        "status": "search_failed"
-        if search_failed
-        else ("saturated" if saturated else "not_saturated"),
+        "status": (
+            "search_failed"
+            if search_failed
+            else ("saturated" if saturated else "not_saturated")
+        ),
         "project": str(root),
         "summary": {
             "absorption_run_count": len(enriched),
@@ -328,8 +331,7 @@ def _search_github_repos(*, query: str, limit: int) -> dict[str, Any]:
     try:
         result = subprocess.run(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=60,
             check=False,
@@ -519,9 +521,11 @@ def _loop_run_summary(
         "execution_status": execution.get("status"),
         "gates_passed": bool(execution.get("gates_passed")),
         "changed_file_count": len(execution.get("changed_files") or []),
-        "branch_status": (result.get("branch_workflow") or {}).get("status")
-        if isinstance(result.get("branch_workflow"), dict)
-        else "",
+        "branch_status": (
+            (result.get("branch_workflow") or {}).get("status")
+            if isinstance(result.get("branch_workflow"), dict)
+            else ""
+        ),
         "task_count": len(result.get("tasks") or []),
     }
 

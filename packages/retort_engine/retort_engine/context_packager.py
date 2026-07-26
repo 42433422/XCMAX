@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from retort_engine.codebase_graph import build_codebase_graph
-
 
 PACK_SUFFIXES = {
     ".py",

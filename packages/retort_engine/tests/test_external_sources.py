@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from retort_engine import external_sources
 from retort_engine.external_sources import (
     external_project_profile,

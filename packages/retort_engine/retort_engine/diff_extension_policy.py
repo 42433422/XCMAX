@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
 EXTENSION_POLICIES: dict[str, dict[str, Any]] = {
     ".py": {
         "family": "python",

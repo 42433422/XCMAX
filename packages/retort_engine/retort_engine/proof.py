@@ -3,9 +3,9 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 StateLoader = Callable[[Path], dict[str, Any]]
 StateSaver = Callable[[Path, dict[str, Any]], None]
@@ -299,8 +299,7 @@ def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
         cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=120,
         check=False,

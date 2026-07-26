@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 STATIC_RULES: tuple[dict[str, str], ...] = (
     {
         "rule_id": "python-eval-exec",

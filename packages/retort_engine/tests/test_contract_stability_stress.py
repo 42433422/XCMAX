@@ -52,8 +52,7 @@ def test_contract_stability_stress_cli_outputs_contract(tmp_path: Path) -> None:
             "101",
             "--json",
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

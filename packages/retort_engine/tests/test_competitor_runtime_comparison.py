@@ -54,10 +54,8 @@ def test_competitor_runtime_comparison_can_force_live_materialized_sources(
                 "json": {"default_branch": "main"},
                 "stderr_tail": "",
             }
-        raw = f"live source for {endpoint}\n".encode("utf-8")
-        git_blob_sha = hashlib.sha1(
-            f"blob {len(raw)}\0".encode("utf-8") + raw
-        ).hexdigest()
+        raw = f"live source for {endpoint}\n".encode()
+        git_blob_sha = hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest()
         return {
             "returncode": 0,
             "json": {
@@ -132,8 +130,7 @@ def test_competitor_runtime_comparison_cli_outputs_contract(tmp_path: Path) -> N
             str(competitor),
             "--json",
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

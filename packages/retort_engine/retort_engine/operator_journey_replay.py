@@ -52,9 +52,9 @@ def build_operator_journey_replay(
             if item["kind"] == "source_report" and item["exists"]
         ),
         "real_absorption_run_present": bool(latest_run),
-        "real_absorption_gates_passed": latest_run.get("gates_passed") is True
-        if latest_run
-        else False,
+        "real_absorption_gates_passed": (
+            latest_run.get("gates_passed") is True if latest_run else False
+        ),
         "per_run_code_graph_proved": _code_graph_ready(latest_run),
         "product_mainline_absorption_ready": _report_ready(
             root, "retort_product_mainline_absorption_proof.json"
@@ -685,9 +685,7 @@ def _location_evidence(run: dict[str, Any]) -> dict[str, Any]:
     kind = (
         "pre_absorption_focus"
         if has_pre_focus
-        else "post_absorption_code_graph_focus"
-        if has_graph_focus
-        else "missing"
+        else "post_absorption_code_graph_focus" if has_graph_focus else "missing"
     )
     return {
         "ready": has_pre_focus or has_graph_focus,
@@ -908,7 +906,9 @@ def _write_manifest(path: Path, result: dict[str, Any]) -> None:
 def _safe_call(fn: Any) -> dict[str, Any]:
     try:
         result = fn()
-    except Exception as exc:
+    except (
+        Exception  # noqa: BLE001 - replay captures arbitrary adapter failures
+    ) as exc:
         return {
             "status": "error",
             "error": type(exc).__name__,

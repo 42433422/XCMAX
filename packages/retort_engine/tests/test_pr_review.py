@@ -14,7 +14,6 @@ from retort_engine.pr_review import (
     review_diff,
 )
 
-
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
 index 1111111..2222222 100644
 --- a/app.py
@@ -775,8 +774,7 @@ def test_review_diff_cli_outputs_contract(tmp_path: Path) -> None:
         check=True,
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     payload = json.loads(result.stdout)
 

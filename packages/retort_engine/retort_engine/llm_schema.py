@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 RETORT_SCORE_DIMENSIONS = (
     "product_level",
     "architecture_depth",

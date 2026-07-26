@@ -157,9 +157,14 @@ def test_outbound_safety_blocks_loopback_and_schemes() -> None:
         assert_url_outbound_safe("http://localhost/")
     with pytest.raises(OutboundBlocked):
         assert_url_outbound_safe("http://10.0.0.1/")
-    # 公网域名解析成功时只要不是私有 IP 就放行；解析失败也放行
+    # 公网域名解析成功时只要不是私有 IP 就放行。
     with patch.object(socket, "getaddrinfo", return_value=[(0, 0, 0, "", ("8.8.8.8", 0))]):
         assert_url_outbound_safe("http://example.com/path")
+    with patch.object(socket, "getaddrinfo", side_effect=socket.gaierror):
+        with pytest.raises(OutboundBlocked, match="无法安全解析"):
+            assert_url_outbound_safe("https://unresolvable.example/path")
+    with pytest.raises(OutboundBlocked, match="用户凭据"):
+        assert_url_outbound_safe("https://user:password@example.com/path")
 
 
 def test_split_params_validates_required() -> None:

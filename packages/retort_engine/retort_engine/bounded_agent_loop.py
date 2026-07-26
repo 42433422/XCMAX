@@ -7,7 +7,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-
 Planner = Callable[[str, list[dict[str, Any]]], dict[str, Any]]
 Executor = Callable[[dict[str, Any]], dict[str, Any]]
 Judge = Callable[[str, list[dict[str, Any]]], dict[str, Any]]
@@ -121,7 +120,7 @@ def persist_trajectory(
 def load_trajectory(path: str | Path) -> dict[str, Any]:
     payload = json.loads(Path(path).expanduser().resolve().read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("trajectory artifact must be an object")
+        raise TypeError("trajectory artifact must be an object")
     return payload
 
 

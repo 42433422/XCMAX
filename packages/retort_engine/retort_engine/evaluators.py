@@ -125,7 +125,9 @@ def collect_project_signals(
                 test_files += 1
                 test_functions += len(
                     re.findall(
-                        r"^\s*(?:async\s+def|def)\s+test_", _read_text(path), re.M
+                        r"^\s*(?:async\s+def|def)\s+test_",
+                        _read_text(path),
+                        re.MULTILINE,
                     )
                 )
     context_policy = _context_policy(state)
@@ -314,9 +316,11 @@ def _gate_results_from_state(state: dict[str, Any]) -> dict[str, bool]:
     if not isinstance(raw, dict):
         return {}
     return {
-        str(k): bool(v)
-        if isinstance(v, bool)
-        else str(v).lower() in {"pass", "passed", "ok", "true", "1"}
+        str(k): (
+            bool(v)
+            if isinstance(v, bool)
+            else str(v).lower() in {"pass", "passed", "ok", "true", "1"}
+        )
         for k, v in raw.items()
     }
 
@@ -351,8 +355,7 @@ def _run_gate(
             cmd,
             cwd=project_path,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             env=env,
             timeout=180,
             check=False,

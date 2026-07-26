@@ -1,7 +1,7 @@
 from retort_engine.absorbed_review_rank_weights import (
+    absorbed_rank_weights,
     capability_rank_boost,
     external_source_boost,
-    absorbed_rank_weights,
 )
 from retort_engine.pr_review import review_diff
 
