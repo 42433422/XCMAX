@@ -2823,3 +2823,45 @@ def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypa
     assert "will retry code remediation" in caplog.text
     assert "escalating to human review" not in caplog.text
     assert result is None
+
+
+def test_run_cmd_excerpt_truncates_and_terminates_large_output_quickly():
+    import sys
+    import time
+
+    args = [
+        sys.executable,
+        "-c",
+        "import sys; sys.stdout.write('a' * 100000); sys.stdout.flush()",
+    ]
+    started = time.monotonic()
+    out = loop_runner._run_cmd_excerpt(args, max_chars=200, timeout=180)
+    elapsed = time.monotonic() - started
+    assert len(out) == 200
+    assert elapsed < 15
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_fully_read():
+    import sys
+
+    with pytest.raises(RuntimeError, match="command failed"):
+        loop_runner._run_cmd_excerpt(
+            [sys.executable, "-c", "import sys; sys.exit(2)"],
+            max_chars=10_000,
+        )
+
+
+def test_run_cmd_excerpt_accepts_truncated_success_despite_late_exit():
+    import sys
+
+    script = (
+        "import sys\n"
+        "sys.stdout.write('z' * 50000)\n"
+        "sys.stdout.flush()\n"
+        "sys.exit(0)\n"
+    )
+    out = loop_runner._run_cmd_excerpt(
+        [sys.executable, "-c", script],
+        max_chars=128,
+    )
+    assert out == "z" * 128

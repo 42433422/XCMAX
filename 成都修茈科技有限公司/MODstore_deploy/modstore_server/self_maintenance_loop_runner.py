@@ -3383,6 +3383,73 @@ def _run_cmd(args: List[str], cwd: Optional[Path] = None, timeout: int = 120) ->
     return output
 
 
+def _terminate_subprocess(proc: subprocess.Popen[str], *, grace_seconds: float = 5.0) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=grace_seconds)
+
+
+def _run_cmd_excerpt(
+    args: List[str],
+    *,
+    cwd: Optional[Path] = None,
+    timeout: int = 120,
+    max_chars: int = 20000,
+) -> str:
+    """Run a command and return at most ``max_chars`` of combined stdout/stderr.
+
+    When output exceeds ``max_chars``, the child is terminated promptly so a large
+    producer (e.g. ``git diff``) cannot block on a full pipe buffer.
+    """
+
+    if max_chars <= 0:
+        return ""
+    proc = subprocess.Popen(
+        args,
+        cwd=str(cwd) if cwd else None,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    stdout = proc.stdout
+    if stdout is None:
+        raise RuntimeError(f"command produced no stdout pipe: {' '.join(args)}")
+    chunks: List[str] = []
+    collected = 0
+    truncated = False
+    try:
+        while collected < max_chars:
+            block = stdout.read(min(8192, max_chars - collected))
+            if not block:
+                break
+            chunks.append(block)
+            collected += len(block)
+        truncated = collected >= max_chars
+        excerpt = "".join(chunks).strip()
+        if truncated:
+            _terminate_subprocess(proc)
+            return excerpt
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _terminate_subprocess(proc)
+            raise RuntimeError(
+                f"command timed out after {timeout}s: {' '.join(args)}\n{excerpt}"
+            ) from None
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"command failed ({proc.returncode}): {' '.join(args)}\n{excerpt}"
+            )
+        return excerpt
+    finally:
+        stdout.close()
+
+
 def _cleanup_merge_workspace(workspace: Path) -> bool:
     """Remove one ephemeral merge workspace without widening the delete scope."""
 
@@ -5643,7 +5710,7 @@ def _auto_merge_local_repo(
     diff_stats = _diff_numstat_for_branch(
         base_branch=base_branch, branch=branch, workspace=workspace
     )
-    diff_excerpt = _run_cmd(
+    diff_excerpt = _run_cmd_excerpt(
         [
             "git",
             "-c",
@@ -5655,7 +5722,8 @@ def _auto_merge_local_repo(
         ],
         cwd=workspace,
         timeout=180,
-    )[:20000]
+        max_chars=20000,
+    )
     kb_validation = _validate_kb_json_changes_for_auto_merge(
         branch=branch,
         files=files,
