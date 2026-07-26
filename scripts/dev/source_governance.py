@@ -67,6 +67,7 @@ FORBIDDEN_SOURCE_MIRROR_PREFIXES = (
     "FHD/_recovered-",
     "FHD/_restored-from-transcript-",
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_script_runs/",
+    "成都修茈科技有限公司/packages/xcagi_common/",
 )
 FORBIDDEN_SOURCE_MIRROR_PATHS = ("FHD/scripts/dev/online_update_daemon.py",)
 
