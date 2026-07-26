@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from retort_engine.context_packager import build_context_pack
 from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.pr_review import (

@@ -8,8 +8,9 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 Transport = Callable[[str, str, dict[str, Any] | None, str], tuple[int, dict[str, Any]]]
 
@@ -129,9 +130,11 @@ def run_live_pr_comment_probe(
             "real_network": transport is None,
             "transport": "github_rest" if transport is None else "injected_transport",
             "required_permission": "issues:write or pull_requests:write",
-            "degradation": "no_comment_created_no_rollback_needed"
-            if degraded_without_write
-            else "",
+            "degradation": (
+                "no_comment_created_no_rollback_needed"
+                if degraded_without_write
+                else ""
+            ),
         },
     }
 
@@ -168,15 +171,17 @@ def run_readonly_pr_degradation_probe(
             "degradation_artifact_ready": target_found,
         },
         "created_receipts": [],
-        "rollback_receipts": [
-            {
-                "created": False,
-                "status_code": 0,
-                "response": {"reason": "read_only_probe_suppressed_write"},
-            }
-        ]
-        if target_found
-        else [],
+        "rollback_receipts": (
+            [
+                {
+                    "created": False,
+                    "status_code": 0,
+                    "response": {"reason": "read_only_probe_suppressed_write"},
+                }
+            ]
+            if target_found
+            else []
+        ),
         "evidence": {
             "api": "GitHub REST public read-only",
             "target_is_pull_request": bool(pull_payload.get("number")),
@@ -184,14 +189,16 @@ def run_readonly_pr_degradation_probe(
             "base_ref": str((pull_payload.get("base") or {}).get("ref") or ""),
             "token_redacted": True,
             "real_network": transport is None,
-            "transport": "github_rest_readonly"
-            if transport is None
-            else "injected_transport",
+            "transport": (
+                "github_rest_readonly" if transport is None else "injected_transport"
+            ),
             "required_permission": "issues:write or pull_requests:write",
             "write_suppressed_reason": "no_token_read_only_probe",
-            "degradation": "dry_run_review_payload_only_no_comment_created"
-            if target_found
-            else "target_not_readable",
+            "degradation": (
+                "dry_run_review_payload_only_no_comment_created"
+                if target_found
+                else "target_not_readable"
+            ),
             "degradation_artifact": {
                 "kind": "publish_dry_run",
                 "target": f"{owner}/{repo}#{number}",
@@ -277,9 +284,11 @@ def run_low_permission_pr_degradation_probe(
             "real_network": transport is None,
             "transport": transport_name,
             "required_permission": "issues:write or pull_requests:write",
-            "degradation": "write_attempt_denied_no_comment_created"
-            if degraded_without_write
-            else "target_not_readable_or_write_unexpectedly_allowed",
+            "degradation": (
+                "write_attempt_denied_no_comment_created"
+                if degraded_without_write
+                else "target_not_readable_or_write_unexpectedly_allowed"
+            ),
             "degradation_artifact": {
                 "kind": "permission_denied_publish_attempt",
                 "target": f"{owner}/{repo}#{number}",

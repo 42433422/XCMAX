@@ -24,7 +24,6 @@ from retort_engine.repository_intelligence import (
     compare_repository_gaps,
 )
 
-
 FRONTIER_SOURCES: tuple[dict[str, Any], ...] = (
     {
         "source_id": "aider-repomap",
@@ -122,9 +121,11 @@ def build_self_bootstrap_plan(project: str | Path) -> dict[str, Any]:
             }
         )
     return {
-        "status": "ready_for_other_modules"
-        if report["external_improvement_allowed"]
-        else "self_deepening_only",
+        "status": (
+            "ready_for_other_modules"
+            if report["external_improvement_allowed"]
+            else "self_deepening_only"
+        ),
         "project": str(root),
         "policy": {
             "mode": "retort_self_first",
@@ -179,9 +180,9 @@ def build_self_depth_report(project: str | Path) -> dict[str, Any]:
         missing.append("comparative_benchmark:absorbed_behavior_must_beat_baseline")
     missing.extend(f"landing:{name}" for name in landing["missing"])
     return {
-        "status": "strongest_depth_verified"
-        if allowed
-        else "self_deepening_incomplete",
+        "status": (
+            "strongest_depth_verified" if allowed else "self_deepening_incomplete"
+        ),
         "project": str(root),
         "external_improvement_allowed": allowed,
         "layers": layers,
@@ -239,9 +240,11 @@ def external_improvement_gate(
     return {
         "status": "allowed" if allowed else "blocked",
         "target": str(Path(target).expanduser().resolve()),
-        "reason": "retort_self_depth_verified"
-        if allowed
-        else "retort_must_deepen_itself_before_improving_other_modules",
+        "reason": (
+            "retort_self_depth_verified"
+            if allowed
+            else "retort_must_deepen_itself_before_improving_other_modules"
+        ),
         "missing": report["summary"]["missing"],
         "depth_status": report["status"],
     }
@@ -594,10 +597,10 @@ def _gate_evidence_ok(gate_evidence: str) -> bool:
     if (
         "ruff all checks passed" not in gate_evidence.lower()
         and "ruff" not in gate_evidence.lower()
+        and not re.search(r"\b\d+\s+passed\b", gate_evidence)
     ):
         # Accept either explicit ruff phrase or a pytest summary with passed count.
-        if not re.search(r"\b\d+\s+passed\b", gate_evidence):
-            return False
+        return False
     return bool(re.search(r"\b\d+\s+passed\b", gate_evidence)) and (
         "ruff" in gate_evidence.lower() or "all checks passed" in gate_evidence.lower()
     )

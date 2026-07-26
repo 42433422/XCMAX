@@ -244,8 +244,7 @@ def _post_merge_changed_files(root: Path, merge_commit: str) -> list[str]:
     completed = subprocess.run(
         command,
         cwd=git_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -464,9 +463,11 @@ def _aggregate_worker_results(
             reviews.append(review)
     aggregate_review_path = output_path.with_suffix(".worker_review.json")
     aggregate_review = {
-        "status": "reviewed"
-        if reviews and all(item.get("status") == "reviewed" for item in reviews)
-        else "missing",
+        "status": (
+            "reviewed"
+            if reviews and all(item.get("status") == "reviewed" for item in reviews)
+            else "missing"
+        ),
         "comment_count": sum(int(item.get("comment_count") or 0) for item in reviews),
         "file_count": sum(int(item.get("file_count") or 0) for item in reviews),
         "task_group_count": sum(
@@ -598,14 +599,14 @@ def _process_isolation_evidence(
                 "runtime_boundary": str(boundary.get("runtime_boundary") or ""),
                 "runtime_boundary_verified": boundary_verified,
                 "crash_isolation_verified": crash_verified,
-                "crash_probe_returncode": int(crash_probe.get("returncode") or 0)
-                if crash_probe
-                else 0,
-                "crash_probe_expected_returncode": int(
-                    crash_probe.get("expected_returncode") or 0
-                )
-                if crash_probe
-                else 0,
+                "crash_probe_returncode": (
+                    int(crash_probe.get("returncode") or 0) if crash_probe else 0
+                ),
+                "crash_probe_expected_returncode": (
+                    int(crash_probe.get("expected_returncode") or 0)
+                    if crash_probe
+                    else 0
+                ),
                 "payload_nonce": str(boundary.get("payload_nonce") or ""),
                 "payload_nonce_verified": bool(boundary.get("payload_nonce_verified")),
                 "returncode": _returncode(result),
@@ -680,8 +681,7 @@ def _git_diff(root: Path, changed_files: list[str]) -> str:
     completed = subprocess.run(
         ["git", "diff", "HEAD", "--", *rels],
         cwd=git_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -690,8 +690,7 @@ def _git_diff(root: Path, changed_files: list[str]) -> str:
     completed = subprocess.run(
         ["git", "show", "--format=", "--", *rels],
         cwd=git_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -702,8 +701,7 @@ def _git_root(root: Path) -> Path | None:
     completed = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

@@ -29,7 +29,6 @@ from retort_engine.real_absorption_run_proof import (
 )
 from retort_engine.review_pipeline import build_absorption_review_report
 
-
 SOURCE_SUFFIXES = {
     ".py",
     ".js",
@@ -443,33 +442,11 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
                 ),
             ]
         )
-    if writes_capability_model:
-        gates.extend(
-            [
-                _run_command(
-                    [
-                        _python(payload),
-                        "-c",
-                        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
-                        str(capability_path),
-                    ],
-                    root,
-                    timeout=60,
-                ),
-                _run_command(
-                    [
-                        _python(payload),
-                        "-m",
-                        "pytest",
-                        str(capability_test_path.relative_to(root)),
-                        "-q",
-                    ],
-                    root,
-                    timeout=120,
-                ),
-            ]
-        )
-    elif capability_path.is_file() and capability_test_path.is_file():
+    if (
+        writes_capability_model
+        or capability_path.is_file()
+        and capability_test_path.is_file()
+    ):
         gates.extend(
             [
                 _run_command(
@@ -642,12 +619,14 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
         changed_files,
         gates,
         diff_summary,
-        "CLI absorption applied project-local code and evidence artifacts."
-        if status == "applied"
-        else (
-            "Absorption blocked: behavior quality gate failed."
-            if status == "blocked_by_absorption_quality_gate"
-            else "CLI absorption produced no tracked file changes."
+        (
+            "CLI absorption applied project-local code and evidence artifacts."
+            if status == "applied"
+            else (
+                "Absorption blocked: behavior quality gate failed."
+                if status == "blocked_by_absorption_quality_gate"
+                else "CLI absorption produced no tracked file changes."
+            )
         ),
     )
     result["absorption_quality_gate"] = quality
@@ -1311,7 +1290,7 @@ def _write_frontend_visual_profile(
 ) -> None:
     if not app_path.is_file():
         return
-    signals = set(str(item) for item in profile.get("signals") or [])
+    signals = {str(item) for item in profile.get("signals") or []}
     visual_profile = {
         "source": source,
         "enabled": True,
@@ -1351,7 +1330,7 @@ def _write_frontend_visual_profile(
         replacement,
         text,
         count=1,
-        flags=re.S,
+        flags=re.DOTALL,
     )
     if count != 1:
         raise RuntimeError(
@@ -2224,8 +2203,7 @@ def _run_command(cmd: list[str], cwd: Path, *, timeout: int) -> dict[str, Any]:
         result = subprocess.run(
             cmd,
             cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=timeout,
             check=False,
@@ -2246,12 +2224,12 @@ def _run_command(cmd: list[str], cwd: Path, *, timeout: int) -> dict[str, Any]:
             "exit_code": 124,
             "ok": False,
             "duration_sec": round(time.monotonic() - started, 3),
-            "stdout_tail": (exc.stdout or "")[-4000:]
-            if isinstance(exc.stdout, str)
-            else "",
-            "stderr_tail": (exc.stderr or "")[-4000:]
-            if isinstance(exc.stderr, str)
-            else "",
+            "stdout_tail": (
+                (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else ""
+            ),
+            "stderr_tail": (
+                (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else ""
+            ),
             "timeout": True,
         }
 

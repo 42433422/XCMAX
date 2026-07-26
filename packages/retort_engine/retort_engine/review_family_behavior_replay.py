@@ -8,7 +8,6 @@ from typing import Any
 
 from retort_engine.pr_review import review_diff
 
-
 FAMILY_CASES: tuple[dict[str, str], ...] = (
     {
         "case_id": "typescript_duplicate_dispatch",

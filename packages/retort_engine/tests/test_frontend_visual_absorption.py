@@ -4,7 +4,6 @@ import json
 import re
 from pathlib import Path
 
-
 EXPECTED_VISUAL_SOURCE = "https://github.com/bobbyroe/threejs-earth"
 
 
@@ -17,7 +16,7 @@ def _app_text() -> str:
 def _absorbed_profile() -> dict[str, object]:
     text = _app_text()
     match = re.search(
-        r"const ABSORBED_PLANET_VISUAL_PROFILE = (\{.*?\n\});", text, re.S
+        r"const ABSORBED_PLANET_VISUAL_PROFILE = (\{.*?\n\});", text, re.DOTALL
     )
     assert match, "absorbed planet visual profile is missing"
     return json.loads(match.group(1))

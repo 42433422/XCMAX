@@ -10,11 +10,15 @@ from retort_engine.absorption_state import (
 from retort_engine.core import RetortService
 from retort_engine.quality_metrics import (
     is_generated_absorption_file,
+)
+from retort_engine.quality_metrics import (
     test_code_health as code_health,
 )
 from retort_engine.quality_policy import (
     TEST_TO_SOURCE_HEALTHY_RATIO,
     apply_default_llm_policy,
+)
+from retort_engine.quality_policy import (
     test_source_ratio_status as ratio_status,
 )
 

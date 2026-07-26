@@ -8,7 +8,6 @@ from typing import Any
 
 from retort_engine.codebase_graph import code_graph_absorption_proof
 
-
 REQUIRED_PROOF_STYLE = "deterministic_post_absorption_code_graph"
 
 

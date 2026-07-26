@@ -178,11 +178,12 @@ def _integrated_diff(stages: list[dict[str, Any]]) -> str:
     for stage in stages:
         added_lines.append(f"+        '{stage['domain']}:{stage['direct_module']}',")
     added_lines.extend(["+    ]}", ""])
+    added_body = "\n".join(added_lines)
     return (
         "diff --git a/retort_engine/absorption_orchestrator.py b/retort_engine/absorption_orchestrator.py\n"
         "--- a/retort_engine/absorption_orchestrator.py\n"
         "+++ b/retort_engine/absorption_orchestrator.py\n"
-        "@@ -0,0 +1,%d @@\n%s" % (len(added_lines) - 1, "\n".join(added_lines))
+        f"@@ -0,0 +1,{len(added_lines) - 1} @@\n{added_body}"
     )
 
 

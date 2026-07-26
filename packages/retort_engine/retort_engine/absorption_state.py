@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 ABSORPTION_STATE_RELATIVE_PATH = Path(".retort") / "absorption_state.json"
 SELF_EVOLUTION_ACTIONS_RELATIVE_PATH = Path(".retort") / "self_evolution_actions.jsonl"
 CLOSED_LOOP_FLAGS = (

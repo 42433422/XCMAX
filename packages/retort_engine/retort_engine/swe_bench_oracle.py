@@ -4,7 +4,6 @@ import re
 from pathlib import PurePosixPath
 from typing import Any
 
-
 PASS_VALUES = {"pass", "passed", "ok", "success", "true", "1", True}
 
 
@@ -72,26 +71,32 @@ def build_issue_patch_benchmark(cases: list[dict[str, Any]]) -> dict[str, Any]:
     resolved_count = sum(1 for item in results if item["resolved"])
     no_patch_count = sum(1 for item in results if item["status"] == "no_patch")
     return {
-        "status": "ready"
-        if results and resolved_count == len(results) and regression_count == 0
-        else "needs_attention",
+        "status": (
+            "ready"
+            if results and resolved_count == len(results) and regression_count == 0
+            else "needs_attention"
+        ),
         "summary": {
             "case_count": len(results),
             "resolved_count": resolved_count,
             "unresolved_count": len(results) - resolved_count,
             "regression_count": regression_count,
             "no_patch_count": no_patch_count,
-            "fail_to_pass_pass_rate": round(fail_passed / fail_total, 4)
-            if fail_total
-            else 1.0,
-            "pass_to_pass_pass_rate": round(pass_passed / pass_total, 4)
-            if pass_total
-            else 1.0,
-            "average_patch_overlap": round(
-                sum(float(item["patch_overlap"]) for item in results) / len(results), 4
-            )
-            if results
-            else 0.0,
+            "fail_to_pass_pass_rate": (
+                round(fail_passed / fail_total, 4) if fail_total else 1.0
+            ),
+            "pass_to_pass_pass_rate": (
+                round(pass_passed / pass_total, 4) if pass_total else 1.0
+            ),
+            "average_patch_overlap": (
+                round(
+                    sum(float(item["patch_overlap"]) for item in results)
+                    / len(results),
+                    4,
+                )
+                if results
+                else 0.0
+            ),
         },
         "cases": results,
         "evidence": {

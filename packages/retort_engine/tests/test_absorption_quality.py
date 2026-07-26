@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from retort_engine.absorption_quality import (
     absorption_quality_gate,
     advantage_diff_map,

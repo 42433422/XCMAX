@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from retort_engine.absorption_release_decision import build_absorption_release_decision
+from retort_engine.absorption import run_absorption
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
+from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
-from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.competitor_behavior_regression import (
     build_competitor_behavior_regression,
 )
@@ -18,9 +18,10 @@ from retort_engine.competitor_blind_adjudication import (
 from retort_engine.competitor_runtime_comparison import (
     build_competitor_runtime_comparison,
 )
+from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
-from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
+from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.cross_domain_absorption_replay import (
     build_cross_domain_absorption_replay,
@@ -40,11 +41,13 @@ from retort_engine.external_merge_landing import build_external_merge_landing
 from retort_engine.external_process_adjudication import (
     build_external_process_adjudication,
 )
+from retort_engine.feedback import feedback_ingest
 from retort_engine.heterogeneous_absorption_replay import (
     build_heterogeneous_absorption_replay,
 )
-from retort_engine.absorption import run_absorption
-from retort_engine.feedback import feedback_ingest
+from retort_engine.multi_project_absorption_replay import (
+    build_multi_project_absorption_replay,
+)
 from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.paibi_cli_cross_adjudication import (
     build_paibi_cli_cross_adjudication,
@@ -60,13 +63,10 @@ from retort_engine.pr_live_probe import (
 from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
-from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.product_mainline_absorption_proof import (
     build_product_mainline_absorption_proof,
 )
-from retort_engine.multi_project_absorption_replay import (
-    build_multi_project_absorption_replay,
-)
+from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import (
     build_review_adjudication_calibration,
@@ -81,8 +81,8 @@ from retort_engine.self_bootstrap import (
     build_self_depth_report,
     external_improvement_gate,
 )
-from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
+from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 
 
@@ -402,9 +402,9 @@ class RetortService:
         return build_external_merge_landing(
             str(payload.get("project") or payload.get("project_path") or "."),
             min_cases=int(payload.get("min_cases") or 10),
-            cases=payload.get("cases")
-            if isinstance(payload.get("cases"), list)
-            else None,
+            cases=(
+                payload.get("cases") if isinstance(payload.get("cases"), list) else None
+            ),
         )
 
     def review_adjudication_calibration(
@@ -491,9 +491,11 @@ class RetortService:
         contracts = payload.get("contracts")
         return evaluate_architecture_contracts(
             str(payload.get("project") or payload.get("project_path") or "."),
-            contracts=[dict(item) for item in contracts]
-            if isinstance(contracts, list)
-            else None,
+            contracts=(
+                [dict(item) for item in contracts]
+                if isinstance(contracts, list)
+                else None
+            ),
             include_tests=bool(payload.get("include_tests")),
             max_files=int(payload.get("max_files") or 400),
         )
