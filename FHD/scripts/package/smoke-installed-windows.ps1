@@ -13,7 +13,7 @@ param(
     'xcagi-neuro-bus-bridge',
     'xcagi-office-employee-pack-bridge',
     'xcagi-planner-bridge',
-    'xcagi-workflow-visualization-bridge'
+    'xcagi-core-workflow-employees'
   )
 )
 
