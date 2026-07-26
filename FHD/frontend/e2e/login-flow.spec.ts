@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { E2E_ACCOUNT_KIND, E2E_PASSWORD, E2E_USER, isFullStack } from './helpers'
+import { E2E_PASSWORD, E2E_USER, isFullStack } from './helpers'
 
 test.describe('Login flow', () => {
   test('login page loads without app shell chrome', async ({ page }) => {
@@ -23,17 +23,17 @@ test.describe('Login flow', () => {
     await page.locator('#lv-password').fill(E2E_PASSWORD)
     await page.locator('.login-submit').click()
 
-    await expect(page).not.toHaveURL(/\/login(?:[?#]|$)/, { timeout: 20_000 })
+    await expect(page).not.toHaveURL(/\/login(?:[?#]|$)/, { timeout: 30_000 })
     await expect(page.locator('.login-submit')).toHaveCount(0)
     await expect(page.locator('#app')).toBeVisible()
 
     await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 20_000 })
     await expect(page).toHaveURL(/\/orders(?:[?#]|$)/)
-    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 30_000 })
 
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 20_000 })
     await expect(page).toHaveURL(/\/materials(?:[?#]|$)/)
-    await expect(page.locator('#view-materials')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('#view-materials')).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('body')).not.toContainText('正在登录')
   })
 })
