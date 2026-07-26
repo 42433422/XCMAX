@@ -920,9 +920,6 @@ _AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
         "structured_qa_new_failures",
         "structured_qa_source_governance_not_passed",
         "structured_qa_verdict_not_pass",
-        "structured_review_blocking_findings",
-        "structured_review_dimension_fail",
-        "structured_review_high_severity",
     }
 )
 
@@ -933,6 +930,8 @@ def _automated_remediation_resume_plan(reason: str) -> Optional[Tuple[List[str],
     normalized = str(reason or "").strip()
     if normalized in _AUTOMATED_REMEDIATION_QA_ONLY_REASONS:
         return (["qa"], False)
+    if normalized.startswith("structured_review_"):
+        return (["code"], False)
     if normalized in _AUTOMATED_REMEDIATION_CODE_REASONS:
         return (["code"], True)
     if normalized.startswith("structured_qa_new_"):
