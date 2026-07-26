@@ -237,7 +237,7 @@ custom_mode_test.html
 # ============================================================================
 # Large local data / release builds
 # ============================================================================
-release/
+/release/
 !/release/
 /release/*
 !/release/VERSION
