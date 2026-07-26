@@ -1,4 +1,5 @@
 """Flutter Android 签约级交付契约（不发 APK，只验 SSOT）。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -26,9 +27,9 @@ def test_mobile_android_guide_exists() -> None:
 def test_android_version_anchor_in_gradle() -> None:
     import re
 
-    gradle = (
-        ROOT / "mobile-flutter-poc" / "android" / "app" / "build.gradle.kts"
-    ).read_text(encoding="utf-8")
+    gradle = (ROOT / "mobile-flutter-poc" / "android" / "app" / "build.gradle.kts").read_text(
+        encoding="utf-8"
+    )
     version_md = (ROOT / "VERSION.md").read_text(encoding="utf-8")
     # versionName 跟随四段产品版本；versionCode 是商店要求的独立单调递增构建号，
     # 不得因产品版本从历史 10.0.0 切到 1.0.0.0 而倒退或强行映射主版本号。
