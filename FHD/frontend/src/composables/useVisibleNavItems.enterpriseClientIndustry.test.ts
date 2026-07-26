@@ -8,6 +8,7 @@ const mockFlags = vi.hoisted(() => ({
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
+  isEnterpriseProductSkuBuild: () => true,
   isPlatformShellModeEnabled: () => false,
   shouldExposeIndustrySidebar: () => mockFlags.exposeIndustrySidebar,
   resolvePlatformShellMenuKeys: () => new Set<string>(),

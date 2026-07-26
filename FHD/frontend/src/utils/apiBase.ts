@@ -127,6 +127,7 @@ const ACTIVE_MOD_HEADER_SKIP_PREFIXES = [
   '/api/auth/',
   '/api/platform-shell/',
   '/api/debug/',
+  '/api/etl/',
 ] as const
 
 function shouldAttachActiveModHeader(rawUrl = ''): boolean {

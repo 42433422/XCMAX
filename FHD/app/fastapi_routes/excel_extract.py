@@ -10,7 +10,9 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy.orm import Session
 
+from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import require_identified_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
@@ -39,6 +41,48 @@ def _form_include_ledger(value: str, default: str = "auto") -> bool | str:
     if text in {"0", "false", "no", "off"}:
         return False
     return "auto"
+
+
+def _legacy_etl_user_id(user: Any) -> int:
+    value = getattr(user, "id", None)
+    if value is None:
+        value = getattr(user, "user_id", None)
+    if value is None and isinstance(user, dict):
+        value = user.get("id") or user.get("user_id")
+    if value is None:
+        raise ValueError("identified user id missing")
+    return int(value)
+
+
+def _create_general_etl_compat_runs(
+    db: Session,
+    *,
+    user: Any,
+    path: str,
+    target_types: list[str],
+) -> list[dict[str, Any]]:
+    from app.application.etl.service import get_etl_service
+
+    service = get_etl_service()
+    source = Path(path).expanduser().resolve()
+    with source.open("rb") as stream:
+        upload = service.save_upload(
+            db,
+            owner_user_id=_legacy_etl_user_id(user),
+            file_name=source.name,
+            content_type=None,
+            stream=stream,
+        )
+    db.commit()
+    return [
+        service.create_preview(
+            db,
+            owner_user_id=_legacy_etl_user_id(user),
+            upload_id=upload["upload_id"],
+            target_type=target_type,
+        )
+        for target_type in dict.fromkeys(target_types)
+    ]
 
 
 def _get_ai_product_parser():
@@ -447,6 +491,8 @@ async def shipment_etl_preview(
     save_as_template: str = Form("0"),
     template_name: str = Form(""),
     template_scope: str = Form(""),
+    db: Session = Depends(get_db_dependency),
+    _user: Any = Depends(require_identified_user),
 ):
     """预览：按内容指纹识别送货单/出货流水并抽取抬头+明细（不写业务库）。
 
@@ -491,6 +537,18 @@ async def shipment_etl_preview(
             template_scope=str(template_scope or "").strip(),
             source="shipment_excel_etl_preview",
         )
+        if result.get("success"):
+            etl_runs = _create_general_etl_compat_runs(
+                db,
+                user=_user,
+                path=path,
+                target_types=["customers", "products", "shipment_records"],
+            )
+            result["general_etl"] = {
+                "preview_required": True,
+                "confirmation_required": True,
+                "runs": etl_runs,
+            }
         return JSONResponse(result, status_code=200 if result.get("success") else 400)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl preview failed: %s", e)
@@ -517,22 +575,21 @@ async def shipment_etl_execute(
     save_as_template: str = Form("0"),
     template_name: str = Form(""),
     template_scope: str = Form(""),
+    etl_run_id: str = Form(""),
+    confirmed: str = Form("0"),
+    valid_rows_only: str = Form("0"),
+    db: Session = Depends(get_db_dependency),
     _user: Any = Depends(require_identified_user),
 ):
-    """执行闭环：单据 → 客户/产品/发货单（默认幂等；流水需 confirm_ledger）。
+    """旧接口兼容包装：创建通用 ETL 预演，随后凭 run_id 显式确认。
 
-    direct=1：无预览直写（需环境开关 FHD_EXCEL_ETL_ALLOW_DIRECT=1）。
-    save_as_template=1：额外把源办公文件解析入库模版库。
+    ``direct`` 已永久降级为兼容参数，不再允许绕过预演直接写库。
     """
     try:
         import json
 
-        from app.application.office_template_ingest_app_service import (
-            attach_template_ingest_to_etl_result,
-        )
-        from app.application.shipment_excel_etl_app_service import (
-            get_shipment_excel_etl_app_service,
-        )
+        from app.application.etl.errors import EtlError
+        from app.application.etl.service import get_etl_service
 
         # 生产/预发默认强校验 shipment.create；桌面开发可用 FHD_SHIPMENT_ETL_REQUIRE_RBAC=0 关闭
         try:
@@ -614,35 +671,70 @@ async def shipment_etl_execute(
                 {"success": False, "message": "请上传文件、提供 file_path，或提交 notes_json"},
                 status_code=400,
             )
-        result = get_shipment_excel_etl_app_service().execute(
-            path or "",
-            import_products=_form_truthy(import_products, True),
-            import_shipments=_form_truthy(import_shipments, True),
-            idempotent=_form_truthy(idempotent, True),
-            include_ledger=_form_include_ledger(include_ledger, default="0"),
-            confirm_ledger=_form_truthy(confirm_ledger, False),
-            dry_run=_form_truthy(dry_run, False),
-            direct=_form_truthy(direct, False),
-            force_shipment_target=_form_truthy(force_shipment_target, False),
-            notes=notes,
-            workspace_root=str(workspace_root or "").strip() or None,
+        run_id = str(etl_run_id or "").strip()
+        if run_id:
+            try:
+                run = get_etl_service().execute(
+                    db,
+                    run_id=run_id,
+                    owner_user_id=_legacy_etl_user_id(_user),
+                    confirmed=_form_truthy(confirmed, False),
+                    valid_rows_only=_form_truthy(valid_rows_only, False),
+                )
+            except EtlError as exc:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error_code": exc.code,
+                        "message": exc.message,
+                    },
+                    status_code=exc.status_code,
+                )
+            return JSONResponse(
+                {
+                    "success": True,
+                    "general_etl": True,
+                    "run": run,
+                    "message": "已确认，通用 ETL 正在后台执行",
+                },
+                status_code=202,
+            )
+
+        if not path:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error_code": "ETL_SOURCE_FILE_REQUIRED",
+                    "message": "旧接口的 notes_json 直写已停用；请上传源文件创建通用 ETL 预演",
+                },
+                status_code=409,
+            )
+        targets: list[str] = []
+        if _form_truthy(import_products, True):
+            targets.extend(["customers", "products"])
+        if _form_truthy(import_shipments, True):
+            targets.append("shipment_records")
+        runs = _create_general_etl_compat_runs(
+            db,
+            user=_user,
+            path=path,
+            target_types=targets or ["shipment_records"],
         )
-        result = attach_template_ingest_to_etl_result(
-            result,
-            file_path=path,
-            save_as_template=_form_truthy(save_as_template, False),
-            template_name=str(template_name or "").strip(),
-            template_scope=str(template_scope or "").strip(),
-            source="shipment_excel_etl_execute",
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "ETL_PREVIEW_CONFIRMATION_REQUIRED",
+                "message": "旧接口已升级为通用 ETL：请先检查预演，再逐个确认执行",
+                "general_etl": {
+                    "preview_required": True,
+                    "confirmation_required": True,
+                    "runs": runs,
+                },
+                "dry_run": _form_truthy(dry_run, False),
+                "direct_ignored": _form_truthy(direct, False),
+            },
+            status_code=409,
         )
-        status = 200 if result.get("success") or result.get("dry_run") else 400
-        if result.get("error_code") == "unsafe_path":
-            status = 400
-        if result.get("error_code") == "ledger_confirm_required":
-            status = 409
-        if result.get("error_code") == "direct_execute_denied":
-            status = 403
-        return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.exception("shipment etl execute failed: %s", e)
         return JSONResponse(

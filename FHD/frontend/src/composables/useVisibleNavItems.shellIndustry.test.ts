@@ -5,7 +5,11 @@ import { setActivePinia, createPinia } from 'pinia'
 // 平台壳模式开启；其余 platformShellMode 行为保留真实实现（含 resolvePlatformShellMenuKeys / shouldExposeIndustrySidebar）
 vi.mock('@/constants/platformShellMode', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/constants/platformShellMode')>()
-  return { ...actual, isPlatformShellModeEnabled: () => true }
+  return {
+    ...actual,
+    isEnterpriseProductSkuBuild: () => true,
+    isPlatformShellModeEnabled: () => true,
+  }
 })
 
 vi.mock('@/stores/industry', () => ({
@@ -29,6 +33,7 @@ vi.mock('@/stores/mods', async () => {
           menu_overrides: [
             { key: 'products', hidden: true },
             { key: 'customers', hidden: true },
+            { key: 'business-docking', hidden: true },
           ],
         },
       ])
@@ -93,6 +98,8 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(keys).not.toContain('products')
     expect(keys).not.toContain('customers')
     expect(keys).toContain('chat')
+    // Legacy ERP bridge overrides must not hide the first-class ETL center.
+    expect(keys).toContain('business-docking')
   })
 
   it('完成补基础线后：长出考勤业务项且 label 本地化为人员/部门管理', () => {

@@ -57,6 +57,15 @@ async def lifespan(app: FastAPI):
         _initialize_databases_async(app),
     )
 
+    try:
+        from app.application.etl.service import mark_interrupted_runs_on_startup
+
+        recovered = await asyncio.to_thread(mark_interrupted_runs_on_startup, engine)
+        if recovered:
+            logger.warning("ETL startup recovery marked %s in-flight run(s) interrupted", recovered)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("ETL startup recovery skipped: %s", exc)
+
     mark_startup("lifespan_db_done")
 
     try:

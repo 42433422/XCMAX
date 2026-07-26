@@ -120,6 +120,59 @@ def grid_to_workbook_path(
     return path
 
 
+def page_grids_to_workbook_path(
+    pages: list[dict[str, Any]],
+    *,
+    output_path: str | Path | None = None,
+    base_sheet_name: str = "OCR",
+) -> Path:
+    """把 OCR 多页结果写成逐页工作表，避免不同页面按相同坐标错误叠加。"""
+    from openpyxl import Workbook
+
+    path = (
+        Path(output_path)
+        if output_path
+        else Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1])
+    )
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    for index, page in enumerate(pages, start=1):
+        raw_name = f"{base_sheet_name[:24]}_P{index}"
+        worksheet = workbook.create_sheet(raw_name[:31])
+        page["sheet_name"] = worksheet.title
+        row_index = 1
+        for line in page.get("meta_lines") or []:
+            text = str(line or "").strip()
+            if text:
+                worksheet.cell(row_index, 1, text)
+                row_index += 1
+        page["data_start_row"] = row_index
+        for row in page.get("grid") or []:
+            for column, value in enumerate(row, start=1):
+                worksheet.cell(row_index, column, value)
+            row_index += 1
+    if not workbook.worksheets:
+        workbook.create_sheet("OCR")
+    workbook.save(path)
+    workbook.close()
+    return path
+
+
+def _safe_ocr_block(raw: dict[str, Any]) -> dict[str, Any]:
+    """仅保留审计所需 OCR 证据，避免把后端对象或提示文本带入执行上下文。"""
+    result: dict[str, Any] = {"text": str(raw.get("text") or "").strip()}
+    for key in ("left", "top", "width", "height", "confidence", "score"):
+        value = raw.get(key)
+        if isinstance(value, (int, float)):
+            result[key] = float(value)
+    center = raw.get("center")
+    if isinstance(center, (tuple, list)) and len(center) >= 2:
+        result["center"] = [float(center[0]), float(center[1])]
+    return result
+
+
 def _load_image_arrays(path: Path) -> list[Any]:
     """返回可 OCR 的图像数组列表（PDF 多页）。"""
     suffix = path.suffix.lower()
@@ -137,13 +190,19 @@ def _load_image_arrays(path: Path) -> list[Any]:
             import pypdfium2 as pdfium
 
             pdf = pdfium.PdfDocument(str(path))
-            pages = []
-            max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
-            for i in range(min(len(pdf), max(1, max_pages))):
-                page = pdf[i]
-                bitmap = page.render(scale=2).to_pil().convert("RGB")
-                pages.append(np.array(bitmap))
-            return pages
+            try:
+                pages = []
+                max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
+                for i in range(min(len(pdf), max(1, max_pages))):
+                    page = pdf[i]
+                    try:
+                        bitmap = page.render(scale=2).to_pil().convert("RGB")
+                        pages.append(np.array(bitmap))
+                    finally:
+                        page.close()
+                return pages
+            finally:
+                pdf.close()
         except RECOVERABLE_ERRORS:
             logger.debug("pypdfium2 pdf render unavailable", exc_info=True)
         try:
@@ -195,9 +254,31 @@ def ocr_source_to_workbook(
         ocr = get_ocr_service()
         images = _load_image_arrays(path)
         all_blocks: list[dict[str, Any]] = []
-        for img in images:
+        pages: list[dict[str, Any]] = []
+        for page_number, img in enumerate(images, start=1):
             blocks = ocr.recognize_text_blocks(img) or []
             all_blocks.extend(blocks)
+            grid = text_blocks_to_grid(blocks)
+            if not grid:
+                continue
+            meta_lines = _guess_meta_lines(grid)
+            body = grid
+            if meta_lines:
+                body = [
+                    row
+                    for row in grid
+                    if " ".join(str(c).strip() for c in row if str(c).strip()) not in meta_lines
+                ] or grid
+            pages.append(
+                {
+                    "page_number": page_number,
+                    "grid": body,
+                    "meta_lines": meta_lines,
+                    "blocks": [_safe_ocr_block(block) for block in blocks],
+                    "row_count": len(body),
+                    "col_count": max((len(row) for row in body), default=0),
+                }
+            )
         if not all_blocks:
             return {
                 "success": False,
@@ -205,36 +286,27 @@ def ocr_source_to_workbook(
                 "error_code": "ocr_empty",
                 "backend": getattr(ocr, "get_active_ocr_backend", lambda: "unknown")(),
             }
-        grid = text_blocks_to_grid(all_blocks)
-        if not grid:
+        if not pages:
             return {
                 "success": False,
                 "message": "OCR 文本无法聚类成表格",
                 "error_code": "ocr_grid_empty",
             }
-        meta_lines = _guess_meta_lines(grid)
-        # 去掉已抽到 meta 的重复首行，减少干扰
-        body = grid
-        if meta_lines:
-            body = [
-                row
-                for row in grid
-                if " ".join(str(c).strip() for c in row if str(c).strip()) not in meta_lines
-            ] or grid
-        xlsx = grid_to_workbook_path(
-            body,
+        xlsx = page_grids_to_workbook_path(
+            pages,
             output_path=output_path,
-            sheet_name=path.stem[:28] or "OCR",
-            meta_lines=meta_lines,
+            base_sheet_name=path.stem[:24] or "OCR",
         )
+        meta_lines = [line for page in pages for line in page.get("meta_lines") or []]
         return {
             "success": True,
             "file_path": str(xlsx),
             "source_path": str(path),
             "block_count": len(all_blocks),
-            "row_count": len(body),
-            "col_count": max((len(r) for r in body), default=0),
+            "row_count": sum(int(page["row_count"]) for page in pages),
+            "col_count": max((int(page["col_count"]) for page in pages), default=0),
             "meta_lines": meta_lines,
+            "pages": pages,
             "message": f"OCR 已生成表格 {xlsx.name}",
         }
     except RECOVERABLE_ERRORS as exc:

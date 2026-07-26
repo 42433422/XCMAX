@@ -18,6 +18,7 @@ describe('platformShellMode', () => {
     expect(SHELL_CORE_MENU_KEYS.has('chat')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('ai-ecosystem')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('persy-knowledge')).toBe(true)
+    expect(SHELL_CORE_MENU_KEYS.has('business-docking')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('employee-workflow')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('workflow-employee-space')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('other-tools')).toBe(false)

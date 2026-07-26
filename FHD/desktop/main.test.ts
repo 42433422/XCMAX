@@ -315,6 +315,7 @@ describe('main — desktopInitialUrl', () => {
 describe('main — readPackagedProductSku', () => {
   beforeEach(() => {
     delete process.env.XCAGI_PRODUCT_SKU
+    delete process.env.FHD_ETL_CENTER_ENABLED
     electronMocks.app.isPackaged = false
   })
 
@@ -400,6 +401,7 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_GENERIC_EDITION).toBe('1')
     expect(env.XCAGI_PLATFORM_SHELL).toBe('1')
     expect(env.XCAGI_DEFAULT_EDITION).toBe('generic')
+    expect(env.FHD_ETL_CENTER_ENABLED).toBe('0')
   })
 
   it('returns full edition env for enterprise SKU', async () => {
@@ -410,6 +412,7 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_PLATFORM_SHELL).toBe('0')
     expect(env.XCAGI_DEFAULT_EDITION).toBe('full')
     expect(env.XCAGI_EDITION).toBe('full')
+    expect(env.FHD_ETL_CENTER_ENABLED).toBe('1')
   })
 
   it('returns minimal edition env for personal SKU', async () => {
@@ -421,6 +424,14 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_DEFAULT_EDITION).toBe('minimal')
     expect(env.XCAGI_EDITION).toBe('minimal')
     expect(env.XCAGI_MINIMAL_EDITION).toBe('1')
+    expect(env.FHD_ETL_CENTER_ENABLED).toBe('0')
+  })
+
+  it('allows staged rollout to override the enterprise ETL flag', async () => {
+    process.env.XCAGI_PRODUCT_SKU = 'enterprise'
+    process.env.FHD_ETL_CENTER_ENABLED = '0'
+    const { backendEditionEnv } = await import('./main.js')
+    expect(backendEditionEnv().FHD_ETL_CENTER_ENABLED).toBe('0')
   })
 })
 

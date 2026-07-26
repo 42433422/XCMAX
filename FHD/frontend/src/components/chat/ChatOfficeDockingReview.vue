@@ -72,7 +72,7 @@
               :disabled="item.status !== 'ready' || item.commitStatus === 'committing'"
               @change="onToggle(item.id, 'knowledge', $event)"
             >
-            入知识库
+            预演：知识库
           </label>
           <label :class="{ muted: !item.databaseAction }" :title="item.databaseDisabledReason">
             <input
@@ -81,7 +81,7 @@
               :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing'"
               @change="onToggle(item.id, 'database', $event)"
             >
-            入数据库{{ item.databaseTargetLabel ? `（${item.databaseTargetLabel}）` : '' }}
+            预演：业务数据{{ item.databaseTargetLabel ? `（${item.databaseTargetLabel}）` : '' }}
           </label>
         </div>
         <p v-if="item.status === 'ready' && !item.databaseAction && item.databaseDisabledReason" class="office-docking-review__hint">
@@ -147,24 +147,24 @@ const selectionHint = computed(() => {
   const targets: string[] = []
   if (hasKnowledgeTarget.value) targets.push('知识库')
   targets.push(...databaseTargets.value)
-  const base = `将写入：${targets.join('、')}`
-  return databaseTargets.value.length ? base : `${base}；不会修改业务数据库`
+  const base = `将创建预演：${targets.join('、')}`
+  return `${base}；此处不会直接写库`
 })
 
 const confirmLabel = computed(() => {
-  if (committing.value) return '正在提交...'
+  if (committing.value) return '正在创建预演...'
   if (!selectedReadyCount.value) return '请选择处理方式'
-  if (hasKnowledgeTarget.value && !databaseTargets.value.length) return '确认加入知识库'
+  if (hasKnowledgeTarget.value && !databaseTargets.value.length) return '进入数据对接中心'
   if (!hasKnowledgeTarget.value && databaseTargets.value.length === 1) {
-    return `确认写入${databaseTargets.value[0]}`
+    return `预演${databaseTargets.value[0]}`
   }
-  return '确认按所选方式写入'
+  return '创建预演并进入对接中心'
 })
 
 function statusText(item: ChatOfficeDockingReviewItem): string {
-  if (item.commitStatus === 'committed') return '已提交'
-  if (item.commitStatus === 'failed') return '提交失败'
-  if (item.commitStatus === 'committing') return '提交中'
+  if (item.commitStatus === 'committed') return '预演已创建'
+  if (item.commitStatus === 'failed') return '创建失败'
+  if (item.commitStatus === 'committing') return '创建预演中'
   if (item.status === 'running') return '识别中'
   if (item.status === 'error') return '识别失败'
   return '待确认'

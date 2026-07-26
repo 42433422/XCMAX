@@ -398,6 +398,18 @@ const {
     messageInput.value = message
     await sendMessage()
   },
+  openEtlCenter: async (runIds: string[]) => {
+    try {
+      sessionStorage.setItem('xcagi_etl_pending_runs', JSON.stringify(runIds))
+    } catch {
+      /* sessionStorage unavailable */
+    }
+    const runId = runIds[0]
+    await router.push({
+      path: '/business-docking',
+      query: runId ? { run_id: runId } : {},
+    })
+  },
 })
 
 const sendQuick = (text: string) => {

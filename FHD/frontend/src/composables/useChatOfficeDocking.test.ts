@@ -51,6 +51,7 @@ function createHarness() {
     addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
     stageExcelAnalysisContext: vi.fn(),
     sendDatabaseImportMessage: vi.fn().mockResolvedValue(undefined),
+    openEtlCenter: vi.fn().mockResolvedValue(undefined),
   }
   return { deps, docking: useChatOfficeDocking(deps) }
 }
@@ -65,7 +66,14 @@ describe('useChatOfficeDocking', () => {
       workspace_root: '/workspace',
       filename: file.name,
     }))
-    mocks.apiFetch.mockImplementation(async (url: string) => {
+    mocks.apiFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url) === '/api/etl/uploads') {
+        return jsonResponse({ success: true, data: { upload_id: 'upload-1' } }, 201)
+      }
+      if (String(url) === '/api/etl/runs/preview') {
+        const target = JSON.parse(String(init?.body || '{}')).target_type
+        return jsonResponse({ success: true, data: { id: `run-${target}` } }, 202)
+      }
       if (String(url).includes('/shipment-etl/')) {
         return jsonResponse({ success: true, notes: [] })
       }
@@ -100,7 +108,14 @@ describe('useChatOfficeDocking', () => {
         { sheet_name: '送货单', fields: ['购货单位', '型号', '品名', '数量', '单价'] },
       ],
     })
-    mocks.apiFetch.mockImplementation(async (url: string) => {
+    mocks.apiFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url) === '/api/etl/uploads') {
+        return jsonResponse({ success: true, data: { upload_id: 'upload-shipment' } }, 201)
+      }
+      if (String(url) === '/api/etl/runs/preview') {
+        const target = JSON.parse(String(init?.body || '{}')).target_type
+        return jsonResponse({ success: true, data: { id: `run-${target}` } }, 202)
+      }
       if (String(url).includes('/shipment-etl/preview')) {
         return jsonResponse({
           success: true,
@@ -113,14 +128,6 @@ describe('useChatOfficeDocking', () => {
             total_amount: 20,
             items: [{ model_number: 'A1', product_name: '底漆', quantity: 2 }],
           }],
-        })
-      }
-      if (String(url).includes('/shipment-etl/execute')) {
-        return jsonResponse({
-          success: true,
-          note_count: 1,
-          shipment_created: 1,
-          product_result: { success: true, imported: 1 },
         })
       }
       return jsonResponse({ success: true })
@@ -139,14 +146,19 @@ describe('useChatOfficeDocking', () => {
     docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
     await docking.confirmOfficeDockingReview()
 
-    expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/excel/data/shipment-etl/execute',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    const targets = mocks.apiFetch.mock.calls
+      .filter(([url]) => url === '/api/etl/runs/preview')
+      .map(([, init]) => JSON.parse(String(init?.body)).target_type)
+    expect(targets).toEqual(['customers', 'products', 'shipment_records'])
     expect(deps.stageExcelAnalysisContext).not.toHaveBeenCalled()
     expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
+    expect(deps.openEtlCenter).toHaveBeenCalledWith([
+      'run-customers',
+      'run-products',
+      'run-shipment_records',
+    ])
     expect(item.commitStatus).toBe('committed')
-    expect(item.summary).toContain('送货单 ETL 完成')
+    expect(item.summary).toContain('已创建 3 个预演任务')
   })
 
   it('reads a CSV, classifies customer/product data, and commits both targets', async () => {
@@ -195,15 +207,20 @@ describe('useChatOfficeDocking', () => {
     await docking.confirmOfficeDockingReview()
 
     expect(mocks.primeCsrfCookie).toHaveBeenCalled()
-    expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/knowledge/v1/datasets/persy-knowledge/documents',
-      expect.objectContaining({ method: 'POST' }),
-    )
-    expect(deps.stageExcelAnalysisContext).toHaveBeenCalledWith(item.excelAnalysis)
-    expect(deps.sendDatabaseImportMessage).toHaveBeenCalledWith('导入数据库，确认导入：客户产品.csv')
+    const targets = mocks.apiFetch.mock.calls
+      .filter(([url]) => url === '/api/etl/runs/preview')
+      .map(([, init]) => JSON.parse(String(init?.body)).target_type)
+    expect(targets).toEqual(['knowledge', 'customers', 'products'])
+    expect(deps.stageExcelAnalysisContext).not.toHaveBeenCalled()
+    expect(deps.sendDatabaseImportMessage).not.toHaveBeenCalled()
+    expect(deps.openEtlCenter).toHaveBeenCalledWith([
+      'run-knowledge',
+      'run-customers',
+      'run-products',
+    ])
     expect(item.commitStatus).toBe('committed')
     expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
-      '[对接] 审核提交完成：成功 1 个。',
+      '[对接] 已创建预演任务：成功 1 个。数据不会在此处直接写库。',
       'ai',
     )
 
@@ -241,11 +258,7 @@ describe('useChatOfficeDocking', () => {
         { sheet_name: '月度统计', fields: ['部门', '姓名'] },
       ],
     })
-    mocks.apiFetch.mockResolvedValue(
-      jsonResponse({ success: true, data: { employee_rows: 3, department_rows: 1 } }),
-    )
-
-    const { docking } = createHarness()
+    const { deps, docking } = createHarness()
     await docking.onOfficeDockingFileChange(fileEvent(new File(['xlsx'], '考勤转换结果.xlsx')))
 
     const item = docking.officeDockingReviewItems.value[0]
@@ -255,12 +268,13 @@ describe('useChatOfficeDocking', () => {
     docking.toggleOfficeDockingTarget(item.id, 'knowledge', false)
     await docking.confirmOfficeDockingReview()
 
-    expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/mod/taiyangniao-pro/attendance/import-workbook',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    const previewCall = mocks.apiFetch.mock.calls.find(([url]) => url === '/api/etl/runs/preview')
+    expect(JSON.parse(String(previewCall?.[1]?.body))).toMatchObject({
+      target_type: 'attendance',
+    })
+    expect(deps.openEtlCenter).toHaveBeenCalledWith(['run-attendance'])
     expect(item.commitStatus).toBe('committed')
-    expect(item.summary).toBe('考勤入库完成：人员 3 条，部门 1 条')
+    expect(item.summary).toBe('已创建 1 个预演任务，等待在数据对接中心确认')
   })
 
   it('handles unsupported input, trigger state, and failed knowledge ingestion', async () => {
@@ -308,7 +322,7 @@ describe('useChatOfficeDocking', () => {
     expect(item.commitStatus).toBe('failed')
     expect(item.error).toBe('向量库不可用')
     expect(deps.addAndSaveMessage).toHaveBeenLastCalledWith(
-      '[对接] 审核提交完成：成功 0 个，失败 1 个。',
+      '[对接] 已创建预演任务：成功 0 个，失败 1 个。数据不会在此处直接写库。',
       'ai',
     )
   })

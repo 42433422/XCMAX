@@ -173,6 +173,38 @@ mod_install_total = Counter(
     ["operation", "status"],
 )
 
+# --- 通用 ETL（不得使用文件名、字段值、租户或业务原文作为 label）-------------
+etl_runs_total = Counter(
+    "etl_runs_total",
+    "General ETL runs by phase and stable outcome",
+    ["phase", "target_type", "status"],
+)
+etl_run_duration_seconds = Histogram(
+    "etl_run_duration_seconds",
+    "General ETL phase duration",
+    ["phase", "target_type"],
+    buckets=(0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900),
+)
+etl_rows_total = Counter(
+    "etl_rows_total",
+    "General ETL rows by deterministic decision",
+    ["target_type", "decision"],
+)
+etl_manual_corrections_total = Counter(
+    "etl_manual_corrections_total",
+    "General ETL mapping or row action corrections",
+    ["kind"],
+)
+etl_retries_total = Counter("etl_retries_total", "General ETL retry operations", ["target_type"])
+etl_rollbacks_total = Counter(
+    "etl_rollbacks_total", "General ETL rollback operations", ["target_type", "status"]
+)
+etl_llm_degradations_total = Counter(
+    "etl_llm_degradations_total",
+    "General ETL previews completed without LLM advisory",
+    ["target_type"],
+)
+
 
 def _normalize_endpoint(path: str) -> str:
     if not path or path == "/":

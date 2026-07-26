@@ -72,8 +72,8 @@ describe('ChatOfficeDockingReview', () => {
     const snippet = wrapper.get('.office-docking-review__preview-snippet')
     expect(snippet.text().length).toBeLessThanOrEqual(221)
     expect(wrapper.get('.office-docking-review__preview-details').attributes('open')).toBeUndefined()
-    expect(wrapper.get('.office-docking-review__selection-hint').text()).toContain('不会修改业务数据库')
-    expect(wrapper.get('button.btn-primary').text()).toBe('确认加入知识库')
+    expect(wrapper.get('.office-docking-review__selection-hint').text()).toContain('不会直接写库')
+    expect(wrapper.get('button.btn-primary').text()).toBe('进入数据对接中心')
   })
 
   it('disables confirmation until at least one write target is selected', () => {
@@ -182,7 +182,7 @@ describe('ChatOfficeDockingReview', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [excelItem({ commitStatus: 'committing', selectedDatabase: true })], processing: false },
     })
-    expect(wrapper.get('button.btn-primary').text()).toBe('正在提交...')
+    expect(wrapper.get('button.btn-primary').text()).toBe('正在创建预演...')
     expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
   })
 
@@ -190,7 +190,7 @@ describe('ChatOfficeDockingReview', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [excelItem({ commitStatus: 'failed' })], processing: false },
     })
-    expect(wrapper.get('.office-docking-review__status').text()).toBe('提交失败')
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('创建失败')
   })
 
   it('shows running status text when status=running', () => {
@@ -228,14 +228,14 @@ describe('ChatOfficeDockingReview', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [excelItem({ selectedKnowledge: false, selectedDatabase: true })], processing: false },
     })
-    expect(wrapper.get('button.btn-primary').text()).toBe('确认写入考勤数据库')
+    expect(wrapper.get('button.btn-primary').text()).toBe('预演考勤数据库')
   })
 
   it('shows generic confirm label when both targets selected', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [excelItem({ selectedKnowledge: true, selectedDatabase: true })], processing: false },
     })
-    expect(wrapper.get('button.btn-primary').text()).toBe('确认按所选方式写入')
+    expect(wrapper.get('button.btn-primary').text()).toBe('创建预演并进入对接中心')
   })
 
   it('shows database disabled reason hint when no databaseAction', () => {
@@ -290,7 +290,7 @@ describe('ChatOfficeDockingReview', () => {
     const wrapper = mount(ChatOfficeDockingReview, {
       props: { items: [wordItem({ commitStatus: 'committed' })], processing: false },
     })
-    expect(wrapper.get('.office-docking-review__status').text()).toBe('已提交')
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('预演已创建')
   })
 
   it('shows pending status text by default', () => {
@@ -328,6 +328,6 @@ describe('ChatOfficeDockingReview', () => {
     expect(wrapper.get('.office-docking-review__preview-snippet').text()).toContain('送货单 1 张')
     expect(wrapper.get('.office-docking-review__shipment-notes').text()).toContain('甲公司')
     expect(wrapper.get('.office-docking-review__preview-details summary').text()).toBe('查看送货单结构化预览')
-    expect(wrapper.get('button.btn-primary').text()).toBe('确认写入客户/产品/发货单')
+    expect(wrapper.get('button.btn-primary').text()).toBe('预演客户/产品/发货单')
   })
 })

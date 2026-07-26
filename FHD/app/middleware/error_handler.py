@@ -39,12 +39,16 @@ def register_exception_handlers(app: FastAPI) -> None:
         logger.warning(
             "HTTP Exception %s: %s - Path: %s", exc.status_code, exc.detail, request.url.path
         )
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = str(detail.get("code") or f"http_{exc.status_code}")
+        message = str(detail.get("message") or exc.detail)
         return JSONResponse(
             status_code=exc.status_code,
             content={
                 "success": False,
-                "error_code": f"http_{exc.status_code}",
-                "message": str(exc.detail),
+                "code": code,
+                "error_code": code,
+                "message": message,
                 "path": request.url.path,
             },
         )
@@ -61,11 +65,17 @@ def register_exception_handlers(app: FastAPI) -> None:
                     "type": error["type"],
                 }
             )
+        code = (
+            "ETL_REQUEST_VALIDATION_ERROR"
+            if request.url.path.startswith("/api/etl/")
+            else "validation_error"
+        )
         return JSONResponse(
             status_code=422,
             content={
                 "success": False,
-                "error_code": "validation_error",
+                "code": code,
+                "error_code": code,
                 "message": "请求参数验证失败",
                 "errors": errors,
                 "path": request.url.path,
@@ -75,11 +85,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled Exception: %s - Path: %s", exc, request.url.path)
+        code = "ETL_INTERNAL_ERROR" if request.url.path.startswith("/api/etl/") else "internal_error"
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
-                "error_code": "internal_error",
+                "code": code,
+                "error_code": code,
                 "message": "服务器内部错误",
                 "path": request.url.path,
             },

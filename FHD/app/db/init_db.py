@@ -1206,6 +1206,55 @@ def ensure_mobile_push_bootstrap(
         raise
 
 
+def ensure_sqlite_etl_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """Create the general ETL tables for desktop SQLite installations.
+
+    Server deployments receive this schema through Alembic.  The packaged
+    desktop runtime intentionally does not run the full migration history on a
+    fresh local database, so its idempotent bootstrap must create these tables
+    before startup recovery or any ``/api/etl`` request can touch them.
+    """
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.etl import (
+        EtlRun,
+        EtlRunRow,
+        EtlTargetConfig,
+        EtlTemplate,
+        EtlTemplateVersion,
+        EtlUpload,
+    )
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None or real_engine.dialect.name != "sqlite":
+        return
+    try:
+        tables = set(inspect(real_engine).get_table_names() or [])
+        model_tables = [
+            EtlUpload.__table__,
+            EtlTemplate.__table__,
+            EtlTemplateVersion.__table__,
+            EtlRun.__table__,
+            EtlRunRow.__table__,
+            EtlTargetConfig.__table__,
+        ]
+        missing = [table for table in model_tables if table.name not in tables]
+        if missing:
+            logger.info("SQLite 缺少 ETL 表 %s，正在通过 ORM 创建 …", [t.name for t in missing])
+            Base.metadata.create_all(real_engine, tables=missing, checkfirst=True)
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_sqlite_etl_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_runtime_auth_bootstrap(
     engine: Engine | None = None,
     *,
@@ -1265,6 +1314,11 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_mobile_push_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_sqlite_etl_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,

@@ -356,7 +356,8 @@ export function backendEditionEnv(): Record<string, string> {
       XCAGI_PRODUCT_SKU: 'generic',
       XCAGI_GENERIC_EDITION: '1',
       XCAGI_PLATFORM_SHELL: '1',
-      XCAGI_DEFAULT_EDITION: 'generic'
+      XCAGI_DEFAULT_EDITION: 'generic',
+      FHD_ETL_CENTER_ENABLED: process.env.FHD_ETL_CENTER_ENABLED || '0'
     }
   }
   const edition = SKU_RUNTIME_EDITION[sku]
@@ -364,7 +365,9 @@ export function backendEditionEnv(): Record<string, string> {
     XCAGI_PRODUCT_SKU: sku,
     XCAGI_PLATFORM_SHELL: sku === 'enterprise' ? '0' : '1',
     XCAGI_DEFAULT_EDITION: edition,
-    XCAGI_EDITION: edition
+    XCAGI_EDITION: edition,
+    FHD_ETL_CENTER_ENABLED:
+      process.env.FHD_ETL_CENTER_ENABLED || (sku === 'enterprise' ? '1' : '0')
   }
   if (edition === 'minimal') {
     env.XCAGI_MINIMAL_EDITION = '1'
