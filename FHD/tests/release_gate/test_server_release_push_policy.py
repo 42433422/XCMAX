@@ -230,7 +230,7 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "&& inputs.release_channel || (contains(github.ref, '-rc') "
             "&& 'staging' || 'stable') }}"
         ) in workflow
-        assert "cancel-in-progress: true" in workflow
+        assert "cancel-in-progress: false" in workflow
         assert (
             "FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '1' || '0' }}"
