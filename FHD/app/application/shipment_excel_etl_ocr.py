@@ -123,19 +123,15 @@ def grid_to_workbook_path(
 def page_grids_to_workbook_path(
     pages: list[dict[str, Any]],
     *,
-    output_path: str | Path | None = None,
     base_sheet_name: str = "OCR",
 ) -> Path:
     """把 OCR 多页结果写成逐页工作表，避免不同页面按相同坐标错误叠加。"""
     from openpyxl import Workbook
 
-    path = (
-        Path(output_path)
-        if output_path
-        else Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1])
-    )
-    path = path.expanduser().resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # Always allocate the workbook ourselves.  The public OCR route may receive
+    # an output_path for legacy compatibility, but user input must never select
+    # the file opened by this writer.
+    path = Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1]).resolve()
     workbook = Workbook()
     workbook.remove(workbook.active)
     for index, page in enumerate(pages, start=1):
@@ -294,7 +290,6 @@ def ocr_source_to_workbook(
             }
         xlsx = page_grids_to_workbook_path(
             pages,
-            output_path=output_path,
             base_sheet_name=path.stem[:24] or "OCR",
         )
         meta_lines = [line for page in pages for line in page.get("meta_lines") or []]

@@ -13,10 +13,7 @@ _ACTIONS = frozenset({"new", "update", "skip"})
 
 
 def _bounded_record(value: dict[str, Any]) -> dict[str, str]:
-    return {
-        str(key)[:80]: str(item)[:500]
-        for key, item in list(value.items())[:40]
-    }
+    return {str(key)[:80]: str(item)[:500] for key, item in list(value.items())[:40]}
 
 
 class EtlRowAdviser:

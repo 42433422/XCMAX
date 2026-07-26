@@ -5,7 +5,6 @@ OCR服务模块
 默认优先 PaddleOCR，与「识别模板」标签图走同一引擎；可通过环境变量切换或回退 EasyOCR/Tesseract。
 """
 
-import json
 import logging
 import os
 import subprocess
@@ -19,6 +18,10 @@ from typing import Any
 import numpy as np
 
 from app.infrastructure.ocr_analysis import OCRAnalysisMixin
+from app.services.ocr_text_blocks import (
+    recognize_macos_vision_blocks,
+    recognize_tesseract_blocks,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -50,45 +53,6 @@ function run(argv) {
     }
   }
   return lines.join('\n');
-}
-"""
-
-_MACOS_VISION_OCR_BLOCKS_JXA = r"""
-function run(argv) {
-  ObjC.import('Vision');
-  ObjC.import('CoreImage');
-  const path = String(argv[0] || '');
-  if (!path) return '[]';
-  const imageUrl = $.NSURL.fileURLWithPath(path);
-  const image = $.CIImage.imageWithContentsOfURL(imageUrl);
-  if (!image) return '[]';
-  const blocks = [];
-  const request = $.VNRecognizeTextRequest.alloc.init;
-  request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
-  request.usesLanguageCorrection = true;
-  request.recognitionLanguages = $(['zh-Hans', 'en-US']);
-  const handler = $.VNImageRequestHandler.alloc.initWithCIImageOptions(
-    image, $.NSDictionary.dictionary
-  );
-  const error = Ref();
-  if (!handler.performRequestsError($([request]), error)) return '[]';
-  const observations = request.results;
-  for (let i = 0; i < observations.count; i += 1) {
-    const observation = observations.objectAtIndex(i);
-    const candidates = observation.topCandidates(1);
-    if (candidates.count === 0) continue;
-    const candidate = candidates.objectAtIndex(0);
-    const box = observation.boundingBox;
-    blocks.push({
-      text: ObjC.unwrap(candidate.string),
-      confidence: Number(candidate.confidence),
-      x: Number(box.origin.x),
-      y: Number(box.origin.y),
-      width: Number(box.size.width),
-      height: Number(box.size.height)
-    });
-  }
-  return JSON.stringify(blocks);
 }
 """
 
@@ -229,114 +193,12 @@ class OCRService(OCRAnalysisMixin):
     def _recognize_macos_vision_blocks(self, image_array: np.ndarray) -> list[dict[str, Any]]:
         if not self.macos_vision_available:
             return []
-        tmp_path = ""
-        try:
-            from PIL import Image
-
-            height, width = image_array.shape[:2]
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                tmp_path = tmp.name
-            Image.fromarray(image_array).save(tmp_path, format="PNG")
-            proc = subprocess.run(
-                [
-                    "/usr/bin/osascript",
-                    "-l",
-                    "JavaScript",
-                    "-e",
-                    _MACOS_VISION_OCR_BLOCKS_JXA,
-                    tmp_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-            if proc.returncode != 0:
-                logger.warning("macOS Vision OCR 分块失败: %s", (proc.stderr or "").strip()[:500])
-                return []
-            raw_blocks = json.loads(proc.stdout or "[]")
-            blocks: list[dict[str, Any]] = []
-            for raw in raw_blocks if isinstance(raw_blocks, list) else []:
-                text = str(raw.get("text") or "").strip()
-                if not text:
-                    continue
-                left = max(0.0, float(raw.get("x") or 0) * width)
-                block_width = max(0.0, float(raw.get("width") or 0) * width)
-                block_height = max(0.0, float(raw.get("height") or 0) * height)
-                # Vision uses a bottom-left origin; desktop tables use top-left.
-                top = max(
-                    0.0,
-                    (1.0 - float(raw.get("y") or 0) - float(raw.get("height") or 0)) * height,
-                )
-                confidence = max(0.0, min(1.0, float(raw.get("confidence") or 0.0)))
-                blocks.append(
-                    {
-                        "text": text,
-                        "left": left,
-                        "top": top,
-                        "width": block_width,
-                        "height": block_height,
-                        "confidence": confidence,
-                        "center": (
-                            left + block_width / 2.0,
-                            top + block_height / 2.0,
-                        ),
-                        "y_center": top + block_height / 2.0,
-                    }
-                )
-            return blocks
-        except (json.JSONDecodeError, subprocess.SubprocessError, *RECOVERABLE_ERRORS) as exc:
-            logger.warning("macOS Vision OCR 分块异常: %s", exc)
-            return []
-        finally:
-            if tmp_path:
-                Path(tmp_path).unlink(missing_ok=True)
+        return recognize_macos_vision_blocks(image_array)
 
     def _recognize_tesseract_blocks(self, image_array: np.ndarray) -> list[dict[str, Any]]:
         if not self.tesseract_available:
             return []
-        try:
-            import pytesseract
-            from PIL import Image
-
-            image = Image.fromarray(image_array)
-            try:
-                data = pytesseract.image_to_data(
-                    image,
-                    lang="chi_sim+eng",
-                    output_type=pytesseract.Output.DICT,
-                )
-            except RECOVERABLE_ERRORS:
-                data = pytesseract.image_to_data(
-                    image,
-                    output_type=pytesseract.Output.DICT,
-                )
-            blocks: list[dict[str, Any]] = []
-            for index, raw_text in enumerate(data.get("text") or []):
-                text = str(raw_text or "").strip()
-                if not text:
-                    continue
-                confidence = max(0.0, min(100.0, float(data["conf"][index]))) / 100.0
-                left = float(data["left"][index])
-                top = float(data["top"][index])
-                width = float(data["width"][index])
-                height = float(data["height"][index])
-                blocks.append(
-                    {
-                        "text": text,
-                        "left": left,
-                        "top": top,
-                        "width": width,
-                        "height": height,
-                        "confidence": confidence,
-                        "center": (left + width / 2.0, top + height / 2.0),
-                        "y_center": top + height / 2.0,
-                    }
-                )
-            return blocks
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("Tesseract OCR 分块异常: %s", exc)
-            return []
+        return recognize_tesseract_blocks(image_array)
 
     def recognize(self, image) -> str:
         """

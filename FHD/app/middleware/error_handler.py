@@ -85,7 +85,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         logger.exception("Unhandled Exception: %s - Path: %s", exc, request.url.path)
-        code = "ETL_INTERNAL_ERROR" if request.url.path.startswith("/api/etl/") else "internal_error"
+        code = (
+            "ETL_INTERNAL_ERROR" if request.url.path.startswith("/api/etl/") else "internal_error"
+        )
         return JSONResponse(
             status_code=500,
             content={

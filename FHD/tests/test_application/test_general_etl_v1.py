@@ -215,9 +215,7 @@ def test_macos_vision_fallback_returns_auditable_positioned_blocks(monkeypatch):
             stderr="",
         ),
     )
-    blocks = service._recognize_macos_vision_blocks(
-        np.zeros((100, 200, 3), dtype=np.uint8)
-    )
+    blocks = service._recognize_macos_vision_blocks(np.zeros((100, 200, 3), dtype=np.uint8))
     assert blocks == [
         {
             "text": "客户名称",
@@ -240,9 +238,7 @@ def test_llm_adviser_failure_never_changes_deterministic_action(etl_db, monkeypa
     monkeypatch.setattr(
         service,
         "_submit_preview",
-        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
-            run_id, owner_user_id
-        ),
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
     )
     with tenant_scope(6):
         db = etl_db()
@@ -358,8 +354,8 @@ def test_internal_partial_failure_retries_only_unfinished_rows(etl_db, monkeypat
     monkeypatch.setattr(
         service,
         "_submit_revalidation",
-        lambda run_id, _tenant_id, owner_user_id, _overrides=None: service._revalidate_existing_rows(
-            db, run_id, owner_user_id
+        lambda run_id, _tenant_id, owner_user_id, _overrides=None: (
+            service._revalidate_existing_rows(db, run_id, owner_user_id)
         ),
     )
     adapter = get_adapter("customers")
@@ -874,9 +870,7 @@ def test_dynamic_export_preserves_source_columns_and_values(etl_db, monkeypatch,
     monkeypatch.setattr(
         service,
         "_submit_preview",
-        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
-            run_id, owner_user_id
-        ),
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
     )
     monkeypatch.setattr(
         service,
@@ -930,9 +924,7 @@ def test_duplicate_customers_inside_one_file_are_skipped(etl_db, monkeypatch):
     monkeypatch.setattr(
         service,
         "_submit_preview",
-        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
-            run_id, owner_user_id
-        ),
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
     )
     monkeypatch.setattr(
         service,

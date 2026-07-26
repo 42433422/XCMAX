@@ -1,0 +1,418 @@
+  <main id="view-business-docking" class="etl-center">
+    <header class="etl-hero">
+      <div>
+        <span class="etl-eyebrow">企业版 · 通用 ETL</span>
+        <h1>数据对接中心</h1>
+        <p>文件先预演、再确认。AI 只给建议，最终写入由确定性规则和你的确认控制。</p>
+      </div>
+      <div class="etl-hero__limits">
+        <span>单文件 50MB</span>
+        <span>最多 10 万行</span>
+        <span>模板仅自己可见</span>
+      </div>
+    </header>
+
+    <div v-if="pageError" class="etl-alert etl-alert--error" role="alert">
+      <strong>{{ pageError }}</strong>
+      <button type="button" @click="bootstrap">重试</button>
+    </div>
+
+    <nav class="etl-tabs" aria-label="数据对接工作区">
+      <button
+        v-for="item in tabs"
+        :key="item.id"
+        type="button"
+        :class="{ active: activeTab === item.id }"
+        @click="activeTab = item.id"
+      >
+        <span>{{ item.step }}</span>
+        {{ item.label }}
+      </button>
+    </nav>
+
+    <section v-if="activeTab === 'upload'" class="etl-panel">
+      <div class="etl-panel__title">
+        <div>
+          <h2>上传与目标</h2>
+          <p>每个任务只绑定一个目标；需要多目标时复制为多个运行。</p>
+        </div>
+      </div>
+      <div class="etl-upload-grid">
+        <label class="etl-dropzone" :class="{ busy: busy }">
+          <input
+            type="file"
+            accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.doc,.docx,.ppt,.pptx"
+            :disabled="busy"
+            @change="onFileChange"
+          >
+          <i class="fa fa-cloud-upload" aria-hidden="true"></i>
+          <strong>{{ selectedFile?.name || '选择办公文件或扫描单据' }}</strong>
+          <span>XLSX / XLSM / CSV · PDF / JPG / PNG OCR · Word / PPT 仅知识库</span>
+        </label>
+
+        <div class="etl-form-card">
+          <label>
+            目标
+            <select v-model="targetType" :disabled="busy">
+              <option v-for="target in capabilities?.targets || []" :key="target.type" :value="target.type">
+                {{ target.label }}{{ target.reversible ? ' · 可撤销' : ' · 不可撤销' }}
+              </option>
+            </select>
+          </label>
+          <label>
+            个人模板
+            <select v-model="templateId" :disabled="busy">
+              <option value="">新建任务（自动建议映射）</option>
+              <option
+                v-for="template in compatibleTemplates"
+                :key="template.id"
+                :value="template.id"
+              >
+                {{ template.name }} · v{{ template.current_version }}
+              </option>
+            </select>
+          </label>
+          <label v-if="targetType === 'webhook'">
+            Webhook 配置
+            <select v-model="targetConfigId">
+              <option value="">请选择配置</option>
+              <option v-for="config in targetConfigs" :key="config.id" :value="config.id">
+                {{ config.name }}
+              </option>
+            </select>
+          </label>
+          <button
+            v-if="targetType === 'webhook' && targetConfigId"
+            type="button"
+            class="etl-link-button"
+            :disabled="busy"
+            @click="testWebhook"
+          >
+            测试当前 Webhook
+          </button>
+          <small v-if="webhookTestMessage" class="etl-webhook-test">{{ webhookTestMessage }}</small>
+          <button
+            v-if="targetType === 'webhook'"
+            type="button"
+            class="etl-link-button"
+            @click="showWebhookForm = !showWebhookForm"
+          >
+            {{ showWebhookForm ? '收起配置' : '新建 Webhook 配置' }}
+          </button>
+          <button
+            type="button"
+            class="etl-primary"
+            :disabled="!selectedFile || busy || (targetType === 'webhook' && !targetConfigId)"
+            @click="startPreview"
+          >
+            {{ busy ? '正在创建后台预演…' : '上传并开始预演' }}
+          </button>
+        </div>
+      </div>
+      <p v-if="capabilities?.compatibility_presets?.length" class="etl-compat-note">
+        已加载 {{ capabilities.compatibility_presets.length }} 个旧 YAML/知识库兼容预设；
+        预演确认后请保存为仅自己可见的个人模板。
+      </p>
+
+      <form v-if="showWebhookForm" class="etl-webhook-form" @submit.prevent="saveWebhook">
+        <label>名称<input v-model.trim="webhookDraft.name" required maxlength="160"></label>
+        <label>HTTPS 地址<input v-model.trim="webhookDraft.endpoint_url" required type="url"></label>
+        <label>
+          普通请求头 JSON
+          <textarea v-model="webhookDraft.headersJson" rows="2" placeholder="{&quot;X-System&quot;:&quot;FHD&quot;}"></textarea>
+        </label>
+        <label>Bearer 密钥<input v-model="webhookDraft.secret" type="password" autocomplete="new-password"></label>
+        <button class="etl-secondary" type="submit" :disabled="busy">保存到系统凭据管理器</button>
+      </form>
+
+      <div v-if="currentRun && ['queued', 'previewing'].includes(currentRun.status)" class="etl-progress-card">
+        <div>
+          <strong>{{ stageLabel(currentRun.stage) }}</strong>
+          <span>{{ currentRun.progress }}%</span>
+        </div>
+        <progress :value="currentRun.progress" max="100"></progress>
+        <p>后台分块处理中，可以留在本页查看进度。</p>
+      </div>
+    </section>
+
+    <section v-else-if="activeTab === 'mapping'" class="etl-panel">
+      <div class="etl-panel__title">
+        <div>
+          <h2>字段映射</h2>
+          <p>确认源字段、目标字段与安全转换。转换规则只接受受限 JSON DSL。</p>
+        </div>
+        <button type="button" class="etl-secondary" :disabled="!editableMappings.length || busy" @click="saveMappings">
+          保存并重新校验
+        </button>
+      </div>
+      <div v-if="!currentRun" class="etl-empty">请先在“上传文件”中创建预演。</div>
+      <div v-else class="etl-mapping-table-wrap">
+        <table class="etl-table etl-mapping-table">
+          <thead>
+            <tr><th>源字段</th><th>样例</th><th>目标字段</th><th>转换</th><th>置信度</th><th>必填</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(mapping, mappingIndex) in editableMappings" :key="`${mappingIndex}-${mapping.target}`">
+              <td>
+                <input v-model="mapping.source" :placeholder="mapping.required ? '请选择源字段' : '可留空'">
+              </td>
+              <td><small>{{ mappingSample(mapping.source) }}</small></td>
+              <td>
+                <input
+                  v-if="currentCapability?.allow_dynamic_fields"
+                  v-model.trim="mapping.target"
+                  aria-label="输出字段名"
+                  maxlength="160"
+                >
+                <template v-else>
+                  <strong>{{ targetField(mapping.target)?.label || mapping.target }}</strong>
+                  <small>{{ mapping.target }}</small>
+</template>
+              </td>
+              <td>
+                <select v-model="mappingUiTransform[String(mappingIndex)]" @change="applyCommonTransform(String(mappingIndex))">
+                  <option value="">无</option>
+                  <option value="trim">去空格</option>
+                  <option value="number">数字标准化</option>
+                  <option value="date">日期标准化</option>
+                  <option value="custom">高级 JSON</option>
+                </select>
+                <textarea
+                  v-model="mappingUiTransformJson[String(mappingIndex)]"
+                  rows="2"
+                  spellcheck="false"
+                  aria-label="安全转换 JSON"
+                  placeholder="[]"
+                ></textarea>
+              </td>
+              <td>
+                <span :class="confidenceClass(mapping.confidence)">
+                  {{ Math.round((mapping.confidence || 0) * 100) }}%
+                </span>
+              </td>
+              <td>{{ mapping.required ? '是' : '否' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="hasOcrRows" class="etl-ocr-confirm">
+          <label>
+            <input v-model="ocrConfirmed" type="checkbox">
+            我已对照原图复核 OCR 表格位置和原文片段
+          </label>
+          <span>未确认前，OCR 行会保持错误状态并阻止写入。</span>
+        </div>
+        <fieldset v-if="updatableFields.length" class="etl-update-fields">
+          <legend>允许更新的字段（默认全部不更新）</legend>
+          <label v-for="field in updatableFields" :key="field.key">
+            <input v-model="allowedUpdateFields" type="checkbox" :value="field.key">
+            {{ field.label }}
+          </label>
+        </fieldset>
+        <fieldset v-if="currentRun.draft.match_keys?.length" class="etl-update-fields">
+          <legend>确定性匹配键</legend>
+          <span v-for="key in currentRun.draft.match_keys" :key="key" class="etl-match-key">{{ key }}</span>
+        </fieldset>
+      </div>
+    </section>
+
+    <section v-else-if="activeTab === 'preview'" class="etl-panel" data-tutorial-anchor="business-dock-results">
+      <div class="etl-panel__title">
+        <div>
+          <h2>预演与确认</h2>
+          <p>重复数据默认跳过；更新只会使用模板中明确允许的字段。</p>
+        </div>
+        <div class="etl-actions">
+          <button type="button" class="etl-secondary" :disabled="!currentRun || busy" @click="saveCurrentAsTemplate">
+            保存个人模板
+          </button>
+          <button
+            type="button"
+            class="etl-primary"
+            :disabled="!canExecute || busy"
+            @click="executeCurrentRun"
+          >
+            确认执行
+          </button>
+        </div>
+      </div>
+      <div v-if="!currentRun" class="etl-empty">暂无预演任务。</div>
+      <template v-else>
+        <div class="etl-summary-grid">
+          <button v-for="item in summaryCards" :key="item.action" type="button" @click="rowActionFilter = item.action">
+            <span :class="`etl-dot etl-dot--${item.action}`"></span>
+            <strong>{{ item.count }}</strong>
+            <small>{{ item.label }}</small>
+          </button>
+        </div>
+        <div v-if="currentRun.summary.error" class="etl-alert etl-alert--warning">
+          <div>
+            <strong>存在 {{ currentRun.summary.error }} 行错误，默认阻断整批</strong>
+            <span>修正映射后重新校验，或明确选择仅写入正确行。</span>
+          </div>
+          <label>
+            <input v-model="validRowsOnly" type="checkbox">
+            仅写入正确行
+          </label>
+        </div>
+        <div v-if="currentRun.error" class="etl-alert etl-alert--error">
+          {{ currentRun.error.message }}（{{ currentRun.error.code }}）
+        </div>
+        <div class="etl-table-toolbar">
+          <div class="etl-bulk-actions">
+            <select v-model="rowActionFilter" @change="loadRows">
+              <option value="">全部动作</option>
+              <option value="new">新增</option>
+              <option value="update">更新</option>
+              <option value="skip">跳过</option>
+              <option value="error">错误</option>
+            </select>
+            <button type="button" :disabled="busy || !runRows.length" @click="bulkOverride('skip')">本页全部跳过</button>
+            <button type="button" :disabled="busy || !bulkNewRows.length" @click="bulkOverride('new')">本页可新增行设为新增</button>
+          </div>
+          <a
+            v-if="currentRun.summary.error"
+            :href="etlApi.errorExportUrl(currentRun.id)"
+            target="_blank"
+            rel="noopener"
+          >导出错误行</a>
+        </div>
+        <div class="etl-table-wrap">
+          <table class="etl-table">
+            <thead>
+              <tr><th>来源</th><th>标准化结果</th><th>最终动作</th><th>AI 建议</th><th>问题 / 差异</th></tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in runRows"
+                :key="row.id"
+                :class="{
+                  'etl-row-error': row.final_action === 'error',
+                  'etl-row-ocr-low': Array.isArray(row.provenance.low_confidence_fields) && row.provenance.low_confidence_fields.length > 0,
+                }"
+              >
+                <td>
+                  <strong>{{ row.source_sheet }} · {{ row.source_row }}</strong>
+                  <small>{{ compactRecord(row.source) }}</small>
+                  <details v-if="row.provenance.ocr === true" class="etl-ocr-evidence">
+                    <summary>
+                      OCR 第 {{ row.provenance.page || 1 }} 页 · 表格行 {{ ocrTableRow(row) }}
+                    </summary>
+                    <pre>{{ JSON.stringify(row.provenance.cells || row.provenance.original_fragment || {}, null, 2) }}</pre>
+                  </details>
+                  <small
+                    v-if="Array.isArray(row.provenance.low_confidence_fields) && row.provenance.low_confidence_fields.length"
+                    class="etl-ocr-low-note"
+                  >
+                    OCR 低置信：{{ row.provenance.low_confidence_fields.join('、') }}
+                  </small>
+                </td>
+                <td><small>{{ compactRecord(row.normalized) }}</small></td>
+                <td>
+                  <select
+                    :value="row.final_action"
+                    :disabled="row.validation_issues.length > 0 || busy"
+                    @change="overrideRow(row, $event)"
+                  >
+                    <option v-for="action in allowedActionsForRow(row)" :key="action" :value="action">
+                      {{ actionLabel(action) }}
+                    </option>
+                    <option v-if="row.final_action === 'error'" value="error">错误</option>
+                  </select>
+                </td>
+                <td>
+                  <span>{{ actionLabel(row.llm_suggestion.action || row.suggested_action) }}</span>
+                  <small>{{ row.llm_suggestion.reason || '确定性规则建议' }} · 仅供参考</small>
+                </td>
+                <td>
+                  <ul v-if="row.validation_issues.length" class="etl-issues">
+                    <li v-for="issue in row.validation_issues" :key="`${row.id}-${issue.code}`">
+                      {{ issue.message }}
+                    </li>
+                  </ul>
+                  <details v-else-if="row.final_action === 'update'">
+                    <summary>查看前后差异</summary>
+                    <pre>{{ diffText(row) }}</pre>
+                  </details>
+                  <span v-else>{{ actionReason(row.final_action) }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="etl-pagination">
+          <button type="button" :disabled="rowPage <= 1" @click="rowPage--; loadRows()">上一页</button>
+          <span>第 {{ rowPage }} 页 · 共 {{ rowTotal }} 行</span>
+          <button type="button" :disabled="rowPage * 50 >= rowTotal" @click="rowPage++; loadRows()">下一页</button>
+        </div>
+      </template>
+    </section>
+
+    <section v-else class="etl-panel">
+      <div class="etl-panel__title">
+        <div>
+          <h2>运行历史</h2>
+          <p>查看进度、回执、重试和撤销。外部导出与 Webhook 明确不可撤销。</p>
+        </div>
+        <button type="button" class="etl-secondary" @click="refreshRuns">刷新</button>
+      </div>
+      <div v-if="!runs.length" class="etl-empty">暂无运行记录。</div>
+      <div v-else class="etl-history">
+        <button
+          v-for="run in runs"
+          :key="run.id"
+          type="button"
+          class="etl-history__item"
+          :class="{ active: currentRun?.id === run.id }"
+          @click="selectRun(run)"
+        >
+          <div>
+            <strong>{{ targetLabel(run.target_type) }}</strong>
+            <span>{{ run.id.slice(0, 8) }} · {{ formatTime(run.created_at) }}</span>
+          </div>
+          <div>
+            <span :class="`etl-status etl-status--${run.status}`">{{ statusLabel(run.status) }}</span>
+            <small>{{ run.summary.executed }}/{{ run.total_rows }} · {{ run.progress }}%</small>
+          </div>
+        </button>
+      </div>
+      <article v-if="currentRun" class="etl-receipt">
+        <header>
+          <div>
+            <h3>运行回执</h3>
+            <p>{{ currentRun.id }}</p>
+          </div>
+          <div class="etl-actions">
+            <a
+              v-if="['export_xlsx', 'export_csv'].includes(currentRun.target_type) && currentRun.status === 'completed'"
+              :href="etlApi.exportUrl(currentRun.id)"
+              target="_blank"
+              rel="noopener"
+              class="etl-secondary"
+            >下载导出</a>
+            <button
+              v-if="['failed', 'interrupted'].includes(currentRun.status)"
+              type="button"
+              class="etl-secondary"
+              :disabled="busy"
+              @click="retryRun"
+            >重新预演</button>
+            <button
+              v-if="['completed', 'failed', 'interrupted'].includes(currentRun.status) && currentRun.summary.executed > 0 && currentRun.reversible && currentRun.rollback_status !== 'completed'"
+              type="button"
+              class="etl-danger"
+              :disabled="busy"
+              @click="rollbackRun"
+            >撤销本次写入</button>
+          </div>
+        </header>
+        <dl>
+          <div><dt>状态</dt><dd>{{ statusLabel(currentRun.status) }}</dd></div>
+          <div><dt>目标</dt><dd>{{ targetLabel(currentRun.target_type) }}</dd></div>
+          <div><dt>已执行</dt><dd>{{ currentRun.summary.executed }} 行</dd></div>
+          <div><dt>进度</dt><dd>{{ currentRun.progress }}%</dd></div>
+          <div><dt>撤销能力</dt><dd>{{ currentRun.reversible ? '内部目标可撤销' : '外部目标不可撤销' }}</dd></div>
+        </dl>
+        <pre>{{ JSON.stringify(currentRun.receipt, null, 2) }}</pre>
+      </article>
+    </section>
+  </main>

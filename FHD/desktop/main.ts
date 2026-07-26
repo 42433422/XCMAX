@@ -349,9 +349,6 @@ function sanitizeBackendProxyEnv(
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
-    // dev 模式未指定 SKU：默认 generic，与前端 generic 构建产物一致。
-    // 显式注入 XCAGI_PRODUCT_SKU=generic 覆盖 XCAGI/.env 中可能的 enterprise 设置，
-    // 避免前后端 SKU 不一致导致路由守卫误触发 admin 跳转。
     return {
       XCAGI_PRODUCT_SKU: 'generic',
       XCAGI_GENERIC_EDITION: '1',
