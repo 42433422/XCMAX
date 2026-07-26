@@ -1040,6 +1040,47 @@ def test_resume_candidate_prefers_newer_same_task_code_hold_over_old_review_fail
     }
 
 
+def test_resume_candidate_prefers_latest_code_hold_over_stale_paired_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/stale",
+                "kind": "failed_steps",
+                "para_task_id": "task-stale",
+                "retry_count": 1,
+                "run_id": "run-stale-review",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/stale",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_black_not_passed",
+                "run_id": "run-stale-hold",
+                "task_id": "task-stale",
+            },
+            {
+                "branch": "devfleet/cursor/latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
+
+
 def test_resume_steps_rerun_failed_step_and_downstream_chain():
     assert _resume_steps(None) == {"code", "review", "qa"}
     assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
