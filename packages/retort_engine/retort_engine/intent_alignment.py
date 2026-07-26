@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 STOPWORDS = {
     "about",
     "above",
@@ -110,6 +109,6 @@ def _cjk_ngrams(value: str, *, min_keyword_length: int) -> set[str]:
     max_size = min(6, len(value))
     grams: set[str] = set()
     for size in range(max(2, min_keyword_length), max_size + 1):
-        for index in range(0, len(value) - size + 1):
+        for index in range(len(value) - size + 1):
             grams.add(value[index : index + size])
     return grams

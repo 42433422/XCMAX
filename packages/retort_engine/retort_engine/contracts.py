@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 RETORT_CONTRACT_COMPATIBILITY_VERSION = "retort-contracts-v1"
 
 RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {

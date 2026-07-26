@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-
 ABSORBED_REVIEW_POLICY: dict[str, Any] = json.loads(
     '{\n  "context_rank_overrides": {\n    "ci_config": 15,\n    "config": 15,\n    "docs": 15,\n    "frontend": 0,\n    "other": 0,\n    "runtime": 45,\n    "security": 25,\n    "tests": 40\n  },\n  "enabled": true,\n  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/alibaba/open-code-review",\n  "reason": "absorbed external review policy affects PR comment ordering",\n  "run_id": "20260719151907-f7cfdfd7bc",\n  "signals": [\n    "review_pipeline",\n    "file_grouping",\n    "benchmarking",\n    "codebase_graph",\n    "plugin_surface",\n    "multi_provider",\n    "safety_policy",\n    "static_analysis",\n    "semantic_index",\n    "atmosphere_shader",\n    "procedural_surface",\n    "webgl_scene",\n    "elevation_bump_map",\n    "specular_ocean"\n  ],\n  "source": "https://github.com/alibaba/open-code-review"\n}'
 )

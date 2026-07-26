@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-
 # Closed-loop proof flags may remain. Everything else under .retort is runtime residue.
 DURABLE_RELATIVE_PATHS = frozenset(
     {
@@ -104,9 +103,11 @@ def clean_workspace(
 
     residue = workspace_residue_report(root, keep_durable_state=keep_durable_state)
     return {
-        "status": "clean"
-        if residue["clean"] and not errors
-        else ("partial" if removed else "dirty"),
+        "status": (
+            "clean"
+            if residue["clean"] and not errors
+            else ("partial" if removed else "dirty")
+        ),
         "project": str(root),
         "runtime_root": str(runtime),
         "removed": removed,

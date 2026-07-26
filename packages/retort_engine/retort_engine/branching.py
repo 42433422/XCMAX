@@ -33,7 +33,7 @@ class BranchWorkflowState:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "BranchWorkflowState":
+    def from_dict(cls, payload: dict[str, object]) -> BranchWorkflowState:
         return cls(
             bool(payload.get("enabled")),
             str(payload.get("project_root") or ""),
@@ -143,8 +143,7 @@ def _git(args: list[str], cwd: Path) -> str:
         ["git", *args],
         cwd=cwd,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         timeout=30,
         check=False,
     )

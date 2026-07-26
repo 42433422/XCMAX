@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from retort_engine.self_bootstrap import (
     FRONTIER_SOURCES,
     build_self_bootstrap_plan,

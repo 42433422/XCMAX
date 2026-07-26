@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from retort_engine.absorption import run_absorption
 from retort_engine.models import ExternalProjectRef
 from retort_engine.sources import parse_github_url, resolve_external_project
+
 from tests.test_evidence_evaluator import (
     create_focused_tool_package,
     create_incomplete_package,

@@ -86,7 +86,7 @@ def _capability_audit_evidence(
     behavior_test = project / "tests" / "test_absorbed_capabilities.py"
     if behavior_test.is_file():
         behavior_test_count = len(
-            re.findall(r"^\s*def\s+test_", read_text(behavior_test), re.M)
+            re.findall(r"^\s*def\s+test_", read_text(behavior_test), re.MULTILINE)
         )
         evidence.append(f"behavior_test_function_count={behavior_test_count}")
     evidence.extend(

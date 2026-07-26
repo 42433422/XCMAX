@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from retort_engine.absorption import run_absorption
+
 from tests.test_evidence_evaluator import (
     create_focused_tool_package,
     create_incomplete_package,
@@ -17,8 +18,7 @@ def git(cwd: Path, *args: str) -> str:
         cwd=cwd,
         check=True,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return result.stdout.strip()
 

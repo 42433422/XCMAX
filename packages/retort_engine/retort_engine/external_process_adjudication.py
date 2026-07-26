@@ -43,8 +43,7 @@ def build_external_process_adjudication(
     completed = subprocess.run(
         [sys.executable, str(script_path), str(input_path), str(output_path)],
         cwd=lab,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=60,
         check=False,

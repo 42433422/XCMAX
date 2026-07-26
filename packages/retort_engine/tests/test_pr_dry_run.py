@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import pytest
-
 from retort_engine.contracts import validate_contract
-from retort_engine.pr_dry_run import prepare_review_input, pr_diff_url, review_pr_url
+from retort_engine.pr_dry_run import pr_diff_url, prepare_review_input, review_pr_url
 
 PR_DIFF = """diff --git a/app.py b/app.py
 index 1111111..2222222 100644

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from retort_engine.core_refactor_execution import verify_core_refactor_execution
 from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
@@ -74,7 +75,7 @@ def assess_project(
         path for path in files if path.name.startswith("test_") and path.suffix == ".py"
     ]
     test_functions = sum(
-        len(re.findall(r"^\s*def\s+test_", dependencies.read_text(path), re.M))
+        len(re.findall(r"^\s*def\s+test_", dependencies.read_text(path), re.MULTILINE))
         for path in tests
     )
     lint_ok = test_ok = False

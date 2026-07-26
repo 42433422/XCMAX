@@ -6,7 +6,6 @@ from typing import Any
 
 from retort_engine.pr_review import review_diff
 
-
 HETEROGENEOUS_ABSORPTION_CASES: tuple[dict[str, Any], ...] = (
     {
         "case_id": "semgrep-java-secret",
@@ -114,9 +113,9 @@ def build_heterogeneous_absorption_replay(
         "all_before_failed_after_passed": bool(rows)
         and all(row["before_failed_after_passed"] for row in rows),
         "minimum_behavior_delta": min(deltas) if deltas else 0,
-        "average_behavior_delta": round(sum(deltas) / len(deltas), 2)
-        if deltas
-        else 0.0,
+        "average_behavior_delta": (
+            round(sum(deltas) / len(deltas), 2) if deltas else 0.0
+        ),
         "independent_adjudication_status": adjudication["status"],
         "independent_adjudicated_case_count": adjudication_summary[
             "adjudicated_case_count"
@@ -287,9 +286,11 @@ def _adjudicate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )
     accepted = [item for item in adjudications if item["accepted"]]
     return {
-        "status": "ready"
-        if adjudications and len(accepted) == len(adjudications)
-        else "needs_attention",
+        "status": (
+            "ready"
+            if adjudications and len(accepted) == len(adjudications)
+            else "needs_attention"
+        ),
         "summary": {
             "adjudicated_case_count": len(adjudications),
             "accepted_case_count": len(accepted),

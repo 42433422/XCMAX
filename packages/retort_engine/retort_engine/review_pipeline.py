@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
 SOURCE_SUFFIXES = {
     ".py",
     ".js",
@@ -244,10 +243,12 @@ def build_diff_pipeline_replay(
         ),
     }
     return {
-        "status": "ready"
-        if any(review.get("status") == "reviewed" for review in reviews)
-        and replay_summary["context_group_count"]
-        else str(reviews[0].get("status") or "empty"),
+        "status": (
+            "ready"
+            if any(review.get("status") == "reviewed" for review in reviews)
+            and replay_summary["context_group_count"]
+            else str(reviews[0].get("status") or "empty")
+        ),
         "pipeline_stages": list(DIFF_REPLAY_STAGES),
         "summary": replay_summary,
         "chunks": [
@@ -610,9 +611,11 @@ def build_depth_absorption_workflow(
         focused.append(
             {
                 "component": component,
-                "priority": "P0"
-                if component in requested_components or depth_gap >= 20
-                else "P1",
+                "priority": (
+                    "P0"
+                    if component in requested_components or depth_gap >= 20
+                    else "P1"
+                ),
                 "own_marker_hits": own_hits,
                 "external_marker_hits": external_hits,
                 "depth_gap": depth_gap,
@@ -786,18 +789,20 @@ def _employee_task_for_component(component: str) -> dict[str, Any]:
         "task_id": f"retort-depth-{component.replace('_', '-')}",
         "title": f"Deepen {component}",
         "dimension": _dimension_for_component(component),
-        "priority": "P0"
-        if component
-        in {
-            "review_pipeline",
-            "diff_hunk_review",
-            "file_grouping",
-            "codebase_graph",
-            "static_analysis",
-            "context_packaging",
-            "semantic_index",
-        }
-        else "P1",
+        "priority": (
+            "P0"
+            if component
+            in {
+                "review_pipeline",
+                "diff_hunk_review",
+                "file_grouping",
+                "codebase_graph",
+                "static_analysis",
+                "context_packaging",
+                "semantic_index",
+            }
+            else "P1"
+        ),
         "acceptance": _acceptance_for_component(component),
         "evidence_required": _evidence_for_component(component),
         "owner_hint": "fhd-core-maintainer",

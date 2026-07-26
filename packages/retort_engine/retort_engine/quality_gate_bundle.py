@@ -4,12 +4,12 @@ import json
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from retort_engine.capability_audit import code_health
 from retort_engine.contracts import contract_names, validate_contract
-
 
 GateRunner = Callable[[list[str], Path], dict[str, Any]]
 TEST_DENSITY_FLOOR = 0.4
@@ -154,8 +154,7 @@ def _run_command(command: list[str], root: Path) -> dict[str, Any]:
         completed = subprocess.run(
             command,
             cwd=root,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=300,
             check=False,

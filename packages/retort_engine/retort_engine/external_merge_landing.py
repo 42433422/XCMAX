@@ -327,8 +327,7 @@ def _run(
         command,
         cwd=cwd,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -385,9 +384,13 @@ def _validate_command(command: list[str]) -> None:
         and branch_pattern.fullmatch(values[1])
     ):
         return
-    if subcommand == "commit" and len(values) == 2 and values[0] == "-m":
-        if re.fullmatch(r"absorb [^\x00\r\n]{1,512} review rule", values[1]):
-            return
+    if (
+        subcommand == "commit"
+        and len(values) == 2
+        and values[0] == "-m"
+        and re.fullmatch(r"absorb [^\x00\r\n]{1,512} review rule", values[1])
+    ):
+        return
     if (
         subcommand == "merge"
         and len(values) == 4

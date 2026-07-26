@@ -4,7 +4,6 @@ import re
 from pathlib import PurePosixPath
 from typing import Any
 
-
 BEHAVIOR_SOURCE_SUFFIXES = (".py", ".js", ".ts", ".tsx", ".jsx", ".go")
 GENERATED_ABSORPTION_NAMES = {
     "absorbed_capabilities.py",
@@ -213,9 +212,12 @@ def absorption_quality_gate(
     requested_capabilities = ranked_capabilities or []
     mapped = advantage_diff_map(changed_files, requested_capabilities)
     requested_rows = mapped[: len(requested_capabilities)]
-    if requested_rows and not any(row["has_behavior_diff"] for row in requested_rows):
-        missing.append("missing_advantage_to_behavior_mapping")
-    elif mapped and not any(row["has_behavior_diff"] for row in mapped):
+    if (
+        requested_rows
+        and not any(row["has_behavior_diff"] for row in requested_rows)
+        or mapped
+        and not any(row["has_behavior_diff"] for row in mapped)
+    ):
         missing.append("missing_advantage_to_behavior_mapping")
     if code_graph_proof is not None and not code_graph_proof.get("passed"):
         missing.append("code_graph_focus_not_proved")

@@ -19,7 +19,6 @@ from retort_engine.models import (
     ImprovementTask,
     ProjectAssessment,
 )
-from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
 from retort_engine.repository_intelligence import (
     build_ranked_repository_map,
     compare_repository_gaps,
@@ -30,8 +29,9 @@ from retort_engine.review_pipeline import (
     build_depth_absorption_workflow,
     group_review_files,
 )
-from retort_engine.semantic_reviewer import semantic_compare
+from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
 from retort_engine.self_bootstrap import external_improvement_gate
+from retort_engine.semantic_reviewer import semantic_compare
 from retort_engine.sources import resolve_external_project
 
 
@@ -428,12 +428,16 @@ def _build_absorption_task_plan(
             judge=lambda _objective, trajectory: {
                 "complete": bool(oracle.get("summary", {}).get("all_resolved"))
                 and len(trajectory) >= len(candidates),
-                "score": round(100 * len(trajectory) / len(candidates), 2)
-                if candidates
-                else 0,
-                "missing": ""
-                if oracle.get("summary", {}).get("all_resolved")
-                else "heldout_oracle_not_all_resolved",
+                "score": (
+                    round(100 * len(trajectory) / len(candidates), 2)
+                    if candidates
+                    else 0
+                ),
+                "missing": (
+                    ""
+                    if oracle.get("summary", {}).get("all_resolved")
+                    else "heldout_oracle_not_all_resolved"
+                ),
                 "oracle_resolved_count": oracle.get("summary", {}).get(
                     "resolved_count"
                 ),
@@ -566,9 +570,11 @@ def build_project_absorption_context(
         own_project, external_project, focus_terms=focus_terms, max_files=12
     )
     return {
-        "status": "ready"
-        if own_map["status"] == "ready" and external_map["status"] == "ready"
-        else "partial",
+        "status": (
+            "ready"
+            if own_map["status"] == "ready" and external_map["status"] == "ready"
+            else "partial"
+        ),
         "repository_intelligence": {
             "own": {
                 "summary": own_map["summary"],

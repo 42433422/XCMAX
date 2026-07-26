@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from retort_engine.contracts import validate_contract
 from retort_engine.external_merge_landing import _run, build_external_merge_landing
 from retort_engine.service import RetortService
@@ -136,8 +135,7 @@ def test_external_merge_landing_cli_outputs_contract(tmp_path: Path) -> None:
             "--json",
         ],
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
     )
     payload = json.loads(completed.stdout)

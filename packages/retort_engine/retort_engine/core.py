@@ -11,6 +11,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.absorption_state import (
+    advance_absorption_state as _state_advance_absorption_state,
+)
+from retort_engine.absorption_state import closed_loop_proof as _state_closed_loop_proof
+from retort_engine.absorption_state import (
+    load_absorption_state as _state_load_absorption_state,
+)
+from retort_engine.absorption_state import (
+    public_absorption_state as _state_public_absorption_state,
+)
+from retort_engine.absorption_state import (
+    record_absorption_shock as _state_record_absorption_shock,
+)
+from retort_engine.absorption_state import (
+    save_absorption_state as _state_save_absorption_state,
+)
 from retort_engine.absorption_workflow import (
     absorption_status as _workflow_absorption_status,
 )
@@ -33,22 +49,6 @@ from retort_engine.absorption_workflow import (
     run_real_absorption_cli as _workflow_run_real_absorption_cli,
 )
 from retort_engine.absorption_workflow import truthy as _workflow_truthy
-from retort_engine.absorption_state import (
-    advance_absorption_state as _state_advance_absorption_state,
-)
-from retort_engine.absorption_state import closed_loop_proof as _state_closed_loop_proof
-from retort_engine.absorption_state import (
-    load_absorption_state as _state_load_absorption_state,
-)
-from retort_engine.absorption_state import (
-    public_absorption_state as _state_public_absorption_state,
-)
-from retort_engine.absorption_state import (
-    record_absorption_shock as _state_record_absorption_shock,
-)
-from retort_engine.absorption_state import (
-    save_absorption_state as _state_save_absorption_state,
-)
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.branching import (
     BranchWorkflowState,
@@ -120,14 +120,14 @@ from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.project_assessment import Assessment, AssessmentDependencies, Score
+from retort_engine.project_assessment import assess_project as _project_assess_project
+from retort_engine.project_assessment import project_files as _assessment_project_files
 from retort_engine.proof import (
     record_closed_loop_proof as _record_closed_loop_proof_impl,
 )
 from retort_engine.proof import record_execution_proof as _record_execution_proof_impl
 from retort_engine.proof import rollback_rehearsal as _rollback_rehearsal_impl
-from retort_engine.project_assessment import Assessment, AssessmentDependencies, Score
-from retort_engine.project_assessment import assess_project as _project_assess_project
-from retort_engine.project_assessment import project_files as _assessment_project_files
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.self_bootstrap import (
     build_self_bootstrap_plan,
@@ -139,8 +139,8 @@ from retort_engine.similar_project_loop import (
     build_similar_project_radar,
     run_similar_project_loop,
 )
-from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
+from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 
 
@@ -415,9 +415,11 @@ def _absorb_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
         tasks=tasks,
         execution=execution,
         branch_state=branch_state,
-        absorption_state=_public_absorption_state(own)
-        if execution.get("status") in {"applied", "noop"}
-        else absorption_state,
+        absorption_state=(
+            _public_absorption_state(own)
+            if execution.get("status") in {"applied", "noop"}
+            else absorption_state
+        ),
         llm_review=llm_review,
     )
     result = {
@@ -433,9 +435,11 @@ def _absorb_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
         "absorption_visual": _absorption_visual(
             pre_assessment, own_assessment, external_assessment, str(external)
         ),
-        "absorption_state": _public_absorption_state(own)
-        if execution.get("status") in {"applied", "noop"}
-        else absorption_state,
+        "absorption_state": (
+            _public_absorption_state(own)
+            if execution.get("status") in {"applied", "noop"}
+            else absorption_state
+        ),
         "execution": execution,
         "tasks": tasks,
         "llm_review": llm_review,
@@ -689,9 +693,11 @@ class RetortService:
         contracts = payload.get("contracts")
         return evaluate_architecture_contracts(
             str(payload.get("project") or payload.get("project_path") or "."),
-            contracts=[dict(item) for item in contracts]
-            if isinstance(contracts, list)
-            else None,
+            contracts=(
+                [dict(item) for item in contracts]
+                if isinstance(contracts, list)
+                else None
+            ),
             include_tests=bool(payload.get("include_tests")),
             max_files=int(payload.get("max_files") or 400),
         )
@@ -1277,8 +1283,7 @@ def _run(cmd: list[str], cwd: Path) -> bool:
             subprocess.run(
                 cmd,
                 cwd=cwd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=120,
                 check=False,
@@ -1293,8 +1298,7 @@ def _git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
         cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=30,
         check=False,

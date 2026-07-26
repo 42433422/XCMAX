@@ -7,7 +7,6 @@ from typing import Any
 
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
 
-
 SOURCE_SUFFIXES = {
     ".py",
     ".js",
@@ -39,12 +38,12 @@ GENERATED_EVIDENCE_FILES = {
 }
 
 __all__ = [
-    "RETORT_SCORE_DIMENSIONS",
     "RETORT_LLM_SCORING_RUBRIC",
+    "RETORT_SCORE_DIMENSIONS",
     "build_retort_paibi_panel_prompt",
     "build_retort_paibi_prompt",
-    "project_digest",
     "prioritized_evidence",
+    "project_digest",
     "scoring_audit",
 ]
 RETORT_LLM_SCORING_RUBRIC = """Retort LLM 评分必须区分“证据闭环”和“能力吸收”，不能把证据文件完整度当成产品能力：

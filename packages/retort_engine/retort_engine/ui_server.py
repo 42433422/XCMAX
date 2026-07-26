@@ -123,7 +123,9 @@ class RetortUIServer:
                         self._json(outer.service.llm_parallel_status(payload))
                     else:
                         self.send_error(404)
-                except Exception as exc:
+                except (
+                    Exception  # noqa: BLE001 - HTTP boundary normalizes failures
+                ) as exc:
                     self._json({"status": "error", "error": str(exc)}, 400)
 
             def log_message(self, format: str, *args: Any) -> None:

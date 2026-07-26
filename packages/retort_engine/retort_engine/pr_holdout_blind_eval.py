@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from retort_engine.pr_dry_run import review_pr_url
 
@@ -135,7 +136,7 @@ def build_pr_holdout_blind_eval(
 def _evaluate_case(url: str, reviewer: Reviewer) -> dict[str, Any]:
     try:
         review = reviewer(url)
-    except Exception as exc:  # pragma: no cover - exercised by injected tests.
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover
         return {
             "pr_url": url,
             "repo": _repo_slug(url),

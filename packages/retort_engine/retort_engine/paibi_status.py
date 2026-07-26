@@ -15,13 +15,13 @@ from typing import Any
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
 
 __all__ = [
-    "summarize_task",
-    "parallel_summary",
     "analyze_task_blockers",
-    "unblock_tasks_from_blockers",
-    "status_has_stale_dispatch",
     "extract_last_json_object",
     "normalize_llm_scores",
+    "parallel_summary",
+    "status_has_stale_dispatch",
+    "summarize_task",
+    "unblock_tasks_from_blockers",
 ]
 
 
