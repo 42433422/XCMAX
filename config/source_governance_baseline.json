@@ -1267,10 +1267,10 @@
     }
   },
   "duplicate_metrics": {
-    "groups": 34,
-    "redundant_files": 36,
-    "redundant_lines": 11917,
-    "redundant_bytes": 480396
+    "groups": 29,
+    "redundant_files": 29,
+    "redundant_lines": 4478,
+    "redundant_bytes": 163782
   },
   "duplicate_excluded_prefixes": [
     "FHD/XCAGI/mods/",
