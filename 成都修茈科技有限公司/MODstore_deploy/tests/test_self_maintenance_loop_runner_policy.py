@@ -34,6 +34,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _matches_focused_test_command,
     _qa_task_text,
     _reconcile_requested_merge_feedback,
+    _reconcile_retort_scope_remediations,
     _reject_and_retry_kb_schema_failure,
     _resume_dispatch_context,
     _resume_review_qa_candidate,
@@ -1143,6 +1144,99 @@ def test_resume_review_qa_candidate_retries_structured_findings_on_existing_bran
     )
 
 
+def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypatch):
+    memory = {
+        "last_policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/too-wide",
+                "kind": "failed_steps",
+                "para_task_id": "task-wide",
+                "retry_count": 1,
+                "run_id": "run-wide",
+                "steps": ["review"],
+            }
+        ],
+        "recent_runs": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/too-wide",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-wide",
+                "phase": "complete",
+                "retort_clarification": {
+                    "changed_file_count": 13,
+                    "clarification": {
+                        "questions": [
+                            {"reason": "elevated_risk_or_large_diff"},
+                        ]
+                    },
+                },
+                "run_id": "run-wide",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-wide"],
+    }
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/too-wide",
+        "failed_run_id": "run-wide",
+        "failed_steps": ["code"],
+        "para_task_id": "task-wide",
+        "reason": "resume_automated_remediation_candidate",
+        "remediation_feedback": (
+            "Retort requested risk acceptance for 13 changed files; "
+            "rebuild the smallest valid fix from the clean base."
+        ),
+        "remediation_reason": "retort_scope_too_large",
+    }
+    assert "continue_existing_code_task" not in result
+    prompt = _code_task_text("run-next", {}, memory, result)
+    assert "RETORT SCOPE REMEDIATION" in prompt
+    assert "Do not copy its repository-wide formatting churn" in prompt
+
+
+def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
+    memory = {"open_items": []}
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/ambiguous",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-ambiguous",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "missing_business_intent"}],
+                    },
+                },
+                "run_id": "run-ambiguous",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 0,
+        "changed": False,
+        "run_ids": [],
+    }
+    assert memory["open_items"] == []
+
+
 def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
     memory = {
         "open_items": [
@@ -1302,15 +1396,27 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "platform-equivalent local `python -m pytest` command" in qa
     assert "same focused test file" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
-    assert "python -m black --check modman/ modstore_server/ tests/" in qa
-    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in qa
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
+    ) in qa
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
+    ) in qa
     assert "python scripts/dev/source_governance.py --top 10" in qa
     assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
-    assert "python -m black --check modman/ modstore_server/ tests/" in code
-    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in code
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/feat/base --target-ref WORKTREE"
+    ) in code
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/feat/base --target-ref WORKTREE"
+    ) in code
     assert "python scripts/dev/source_governance.py --top 10" in code
     assert "executable_template object" in code
     assert "validate_kb_payload" in code
@@ -1564,6 +1670,22 @@ def test_structured_report_gate_requires_black_isort_and_source_governance(monke
 
 
 def test_quality_command_matchers_require_real_commands_and_scopes():
+    assert matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert matches_isort_check_command(
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref HEAD"
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref HEAD"
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref HEAD --target-ref HEAD"
+    )
     assert matches_black_check_command(
         "cd 成都修茈科技有限公司/MODstore_deploy && "
         "python3 -m black --check modman/ modstore_server/ tests/"

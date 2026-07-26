@@ -101,9 +101,64 @@ def _scope_name(token: str) -> str:
     return Path(token.rstrip("/\\")).name
 
 
-def matches_black_check_command(command: Any) -> bool:
-    """Require a real Black check over every MODstore Python source scope."""
+def diff_quality_command(tool: str, *, base_ref: str, target_ref: str) -> str:
+    """Build one fail-closed formatter command over the exact branch diff."""
 
+    return (
+        "python -m modstore_server.self_maintenance_diff_quality "
+        f"--tool {shlex.quote(tool)} "
+        f"--base-ref {shlex.quote(base_ref)} "
+        f"--target-ref {shlex.quote(target_ref)}"
+    )
+
+
+def diff_quality_commands(*, base_ref: str, target_ref: str) -> tuple[str, str]:
+    return (
+        diff_quality_command("black", base_ref=base_ref, target_ref=target_ref),
+        diff_quality_command("isort", base_ref=base_ref, target_ref=target_ref),
+    )
+
+
+def _matches_diff_quality_command(command: Any, tool: str) -> bool:
+    """Accept the repository helper that computes the complete changed-file set."""
+
+    tokens = _safe_command_tokens(str(command or "").strip())
+    if tokens is None:
+        return False
+    for segment in _shell_command_segments(tokens):
+        if (
+            len(segment) < 9
+            or not _is_python_executable(segment[0])
+            or segment[1:3] != ["-m", "modstore_server.self_maintenance_diff_quality"]
+        ):
+            continue
+        args = segment[3:]
+        values: dict[str, str] = {}
+        for name in ("--tool", "--base-ref", "--target-ref"):
+            try:
+                index = args.index(name)
+                values[name] = args[index + 1]
+            except (ValueError, IndexError):
+                values[name] = ""
+        base_ref = values["--base-ref"]
+        target_ref = values["--target-ref"]
+        if (
+            values["--tool"] == tool
+            and base_ref
+            and target_ref
+            and base_ref != target_ref
+            and not base_ref.startswith("-")
+            and not target_ref.startswith("-")
+        ):
+            return True
+    return False
+
+
+def matches_black_check_command(command: Any) -> bool:
+    """Require Black over the exact diff or every MODstore Python source scope."""
+
+    if _matches_diff_quality_command(command, "black"):
+        return True
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
         return False
@@ -126,8 +181,10 @@ def matches_black_check_command(command: Any) -> bool:
 
 
 def matches_isort_check_command(command: Any) -> bool:
-    """Require a real isort check over every MODstore Python source scope."""
+    """Require isort over the exact diff or every MODstore Python source scope."""
 
+    if _matches_diff_quality_command(command, "isort"):
+        return True
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
         return False

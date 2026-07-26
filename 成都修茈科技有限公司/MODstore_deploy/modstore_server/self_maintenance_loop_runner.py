@@ -32,6 +32,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 from apscheduler.triggers.cron import CronTrigger
 
+from . import self_maintenance_retort_remediation as retort_remediation
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .employee_executor import execute_employee_task
@@ -47,13 +48,21 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
 )
 from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
+from .self_maintenance_remediation_prompts import (
+    external_merge_remediation_prompt,
+    external_review_remediation_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
+RETORT_SCOPE_REASON = retort_remediation.RETORT_SCOPE_REASON
+_reconcile_retort_scope_remediations = retort_remediation.reconcile_retort_scope_remediations
+_retort_scope_only_clarification = retort_remediation.retort_scope_only_clarification
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
 DEFAULT_LEDGER_NAME = "self_maintenance_loop_runs.jsonl"
@@ -902,6 +911,7 @@ _AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
     {
         "para_merge_conflict",
         "para_merge_task_failed",
+        RETORT_SCOPE_REASON,
         "structured_qa_blocking_findings",
         "structured_qa_black_not_passed",
         "structured_qa_isort_not_passed",
@@ -1174,6 +1184,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "para_task_id": para_task_id,
             "reason": "resume_automated_remediation_candidate",
         }
+        if reason == RETORT_SCOPE_REASON:
+            candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+            candidate["remediation_reason"] = reason
         if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
             candidate["continue_existing_code_task"] = True
         return candidate
@@ -1272,6 +1285,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "reason": "resume_automated_remediation_candidate",
             }
             if reason.startswith("para_merge_"):
+                candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+                candidate["remediation_reason"] = reason
+            elif reason == RETORT_SCOPE_REASON:
                 candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
                 candidate["remediation_reason"] = reason
             if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
@@ -2589,6 +2605,11 @@ def _code_task_text(
 ) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
     focused_test_command = _focused_test_command()
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main"
+    black_command, isort_command = _diff_quality_commands(
+        base_ref=f"origin/{base_branch}",
+        target_ref="WORKTREE",
+    )
     evolution_context_dict = build_self_evolution_context(
         run_id=run_id, evaluation=evaluation, memory=memory
     )
@@ -2641,46 +2662,9 @@ def _code_task_text(
         "risk_score_v3_below_threshold_or_blocked",
     }:
         selected_remediation = last_decision
-    external_review_remediation = ""
-    if (
-        isinstance(resume_candidate, dict)
-        and resume_candidate.get("reason") == "resume_para_ai_review_rejection"
-    ):
-        feedback = str(resume_candidate.get("review_feedback") or "").strip()[:4000]
-        rejected_branch = str(
-            resume_candidate.get("rejected_branch") or resume_candidate.get("branch") or ""
-        ).strip()
-        external_review_remediation = (
-            "\n\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\n"
-            "The independent Para merge reviewer vetoed the previous candidate. "
-            "Your current isolated work branch starts from the configured clean base, not from "
-            "the rejected branch. Treat the rejected branch as read-only reference and reproduce "
-            "only the smallest production fix needed to address the original symptom and every "
-            "finding below; do not inherit or cherry-pick the whole rejected diff. "
-            "Do not weaken safety gates or merely rewrite comments. "
-            "After the fix, run the mandatory policy suite, commit, and push the current work branch. "
-            f"Rejected reference branch: {rejected_branch or '(missing)'}. "
-            f"Exact reviewer findings: {feedback or '(missing feedback: fail closed and inspect the parent diff)'}"
-        )
-    external_merge_remediation = ""
-    if (
-        isinstance(resume_candidate, dict)
-        and resume_candidate.get("reason") == "resume_automated_remediation_candidate"
-        and str(resume_candidate.get("remediation_reason") or "").startswith("para_merge_")
-    ):
-        rejected_branch = str(resume_candidate.get("branch") or "").strip()
-        remediation_reason = str(resume_candidate.get("remediation_reason") or "").strip()
-        feedback = str(resume_candidate.get("remediation_feedback") or "").strip()[:4000]
-        external_merge_remediation = (
-            "\n\n=== EXTERNAL MERGE FAILURE REMEDIATION ===\n"
-            "The previous Para merge task ended in a terminal failure. Start from the configured "
-            "clean base. Use the rejected branch only as read-only evidence, then reproduce the "
-            "smallest valid production fix and focused regression test; do not inherit or cherry-pick "
-            "the whole rejected diff. "
-            f"Reason: {remediation_reason or '(missing)'}. "
-            f"Rejected reference branch: {rejected_branch or '(missing)'}. "
-            f"Exact failure detail: {feedback or '(missing)'}"
-        )
+    external_review_remediation = external_review_remediation_prompt(resume_candidate)
+    external_merge_remediation = external_merge_remediation_prompt(resume_candidate)
+    retort_scope_remediation = retort_remediation.retort_scope_remediation_prompt(resume_candidate)
     score_remediation = ""
     if isinstance(selected_remediation, dict):
         merge_result = (
@@ -2791,10 +2775,10 @@ def _code_task_text(
         "- Report every verification command with its real exit code and concise passing output.\n"
         f"Before reporting completion, execute `{focused_test_command}` in the target branch "
         "and require exit code 0. "
-        "Also run `python -m black --check modman/ modstore_server/ tests/` from "
-        "`成都修茈科技有限公司/MODstore_deploy` and "
-        "`python -m isort --check-only --diff modman/ modstore_server/ tests/` "
-        "from the same directory, plus "
+        f"Also run `{black_command}` and `{isort_command}` from "
+        "`成都修茈科技有限公司/MODstore_deploy`; these commands deterministically "
+        "check every changed Python file in the target diff without importing "
+        "unrelated historical formatting debt. Also run "
         "`python scripts/dev/source_governance.py --top 10` from the repository root; "
         "all three are mandatory merge-readiness gates and must exit 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
@@ -2814,6 +2798,7 @@ def _code_task_text(
         f"{score_remediation}"
         f"{external_review_remediation}"
         f"{external_merge_remediation}"
+        f"{retort_scope_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
@@ -2971,6 +2956,12 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     focused_test_command = _focused_test_command()
+    base_ref = f"origin/{base_branch or 'main'}"
+    target_ref = f"origin/{str(branch or '').strip()}" if branch else "HEAD"
+    black_command, isort_command = _diff_quality_commands(
+        base_ref=base_ref,
+        target_ref=target_ref,
+    )
     return (
         "MODSTORE_REPORT_ONLY=1. Report-only QA task. "
         "Do not change files, do not commit, and do not push. "
@@ -2992,10 +2983,9 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "check or a different test target is not a substitute. Do not fail solely because the scheduler's "
         "absolute Python path is unavailable when the equivalent focused command passes. "
         "From the target branch archive, you MUST also run "
-        "`python -m black --check modman/ modstore_server/ tests/` from "
-        "`成都修茈科技有限公司/MODstore_deploy`, "
-        "`python -m isort --check-only --diff modman/ modstore_server/ tests/` "
-        "from the same directory, and "
+        f"`{black_command}` and `{isort_command}` from "
+        "`成都修茈科技有限公司/MODstore_deploy`; these commands deterministically "
+        "check every changed Python file in the target diff. Also run "
         "`python scripts/dev/source_governance.py --top 10` from the repository root. "
         "Record their exact commands, real exit codes, and statuses in quality_checks. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
@@ -6467,20 +6457,23 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 new_item["para_task_id"] = final.get("para_task_id")
             open_items.append(new_item)
     if decision.get("action") == "hold_for_automated_remediation":
-        open_items.append(
-            {
-                "branch": final.get("branch"),
-                "active_gates": decision.get("active_gates"),
-                "created_at": _iso(_utc_now()),
-                "evolution_gate": decision.get("evolution_gate"),
-                "kind": "automated_remediation",
-                "governance_gate": decision.get("governance_gate"),
-                "reason": decision.get("reason"),
-                "roster_gate": decision.get("roster_gate"),
-                "run_id": final.get("run_id"),
-                "task_id": final.get("para_task_id"),
-            }
-        )
+        remediation_item = {
+            "branch": final.get("branch"),
+            "active_gates": decision.get("active_gates"),
+            "created_at": _iso(_utc_now()),
+            "evolution_gate": decision.get("evolution_gate"),
+            "kind": "automated_remediation",
+            "governance_gate": decision.get("governance_gate"),
+            "reason": decision.get("reason"),
+            "roster_gate": decision.get("roster_gate"),
+            "run_id": final.get("run_id"),
+            "task_id": final.get("para_task_id"),
+        }
+        if decision.get("detail"):
+            remediation_item["detail"] = decision.get("detail")
+        if decision.get("resume_from_clean_baseline"):
+            remediation_item["resume_from_clean_baseline"] = True
+        open_items.append(remediation_item)
     memory["open_items"] = open_items
     resolution_record = _close_items_resolved_by_final(memory, final)
     knowledge_record = record_loop_evolution_knowledge(final, gate)
@@ -6647,7 +6640,8 @@ def _run_self_maintenance_loop_unlocked(
     user_id = _self_maintenance_actor_user_id()
     loop_memory = _load_loop_memory()
     merge_reconciliation = _reconcile_requested_merge_feedback(loop_memory)
-    if merge_reconciliation.get("changed"):
+    retort_scope_reconciliation = _reconcile_retort_scope_remediations(loop_memory)
+    if merge_reconciliation.get("changed") or retort_scope_reconciliation.get("changed"):
         _write_loop_memory(loop_memory)
     resume_candidate = _resume_review_qa_candidate(loop_memory)
     start_record = {
@@ -6666,6 +6660,8 @@ def _run_self_maintenance_loop_unlocked(
     }
     if any(merge_reconciliation.values()):
         start_record["merge_reconciliation"] = merge_reconciliation
+    if retort_scope_reconciliation.get("changed"):
+        start_record["retort_scope_reconciliation"] = retort_scope_reconciliation
     if resume_candidate:
         start_record["resume_candidate"] = resume_candidate
     _append_ledger(start_record)
@@ -6759,6 +6755,7 @@ def _run_self_maintenance_loop_unlocked(
                     memory=loop_memory,
                 )
                 if retort_gate.get("blocked"):
+                    scope_only = _retort_scope_only_clarification(retort_gate)
                     step_record = {
                         "employee_id": employee_id,
                         "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
@@ -6767,7 +6764,7 @@ def _run_self_maintenance_loop_unlocked(
                         "phase": "step",
                         "report_excerpt": "",
                         "run_id": run_id,
-                        "status": "failed",
+                        "status": ("completed_held_for_remediation" if scope_only else "failed"),
                         "step": step_name,
                         "timestamp": _iso(_utc_now()),
                         "retort_clarification": retort_gate,
@@ -6788,14 +6785,24 @@ def _run_self_maintenance_loop_unlocked(
                         "triggered_by": triggered_by,
                         "retort_clarification": retort_gate,
                     }
-                    final["policy_decision"] = _decide_post_loop_policy(
-                        branch=code_branch,
-                        gate=gate,
-                        para_task_id=para_task_id,
-                        run_id=run_id,
-                        status="failed",
-                        steps=steps,
-                    )
+                    if scope_only:
+                        final["policy_decision"] = {
+                            "action": "hold_for_automated_remediation",
+                            "detail": (
+                                "Retort requires a smaller clean-base patch before unattended review."
+                            ),
+                            "reason": RETORT_SCOPE_REASON,
+                            "resume_from_clean_baseline": True,
+                        }
+                    else:
+                        final["policy_decision"] = _decide_post_loop_policy(
+                            branch=code_branch,
+                            gate=gate,
+                            para_task_id=para_task_id,
+                            run_id=run_id,
+                            status="failed",
+                            steps=steps,
+                        )
                     _append_ledger(final)
                     _update_loop_memory(final, gate)
                     return final
