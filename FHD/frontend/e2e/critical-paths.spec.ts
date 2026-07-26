@@ -1,5 +1,7 @@
 import { test, expect, type Route } from '@playwright/test';
 import {
+  E2E_PASSWORD,
+  E2E_USER,
   installE2eShellMocks,
   captureEvidence,
   csrfHeaders,
@@ -277,10 +279,18 @@ test.describe('P0 critical paths', () => {
       };
     };
 
-    // A clean E2E tenant hides the materials sidebar until host-pack onboarding.
-    // Warm the authenticated ERP bridge through the always-available orders route,
-    // then keep the real materials page mounted while Agent-backed CRUD runs.
-    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    // Establish this page's session through the real login UI. Reusing only a
+    // cookie leaves the browser-side enterprise session cache cold, so a deep
+    // link can block on redundant remote validation while the Agent-backed
+    // order work is settling. Login marks that cache valid without weakening
+    // any auth, route, or CRUD assertion.
+    await page.goto('/login?redirect=%2Forders', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
+    });
+    await page.locator('#lv-username').fill(E2E_USER);
+    await page.locator('#lv-password').fill(E2E_PASSWORD);
+    await page.locator('.login-submit').click();
     await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
