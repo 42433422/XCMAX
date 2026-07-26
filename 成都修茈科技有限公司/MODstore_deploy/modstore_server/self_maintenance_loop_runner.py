@@ -2790,12 +2790,9 @@ def _evaluate_retort_clarification_before_review(
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     target = str(branch or "").strip()
     if repo_url and base_branch and target:
+        workspace_root = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT
+        workspace = workspace_root / "retort-review-gate" / str(run_id or "run")
         try:
-            workspace = (
-                Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
-                / "retort-review-gate"
-                / str(run_id or "run")
-            )
             changed_files = _changed_files_for_branch(
                 repo_url=repo_url,
                 base_branch=base_branch,
@@ -2808,7 +2805,8 @@ def _evaluate_retort_clarification_before_review(
                 run_id,
                 type(exc).__name__,
             )
-            changed_files = []
+        finally:
+            _cleanup_merge_workspace(workspace)
 
     if not changed_files:
         mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
