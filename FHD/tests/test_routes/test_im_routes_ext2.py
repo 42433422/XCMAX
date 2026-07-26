@@ -203,6 +203,7 @@ class TestImRoutes:
         row = MagicMock()
         row.account_kind = "admin"
         row.market_is_admin = True
+        row.user.tier = "admin"
         db.query.return_value.filter.return_value.first.return_value = row
 
         assert mod._is_admin_customer_service_session(request, db) is True

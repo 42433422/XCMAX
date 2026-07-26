@@ -377,6 +377,7 @@ class TestMobileMeLogic:
             display_name="管理员",
             email="admin@local",
             role="admin",
+            tier="admin",
             is_active=True,
             wx_avatar_url=None,
         )
@@ -413,7 +414,7 @@ class TestMobileMeLogic:
         assert expunged == [user]
 
     @pytest.mark.asyncio
-    async def test_get_mobile_user_prefers_admin_jwt_over_stale_user_role(self, monkeypatch):
+    async def test_get_mobile_user_prefers_db_identity_over_admin_jwt(self, monkeypatch):
         from fastapi import Request
 
         stale_user = SimpleNamespace(
@@ -422,6 +423,7 @@ class TestMobileMeLogic:
             display_name="管理员",
             email="admin@local",
             role="user",
+            tier="personal",
             is_active=True,
             wx_avatar_url=None,
         )
@@ -461,9 +463,9 @@ class TestMobileMeLogic:
         request = Request({"type": "http", "headers": []})
         result = await get_mobile_user(request, authorization="Bearer token")
 
-        assert result is not stale_user
-        assert result.role == "admin"
-        assert result.username == "admin"
+        assert result is stale_user
+        assert result.role == "user"
+        assert result.tier == "personal"
 
     def test_user_public_dict_fields(self):
         user = MagicMock()

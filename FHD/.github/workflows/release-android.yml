@@ -27,6 +27,18 @@ jobs:
         working-directory: mobile-flutter-poc
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install governance dependency
+        working-directory: .
+        run: pip install pyyaml
+      - name: SSOT registry and drift gate
+        working-directory: .
+        run: python FHD/scripts/dev/ssot_cli.py gate
+      - name: Generated workflow drift gate
+        working-directory: .
+        run: python scripts/dev/publish_ci_workflows_to_root.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -118,9 +118,6 @@ async def ensure_local_user_after_market(
     from app.db.session import get_db
 
     try:
-        from app.db.init_db import ensure_runtime_auth_bootstrap
-
-        ensure_runtime_auth_bootstrap(swallow_errors=True)
         with get_db() as db:
             exists = db.query(User).filter(User.username == username).first()
     except RECOVERABLE_ERRORS as db_exc:
@@ -216,15 +213,13 @@ def _derive_and_heal_account_kind(
     market_is_enterprise: bool,
     fallback: AccountKind,
 ) -> AccountKind:
-    """从本地 User.tier 派生 account_kind；市场身份可向上提升并回写 User.tier（不下调）。"""
+    """从 User.tier 派生；市场提升必须成功回写后才成为有效身份。"""
+    del fallback
     from app.application.session_account_meta import derive_account_kind_from_user
 
     if user_id is None:
-        return derive_account_kind_from_user(
-            tier=fallback,
-            market_is_admin=market_is_admin,
-            market_is_enterprise=market_is_enterprise,
-        )
+        logger.warning("cannot derive account identity without local user; fail closed")
+        return derive_account_kind_from_user(tier=None)
     try:
         from app.db.models.user import User
         from app.db.session import get_db
@@ -243,11 +238,7 @@ def _derive_and_heal_account_kind(
             return kind
     except RECOVERABLE_ERRORS:
         logger.exception("_derive_and_heal_account_kind failed user_id=%s", user_id)
-        return derive_account_kind_from_user(
-            tier=fallback,
-            market_is_admin=market_is_admin,
-            market_is_enterprise=market_is_enterprise,
-        )
+        return derive_account_kind_from_user(tier=None)
 
 
 async def finalize_enterprise_login(
@@ -346,6 +337,12 @@ async def finalize_enterprise_login(
         elif skip_market_sync:
             user_id = (result.get("user") or {}).get("id")
             if user_id is not None:
+                account_kind = _derive_and_heal_account_kind(
+                    user_id=user_id,
+                    market_is_admin=False,
+                    market_is_enterprise=False,
+                    fallback=account_kind,
+                )
                 tenant_info = bind_tenant_for_login(
                     user_id=int(user_id),
                     company_brand=str(result.get("company_brand") or username),
@@ -363,6 +360,23 @@ async def finalize_enterprise_login(
                         int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
                     ),
                 )
+            result["account_kind"] = account_kind
+        else:
+            # Generic/local login: the selected login entrance is only a UI hint.
+            # Persist and return the identity re-derived from the local user SSOT.
+            user_id = (result.get("user") or {}).get("id")
+            account_kind = _derive_and_heal_account_kind(
+                user_id=user_id,
+                market_is_admin=False,
+                market_is_enterprise=False,
+                fallback=account_kind,
+            )
+            persist_session_account_meta(
+                str(session_id),
+                account_kind=account_kind,
+                company_brand=str(result.get("company_brand") or ""),
+                tenant_id=(int(result["tenant_id"]) if result.get("tenant_id") else None),
+            )
             result["account_kind"] = account_kind
 
         if sku == "enterprise" and market_result and market_result.get("success") and mtok:
@@ -493,7 +507,8 @@ async def run_market_first_login(
                 # 市场不可达的本地管理员应急登录：不阻断于本地 MFA
                 local_admin = auth_app_service.login(username, password, enforce_mfa=False)
                 user_role = str((local_admin.get("user") or {}).get("role") or "")
-                if local_admin.get("success") and user_role == "admin":
+                user_tier = str((local_admin.get("user") or {}).get("tier") or "")
+                if local_admin.get("success") and user_role == "admin" and user_tier == "admin":
                     session_id = local_admin.get("session_id")
                     if session_id:
                         # 复用 finalize 补充租户绑定 + 本地 mod 权益 fallback

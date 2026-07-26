@@ -74,10 +74,12 @@ class SQLAlchemyAgentRunRepository:
         self,
         *,
         session_factory: Callable[[], Session] | None = None,
-        auto_create: bool = True,
+        auto_create: bool = False,
     ) -> None:
         self._session_factory = session_factory
-        self._auto_create = auto_create
+        # Kept for source compatibility only. Runtime schema creation is
+        # intentionally disabled; Alembic owns the table.
+        del auto_create
         self._schema_ready = False
         self._schema_lock = threading.RLock()
 
@@ -173,20 +175,15 @@ class SQLAlchemyAgentRunRepository:
             db.close()
 
     def _ensure_schema(self) -> None:
-        if not self._auto_create or self._schema_ready:
+        if self._schema_ready:
             return
         with self._schema_lock:
             if self._schema_ready:
                 return
             with self._session_scope(read_only=True) as db:
-                from app.db.base import Base
-                from app.db.models.agent import AgentRunRecord
+                from app.db.schema_contract import assert_tables_present
 
-                Base.metadata.create_all(
-                    bind=db.get_bind(),
-                    tables=[AgentRunRecord.__table__],
-                    checkfirst=True,
-                )
+                assert_tables_present(db.get_bind(), {"agent_runs"})
             self._schema_ready = True
 
     @staticmethod

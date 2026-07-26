@@ -343,7 +343,9 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
             mid = getattr(row, "market_user_id", None)
             raw = getattr(row, "entitled_mod_ids_json", None) or "[]"
             ids = {str(x) for x in json.loads(raw) if str(x).strip()}
-            account_kind = str(getattr(row, "account_kind", None) or "enterprise")
+            from app.application.session_account_meta import session_row_to_meta_dict
+
+            account_kind = str(session_row_to_meta_dict(row).get("account_kind") or "personal")
             market_is_admin = bool(getattr(row, "market_is_admin", False))
             set_session_entitlements(
                 market_user_id=int(mid) if mid is not None else None,

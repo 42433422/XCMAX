@@ -40,7 +40,7 @@ def test_resolve_enterprise_role_uses_explicit_role_then_account_defaults(
 
 def test_personal_desktop_and_non_admin_route_are_blocked() -> None:
     decision = permissions.resolve_permissions(
-        user=SimpleNamespace(account_kind="personal"),
+        user=SimpleNamespace(account_kind="personal", tier="personal"),
         session_meta={"client_shell": "desktop"},
         route="/api/admin/users",
     )
@@ -52,14 +52,18 @@ def test_personal_desktop_and_non_admin_route_are_blocked() -> None:
 
 def test_enterprise_employee_execute_respects_role_permission() -> None:
     allowed = permissions.resolve_permissions(
-        user=SimpleNamespace(account_kind="enterprise", role="enterprise_operator"),
+        user=SimpleNamespace(
+            account_kind="enterprise", tier="enterprise", role="enterprise_operator"
+        ),
         route="/api/employees/demo/execute",
     )
     assert allowed["route_allowed"] is True
     assert "employee.invoke" in allowed["permissions"]
 
     denied = permissions.resolve_permissions(
-        user=SimpleNamespace(account_kind="enterprise", role="enterprise_viewer"),
+        user=SimpleNamespace(
+            account_kind="enterprise", tier="enterprise", role="enterprise_viewer"
+        ),
         route="/api/employees/demo/execute",
     )
     assert denied["route_allowed"] is False
@@ -71,7 +75,7 @@ def test_admin_employee_execute_is_allowed_off_desktop(
 ) -> None:
     monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", lambda: False)
     decision = permissions.resolve_permissions(
-        user=SimpleNamespace(account_kind="admin"),
+        user=SimpleNamespace(account_kind="admin", tier="admin"),
         route="/api/employees/demo/execute",
     )
     assert decision["route_allowed"] is True
@@ -87,14 +91,14 @@ def test_admin_desktop_detection_failure_falls_back_to_shell(
 
     monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", fail_detection)
     blocked = permissions.resolve_permissions(
-        user=SimpleNamespace(account_kind="admin"),
+        user=SimpleNamespace(account_kind="admin", tier="admin"),
         session_meta={"shell": "desktop"},
     )
     assert blocked["admin_shell_blocked"] is True
     assert blocked["allowed"] is False
 
     allowed = permissions.resolve_permissions(
-        user=SimpleNamespace(account_kind="admin"),
+        user=SimpleNamespace(account_kind="admin", tier="admin"),
         session_meta={"shell": "web"},
     )
     assert allowed["admin_shell_blocked"] is False
@@ -108,7 +112,7 @@ def test_enterprise_mod_entitlement_allowed_denied_and_recoverable_failure(
         "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
         lambda mod_id: mod_id == "allowed-mod",
     )
-    user = SimpleNamespace(account_kind="enterprise", role="enterprise_owner")
+    user = SimpleNamespace(account_kind="enterprise", tier="enterprise", role="enterprise_owner")
 
     allowed = permissions.resolve_permissions(user=user, mod_id="allowed-mod")
     assert allowed["mod_allowed"] is True
@@ -133,14 +137,14 @@ def test_enterprise_mod_entitlement_allowed_denied_and_recoverable_failure(
     [
         (
             {
-                "user": SimpleNamespace(account_kind="personal"),
+                "user": SimpleNamespace(account_kind="personal", tier="personal"),
                 "route": "/api/admin/users",
             },
             "admin_only",
         ),
         (
             {
-                "user": SimpleNamespace(account_kind="personal"),
+                "user": SimpleNamespace(account_kind="personal", tier="personal"),
                 "session_meta": {"shell": "mobile"},
             },
             "personal_shell_blocked",
@@ -157,4 +161,17 @@ def test_require_allowed_returns_stable_forbidden_reason(
 
 
 def test_require_allowed_returns_for_success() -> None:
-    assert permissions.require_allowed(user=SimpleNamespace(account_kind="personal")) is None
+    assert (
+        permissions.require_allowed(user=SimpleNamespace(account_kind="personal", tier="personal"))
+        is None
+    )
+
+
+def test_permission_resolution_ignores_forged_admin_snapshot() -> None:
+    decision = permissions.resolve_permissions(
+        user=SimpleNamespace(tier="personal", role="user"),
+        account_kind="admin",
+        route="/api/admin/users",
+    )
+    assert decision["account_kind"] == "personal"
+    assert decision["route_allowed"] is False

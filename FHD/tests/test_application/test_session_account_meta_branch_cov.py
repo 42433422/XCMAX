@@ -59,13 +59,13 @@ class TestNormalizeAccountKind:
         assert normalize_account_kind("admin") == "admin"
 
     def test_invalid_kind_returns_default(self) -> None:
-        assert normalize_account_kind("superuser") == "enterprise"
+        assert normalize_account_kind("superuser") == "personal"
 
     def test_none_returns_default(self) -> None:
-        assert normalize_account_kind(None) == "enterprise"
+        assert normalize_account_kind(None) == "personal"
 
     def test_empty_string_returns_default(self) -> None:
-        assert normalize_account_kind("") == "enterprise"
+        assert normalize_account_kind("") == "personal"
 
     def test_uppercase_normalized_to_lower(self) -> None:
         assert normalize_account_kind("ADMIN") == "admin"
@@ -286,6 +286,7 @@ class TestPersistSessionAccountMeta:
 
     def test_full_meta_persisted(self) -> None:
         mock_row = MagicMock()
+        mock_row.user.tier = "enterprise"
         mock_db = MagicMock()
         mock_query = MagicMock()
         mock_filter = MagicMock()
@@ -503,6 +504,7 @@ class TestLoadSessionAccountMeta:
         mock_row.market_is_admin = False
         mock_row.market_is_enterprise = True
         mock_row.market_membership_tier = "gold"
+        mock_row.user.tier = "enterprise"
         mock_row.impersonating_market_user_id = None
         mock_row.impersonating_username = ""
         mock_row.tenant_id = 3
@@ -542,6 +544,7 @@ class TestSessionRowToMetaDict:
         row = MagicMock()
         row.user_id = 12
         row.account_kind = "admin"
+        row.user.tier = "admin"
         row.company_brand = "Co"
         row.market_user_id = 1
         row.market_is_admin = True
@@ -562,7 +565,7 @@ class TestSessionRowToMetaDict:
         assert result["tenant_id"] == 4
         assert result["local_user_id"] == 12
 
-    def test_none_account_kind_defaults_enterprise(self) -> None:
+    def test_none_account_kind_defaults_personal(self) -> None:
         row = MagicMock()
         row.account_kind = None
         row.company_brand = ""
@@ -574,9 +577,9 @@ class TestSessionRowToMetaDict:
         row.impersonating_username = None
         row.tenant_id = None
         result = session_row_to_meta_dict(row)
-        assert result["account_kind"] == "enterprise"
+        assert result["account_kind"] == "personal"
 
-    def test_empty_account_kind_defaults_enterprise(self) -> None:
+    def test_empty_account_kind_defaults_personal(self) -> None:
         row = MagicMock()
         row.account_kind = ""
         row.company_brand = ""
@@ -588,7 +591,7 @@ class TestSessionRowToMetaDict:
         row.impersonating_username = ""
         row.tenant_id = None
         result = session_row_to_meta_dict(row)
-        assert result["account_kind"] == "enterprise"
+        assert result["account_kind"] == "personal"
         assert result["market_membership_tier"] is None
 
     def test_impersonating_uid_converted_to_int(self) -> None:

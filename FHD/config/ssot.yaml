@@ -79,7 +79,7 @@ domains:
     ssot: FHD/docs/SSOT_INDEX.md
     derived: []
     mode: lint
-    check: python scripts/dev/docs_ssot_lint.py
+    check: python scripts/dev/docs_ssot_lint.py --strict
     sync: null
 
   - name: account-system
@@ -100,7 +100,7 @@ domains:
     check: python scripts/dev/ssot_plugins/account_system.py check
     sync: null
 
-  # ===== 已启用域（lint/verify；ssot_cli gate 全量阻断）=====
+  # ===== 已启用域（lint/verify，统一 blocking gate）=====
   - name: test-files
     owner: qa
     enabled: true
@@ -147,7 +147,7 @@ domains:
     derived:
       - FHD/config/ssot.yaml
     mode: verify
-    check: python scripts/dev/ssot_registry_crosscheck.py check
+    check: python scripts/dev/ssot_registry_contract.py
     sync: null
 
   # k8s-manifests 域已随假 k8s 路径整体退役（2026-07-01 运维根治）：清单从未指向
@@ -175,10 +175,10 @@ domains:
   - name: db-schema
     owner: backend
     enabled: true
-    # DB schema：alembic 为唯一演进真相源；ensure_* 仅允许回填 ORM 已声明列（冻结守卫）。
-    # 此处 check = 纯 stdlib 结构守卫（单 head / 无悬挂 down_revision）。
-    # ORM-parity（alembic upgrade head == models）由 fhd-alembic-ssot.yml 的
-    # ssot-parity-sqlite job 阻断；PG parity 见 SCHEMA_DIALECT_NOTES（方言假阳性）。
+    # DB schema 已收口：Alembic 是生产/桌面主库唯一结构写入源。
+    # 此处 check = 纯 stdlib 结构守卫（单 head / 无悬挂 down_revision），无重依赖、随处可跑。
+    # 完整 ORM-parity（alembic upgrade head == models）由主 CI 的
+    # schema-ssot-gate 同时在 SQLite / PostgreSQL 上 blocking 把关。
     ssot: FHD/alembic/versions/
     derived:
       - FHD/app/db/

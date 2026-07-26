@@ -1583,6 +1583,8 @@ function bootstrap(): void {
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()
+        updateSplashProgress(8, '正在校验数据库版本…')
+        await runBackendMigration()
         updateSplashProgress(12, '正在连接本地服务…')
         await startBackend()
         if (!backendProcess) {

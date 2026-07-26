@@ -130,7 +130,7 @@ from app.fastapi_routes.mobile_extensions.pairing_helpers import (
 from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _mobile_user_identity,
     _mobile_user_public_dict,
-    _relay_admin_fallback_user,
+    _relay_admin_fallback_user,  # noqa: F401 - compatibility patch surface, fail-closed
     _relay_mobile_auth_payload,
 )
 from app.mod_sdk.assistant_ssot import dedicated_cs_label
@@ -257,14 +257,13 @@ def _ensure_outbox_table() -> None:
 def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict[str, Any]:
     """Resolve the mobile user for physical QR/device-code relay binding.
 
-    A relay pairing code already proves physical access to the desktop settings
-    screen, so first-time mobile binding must not require a pre-existing mobile
-    JWT. Prefer an existing admin account; create a local relay admin only when
-    the database has no active users yet.
+    A pairing code proves device possession, not an admin identity. Reuse only
+    the authenticated DB user; first-time pairing may create a personal relay
+    identity but can never select or mint an administrator.
     """
     uid, _ = _mobile_user_identity(user)
-    role = str(getattr(user, "role", "") or "").strip()
-    if uid > 0 and (not prefer_admin or role in {"admin", "super_admin", "owner"}):
+    del prefer_admin
+    if uid > 0:
         return _mobile_user_public_dict(user)
 
     from app.db.models import User
@@ -272,22 +271,13 @@ def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict
 
     try:
         with get_db() as db:
-            row = None
-            if prefer_admin or uid <= 0:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)  # noqa: E712
-                    .filter(User.role.in_(["admin", "super_admin", "owner"]))
-                    .order_by(User.id.asc())
-                    .first()
-                )
-            if row is None:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)  # noqa: E712
-                    .order_by(User.id.asc())
-                    .first()
-                )
+            row = (
+                db.query(User)
+                .filter(User.is_active == True)  # noqa: E712
+                .filter(User.role == "relay", User.tier == "personal")
+                .order_by(User.id.asc())
+                .first()
+            )
             if row is None:
                 now = datetime.utcnow()
                 row = User(
@@ -295,7 +285,8 @@ def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict
                     password=uuid.uuid4().hex,
                     display_name="移动端设备绑定",
                     email="",
-                    role="admin",
+                    role="relay",
+                    tier="personal",
                     is_active=True,
                     created_at=now,
                     last_login=now,
@@ -307,9 +298,7 @@ def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict
                 db.expunge(row)
             return public
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("mobile relay admin fallback: %s", exc)
-        if prefer_admin:
-            return _relay_admin_fallback_user()
+        logger.warning("mobile relay identity unavailable: %s", exc)
         raise
 
 

@@ -78,58 +78,12 @@ class MobileRelayService:
     """Small SQL-backed relay used by phones and desktop runtimes."""
 
     def ensure_tables(self, db) -> None:
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS mobile_relay_desktops (
-                    relay_id VARCHAR(64) PRIMARY KEY,
-                    pairing_code VARCHAR(16) UNIQUE NOT NULL,
-                    desktop_token_hash VARCHAR(128) NOT NULL,
-                    desktop_label VARCHAR(200) NOT NULL DEFAULT '',
-                    device_id VARCHAR(128) NOT NULL DEFAULT '',
-                    relay_base_url VARCHAR(512) NOT NULL DEFAULT '',
-                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
-                    mobile_user_id INTEGER,
-                    mobile_username VARCHAR(200) NOT NULL DEFAULT '',
-                    capabilities_json TEXT NOT NULL DEFAULT '{}',
-                    last_seen_at VARCHAR(64),
-                    expires_at VARCHAR(64) NOT NULL,
-                    created_at VARCHAR(64) NOT NULL,
-                    updated_at VARCHAR(64) NOT NULL
-                )
-                """
-            )
-        )
-        db.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS mobile_relay_tasks (
-                    task_id VARCHAR(64) PRIMARY KEY,
-                    relay_id VARCHAR(64) NOT NULL,
-                    kind VARCHAR(64) NOT NULL DEFAULT 'codex.invoke',
-                    payload_json TEXT NOT NULL DEFAULT '{}',
-                    status VARCHAR(32) NOT NULL DEFAULT 'queued',
-                    result_json TEXT NOT NULL DEFAULT '{}',
-                    created_by_user_id INTEGER,
-                    created_at VARCHAR(64) NOT NULL,
-                    updated_at VARCHAR(64) NOT NULL,
-                    claimed_at VARCHAR(64),
-                    completed_at VARCHAR(64)
-                )
-                """
-            )
-        )
-        db.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_mobile_relay_desktops_user "
-                "ON mobile_relay_desktops(mobile_user_id)"
-            )
-        )
-        db.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_mobile_relay_tasks_relay_status "
-                "ON mobile_relay_tasks(relay_id, status, created_at)"
-            )
+        """Verify the Alembic-owned relay schema without mutating it."""
+        from app.db.schema_contract import assert_tables_present
+
+        assert_tables_present(
+            db.get_bind(),
+            {"mobile_relay_desktops", "mobile_relay_tasks"},
         )
 
     def register_desktop(

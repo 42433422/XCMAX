@@ -7,21 +7,29 @@ Create Date: 2026-07-24
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "2026_07_24_shipment_etl_fingerprints"
-down_revision: Union[str, Sequence[str], None] = "2026_07_21_workflow_persistence"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "2026_07_21_workflow_persistence"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 _TABLE = "shipment_etl_import_fingerprints"
 
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # Alembic creates version_num as VARCHAR(32), but this revision ID is 36
+    # characters. PostgreSQL enforces that limit while SQLite does not, so widen
+    # the migration-owned version column before Alembic records this revision.
+    # Keep this before the table-exists early return: older runtimes may already
+    # have created the fingerprint table outside Alembic.
+    if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
     insp = sa.inspect(bind)
     if insp.has_table(_TABLE):
         return

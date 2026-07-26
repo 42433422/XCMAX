@@ -239,8 +239,8 @@ class TestResolveMobileRelayUser:
             m._resolve_mobile_relay_user(u, prefer_admin=False)
         mock_db.expunge.assert_called_once_with(mock_row)
 
-    def test_recoverable_error_prefer_admin_returns_fallback(self, m):
-        """branch [209,211]: RECOVERABLE_ERRORS + prefer_admin → _relay_admin_fallback_user."""
+    def test_recoverable_error_prefer_admin_fails_closed(self, m):
+        """A database outage cannot mint a fallback identity."""
         u = _user(uid=0)
         fallback = {"id": 0, "username": "relay_admin"}
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
@@ -250,8 +250,8 @@ class TestResolveMobileRelayUser:
             patch("app.db.session.get_db", side_effect=err_class("boom")),
             patch.object(m, "_relay_admin_fallback_user", return_value=fallback),
         ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == fallback
+            with pytest.raises(err_class):
+                m._resolve_mobile_relay_user(u, prefer_admin=True)
 
 
 # ============================================================

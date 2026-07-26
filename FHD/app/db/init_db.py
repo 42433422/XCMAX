@@ -167,7 +167,7 @@ def initialize_databases(db_files: Iterable[str] = DEFAULT_DB_FILES) -> None:
                 break
 
         if not source_path:
-            logger.warning("未找到种子数据库文件：%s（将由 ORM/运行时创建）", db_file)
+            logger.warning("未找到种子数据库文件：%s（必须由启动前 Alembic 迁移提供）", db_file)
             continue
 
         try:
@@ -1988,11 +1988,7 @@ def init_service_bridge_tables(engine: Engine) -> None:
 
 
 def init_persona_tables(engine: Engine) -> None:
-    """在主库创建 persona 画像表（persona_profile / persona_event_log）。
-
-    注：本仓库 alembic 链在普通启动时不触发（建表统一走 init_db + lifespan），
-    故 persona 两张表必须在此显式 create_all，否则 PersonaRepositoryImpl 落盘会失败。
-    """
+    """Legacy test/tool helper for persona tables; application runtime may not call it."""
     from app.db.base import Base
     from app.infrastructure.persona.models import (  # noqa: F401
         PersonaEventLogModel,

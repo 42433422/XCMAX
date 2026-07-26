@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""L1：ssot.yaml ↔ SSOT_INDEX.md 机器注册表互校验。
+"""兼容入口：ssot.yaml ↔ SSOT_INDEX.md 注册表契约校验。
 
-要求 SSOT_INDEX.md 含「## 机器注册表（ssot.yaml）」表格，且：
-  1. 每个 enabled 域（ssot.yaml）都有一行，域名与 ssot 路径一致
-  2. 表中没有多余/未知域名
-  3. 表中路径与 ssot.yaml 的 ssot: 字段一致
+正式实现位于 ``ssot_registry_contract.py``，校验所有域（不限 enabled）在
+``SSOT_INDEX.md`` 的「执行注册名」列中恰好绑定一次且路径一致。保留本文件
+是为了兼容已有脚本调用。
 
 用法:
   python scripts/dev/ssot_registry_crosscheck.py check
@@ -21,14 +20,16 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]  # FHD/
+sys.path.insert(0, str(ROOT))
+
+from scripts.dev.ssot_registry_contract import parse_index_bindings, validate_registry_contract
+
 REGISTRY = ROOT / "config" / "ssot.yaml"
 INDEX = ROOT / "docs" / "SSOT_INDEX.md"
 SECTION = "## 机器注册表（ssot.yaml）"
 EXIT_OK, EXIT_DRIFT, EXIT_CONFIG = 0, 1, 2
 
-ROW_RE = re.compile(
-    r"^\|\s*`?([a-z0-9][a-z0-9\-_]*)`?\s*\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|$"
-)
+ROW_RE = re.compile(r"^\|\s*`?([a-z0-9][a-z0-9\-_]*)`?\s*\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|$")
 
 
 def load_enabled_domains() -> dict[str, str]:
@@ -75,52 +76,14 @@ def parse_machine_table(text: str) -> dict[str, str]:
 
 
 def check() -> int:
-    if not INDEX.is_file():
-        print(f"缺少 SSOT_INDEX: {INDEX}", file=sys.stderr)
-        return EXIT_CONFIG
-    text = INDEX.read_text(encoding="utf-8")
-    if SECTION not in text:
-        print(f"SSOT_INDEX.md 缺少章节: {SECTION}", file=sys.stderr)
+    errors = validate_registry_contract()
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
         return EXIT_DRIFT
-
-    yaml_domains = load_enabled_domains()
-    index_rows = parse_machine_table(text)
-    if not index_rows:
-        print("机器注册表为空或无法解析", file=sys.stderr)
-        return EXIT_DRIFT
-
-    missing = sorted(set(yaml_domains) - set(index_rows))
-    extra = sorted(set(index_rows) - set(yaml_domains))
-    path_mismatch = sorted(
-        name
-        for name in set(yaml_domains) & set(index_rows)
-        if yaml_domains[name] != index_rows[name]
-    )
-
-    ok = True
-    if missing:
-        ok = False
-        print("ssot.yaml 有、机器注册表缺:", ", ".join(missing), file=sys.stderr)
-    if extra:
-        ok = False
-        print("机器注册表有、ssot.yaml 无/未启用:", ", ".join(extra), file=sys.stderr)
-    if path_mismatch:
-        ok = False
-        for name in path_mismatch:
-            print(
-                f"路径不一致 {name}: yaml={yaml_domains[name]!r} index={index_rows[name]!r}",
-                file=sys.stderr,
-            )
-    if ok:
-        print(
-            f"registry-crosscheck OK：{len(yaml_domains)} 个 enabled 域与机器注册表一致"
-        )
-        return EXIT_OK
-    print(
-        "修复：同步 FHD/docs/SSOT_INDEX.md「机器注册表（ssot.yaml）」与 FHD/config/ssot.yaml",
-        file=sys.stderr,
-    )
-    return EXIT_DRIFT
+    bindings, _ = parse_index_bindings()
+    print(f"registry-crosscheck OK：{len(bindings)} 个执行域逐项一致")
+    return EXIT_OK
 
 
 def main(argv: list[str] | None = None) -> int:

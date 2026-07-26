@@ -34,27 +34,24 @@ Re-baseline them once (schema is unchanged — this only rewrites alembic_versio
 
     python -m alembic stamp 2026_06_22_baseline --purge
 
-Production on a real database runs ``alembic upgrade head`` from this baseline
-(``FHD_SKIP_ALEMBIC=0`` — see helm ``values-prod.yaml`` and
-``docker-compose.fhd-prod.yml``; the entrypoint gates on a non-empty
-``DATABASE_URL``). SQLite single-host deployments leave ``DATABASE_URL`` empty and
-build via ``create_all`` + ensure, so the entrypoint skips Alembic for them. Real
-DBs predating this squash need the one-time stamp above; dev/desktop SQLite DBs
-build fresh.
+Production always runs ``alembic upgrade head`` from this baseline; the
+container entrypoint requires ``DATABASE_URL`` and has no migration bypass.
+Desktop starts by running the same Alembic upgrade before the backend process.
+Real DBs predating this squash need the one-time stamp above.
 """
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from typing import Sequence
 
 from sqlalchemy import text
 
 from alembic import op
 
 revision: str = "2026_06_22_baseline"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 # Raw-SQL tables that intentionally have no ORM model. Verbatim from the archived
@@ -144,8 +141,8 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # 1. Every ORM table, in FK-correct order, idempotently (checkfirst=True).
-    from app.db.base import Base
     import app.db.models  # noqa: F401  (populates Base.metadata)
+    from app.db.base import Base
 
     Base.metadata.create_all(bind=conn, checkfirst=True)
 
@@ -168,7 +165,7 @@ def downgrade() -> None:
         ):
             conn.execute(text(f"DROP TABLE IF EXISTS {tbl} CASCADE"))
 
-    from app.db.base import Base
     import app.db.models  # noqa: F401
+    from app.db.base import Base
 
     Base.metadata.drop_all(bind=conn)

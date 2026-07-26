@@ -15,7 +15,7 @@ AccountKind = Literal["personal", "enterprise", "admin"]
 VALID_ACCOUNT_KINDS: frozenset[str] = frozenset({"personal", "enterprise", "admin"})
 
 
-def normalize_account_kind(raw: Any, *, default: str = "enterprise") -> AccountKind:
+def normalize_account_kind(raw: Any, *, default: str = "personal") -> AccountKind:
     v = str(raw or default).strip().lower()
     if v in VALID_ACCOUNT_KINDS:
         return v
@@ -116,7 +116,15 @@ def persist_session_account_meta(
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
-            row.account_kind = account_kind
+            user_tier = str(getattr(getattr(row, "user", None), "tier", "") or "")
+            canonical_kind = derive_account_kind_from_user(tier=user_tier)
+            if canonical_kind != account_kind:
+                logger.warning(
+                    "ignored non-canonical session account_kind=%s; users.tier resolved %s",
+                    account_kind,
+                    canonical_kind,
+                )
+            row.account_kind = canonical_kind
             row.company_brand = (company_brand or "").strip()[:256]
             if market_user_id is not None:
                 row.market_user_id = int(market_user_id)
@@ -174,9 +182,14 @@ def session_row_to_meta_dict(row: UserSession) -> dict[str, Any]:
         if isinstance(raw_local_uid, (int, str)) and str(raw_local_uid).strip().isdigit()
         else None
     )
+    canonical_account_kind = derive_account_kind_from_user(
+        tier=getattr(getattr(row, "user", None), "tier", None)
+    )
     return {
-        "account_kind": str(getattr(row, "account_kind", None) or "enterprise").strip()
-        or "enterprise",
+        # sessions.account_kind is only an audit snapshot. User.tier is the
+        # identity SSOT and is re-derived on every read, so stale session rows
+        # cannot retain privileges after an account change.
+        "account_kind": canonical_account_kind,
         "company_brand": str(getattr(row, "company_brand", None) or "").strip(),
         "market_user_id": getattr(row, "market_user_id", None),
         "market_is_admin": bool(getattr(row, "market_is_admin", False)),
@@ -208,7 +221,7 @@ def enrich_session_meta_with_tenant(session_id: str, user: Any) -> dict[str, Any
         if uid is not None:
             meta["local_user_id"] = int(uid)
 
-    account_kind = str(meta.get("account_kind") or "enterprise").strip() or "enterprise"
+    account_kind = str(meta.get("account_kind") or "personal").strip() or "personal"
     if account_kind == "admin":
         return meta
 

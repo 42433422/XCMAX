@@ -25,7 +25,6 @@ from io import BytesIO
 from typing import Any, BinaryIO
 
 from app.application.facades.template_facade import document_templates_service as _tpl
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_base_dir
 
 
@@ -155,18 +154,9 @@ def run_archive_template_delete(
     if db_id is not None:
         from sqlalchemy import text
 
-        from app.db.init_db import init_template_tables
         from app.db.session import get_db
-        from app.infrastructure.templates.tenant_scope import (
-            ensure_templates_tenant_column,
-            templates_tenant_where_sql,
-        )
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
-        try:
-            init_template_tables()
-            ensure_templates_tenant_column()
-        except RECOVERABLE_ERRORS:
-            pass
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             row = db.execute(

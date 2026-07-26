@@ -49,7 +49,12 @@ def resolve_permissions(
     route: str | None = None,
 ) -> dict[str, Any]:
     """返回权限决策摘要，供路由/UI 共用。"""
-    kind = _normalize_account_kind(account_kind or getattr(user, "account_kind", None))
+    from app.application.session_account_meta import derive_account_kind_from_user
+
+    # Login hints and session/JWT snapshots are context only. User.tier is the
+    # identity authority for every permission decision.
+    del account_kind
+    kind = derive_account_kind_from_user(tier=getattr(user, "tier", None))
     meta = session_meta or {}
     enterprise_role = resolve_enterprise_role(user, meta) if kind == "enterprise" else ""
     perms = set(ENTERPRISE_ROLE_PERMISSIONS.get(enterprise_role, frozenset()))

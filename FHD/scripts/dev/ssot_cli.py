@@ -12,6 +12,7 @@
 
 退出码: 0=一致 1=漂移 2=配置错误 3=脚本执行失败
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.dev.ssot_plugins.base import find_domain, load_registry, run_command  # noqa: E402
+from scripts.dev.ssot_registry_contract import validate_registry_contract  # noqa: E402
 
 EXIT_OK = 0
 EXIT_DRIFT = 1
@@ -138,7 +140,14 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
-    """CI 门禁入口，等价于 check-all。"""
+    """CI 门禁入口：先互校双注册表，再执行所有 enabled 域。"""
+    contract_errors = validate_registry_contract()
+    if contract_errors:
+        print("SSOT 双注册表互校失败:", file=sys.stderr)
+        for error in contract_errors:
+            print(f"  - {error}", file=sys.stderr)
+        return EXIT_CONFIG
+    print("SSOT 双注册表互校: OK")
     return cmd_check(args)
 
 
@@ -173,7 +182,9 @@ def cmd_drift(args: argparse.Namespace) -> int:
     report = []
     for d in domains:
         code, msg = _run_domain_check(d, silent=True)
-        report.append({"domain": d["name"], "status": "ok" if code == 0 else "drift", "message": msg})
+        report.append(
+            {"domain": d["name"], "status": "ok" if code == 0 else "drift", "message": msg}
+        )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return EXIT_OK if all(r["status"] == "ok" for r in report) else EXIT_DRIFT
 

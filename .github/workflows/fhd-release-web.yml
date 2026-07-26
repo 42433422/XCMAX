@@ -29,6 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install governance dependency
+        run: pip install pyyaml
+      - name: SSOT registry and drift gate
+        run: python scripts/dev/ssot_cli.py gate
+      - name: Generated workflow drift gate
+        working-directory: .
+        run: python scripts/dev/publish_ci_workflows_to_root.py --check
       - name: Compute lowercase image prefix
         run: echo "IMAGE_PREFIX=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - uses: docker/setup-buildx-action@v3

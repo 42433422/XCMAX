@@ -30,23 +30,14 @@ def _authenticate_failure_message(exc: BaseException) -> str:
     if "market_access_token" in blob:
         return (
             "数据库表 sessions 缺少 market_access_token 列，无法保存登录会话。"
-            "请在服务器 FHD 目录执行 alembic upgrade head，或重启后端由启动逻辑自动补齐该列。"
+            "请在服务器 FHD 目录执行 alembic upgrade head。"
         )
     if "no such table: users" in blob:
-        return (
-            "本地 SQLite 缺少 users 表。请重启后端（将自动创建），"
-            '或在 FHD 目录执行：python -c "from app.db.init_db import ensure_runtime_auth_bootstrap; ensure_runtime_auth_bootstrap()"'
-        )
+        return "本地 SQLite 缺少 users 表。请先执行 Alembic 数据库迁移。"
     if 'relation "users"' in blob or ("users" in blob and "does not exist" in blob):
-        return (
-            "数据库缺少 users 表（尚未执行迁移或空库未自动引导）。"
-            "请在服务器 FHD 目录执行 alembic upgrade head，或重启后端以触发 PostgreSQL 登录表自动补齐。"
-        )
+        return "数据库缺少 users 表。请在服务器 FHD 目录执行 alembic upgrade head。"
     if 'relation "sessions"' in blob or ("sessions" in blob and "does not exist" in blob):
-        return (
-            "数据库缺少 sessions 表，无法创建登录会话。"
-            "请在服务器 FHD 目录执行 alembic upgrade head，或重启后端以触发 PostgreSQL 登录表自动补齐。"
-        )
+        return "数据库缺少 sessions 表。请在服务器 FHD 目录执行 alembic upgrade head。"
     return "登录失败，请稍后重试"
 
 
@@ -70,12 +61,6 @@ class AuthApplicationService:
     def create_session_for_username(self, username: str) -> dict[str, Any]:
         """市场已验证身份后创建本地会话（手机验证码 / OIDC 等无本地密码场景）。"""
         try:
-            from app.db.init_db import ensure_runtime_auth_bootstrap
-
-            ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except RECOVERABLE_ERRORS as bootstrap_exc:
-            logger.warning("create_session_for_username bootstrap skip: %s", bootstrap_exc)
-        try:
             with get_db() as db:
                 user = db.query(User).filter(User.username == username).first()
                 if not user:
@@ -94,6 +79,7 @@ class AuthApplicationService:
                         "display_name": user.display_name,
                         "email": user.email,
                         "role": user.role,
+                        "tier": getattr(user, "tier", "personal"),
                     },
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
@@ -118,12 +104,6 @@ class AuthApplicationService:
             return {"success": False, "message": "OIDC 未返回可用用户名"}
         email = str(profile.get("email") or "").strip()
         display_name = str(profile.get("name") or profile.get("given_name") or username).strip()
-        try:
-            from app.db.init_db import ensure_runtime_auth_bootstrap
-
-            ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except RECOVERABLE_ERRORS:
-            pass
         try:
             with get_db() as db:
                 user = db.query(User).filter(User.username == username).first()
@@ -168,6 +148,7 @@ class AuthApplicationService:
                         "display_name": user.display_name,
                         "email": user.email,
                         "role": user.role,
+                        "tier": getattr(user, "tier", "personal"),
                     },
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
@@ -189,12 +170,6 @@ class AuthApplicationService:
         totp_code: str | None = None,
         enforce_mfa: bool = True,
     ) -> dict[str, Any]:
-        try:
-            from app.db.init_db import ensure_runtime_auth_bootstrap
-
-            ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except RECOVERABLE_ERRORS as bootstrap_exc:
-            logger.warning("登录前 auth 表自检跳过: %s", bootstrap_exc)
         try:
             from app.application.account_security import (
                 is_locked,
@@ -256,6 +231,7 @@ class AuthApplicationService:
                         "display_name": user.display_name,
                         "email": user.email,
                         "role": user.role,
+                        "tier": getattr(user, "tier", "personal"),
                     },
                     "session_id": session_result["session_id"],
                     "expires_at": session_result["expires_at"],
@@ -276,12 +252,6 @@ class AuthApplicationService:
         return cast("User | None", self.session_manager.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
-        try:
-            from app.db.init_db import ensure_runtime_auth_bootstrap
-
-            ensure_runtime_auth_bootstrap(swallow_errors=True)
-        except RECOVERABLE_ERRORS as bootstrap_exc:
-            logger.warning("权限表自检跳过: %s", bootstrap_exc)
         try:
             with get_db() as db:
                 if user.role == "admin":

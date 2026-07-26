@@ -1,12 +1,9 @@
 """Freeze the runtime ``ensure_*`` schema-patch surface (Level 2 / L2.1).
 
-Alembic is the schema SSOT for DATABASE_URL-backed DBs. ``FHD_SKIP_ALEMBIC=1`` is
-blocked at the container entrypoint unless ``FHD_ALLOW_SKIP_ALEMBIC_EMERGENCY=1``.
-The squashed Alembic baseline is itself a ``Base.metadata.create_all`` snapshot, so
-the ORM models *are* the Alembic schema. As long as the runtime ``ensure_*`` layer
-can mint a column the ORM does not declare, the schema has two heads and Alembic can
-never become the single source of truth. These guards cap that second head at zero
-growth:
+Legacy tools still expose ``create_all + ensure_*`` for isolated compatibility
+tests, but production runtime callsites are forbidden. The squashed Alembic
+baseline is itself a ``Base.metadata.create_all`` snapshot, so the ORM models *are*
+the Alembic schema. These guards cap that legacy surface at zero growth:
 
 1. ``test_ensure_star_introduces_no_orm_absent_column`` — functional. Build a fresh
    SQLite DB via ``create_all`` (== the Alembic baseline), then run every

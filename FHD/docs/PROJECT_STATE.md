@@ -2,12 +2,12 @@
 
 > **本文件的唯一职责：说真话。** 不写愿景、不写"已完成"除非有证据。
 > 给人看，也给 AI 员工看——它们照字面信这里的每一行，所以这里只许写实测。
-> 最后更新：2026-07-24
+> 最后更新：2026-07-26
 
 ## 一句话定位
 
 被资深架构师画在**生产级图纸**上、地基三刀（SSOT / schema / 运行时真相）已通电的项目。
-结构的雄心仍略跑在业务闭环前面。**当前综合 ≈ 6.5 / 10**（地基通电后上修；无人公司业务闭环另计）。
+L0/L4 已在源码与本地门禁收口，结构的雄心仍略跑在生产激活与业务闭环前面。**当前综合 ≈ 6.5 / 10**。
 
 ## 客服闭环总线 SSOT（勿混）
 
@@ -28,8 +28,8 @@
 | 维度 | 分 | 依据 |
 |---|---|---|
 | 架构设计 / 雄心 | 8 | NeuroBus 800 行带熔断/重试/死信/追踪；跨端复用 |
-| 工程治理 | 7 | SSOT gate **blocking**；双注册表互校验；neuro-bus-events 已启用 |
-| 落地 / 生产可用 | 5 | schema 旁路已封；runtime inventory 已落地；业务闭环（客服工单/Para 真修）仍有缺口 |
+| 工程治理 | 7 | 19 个 SSOT 域统一 blocking；机器/人类注册逐项互校；全部发布入口接 gate |
+| 落地 / 生产可用 | 5 | schema/身份源码已收口；runtime inventory 已落地；当前分支尚待远端 CI 与生产回执 |
 | **综合** | **6.5** | 地基通电；无人公司业务层未满 |
 
 ## 真东西（不是空架子）👍
@@ -44,20 +44,21 @@
 
 | # | 问题 | 状态 | 证据 |
 |---|---|---|---|
-| 1 | 底座没插电（SSOT advisory） | 🟢 已通电 | `ssot.yaml` 全域 enabled；`registry-crosscheck`；CI `ssot-drift-gate` `continue-on-error: false` |
-| 2 | schema 双头 + SKIP 绕过 | 🟢 旁路已封 / 双头冻结 | entrypoint 拒 `FHD_SKIP_ALEMBIC=1`；FHD+MODstore ensure_* only-shrink 冻结测试 |
+| 1 | 底座没插电（SSOT advisory） | 🟢 源码/本地；🟡 远端 CI | `ssot_cli gate` 先互校 19 域，再执行全部 enabled 域；发布入口阻断 |
+| 2 | schema 双头 + SKIP 绕过 | 🟢 源码/本地；🟡 生产 | entrypoint 不接受迁移绕过；运行时 DDL 拒绝；SQLite+PG 本地迁移验绿 |
 | 3 | 运行时真相缺失 | 🟢 清单已落地 | topology 真值端口 9999/9990；runtime inventory；大厅嵌入；行动板 `day_stale` |
 
 ## 地基施工进度（自底向上打 SSOT）
 
 | 级别 | 内容 | 状态 |
 |---|---|---|
-| **L0** 元层插电 | SSOT 统一 gate advisory→blocking | 🟢 已落地 |
-| **L1** 接神经 | 双注册表（ssot.yaml / SSOT_INDEX.md）互校验 | 🟢 `ssot_registry_crosscheck.py` |
-| **L2** schema 承重 | SQLite parity blocking + 冻结 ensure_* + 方言文档 + 摘 SKIP 开关 | 🟢 旁路封死；存量库 stamp 仍按发版流程执行 |
+| **L0** 物理基底 | Alembic 单头、身份 `users.tier`、无迁移绕过、运行时 DDL 拒绝 | 🟢 源码/本地；🟡 生产未部署 |
+| **L1** 组织与人 | duty roster、租户与账号关系 | 🟢 有守卫 |
+| **L2** 系统契约 | version、mods、routes、error-codes、NeuroBus 事件 | 🟢 主体接线；routes 🟡 |
 | **L3** 运行时真相 | desired×actual 单一清单 | 🟢 runtime-inventory 域 + 公开投影 |
+| **L4** 治理元层 | 双注册表互校、严格 docs lint、CI/全部发布入口 blocking | 🟢 源码/本地；🟡 远端 CI 未运行 |
 
-> L0–L2 差价已收回大半。下一刀在**业务闭环**（客服 incident_bus 执行串、handler_failed、Para 真修通）。
+> 地基差价已收回大半。下一刀在**生产激活与业务闭环**（客服 incident_bus 执行串、handler_failed、Para 真修通）。
 
 ### 客服闭环定轨（2026-07-24）
 
@@ -68,16 +69,17 @@
 ## SSOT 全景（从最底层往上）
 
 ```
-L5 治理元层    注册表本身 ssot.yaml / SSOT_INDEX        🟢 互校验 blocking
-L4 质量可观测  coverage🟢 / claimed-vs-actual🟢 / compliance🟡
-L3 依赖构建    deps🟢(0漂移) / ci-workflows🟢
+L4 治理元层    注册表本身 ssot.yaml / SSOT_INDEX        🟢 19 域逐项互校、gate blocking
+   质量可观测  coverage🟢 / claimed-vs-actual🟢 / compliance🟡
+   依赖构建    deps🟢(0漂移) / ci-workflows🟢
 L2 系统自契约  version🟢 / mods🟢 / routes🟡 / error-codes🟢 / neuro-bus-events🟢
 L1 组织与人    duty_roster🟢(有守卫)
-L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtime-inventory🟢
+L0 物理基底    DB schema🟢(Alembic 单头) · 租户隔离🟢 · 账号身份🟢(users.tier)
 ```
 
 ## 仍未解决（别假装）
 
+- 当前分支尚未取得远端 CI、合并 SHA 与生产部署回执；生产数据库 head 仍需现场核验
 - 客服 `customer_ticket`：已定轨 **MODstore `incident_bus`**（enrich + `routing_plan` 真派发 + handler_failed 按 event_type 可观测）；**生产积压率仍需实跑验收**
 - Para 多 CLI 已有 fallback，但「真改代码→验证→回写」端到端未稳定证明
 - 存量生产库若历史 `SKIP_ALEMBIC` 过，需一次 `alembic stamp/upgrade` 对齐（发版流程执行，非代码缺口）

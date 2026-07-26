@@ -26,6 +26,7 @@ def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
         "display_name": str(getattr(user, "display_name", "") or ""),
         "email": str(getattr(user, "email", "") or ""),
         "role": str(getattr(user, "role", "") or ""),
+        "tier": str(getattr(user, "tier", "") or "personal"),
         "is_active": bool(getattr(user, "is_active", True)),
         "account_id": str(getattr(user, "account_id", "") or ""),
         "tenant_id": str(getattr(user, "tenant_id", "") or ""),
@@ -33,13 +34,15 @@ def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
 
 
 def _relay_admin_fallback_user() -> dict[str, Any]:
+    """Legacy symbol: fail closed instead of minting an admin without DB identity."""
     return {
-        "id": 1,
-        "username": "admin",
-        "display_name": "管理员账号",
+        "id": 0,
+        "username": "",
+        "display_name": "",
         "email": "",
-        "role": "admin",
-        "is_active": True,
+        "role": "relay",
+        "tier": "personal",
+        "is_active": False,
     }
 
 
@@ -49,8 +52,9 @@ def _relay_mobile_auth_payload(
 ) -> dict[str, Any]:
     uid = int(user_public.get("id") or 0)
     username = str(user_public.get("username") or user_public.get("display_name") or "mobile")
-    role = str(user_public.get("role") or "")
-    account_kind = "admin" if role in {"admin", "super_admin", "owner"} else "enterprise"
+    from app.application.session_account_meta import derive_account_kind_from_user
+
+    account_kind = derive_account_kind_from_user(tier=user_public.get("tier"))
     session_id = f"mobile-relay-{uuid.uuid4().hex}"
     relay = desktop or {}
     return {

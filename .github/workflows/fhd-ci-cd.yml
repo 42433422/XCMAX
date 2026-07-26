@@ -301,7 +301,7 @@ jobs:
 
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, pack-verify]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, pack-verify, ssot-drift-gate, schema-ssot-gate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -336,7 +336,7 @@ jobs:
 
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
-    needs: [backend-test, frontend-test]
+    needs: [backend-test, frontend-test, ssot-drift-gate, schema-ssot-gate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -375,7 +375,7 @@ jobs:
 
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness, ssot-drift-gate, schema-ssot-gate]
     runs-on: ubuntu-latest
     # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
     # hand-rolled short sha — see docker/metadata-action#479).
@@ -604,7 +604,7 @@ jobs:
 
   # Docker Build & Push
   docker-build:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness, ssot-drift-gate, schema-ssot-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -650,7 +650,7 @@ jobs:
 
   release-verify:
     name: release-verify
-    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness, ssot-drift-gate, schema-ssot-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -767,6 +767,54 @@ jobs:
           npm ci
           $env:XCAGI_DESKTOP_TEST = '1'
           npx vitest run rollback-windows.test.ts updater-install.test.ts rollback.test.ts
+
+  # DB schema gate (blocking): both supported dialects must build from Alembic head
+  # and match current ORM metadata. Release/image jobs depend on this job.
+  schema-ssot-gate:
+    name: DB Schema SSOT Gate
+    needs: guard-temp-scripts
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: xcagi
+          POSTGRES_PASSWORD: xcagi
+          POSTGRES_DB: xcagi_schema_gate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xcagi -d xcagi_schema_gate"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install schema runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt
+      - name: Alembic single-head / no-dangling check
+        run: python ../scripts/guard_alembic_single_head.py
+      - name: SQLite upgrade and ORM parity
+        env:
+          DATABASE_URL: sqlite:////tmp/fhd_schema_gate.db
+        run: |
+          rm -f /tmp/fhd_schema_gate.db
+          alembic -c alembic.ini upgrade head
+          alembic -c alembic.ini current --check-heads
+          alembic -c alembic.ini check
+      - name: PostgreSQL upgrade and ORM parity
+        env:
+          DATABASE_URL: postgresql+psycopg://xcagi:xcagi@127.0.0.1:5432/xcagi_schema_gate
+        run: |
+          alembic -c alembic.ini upgrade head
+          alembic -c alembic.ini current --check-heads
+          alembic -c alembic.ini check
 
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.

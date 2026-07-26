@@ -392,6 +392,7 @@ def test_persist_session_account_meta(mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     mock_get_db.return_value = _mock_get_db(mock_db)
     row = SimpleNamespace(
+        user=SimpleNamespace(tier="admin"),
         account_kind="enterprise",
         company_brand="",
         market_user_id=None,

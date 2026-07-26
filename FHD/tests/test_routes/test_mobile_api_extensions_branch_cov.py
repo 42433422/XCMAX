@@ -3816,8 +3816,8 @@ class TestResolveMobileRelayUserBranchCov:
             result = m._resolve_mobile_relay_user(u, prefer_admin=True)
         assert result == pub
 
-    def test_no_users_creates_new_relay_admin(self, m):
-        """branch: both queries return None → create new User row."""
+    def test_no_users_creates_personal_relay_identity(self, m):
+        """Physical pairing may create only a least-privilege relay identity."""
         u = _user(uid=0)
         pub = {"id": 99, "username": "new_relay"}
         mock_db = _ctx_db(MagicMock())
@@ -3836,9 +3836,12 @@ class TestResolveMobileRelayUserBranchCov:
         # Verify db.add was called (new user created)
         mock_db.add.assert_called_once()
         mock_db.flush.assert_called_once()
+        created = mock_db.add.call_args.args[0]
+        assert created.role == "relay"
+        assert created.tier == "personal"
 
-    def test_recoverable_error_prefer_admin_returns_fallback(self, m):
-        """branch: RECOVERABLE_ERRORS with prefer_admin=True → return fallback user."""
+    def test_recoverable_error_prefer_admin_fails_closed(self, m):
+        """A database outage cannot mint a fallback identity."""
         u = _user(uid=0)
         err_class = _err_class(m)
         fallback = {"id": -1, "username": "fallback"}
@@ -3847,8 +3850,8 @@ class TestResolveMobileRelayUserBranchCov:
             patch("app.db.session.get_db", side_effect=err_class("boom")),
             patch.object(m, "_relay_admin_fallback_user", return_value=fallback),
         ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == fallback
+            with pytest.raises(err_class):
+                m._resolve_mobile_relay_user(u, prefer_admin=True)
 
     def test_uid_positive_not_prefer_admin_returns_public(self, m):
         """branch: uid > 0 and not prefer_admin → return public dict early."""

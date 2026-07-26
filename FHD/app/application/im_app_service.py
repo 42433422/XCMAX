@@ -22,9 +22,10 @@ ENTERPRISE_DEDICATED_CS_DISPLAY_NAME = "企业专属客服"
 
 
 def ensure_im_tables(engine) -> None:
-    from app.db.init_db import init_im_tables
+    """Verify the Alembic-owned IM tables without runtime DDL."""
+    from app.db.schema_contract import assert_tables_present
 
-    init_im_tables(engine)
+    assert_tables_present(engine, {"im_conversations", "im_conversation_members", "im_messages"})
 
 
 class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):

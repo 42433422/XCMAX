@@ -22,6 +22,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install governance dependency
+        run: pip install pyyaml
+      - name: SSOT registry and drift gate
+        run: python scripts/dev/ssot_cli.py gate
+      - name: Generated workflow drift gate
+        working-directory: .
+        run: python scripts/dev/publish_ci_workflows_to_root.py --check
       - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
 

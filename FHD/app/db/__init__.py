@@ -268,6 +268,9 @@ def _get_engine_for_url(url: str):
         if cached is not None:
             return cached
         created = _create_engine_for_url(url)
+        from app.db.schema_contract import guard_runtime_engine_if_active
+
+        guard_runtime_engine_if_active(created)
         _engine_cache[key] = created
         return created
 

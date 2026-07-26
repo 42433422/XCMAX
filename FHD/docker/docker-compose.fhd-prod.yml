@@ -47,13 +47,9 @@ services:
       XCAGI_IMAGE_DIGEST: ${FHD_API_IMAGE_DIGEST:?set FHD_API_IMAGE_DIGEST from the release manifest}
       XCAGI_ARTIFACT_SHA256: ${FHD_ARTIFACT_SHA256:?set FHD_ARTIFACT_SHA256 from the release manifest}
       XCAGI_ADMIN_CONSOLE_SHA256: ${FHD_ADMIN_CONSOLE_SHA256:?set FHD_ADMIN_CONSOLE_SHA256 from the release manifest}
-      # Alembic head is the single source of truth for any real DB. The entrypoint
-      # runs `alembic upgrade head` only when DATABASE_URL is non-empty, so this
-      # default of 0 leaves the SQLite single-host path (empty DATABASE_URL) on
-      # create_all+ensure while ensuring a Postgres DATABASE_URL is actually
-      # migrated rather than silently skipped. Matches helm values-prod.yaml.
-      FHD_SKIP_ALEMBIC: ${FHD_SKIP_ALEMBIC:-0}
-      DATABASE_URL: ${DATABASE_URL:-}
+      # Alembic head is the only production schema writer. The entrypoint refuses
+      # to start without a concrete URL and always upgrades/checks the head.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the production database}
       VECTOR_DB_URL: ${VECTOR_DB_URL:-}
     env_file:
       - ${FHD_ENV_FILE:-/root/fhd-full.env}

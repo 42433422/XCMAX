@@ -25,6 +25,11 @@ jobs:
           python -m pip install -U pip
           pip install -r deploy/requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
+      - name: SSOT registry and drift gate
+        run: python scripts/dev/ssot_cli.py gate
+      - name: Generated workflow drift gate
+        working-directory: .
+        run: python scripts/dev/publish_ci_workflows_to_root.py --check
       - name: Release contract tests (isolated conftest)
         run: |
           if [ -d tests/release ]; then

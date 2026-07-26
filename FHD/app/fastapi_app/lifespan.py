@@ -9,25 +9,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.engine import make_url
 
-from app.db import engine
-from app.db.init_db import (
-    ensure_product_query_indexes,
-    ensure_sessions_account_meta_columns,
-    ensure_sessions_enterprise_entitlement_columns,
-    ensure_sessions_market_access_token_column,
-    ensure_sessions_market_refresh_token_column,
-    ensure_user_profile_columns,
-    init_approval_tables,
-    init_distillation_tables,
-    init_extract_logs_tables,
-    init_service_bridge_tables,
-    init_template_tables,
-    init_wechat_tasks_table,
-    initialize_databases,
-)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_db_file_from_url
+from .sqlite_paths import is_sqlite_url, resolve_effective_database_url
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +36,10 @@ async def lifespan(app: FastAPI):
 
     set_neuro_main_loop(asyncio.get_running_loop())
 
-    await asyncio.gather(
-        _init_mods_async(app),
-        _initialize_databases_async(app),
-    )
+    # Schema verification must finish before any Mod/runtime initialization can
+    # touch the database. This makes a stale revision a real startup barrier.
+    await _initialize_databases_async(app)
+    await _init_mods_async(app)
 
     mark_startup("lifespan_db_done")
 
@@ -165,118 +149,51 @@ async def _initialize_databases_async(app: FastAPI):
     await asyncio.get_running_loop().run_in_executor(None, _initialize_databases_sync, app)
 
 
-def _run_ensure_ai_action_audit_table() -> None:
-    """Initialize audit DDL through a normal import that also works when frozen."""
-    from app.services.ai_action_audit_service import ensure_ai_action_audit_table
-
-    ensure_ai_action_audit_table()
-
-
 def _initialize_databases_sync(app: FastAPI):
-    """同步数据库初始化（在后台线程中执行）"""
+    """Verify the migration-owned schema and provision migration-owned Mod DBs."""
     database_url = resolve_effective_database_url(getattr(app.state.config, "DATABASE_URL", None))
+    # Narrow test fixtures construct their own in-memory tables and do not own a
+    # persistent Alembic revision.
+    if bool(getattr(app.state.config, "TESTING", False)):
+        return
+
+    # Production is migrated by the container entrypoint; desktop is migrated by
+    # Electron before the backend starts.  Missing/stale revisions therefore stop
+    # startup instead of being silently repaired by create_all/ensure_*.
+    from app.db import _create_engine_for_url
+    from app.db.schema_contract import assert_database_schema_at_head
+
+    schema_engine = _create_engine_for_url(database_url)
     try:
-        if is_sqlite_url(database_url):
-            initialize_databases()
-            try:
-                from app.db.init_db import ensure_sqlite_per_mod_database_copies
-                from app.infrastructure.mods.mod_manager import get_mod_manager
+        assert_database_schema_at_head(schema_engine)
+    finally:
+        schema_engine.dispose()
 
-                mm = get_mod_manager()
-                ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
-                if not ids:
-                    ids = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-                ensure_sqlite_per_mod_database_copies(ids)
-            except RECOVERABLE_ERRORS as mod_db_exc:
-                logger.warning("SQLite 按 Mod 拆分母库副本时跳过: %s", mod_db_exc)
-            sqlite_file = sqlite_db_file_from_url(database_url)
-            if sqlite_file:
-                init_wechat_tasks_table(sqlite_file)
-                init_template_tables(sqlite_file)
-            else:
-                init_wechat_tasks_table()
-                init_template_tables()
+    from app.infrastructure.mods.mod_manager import get_mod_manager
 
-        init_distillation_tables(engine)
-        init_extract_logs_tables(engine)
-        ensure_product_query_indexes(engine)
-        cfg_db_url = database_url
-        from app.db.init_db import ensure_runtime_auth_bootstrap
+    mm = get_mod_manager()
+    mod_ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
+    if not mod_ids:
+        mod_ids = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
 
-        ensure_runtime_auth_bootstrap(engine, database_url=cfg_db_url or None)
-        ensure_sessions_market_access_token_column(engine, database_url=cfg_db_url or None)
-        ensure_sessions_market_refresh_token_column(engine, database_url=cfg_db_url or None)
-        ensure_sessions_enterprise_entitlement_columns(engine, database_url=cfg_db_url or None)
-        ensure_sessions_account_meta_columns(engine, database_url=cfg_db_url or None)
-        ensure_user_profile_columns(engine, database_url=cfg_db_url or None)
-        try:
-            from app.db.init_db import ensure_users_tenant_id_column
+    if is_sqlite_url(database_url):
+        from app.db.init_db import ensure_sqlite_per_mod_database_copies
 
-            ensure_users_tenant_id_column(engine, database_url=cfg_db_url or None)
-        except (ImportError, AttributeError) as tenant_err:
-            logger.warning("users.tenant_id 自检函数不可用，已跳过: %s", tenant_err)
-        try:
-            from app.db.init_db import ensure_business_tenant_id_columns
+        ensure_sqlite_per_mod_database_copies(mod_ids)
+    else:
+        from app.db.ensure_mod_postgres import ensure_postgres_per_mod_databases
 
-            ensure_business_tenant_id_columns(engine, database_url=cfg_db_url or None)
-        except (ImportError, AttributeError) as biz_tenant_err:
-            logger.warning("业务表 tenant_id 自检函数不可用，已跳过: %s", biz_tenant_err)
-        try:
-            init_approval_tables(engine)
-        except RECOVERABLE_ERRORS as approval_err:
-            logger.warning("approval 表初始化失败（不影响主流程）: %s", approval_err)
-        try:
-            init_service_bridge_tables(engine)
-        except RECOVERABLE_ERRORS as bridge_err:
-            logger.warning("service_bridge 表初始化失败（不影响主流程）: %s", bridge_err)
+        created = ensure_postgres_per_mod_databases(mod_ids=mod_ids, migrate_new=True)
+        if created:
+            logger.info("已自动创建并迁移 Mod 分库: %s", ", ".join(created))
 
-        try:
-            from app.db.init_db import init_persona_tables
+    # From this point onward application-created engines reject DDL. Alembic
+    # runs in its own process/engine before startup and remains the only writer.
+    from app.db import _get_engine_for_url
+    from app.db.schema_contract import activate_runtime_ddl_guard, install_runtime_ddl_guard
 
-            init_persona_tables(engine)
-        except RECOVERABLE_ERRORS as persona_err:
-            logger.warning("persona 表初始化失败（不影响主流程）: %s", persona_err)
-
-        if not is_sqlite_url(database_url):
-            try:
-                from app.db.ensure_mod_postgres import ensure_postgres_per_mod_databases
-                from app.infrastructure.mods.mod_manager import get_mod_manager
-
-                mm = get_mod_manager()
-                mod_ids = [m.id for m in (mm.list_loaded_mods() or []) if getattr(m, "id", None)]
-                if not mod_ids:
-                    mod_ids = [m.id for m in mm.scan_mods() if getattr(m, "id", None)]
-                created = ensure_postgres_per_mod_databases(mod_ids=mod_ids, migrate_new=True)
-                if created:
-                    logger.info("已自动创建并迁移 Mod 分库: %s", ", ".join(created))
-            except RECOVERABLE_ERRORS as mod_pg_exc:
-                logger.warning("PostgreSQL Mod 分库自检跳过: %s", mod_pg_exc)
-
-        try:
-            _run_ensure_ai_action_audit_table()
-            from app.runtime_integrity import clear_runtime_issue
-
-            clear_runtime_issue("ai_action_audit")
-        except RECOVERABLE_ERRORS as audit_err:
-            from app.runtime_integrity import record_runtime_issue
-
-            record_runtime_issue("ai_action_audit", str(audit_err), ttl_seconds=3600)
-            logger.warning("AI审计表初始化失败（不影响主流程）: %s", audit_err)
-    except RECOVERABLE_ERRORS as e:
-        safe_url = str(database_url or "").strip()
-        try:
-            if safe_url:
-                safe_url = make_url(safe_url).render_as_string(hide_password=True)
-        except (ValueError, TypeError):
-            pass
-        logger.exception("数据库初始化失败 (DATABASE_URL=%s): %s", safe_url or "<default>", e)
-        if is_sqlite_url(database_url):
-            raise RuntimeError(
-                "本地数据库初始化失败：请检查 userData/data/xcagi.db 权限或磁盘空间。"
-            ) from e
-        raise RuntimeError(
-            "数据库初始化失败：请确认 PostgreSQL 已启动且 DATABASE_URL 可连通。"
-        ) from e
+    activate_runtime_ddl_guard()
+    install_runtime_ddl_guard(_get_engine_for_url(database_url))
 
 
 async def _init_neuro_ddd_async(app: FastAPI):

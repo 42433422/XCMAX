@@ -34,13 +34,13 @@ def _normalize_db_template_id(raw_id):
 
 def _ensure_template_tables_ready():
     try:
-        from app.db.init_db import init_template_tables
-        from app.infrastructure.templates.tenant_scope import ensure_templates_tenant_column
+        from app.db import get_host_engine
+        from app.db.schema_contract import assert_tables_present
 
-        init_template_tables()
-        ensure_templates_tenant_column()
+        assert_tables_present(get_host_engine(), {"templates", "template_usage_log"})
     except RECOVERABLE_ERRORS as e:
-        logger.warning("确保模板表结构失败: %s", e)
+        logger.warning("模板 Alembic schema 验证失败: %s", e)
+        raise
 
 
 def _build_template_payload_from_row(row):

@@ -178,13 +178,13 @@ SAMPLE_QUERIES = {
 
 
 def init_distillation_db():
-    """初始化蒸馏数据库（与 app.db 主库一致）"""
-    from app.db.init_db import init_distillation_tables
+    """验证 Alembic 管理的蒸馏表。"""
+    from app.db.schema_contract import assert_tables_present
 
     os.makedirs(DISTILL_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
-    init_distillation_tables(ENGINE)
-    logger.info("蒸馏数据库初始化完成")
+    assert_tables_present(ENGINE, {"distillation_log", "training_stats"})
+    logger.info("蒸馏数据库 Alembic schema verified")
 
 
 def get_deepseek_api_key() -> str:

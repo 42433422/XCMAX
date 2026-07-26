@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +15,12 @@ if TYPE_CHECKING:
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "tier IN ('personal', 'enterprise', 'admin')",
+            name="ck_users_tier_identity",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -79,6 +85,12 @@ class User(Base):
 
 class Session(Base):
     __tablename__ = "sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "account_kind IS NULL OR account_kind IN ('personal', 'enterprise', 'admin')",
+            name="ck_sessions_account_kind_snapshot",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -92,7 +104,10 @@ class Session(Base):
     market_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     entitled_mod_ids_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     account_kind: Mapped[Optional[str]] = mapped_column(
-        String(32), nullable=True, default="enterprise"
+        String(32),
+        nullable=True,
+        default="personal",
+        comment="users.tier 的会话审计快照，不作为授权真相源",
     )
     company_brand: Mapped[Optional[str]] = mapped_column(String(256), nullable=True, default="")
     market_is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

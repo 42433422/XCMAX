@@ -44,3 +44,18 @@ def test_cli_gate_runs_all_enabled(capsys):
     # gate 会真实调用 10 个脚本；只要不崩、返回 0 或 1 即可
     code = main(["gate"])
     assert code in (0, 1)
+
+
+def test_cli_gate_blocks_before_domain_checks_when_registries_drift(monkeypatch, capsys):
+    from scripts.dev import ssot_cli
+
+    monkeypatch.setattr(
+        ssot_cli,
+        "validate_registry_contract",
+        lambda: ["account-system: registry path mismatch"],
+    )
+
+    code = ssot_cli.main(["gate"])
+
+    assert code == ssot_cli.EXIT_CONFIG
+    assert "双注册表互校失败" in capsys.readouterr().err

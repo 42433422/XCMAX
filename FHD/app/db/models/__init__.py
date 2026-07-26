@@ -36,6 +36,11 @@ from app.db.models.mobile_device import MobileDeviceToken
 from app.db.models.mobile_notification import MobileNotificationOutbox
 from app.db.models.permission import Permission, Role, role_permissions
 from app.db.models.product import Product
+from app.db.models.runtime_foundation import (
+    AiActionAudit,
+    MobileRelayDesktop,
+    MobileRelayTask,
+)
 from app.db.models.purchase import (
     PurchaseInbound,
     PurchaseInboundItem,
@@ -72,6 +77,9 @@ __all__ = [
     "ImConversationMember",
     "ImMessage",
     "Product",
+    "AiActionAudit",
+    "MobileRelayDesktop",
+    "MobileRelayTask",
     "ShipmentRecord",
     "ShipmentEtlImportFingerprint",
     "Customer",

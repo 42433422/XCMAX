@@ -790,7 +790,7 @@ class TestFinalizeEnterpriseLogin:
                 skip_market_sync=True,
             )
         mock_bind.assert_not_called()
-        assert out["account_kind"] == "enterprise"
+        assert out["account_kind"] == "personal"
 
 
 # ───────────────────── run_market_first_login ─────────────────────
@@ -806,7 +806,7 @@ class TestRunMarketFirstLogin:
         auth_svc.login.return_value = {
             "success": True,
             "session_id": "sid",
-            "user": {"role": "admin", "id": 1},
+            "user": {"role": "admin", "tier": "admin", "id": 1},
             "company_brand": "Brand",
         }
         with (
@@ -816,7 +816,7 @@ class TestRunMarketFirstLogin:
                 return_value={
                     "success": True,
                     "session_id": "sid",
-                    "user": {"role": "admin", "id": 1},
+                    "user": {"role": "admin", "tier": "admin", "id": 1},
                     "company_brand": "Brand",
                     "tenant_id": 42,
                 },
@@ -1179,7 +1179,7 @@ class TestRunMarketFirstLogin:
         auth_svc.login.return_value = {
             "success": True,
             "session_id": None,
-            "user": {"role": "admin", "id": 1},
+            "user": {"role": "admin", "tier": "admin", "id": 1},
         }
         with (
             patch(

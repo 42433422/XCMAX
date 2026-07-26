@@ -13,10 +13,12 @@ from app.application.agent_orchestrator import (
     SQLAlchemyAgentRunRepository,
     ToolCall,
 )
+from app.db.models.agent import AgentRunRecord
 
 
 def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'agent-runs.db'}")
+    AgentRunRecord.__table__.create(engine)
     session_factory = sessionmaker(bind=engine)
     repo = SQLAlchemyAgentRunRepository(session_factory=session_factory)
 

@@ -1,7 +1,7 @@
 # SSOT 框架（统一注册表 + 自动派生编排器）
 
 > **本文件为 SSOT 框架的 SSOT**。登记表位于 [config/ssot.yaml](../config/ssot.yaml)，CLI 入口位于 [scripts/dev/ssot_cli.py](../scripts/dev/ssot_cli.py)。
-> 最后更新：2026-06-20
+> 最后更新：2026-07-26
 
 ## 目的
 
@@ -24,7 +24,7 @@ scripts/dev/ssot_plugins/
   ├── coverage.py                   ← 适配 coverage_ratchet.py
   ├── version.py                    ← 适配 verify_version_anchors.py
   └── docs_ssot.py                  ← 适配 docs_ssot_lint.py
-tests/test_dev/test_ssot_*.py       ← 16 个单元/集成测试
+tests/test_dev/test_ssot_*.py       ← 相关单元/集成测试
 ```
 
 ## 注册表格式（ssot.yaml）
@@ -78,8 +78,8 @@ python scripts/dev/ssot_cli.py drift
 # CI 门禁：跑所有 enabled 领域，drift 则 exit 1
 python scripts/dev/ssot_cli.py gate
 
-# 启用/禁用领域
-python scripts/dev/ssot_cli.py enable <domain> --on|--off
+# 启用领域
+python scripts/dev/ssot_cli.py enable <domain>
 ```
 
 ### 退出码
@@ -91,7 +91,7 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | 2 | CONFIG（领域不存在/已禁用） |
 | 3 | EXEC（插件执行异常） |
 
-## 当前登记领域（12 个，全部启用）
+## 当前登记领域（19 个，全部 blocking）
 
 > 2026-06-23：补登记 `employee-roster` / `db-schema` 两个此前游离的真相源；
 > 实测 `deps` / `k8s-manifests` 旧文档所记 31 / 51 漂移已不存在（均为 0）。
@@ -104,9 +104,9 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | ci-workflows | generate | FHD/.github/workflows | .github/workflows | ci_workflows.py check（header） | publish_ci_workflows_to_root.py ✅ |
 | coverage | ratchet+verify | coverage_ratchet_baseline.json | pyproject.toml + vitest.config.js | coverage_ratchet.py --check | coverage_ratchet.py --bump ✅ |
 | version | sync+verify | VERSION.md | 8 处代码锚点 | verify_version_anchors.py | version_sync.py --apply ✅ |
-| docs-ssot | lint | SSOT_INDEX.md | 所有 md 的 SSOT 声明 | docs_ssot_lint.py | 无（lint 模式） |
+| docs-ssot | lint | SSOT_INDEX.md | 所有 md 的 SSOT 声明 | docs_ssot_lint.py --strict | 无（lint 模式） |
 
-### 扩展 5 域（lint/verify，advisory gate）
+### 扩展治理域（lint/verify，统一 blocking gate）
 
 | 领域 | 模式 | SSOT | check 适配 | sync | 当前状态 |
 |------|------|------|-----------|------|---------|
@@ -114,6 +114,7 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | deploy-scripts | lint | FHD/scripts/deploy/ | deploy_scripts.py（shebang/set -e） | 无 | OK（有警告） |
 | deps | sync+verify | FHD/pyproject.toml | deps.py（pyproject vs requirements*.txt） | 无（需人工 reconcile） | OK（server-api/ml 包名集合一致，0 漂移） |
 | error-codes | lint | FHD/app/http/error_codes.py | error_codes.py（常量自洽） | 无 | OK |
+| registry-crosscheck | verify | FHD/docs/SSOT_INDEX.md | ssot_registry_contract.py（19 域逐项绑定） | 无 | OK |
 | ~~k8s-manifests~~ | — | ~~FHD/k8s/~~ | — | — | 已退役（2026-07-01 运维根治：假 k8s 路径整体删除，生产=单 CVM 发布链） |
 
 ### 补登记 2 域（2026-06-23，此前游离于注册表外）
@@ -121,36 +122,43 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | 领域 | 模式 | SSOT | check 适配 | sync | 当前状态 |
 |------|------|------|-----------|------|---------|
 | employee-roster | sync | FHD/config/duty_roster.json | ../scripts/dev/sync_duty_roster.py --check（4 派生目标） | ../scripts/dev/sync_duty_roster.py --generate | OK |
-| db-schema | verify | FHD/alembic/versions/ | ../scripts/guard_alembic_single_head.py（单 head/无悬挂，纯 stdlib） | 无（alembic 收敛中） | OK |
+| db-schema | verify | FHD/alembic/versions/ | ../scripts/guard_alembic_single_head.py（单 head/无悬挂，纯 stdlib） | 无（迁移是唯一结构写入） | OK |
 
-> 注：`db-schema` 的完整 ORM-parity（`alembic upgrade head == models`）由独立的
-> `fhd-alembic-ssot.yml` 的 `ssot-parity` job 单独把关（advisory，待一次 PG 绿后转 blocking）；
-> 注册表内的 check 只做轻量结构守卫，避免 `ssot gate` 依赖 DB。
+### 后续接入 7 域（均 blocking）
+
+| 领域 | SSOT | 当前状态 |
+|------|------|---------|
+| account-system | FHD/docs/account_system_ssot.md | OK |
+| service-topology | FHD/config/service_topology.yaml | OK |
+| deployment-modes | FHD/config/deployment_modes.yaml | OK |
+| database-storage | FHD/config/database_storage_modes.yaml | OK |
+| mobile-tri-platform | FHD/docs/mobile_tri_platform_ssot.md | OK |
+| neuro-bus-events | FHD/config/neuro_bus_events.yaml | OK |
+| runtime-inventory | FHD/config/service_topology.yaml | OK |
+
+> 注：`db-schema` 的完整 ORM-parity（`alembic upgrade head == models`）由主 CI
+> `schema-ssot-gate` 同时在 SQLite / PostgreSQL blocking 把关；注册表内的 check
+> 仍做轻量结构守卫，避免本地 `ssot gate` 强依赖数据库服务。
 
 ## 安全护栏
 
 1. **dry-run 默认**：`ssot sync` 不加 `--apply` 只打印，不写盘；`version_sync.py` 默认 dry-run
 2. **插件只包装不修改**：现有脚本零改动，适配器只转发调用
 3. **禁用领域不参与 check/gate**：`enabled: false` 的领域被 `check/gate` 拒绝（exit 2）
-4. **CI 门禁 blocking**：`ssot-drift-gate` job 已于 2026-06-23 去掉 `continue-on-error`（漂移则 exit 1 阻断流水线）。升级依据：deps/k8s 静态核实 0 漂移，version/coverage/alembic-single-head 为既有硬门（绿）；12 域全绿由本 PR 的 `ssot-drift-gate` job 在合并前终验（红则自动拦截，不会带病合入 main）
+4. **CI/发布门禁 blocking**：主 CI 的镜像、发布包、release-verify，以及桌面/Web/Android/iOS/标签编排入口均依赖或直接执行 `ssot_cli.py gate`
 5. **drift 输出纯净 JSON**：subprocess 输出被静默，保证 CI 可解析
 6. **version_sync count=1**：只替换第一个匹配，避免 `python_version = "3.11"` 被 `version = "..."` pattern 误匹配
 7. **check/sync 同源**：version_sync.py 复用 verify_version_anchors.py 的 ANCHORS 列表，保证"检测的锚点 = 同步的锚点"
+8. **双注册表互校**：gate 在任何领域 check 前，先要求 `config/ssot.yaml` 的 19 个执行域与 `docs/SSOT_INDEX.md` 一一绑定且路径相同
 
 ## 测试
 
 ```bash
 cd FHD
 python -m pytest tests/test_dev/ -v
-# 33 passed
 ```
 
-测试覆盖：
-- `test_ssot_base.py`：注册表加载、enabled 过滤、命令执行（3 tests）
-- `test_ssot_cli.py`：list/check/gate/unknown domain/enabled domain（4 tests）
-- `test_ssot_plugins.py`：10 个适配器 + 协议一致性（11 tests）
-- `test_ssot_integration.py`：list 输出、gate 退出码、check 指定领域（3 tests）
-- `test_version_sync.py`：_replace_version_in_text 纯函数、dry-run/--apply、count=1 防误匹配、ANCHORS 一致性（12 tests）
+其中 `test_ssot_registry_contract.py` 覆盖缺失绑定、未知绑定、重复绑定和路径漂移；`test_ssot_cli.py` 覆盖 gate 在领域 check 前的互校阻断。
 
 ## CI 集成
 
@@ -182,11 +190,12 @@ ssot-drift-gate:
 | `python scripts/dev/docs_ssot_lint.py` | `python scripts/dev/ssot_cli.py check docs-ssot` |
 | （无统一入口） | `python scripts/dev/ssot_cli.py check ci-workflows` |
 
-现有脚本仍可独立调用，本框架是**可选的统一入口**，不破坏现有工作流。
+现有脚本仍可独立调用；CI/发布以本框架作为强制统一入口。
 
 ## 后续路线
 
 - ✅ **P3 已完成（2026-06-23）**：advisory gate 升级为 blocking gate（deps/k8s 实测 0 漂移，无需 reconcile）
 - ✅ **deps reconcile**：核实 server-api/ml 包名集合与 requirements*.txt 一致，0 漂移
 - ✅ **k8s-manifests cleanup**：FHD/XCAGI/k8s/ 已清理（derived 弃用），插件返回 OK
-- **下一步**：`db-schema` 的 alembic ssot-parity job 待一次 PG 绿后从 advisory 转 blocking（见 fhd-alembic-ssot.yml）
+- ✅ **DB schema blocking**：SQLite/PostgreSQL upgrade + current --check-heads + alembic check 已进入主 CI 阻断链
+- ✅ **registry contract**：机器注册表与人类索引 19 域逐项互校

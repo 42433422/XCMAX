@@ -7,6 +7,8 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.db.models.runtime_foundation import MobileRelayDesktop, MobileRelayTask
+
 
 def _load_mobile_relay_service_module():
     path = Path(__file__).resolve().parents[1] / "app" / "services" / "mobile_relay_service.py"
@@ -21,6 +23,8 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     relay = _load_mobile_relay_service_module()
 
     engine = create_engine(f"sqlite:///{tmp_path / 'relay-account.db'}")
+    MobileRelayDesktop.__table__.create(engine)
+    MobileRelayTask.__table__.create(engine)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 
     @contextmanager

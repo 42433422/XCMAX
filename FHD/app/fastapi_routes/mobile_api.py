@@ -67,33 +67,25 @@ def _user_public_dict(user) -> dict[str, Any]:
 
 
 def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
-    """JWT-only fallback for physical relay sessions when the user table is stale.
-
-    Server relay pairing proves access to the desktop settings QR.  The cloud
-    relay can therefore keep using the signed mobile JWT even if a deployed
-    server has an older or mismatched local ``users`` table.
-    """
+    """Return a least-privilege relay principal when the DB identity is unavailable."""
     if not payload:
         return None
     typ = payload.get("typ")
     if typ not in (None, "access"):
         return None
     uid = int(payload.get("user_id") or 0)
-    account_kind = str(payload.get("account_kind") or "").strip().lower()
     session_id = str(payload.get("session_id") or "").strip()
     is_relay = session_id.startswith("mobile-relay-")
-    if uid <= 0 and not is_relay:
-        return None
-    if account_kind not in {"admin", "admin_portal"} and not is_relay:
+    if not is_relay:
         return None
     username = str(payload.get("username") or "").strip() or "mobile"
-    role = "admin" if account_kind in {"admin", "admin_portal"} else "enterprise"
     return SimpleNamespace(
         id=uid if uid > 0 else 0,
         username=username,
         display_name=username,
         email="",
-        role=role,
+        role="relay",
+        tier="personal",
         is_active=True,
         wx_avatar_url=None,
         tenant_id=payload.get("tenant_id"),
@@ -134,21 +126,13 @@ async def get_mobile_user(
             with get_db() as db:
                 user = db.query(User).filter(User.id == uid).first()
                 if user and user.is_active:
-                    jwt_account_kind = (
-                        str((jwt_payload or {}).get("account_kind") or "").strip().lower()
-                    )
-                    jwt_admin = jwt_account_kind in {"admin", "admin_portal"}
-                    user_role = str(getattr(user, "role", "") or "").strip()
-                    if jwt_admin and user_role not in {"admin", "super_admin", "owner"}:
-                        fallback = _mobile_user_from_jwt_payload(jwt_payload or {})
-                        if fallback is not None:
-                            return fallback
                     _ = (
                         user.id,
                         user.username,
                         user.display_name,
                         user.email,
                         user.role,
+                        getattr(user, "tier", None),
                         user.is_active,
                         getattr(user, "tenant_id", None),
                         getattr(user, "wx_avatar_url", None),

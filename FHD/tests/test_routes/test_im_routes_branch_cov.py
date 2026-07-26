@@ -157,6 +157,7 @@ class TestIsAdminCustomerServiceSession:
         row = MagicMock()
         row.account_kind = "admin"
         row.market_is_admin = True
+        row.user.tier = "admin"
         db.query.return_value.filter.return_value.first.return_value = row
         with patch(
             "app.infrastructure.auth.dependencies.session_id_from_request",

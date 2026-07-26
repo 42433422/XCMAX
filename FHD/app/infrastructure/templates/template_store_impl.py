@@ -197,12 +197,8 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def _db_templates(self) -> list[dict]:
         """从 templates 表读取模板元数据（按当前租户隔离；若表不存在则返回空列表）。"""
-        from app.infrastructure.templates.tenant_scope import (
-            ensure_templates_tenant_column,
-            templates_tenant_where_sql,
-        )
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
-        ensure_templates_tenant_column()
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         try:
             with get_db() as db:

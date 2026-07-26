@@ -592,7 +592,7 @@ class TestRequireMobileAdmin:
     def test_admin_user_passes(self):
         """[330→335, 340→345]: user present, account_kind==admin."""
         req = _make_request()
-        user = SimpleNamespace(role="admin")
+        user = SimpleNamespace(role="admin", tier="admin")
         session_meta = {"account_kind": "admin", "market_is_admin": True}
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin(req, user=user)
@@ -611,7 +611,7 @@ class TestRequireMobileAdmin:
     def test_admin_role_via_role_attr(self):
         """account_kind==admin + role in {admin} → passes."""
         req = _make_request()
-        user = SimpleNamespace(role="admin")
+        user = SimpleNamespace(role="admin", tier="admin")
         session_meta = {"account_kind": "admin", "market_is_admin": False}
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin(req, user=user)
@@ -643,7 +643,7 @@ class TestRequireMobileAdminOrEnterprise:
     def test_enterprise_role_passes(self):
         """[364→365(derive enterprise), 366→367]: role=enterprise → pass."""
         req = _make_request()
-        user = SimpleNamespace(role="enterprise")
+        user = SimpleNamespace(role="enterprise", tier="enterprise")
         session_meta = {"account_kind": ""}  # empty → derive
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin_or_enterprise(req, user=user)
@@ -652,7 +652,7 @@ class TestRequireMobileAdminOrEnterprise:
     def test_account_kind_enterprise_passes(self):
         """[364→366, 366→367]: account_kind from meta is 'enterprise'."""
         req = _make_request()
-        user = SimpleNamespace(role="user")
+        user = SimpleNamespace(role="user", tier="enterprise")
         session_meta = {"account_kind": "enterprise"}
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin_or_enterprise(req, user=user)
@@ -661,7 +661,7 @@ class TestRequireMobileAdminOrEnterprise:
     def test_admin_account_kind_passes(self):
         """[366→368, 368→372]: account_kind==admin with market_is_admin."""
         req = _make_request()
-        user = SimpleNamespace(role="admin")
+        user = SimpleNamespace(role="admin", tier="admin")
         session_meta = {"account_kind": "admin", "market_is_admin": True}
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin_or_enterprise(req, user=user)
@@ -691,7 +691,7 @@ class TestRequireMobileAdminOrEnterprise:
     def test_admin_portal_role_passes(self):
         """[368→372]: account_kind=='admin_portal', role in set."""
         req = _make_request()
-        user = SimpleNamespace(role="admin_portal")
+        user = SimpleNamespace(role="admin_portal", tier="admin")
         session_meta = {"account_kind": "admin_portal", "market_is_admin": False}
         with patch.object(ah, "_mobile_session_meta", return_value=session_meta):
             meta, err = ah._require_mobile_admin_or_enterprise(req, user=user)

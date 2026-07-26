@@ -334,8 +334,12 @@ def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], 
             status_code=401,
         )
     meta = _mobile_session_meta(request) or {}
+    from app.application.session_account_meta import derive_account_kind_from_user
+
+    canonical_kind = derive_account_kind_from_user(tier=getattr(user, "tier", None))
+    meta["account_kind"] = canonical_kind
     role = str(getattr(user, "role", "") or "").strip()
-    jwt_or_session_admin = meta.get("account_kind") == "admin" and (
+    jwt_or_session_admin = canonical_kind == "admin" and (
         bool(meta.get("market_is_admin")) or role in {"admin", "super_admin", "owner"}
     )
     if not jwt_or_session_admin:
@@ -360,10 +364,11 @@ def _require_mobile_admin_or_enterprise(
             status_code=401,
         )
     meta = _mobile_session_meta(request) or {}
+    from app.application.session_account_meta import derive_account_kind_from_user
+
     role = str(getattr(user, "role", "") or "").strip().lower()
-    account_kind = str(meta.get("account_kind") or "").strip().lower()
-    if not account_kind:
-        account_kind = "enterprise" if role == "enterprise" else "personal"
+    account_kind = derive_account_kind_from_user(tier=getattr(user, "tier", None))
+    meta["account_kind"] = account_kind
     if account_kind == "enterprise":
         return meta, None
     if account_kind in {"admin", "admin_portal"} and (

@@ -11,19 +11,8 @@ from app.infrastructure.tenant_scope import (
     tenant_id_for_write,
     tenant_legacy_null_visible,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-def ensure_templates_tenant_column() -> None:
-    """幂等补齐 templates.tenant_id（SQLite / PG）。"""
-    try:
-        from app.db.init_db import ensure_business_tenant_id_columns
-
-        ensure_business_tenant_id_columns()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("补齐 templates.tenant_id 失败: %s", exc)
 
 
 def templates_tenant_where_sql(*, table_alias: str = "") -> tuple[str, dict[str, Any]]:
@@ -42,7 +31,6 @@ def templates_tenant_where_sql(*, table_alias: str = "") -> tuple[str, dict[str,
 
 def templates_tenant_id_for_insert() -> int:
     """创建模板必须打标当前租户。"""
-    ensure_templates_tenant_column()
     try:
         return int(tenant_id_for_write())
     except TenantScopeError:

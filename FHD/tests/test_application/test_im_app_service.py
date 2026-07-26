@@ -57,11 +57,14 @@ def _make_member(conversation_id=1, user_id=1, last_read_message_id=None):
 
 
 class TestEnsureImTables:
-    def test_delegates_to_init_im_tables(self):
+    def test_verifies_migration_owned_tables(self):
         mock_engine = MagicMock()
-        with patch("app.db.init_db.init_im_tables") as mock_init:
+        with patch("app.db.schema_contract.assert_tables_present") as mock_assert:
             ensure_im_tables(mock_engine)
-            mock_init.assert_called_once_with(mock_engine)
+            mock_assert.assert_called_once_with(
+                mock_engine,
+                {"im_conversations", "im_conversation_members", "im_messages"},
+            )
 
 
 # ---------------------------------------------------------------------------

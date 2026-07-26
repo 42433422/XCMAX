@@ -93,7 +93,7 @@ def _is_admin_customer_service_session(request: Request, db) -> bool:
         return False
     return bool(
         row is not None
-        and str(getattr(row, "account_kind", "") or "").strip() == "admin"
+        and str(getattr(getattr(row, "user", None), "tier", "") or "").strip().lower() == "admin"
         and bool(getattr(row, "market_is_admin", False))
     )
 

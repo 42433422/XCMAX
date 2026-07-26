@@ -51,6 +51,17 @@ jobs:
       FHD_PUSH_SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY }}
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install governance dependency
+        run: pip install pyyaml
+      - name: SSOT registry and drift gate
+        run: python scripts/dev/ssot_cli.py gate
+      - name: Generated workflow drift gate
+        working-directory: .
+        run: python scripts/dev/publish_ci_workflows_to_root.py --check
       - name: Fail closed before either platform builds
         shell: bash
         run: |

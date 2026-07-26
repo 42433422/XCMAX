@@ -32,8 +32,10 @@ class SessionManager:
         expires_at = now + timedelta(hours=self.SESSION_EXPIRE_HOURS)
 
         user_row = db.query(User).filter(User.id == user_id).first()
-        account_kind = (
-            "admin" if str(getattr(user_row, "role", "") or "") == "admin" else "enterprise"
+        from app.application.session_account_meta import derive_account_kind_from_user
+
+        account_kind = derive_account_kind_from_user(
+            tier=getattr(user_row, "tier", None),
         )
 
         user_session = UserSession(
@@ -42,8 +44,8 @@ class SessionManager:
             created_at=now,
             expires_at=expires_at,
             account_kind=account_kind,
-            market_is_admin=account_kind == "admin",
-            market_is_enterprise=True,
+            market_is_admin=False,
+            market_is_enterprise=False,
         )
         db.add(user_session)
 
@@ -69,6 +71,7 @@ class SessionManager:
             user.display_name,
             user.email,
             user.role,
+            user.tier,
             user.is_active,
         )
         make_transient(user)
