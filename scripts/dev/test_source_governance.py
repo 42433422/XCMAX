@@ -12,6 +12,7 @@ def current_state(
     routers: list[dict] | None = None,
     duplicate_lines: int = 10,
     ignored: list[str] | None = None,
+    mirrors: list[str] | None = None,
 ) -> dict:
     return {
         "oversized_files": files or [],
@@ -22,6 +23,7 @@ def current_state(
             "redundant_lines": duplicate_lines,
             "redundant_bytes": 100,
         },
+        "forbidden_source_mirrors": mirrors or [],
         "ignored_tracked_files": ignored or [],
     }
 
@@ -92,6 +94,11 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
         errors, progress = source_governance.evaluate(current_state(), baseline_state())
         self.assertEqual(errors, [])
         self.assertTrue(any("oversized-file debt reduced" in item for item in progress))
+
+    def test_rejects_source_in_retired_static_mirror(self) -> None:
+        current = current_state(mirrors=["FHD/static/js/legacy.js"])
+        errors, _ = source_governance.evaluate(current, baseline_state())
+        self.assertTrue(any("retired source mirror" in item for item in errors))
 
 
 class FhdBigFileRatchetV2Tests(unittest.TestCase):

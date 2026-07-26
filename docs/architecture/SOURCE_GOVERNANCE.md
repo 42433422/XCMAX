@@ -19,7 +19,18 @@ The baseline is `config/source_governance_baseline.json`. The gate enforces:
 - new production files stay below the stack soft cap;
 - existing oversized files and routers never grow;
 - exact-copy debt outside declared derived trees never grows;
+- retired source mirrors cannot regain tracked JS, CSS, or application source;
 - Git never tracks a path that its ignore rules classify as generated or local.
+
+## Legacy static single source
+
+`FHD/frontend/public/static` is the single editable source for the opt-in legacy
+assets loaded by `FHD/frontend/index.html`. Vite copies that tree into
+`templates/vue-dist/static`, which is the directory served by FastAPI.
+
+The former `FHD/static` JS/CSS mirror is retired. The directory may contain
+non-source binary assets (currently the VBCABLE driver archive), but CI rejects
+new source files there.
 
 When an oversized file is reduced, update the baseline so the improvement cannot
 regress:
