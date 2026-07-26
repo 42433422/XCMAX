@@ -1618,15 +1618,18 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
     candidate = _resume_review_qa_candidate(memory)
     assert candidate == {
         "branch": "devfleet/codex/fix-1",
-        "continue_existing_code_task": True,
         "failed_run_id": "run-1",
         "failed_steps": ["code"],
         "para_task_id": "task-1",
         "reason": "resume_para_ai_review_rejection",
+        "rejected_branch": "devfleet/codex/fix-1",
         "review_feedback": feedback,
     }
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
     prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
     assert "EXTERNAL MERGE REVIEW REMEDIATION" in prompt
+    assert "starts from the configured clean base" in prompt
+    assert "do not inherit or cherry-pick the whole rejected diff" in prompt
     assert feedback in prompt
 
     repeated = _reconcile_requested_merge_feedback(
@@ -1678,6 +1681,69 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
     assert result["merged"] == 1
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
+
+
+@pytest.mark.parametrize(
+    ("task", "expected_reason"),
+    [
+        (
+            {
+                "status": "merge_conflict",
+                "merge_conflict": {
+                    "branch_name": "devfleet/codex/fix-conflict",
+                    "detail": "content conflict in policy.py",
+                    "source": "git-merge",
+                },
+            },
+            "para_merge_conflict",
+        ),
+        (
+            {
+                "status": "failed",
+                "fail_reason": "required CI checks failed",
+            },
+            "para_merge_task_failed",
+        ),
+    ],
+)
+def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, expected_reason):
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-conflict",
+                "para_task_id": "task-failed",
+                "run_id": "run-failed",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["reason"] == expected_reason
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["failed_steps"] == ["code"]
+    assert "continue_existing_code_task" not in candidate
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
+    prompt = _code_task_text("run-retry", {"gaps": []}, memory, candidate)
+    assert "EXTERNAL MERGE FAILURE REMEDIATION" in prompt
+    assert expected_reason in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
 
 
 # ---------------------------------------------------------------------------
