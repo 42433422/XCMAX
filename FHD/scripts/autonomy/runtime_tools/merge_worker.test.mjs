@@ -106,9 +106,15 @@ test('merge retries use bounded exponential backoff', () => {
 });
 
 
-test('operational failures retry but review and identity vetoes are terminal', () => {
+test('operational failures retry but explicit review and identity vetoes are terminal', () => {
   assert.equal(isTransientMergeFailure('HTTP 503 service unavailable'), true);
   assert.equal(isTransientMergeFailure('update-branch failed: network timeout'), true);
+  assert.equal(
+    isTransientMergeFailure(
+      'indeterminate-review: {"primary":"timeout","fallback":"minimax-key-unavailable"}',
+    ),
+    true,
+  );
   assert.equal(isTransientMergeFailure('REJECT: unsafe behavior'), false);
   assert.equal(isTransientMergeFailure('GitHub actor mismatch: expected=bot actual=user'), false);
   assert.equal(isTransientMergeFailure('forbidden-auto-merge-paths: .env'), false);

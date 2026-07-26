@@ -197,7 +197,6 @@ export function isTransientMergeFailure(reason) {
     'diff-too-large',
     'empty-diff',
     'forbidden-auto-merge-paths',
-    'indeterminate-review',
     'is not a bot identity',
     'no-diff-available',
     'reject:',
@@ -984,9 +983,29 @@ async function processTask(token, task, state) {
             const mergeSha = await mergePR(workspaceExists ? workspace : '', prNumber, repoFull);
             results.push({ branch, prUrl, prNumber, merged: true, sha: mergeSha });
             log(`  ✓ merged (${mergeSha.slice(0, 10)})`);
+          } else if (review.reason === 'indeterminate-review') {
+            const diagnostics = JSON.stringify(review.diagnostics || {});
+            const reason = `indeterminate-review: ${diagnostics}`;
+            log(
+              `  ⚠ AI review 无明确结论 → 保持 hold-merge 并进入有限重试：`
+              + reason.slice(0, 300),
+            );
+            // Review provider timeout / missing key / unparsable output is an
+            // operational failure, not a semantic REJECT. Keep the temporary
+            // hold in place and let the bounded retry policy try both reviewers
+            // again. Only an explicit REJECT is a terminal veto.
+            results.push({
+              branch,
+              prUrl,
+              prNumber,
+              merged: false,
+              reason,
+              vetoed: false,
+            });
           } else {
             log(`  ✗ AI review: ${review.reason} → PR #${prNumber} 打 hold-merge veto 保持 OPEN`);
-            // AI review REJECT：打 hold-merge 标签强制 veto，防止 ai-self-heal-auto-merge SLA 12h 后 auto-merge
+            // Explicit AI review REJECT：打 hold-merge 标签强制 veto，
+            // 防止 ai-self-heal-auto-merge SLA 12h 后 auto-merge。
             // 人工 review 后可手动移除 hold-merge 标签
             await addPrLabels(workspaceExists ? workspace : '', prNumber, repoFull, ['hold-merge']);
             results.push({ branch, prUrl, prNumber, merged: false, reason: review.reason, vetoed: true });
