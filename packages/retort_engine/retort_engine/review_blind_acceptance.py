@@ -6,7 +6,6 @@ from typing import Any
 
 from retort_engine.pr_review import review_diff
 
-
 BLIND_MANIFEST = Path("tests") / "review_blind_cases" / "manifest.json"
 PASS_RATE_FLOOR = 0.85
 

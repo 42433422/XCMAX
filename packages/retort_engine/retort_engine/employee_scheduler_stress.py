@@ -14,7 +14,6 @@ from typing import Any
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskRecord, ImprovementTask
 
-
 DEFAULT_DIMENSIONS = (
     "comparative_analysis_depth",
     "feedback_loop_closure",
@@ -207,9 +206,9 @@ def run_employee_scheduler_stress(
             "history_store": str(history_path),
             "employee_results_dir": str(result_dir),
             "worker": "retort_engine.employee_runtime_worker",
-            "launch_mode": "concurrent_popen"
-            if worker_count > 1
-            else "single_process_per_round",
+            "launch_mode": (
+                "concurrent_popen" if worker_count > 1 else "single_process_per_round"
+            ),
             "process_ids": sorted(set(process_ids)),
         },
     }

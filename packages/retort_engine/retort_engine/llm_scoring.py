@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 RequestReview = Callable[..., dict[str, Any]]
 FetchStatus = Callable[[str], dict[str, Any]]

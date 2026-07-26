@@ -48,8 +48,7 @@ def test_competitor_behavior_regression_cli_outputs_contract(tmp_path: Path) -> 
             str(tmp_path),
             "--json",
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

@@ -41,7 +41,7 @@ jobs:
       - name: Release gate subset (hard)
         run: python -m pytest -m release_gate -q --tb=short
 
-  backend-test:
+  modstore-backend-test:
     runs-on: ubuntu-latest
     needs: [release-gate]
 

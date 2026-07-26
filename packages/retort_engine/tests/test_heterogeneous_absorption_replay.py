@@ -100,8 +100,7 @@ def test_heterogeneous_absorption_replay_cli_outputs_contract(tmp_path: Path) ->
         check=True,
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     payload = json.loads(result.stdout)
 

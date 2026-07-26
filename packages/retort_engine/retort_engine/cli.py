@@ -5,16 +5,15 @@ import json
 import sys
 from pathlib import Path
 
-from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
+from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.architecture_contracts import (
     evaluate_architecture_contracts,
     load_architecture_contracts,
 )
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
-from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.competitor_behavior_regression import (
     build_competitor_behavior_regression,
 )
@@ -24,9 +23,10 @@ from retort_engine.competitor_blind_adjudication import (
 from retort_engine.competitor_runtime_comparison import (
     build_competitor_runtime_comparison,
 )
+from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
-from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
+from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.cross_domain_absorption_replay import (
     build_cross_domain_absorption_replay,
@@ -41,12 +41,19 @@ from retort_engine.external_advantage_ci_regression import (
 )
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
+from retort_engine.external_merge_landing import build_external_merge_landing
 from retort_engine.external_process_adjudication import (
     build_external_process_adjudication,
 )
-from retort_engine.external_merge_landing import build_external_merge_landing
 from retort_engine.heterogeneous_absorption_replay import (
     build_heterogeneous_absorption_replay,
+)
+from retort_engine.multi_project_absorption_replay import (
+    build_multi_project_absorption_replay,
+)
+from retort_engine.operator_journey_replay import build_operator_journey_replay
+from retort_engine.paibi_cli_cross_adjudication import (
+    build_paibi_cli_cross_adjudication,
 )
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
@@ -59,18 +66,12 @@ from retort_engine.pr_live_probe import (
 from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
-from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.product_mainline_absorption_proof import (
     build_product_mainline_absorption_proof,
 )
-from retort_engine.multi_project_absorption_replay import (
-    build_multi_project_absorption_replay,
-)
-from retort_engine.operator_journey_replay import build_operator_journey_replay
-from retort_engine.paibi_cli_cross_adjudication import (
-    build_paibi_cli_cross_adjudication,
-)
+from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
+from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.review_adjudication_calibration import (
     build_review_adjudication_calibration,
 )
@@ -85,17 +86,16 @@ from retort_engine.self_bootstrap import (
     build_self_depth_report,
     external_improvement_gate,
 )
-from retort_engine.workspace_hygiene import clean_workspace
 from retort_engine.similar_project_loop import (
     build_absorption_saturation_report,
     build_similar_project_radar,
     run_similar_project_loop,
 )
-from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
-from retort_engine.real_absorption import apply_real_absorption
-from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
+from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.ui_server import run_ui_server
+from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
+from retort_engine.workspace_hygiene import clean_workspace
 
 
 def main(argv: list[str] | None = None) -> int:

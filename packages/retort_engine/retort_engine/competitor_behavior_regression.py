@@ -7,7 +7,6 @@ from typing import Any
 
 from retort_engine.pr_review import review_diff
 
-
 COMPETITOR_BEHAVIOR_CASES: tuple[dict[str, Any], ...] = (
     {
         "case_id": "mopemope-runtime-output-parser",

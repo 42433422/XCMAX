@@ -14,7 +14,6 @@ from typing import Any
 
 from retort_engine.pr_review import review_diff
 
-
 COMPETITOR_PROFILES: tuple[dict[str, str], ...] = (
     {
         "project": "mopemope/pr-ai-review-bot",
@@ -316,8 +315,7 @@ def _run_competitor_profile(
     completed = subprocess.run(
         command,
         cwd=lab,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=30,
         check=False,
@@ -336,9 +334,9 @@ def _run_competitor_profile(
         "cached_source": str(source),
         "source_mode": source_mode,
         "source_exists": effective_source.is_file(),
-        "source_sha256": _sha256(effective_source)
-        if effective_source.is_file()
-        else "",
+        "source_sha256": (
+            _sha256(effective_source) if effective_source.is_file() else ""
+        ),
         "runner_path": str(runner_path),
         "output_path": str(output_path),
         "external_process_returncode": completed.returncode,
@@ -445,7 +443,7 @@ def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
         materialized_path.parent.mkdir(parents=True, exist_ok=True)
         materialized_path.write_bytes(decoded)
     materialized_sha = (
-        hashlib.sha1((f"blob {len(decoded)}\0").encode("utf-8") + decoded).hexdigest()
+        hashlib.sha1((f"blob {len(decoded)}\0").encode() + decoded).hexdigest()
         if decoded
         else ""
     )
@@ -477,8 +475,7 @@ def _gh_api(endpoint: str) -> dict[str, Any]:
     try:
         completed = subprocess.run(
             [_gh_executable(), "api", endpoint],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=30,
             check=False,

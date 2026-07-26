@@ -284,7 +284,11 @@ async def scheduler_health() -> dict[str, Any]:
     因此同时输出每 job 的 ``next_run_time``，watchdog 可基于此判定是否停摆。
     """
     try:
-        from modstore_server.workflow_scheduler import _scheduler, scheduler_integrity_status
+        from modstore_server.workflow_scheduler import (
+            _scheduler,
+            scheduler_integrity_status,
+            scheduler_runtime_health_status,
+        )
 
         if _scheduler is None:
             return {
@@ -319,7 +323,8 @@ async def scheduler_health() -> dict[str, Any]:
 
         running = bool(getattr(_scheduler, "running", False))
         integrity = scheduler_integrity_status()
-        healthy = bool(integrity["ok"]) and pending > 0
+        runtime_health = scheduler_runtime_health_status()
+        healthy = bool(integrity["ok"]) and bool(runtime_health["ok"]) and pending > 0
         return {
             "success": True,
             "ok": healthy,
@@ -333,6 +338,10 @@ async def scheduler_health() -> dict[str, Any]:
                 "required_job_count": integrity["required_job_count"],
                 "missing_required_jobs": integrity["missing_required_jobs"],
                 "startup_probe_failures": integrity["startup_probe_failures"],
+                "runtime_healthy": runtime_health["ok"],
+                "runtime_jobs": runtime_health["jobs"],
+                "unhealthy_runtime_jobs": runtime_health["unhealthy_jobs"],
+                "recovering_runtime_jobs": runtime_health["recovering_jobs"],
                 "jobs": jobs_payload,
                 "reported_at": datetime.now(timezone.utc).isoformat(),
             },

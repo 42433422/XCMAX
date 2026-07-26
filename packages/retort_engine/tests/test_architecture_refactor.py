@@ -114,9 +114,11 @@ def test_core_refactor_plan_maps_codebase_graph_component(tmp_path: Path) -> Non
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            "def test_ok():\n    assert True\n"
-            if rel.startswith("tests/")
-            else "# ok\n",
+            (
+                "def test_ok():\n    assert True\n"
+                if rel.startswith("tests/")
+                else "# ok\n"
+            ),
             encoding="utf-8",
         )
     memory = {
@@ -160,15 +162,7 @@ def test_core_refactor_plan_uses_code_graph_hotspots_to_order_equal_priority_tas
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# ok\n", encoding="utf-8")
     (tmp_path / "retort_engine" / "codebase_graph.py").write_text(
-        "\n".join(
-            [
-                "def a(): return 1",
-                "def b(): return a()",
-                "def c(): return a() + b()",
-                "def d(): return a() + b() + c()",
-                "def e(): return a() + b() + c() + d()",
-            ]
-        ),
+        "def a(): return 1\ndef b(): return a()\ndef c(): return a() + b()\ndef d(): return a() + b() + c()\ndef e(): return a() + b() + c() + d()",
         encoding="utf-8",
     )
     memory = {

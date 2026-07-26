@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 ExternalProjectProfile = Callable[[Path | None], dict[str, bool]]
 
@@ -239,9 +239,11 @@ def improvement_proof(
         "status": improvement_proof_status(execution, flags),
         "before_score": before_score,
         "after_score": after_score,
-        "score_delta": round(after_score - before_score, 1)
-        if before_score is not None and after_score is not None
-        else None,
+        "score_delta": (
+            round(after_score - before_score, 1)
+            if before_score is not None and after_score is not None
+            else None
+        ),
         "changed_file_count": len(changed_files),
         "changed_files": changed_files,
         "gate_passed_count": sum(1 for gate in gates if gate.get("ok")),

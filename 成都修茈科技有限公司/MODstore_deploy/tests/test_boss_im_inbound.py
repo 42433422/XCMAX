@@ -9,6 +9,7 @@ import pytest
 from modstore_server.models import (
     PendingBriefTask,
     PendingHumanQuestion,
+    User,
     get_session_factory,
     init_db,
 )
@@ -37,6 +38,16 @@ def notify_calls(monkeypatch) -> List[Dict[str, Any]]:
 def _seed_pending_question(user_id: int, employee_id: str, question: str = "先做哪个？") -> int:
     sf = get_session_factory()
     with sf() as session:
+        if session.get(User, user_id) is None:
+            session.add(
+                User(
+                    id=user_id,
+                    username=f"boss-{user_id}",
+                    email=f"boss-{user_id}@pytest.local",
+                    password_hash="x",
+                )
+            )
+            session.flush()
         row = PendingHumanQuestion(
             user_id=user_id,
             employee_id=employee_id,

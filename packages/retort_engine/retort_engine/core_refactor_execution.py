@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 EXTRACTED_BOUNDARY_MODULES = {
     "automation_surface": (
         "retort_engine/project_assessment.py",

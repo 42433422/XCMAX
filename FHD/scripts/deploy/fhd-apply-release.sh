@@ -102,11 +102,18 @@ log "已备份至 $BACKUP"
 rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
   log "执行回滚: $BACKUP"
-  for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+  for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common requirements-base.txt requirements.txt pyproject.toml; do
     if [[ -e "$BACKUP/$item" ]]; then
       rsync -a --delete "$BACKUP/$item" "$DEPLOY_ROOT/"
     fi
   done
+  if [[ -d "$BACKUP/resources" ]]; then
+    mkdir -p "$DEPLOY_ROOT/resources"
+    rsync -a --delete \
+      --exclude 'routing_policies/routing_decisions.jsonl' \
+      --exclude 'routing_policies/.online_update_state.json' \
+      "$BACKUP/resources/" "$DEPLOY_ROOT/resources/"
+  fi
   if [[ "$ADMIN_BACKUP_PRESENT" == "1" ]]; then
     mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist"
     rsync -a --delete "$BACKUP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
@@ -156,11 +163,18 @@ python3 "$ADMIN_VERIFY" \
   --expected-sha256 "$EXPECTED_ADMIN_CONSOLE_SHA256"
 
 MUTATION_STARTED=1
-for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
+for item in .build-identity.json app XCAGI alembic alembic.ini config mods xcagi_common requirements-base.txt requirements.txt pyproject.toml; do
   if [[ -e "$TMP/$item" ]]; then
     rsync -a --delete "$TMP/$item" "$DEPLOY_ROOT/"
   fi
 done
+if [[ -d "$TMP/resources" ]]; then
+  mkdir -p "$DEPLOY_ROOT/resources"
+  rsync -a --delete \
+    --exclude 'routing_policies/routing_decisions.jsonl' \
+    --exclude 'routing_policies/.online_update_state.json' \
+    "$TMP/resources/" "$DEPLOY_ROOT/resources/"
+fi
 mkdir -p "$DEPLOY_ROOT/templates/admin-vue-dist"
 rsync -a --delete "$TMP/templates/admin-vue-dist/" "$DEPLOY_ROOT/templates/admin-vue-dist/"
 if [[ -d "$TMP/scripts/deploy" ]]; then

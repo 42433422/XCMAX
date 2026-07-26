@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import pytest
-
 from retort_engine.pr_review import (
     _comment_rank_score,
     _core_review_score_summary,
     _rank_reason,
 )
-
 
 CORE_SCORE_CASES = [
     pytest.param(

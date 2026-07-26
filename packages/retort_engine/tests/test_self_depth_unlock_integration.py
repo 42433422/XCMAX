@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from retort_engine.absorption import RetortAbsorptionRunner
 from retort_engine.core import absorb
 from retort_engine.models import ExternalProjectRef

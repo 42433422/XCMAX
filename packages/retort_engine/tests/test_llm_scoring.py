@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from retort_engine.llm_scoring import attach_llm_scoring, maybe_request_llm_review
 
 

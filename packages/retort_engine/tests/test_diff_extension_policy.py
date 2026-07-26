@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from retort_engine.diff_extension_policy import (
     extension_policy_for_path,
     extension_policy_summary,

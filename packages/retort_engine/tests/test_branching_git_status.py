@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from retort_engine.branching import (
     BranchWorkflowError,
     begin_absorption_branch,
@@ -19,8 +18,7 @@ def git(cwd: Path, *args: str) -> str:
         cwd=cwd,
         check=True,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     ).stdout.strip()
 
 

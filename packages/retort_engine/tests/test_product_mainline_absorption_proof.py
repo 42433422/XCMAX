@@ -53,8 +53,7 @@ def test_product_mainline_absorption_proof_cli_outputs_contract(tmp_path: Path) 
             str(project),
             "--json",
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -120,8 +119,7 @@ def _git(cwd: Path, *args: str) -> None:
     completed = subprocess.run(
         ["git", *args],
         cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

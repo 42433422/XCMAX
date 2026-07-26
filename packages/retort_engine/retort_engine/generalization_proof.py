@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 LANGUAGE_SUFFIXES = {
     ".py": "python",
     ".js": "javascript",
@@ -86,9 +85,11 @@ def build_generalization_proof(
         },
     ]
     return {
-        "status": "ready"
-        if all(item["passed"] for item in checks)
-        else "needs_more_generalization",
+        "status": (
+            "ready"
+            if all(item["passed"] for item in checks)
+            else "needs_more_generalization"
+        ),
         "summary": {
             "external_project_count": len(profiles),
             "language_count": len(language_counts),

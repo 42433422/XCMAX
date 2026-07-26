@@ -106,16 +106,7 @@ def test_issue_patch_benchmark_aggregates_resolution_and_overlap() -> None:
 
 
 def test_touched_files_from_patch_supports_diff_and_plus_plus_plus_headers() -> None:
-    patch = "\n".join(
-        [
-            "diff --git a/old.py b/new.py",
-            "--- a/old.py",
-            "+++ b/new.py",
-            "@@ -1 +1 @@",
-            "+print('ok')",
-            "+++ b/extra.py",
-        ]
-    )
+    patch = "diff --git a/old.py b/new.py\n--- a/old.py\n+++ b/new.py\n@@ -1 +1 @@\n+print('ok')\n+++ b/extra.py"
 
     assert touched_files_from_patch(patch) == ["new.py", "extra.py"]
 

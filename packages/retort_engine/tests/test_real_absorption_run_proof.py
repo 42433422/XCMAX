@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.real_absorption_run_proof import (
     code_graph_proof_gate,

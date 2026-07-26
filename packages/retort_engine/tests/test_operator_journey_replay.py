@@ -144,34 +144,7 @@ def _write_frontend(root: Path) -> None:
         encoding="utf-8",
     )
     (frontend / "app.js").write_text(
-        "\n".join(
-            [
-                'const canvas = document.getElementById("blackholeCanvas");',
-                'canvas.getContext("2d");',
-                "function drawAbsorptionScene() {}",
-                "function drawAbsorptionPlanet() {}",
-                "function renderDevourSession() {}",
-                "function renderLiveRuntimePanel() {}",
-                "function renderUpstreamCiPanel() { cross_language_ci_generalization; }",
-                "function beginAbsorption() {}",
-                "function setMode(mode) {}",
-                "function assess() {}",
-                "function absorb() {}",
-                "function liveRuntimeComparison() { force_live_refresh: true; }",
-                "function upstreamCiProbe() { cross_language_ci_generalization; }",
-                "function refreshEvolutionMap() {}",
-                "function handleAbsorbedProjectClick() { selectAbsorbedProject(); }",
-                "function selectAbsorbedProject() {}",
-                "$('assessBtn').onclick = assess;",
-                "$('absorbBtn').onclick = absorb;",
-                "$('liveRuntimeBtn').onclick = liveRuntimeComparison;",
-                "$('upstreamCiBtn').onclick = upstreamCiProbe;",
-                'setMode("github");',
-                "codeGraphProofPanel; refactorPriorityPanel;",
-                'canvas.addEventListener("click", handleAbsorbedProjectClick);',
-                "function draw() { requestAnimationFrame(draw); }",
-            ]
-        ),
+        "const canvas = document.getElementById(\"blackholeCanvas\");\ncanvas.getContext(\"2d\");\nfunction drawAbsorptionScene() {}\nfunction drawAbsorptionPlanet() {}\nfunction renderDevourSession() {}\nfunction renderLiveRuntimePanel() {}\nfunction renderUpstreamCiPanel() { cross_language_ci_generalization; }\nfunction beginAbsorption() {}\nfunction setMode(mode) {}\nfunction assess() {}\nfunction absorb() {}\nfunction liveRuntimeComparison() { force_live_refresh: true; }\nfunction upstreamCiProbe() { cross_language_ci_generalization; }\nfunction refreshEvolutionMap() {}\nfunction handleAbsorbedProjectClick() { selectAbsorbedProject(); }\nfunction selectAbsorbedProject() {}\n$('assessBtn').onclick = assess;\n$('absorbBtn').onclick = absorb;\n$('liveRuntimeBtn').onclick = liveRuntimeComparison;\n$('upstreamCiBtn').onclick = upstreamCiProbe;\nsetMode(\"github\");\ncodeGraphProofPanel; refactorPriorityPanel;\ncanvas.addEventListener(\"click\", handleAbsorbedProjectClick);\nfunction draw() { requestAnimationFrame(draw); }",
         encoding="utf-8",
     )
 

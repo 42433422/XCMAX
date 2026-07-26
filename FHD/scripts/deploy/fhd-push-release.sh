@@ -256,6 +256,15 @@ if [[ "$APPLY_NOW" == "1" ]]; then
   fi
   deploy_emit verify ok "git_sha=$GIT_SHA"
   deploy_emit apply ok "host=$HOST git_sha=$GIT_SHA"
+
+  # Cleanup is intentionally post-verify: failed or unverified releases retain
+  # every rollback artifact. Once the exact SHA is live, bound old immutable
+  # tarballs, abandoned partial uploads, and full-tree rollback snapshots.
+  REMOTE_PRUNER="${REMOTE_DEPLOY_ROOT}/scripts/deploy/prune_release_cache.py"
+  if ! "${SSH[@]}" "$REMOTE" \
+      "python3 '$REMOTE_PRUNER' --release-dir '$REMOTE_DIR' --backup-dir '/opt/fhd-full-backups' --current-artifact '$ARTIFACT' --retain-releases 8 --retain-backups 5 --part-max-age-hours 24"; then
+    echo "[warn] release cache cleanup failed after verified deploy; runtime remains healthy" >&2
+  fi
 fi
 
 deploy_emit push ok "channel=$CHANNEL version=$VERSION git_sha=$GIT_SHA mode=${DEPLOY_MODE:-tarball}"

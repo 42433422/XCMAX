@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DEFAULT_LLM_WAIT_SEC = 12.0
 TEST_TO_SOURCE_HEALTHY_RATIO = 0.4
 

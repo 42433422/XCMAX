@@ -9,7 +9,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-
 PatchProducer = Callable[[dict[str, Any]], str]
 PatchVerifier = Callable[[dict[str, Any], str], dict[str, Any]]
 

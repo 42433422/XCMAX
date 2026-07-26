@@ -35,7 +35,7 @@ def build_evolution_map(project: str | Path, *, max_files: int = 140) -> dict[st
             "run_id": str(latest_run.get("run_id") or ""),
             "closed_loop_status": str(state.get("status") or ""),
             "closed_loop_evidence": list(
-                ((state.get("closed_loop_proof") or {}).get("evidence") or [])
+                (state.get("closed_loop_proof") or {}).get("evidence") or []
             )[-10:],
             "pre_absorption_focus": latest_run.get("pre_absorption_focus") or {},
             "code_graph_proof": latest_code_graph_proof

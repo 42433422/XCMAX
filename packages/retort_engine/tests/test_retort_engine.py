@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from retort_engine.core import (
     RetortSelfEvolutionRunner,
     RetortService,
@@ -30,12 +29,12 @@ from retort_engine.paibi_llm import (
 )
 from retort_engine.proof import rollback_rehearsal
 from retort_engine.real_absorption import apply_real_absorption
-from retort_engine.ui_server import RetortUIServer
 from retort_engine.ui_features import (
     blackhole_ui_detected,
     blackhole_ui_operation_replay,
     blackhole_ui_structure,
 )
+from retort_engine.ui_server import RetortUIServer
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -44,8 +43,7 @@ def git(cwd: Path, *args: str) -> str:
         cwd=cwd,
         check=True,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     ).stdout.strip()
 
 
@@ -248,20 +246,7 @@ def test_real_executor_features_can_converge_after_closed_loop_proof(
     project.mkdir()
     (project / "engine.py").write_text(
         '"""'
-        + "\n".join(
-            [
-                "RetortService RetortUIServer",
-                "RetortSelfEvolutionRunner scores_repeated_without_convergence",
-                "begin_absorption_branch merge_absorption_branch branch_workflow",
-                "employee_queue RetortHistory",
-                "github_url external_path ownProjectFolder externalProjectFolder",
-                "license incompatible",
-                "blackhole accretion canvas",
-                "apply_real_absorption apply-absorption execution_requests",
-                "_record_execution_proof closed_loop_proof gates_passed",
-                "https://github.com/openai/codex",
-            ]
-        )
+        + "RetortService RetortUIServer\nRetortSelfEvolutionRunner scores_repeated_without_convergence\nbegin_absorption_branch merge_absorption_branch branch_workflow\nemployee_queue RetortHistory\ngithub_url external_path ownProjectFolder externalProjectFolder\nlicense incompatible\nblackhole accretion canvas\napply_real_absorption apply-absorption execution_requests\n_record_execution_proof closed_loop_proof gates_passed\nhttps://github.com/openai/codex"
         + '"""\n',
         encoding="utf-8",
     )
