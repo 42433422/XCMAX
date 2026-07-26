@@ -340,6 +340,7 @@
   "/api/xcmax/ops/duty-runs",
   "/api/xcmax/ops/duty-runs/{run_id}",
   "/api/xcmax/ops/founder-autonomy",
+  "/api/xcmax/ops/founder-autonomy/refresh-internal",
   "/api/xcmax/ops/jobs",
   "/api/xcmax/ops/jobs/{job_id}",
   "/api/xcmax/ops/runtime-inventory",
