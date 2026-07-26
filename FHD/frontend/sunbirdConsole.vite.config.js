@@ -128,6 +128,14 @@ export default defineConfig(() => ({
         find: '@/constants/modRouteGlob',
         replacement: path.join(hostConstants, 'modRouteGlob.full.ts'),
       },
+      {
+        find: '@/data/workflow-employee-docs.json',
+        replacement: path.join(hostRoot, 'public/workflow-employee-docs.json'),
+      },
+      {
+        find: '@/data/workflow-employees.json',
+        replacement: path.join(hostRoot, 'public/workflow-employees.json'),
+      },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },
       { find: '@amin', replacement: path.resolve(hostRoot, '../AMIN') },
@@ -171,6 +179,14 @@ export default defineConfig(() => ({
         find: '@mod-views/xcagi-core-workflow-employees',
         replacement: modViewsDir('xcagi-workflow-visualization-bridge'),
       },
+      {
+        find: '@admin-console-inject/adminHostRoutes',
+        replacement: path.join(hostSrc, 'router/adminHostRoutes.stub.ts'),
+      },
+      {
+        find: '@admin-console-inject/views/DutyRosterGraphView.vue',
+        replacement: path.join(hostSrc, 'views/adminDutyRosterGraphView.stub.vue'),
+      },
       { find: 'vue', replacement: path.join(hostRoot, 'node_modules/vue') },
       { find: 'xlsx', replacement: path.join(hostRoot, 'node_modules/xlsx') },
       {
@@ -212,8 +228,19 @@ export default defineConfig(() => ({
     proxy: buildDevProxy(API_BASE),
   },
   publicDir: path.join(hostRoot, 'public'),
+  esbuild: {
+    target: 'esnext',
+  },
   worker: { format: 'es' },
+  optimizeDeps: {
+    include: ['vue'],
+    exclude: ['mermaid', '@mermaid-js/parser'],
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   build: {
+    target: 'esnext',
     outDir: path.resolve(hostRoot, '../templates/sunbird-vue-dist'),
     emptyOutDir: true,
     assetsDir: 'assets',
