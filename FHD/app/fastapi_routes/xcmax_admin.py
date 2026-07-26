@@ -2346,9 +2346,7 @@ async def _build_and_publish_founder_autonomy(
     from app.fastapi_routes.knowledge_v1 import _knowledge_runtime_snapshot
 
     machine_authorization = (
-        str(request.headers.get("Authorization") or "").strip()
-        if not require_admin_session
-        else ""
+        str(request.headers.get("Authorization") or "").strip() if not require_admin_session else ""
     )
 
     async def _safe_proxy(path: str) -> dict[str, Any]:
