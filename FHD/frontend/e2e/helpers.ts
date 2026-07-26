@@ -8,9 +8,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const E2E_USER = process.env.E2E_USER || 'xcagi-enterprise-demo';
 export const E2E_PASSWORD = process.env.E2E_PASSWORD || 'Demo@2026';
 export const E2E_ACCOUNT_KIND = process.env.E2E_ACCOUNT_KIND || 'enterprise';
-type BrowserCookie = Awaited<ReturnType<APIRequestContext['storageState']>>['cookies'][number];
-
-const loginCookieCache = new Map<string, Promise<BrowserCookie[]>>();
 
 export function isFullStack(): boolean {
   return process.env.E2E_FULL_STACK === '1';
@@ -104,9 +101,10 @@ export async function loginBrowserSession(page: Page, apiBase = ''): Promise<voi
     /\/$/,
     ''
   );
-  let cookiePromise = loginCookieCache.get(base);
-  if (!cookiePromise) {
-    cookiePromise = (async () => {
+
+  let lastTransientError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
       const headers = await csrfHeaders(page.request, {}, base);
       const resp = await page.request.post(`${base}/api/auth/login`, {
         headers,
@@ -118,14 +116,42 @@ export async function loginBrowserSession(page: Page, apiBase = ''): Promise<voi
         timeout: 20_000,
       });
       const body = await resp.json().catch(() => ({}));
-      if (resp.status() >= 500 || body?.success !== true) {
+      if (resp.status() >= 500) {
+        throw new Error(
+          `E2E login transient failure: status=${resp.status()} body=${JSON.stringify(body)}`
+        );
+      }
+      if (body?.success !== true) {
         throw new Error(`E2E login failed: status=${resp.status()} body=${JSON.stringify(body)}`);
       }
-      return (await page.request.storageState()).cookies;
-    })();
-    loginCookieCache.set(base, cookiePromise);
+
+      const meResp = await page.request.get(`${base}/api/auth/me`, { timeout: 20_000 });
+      const meBody = await meResp.json().catch(() => ({}));
+      if (meResp.status() >= 500) {
+        throw new Error(
+          `E2E auth verification transient failure: status=${meResp.status()} body=${JSON.stringify(meBody)}`
+        );
+      }
+      if (meBody?.success !== true || !meBody?.data?.user) {
+        throw new Error(
+          `E2E auth verification failed: status=${meResp.status()} body=${JSON.stringify(meBody)}`
+        );
+      }
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isTransient =
+        message.includes('transient failure') ||
+        message.includes('Timeout') ||
+        message.includes('timed out') ||
+        message.includes('ECONNRESET') ||
+        message.includes('ECONNREFUSED');
+      if (!isTransient || attempt === 2) throw error;
+      lastTransientError = error;
+    }
   }
-  await page.context().addCookies(await cookiePromise);
+
+  throw lastTransientError;
 }
 
 export async function imUserHeaders(
