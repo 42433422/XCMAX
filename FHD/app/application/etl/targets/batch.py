@@ -11,7 +11,12 @@ from typing import Any
 
 from app.application.etl.errors import EtlError
 from app.application.etl.secrets import read_webhook_secret
-from app.application.etl.targets.base import TargetAdapter, TargetField, json_safe
+from app.application.etl.targets.base import (
+    PreviewDecision,
+    TargetAdapter,
+    TargetField,
+    json_safe,
+)
 from app.application.etl.transforms import neutralize_spreadsheet_formula
 from app.utils.path_utils import get_app_data_dir
 
@@ -23,6 +28,86 @@ class AttendanceAdapter(TargetAdapter):
     fields = (TargetField("document_path", "考勤文件", aliases=("document_path",)),)
     default_match_keys = ("source_file", "source_row")
 
+    @staticmethod
+    def _source_file_key(context: dict[str, Any]) -> str:
+        source_path = Path(str(context["upload_path"]))
+        return f"{context['file_sha256']}:{source_path.name}"
+
+    @staticmethod
+    def _db_path() -> Path:
+        return Path(get_app_data_dir()) / "data" / "mod_dbs" / "taiyangniao-pro.db"
+
+    def _existing_batch(
+        self,
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        import sqlite3
+
+        cache = context.get("_preview_cache")
+        cache_key = f"attendance_batch:{self._source_file_key(context)}"
+        if isinstance(cache, dict) and cache_key in cache:
+            return cache[cache_key]
+        db_path = self._db_path()
+        match = None
+        if db_path.is_file():
+            try:
+                with sqlite3.connect(str(db_path)) as conn:
+                    row = conn.execute(
+                        """
+                        SELECT id, rows_written, imported_at
+                        FROM attendance_import_batches
+                        WHERE source_file = ?
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (self._source_file_key(context),),
+                    ).fetchone()
+                if row:
+                    match = {
+                        "batch_id": int(row[0]),
+                        "rows_written": int(row[1] or 0),
+                        "imported_at": str(row[2] or ""),
+                    }
+            except sqlite3.OperationalError:
+                match = None
+        if isinstance(cache, dict):
+            cache[cache_key] = match
+        return match
+
+    def preview(self, db, data, *, allowed_update_fields, context):
+        del db, allowed_update_fields
+        source_path = Path(str(context["upload_path"]))
+        if source_path.suffix.lower() not in {".xlsx", ".xlsm"}:
+            return PreviewDecision(
+                "error",
+                reason="unsupported_attendance_file",
+                issues=[
+                    {
+                        "code": "ETL_ATTENDANCE_FILE_INVALID",
+                        "field": "document_path",
+                        "severity": "error",
+                        "message": "考勤仅支持 Excel 工作簿",
+                    }
+                ],
+            )
+        existing = self._existing_batch(context)
+        if existing:
+            return PreviewDecision(
+                "skip",
+                match_ref=str(existing["batch_id"]),
+                before=existing,
+                after=existing,
+                reason="duplicate_attendance_source",
+            )
+        return PreviewDecision(
+            "new",
+            after={
+                "source_file": self._source_file_key(context),
+                "document_path": source_path.name,
+            },
+            reason="new_attendance_source",
+        )
+
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
@@ -31,12 +116,17 @@ class AttendanceAdapter(TargetAdapter):
         source_path = Path(str(context["upload_path"]))
         if source_path.suffix.lower() not in {".xlsx", ".xlsm"}:
             raise EtlError("ETL_ATTENDANCE_FILE_INVALID", "考勤仅支持 Excel 工作簿")
-        data_root = Path(get_app_data_dir())
-        db_path = data_root / "data" / "mod_dbs" / "taiyangniao-pro.db"
+        if self._existing_batch(context):
+            raise EtlError(
+                "ETL_MATCH_CHANGED",
+                "考勤文件在预演后已导入，请重新预演",
+                status_code=409,
+            )
+        db_path = self._db_path()
         result = import_attendance_workbook(
             source_path,
             db_path,
-            source_file_key=f"{context['file_sha256']}:{source_path.name}",
+            source_file_key=self._source_file_key(context),
             sync_ui_tables=True,
         )
         row_count = int(context.get("row_count") or 0)

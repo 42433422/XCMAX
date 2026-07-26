@@ -332,6 +332,18 @@ class ShipmentAdapter(TargetAdapter):
 
     def execute_row(self, db, data, *, action, match_ref, allowed_update_fields, context):
         fingerprint = self._fingerprint(data, context)
+        current = self.preview(
+            db,
+            data,
+            allowed_update_fields=allowed_update_fields,
+            context=context,
+        )
+        if current.action != "new":
+            raise EtlError(
+                "ETL_MATCH_CHANGED",
+                "发货记录在预演后已存在，请重新预演",
+                status_code=409,
+            )
         parsed = {
             "external_order_no": data.get("external_order_no"),
             "etl_run_id": context.get("run_id"),

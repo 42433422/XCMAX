@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -17,13 +18,16 @@ from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
 from app.application.etl.parsers import parse_file
 from app.application.etl.service import EtlService, mark_interrupted_runs_on_startup
 from app.application.etl.targets import (
+    AttendanceAdapter,
     CustomerAdapter,
     CustomerProductsAdapter,
     ExportCsvAdapter,
+    ExportXlsxAdapter,
     KnowledgeAdapter,
     ProductAdapter,
     PurchaseOrderAdapter,
     ShipmentAdapter,
+    TargetAdapter,
     WebhookAdapter,
     get_adapter,
     target_capabilities,
@@ -195,9 +199,7 @@ def test_delivery_profile_converts_to_general_etl_rows(tmp_path, monkeypatch):
     assert len({row["legacy_note_fingerprint"] for row in values}) == 1
 
 
-def test_delivery_profile_skips_filename_fallback_sheets_and_total_rows(
-    tmp_path, monkeypatch
-):
+def test_delivery_profile_skips_filename_fallback_sheets_and_total_rows(tmp_path, monkeypatch):
     path = tmp_path / "855237eb-59a4-419e-b22c-360ea04a8a56.xlsx"
     path.write_bytes(b"placeholder")
     notes = [
@@ -651,10 +653,7 @@ def test_customer_products_adapter_links_parent_and_children_and_rolls_back(etl_
 
         assert db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "甲公司").count() == 1
         products = (
-            db.query(Product)
-            .filter(Product.unit == "甲公司")
-            .order_by(Product.model_number)
-            .all()
+            db.query(Product).filter(Product.unit == "甲公司").order_by(Product.model_number).all()
         )
         assert [item.model_number for item in products] == ["A1", "A2"]
         assert first_result["after"]["_etl"]["customer_created"] is True
@@ -752,15 +751,13 @@ def test_customer_products_service_executes_one_confirmed_linked_run(etl_db, mon
     monkeypatch.setattr(
         service,
         "_submit_preview",
-        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
-            run_id, owner_user_id
-        ),
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
     )
     monkeypatch.setattr(
         service,
         "_submit_execution",
-        lambda run_id, _tenant_id, owner_user_id, valid_rows_only: (
-            service._execute_worker(run_id, owner_user_id, valid_rows_only)
+        lambda run_id, _tenant_id, owner_user_id, valid_rows_only: service._execute_worker(
+            run_id, owner_user_id, valid_rows_only
         ),
     )
     with tenant_scope(122):
@@ -791,10 +788,7 @@ def test_customer_products_service_executes_one_confirmed_linked_run(etl_db, mon
         persisted_run = db.get(EtlRun, run["id"])
         persisted_run.summary_json = "{}"
         db.commit()
-        assert (
-            service.get_run(db, run_id=run["id"], owner_user_id=21)["file_name"]
-            == "linked.csv"
-        )
+        assert service.get_run(db, run_id=run["id"], owner_user_id=21)["file_name"] == "linked.csv"
         assert run["summary"]["new"] == 2
         completed = service.execute(
             db,
@@ -820,15 +814,13 @@ def test_customer_products_retry_replays_parent_without_orphaning(etl_db, monkey
     monkeypatch.setattr(
         service,
         "_submit_preview",
-        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(
-            run_id, owner_user_id
-        ),
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
     )
     monkeypatch.setattr(
         service,
         "_submit_execution",
-        lambda run_id, _tenant_id, owner_user_id, valid_rows_only: (
-            service._execute_worker(run_id, owner_user_id, valid_rows_only)
+        lambda run_id, _tenant_id, owner_user_id, valid_rows_only: service._execute_worker(
+            run_id, owner_user_id, valid_rows_only
         ),
     )
     monkeypatch.setattr(
@@ -858,11 +850,7 @@ def test_customer_products_retry_replays_parent_without_orphaning(etl_db, monkey
             file_name="linked-retry.csv",
             content_type="text/csv",
             stream=BytesIO(
-                (
-                    "客户名称,产品型号,产品名称\n"
-                    "甲公司,A1,底漆\n"
-                    "甲公司,A2,面漆\n"
-                ).encode()
+                ("客户名称,产品型号,产品名称\n甲公司,A1,底漆\n甲公司,A2,面漆\n").encode()
             ),
         )
         db.commit()
@@ -1002,6 +990,77 @@ def test_purchase_order_v1_add_skip_and_rollback(etl_db):
         db.commit()
         assert db.query(PurchaseOrderItem).count() == 0
         assert db.query(PurchaseOrder).count() == 0
+        db.close()
+
+
+def test_purchase_order_number_is_unique_per_tenant_for_etl(etl_db):
+    adapter = PurchaseOrderAdapter()
+    shared_order_no = "PO-SHARED-100"
+
+    with tenant_scope(141):
+        db = etl_db()
+        supplier = Supplier(tenant_id=141, code="SUP-141", name="甲供应商")
+        product = Product(
+            tenant_id=141,
+            unit="内部采购",
+            model_number="M-SHARED",
+            name="共享型号树脂",
+        )
+        db.add_all([supplier, product])
+        db.commit()
+        adapter.execute_row(
+            db,
+            {
+                "external_order_no": shared_order_no,
+                "supplier_name": supplier.name,
+                "order_date": "2026-07-27",
+                "product_model": product.model_number,
+                "product_name": product.name,
+                "quantity": "1",
+            },
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
+        db.commit()
+        assert (
+            db.query(PurchaseOrder).filter(PurchaseOrder.order_no == shared_order_no).count() == 1
+        )
+        db.close()
+
+    with tenant_scope(142):
+        db = etl_db()
+        supplier = Supplier(tenant_id=142, code="SUP-142", name="乙供应商")
+        product = Product(
+            tenant_id=142,
+            unit="内部采购",
+            model_number="M-SHARED",
+            name="共享型号树脂",
+        )
+        db.add_all([supplier, product])
+        db.commit()
+        data = {
+            "external_order_no": shared_order_no,
+            "supplier_name": supplier.name,
+            "order_date": "2026-07-27",
+            "product_model": product.model_number,
+            "product_name": product.name,
+            "quantity": "2",
+        }
+        assert adapter.preview(db, data, allowed_update_fields=set(), context={}).action == "new"
+        adapter.execute_row(
+            db,
+            data,
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
+        db.commit()
+        assert (
+            db.query(PurchaseOrder).filter(PurchaseOrder.order_no == shared_order_no).count() == 1
+        )
         db.close()
 
 
@@ -1159,7 +1218,210 @@ def test_target_contract_catalog_covers_v1_targets_without_secret_fields():
     assert capabilities["customers"]["reversible"] is True
     assert capabilities["attendance"]["reversible"] is True
     assert capabilities["webhook"]["reversible"] is False
-    assert all("secret" not in field for item in capabilities.values() for field in item["fields"])
+    for target_type, capability in capabilities.items():
+        adapter = get_adapter(target_type)
+        fields = {field["key"] for field in capability["fields"]}
+        assert capability["type"] == target_type
+        assert capability["label"]
+        assert set(capability["required_fields"]).issubset(fields)
+        assert set(capability["supported_actions"]).issubset({"new", "update", "skip"})
+        assert capability["supported_actions"]
+        if target_type not in {"knowledge", "attendance"}:
+            assert set(capability["default_match_keys"]).issubset(fields)
+        has_batch_execute = callable(getattr(adapter, "execute_batch", None))
+        assert has_batch_execute or type(adapter).execute_row is not TargetAdapter.execute_row
+        if capability["reversible"]:
+            has_batch_rollback = callable(getattr(adapter, "rollback_batch", None))
+            assert (
+                has_batch_rollback or type(adapter).rollback_row is not TargetAdapter.rollback_row
+            )
+        assert "secret_ref" not in json.dumps(capability, ensure_ascii=False)
+
+
+def test_attendance_adapter_is_idempotent_and_rolls_back_only_its_source(tmp_path, monkeypatch):
+    data_root = tmp_path / "app-data"
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(data_root))
+    source_path = tmp_path / "attendance.xlsx"
+    source_path.write_bytes(b"workbook-placeholder")
+    adapter = AttendanceAdapter()
+    source_key = f"attendance-hash:{source_path.name}"
+
+    preview_context = {
+        "upload_path": str(source_path),
+        "file_sha256": "attendance-hash",
+        "_preview_cache": {},
+    }
+    preview = adapter.preview(
+        None,
+        {},
+        allowed_update_fields=set(),
+        context=preview_context,
+    )
+    assert preview.action == "new"
+    assert preview.after["source_file"] == source_key
+
+    def fake_import(_source_path, db_path, *, source_file_key, sync_ui_tables):
+        assert source_file_key == source_key
+        assert sync_ui_tables is True
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE attendance_import_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_file TEXT NOT NULL,
+                    rows_written INTEGER NOT NULL,
+                    imported_at TEXT NOT NULL
+                );
+                CREATE TABLE attendance_daily_records (source_file TEXT NOT NULL);
+                CREATE TABLE attendance_employees (source_file TEXT NOT NULL);
+                CREATE TABLE attendance_departments (source_file TEXT NOT NULL);
+                CREATE TABLE products (source_file TEXT NOT NULL);
+                CREATE TABLE customers (source_file TEXT NOT NULL);
+                """
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO attendance_import_batches
+                    (source_file, rows_written, imported_at)
+                VALUES (?, 2, '2026-07-27T10:00:00')
+                """,
+                (source_file_key,),
+            )
+            for table in (
+                "attendance_daily_records",
+                "attendance_employees",
+                "attendance_departments",
+                "products",
+                "customers",
+            ):
+                conn.execute(f"INSERT INTO {table} (source_file) VALUES (?)", (source_file_key,))
+                conn.execute(f"INSERT INTO {table} (source_file) VALUES ('unrelated-source')")
+            conn.commit()
+            batch_id = int(cursor.lastrowid)
+        return {
+            "source_file": source_file_key,
+            "db_path": str(db_path),
+            "rows_written": 2,
+            "batch_id": batch_id,
+        }
+
+    monkeypatch.setattr(
+        "app.application.attendance_import_app_service.import_attendance_workbook",
+        fake_import,
+    )
+    execution_context = {
+        "upload_path": str(source_path),
+        "file_sha256": "attendance-hash",
+        "row_count": 2,
+    }
+    result = adapter.execute_batch([{}, {}], execution_context)
+    assert result["executed"] == 2
+
+    duplicate = adapter.preview(
+        None,
+        {},
+        allowed_update_fields=set(),
+        context={
+            "upload_path": str(source_path),
+            "file_sha256": "attendance-hash",
+            "_preview_cache": {},
+        },
+    )
+    assert duplicate.action == "skip"
+    assert duplicate.reason == "duplicate_attendance_source"
+
+    deleted = adapter.rollback_batch({}, result["receipt"])
+    assert deleted == 5
+    with sqlite3.connect(result["receipt"]["db_path"]) as conn:
+        for table in (
+            "attendance_daily_records",
+            "attendance_employees",
+            "attendance_departments",
+            "products",
+            "customers",
+        ):
+            assert conn.execute(f"SELECT source_file FROM {table}").fetchall() == [
+                ("unrelated-source",)
+            ]
+        assert conn.execute("SELECT COUNT(*) FROM attendance_import_batches").fetchone()[0] == 0
+
+    invalid = adapter.preview(
+        None,
+        {},
+        allowed_update_fields=set(),
+        context={"upload_path": str(tmp_path / "attendance.csv"), "file_sha256": "bad"},
+    )
+    assert invalid.action == "error"
+    assert invalid.issues[0]["code"] == "ETL_ATTENDANCE_FILE_INVALID"
+
+
+def test_export_xlsx_neutralizes_spreadsheet_formulas(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "app-data"))
+    result = ExportXlsxAdapter().execute_batch(
+        [{"name": "=2+2", "value": 4}],
+        {
+            "run_id": "xlsx-formula-run",
+            "row_count": 1,
+            "output_headers": ["name", "value"],
+        },
+    )
+    path = tmp_path / "app-data" / "etl" / "exports" / result["receipt"]["file_name"]
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(path, read_only=True, data_only=False)
+    try:
+        rows = list(workbook.active.iter_rows(values_only=True))
+    finally:
+        workbook.close()
+    assert rows == [("name", "value"), ("'=2+2", 4)]
+
+
+def test_webhook_retries_server_errors_and_fails_with_stable_code(monkeypatch):
+    statuses = iter((500, 200, 503, 503, 503))
+    waits: list[int] = []
+
+    class Response:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, *_args, **_kwargs):
+            return Response(next(statuses))
+
+    monkeypatch.setattr("httpx.Client", Client)
+    monkeypatch.setattr("app.application.etl.targets._assert_safe_webhook_url", lambda _url: None)
+    monkeypatch.setattr(
+        "app.application.etl.targets.batch.Event.wait",
+        lambda _self, seconds: waits.append(seconds),
+    )
+    adapter = WebhookAdapter()
+    context = {
+        "run_id": "webhook-retry",
+        "row_count": 1,
+        "target_config": {
+            "endpoint_url": "https://example.com/hook",
+            "headers": {},
+            "secret_ref": None,
+        },
+    }
+    assert adapter.execute_batch([{"id": 1}], context)["executed"] == 1
+    assert waits == [1]
+
+    with pytest.raises(EtlError) as exc_info:
+        adapter.execute_batch([{"id": 2}], {**context, "run_id": "webhook-fail"})
+    assert exc_info.value.code == "ETL_WEBHOOK_DELIVERY_FAILED"
+    assert exc_info.value.status_code == 502
+    assert waits == [1, 1, 2]
 
 
 def test_knowledge_hash_dedup_source_replacement_and_rollback(tmp_path, monkeypatch):

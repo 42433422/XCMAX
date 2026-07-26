@@ -61,10 +61,7 @@ class HistoryServiceMixin:
             )
             .all()
         }
-        return [
-            self.run_dict(run, file_name=upload_names.get(run.upload_id))
-            for run in rows
-        ]
+        return [self.run_dict(run, file_name=upload_names.get(run.upload_id)) for run in rows]
 
     def cleanup_retention(self, db: Session, *, owner_user_id: int) -> dict[str, int]:
         now = utcnow()
