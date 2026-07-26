@@ -4,9 +4,7 @@
 1. 显式 profile 对象 / profile_id（含 knowledge:* 记忆条目）
 2. ``FHD_EXCEL_ETL_PROFILE_DIR`` 用户自定义 YAML（可选）
 3. 知识库生成的 ``universal`` 通用 profile（默认）
-
-仓库 ``resources/config/shipment_etl/profiles`` 仅当
-``FHD_EXCEL_ETL_ALLOW_BUILTIN=1`` 时才加载（默认关闭）。
+仓库内置 profile 仅当 ``FHD_EXCEL_ETL_ALLOW_BUILTIN=1`` 时加载（默认关闭）。
 """
 
 from __future__ import annotations
@@ -296,11 +294,8 @@ def load_profile_from_path(path: str | Path) -> ShipmentEtlProfile:
     raw_path = Path(path).expanduser()
     p = raw_path.resolve()
     if not p.is_file() and not raw_path.is_absolute():
-        # Callers may run from the monorepo root or an installed launcher
-        # instead of FHD/. Keep repository-relative profile paths stable.
-        project_relative = (Path(__file__).resolve().parents[2] / raw_path).resolve()
-        if project_relative.is_file():
-            p = project_relative
+        candidate = (Path(__file__).resolve().parents[2] / raw_path).resolve()
+        p = candidate if candidate.is_file() else p
     if not p.is_file():
         raise ShipmentEtlProfileError(f"profile file not found: {p}")
     try:
