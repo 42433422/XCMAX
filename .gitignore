@@ -30,6 +30,8 @@ __pycache__/
 .venv*/
 .coverage
 htmlcov/
+packages/xcagi_common/build/
+packages/xcagi_common/*.egg-info/
 .idea/
 .vscode/
 .DS_Store

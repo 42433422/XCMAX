@@ -57,7 +57,6 @@ DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
     "FHD/mods-admin-runtime/",
     "FHD/templates/",
-    "成都修茈科技有限公司/packages/xcagi_common/build/",
 )
 
 # These retired recovery/runtime trees are not editing sources. Keep the
