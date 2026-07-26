@@ -47,6 +47,21 @@ from modstore_server.self_maintenance_loop_runner import (
     ensure_clean_baseline,
     loop_memory_path,
 )
+from modstore_server.self_maintenance_quality_gate import (
+    matches_black_check_command,
+    matches_isort_check_command,
+    matches_source_governance_command,
+)
+
+QUALITY_CHECKS_JSON = (
+    '"quality_checks":{'
+    '"black":{"command":"python3 -m black --check modman/ modstore_server/ tests/",'
+    '"exit_code":0,"status":"passed"},'
+    '"isort":{"command":"python3 -m isort --check-only --diff modman/ modstore_server/ tests/",'
+    '"exit_code":0,"status":"passed"},'
+    '"source_governance":{"command":"python3 scripts/dev/source_governance.py --top 10",'
+    '"exit_code":0,"status":"passed"}},'
+)
 
 
 def _stats(line_changes=12, binary_files=None):
@@ -1246,9 +1261,16 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "platform-equivalent local `python -m pytest` command" in qa
     assert "same focused test file" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
+    assert "python -m black --check modman/ modstore_server/ tests/" in qa
+    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in qa
+    assert "python scripts/dev/source_governance.py --top 10" in qa
+    assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
+    assert "python -m black --check modman/ modstore_server/ tests/" in code
+    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in code
+    assert "python scripts/dev/source_governance.py --top 10" in code
     assert "executable_template object" in code
     assert "validate_kb_payload" in code
 
@@ -1295,6 +1317,7 @@ def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
                 f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1393,6 +1416,7 @@ def test_structured_report_gate_accepts_platform_equivalent_focused_command(
                 '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
                 'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
                 '"exit_code":0,"status":"passed (27 tests passed)"}],'
+                f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1420,6 +1444,103 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
     ]
 
     assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+
+
+def test_structured_report_gate_requires_black_isort_and_source_governance(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+
+    def qa_report(quality_checks):
+        return [
+            {
+                "step": "qa",
+                "report_excerpt": (
+                    'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                    f'"tested_commands":[{{"command":"{focused}","exit_code":0,'
+                    '"status":"passed"}],'
+                    f'"quality_checks":{json.dumps(quality_checks)},'
+                    '"target_branch_available":true,'
+                    '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                    '"changed_files_scope":"low","risk_class":"low"}'
+                ),
+            }
+        ]
+
+    missing_black = {
+        "isort": {
+            "command": ("python3 -m isort --check-only --diff modman/ modstore_server/ tests/"),
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 0,
+            "status": "passed",
+        },
+    }
+    missing_isort = {
+        "black": {
+            "command": "python3 -m black --check modman/ modstore_server/ tests/",
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 0,
+            "status": "passed",
+        },
+    }
+    failed_governance = {
+        "black": {
+            "command": "python3 -m black --check modman/ modstore_server/ tests/",
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "isort": {
+            "command": ("python3 -m isort --check-only --diff modman/ modstore_server/ tests/"),
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 1,
+            "status": "failed",
+        },
+    }
+
+    assert (
+        _structured_report_gate(qa_report(missing_black))["reason"]
+        == "structured_qa_black_not_passed"
+    )
+    assert (
+        _structured_report_gate(qa_report(missing_isort))["reason"]
+        == "structured_qa_isort_not_passed"
+    )
+    assert (
+        _structured_report_gate(qa_report(failed_governance))["reason"]
+        == "structured_qa_source_governance_not_passed"
+    )
+
+
+def test_quality_command_matchers_require_real_commands_and_scopes():
+    assert matches_black_check_command(
+        "cd 成都修茈科技有限公司/MODstore_deploy && "
+        "python3 -m black --check modman/ modstore_server/ tests/"
+    )
+    assert not matches_black_check_command(
+        "echo python3 -m black --check modman/ modstore_server/ tests/"
+    )
+    assert not matches_black_check_command("python3 -m black --check modstore_server/ tests/")
+    assert matches_isort_check_command(
+        "python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
+    )
+    assert not matches_isort_check_command(
+        "echo python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
+    )
+    assert matches_source_governance_command("python3 scripts/dev/source_governance.py --top 10")
+    assert not matches_source_governance_command(
+        "echo python3 scripts/dev/source_governance.py --top 10"
+    )
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
@@ -1473,6 +1594,7 @@ def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypat
                 "SELF_MAINTENANCE_QA_JSON: "
                 '{"verdict":"PASS","blocking_findings":[],'
                 f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'

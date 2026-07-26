@@ -11,7 +11,7 @@ on:
     # MUST stay a single-line inline list: publish_ci_workflows_to_root.py path-prefixes
     # YAML sequence items under workflows: and would break workflow_run matching.
     # Broaden coverage beyond the original 6 names so Employee Smoke / MODstore tests etc. can heal.
-    workflows: ["CI/CD Pipeline", "Smoke Tests", "Employee Smoke Gate", "MODstore tests", "cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Release gate CI", "Capacity staging monthly", "desktop-macos-smoke", "ci-mobile-flutter", "ci-mobile-ios", "Deploy corp site (xiu-ci.com)"]
+    workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance", "Smoke Tests", "Employee Smoke Gate", "MODstore tests", "cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Release gate CI", "Capacity staging monthly", "desktop-macos-smoke", "ci-mobile-flutter", "ci-mobile-ios", "Deploy corp site (xiu-ci.com)"]
     types: [completed]
   workflow_dispatch:
     inputs:
