@@ -2790,11 +2790,8 @@ def _evaluate_retort_clarification_before_review(
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     target = str(branch or "").strip()
     if repo_url and base_branch and target:
-        workspace = (
-            _runtime_dir()
-            / DEFAULT_MERGE_WORKSPACE_ROOT
-            / "retort-review-gate"
-            / str(run_id or "run")
+        workspace = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT / "retort-review-gate" / str(
+            run_id or "run"
         )
         try:
             changed_files = _changed_files_for_branch(
@@ -2811,18 +2808,13 @@ def _evaluate_retort_clarification_before_review(
             )
             changed_files = []
         finally:
-            if workspace.exists() and not _cleanup_merge_workspace(workspace):
-                logger.warning(
-                    "retort clarification workspace cleanup failed run_id=%s path=%s",
-                    run_id,
-                    workspace,
-                )
+            if workspace.exists():
+                _cleanup_merge_workspace(workspace)
 
     if not changed_files:
         mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
         if isinstance(mem_files, list):
             changed_files = [str(x).strip() for x in mem_files if str(x).strip()][:80]
-
     intent_bits = [
         f"self-maintenance review run {run_id}",
         f"branch {target}" if target else "",
