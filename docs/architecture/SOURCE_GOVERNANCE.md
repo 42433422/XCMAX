@@ -50,10 +50,10 @@ Package `__init__.py` files expose stable imports through explicit re-exports.
 They must not copy an implementation module wholesale; the implementation module
 remains the single source of truth.
 
-`packages/xcagi_common` is the repository-wide authentication/session utility
-SSOT for FHD and MODstore. Product trees reference that package; they do not keep
-vendored source copies. Python package `build/` and `*.egg-info/` directories are
-generated locally and stay untracked.
+`packages/xcagi_common` is the canonical repository-wide authentication/session
+utility package for FHD and MODstore. Product trees reference that package; they
+do not keep vendored source copies. Python package `build/` and `*.egg-info/`
+directories are generated locally and stay untracked.
 
 When an oversized file is reduced, update the baseline so the improvement cannot
 regress:
