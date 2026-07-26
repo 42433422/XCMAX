@@ -222,6 +222,18 @@ test.describe('P0 critical paths', () => {
 
   test('07 material data loop — 创建、编辑、导出并回读材料', async ({ page }) => {
     test.skip(!isFullStack(), 'covered by the mandatory release full-stack job');
+    const browserErrors: string[] = [];
+    page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+    page.on('console', (message) => {
+      if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
+    });
+    page.on('requestfailed', (request) => {
+      if (request.resourceType() === 'script') {
+        browserErrors.push(
+          `script: ${request.url()} (${request.failure()?.errorText || 'request failed'})`
+        );
+      }
+    });
     const apiBase = (
       process.env.MOD_PILOT_FHD_API ||
       process.env.PLAYWRIGHT_BASE_URL ||
@@ -287,7 +299,19 @@ test.describe('P0 critical paths', () => {
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
-    await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
+    try {
+      await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
+    } catch (error) {
+      await captureEvidence(page, '07-material-data-loop-failure.png').catch(() => undefined);
+      const bodyText = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '<body unavailable>');
+      const original = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${original}\nMaterial page diagnostics:\n${browserErrors.join('\n') || '<no browser errors>'}\nBody:\n${bodyText.slice(0, 4000)}`
+      );
+    }
     await expect(page.getByText(updatedName, { exact: true })).toBeVisible({ timeout: 20_000 });
     await captureEvidence(page, '07-material-data-loop.png');
   });
