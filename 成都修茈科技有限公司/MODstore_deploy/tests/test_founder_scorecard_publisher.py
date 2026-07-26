@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,6 +8,7 @@ import pytest
 pytestmark = pytest.mark.release_gate
 
 from modstore_server.founder_scorecard_publisher import (  # noqa: E402
+    _issue_market_admin_bearer,
     publish_founder_scorecard,
     register_founder_scorecard_job,
 )
@@ -23,8 +26,8 @@ def test_publisher_uses_two_credentials_and_requires_seven_dimensions(
 ) -> None:
     monkeypatch.setenv("AUTONOMY_WEBHOOK_TOKEN", "automation-secret")
     monkeypatch.setattr(
-        "modstore_server.daily_digest_surface_audit._login_surface_audit_sync",
-        lambda **_kwargs: {"access_token": "market-admin-jwt"},
+        "modstore_server.founder_scorecard_publisher._issue_market_admin_bearer",
+        lambda: "market-admin-jwt",
     )
     opened: list = []
 
@@ -64,15 +67,73 @@ def test_publisher_uses_two_credentials_and_requires_seven_dimensions(
     assert request.get_header("X-autonomy-token") == "automation-secret"
 
 
+def test_machine_bearer_uses_first_admin_and_expires_quickly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = SimpleNamespace(id=42, username="ops-admin")
+    session = MagicMock()
+    session.query.return_value.filter.return_value.order_by.return_value.first.return_value = admin
+    session_factory = MagicMock()
+    session_factory.return_value.__enter__.return_value = session
+    monkeypatch.setattr(
+        "modstore_server.models.get_session_factory",
+        lambda: session_factory,
+    )
+    issued: list[tuple[tuple, dict]] = []
+
+    def _create_access_token(*args, **kwargs):
+        issued.append((args, kwargs))
+        return "short-lived-machine-jwt"
+
+    monkeypatch.setattr(
+        "modstore_server.auth_service.create_access_token",
+        _create_access_token,
+    )
+
+    assert _issue_market_admin_bearer() == "short-lived-machine-jwt"
+    assert issued == [
+        (
+            (42, "ops-admin"),
+            {
+                "is_admin": True,
+                "expires_delta": timedelta(minutes=10),
+                "actor": "founder-scorecard-publisher",
+            },
+        )
+    ]
+
+
+def test_access_token_records_machine_actor_and_custom_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from modstore_server.auth_service import create_access_token, decode_access_token
+
+    monkeypatch.setenv("MODSTORE_JWT_SECRET", "test-secret-" + ("x" * 32))
+    before = datetime.now(timezone.utc)
+    token = create_access_token(
+        42,
+        "ops-admin",
+        is_admin=True,
+        expires_delta=timedelta(minutes=10),
+        actor="founder-scorecard-publisher",
+    )
+
+    payload = decode_access_token(token)
+    assert payload is not None
+    assert payload["actor"] == "founder-scorecard-publisher"
+    assert payload["roles"] == ["ADMIN"]
+    assert (
+        before + timedelta(minutes=9, seconds=55)
+        <= datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        <= before + timedelta(minutes=10, seconds=5)
+    )
+
+
 def test_publisher_fails_closed_without_autonomy_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AUTONOMY_WEBHOOK_TOKEN", raising=False)
     monkeypatch.delenv("MODSTORE_OPS_INGEST_TOKEN", raising=False)
-    monkeypatch.setattr(
-        "modstore_server.daily_digest_surface_audit._login_surface_audit_sync",
-        lambda **_kwargs: {"access_token": "market-admin-jwt"},
-    )
 
     with pytest.raises(RuntimeError, match="no autonomy webhook token"):
         publish_founder_scorecard()

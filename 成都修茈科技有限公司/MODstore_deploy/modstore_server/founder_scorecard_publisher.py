@@ -64,6 +64,29 @@ def _int_env(name: str, default: int, *, minimum: int) -> int:
     return max(minimum, value)
 
 
+def _issue_market_admin_bearer() -> str:
+    """Mint a short-lived machine bearer without depending on a human password."""
+    from modstore_server.auth_service import create_access_token
+    from modstore_server.models import User, get_session_factory
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        admin = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        if admin is None:
+            raise RuntimeError("founder scorecard refresh has no market admin identity")
+        user_id = int(admin.id)
+        username = str(admin.username or "").strip()
+    if user_id <= 0 or not username:
+        raise RuntimeError("founder scorecard refresh has invalid market admin identity")
+    return create_access_token(
+        user_id,
+        username,
+        is_admin=True,
+        expires_delta=timedelta(minutes=10),
+        actor="founder-scorecard-publisher",
+    )
+
+
 def publish_founder_scorecard() -> dict[str, Any]:
     """Refresh the seven dimensions and atomically publish the public subset.
 
@@ -71,27 +94,12 @@ def publish_founder_scorecard() -> dict[str, Any]:
     treating a login error or partial publication as a successful heartbeat.
     """
 
-    from modstore_server.daily_digest_surface_audit import _login_surface_audit_sync
-
-    auth = _login_surface_audit_sync(
-        user=(
-            os.environ.get("MODSTORE_SURFACE_AUDIT_USER")
-            or os.environ.get("MODSTORE_DIGEST_ADMIN_USER")
-            or "admin"
-        ),
-        password=(
-            os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD")
-            or os.environ.get("MODSTORE_DIGEST_ADMIN_PASSWORD")
-            or "admin123"
-        ),
-        label="founder-scorecard",
-    )
-    market_bearer = str(auth.get("access_token") or "").strip()
     autonomy_token = _autonomy_token()
-    if not market_bearer:
-        raise RuntimeError("founder scorecard refresh has no market admin bearer")
     if not autonomy_token:
         raise RuntimeError("founder scorecard refresh has no autonomy webhook token")
+    market_bearer = _issue_market_admin_bearer()
+    if not market_bearer:
+        raise RuntimeError("founder scorecard refresh has no market admin bearer")
 
     request = urllib.request.Request(
         f"{_fhd_base_url()}/api/xcmax/ops/founder-autonomy/refresh-internal",
