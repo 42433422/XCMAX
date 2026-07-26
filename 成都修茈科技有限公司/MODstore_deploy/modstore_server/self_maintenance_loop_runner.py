@@ -1080,31 +1080,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             )
             return None
 
-        # A merge request is only a hand-off, not completion.  When the Para
-        # merge worker's independent AI review vetoes a PR, start a new code
-        # task from the rejected branch and carry the exact findings forward.
-        for item in reversed(open_items_raw):
-            if not isinstance(item, dict):
-                continue
-            if item.get("kind") != "automated_remediation":
-                continue
-            if item.get("reason") != "para_ai_review_rejected":
-                continue
-            branch = str(item.get("branch") or "").strip()
-            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
-            if branch and para_task_id:
-                return {
-                    "branch": branch,
-                    "failed_run_id": str(item.get("run_id") or "").strip(),
-                    "failed_steps": ["code"],
-                    "para_task_id": para_task_id,
-                    "reason": "resume_para_ai_review_rejection",
-                    "rejected_branch": branch,
-                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
-                        :4000
-                    ],
-                }
-
     last_decision = memory.get("last_policy_decision")
     last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
     if last_reason == "review_or_qa_reported_risk":
@@ -1186,6 +1161,22 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         }:
             continue
         reason = str(item.get("reason") or "")
+        if reason == "para_ai_review_rejected":
+            branch = str(item.get("branch") or "").strip()
+            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+            if branch and para_task_id:
+                return {
+                    "branch": branch,
+                    "failed_run_id": str(item.get("run_id") or "").strip(),
+                    "failed_steps": ["code"],
+                    "para_task_id": para_task_id,
+                    "reason": "resume_para_ai_review_rejection",
+                    "rejected_branch": branch,
+                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
+                        :4000
+                    ],
+                }
+            continue
         if _stored_qa_target_ref_missing(memory, item):
             reason = "structured_qa_target_branch_unavailable"
         if reason in {
@@ -1590,11 +1581,9 @@ def should_run_self_maintenance_loop(
             "should_run": False,
         }
     threshold = _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1)
-    # incident 触发用独立更短冷却，避免 6 小时冷却导致信号被全部跳过
-    if triggered_by == "incident_event":
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
-    else:
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
+    from modstore_server.autonomy_scheduler import self_maintenance_cooldown_minutes
+
+    cooldown_minutes = self_maintenance_cooldown_minutes(triggered_by)
     last_started = _last_started_at()
 
     if not force and last_started is not None and cooldown_minutes > 0:
