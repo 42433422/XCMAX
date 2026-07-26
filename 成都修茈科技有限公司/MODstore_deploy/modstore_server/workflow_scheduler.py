@@ -16,6 +16,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from modstore_server import payment_orders
+from modstore_server.founder_scorecard_publisher import register_founder_scorecard_job
 from modstore_server.models import WorkflowTrigger, get_session_factory
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
@@ -66,6 +67,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
 )
 _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
     "daily_digest": "daily_ops_digest_email",
+    "founder_scorecard_refresh": "founder_scorecard_refresh",
     "self_maintenance_loop_daily": "self_maintenance_loop_daily",
     "boss_daily_im_report": "boss_daily_im_report",
 }
@@ -80,9 +82,7 @@ def _env_int(name: str, default: int) -> int:
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+    return default if raw is None else str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _business_misfire_grace_time() -> int:
@@ -94,9 +94,7 @@ def _cleanup_misfire_grace_time() -> int:
 
 
 def required_scheduler_job_ids() -> tuple[str, ...]:
-    """Return the jobs required by the current scheduler configuration."""
-
-    required = set(_REQUIRED_CORE_JOB_IDS)
+    required = set(_REQUIRED_CORE_JOB_IDS) | {"founder_scorecard_refresh"}
     if _env_bool("MODSTORE_EMPLOYEE_BURN_IN_SCHEDULER_ENABLED", True):
         required.add("duty_workforce_burnin")
     if _env_bool("MODSTORE_BOSS_IM_REPORT_ENABLED", True):
@@ -415,6 +413,8 @@ def start_scheduler() -> None:
         max_instances=1,
     )
     _scheduler_heartbeat_job()
+
+    register_founder_scorecard_job(_scheduler)
 
     def _dead_letter_reconcile_job() -> None:
         try:

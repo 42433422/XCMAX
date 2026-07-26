@@ -408,6 +408,7 @@ async def _market_admin_proxy(
     *,
     json_body: dict[str, Any] | None = None,
     require_admin_session: bool = True,
+    authorization_override: str = "",
 ):
     """Proxy server-function calls through the market token bound to the local session."""
     if require_admin_session:
@@ -437,6 +438,7 @@ async def _market_admin_proxy(
                 )
     try:
         from app.fastapi_routes.market_account import (
+            _auth_header,
             _authorization_from_request_resolved,
             _error_message,
             _proxy_json,
@@ -448,7 +450,9 @@ async def _market_admin_proxy(
         )
 
     body_for_auth = json_body if isinstance(json_body, dict) else {}
-    authorization = await _authorization_from_request_resolved(request, body_for_auth)
+    authorization = _auth_header(authorization_override)
+    if not authorization:
+        authorization = await _authorization_from_request_resolved(request, body_for_auth)
     if not authorization:
         return JSONResponse(
             {
@@ -2324,116 +2328,6 @@ async def ops_runtime_inventory(request: Request):
         "data": snapshot,
         "publication": result.get("publication") or {},
     }
-
-
-@router.get("/ops/founder-autonomy", response_model=None)
-async def ops_founder_autonomy(request: Request):
-    """Aggregate the seven founder-autonomy dimensions from live evidence.
-
-    Each upstream is fail-soft: an unavailable evidence domain lowers the
-    corresponding score instead of making the management page unavailable or
-    silently converting source capability into runtime proof.
-    """
-
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-
-    from app.application.autonomy.approval_resume import list_pending_actions
-    from app.application.founder_autonomy_status import (
-        build_founder_autonomy_snapshot,
-        write_public_founder_autonomy_projection,
-    )
-    from app.application.ops_closure_status import build_ops_closure_status
-    from app.fastapi_routes.knowledge_v1 import _knowledge_runtime_snapshot
-
-    async def _safe_proxy(path: str) -> dict[str, Any]:
-        try:
-            payload = await _market_admin_proxy(request, "GET", path)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("founder autonomy evidence unavailable path=%s: %s", path, exc)
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
-    (
-        runtime,
-        remote_health,
-        employee_autonomy,
-        employee_capability,
-        customer_value,
-        autonomy_audit,
-        dead_letters,
-        strategic_decisions,
-        strategic_council,
-        action_board,
-    ) = await asyncio.gather(
-        _safe_proxy("/api/ops/self-maintenance/status?limit=100"),
-        _safe_proxy("/api/admin/duty-graph/health"),
-        _safe_proxy("/api/admin/employee-autonomy/dashboard"),
-        _safe_proxy("/api/admin/employee-autonomy/execution-coverage?window_hours=24"),
-        _safe_proxy("/api/admin/customer-value/evidence?window_days=90"),
-        _safe_proxy("/api/admin/autonomy/evidence?window_days=30&limit=100"),
-        _safe_proxy("/api/admin/events/dlq/health"),
-        _safe_proxy("/api/xcmax/strategic/decisions?limit=100"),
-        _safe_proxy("/api/xcmax/strategic/council/status?limit=20"),
-        _safe_proxy("/api/public/action-board"),
-    )
-
-    action_board_data = (
-        action_board.get("data") if isinstance(action_board.get("data"), dict) else action_board
-    )
-    action_board_goal_section = action_board_data.get("goals")
-    action_board_goal_summary = (
-        action_board_goal_section.get("summary")
-        if isinstance(action_board_goal_section, dict)
-        else None
-    )
-    action_board_goals = (
-        action_board_goal_summary if isinstance(action_board_goal_summary, dict) else {}
-    )
-
-    try:
-        knowledge = _knowledge_runtime_snapshot()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("founder autonomy knowledge evidence unavailable: %s", exc)
-        knowledge = {}
-    try:
-        pending_actions = list_pending_actions()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("founder autonomy approvals unavailable: %s", exc)
-        pending_actions = []
-
-    closure = build_ops_closure_status(remote_health)
-    snapshot = build_founder_autonomy_snapshot(
-        runtime=runtime,
-        closure=closure,
-        approvals={"local_pending": len(pending_actions)},
-        knowledge=knowledge,
-        goals=action_board_goals,
-        customer_value=customer_value,
-        autonomy_audit=autonomy_audit,
-        employee_autonomy=employee_autonomy,
-        employee_capability=employee_capability,
-        dead_letters=dead_letters,
-        strategic_decisions=strategic_decisions,
-        strategic_council=strategic_council,
-        surfaces={
-            "founder_cockpit": True,
-            "approval_center": True,
-            "knowledge_base": True,
-            "ai_employees": True,
-            "goals": bool(action_board_goals),
-            "loops": True,
-        },
-    )
-    publication = write_public_founder_autonomy_projection(snapshot)
-    if not publication.get("ok"):
-        logger.warning(
-            "founder autonomy public projection not fully published written=%s errors=%s",
-            publication.get("written"),
-            publication.get("errors"),
-        )
-    return {"success": True, "data": snapshot}
 
 
 @router.post("/ops/staffing/onboard", response_model=None)
