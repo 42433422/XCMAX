@@ -12,8 +12,9 @@ import {
   type EtlTargetConfig,
   type EtlTemplate,
 } from '@/api/etl'
+import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
 
-type TabId = 'upload' | 'mapping' | 'preview' | 'history'
+type TabId = EtlRunTab
 
 const route = useRoute()
 const router = useRouter()
@@ -122,7 +123,7 @@ async function bootstrap() {
     if (requestedRun) {
       currentRun.value = await etlApi.run(requestedRun)
       syncDraft()
-      activeTab.value = ['queued', 'previewing'].includes(currentRun.value.status) ? 'upload' : 'preview'
+      activeTab.value = tabForRunStatus(currentRun.value.status)
       if (currentRun.value.status === 'preview_ready') await loadRows()
       schedulePoll()
     }
@@ -318,6 +319,7 @@ async function refreshRuns() {
 async function selectRun(run: EtlRun) {
   currentRun.value = await etlApi.run(run.id)
   syncDraft()
+  activeTab.value = 'history'
   await router.replace({ path: '/business-docking', query: { run_id: run.id } })
   schedulePoll()
 }
