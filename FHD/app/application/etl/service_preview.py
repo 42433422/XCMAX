@@ -127,6 +127,12 @@ class PreviewServiceMixin:
         EXECUTOR.submit(work)
 
     def _preview_worker(self, run_id: str, owner_user_id: int) -> None:
+        from app.application.etl.llm_session_provider import (
+            bind_etl_llm_owner,
+            reset_etl_llm_owner,
+        )
+
+        llm_owner_token = bind_etl_llm_owner(owner_user_id)
         db = new_session()
         started_at = time.monotonic()
         try:
@@ -193,6 +199,7 @@ class PreviewServiceMixin:
                 logger.exception("Unable to persist ETL preview failure for run %s", run_id)
         finally:
             db.close()
+            reset_etl_llm_owner(llm_owner_token)
 
     @staticmethod
     def _record_preview_metrics(run: EtlRun, started_at: float, *, status: str) -> None:

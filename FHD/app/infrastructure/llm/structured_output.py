@@ -118,6 +118,7 @@ async def complete_structured(
     temperature: float = 0.3,
     max_tokens: int = 2000,
     conversation_service: Any | None = None,
+    provider: Any | None = None,
 ) -> StructuredResult:
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
     repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
@@ -134,6 +135,7 @@ async def complete_structured(
                 max_tokens=max_tokens,
                 profile=profile,
                 conversation_service=conversation_service,
+                provider=provider,
             )
         except RECOVERABLE_ERRORS as exc:
             last_errors = [f"LLM 调用异常: {type(exc).__name__}: {exc}"]

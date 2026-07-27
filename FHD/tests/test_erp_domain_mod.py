@@ -140,6 +140,32 @@ def test_try_invoke_products_list(monkeypatch):
     assert out.get("source") == "mod:xcagi-erp-domain-bridge"
 
 
+def test_mod_facade_force_invokes_handler_when_host_dispatch_is_disabled(monkeypatch):
+    from app.mod_sdk import erp_domain_dispatch as ed
+
+    monkeypatch.setattr(ed, "is_erp_domain_handlers_enabled", lambda: False)
+    monkeypatch.setattr(ed, "_mod_domain_handler_domains", lambda: ["customers"])
+    monkeypatch.setattr(
+        ed,
+        "_resolve_mod_path",
+        lambda: ("xcagi-erp-domain-bridge", str(MOD_DIR)),
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+        lambda: [{"id": 1, "customer_name": "金汉武家私"}],
+    )
+
+    out = ed.invoke_erp_domain_handler("customers", "list", page=1, per_page=10)
+
+    assert out.get("success") is True
+    assert out.get("total") == 1
+    assert out.get("data")[0]["customer_name"] == "金汉武家私"
+
+
 def test_registry_phase_g_domains(monkeypatch):
     from app.mod_sdk import erp_domain_compat as ed
 

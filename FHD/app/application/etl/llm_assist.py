@@ -80,29 +80,40 @@ def etl_row_advice_limit() -> int:
         return 20
 
 
-def _active_software_llm() -> tuple[bool, Any | None]:
-    """Resolve env providers first, then the already configured app conversation LLM."""
+def _degradation_code(exc: BaseException) -> str:
+    message = str(exc).lower()
+    if "quota exhausted" in message or "额度" in message or "429" in message:
+        return "ETL_LLM_QUOTA_EXHAUSTED"
+    return "ETL_LLM_UNAVAILABLE"
+
+
+def _active_software_llm() -> tuple[bool, Any | None, Any | None]:
+    """Resolve the current user's software-account LLM, then app-wide providers."""
     try:
+        from app.application.etl.llm_session_provider import current_owner_market_provider
+
+        market_provider = current_owner_market_provider(timeout_seconds=etl_llm_timeout_seconds())
+        if market_provider is not None:
+            return True, None, market_provider
         from app.infrastructure.llm.providers.registry import get_active_provider
 
         if get_active_provider(profile="etl") is not None:
-            return True, None
+            return True, None, None
         from app.services.ai_conversation_service import get_ai_conversation_service
 
         service = get_ai_conversation_service()
-        return (
-            get_active_provider(conversation_service=service, profile="etl") is not None,
-            service,
-        )
+        if get_active_provider(conversation_service=service, profile="etl") is not None:
+            return True, service, None
+        return False, None, None
     except RECOVERABLE_ERRORS:
-        return False, None
+        return False, None, None
 
 
 def etl_llm_enabled() -> bool:
     mode = etl_llm_mode()
     if mode == "off":
         return False
-    configured, _service = _active_software_llm()
+    configured, _service, _provider = _active_software_llm()
     return configured if mode == "auto" else True
 
 
@@ -115,7 +126,7 @@ def _complete(
     mode = etl_llm_mode()
     if mode == "off":
         return LlmAssistResult()
-    configured, conversation_service = _active_software_llm()
+    configured, conversation_service, provider = _active_software_llm()
     if not configured:
         return LlmAssistResult(
             used_llm=False,
@@ -134,6 +145,7 @@ def _complete(
             timeout_seconds=etl_llm_timeout_seconds(),
             profile="etl",
             conversation_service=conversation_service,
+            provider=provider,
         )
         return LlmAssistResult(
             used_llm=True,
@@ -146,7 +158,7 @@ def _complete(
         return LlmAssistResult(
             used_llm=True,
             degraded=True,
-            degradation_code="ETL_LLM_UNAVAILABLE",
+            degradation_code=_degradation_code(exc),
         )
 
 
