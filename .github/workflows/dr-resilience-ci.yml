@@ -80,6 +80,8 @@ jobs:
           grep -q 'xcmax-dr-apply-release' ops/dr/xcmax_dr_install.sh
           grep -q 'release_modstore_sha' ops/dr/xcmax_dr_status.sh
           grep -q 'release_fhd_sha' ops/dr/xcmax_dr_status.sh
+          grep -q 'current_modstore_sha' ops/dr/xcmax_dr_apply_release.sh
+          grep -q 'current_fhd_sha' ops/dr/xcmax_dr_apply_release.sh
           grep -q 'xcmax_release_sync.sh' FHD/scripts/deploy/fhd-auto-update.sh
           grep -q 'xcmax_release_sync.sh' \
             "成都修茈科技有限公司/MODstore_deploy/.github/workflows/prod-deploy.yml"

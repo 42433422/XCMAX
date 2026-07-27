@@ -61,10 +61,23 @@ wait_http() {
 if [[ -n "$REQUESTED_SHA" ]]; then
   incoming="$INCOMING/runtime-releases/$REQUESTED_SHA"
 else
+  current_modstore_sha="$(cat "$STATE/release_applied_modstore_sha" 2>/dev/null || true)"
+  current_fhd_sha="$(cat "$STATE/release_applied_fhd_sha" 2>/dev/null || true)"
   incoming="$(
-    find "$INCOMING/runtime-releases" -mindepth 1 -maxdepth 1 -type d \
-      -printf '%T@ %p\n' 2>/dev/null |
-      sort -nr | head -1 | cut -d' ' -f2-
+    while IFS= read -r candidate; do
+      candidate="${candidate#* }"
+      candidate_sha="$(basename "$candidate")"
+      if [[ -s "$candidate/modstore.MANIFEST.txt" &&
+        "$candidate_sha" != "$current_modstore_sha" ]] ||
+        [[ -s "$candidate/fhd.MANIFEST.txt" &&
+          "$candidate_sha" != "$current_fhd_sha" ]]; then
+        printf '%s\n' "$candidate"
+        break
+      fi
+    done < <(
+      find "$INCOMING/runtime-releases" -mindepth 1 -maxdepth 1 -type d \
+        -printf '%T@ %p\n' 2>/dev/null | sort -nr
+    )
   )"
 fi
 [[ -n "${incoming:-}" && -d "$incoming" ]] || exit 0
