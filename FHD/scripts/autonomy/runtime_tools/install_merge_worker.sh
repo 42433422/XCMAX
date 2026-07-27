@@ -49,6 +49,21 @@ dest_existed=0
 cp -p "$PLIST" "$plist_backup"
 domain="gui/$(id -u)"
 target="${domain}/${LABEL}"
+bootstrap_agent() {
+  local attempt
+  for attempt in 1 2 3; do
+    if launchctl bootstrap "$domain" "$PLIST"; then
+      return 0
+    fi
+    if [[ "$attempt" -lt 3 ]]; then
+      # launchd can briefly retain a just-booted-out service and return EIO.
+      # Clear any partial registration, then retry with a bounded delay.
+      launchctl bootout "$target" >/dev/null 2>&1 || true
+      sleep "$attempt"
+    fi
+  done
+  return 1
+}
 rollback() {
   set +e
   if [[ -f "$tmp" ]]; then mv -f "$tmp" "${tmp}.failed-install"; fi
@@ -56,7 +71,7 @@ rollback() {
   if [[ "$dest_existed" == 0 && -f "$DEST" ]]; then mv -f "$DEST" "${DEST}.failed-install"; fi
   if [[ -f "$plist_backup" ]]; then cp -p "$plist_backup" "$PLIST"; fi
   launchctl bootout "$target" >/dev/null 2>&1 || true
-  launchctl bootstrap "$domain" "$PLIST" >/dev/null 2>&1 || true
+  bootstrap_agent >/dev/null 2>&1 || true
   launchctl kickstart -k "$target" >/dev/null 2>&1 || true
 }
 trap 'status=$?; if [[ "$status" -ne 0 ]]; then rollback; fi' EXIT
@@ -83,7 +98,7 @@ done
 /usr/libexec/PlistBuddy -c "Set :ProgramArguments:0 $NODE_BIN" "$PLIST"
 
 launchctl bootout "$target" >/dev/null 2>&1 || true
-launchctl bootstrap "$domain" "$PLIST"
+bootstrap_agent
 launchctl kickstart -k "$target"
 
 for _ in 1 2 3 4 5 6 7 8 9 10; do
