@@ -99,6 +99,12 @@ jobs:
             CURRENT_DEPLOY="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"
             STRICT_PLATFORM_KEY="$STRICT_KEY" MODSTORE_DEPLOY_DIR="$CURRENT_DEPLOY" \
               XCMAX_MONOREPO_ROOT=/opt/xcmax/current bash "$CURRENT_DEPLOY/scripts/diagnose_production_landing.sh"
+            DR_SYNC="/usr/local/xcmax-ops/dr/xcmax_release_sync.sh"
+            [ -x "$DR_SYNC" ] || {
+              echo "DR release sync script missing: $DR_SYNC" >&2
+              exit 1
+            }
+            "$DR_SYNC" --component modstore --sha "$TARGET_SHA"
 
       - name: Summary
         run: echo "MODstore exact-SHA production deploy succeeded at ${{ steps.target.outputs.sha }}"
