@@ -6,6 +6,7 @@
         <p>文件先预演、再确认。AI 只给建议，最终写入由确定性规则和你的确认控制。</p>
       </div>
       <div class="etl-hero__limits">
+        <span>支持整文件夹</span>
         <span>单文件 50MB</span>
         <span>最多 10 万行</span>
         <span>模板仅自己可见</span>
@@ -38,19 +39,57 @@
         </div>
       </div>
       <div class="etl-upload-grid">
-        <label class="etl-dropzone" :class="{ busy: busy }">
+        <div
+          class="etl-dropzone"
+          :class="{ busy: busy }"
+          @dragover.prevent
+          @drop="onDrop"
+        >
           <input
+            ref="fileInput"
             type="file"
-            accept=".xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.doc,.docx,.ppt,.pptx"
+            :accept="ETL_FILE_ACCEPT"
+            multiple
             :disabled="busy"
             @change="onFileChange"
           >
+          <input
+            ref="folderInput"
+            type="file"
+            :accept="ETL_FILE_ACCEPT"
+            multiple
+            webkitdirectory
+            directory
+            :disabled="busy"
+            @change="onFolderChange"
+          >
           <i class="fa fa-cloud-upload" aria-hidden="true"></i>
-          <strong>{{ selectedFile?.name || '选择办公文件或扫描单据' }}</strong>
+          <strong>{{ selectionHeadline }}</strong>
           <span>XLSX / XLSM / CSV · PDF / JPG / PNG OCR · Word / PPT 仅知识库</span>
-        </label>
+          <div class="etl-picker-actions">
+            <button type="button" :disabled="busy" @click="fileInput?.click()">选择文件</button>
+            <button type="button" :disabled="busy" @click="folderInput?.click()">选择整个文件夹</button>
+            <button
+              v-if="selectedFiles.length"
+              type="button"
+              class="etl-picker-actions__clear"
+              :disabled="busy"
+              @click="clearSelection"
+            >清空</button>
+          </div>
+          <small v-if="selectedFiles.length">
+            已选择 {{ selectedFiles.length }} 个文件，共 {{ formatEtlBytes(selectedTotalBytes) }}
+          </small>
+          <small v-if="ignoredFiles.length" class="etl-selection-warning">
+            已忽略 {{ ignoredFiles.length }} 个不支持、重复或超过 50MB 的文件
+          </small>
+        </div>
 
         <div class="etl-form-card">
+          <div class="etl-current-target">
+            <small>当前写入目标</small>
+            <strong>{{ targetLabel(targetType) }}</strong>
+          </div>
           <label>
             目标
             <select v-model="targetType" :disabled="busy">
@@ -109,16 +148,70 @@
           >
             {{ showWebhookForm ? '收起配置' : '新建 Webhook 配置' }}
           </button>
-          <button
-            type="button"
-            class="etl-primary"
-            :disabled="!selectedFile || busy || (targetType === 'webhook' && !targetConfigId)"
-            @click="startPreview"
-          >
-            {{ busy ? '正在创建后台预演…' : '上传并开始预演' }}
-          </button>
+          <div v-if="incompatibleFiles.length" class="etl-inline-error" role="alert">
+            当前目标不能处理 {{ incompatibleFiles.length }} 个 Word/PPT 文件。
+            请将目标切换为“知识库”，或移除这些文件。
+          </div>
+          <div class="etl-form-actions">
+            <span v-if="selectedFiles.length">
+              {{ selectedFiles.length }} 个文件将分别预演，确认前不会写库
+            </span>
+            <button
+              type="button"
+              class="etl-primary"
+              :disabled="!selectedFiles.length || busy || incompatibleFiles.length > 0 || (targetType === 'webhook' && !targetConfigId)"
+              @click="startPreview"
+            >
+              {{ startButtonText }}
+            </button>
+          </div>
         </div>
       </div>
+      <section v-if="selectedFiles.length" class="etl-batch-card" aria-label="文件夹处理进度">
+        <header>
+          <div>
+            <strong>{{ selectionFolderName ? `文件夹：${selectionFolderName}` : '本次文件清单' }}</strong>
+            <span>
+              {{ batchFinishedCount }}/{{ selectedFiles.length }} 已完成预演 ·
+              {{ batchFailedCount }} 个失败
+            </span>
+          </div>
+          <strong>{{ batchProgress }}%</strong>
+        </header>
+        <progress :value="batchProgress" max="100"></progress>
+        <div class="etl-batch-list">
+          <div v-for="item in selectedFiles" :key="item.id" class="etl-batch-item">
+            <div>
+              <strong>{{ item.relativePath }}</strong>
+              <small v-if="item.message">{{ item.message }}</small>
+              <small v-else>{{ formatEtlBytes(item.file.size) }}</small>
+            </div>
+            <div class="etl-batch-item__state">
+              <span :class="`etl-status etl-status--${item.status}`">
+                {{ batchFileStatusLabel(item.status) }}
+              </span>
+              <button
+                v-if="item.runId"
+                type="button"
+                @click="openBatchRun(item)"
+              >查看</button>
+              <button
+                v-else-if="item.status === 'waiting' && !busy"
+                type="button"
+                @click="removeSelectedFile(item.id)"
+              >移除</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <details v-if="ignoredFiles.length" class="etl-ignored-files">
+        <summary>查看被忽略的 {{ ignoredFiles.length }} 个文件</summary>
+        <ul>
+          <li v-for="item in ignoredFiles" :key="`${item.name}-${item.reason}`">
+            {{ item.name }} · {{ ignoredReasonLabel(item.reason) }}
+          </li>
+        </ul>
+      </details>
       <p v-if="capabilities?.compatibility_presets?.length" class="etl-compat-note">
         已加载 {{ capabilities.compatibility_presets.length }} 个旧 YAML/知识库兼容预设；
         预演确认后请保存为仅自己可见的个人模板。

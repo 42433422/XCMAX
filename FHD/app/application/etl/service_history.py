@@ -28,19 +28,29 @@ class HistoryServiceMixin:
             run.error_message = "上次执行被意外中断，请重新预演或重试"
             db.commit()
         upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
-        return self.run_dict(run, file_name=upload.file_name)
+        return self.run_dict(
+            run,
+            file_name=upload.file_name,
+            batch_id=upload.batch_id,
+            relative_path=upload.relative_path,
+        )
 
     def list_runs(
-        self, db: Session, *, owner_user_id: int, limit: int = 50
+        self,
+        db: Session,
+        *,
+        owner_user_id: int,
+        limit: int = 50,
+        batch_id: str | None = None,
     ) -> list[dict[str, Any]]:
         self.cleanup_retention(db, owner_user_id=owner_user_id)
-        rows = (
-            db.query(EtlRun)
-            .filter(EtlRun.owner_user_id == owner_user_id)
-            .order_by(EtlRun.created_at.desc())
-            .limit(min(max(limit, 1), 100))
-            .all()
-        )
+        query = db.query(EtlRun).filter(EtlRun.owner_user_id == owner_user_id)
+        if batch_id:
+            query = query.join(EtlUpload, EtlUpload.id == EtlRun.upload_id).filter(
+                EtlUpload.owner_user_id == owner_user_id,
+                EtlUpload.batch_id == batch_id,
+            )
+        rows = query.order_by(EtlRun.created_at.desc()).limit(min(max(limit, 1), 500)).all()
         interrupted = False
         for run in rows:
             if self._execution_is_stale(run):
@@ -52,8 +62,8 @@ class HistoryServiceMixin:
         if interrupted:
             db.commit()
         upload_ids = {run.upload_id for run in rows}
-        upload_names = {
-            upload.id: upload.file_name
+        uploads = {
+            upload.id: upload
             for upload in db.query(EtlUpload)
             .filter(
                 EtlUpload.owner_user_id == owner_user_id,
@@ -61,7 +71,18 @@ class HistoryServiceMixin:
             )
             .all()
         }
-        return [self.run_dict(run, file_name=upload_names.get(run.upload_id)) for run in rows]
+        result: list[dict[str, Any]] = []
+        for run in rows:
+            upload = uploads.get(run.upload_id)
+            result.append(
+                self.run_dict(
+                    run,
+                    file_name=upload.file_name if upload else None,
+                    batch_id=upload.batch_id if upload else None,
+                    relative_path=upload.relative_path if upload else None,
+                )
+            )
+        return result
 
     def cleanup_retention(self, db: Session, *, owner_user_id: int) -> dict[str, int]:
         now = utcnow()
@@ -124,12 +145,21 @@ class HistoryServiceMixin:
             updated = updated.replace(tzinfo=UTC)
         return updated < utcnow() - timedelta(minutes=5)
 
-    def run_dict(self, run: EtlRun, *, file_name: str | None = None) -> dict[str, Any]:
+    def run_dict(
+        self,
+        run: EtlRun,
+        *,
+        file_name: str | None = None,
+        batch_id: str | None = None,
+        relative_path: str | None = None,
+    ) -> dict[str, Any]:
         details = load_json(run.summary_json, {})
         return {
             "id": run.id,
             "upload_id": run.upload_id,
             "file_name": str(file_name or details.get("file_name") or ""),
+            "batch_id": batch_id or details.get("batch_id"),
+            "relative_path": str(relative_path or details.get("relative_path") or file_name or ""),
             "file_sha256": run.file_sha256,
             "template_id": run.template_id,
             "template_version_id": run.template_version_id,

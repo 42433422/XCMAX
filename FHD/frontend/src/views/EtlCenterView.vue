@@ -12,7 +12,13 @@ import {
   type EtlTargetConfig,
   type EtlTemplate,
 } from '@/api/etl'
+import {
+  batchFileStatusLabel,
+  ignoredReasonLabel,
+  useEtlFolderBatch,
+} from '@/composables/useEtlFolderBatch'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
+import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
 
 type TabId = EtlRunTab
 
@@ -31,7 +37,6 @@ const templates = ref<EtlTemplate[]>([])
 const targetConfigs = ref<EtlTargetConfig[]>([])
 const runs = ref<EtlRun[]>([])
 const currentRun = ref<EtlRun | null>(null)
-const selectedFile = ref<File | null>(null)
 const targetType = ref('customer_products')
 const templateId = ref('')
 const targetConfigId = ref('')
@@ -52,6 +57,42 @@ const showWebhookForm = ref(false)
 const webhookDraft = reactive({ name: '', endpoint_url: '', headersJson: '{}', secret: '' })
 const webhookTestMessage = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+const {
+  selectedFiles,
+  ignoredFiles,
+  selectionFolderName,
+  fileInput,
+  folderInput,
+  selectedTotalBytes,
+  incompatibleFiles,
+  batchFinishedCount,
+  batchFailedCount,
+  batchProgress,
+  selectionHeadline,
+  startButtonText,
+  onFileChange,
+  onFolderChange,
+  onDrop,
+  clearSelection,
+  removeSelectedFile,
+  startPreview,
+  openBatchRun,
+} = useEtlFolderBatch({
+  capabilities,
+  targetType,
+  templateId,
+  targetConfigId,
+  runs,
+  currentRun,
+  activeTab,
+  busy,
+  pageError,
+  router,
+  syncDraft,
+  schedulePoll,
+  loadRows,
+})
 
 const compatibleTemplates = computed(() => templates.value.filter((item) => item.target_type === targetType.value))
 const currentCapability = computed(() => capabilities.value?.targets.find((item) => item.type === currentRun.value?.target_type || targetType.value))
@@ -129,36 +170,6 @@ async function bootstrap() {
     }
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '数据对接中心加载失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-function onFileChange(event: Event) {
-  selectedFile.value = (event.target as HTMLInputElement).files?.[0] || null
-  const suffix = selectedFile.value?.name.toLowerCase().split('.').pop() || ''
-  if (['doc', 'docx', 'ppt', 'pptx'].includes(suffix)) targetType.value = 'knowledge'
-}
-
-async function startPreview() {
-  if (!selectedFile.value) return
-  busy.value = true
-  pageError.value = ''
-  try {
-    const upload = await etlApi.upload(selectedFile.value)
-    const run = await etlApi.preview({
-      upload_id: upload.upload_id,
-      target_type: targetType.value,
-      template_id: templateId.value || undefined,
-      target_config_id: targetConfigId.value || undefined,
-    })
-    currentRun.value = run
-    syncDraft()
-    runs.value = [run, ...runs.value.filter((item) => item.id !== run.id)]
-    await router.replace({ path: '/business-docking', query: { run_id: run.id } })
-    schedulePoll()
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '创建预演失败'
   } finally {
     busy.value = false
   }

@@ -13,7 +13,9 @@ from app.application.etl.errors import EtlError, EtlNotFound
 from app.application.etl.parsers import SUPPORTED_SUFFIXES
 from app.application.etl.service_support import (
     MAX_FILE_BYTES,
+    clean_batch_id,
     clean_filename,
+    clean_relative_path,
     new_id,
     utcnow,
 )
@@ -31,9 +33,13 @@ class UploadServiceMixin:
         file_name: str,
         content_type: str | None,
         stream: BinaryIO,
+        batch_id: str | None = None,
+        relative_path: str | None = None,
     ) -> dict[str, Any]:
         tenant_id = tenant_id_for_write()
         safe_name = clean_filename(file_name)
+        safe_batch_id = clean_batch_id(batch_id)
+        safe_relative_path = clean_relative_path(relative_path, safe_name)
         suffix = Path(safe_name).suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:
             raise EtlError("ETL_FILE_TYPE_UNSUPPORTED", f"不支持的文件类型: {suffix}")
@@ -76,6 +82,8 @@ class UploadServiceMixin:
             tenant_id=tenant_id,
             owner_user_id=owner_user_id,
             file_name=safe_name,
+            batch_id=safe_batch_id,
+            relative_path=safe_relative_path,
             suffix=suffix,
             content_type=str(content_type or "")[:128] or None,
             size_bytes=total,
@@ -91,6 +99,8 @@ class UploadServiceMixin:
         return {
             "upload_id": upload.id,
             "file_name": upload.file_name,
+            "batch_id": upload.batch_id,
+            "relative_path": upload.relative_path or upload.file_name,
             "suffix": upload.suffix,
             "size_bytes": upload.size_bytes,
             "sha256": upload.sha256,

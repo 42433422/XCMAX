@@ -57,6 +57,7 @@ class EtlService(
                 "structured": sorted(STRUCTURED_SUFFIXES),
                 "ocr": sorted(OCR_SUFFIXES),
                 "knowledge_only": sorted(KNOWLEDGE_ONLY_SUFFIXES),
+                "folder_upload": True,
             },
             "transforms": sorted(ALLOWED_TRANSFORMS),
             "targets": target_capabilities(),

@@ -41,7 +41,12 @@ export type EtlTargetCapability = {
 export type EtlCapabilities = {
   enabled: boolean
   limits: { max_file_bytes: number; max_rows: number }
-  inputs: { structured: string[]; ocr: string[]; knowledge_only: string[] }
+  inputs: {
+    structured: string[]
+    ocr: string[]
+    knowledge_only: string[]
+    folder_upload?: boolean
+  }
   transforms: string[]
   targets: EtlTargetCapability[]
   compatibility_presets?: Array<{ id: string; label: string; source: string; target: string }>
@@ -52,6 +57,8 @@ export type EtlRun = {
   id: string
   upload_id: string
   file_name: string
+  batch_id?: string | null
+  relative_path?: string
   file_sha256: string
   template_id?: string | null
   template_version_id?: string | null
@@ -80,6 +87,11 @@ export type EtlRun = {
   created_at?: string | null
   updated_at?: string | null
   executed_at?: string | null
+}
+
+export type EtlUploadOptions = {
+  batchId?: string
+  relativePath?: string
 }
 
 export type EtlRunRow = {
@@ -150,10 +162,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const etlApi = {
   capabilities: () => request<EtlCapabilities>('/api/etl/capabilities'),
-  upload: async (file: File) => {
+  upload: async (file: File, options: EtlUploadOptions = {}) => {
     const form = new FormData()
     form.append('file', file)
-    return request<{ upload_id: string; file_name: string; suffix: string; size_bytes: number; sha256: string }>(
+    if (options.batchId) form.append('batch_id', options.batchId)
+    if (options.relativePath) form.append('relative_path', options.relativePath)
+    return request<{
+      upload_id: string
+      file_name: string
+      batch_id?: string | null
+      relative_path?: string
+      suffix: string
+      size_bytes: number
+      sha256: string
+    }>(
       '/api/etl/uploads',
       { method: 'POST', body: form },
     )
@@ -164,7 +186,10 @@ export const etlApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-  runs: (limit = 50) => request<EtlRun[]>(`/api/etl/runs?limit=${limit}`),
+  runs: (limit = 50, batchId = '') =>
+    request<EtlRun[]>(
+      `/api/etl/runs?limit=${limit}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`,
+    ),
   run: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}`),
   rows: (id: string, page = 1, pageSize = 50, action = '') =>
     request<{ page: number; page_size: number; total: number; items: EtlRunRow[] }>(

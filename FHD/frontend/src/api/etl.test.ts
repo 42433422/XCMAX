@@ -30,9 +30,13 @@ describe('etlApi', () => {
     const file = new File(['unit,name\n1,test'], 'test.csv', { type: 'text/csv' })
 
     await etlApi.capabilities()
-    await etlApi.upload(file)
+    await etlApi.upload(file, {
+      batchId: '11111111-1111-4111-8111-111111111111',
+      relativePath: '客户资料/test.csv',
+    })
     await etlApi.preview({ upload_id: 'upload/1', target_type: 'customers' })
     await etlApi.runs(12)
+    await etlApi.runs(12, 'batch/1')
     await etlApi.run('run/1')
     await etlApi.rows('run/1', 2, 25, 'new')
     await etlApi.patchDraft('run/1', { allowed_update_fields: ['phone'] })
@@ -62,6 +66,7 @@ describe('etlApi', () => {
       '/api/etl/uploads',
       '/api/etl/runs/preview',
       '/api/etl/runs?limit=12',
+      '/api/etl/runs?limit=12&batch_id=batch%2F1',
       '/api/etl/runs/run%2F1',
       '/api/etl/runs/run%2F1/rows?page=2&page_size=25&action=new',
       '/api/etl/runs/run%2F1/draft',
@@ -75,6 +80,9 @@ describe('etlApi', () => {
       '/api/etl/targets/target%2F1',
       '/api/etl/targets/target%2F1/test',
     ])
+    const uploadBody = apiFetchMock.mock.calls[1]?.[1]?.body as FormData
+    expect(uploadBody.get('batch_id')).toBe('11111111-1111-4111-8111-111111111111')
+    expect(uploadBody.get('relative_path')).toBe('客户资料/test.csv')
     expect(primeCsrfCookieMock).toHaveBeenCalledTimes(10)
     expect(etlApi.exportUrl('run/1')).toBe('/api/etl/runs/run%2F1/download')
     expect(etlApi.errorExportUrl('run/1')).toBe('/api/etl/runs/run%2F1/errors/export')

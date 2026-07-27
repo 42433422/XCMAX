@@ -93,6 +93,8 @@ class PreviewServiceMixin:
                 {
                     "file_name": upload.file_name,
                     "file_sha256": upload.sha256,
+                    "batch_id": upload.batch_id,
+                    "relative_path": upload.relative_path or upload.file_name,
                 }
             ),
             draft_json=dump_json(draft),
@@ -385,6 +387,7 @@ class PreviewServiceMixin:
             "owner_user_id": run.owner_user_id,
             "file_sha256": upload.sha256,
             "file_name": upload.file_name,
+            "relative_path": upload.relative_path or upload.file_name,
             "upload_path": upload.storage_path,
             "source_row": source_row,
         }

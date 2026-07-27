@@ -35,6 +35,8 @@ class EtlUpload(TimestampMixin, TenantScopedMixin, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    batch_id: Mapped[Optional[str]] = mapped_column(String(36), index=True)
+    relative_path: Mapped[Optional[str]] = mapped_column(String(500))
     suffix: Mapped[str] = mapped_column(String(16), nullable=False)
     content_type: Mapped[Optional[str]] = mapped_column(String(128))
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)

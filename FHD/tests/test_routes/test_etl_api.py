@@ -97,12 +97,19 @@ def test_etl_api_upload_preview_execute_and_owner_isolation(tmp_path, monkeypatc
         "shipment_records",
         "webhook",
     }
+    assert capabilities.json()["data"]["inputs"]["folder_upload"] is True
 
     uploaded = client.post(
         "/api/etl/uploads",
+        data={
+            "batch_id": "11111111-1111-4111-8111-111111111111",
+            "relative_path": "客户资料/customers.csv",
+        },
         files={"file": ("customers.csv", "客户名称,电话\n甲公司,138\n".encode(), "text/csv")},
     )
     assert uploaded.status_code == 201
+    assert uploaded.json()["data"]["batch_id"] == "11111111-1111-4111-8111-111111111111"
+    assert uploaded.json()["data"]["relative_path"] == "客户资料/customers.csv"
     upload_id = uploaded.json()["data"]["upload_id"]
 
     preview = client.post(
@@ -113,6 +120,15 @@ def test_etl_api_upload_preview_execute_and_owner_isolation(tmp_path, monkeypatc
     run = preview.json()["data"]
     assert run["status"] == "preview_ready"
     assert run["summary"]["new"] == 1
+    assert run["batch_id"] == "11111111-1111-4111-8111-111111111111"
+    assert run["relative_path"] == "客户资料/customers.csv"
+
+    batch_runs = client.get(
+        "/api/etl/runs",
+        params={"batch_id": "11111111-1111-4111-8111-111111111111", "limit": 500},
+    )
+    assert batch_runs.status_code == 200
+    assert [item["id"] for item in batch_runs.json()["data"]] == [run["id"]]
 
     rows = client.get(f"/api/etl/runs/{run['id']}/rows")
     assert rows.status_code == 200
@@ -145,6 +161,18 @@ def test_etl_api_is_fail_closed_when_feature_flag_is_missing(tmp_path, monkeypat
     response = client.get("/api/etl/capabilities")
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "ETL_CENTER_DISABLED"
+
+
+def test_etl_api_rejects_invalid_folder_batch_id(tmp_path, monkeypatch):
+    client, _ = _test_app(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/etl/uploads",
+        data={"batch_id": "../../not-a-batch", "relative_path": "../../customers.csv"},
+        files={"file": ("customers.csv", b"name\nAcme\n", "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "ETL_BATCH_ID_INVALID"
 
 
 @pytest.mark.asyncio

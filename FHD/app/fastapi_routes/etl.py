@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -84,6 +84,8 @@ def capabilities(_user: Any = Depends(_read)):
 @router.post("/uploads", status_code=201)
 def upload_file(
     file: UploadFile = File(...),
+    batch_id: str | None = Form(default=None),
+    relative_path: str | None = Form(default=None),
     db: Session = Depends(get_db_dependency),
     user: Any = Depends(_execute),
 ):
@@ -93,6 +95,8 @@ def upload_file(
         file_name=file.filename or "upload",
         content_type=file.content_type,
         stream=file.file,
+        batch_id=batch_id,
+        relative_path=relative_path,
     )
     return {"success": True, "data": data}
 
@@ -116,13 +120,19 @@ def create_preview(
 
 @router.get("/runs")
 def list_runs(
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=50, ge=1, le=500),
+    batch_id: str | None = Query(default=None),
     db: Session = Depends(get_db_dependency),
     user: Any = Depends(_read),
 ):
     return {
         "success": True,
-        "data": get_etl_service().list_runs(db, owner_user_id=_user_id(user), limit=limit),
+        "data": get_etl_service().list_runs(
+            db,
+            owner_user_id=_user_id(user),
+            limit=limit,
+            batch_id=batch_id,
+        ),
     }
 
 

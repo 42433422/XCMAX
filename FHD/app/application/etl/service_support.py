@@ -62,6 +62,26 @@ def clean_filename(value: str) -> str:
     return (name[:240] or "upload").strip()
 
 
+def clean_relative_path(value: str | None, file_name: str) -> str:
+    parts = [
+        part
+        for part in str(value or file_name).replace("\\", "/").split("/")
+        if part not in {"", ".", ".."}
+    ]
+    cleaned = "/".join(parts).replace("\x00", "")
+    return (cleaned[:500] or clean_filename(file_name)).strip()
+
+
+def clean_batch_id(value: str | None) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return str(uuid.UUID(raw))
+    except ValueError as exc:
+        raise EtlError("ETL_BATCH_ID_INVALID", "文件夹批次标识无效") from exc
+
+
 def mapping_key(value: str) -> str:
     return "".join(ch.lower() for ch in str(value or "") if ch.isalnum())
 
