@@ -191,5 +191,7 @@ if [[ -f "$STATE/release_applied_modstore_sha" &&
   [[ "$(cat "$STATE/release_applied_modstore_sha")" == "$sha" ]] &&
   [[ "$(cat "$STATE/release_applied_fhd_sha")" == "$sha" ]]; then
   printf '%s\n' "$sha" >"$STATE/release_applied_sha"
+else
+  rm -f "$STATE/release_applied_sha"
 fi
 date -u +%s >"$STATE/release_apply_last_success"
