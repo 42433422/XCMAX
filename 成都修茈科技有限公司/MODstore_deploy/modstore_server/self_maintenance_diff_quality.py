@@ -7,8 +7,10 @@ import json
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Sequence
+from tempfile import TemporaryDirectory
+from typing import Iterator, Sequence
 
 _SAFE_GIT_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,199}")
 _MODSTORE_PYTHON_SCOPES = ("modman/", "modstore_server/", "tests/")
@@ -81,6 +83,66 @@ def changed_modstore_python_files(
     return sorted(set(targets))
 
 
+def _git_blob(
+    *,
+    repo_root: Path,
+    target_ref: str,
+    repo_path: str,
+) -> bytes:
+    """Read one regular-file snapshot from a target Git tree."""
+
+    target = _validate_git_ref(target_ref)
+    proc = subprocess.run(
+        ["git", "show", f"{target}:{repo_path}"],
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or b"").decode("utf-8", errors="replace")[:1000]
+        raise RuntimeError(
+            f"git show failed for {repo_path!r} at {target!r} "
+            f"with exit {proc.returncode}: {detail}"
+        )
+    return proc.stdout or b""
+
+
+@contextmanager
+def _quality_root(
+    *,
+    target_ref: str,
+    targets: Sequence[str],
+    repo_root: Path,
+    modstore_root: Path,
+) -> Iterator[Path]:
+    """Yield files from the tree being checked, not the caller's checkout."""
+
+    target = _validate_git_ref(target_ref)
+    if target == "WORKTREE":
+        yield modstore_root
+        return
+
+    modstore_prefix = (
+        modstore_root.resolve().relative_to(repo_root.resolve()).as_posix().rstrip("/")
+    )
+    with TemporaryDirectory(prefix="xcmax-diff-quality-") as temp_dir:
+        quality_root = Path(temp_dir) / "MODstore_deploy"
+        quality_root.mkdir(parents=True)
+        for relative in ("pyproject.toml", *targets):
+            destination = quality_root / relative
+            if not destination.resolve().is_relative_to(quality_root.resolve()):
+                raise ValueError(f"unsafe target path: {relative!r}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(
+                _git_blob(
+                    repo_root=repo_root,
+                    target_ref=target,
+                    repo_path=f"{modstore_prefix}/{relative}",
+                )
+            )
+        yield quality_root
+
+
 def run_quality_tool(
     *,
     tool: str,
@@ -97,13 +159,6 @@ def run_quality_tool(
         repo_root=repo_root,
         modstore_root=modstore_root,
     )
-    if tool == "black":
-        args: Sequence[str] = (sys.executable, "-m", "black", "--check", *targets)
-    elif tool == "isort":
-        args = (sys.executable, "-m", "isort", "--check-only", "--diff", *targets)
-    else:
-        raise ValueError(f"unsupported quality tool: {tool!r}")
-
     if not targets:
         print(
             json.dumps(
@@ -117,8 +172,21 @@ def run_quality_tool(
             )
         )
         return 0
-    proc = subprocess.run(list(args), cwd=modstore_root, check=False)
-    return int(proc.returncode)
+    if tool == "black":
+        args: Sequence[str] = (sys.executable, "-m", "black", "--check", *targets)
+    elif tool == "isort":
+        args = (sys.executable, "-m", "isort", "--check-only", "--diff", *targets)
+    else:
+        raise ValueError(f"unsupported quality tool: {tool!r}")
+
+    with _quality_root(
+        target_ref=target_ref,
+        targets=targets,
+        repo_root=repo_root,
+        modstore_root=modstore_root,
+    ) as checked_root:
+        proc = subprocess.run(list(args), cwd=checked_root, check=False)
+        return int(proc.returncode)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
