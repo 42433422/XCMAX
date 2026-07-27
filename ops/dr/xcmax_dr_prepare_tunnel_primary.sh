@@ -31,7 +31,7 @@ done
 PEER_USER="${OPS_DR_PEER_USER:-xcmaxdrpeer}"
 DR_IP="${OPS_DR_SECONDARY_IP:-43.138.211.142}"
 PEER_HOME="${OPS_DR_PEER_HOME:-/var/lib/xcmax-dr-peer}"
-SSHD_DROPIN="/etc/ssh/sshd_config.d/90-xcmax-dr-peer.conf"
+SSHD_CONFIG="${OPS_DR_SSHD_CONFIG:-/etc/ssh/sshd_config}"
 
 read -r key_type key_body key_comment <"$PUBLIC_KEY_FILE"
 [[ "$key_type" == "ssh-ed25519" && -n "$key_body" ]] || {
@@ -67,9 +67,24 @@ printf '%s %s %s %s\n' \
 chown "$PEER_USER:$PEER_USER" "$authorized_key"
 chmod 0600 "$authorized_key"
 
-install -d -m 0755 /etc/ssh/sshd_config.d
-cat >"$SSHD_DROPIN" <<EOF
-Match User $PEER_USER
+python3 - "$SSHD_CONFIG" "$PEER_USER" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+user = sys.argv[2]
+begin = "# XCMAX_DR_PEER_BEGIN"
+end = "# XCMAX_DR_PEER_END"
+text = path.read_text(encoding="utf-8")
+if begin in text:
+    before, remainder = text.split(begin, 1)
+    if end not in remainder:
+        raise SystemExit("sshd_config 中的 XCMAX DR 标记不完整")
+    _, after = remainder.split(end, 1)
+    text = before.rstrip() + "\n" + after.lstrip()
+block = f"""
+{begin}
+Match User {user}
     AuthenticationMethods publickey
     PasswordAuthentication no
     KbdInteractiveAuthentication no
@@ -78,8 +93,12 @@ Match User $PEER_USER
     AllowAgentForwarding no
     AllowTcpForwarding local
     GatewayPorts no
-EOF
-chmod 0644 "$SSHD_DROPIN"
+{end}
+"""
+path.write_text(text.rstrip() + "\n\n" + block.strip() + "\n", encoding="utf-8")
+PY
+chmod 0600 "$SSHD_CONFIG"
+rm -f /etc/ssh/sshd_config.d/90-xcmax-dr-peer.conf
 
 sshd -t
 systemctl reload ssh 2>/dev/null || systemctl reload sshd
