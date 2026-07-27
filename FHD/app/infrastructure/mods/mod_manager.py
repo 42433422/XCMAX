@@ -178,7 +178,7 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
             raise FileNotFoundError(f"Mod {mod_id} backend file missing")
         safe = "".join(c if c.isalnum() else "_" for c in mod_id)
         # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
-        path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[:16]
+        path_digest = hashlib.sha256(os.path.abspath(mod_path).encode()).hexdigest()[:16]
         spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
         if existing := sys.modules.get(spec_name):
             return existing
