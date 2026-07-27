@@ -58,6 +58,7 @@ from .self_maintenance_remediation_prompts import (
     external_review_remediation_prompt,
 )
 from .self_maintenance_retry import is_transient_dispatch_failure
+from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
 
 logger = logging.getLogger(__name__)
 
@@ -5597,7 +5598,7 @@ def _auto_merge_local_repo(
     diff_stats = _diff_numstat_for_branch(
         base_branch=base_branch, branch=branch, workspace=workspace
     )
-    diff_excerpt = _run_cmd(
+    diff_excerpt = _run_cmd_excerpt(
         [
             "git",
             "-c",
@@ -5609,7 +5610,8 @@ def _auto_merge_local_repo(
         ],
         cwd=workspace,
         timeout=180,
-    )[:20000]
+        max_chars=20000,
+    )
     kb_validation = _validate_kb_json_changes_for_auto_merge(
         branch=branch,
         files=files,
