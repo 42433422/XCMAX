@@ -69,6 +69,10 @@ jobs:
           grep -q 'runtime-releases' ops/dr/xcmax_release_sync.sh
           grep -q 'modstore-static.tar.gz' ops/dr/xcmax_release_sync.sh
           grep -q 'modstore-static.tar.gz' ops/dr/xcmax_dr_apply_release.sh
+          grep -q 'xcmax-dr-transfer.lock' ops/backup/xcmax_backup.sh
+          grep -q 'xcmax-dr-transfer.lock' ops/dr/xcmax_wal_ship.sh
+          grep -q 'xcmax-dr-transfer.lock' ops/dr/xcmax_wal_ship_pg16.sh
+          grep -q 'xcmax-dr-transfer.lock' ops/dr/xcmax_release_sync.sh
           ! grep -q 'cat >/etc/cron.d/xcmax-dr' \
             ops/dr/xcmax_dr_prepare_runtime.sh
           grep -q 'xcmax-dr-prepare-standby-pg16' \

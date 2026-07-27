@@ -26,6 +26,8 @@ TARGET="${OPS_BACKUP_SSH_TARGET:-}"
 KEY="${OPS_BACKUP_SSH_KEY:-/root/.ssh/xcmax_dr_ed25519}"
 REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 LOCK="/run/lock/xcmax-wal-ship.lock"
+TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
+TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 PG_OS_USER="${OPS_PG_OS_USER:-postgres}"
 
 [[ "$WAL_ROOT" == /var/lib/pgsql/xcmax-wal ]] || {
@@ -99,12 +101,15 @@ ssh_opts=(
   -o IdentitiesOnly=yes
   -o StrictHostKeyChecking=yes
 )
-rsync -a --ignore-existing --delay-updates --partial \
-  -e "ssh ${ssh_opts[*]}" \
-  "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal/archive/" >>"$LOG" 2>&1
-rsync -a --delay-updates \
-  -e "ssh ${ssh_opts[*]}" \
-  "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal/status/current" >>"$LOG" 2>&1
+(
+  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  rsync -a --ignore-existing --delay-updates --partial \
+    -e "ssh ${ssh_opts[*]}" \
+    "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal/archive/" >>"$LOG" 2>&1
+  rsync -a --delay-updates \
+    -e "ssh ${ssh_opts[*]}" \
+    "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal/status/current" >>"$LOG" 2>&1
+) 8>"$TRANSFER_LOCK"
 mv -f "$status_tmp" "$STATE/wal-status"
 date -u +%s >"$STATE/wal_ship_last_success"
 

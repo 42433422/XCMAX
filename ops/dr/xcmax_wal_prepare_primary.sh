@@ -29,6 +29,8 @@ REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 PG_OS_USER="${OPS_PG_OS_USER:-postgres}"
 PG_SERVICE="${OPS_PG_SERVICE:-postgresql}"
 LOCK="/run/lock/xcmax-wal-base.lock"
+TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
+TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 
 [[ "$WAL_ROOT" == /var/lib/pgsql/xcmax-wal ]] || {
   echo "拒绝非标准 WAL 根目录: $WAL_ROOT" >&2
@@ -144,9 +146,12 @@ chown -R root:root "$staging"
 chmod -R go-rwx "$staging"
 mv "$staging" "$final"
 
-rsync -a --partial --delay-updates \
-  -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-  "$final/" "${TARGET}:${REMOTE_ROOT}/wal/base/${snapshot}/" >>"$LOG" 2>&1
+(
+  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  rsync -a --partial --delay-updates \
+    -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+    "$final/" "${TARGET}:${REMOTE_ROOT}/wal/base/${snapshot}/" >>"$LOG" 2>&1
+) 8>"$TRANSFER_LOCK"
 printf '%s\n' "$snapshot" >"$STATE/wal_base_last_snapshot"
 date -u +%s >"$STATE/wal_base_last_success"
 

@@ -44,6 +44,8 @@ MODSTORE_DB="${OPS_MODSTORE_DB:-${MODSTORE_DIR}/modstore.db}"
 LOG_DIR="${OPS_LOG_DIR:-/var/log/xcmax-ops}"
 LOG="${LOG_DIR}/backup.log"
 LOCK="/tmp/xcmax-backup.lock"
+TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
+TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
@@ -369,9 +371,12 @@ offsite_ssh() {
     fail "温备推送需要 rsync"
     return
   fi
-  if rsync -a --partial \
-    -e "ssh -i $key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-    "$DEST/" "${target}:${remote_root}/${TODAY}/" >>"$LOG" 2>&1; then
+  if (
+    flock -w "$TRANSFER_WAIT_SECONDS" 8
+    rsync -a --partial \
+      -e "ssh -i $key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+      "$DEST/" "${target}:${remote_root}/${TODAY}/" >>"$LOG" 2>&1
+  ) 8>"$TRANSFER_LOCK"; then
     date -u +%s > "${OPS_STATE_DIR:-/var/lib/xcmax-ops}/state/offsite_ssh_last_success" \
       2>/dev/null || true
     log "SSH 异地推送完成 → ${target}:${remote_root}/${TODAY}/"

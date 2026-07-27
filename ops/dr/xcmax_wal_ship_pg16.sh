@@ -24,6 +24,8 @@ TARGET="${OPS_BACKUP_SSH_TARGET:-}"
 KEY="${OPS_BACKUP_SSH_KEY:-/root/.ssh/xcmax_dr_ed25519}"
 REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 LOCK="/run/lock/xcmax-wal-pg16-ship.lock"
+TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
+TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 
 [[ -n "$TARGET" && -f "$KEY" ]] || {
   echo "温备 SSH 目标或私钥未配置" >&2
@@ -88,12 +90,15 @@ status_tmp="$STATE/.wal-pg16-status.$$"
 chmod 0600 "$status_tmp"
 
 ssh_cmd="ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-rsync -a --ignore-existing --delay-updates --partial \
-  -e "$ssh_cmd" \
-  "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/" >>"$LOG" 2>&1
-rsync -a --delay-updates \
-  -e "$ssh_cmd" \
-  "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal-pg16/status/current" >>"$LOG" 2>&1
+(
+  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  rsync -a --ignore-existing --delay-updates --partial \
+    -e "$ssh_cmd" \
+    "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/" >>"$LOG" 2>&1
+  rsync -a --delay-updates \
+    -e "$ssh_cmd" \
+    "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal-pg16/status/current" >>"$LOG" 2>&1
+) 8>"$TRANSFER_LOCK"
 mv -f "$status_tmp" "$STATE/wal-pg16-status"
 date -u +%s >"$STATE/wal_pg16_ship_last_success"
 

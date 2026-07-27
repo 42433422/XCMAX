@@ -26,6 +26,8 @@ TARGET="${OPS_BACKUP_SSH_TARGET:-}"
 KEY="${OPS_BACKUP_SSH_KEY:-/root/.ssh/xcmax_dr_ed25519}"
 REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 LOCK="/run/lock/xcmax-wal-pg16-base.lock"
+TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
+TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 
 [[ "$BASE_ROOT" == /var/lib/pgsql/xcmax-wal-pg16/base ]] || {
   echo "拒绝非标准 PostgreSQL 16 基线目录: $BASE_ROOT" >&2
@@ -138,9 +140,12 @@ touch "$staging/BASE_READY"
 chmod -R go-rwx "$staging"
 mv "$staging" "$final"
 
-rsync -a --partial --delay-updates \
-  -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-  "$final/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/base/${snapshot}/" >>"$LOG" 2>&1
+(
+  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  rsync -a --partial --delay-updates \
+    -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+    "$final/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/base/${snapshot}/" >>"$LOG" 2>&1
+) 8>"$TRANSFER_LOCK"
 printf '%s\n' "$snapshot" >"$STATE/wal_pg16_base_last_snapshot"
 date -u +%s >"$STATE/wal_pg16_base_last_success"
 

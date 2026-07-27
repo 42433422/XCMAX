@@ -46,6 +46,8 @@ SPOOL="${OPS_RELEASE_SPOOL:-/var/backups/xcmax/releases}"
 STATE="${OPS_STATE_DIR:-/var/lib/xcmax-ops}/state"
 LOG="${OPS_LOG_DIR:-/var/log/xcmax-ops}/release-sync.log"
 LOCK="/run/lock/xcmax-release-sync-${COMPONENT}.lock"
+TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
+TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
 
 [[ -n "$TARGET" && -f "$KEY" ]] || {
   echo "温备 SSH 目标或私钥未配置" >&2
@@ -136,10 +138,13 @@ fi
 printf '%s\n' "$SHA" >"$staging/${COMPONENT}.SHA"
 date -u +%s >"$staging/${COMPONENT}.CREATED_AT"
 
-rsync -a --partial --delay-updates \
-  -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-  "$staging/" "${TARGET}:${REMOTE_ROOT}/runtime-releases/${SHA}/" \
-  >>"$LOG" 2>&1
+(
+  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  rsync -a --partial --delay-updates \
+    -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+    "$staging/" "${TARGET}:${REMOTE_ROOT}/runtime-releases/${SHA}/" \
+    >>"$LOG" 2>&1
+) 8>"$TRANSFER_LOCK"
 
 printf '%s\n' "$SHA" >"$STATE/release_sync_${COMPONENT}_sha"
 date -u +%s >"$STATE/release_sync_${COMPONENT}_last_success"
