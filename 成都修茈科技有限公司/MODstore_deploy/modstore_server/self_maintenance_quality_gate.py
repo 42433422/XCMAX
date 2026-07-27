@@ -139,6 +139,7 @@ def _matches_diff_quality_command(command: Any, tool: str) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         if (
             len(segment) < 9
             or not _is_python_executable(segment[0])
@@ -176,6 +177,7 @@ def matches_black_check_command(command: Any) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         args: list[str]
         if len(segment) >= 3 and _is_python_executable(segment[0]):
             if segment[1:3] != ["-m", "black"]:
@@ -202,6 +204,7 @@ def matches_isort_check_command(command: Any) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         args: list[str]
         if len(segment) >= 3 and _is_python_executable(segment[0]):
             if segment[1:3] != ["-m", "isort"]:
@@ -226,6 +229,7 @@ def matches_source_governance_command(command: Any) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         if len(segment) < 2 or not _is_python_executable(segment[0]):
             continue
         script = Path(segment[1])
