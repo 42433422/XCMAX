@@ -16,6 +16,10 @@ declare -A scripts=(
   [xcmax_dr_finalize.sh]=xcmax-dr-finalize
   [xcmax_dr_restore_latest.sh]=xcmax-dr-restore-latest
   [xcmax_dr_prepare_runtime.sh]=xcmax-dr-prepare-runtime
+  [xcmax_dr_prepare_tunnel_primary.sh]=xcmax-dr-prepare-tunnel-primary
+  [xcmax_dr_prepare_active_peer.sh]=xcmax-dr-prepare-active-peer
+  [xcmax_dr_failover_guard.py]=xcmax-dr-failover-guard
+  [xcmax_dr_tencent_fence.sh]=xcmax-dr-tencent-fence
   [xcmax_wal_prepare_standby.sh]=xcmax-dr-prepare-standby
   [xcmax_wal_prepare_standby_pg16.sh]=xcmax-dr-prepare-standby-pg16
   [xcmax_dr_apply_release.sh]=xcmax-dr-apply-release
@@ -31,6 +35,55 @@ for source in "${!scripts[@]}"; do
   }
   install -m 0755 "$SRC_DIR/$source" "/usr/local/sbin/${scripts[$source]}"
 done
+
+if [[ ! -f /etc/xcmax-dr-auto-failover.env ]]; then
+  cat >/etc/xcmax-dr-auto-failover.env <<'EOF'
+# Observer is installed and scheduled, but automatic promotion stays disabled
+# until DNSPod/IGTM and a provider-side primary fencing action are configured.
+OPS_DR_AUTO_FAILOVER_ENABLED=0
+OPS_DR_PRIMARY_IP=119.27.178.147
+OPS_DR_SECONDARY_IP=43.138.211.142
+OPS_DR_DOMAIN=xiu-ci.com
+OPS_DR_PRIMARY_HEALTH_PATH=/fhd-api/api/health
+OPS_DR_FAILOVER_THRESHOLD=3
+OPS_DR_FENCE_PROOF=/var/lib/xcmax-dr/provider-fence-proof.json
+OPS_DR_FENCE_COMMAND=/usr/local/sbin/xcmax-dr-tencent-fence
+EOF
+  chmod 0600 /etc/xcmax-dr-auto-failover.env
+fi
+
+cat >/etc/systemd/system/xcmax-dr-failover-guard.service <<'EOF'
+[Unit]
+Description=XCMAX DR guarded automatic promotion observer
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/xcmax-dr-failover-guard
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+EOF
+
+cat >/etc/systemd/system/xcmax-dr-failover-guard.timer <<'EOF'
+[Unit]
+Description=Check XCMAX DR promotion evidence every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+chmod 0644 \
+  /etc/systemd/system/xcmax-dr-failover-guard.service \
+  /etc/systemd/system/xcmax-dr-failover-guard.timer
+systemctl daemon-reload
+systemctl enable --now xcmax-dr-failover-guard.timer >/dev/null
 
 cat >"$CRON_FILE" <<'EOF'
 SHELL=/bin/bash
