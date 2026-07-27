@@ -176,3 +176,15 @@ test('review remediation branches are promoted to the rejected PR canonical base
   );
   assert.equal(selectTaskMergeBase({ branch: 'release/1', description: 'ordinary' }), 'release/1');
 });
+
+
+test('self-maintenance continuation branches always merge to canonical main', () => {
+  const task = {
+    branch: 'devfleet/cursor/previous-remediation',
+    description: (
+      'Run a real MODstore self-maintenance improvement task. '
+      + '=== SELF_MAINTENANCE_CANONICAL_MERGE_BASE:main ==='
+    ),
+  };
+  assert.equal(selectTaskMergeBase(task, ''), 'main');
+});

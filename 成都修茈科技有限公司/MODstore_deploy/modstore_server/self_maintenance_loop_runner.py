@@ -2688,7 +2688,7 @@ def _code_task_text(
             f"{json.dumps(remediation_evidence, ensure_ascii=False, sort_keys=True)}"
         )
     return (
-        "Run a real MODstore self-maintenance improvement task. "
+        "Run a real MODstore self-maintenance improvement task. === SELF_MAINTENANCE_CANONICAL_MERGE_BASE:main === "
         "Use the previous loop memory and current evidence gaps to fix the highest-value "
         "executable gap in the self-maintenance loop. "
         "MANDATORY: Before reasoning from scratch, you MUST check the HISTORICAL FIXES below. "
