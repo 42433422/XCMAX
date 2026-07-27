@@ -147,7 +147,7 @@ chmod -R go-rwx "$staging"
 mv "$staging" "$final"
 
 (
-  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   rsync -a --partial --delay-updates \
     -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
     "$final/" "${TARGET}:${REMOTE_ROOT}/wal/base/${snapshot}/" >>"$LOG" 2>&1

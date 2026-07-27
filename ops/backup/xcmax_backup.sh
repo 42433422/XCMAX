@@ -372,7 +372,7 @@ offsite_ssh() {
     return
   fi
   if (
-    flock -w "$TRANSFER_WAIT_SECONDS" 8
+    flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
     rsync -a --partial \
       -e "ssh -i $key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
       "$DEST/" "${target}:${remote_root}/${TODAY}/" >>"$LOG" 2>&1

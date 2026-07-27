@@ -139,7 +139,7 @@ printf '%s\n' "$SHA" >"$staging/${COMPONENT}.SHA"
 date -u +%s >"$staging/${COMPONENT}.CREATED_AT"
 
 (
-  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   rsync -a --partial --delay-updates \
     -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
     "$staging/" "${TARGET}:${REMOTE_ROOT}/runtime-releases/${SHA}/" \

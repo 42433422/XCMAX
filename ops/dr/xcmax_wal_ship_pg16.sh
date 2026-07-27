@@ -91,7 +91,7 @@ chmod 0600 "$status_tmp"
 
 ssh_cmd="ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 (
-  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   rsync -a --ignore-existing --delay-updates --partial \
     -e "$ssh_cmd" \
     "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/" >>"$LOG" 2>&1

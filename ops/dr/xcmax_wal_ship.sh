@@ -102,7 +102,7 @@ ssh_opts=(
   -o StrictHostKeyChecking=yes
 )
 (
-  flock -w "$TRANSFER_WAIT_SECONDS" 8
+  flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
   rsync -a --ignore-existing --delay-updates --partial \
     -e "ssh ${ssh_opts[*]}" \
     "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal/archive/" >>"$LOG" 2>&1
