@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  AI_REVIEW_CHUNK_MAX_CHARS,
+  AI_REVIEW_MAX_CHUNKS,
   AUTO_PR_LABELS,
   CI_TIMEOUT_POLICY,
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
   INITIAL_PR_LABELS,
   buildMergeConflictPayload,
+  chunkReviewDiff,
   forbiddenAutoMergePaths,
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
@@ -16,6 +20,7 @@ import {
   nextMergeRetryState,
   parseGithubRepo,
   parseReviewVerdict,
+  reviewDiffInChunks,
   resolveReviewWithFallback,
   selectTaskMergeBase,
 } from './merge_worker.mjs';
@@ -163,6 +168,64 @@ test('review remains fail-closed when Trae and MiniMax are unavailable', async (
   assert.match(result.diagnostics.fallback, /minimax-key-unavailable/);
 });
 
+test('large diffs are completely partitioned into bounded review chunks', () => {
+  const diff = `${'a'.repeat(12_345)}\n${'b'.repeat(12_345)}\n${'c'.repeat(12_345)}`;
+  const chunks = chunkReviewDiff(diff, 10_000);
+  assert.equal(chunks.join(''), diff);
+  assert.equal(chunks.length, 4);
+  assert.equal(chunks.every((chunk) => chunk.length <= 10_000), true);
+  assert.equal(AI_REVIEW_CHUNK_MAX_CHARS >= 8_000, true);
+  assert.equal(AI_REVIEW_MAX_CHUNKS >= 1, true);
+});
+
+
+test('large diff approval requires every review chunk to approve', async () => {
+  const reviewed = [];
+  const result = await reviewDiffInChunks(
+    'x'.repeat(31_435),
+    async (chunk, position) => {
+      reviewed.push({ length: chunk.length, ...position });
+      return { verdict: 'approve', provider: 'test' };
+    },
+    { maxChars: 20_000, maxChunks: 3 },
+  );
+  assert.equal(result.verdict, 'approve');
+  assert.equal(result.reviewed_chunks, 2);
+  assert.deepEqual(reviewed.map((item) => item.number), [1, 2]);
+  assert.equal(reviewed.reduce((total, item) => total + item.length, 0), 31_435);
+});
+
+
+test('one rejected review chunk vetoes the whole diff', async () => {
+  const result = await reviewDiffInChunks(
+    'x'.repeat(31_435),
+    async (_chunk, position) => (
+      position.number === 2
+        ? { verdict: 'reject', reason: 'REJECT: security=unsafe input' }
+        : { verdict: 'approve', provider: 'test' }
+    ),
+    { maxChars: 20_000, maxChunks: 3 },
+  );
+  assert.equal(result.verdict, 'reject');
+  assert.equal(result.reason, 'chunk 2/2: REJECT: security=unsafe input');
+});
+
+
+test('review chunk count remains bounded and fail-closed', async () => {
+  let calls = 0;
+  const result = await reviewDiffInChunks(
+    'x'.repeat(31),
+    async () => {
+      calls += 1;
+      return { verdict: 'approve', provider: 'test' };
+    },
+    { maxChars: 10, maxChunks: 3 },
+  );
+  assert.equal(result.verdict, 'reject');
+  assert.equal(result.reason, 'diff-too-large:31:chunks=4:limit=3');
+  assert.equal(calls, 0);
+});
+
 
 test('review remediation branches are promoted to the rejected PR canonical base', () => {
   const task = {
@@ -187,4 +250,20 @@ test('self-maintenance continuation branches always merge to canonical main', ()
     ),
   };
   assert.equal(selectTaskMergeBase(task, ''), 'main');
+});
+
+
+test('installer repairs stale Node paths and reloads the LaunchAgent definition', () => {
+  const installer = readFileSync(
+    new URL('./install_merge_worker.sh', import.meta.url),
+    'utf8',
+  );
+  assert.match(installer, /configured_node=.*ProgramArguments:0/);
+  assert.match(installer, /NODE_BIN=.*command -v node/);
+  assert.match(installer, /Set :ProgramArguments:0 \$NODE_BIN/);
+  assert.match(installer, /launchctl bootout "\$target"/);
+  assert.match(installer, /bootstrap_agent\(\)/);
+  assert.match(installer, /for attempt in 1 2 3/);
+  assert.match(installer, /bootstrap_agent/);
+  assert.match(installer, /trap .*EXIT/);
 });
