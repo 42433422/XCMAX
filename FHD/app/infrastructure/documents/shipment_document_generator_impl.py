@@ -347,10 +347,12 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             "products": parsed_products,
         }
 
-        # 5) 调用 legacy 生成逻辑
+        # 5) 调用 legacy 生成逻辑（强制输出到与下载 API 同源的 shipment_outputs）
         from app.db.init_db import get_db_path
 
         generator = ShipmentDocumentGenerator(db_path=get_db_path("products.db"))
+        generator.OUTPUT_FOLDER = self.output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
         doc = generator.generate_document(
             order_text="",
             parsed_data=parsed_data,

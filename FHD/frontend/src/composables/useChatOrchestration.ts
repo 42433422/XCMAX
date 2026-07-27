@@ -511,7 +511,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     const context = lastShipmentExecution.value
     if (!context) {
-      await addAndSaveMessage('暂无可打印任务。请先生成发货单，再发送"开始打印"。', 'ai')
+      await addAndSaveMessage('暂无可打印任务。请先生成发货单或价格表，再发送"开始打印"。', 'ai')
       return true
     }
 
@@ -521,7 +521,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const orderId = context.orderId
 
     if (!labelPaths.length && !filePath) {
-      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成发货单后再试。', 'ai')
+      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成单据后再试。', 'ai')
       return true
     }
 
@@ -676,6 +676,28 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       scheduleAutoConfirmTask(nextTask)
     }
 
+    // 价格表已生成任务：写入打印上下文，供「开始打印」复用
+    if (nextTask.type === 'price_list_export' && nextTask.completed) {
+      const filePath = asString(
+        nextTask.file_path || nextTask.filePath || asRecord(nextTask.data).file_path
+      )
+      const downloadUrl =
+        asString(nextTask.downloadUrl || nextTask.download_url) ||
+        buildShipmentDownloadUrl(nextTask)
+      if (downloadUrl && !nextTask.downloadUrl) {
+        nextTask.downloadUrl = downloadUrl
+      }
+      if (filePath) {
+        lastShipmentExecution.value = {
+          filePath,
+          purchaseUnit: asString(nextTask.customer_name || asRecord(nextTask.data).customer_name),
+          orderId: null,
+          labelPaths: [],
+        }
+      }
+      return
+    }
+
     if (nextTask.type !== 'shipment_generate' || nextTask.completed) return
 
     const existingOrderNo = String(
@@ -769,10 +791,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const row = asRecord(data)
     const nestedData = asRecord(row.data)
     const document = asRecord(row.document || nestedData.document)
-    const directUrl = row.download_url || nestedData.download_url
+    const directUrl = row.downloadUrl || row.download_url || nestedData.download_url || nestedData.downloadUrl
     if (directUrl && typeof directUrl === 'string') return directUrl
 
-    const docName = row.doc_name || nestedData.doc_name || document.filename
+    const docName =
+      row.doc_name ||
+      nestedData.doc_name ||
+      row.filename ||
+      nestedData.filename ||
+      document.filename
     if (!docName || typeof docName !== 'string') return ''
 
     return `/api/shipment/download/${encodeURIComponent(docName)}`

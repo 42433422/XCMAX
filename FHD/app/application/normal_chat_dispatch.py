@@ -17,10 +17,37 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+_PRICE_LIST_DOC_RE = re.compile(r"价格表|价目表|价目")
+_PRICE_LIST_CUSTOMER_RE = re.compile(
+    r"([^\s，,。]{2,}(?:有限公司|集团有限公司|实业有限公司|公司|单位|客户|厂|店))"
+)
+
+
+def _extract_price_list_slots(text: str) -> dict[str, Any]:
+    slots: dict[str, Any] = {}
+    customer_name_match = _PRICE_LIST_CUSTOMER_RE.search(text)
+    if customer_name_match:
+        name = customer_name_match.group(1).strip()
+        name = re.sub(
+            r"^(?:帮我|给我|请)?(?:打印|生成|导出|制作)(?:一下|一份)?",
+            "",
+            name,
+        ).strip()
+        if name:
+            slots["customer_name"] = name
+    keyword_match = re.search(r"的\s*([^\s，,。]+)", text)
+    if keyword_match:
+        kw = keyword_match.group(1).strip()
+        if kw and not _PRICE_LIST_DOC_RE.search(kw):
+            slots["keyword"] = kw
+    return slots
+
+
 def route_normal_mode_message(message: str) -> dict[str, Any]:
     """
     普通版轻量槽位提取与任务分流：
-    - shipment: 发货单 / 开单 / 打印 / 出货单等单据语境
+    - price_list: 价格表 / 价目表 Word 导出
+    - shipment: 发货单 / 开单 / 打单 / 出货单等单据语境
     - product_query: 产品库检索
     - customers_query: 客户/购买单位查询
     - inventory_alert: 库存预警
@@ -29,6 +56,13 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     """
     text = (message or "").strip()
     lower = text.lower()
+
+    # 价目/价格表优先于裸「打印」，避免「打印某某公司价格表」被收成发货单
+    if _PRICE_LIST_DOC_RE.search(text):
+        return {
+            "intent": "price_list",
+            "slots": _extract_price_list_slots(text),
+        }
 
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(

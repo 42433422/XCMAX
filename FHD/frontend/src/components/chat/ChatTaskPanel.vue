@@ -78,7 +78,7 @@
                 {{ $t('chat.downloadShipment') }}
               </a>
               <button
-                v-if="currentTask?.type === 'shipment_generate'"
+                v-if="currentTask?.type === 'shipment_generate' || currentTask?.type === 'price_list_export'"
                 type="button"
                 class="btn btn-success btn-sm"
                 data-action="start-print"

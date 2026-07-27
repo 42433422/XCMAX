@@ -1181,69 +1181,81 @@ class AIChatApplicationService(
                 if lp:
                     return lp
             if rr.get("intent") == "price_list":
-                customer_name_match = re.search(
-                    r"([^\s，,。]{2,}(?:有限公司|集团有限公司|实业有限公司|公司\s|单位|客户|厂|店))",
-                    text,
-                )
-                keyword_match = re.search(r"[的的]\s*([^\s，,。]+)", text)
-                slots = {}
-                if customer_name_match:
-                    slots["customer_name"] = customer_name_match.group(1)
-                if keyword_match:
-                    slots["keyword"] = keyword_match.group(1)
+                slots = dict(rr.get("slots") or {})
+                customer_name = str(slots.get("customer_name") or "").strip()
+                keyword = str(slots.get("keyword") or "").strip() or None
 
-                if not slots.get("customer_name"):
+                if not customer_name:
                     return {
                         "success": False,
                         "message": "缺少客户名称",
                         "response": "请告诉我您要生成哪家客户的价格表？例如：「打印某某公司的价格表」",
                     }
 
-                # 直接调用价格表生成 API，而不是返回 tool_call
                 try:
-                    fhd_root = resolve_fhd_repo_root(anchor=Path(__file__).resolve())
                     from app.application.tools import handle_price_list_export
-
-                    logger.info("价格表生成 - FHD根目录: %s", fhd_root)
 
                     result = handle_price_list_export(
                         {
-                            "customer_name": slots.get("customer_name", ""),
-                            "keyword": slots.get("keyword"),
+                            "customer_name": customer_name,
+                            "keyword": keyword,
                             "export_date": None,
-                        },
-                        workspace_root=str(fhd_root) if fhd_root else None,
+                        }
                     )
 
                     logger.info("价格表生成结果: %s", result)
 
                     if result.get("success"):
-                        product_count = len(result.get("products", []))
-                        file_path = result.get("file_path", "")
-                        filename = (
-                            file_path.split("/")[-1].split("\\")[-1] if file_path else "价格表.docx"
+                        product_count = int(result.get("product_count") or 0)
+                        file_path = str(result.get("file_path") or "")
+                        filename = str(
+                            result.get("doc_name")
+                            or result.get("filename")
+                            or (file_path.split("/")[-1].split("\\")[-1] if file_path else "价格表.docx")
                         )
-
+                        download_url = str(result.get("download_url") or "")
+                        if not download_url and filename:
+                            download_url = f"/api/shipment/download/{filename}"
+                        desc = (
+                            f"客户：{customer_name}，共 {product_count} 个产品。"
+                            f"可下载 Word 或点击「开始打印」。"
+                        )
                         return {
                             "success": True,
                             "message": result.get("message", "价格表已生成"),
-                            "response": f"好的，价格表已生成成功！\n\n{result.get('message', '')}\n\n📄 文件名：{filename}\n💡 已在右侧任务面板中添加下载和打印按钮。",
+                            "response": (
+                                f"好的，价格表已生成成功！\n\n{result.get('message', '')}\n\n"
+                                f"📄 文件名：{filename}\n💡 已在右侧任务面板中添加下载和打印按钮。"
+                            ),
+                            "task": {
+                                "type": "price_list_export",
+                                "title": "价格表已生成",
+                                "description": desc,
+                                "completed": True,
+                                "downloadUrl": download_url,
+                                "file_path": file_path,
+                                "doc_name": filename,
+                            },
                             "data": {
                                 "file_path": file_path,
-                                "download_url": result.get("download_url"),
+                                "download_url": download_url,
                                 "filename": filename,
+                                "doc_name": filename,
                                 "product_count": product_count,
+                                "customer_name": customer_name,
                                 "intent": "price_list",
-                                "action": "tool_call",
+                                "action": "price_list_export",
                                 "tool_key": "price_list",
                             },
                         }
-                    else:
-                        return {
-                            "success": False,
-                            "message": result.get("error", "价格表生成失败"),
-                            "response": f"抱歉，价格表生成失败：{result.get('error', '未知错误')}",
-                        }
+                    return {
+                        "success": False,
+                        "message": result.get("message") or result.get("error") or "价格表生成失败",
+                        "response": (
+                            f"抱歉，价格表生成失败："
+                            f"{result.get('message') or result.get('error') or '未知错误'}"
+                        ),
+                    }
                 except RECOVERABLE_ERRORS as e:
                     logger.error("价格表生成异常：%s", e, exc_info=True)
                     return {
