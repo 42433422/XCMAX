@@ -5580,6 +5580,20 @@ def _auto_merge_local_repo(
     task_id: str,
     workspace: Path,
 ) -> Dict[str, Any]:
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+    decision = evaluate_risk(
+        "self_maintenance_l1_merge",
+        action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+        source="self_maintenance_loop.auto_merge",
+    )
+    if not decision.allowed:
+        return {
+            "ok": False,
+            "reason": "autonomy_guard_blocked",
+            "risk_decision": decision.to_dict(),
+        }
+
     files = _changed_files_for_branch(
         repo_url=repo_url,
         base_branch=base_branch,
@@ -5632,20 +5646,6 @@ def _auto_merge_local_repo(
     )
     if not policy.get("ok"):
         return policy
-
-    from modstore_server.autonomy_guard_delegate import evaluate_risk
-
-    decision = evaluate_risk(
-        "self_maintenance_l1_merge",
-        action_id=f"loop:{run_id}:self_maintenance_l1_merge",
-        source="self_maintenance_loop.auto_merge",
-    )
-    if not decision.allowed:
-        return {
-            "ok": False,
-            "reason": "autonomy_guard_blocked",
-            "risk_decision": decision.to_dict(),
-        }
 
     _run_cmd(["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace)
     merge_sha = _run_cmd(["git", "rev-parse", "HEAD"], cwd=workspace)
