@@ -52,6 +52,7 @@ from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
     matches_isort_check_command,
     matches_source_governance_command,
+    quality_check_failure,
 )
 
 QUALITY_CHECKS_JSON = (
@@ -1879,6 +1880,16 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/main --target-ref HEAD"
     )
+    assert matches_black_check_command(
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert matches_isort_check_command(
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
     assert not matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/main --target-ref HEAD"
@@ -1902,9 +1913,46 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         "echo python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
     )
     assert matches_source_governance_command("python3 scripts/dev/source_governance.py --top 10")
+    assert matches_source_governance_command(
+        "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10"
+    )
     assert not matches_source_governance_command(
         "echo python3 scripts/dev/source_governance.py --top 10"
     )
+
+
+def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
+    diff_prefix = (
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality"
+    )
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": (
+                    f"{diff_prefix} --tool black --base-ref origin/main "
+                    "--target-ref origin/feature"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    f"{diff_prefix} --tool isort --base-ref origin/main "
+                    "--target-ref origin/feature"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert quality_check_failure(qa_json) is None
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
