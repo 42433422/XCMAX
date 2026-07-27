@@ -11,6 +11,7 @@ import {
   CI_WAIT_TIMEOUT_MS,
   INITIAL_PR_LABELS,
   buildMergeConflictPayload,
+  blockingMergePollReason,
   chunkReviewDiff,
   forbiddenAutoMergePaths,
   githubIssueLabelEndpoint,
@@ -123,9 +124,50 @@ test('operational failures retry but explicit review and identity vetoes are ter
   assert.equal(isTransientMergeFailure('REJECT: unsafe behavior'), false);
   assert.equal(isTransientMergeFailure('GitHub actor mismatch: expected=bot actual=user'), false);
   assert.equal(isTransientMergeFailure('forbidden-auto-merge-paths: .env'), false);
+  assert.equal(isTransientMergeFailure('manual-veto-active: PR #730 has hold-merge label'), false);
+  assert.equal(isTransientMergeFailure('post-dispatch-check-failed: PR #730 checks=test'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-fail: required checks'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-needs-human: escalate'), false);
   assert.equal(isTransientMergeFailure('required checks failed or unavailable'), false);
+});
+
+test('merge polling stops for a restored human veto or terminal check failure', () => {
+  assert.equal(
+    blockingMergePollReason(
+      {
+        labels: [{ name: 'risk:r0' }, { name: 'hold-merge' }],
+        statusCheckRollup: [],
+      },
+      730,
+    ),
+    'manual-veto-active: PR #730 has hold-merge label',
+  );
+  assert.equal(
+    blockingMergePollReason(
+      {
+        labels: [{ name: 'risk:r0' }],
+        statusCheckRollup: [
+          { name: 'review', conclusion: 'SUCCESS' },
+          { name: 'modstore-backend-test', conclusion: 'FAILURE' },
+        ],
+      },
+      730,
+    ),
+    'post-dispatch-check-failed: PR #730 checks=modstore-backend-test',
+  );
+  assert.equal(
+    blockingMergePollReason(
+      {
+        labels: [{ name: 'risk:r0' }],
+        statusCheckRollup: [
+          { name: 'review', conclusion: 'SUCCESS' },
+          { name: 'backend-test', conclusion: '' },
+        ],
+      },
+      730,
+    ),
+    '',
+  );
 });
 
 
