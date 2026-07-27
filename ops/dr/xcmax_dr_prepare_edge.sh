@@ -83,8 +83,8 @@ location ^~ /kellai-api/ { include proxy_params; proxy_ssl_server_name on; proxy
 location ^~ /downloads/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
 location ^~ /sandbox/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
 location ^~ /api/xcmax/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /api/realtime/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
-location ^~ /api/workbench/voice/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /api/realtime/ { include proxy_params; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /api/workbench/voice/ { include proxy_params; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
 location ^~ /api/asr/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
 location ^~ /uploads/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
 EOF
@@ -121,6 +121,28 @@ server {
     }
 
     include $PRIMARY_ROUTES_CONF;
+
+    location = /fhd-api/ws/im {
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_pass http://127.0.0.1:${FHD_PORT}/ws/im;
+    }
+
+    location = /ws/im {
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_pass http://127.0.0.1:${FHD_PORT}/ws/im;
+    }
 
     location /fhd-api/ {
         proxy_set_header Host \$host;

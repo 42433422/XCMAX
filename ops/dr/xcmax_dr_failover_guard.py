@@ -172,6 +172,20 @@ def valid_fence_proof(path: Path, primary_ip: str, now: int) -> bool:
     )
 
 
+def trusted_executable(path: Path) -> bool:
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    return (
+        path.is_absolute()
+        and path.is_file()
+        and stat.st_uid == 0
+        and not stat.st_mode & 0o022
+        and os.access(path, os.X_OK)
+    )
+
+
 def atomic_json(path: Path, value: dict[str, object], mode: int = 0o600) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -225,6 +239,13 @@ def main() -> int:
     promote_command = setting(
         values, "OPS_DR_PROMOTE_COMMAND", "/usr/local/sbin/xcmax-dr-promote"
     )
+    fence_command = Path(
+        setting(
+            values,
+            "OPS_DR_FENCE_COMMAND",
+            "/usr/local/sbin/xcmax-dr-tencent-fence",
+        )
+    )
     enabled = env_bool(values, "OPS_DR_AUTO_FAILOVER_ENABLED")
     now = int(time.time())
 
@@ -255,6 +276,35 @@ def main() -> int:
         previous_consecutive=previous_consecutive,
         threshold=threshold,
     )
+    fence_attempted = False
+    fence_exit_code: int | None = None
+    if (
+        decision.reason == "provider_fence_proof_missing"
+        and decision.consecutive >= threshold
+        and trusted_executable(fence_command)
+    ):
+        fence_attempted = True
+        try:
+            fence_result = subprocess.run(
+                [str(fence_command)],
+                check=False,
+                timeout=240,
+            )
+            fence_exit_code = fence_result.returncode
+        except subprocess.TimeoutExpired:
+            fence_exit_code = 124
+        fence_ready = valid_fence_proof(fence_path, primary_ip, int(time.time()))
+        decision = decide(
+            enabled=enabled,
+            primary_https_ok=primary_https_ok,
+            primary_ssh_ok=primary_ssh_ok,
+            authoritative_addresses=addresses,
+            secondary_ip=secondary_ip,
+            standby_ready=standby_ready,
+            fence_ready=fence_ready,
+            previous_consecutive=max(decision.consecutive - 1, 0),
+            threshold=threshold,
+        )
     observation: dict[str, object] = {
         "checked_at": now,
         "primary_https_ok": primary_https_ok,
@@ -262,6 +312,8 @@ def main() -> int:
         "authoritative_addresses": sorted(addresses),
         "standby_ready": standby_ready,
         "fence_ready": fence_ready,
+        "fence_attempted": fence_attempted,
+        "fence_exit_code": fence_exit_code,
         **asdict(decision),
     }
     atomic_json(state_path, observation)
