@@ -48,6 +48,31 @@ flock -n 9 || exit 0
   exit 1
 }
 
+bootstrap_applied_timestamp() {
+  local component="$1" current_sha timestamp state_file temp_file
+  state_file="$STATE/release_applied_${component}_created_at"
+  if [[ -s "$state_file" ]] && [[ "$(cat "$state_file")" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  current_sha="$(
+    cat "$STATE/release_applied_${component}_sha" 2>/dev/null || true
+  )"
+  [[ "$current_sha" =~ ^[0-9a-f]{40}$ ]] || return 0
+  timestamp="$(
+    "$RELEASE_ORDER" \
+      --incoming "$INCOMING/runtime-releases" \
+      --state "$STATE" created-at \
+      --candidate "$INCOMING/runtime-releases/$current_sha" \
+      --component "$component" 2>/dev/null
+  )" || return 0
+  temp_file="$STATE/.release_applied_${component}_created_at.$$"
+  printf '%s\n' "$timestamp" >"$temp_file"
+  mv "$temp_file" "$state_file"
+}
+
+bootstrap_applied_timestamp modstore
+bootstrap_applied_timestamp fhd
+
 log() {
   echo "[$(date -Is)] $*" | tee -a "$LOG"
 }
