@@ -143,6 +143,28 @@ const runOutcomeText = computed(() => {
   }
   return `计划处理 ${plannedBusinessRows.value} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
 })
+const regionSummary = computed<Record<string, unknown> | null>(() => {
+  const value = currentRun.value?.source_features?.region_summary
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+})
+const detectedRegions = computed<Array<Record<string, unknown>>>(() => {
+  const value = currentRun.value?.source_features?.regions
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    : []
+})
+const llmPlanningText = computed(() => {
+  const structure = currentRun.value?.source_features?.llm_structure
+  const mapping = currentRun.value?.source_features?.llm_mapping
+  const entries = [structure, mapping].filter(
+    (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
+  )
+  if (entries.some((item) => item.used_llm === true && item.degraded !== true)) return '软件 LLM 已参与结构或字段建议'
+  if (entries.some((item) => item.degraded === true)) return 'LLM 已降级，当前结果由确定性规则生成'
+  return '当前结构由确定性规则识别'
+})
 
 async function bootstrap() {
   busy.value = true

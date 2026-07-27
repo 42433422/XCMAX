@@ -358,6 +358,26 @@
             </strong>
           </div>
         </div>
+        <div v-if="regionSummary" class="etl-target-scope-note">
+          <strong>
+            已识别 {{ Number(regionSummary.selected || 0) }} 个业务区块，
+            排除 {{ Number(regionSummary.excluded || 0) }} 个其他区块
+          </strong>
+          <span>
+            共 {{ Number(regionSummary.business_rows || currentRun.total_rows) }} 行候选业务数据 ·
+            {{ llmPlanningText }}
+          </span>
+          <details v-if="detectedRegions.length">
+            <summary>查看工作簿区域规划</summary>
+            <ul>
+              <li v-for="region in detectedRegions" :key="String(region.id)">
+                {{ String(region.sheet || '') }} · 第 {{ Number(region.header_row || 0) }} 行表头 ·
+                {{ region.status === 'selected' ? '纳入本次预演' : '已排除' }}
+                <template v-if="region.customer_name"> · 客户 {{ String(region.customer_name) }}</template>
+              </li>
+            </ul>
+          </details>
+        </div>
         <div class="etl-summary-grid">
           <button v-for="item in summaryCards" :key="item.action" type="button" @click="rowActionFilter = item.action">
             <span :class="`etl-dot etl-dot--${item.action}`"></span>

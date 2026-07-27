@@ -335,6 +335,54 @@ def test_llm_adviser_failure_never_changes_deterministic_action(etl_db, monkeypa
         db.close()
 
 
+def test_batch_llm_advice_never_overrides_adapter_action(etl_db, monkeypatch):
+    def batch_advice(_payloads):
+        return {
+            "items": [{"index": 0, "action": "skip", "reason": "模型建议跳过"}],
+            "metadata": {
+                "used_llm": True,
+                "advisory_only": True,
+                "degraded": False,
+                "model": "software-model",
+            },
+        }
+
+    service = EtlService(adviser=EtlRowAdviser(batch_provider=batch_advice))
+    monkeypatch.setattr(
+        service,
+        "_submit_preview",
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
+    )
+    with tenant_scope(6):
+        db = etl_db()
+        upload = service.save_upload(
+            db,
+            owner_user_id=10,
+            file_name="llm-advice.csv",
+            content_type="text/csv",
+            stream=BytesIO("客户名称\n确定性客户\n".encode()),
+        )
+        db.commit()
+        run = service.create_preview(
+            db,
+            owner_user_id=10,
+            upload_id=upload["upload_id"],
+            target_type="customers",
+        )
+        rows = service.get_rows(
+            db,
+            run_id=run["id"],
+            owner_user_id=10,
+            page=1,
+            page_size=10,
+        )
+        assert rows["items"][0]["suggested_action"] == "new"
+        assert rows["items"][0]["final_action"] == "new"
+        assert rows["items"][0]["llm_suggestion"]["action"] == "skip"
+        assert rows["items"][0]["llm_suggestion"]["advisory_only"] is True
+        db.close()
+
+
 def test_preview_blocks_invalid_rows_execute_valid_rows_and_rollback(etl_db, monkeypatch):
     service = EtlService()
 

@@ -141,13 +141,20 @@ class PreviewServiceMixin:
             dataset = parse_file(upload.storage_path, target_type=run.target_type)
             run = self._owned_run(db, run_id, owner_user_id)
             draft = load_json(run.draft_json, {})
+            source_features = dict(dataset.source_features or {})
             if not draft.get("field_mappings"):
-                draft["field_mappings"] = self._suggest_mappings(
+                deterministic_mappings = self._suggest_mappings(
                     dataset, get_adapter(run.target_type)
                 )
+                draft["field_mappings"], llm_mapping = self._enhance_mappings_with_llm(
+                    dataset,
+                    get_adapter(run.target_type),
+                    deterministic_mappings,
+                )
+                source_features["llm_mapping"] = llm_mapping
                 run.draft_json = dump_json(draft)
             run.total_rows = len(dataset.rows)
-            run.source_features_json = dump_json(dataset.source_features)
+            run.source_features_json = dump_json(source_features)
             run.summary_json = dump_json(
                 {
                     **load_json(run.summary_json, {}),
@@ -226,6 +233,10 @@ class PreviewServiceMixin:
         counts = {"new": 0, "update": 0, "skip": 0, "error": 0}
         llm_degraded = False
         preview_cache: dict[str, Any] = {}
+        advisory_jobs: list[tuple[EtlRunRow, dict[str, Any]]] = []
+        from app.application.etl.llm_assist import etl_row_advice_limit
+
+        advisory_limit = etl_row_advice_limit()
         for index, source in enumerate(dataset.rows, start=1):
             issues: list[dict[str, Any]] = []
             try:
@@ -261,37 +272,47 @@ class PreviewServiceMixin:
             issues.extend(decision.issues or [])
             action = "error" if issues else decision.action
             counts[action] = counts.get(action, 0) + 1
-            advisory = self._adviser.suggest(
-                deterministic_action=decision.action,
-                deterministic_reason=decision.reason,
-                normalized=normalized,
-                before=decision.before or {},
-                after=decision.after or {},
+            advisory_input = {
+                "deterministic_action": decision.action,
+                "deterministic_reason": decision.reason,
+                "normalized": normalized,
+                "before": decision.before or {},
+                "after": decision.after or {},
+            }
+            advisory = self._adviser.fallback(**advisory_input)
+            row_record = EtlRunRow(
+                tenant_id=tenant_id_for_write(),
+                owner_user_id=run.owner_user_id,
+                run_id=run.id,
+                source_sheet=source.sheet,
+                source_row=source.row_number,
+                source_json=dump_json(source.values),
+                normalized_json=dump_json(normalized),
+                provenance_json=dump_json(source.provenance),
+                validation_json=dump_json(issues),
+                llm_suggestion_json=dump_json(advisory),
+                suggested_action=decision.action,
+                final_action=action,
+                match_ref=decision.match_ref or None,
+                before_json=dump_json(decision.before or {}),
+                after_json=dump_json(decision.after or {}),
             )
-            llm_degraded = llm_degraded or bool(advisory.get("degraded"))
-            db.add(
-                EtlRunRow(
-                    tenant_id=tenant_id_for_write(),
-                    owner_user_id=run.owner_user_id,
-                    run_id=run.id,
-                    source_sheet=source.sheet,
-                    source_row=source.row_number,
-                    source_json=dump_json(source.values),
-                    normalized_json=dump_json(normalized),
-                    provenance_json=dump_json(source.provenance),
-                    validation_json=dump_json(issues),
-                    llm_suggestion_json=dump_json(advisory),
-                    suggested_action=decision.action,
-                    final_action=action,
-                    match_ref=decision.match_ref or None,
-                    before_json=dump_json(decision.before or {}),
-                    after_json=dump_json(decision.after or {}),
-                )
-            )
+            db.add(row_record)
+            if len(advisory_jobs) < advisory_limit:
+                advisory_jobs.append((row_record, advisory_input))
             if index % 500 == 0:
                 run.progress = min(95, 20 + int(index / max(1, len(dataset.rows)) * 75))
                 run.processed_rows = index
                 db.commit()
+        if advisory_jobs:
+            suggestions = self._adviser.suggest_many(
+                [payload for _row, payload in advisory_jobs]
+            )
+            for (row_record, _payload), advisory in zip(
+                advisory_jobs, suggestions, strict=False
+            ):
+                row_record.llm_suggestion_json = dump_json(advisory)
+                llm_degraded = llm_degraded or bool(advisory.get("degraded"))
         run.new_rows = counts["new"]
         run.update_rows = counts["update"]
         run.skip_rows = counts["skip"]
@@ -400,6 +421,85 @@ class PreviewServiceMixin:
                     mapping["source"] = "document_path"
                     mapping["confidence"] = 1.0
         return mappings
+
+    @staticmethod
+    def _enhance_mappings_with_llm(
+        dataset: ParsedDataset,
+        adapter: TargetAdapter,
+        deterministic: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Fill only weak/unmapped pairs from a bounded structured-output suggestion."""
+        if adapter.allow_dynamic_fields or not dataset.rows:
+            return deterministic, {
+                "used_llm": False,
+                "advisory_only": True,
+                "degraded": False,
+                "reason": "dynamic_or_empty_dataset",
+            }
+        from app.application.etl.llm_assist import advise_field_mappings
+
+        samples: dict[str, list[str]] = {}
+        for header in dataset.headers[:100]:
+            values: list[str] = []
+            for row in dataset.rows[:20]:
+                value = row.values.get(header)
+                if value in (None, ""):
+                    continue
+                text = str(value)[:160]
+                if text not in values:
+                    values.append(text)
+                if len(values) >= 3:
+                    break
+            samples[header] = values
+        result = advise_field_mappings(
+            headers=list(dataset.headers),
+            samples=samples,
+            target_fields=[
+                {
+                    "key": field.key,
+                    "label": field.label,
+                    "type": field.type,
+                    "required": field.required,
+                    "aliases": list(field.aliases),
+                }
+                for field in adapter.fields
+            ],
+        )
+        enhanced = [dict(mapping) for mapping in deterministic]
+        by_target = {str(mapping.get("target") or ""): mapping for mapping in enhanced}
+        used_sources = {
+            str(mapping.get("source") or "")
+            for mapping in enhanced
+            if mapping.get("source") and float(mapping.get("confidence") or 0.0) >= 0.9
+        }
+        applied = 0
+        for suggestion in list(result.data.get("mappings") or []):
+            target = str(suggestion.get("target") or "")
+            source = str(suggestion.get("source") or "")
+            mapping = by_target.get(target)
+            if mapping is None or source in used_sources:
+                continue
+            current_confidence = float(mapping.get("confidence") or 0.0)
+            llm_confidence = float(suggestion.get("confidence") or 0.0)
+            if current_confidence >= 0.9 or llm_confidence < 0.85:
+                continue
+            transform = str(suggestion.get("transform") or "")
+            mapping.update(
+                {
+                    "source": source,
+                    "confidence": llm_confidence,
+                    "transforms": [{"op": transform}] if transform else [],
+                    "suggested_by": "llm",
+                    "reason": str(suggestion.get("reason") or "")[:300],
+                }
+            )
+            used_sources.add(source)
+            applied += 1
+        return enhanced, {
+            **result.public_metadata(),
+            "suggestion_count": len(list(result.data.get("mappings") or [])),
+            "applied_count": applied,
+        }
 
     def _row_context(self, run: EtlRun, upload: EtlUpload, source_row: int) -> dict[str, Any]:
         return {

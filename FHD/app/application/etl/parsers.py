@@ -414,6 +414,21 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
     if suffix == ".csv":
         return _parse_csv(source, max_rows, target_type)
     if suffix in STRUCTURED_SUFFIXES:
+        if target_type == "customer_products":
+            try:
+                from app.application.etl.parser_regions import (
+                    parse_customer_product_regions,
+                )
+
+                regional = parse_customer_product_regions(source, max_rows=max_rows)
+            except EtlError:
+                raise
+            except Exception:  # noqa: BLE001 - legacy presets remain a safe fallback
+                regional = None
+            if regional is not None and _covers_required_target_fields(
+                regional, target_type
+            ):
+                return regional
         from app.application.etl.shipment_compat_parser import (
             parse_delivery_note_with_compat_profile,
         )

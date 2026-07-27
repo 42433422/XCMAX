@@ -415,6 +415,40 @@ describe('EtlCenterView folder workflow', () => {
     wrapper.unmount()
   })
 
+  it('shows multi-region planning and software LLM participation', async () => {
+    const run = previewRun()
+    run.source_features = {
+      region_summary: { selected: 2, excluded: 3, business_rows: 6 },
+      regions: [
+        {
+          id: '业务员甲!R3C1:10',
+          sheet: '业务员甲',
+          header_row: 3,
+          status: 'selected',
+          customer_name: '甲家具',
+        },
+        {
+          id: '报价!R2C1:5',
+          sheet: '报价',
+          header_row: 2,
+          status: 'excluded',
+        },
+      ],
+      llm_structure: { used_llm: true, degraded: false },
+    }
+    etlApiMock.run.mockResolvedValue(run)
+
+    const wrapper = await mountView(run.id)
+    await buttonByText(wrapper, '预演确认')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('已识别 2 个业务区块')
+    expect(wrapper.text()).toContain('排除 3 个其他区块')
+    expect(wrapper.text()).toContain('软件 LLM 已参与结构或字段建议')
+    expect(wrapper.text()).toContain('客户 甲家具')
+    wrapper.unmount()
+  })
+
   it('loads history receipts, retries failures, and rolls back confirmed internal writes', async () => {
     const completed = completedRun()
     const failed = {
