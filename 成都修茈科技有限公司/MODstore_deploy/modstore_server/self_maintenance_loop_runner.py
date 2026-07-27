@@ -980,7 +980,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         return None
     max_retries = int(os.environ.get("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES") or "3")
     open_items_raw = memory.get("open_items")
-    escalated_items = []
     successfully_enqueued_items = []
     if isinstance(open_items_raw, list):
         # First pass: collect items exceeding max retries, but only mark escalated after successful enqueue for non-code items
@@ -1039,7 +1038,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                         if result.get("queued"):
                             item["escalated"] = True
                             successfully_enqueued_items.append(item_key)
-                            escalated_items.append(item)
                             logger.info(
                                 "successfully enqueued escalated item run_id=%s to human queue",
                                 item.get("run_id"),
@@ -1079,9 +1077,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             ]
         else:
             memory["open_items"] = open_items_raw
-    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
-    if escalated_items:
-        return None
+    # Escalated non-code failures are removed from open_items above; do not stop
+    # the whole loop when other branches still have executable remediation holds.
 
     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
     # return None to trigger a fresh code step. The employee will see the
