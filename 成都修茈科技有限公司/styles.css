@@ -958,6 +958,12 @@ body.page-contact .intake-wizard-actions {
   display: grid;
   place-items: center;
 }
+.contact-channel-btn__logo {
+  width: 48px;
+  height: 48px;
+  display: block;
+  object-fit: contain;
+}
 .contact-channel-btn__label {
   font-size: 14px;
   font-weight: 700;
