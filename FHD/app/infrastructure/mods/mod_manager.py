@@ -2,6 +2,7 @@
 Mod Manager - Core manager for scanning, loading, and managing mods
 """
 
+import hashlib
 import importlib
 import importlib.util
 import json
@@ -169,10 +170,7 @@ def _trusted_relative_file(parent: str, relative_path: str) -> str | None:
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
-    """
-    从指定 Mod 的 backend/<stem>.py 按文件路径加载为唯一模块名，避免多个 Mod 都叫 blueprints/services 时 sys.modules 冲突。
-    stem 不含 .py；允许 ``employees/name`` 这类 backend 内相对模块路径。
-    """
+    """按唯一模块名安全加载 Mod backend 文件，且不暴露未初始化模块。"""
     with _MOD_BACKEND_IMPORT_LOCK:
         backend_path = _trusted_child_path(mod_path, "backend", directory=True)
         path = _trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
@@ -180,14 +178,9 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
             raise FileNotFoundError(f"Mod {mod_id} backend file missing")
         safe = "".join(c if c.isalnum() else "_" for c in mod_id)
         # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
-        import hashlib
-
-        path_digest = hashlib.sha256(
-            os.path.normpath(os.path.abspath(mod_path)).encode()
-        ).hexdigest()[:16]
+        path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[:16]
         spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
-        existing = sys.modules.get(spec_name)
-        if existing is not None:
+        if existing := sys.modules.get(spec_name):
             return existing
         spec = importlib.util.spec_from_file_location(spec_name, path)
         if spec is None or spec.loader is None:
