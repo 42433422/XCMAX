@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlError
+from app.application.etl.mapping_assist import enhance_mappings_with_llm
 from app.application.etl.parser_structure import header_match_score
 from app.application.etl.parsers import (
     KNOWLEDGE_ONLY_SUFFIXES,
@@ -146,7 +147,7 @@ class PreviewServiceMixin:
                 deterministic_mappings = self._suggest_mappings(
                     dataset, get_adapter(run.target_type)
                 )
-                draft["field_mappings"], llm_mapping = self._enhance_mappings_with_llm(
+                draft["field_mappings"], llm_mapping = enhance_mappings_with_llm(
                     dataset,
                     get_adapter(run.target_type),
                     deterministic_mappings,
@@ -305,12 +306,8 @@ class PreviewServiceMixin:
                 run.processed_rows = index
                 db.commit()
         if advisory_jobs:
-            suggestions = self._adviser.suggest_many(
-                [payload for _row, payload in advisory_jobs]
-            )
-            for (row_record, _payload), advisory in zip(
-                advisory_jobs, suggestions, strict=False
-            ):
+            suggestions = self._adviser.suggest_many([payload for _row, payload in advisory_jobs])
+            for (row_record, _payload), advisory in zip(advisory_jobs, suggestions, strict=False):
                 row_record.llm_suggestion_json = dump_json(advisory)
                 llm_degraded = llm_degraded or bool(advisory.get("degraded"))
         run.new_rows = counts["new"]
@@ -421,85 +418,6 @@ class PreviewServiceMixin:
                     mapping["source"] = "document_path"
                     mapping["confidence"] = 1.0
         return mappings
-
-    @staticmethod
-    def _enhance_mappings_with_llm(
-        dataset: ParsedDataset,
-        adapter: TargetAdapter,
-        deterministic: list[dict[str, Any]],
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Fill only weak/unmapped pairs from a bounded structured-output suggestion."""
-        if adapter.allow_dynamic_fields or not dataset.rows:
-            return deterministic, {
-                "used_llm": False,
-                "advisory_only": True,
-                "degraded": False,
-                "reason": "dynamic_or_empty_dataset",
-            }
-        from app.application.etl.llm_assist import advise_field_mappings
-
-        samples: dict[str, list[str]] = {}
-        for header in dataset.headers[:100]:
-            values: list[str] = []
-            for row in dataset.rows[:20]:
-                value = row.values.get(header)
-                if value in (None, ""):
-                    continue
-                text = str(value)[:160]
-                if text not in values:
-                    values.append(text)
-                if len(values) >= 3:
-                    break
-            samples[header] = values
-        result = advise_field_mappings(
-            headers=list(dataset.headers),
-            samples=samples,
-            target_fields=[
-                {
-                    "key": field.key,
-                    "label": field.label,
-                    "type": field.type,
-                    "required": field.required,
-                    "aliases": list(field.aliases),
-                }
-                for field in adapter.fields
-            ],
-        )
-        enhanced = [dict(mapping) for mapping in deterministic]
-        by_target = {str(mapping.get("target") or ""): mapping for mapping in enhanced}
-        used_sources = {
-            str(mapping.get("source") or "")
-            for mapping in enhanced
-            if mapping.get("source") and float(mapping.get("confidence") or 0.0) >= 0.9
-        }
-        applied = 0
-        for suggestion in list(result.data.get("mappings") or []):
-            target = str(suggestion.get("target") or "")
-            source = str(suggestion.get("source") or "")
-            mapping = by_target.get(target)
-            if mapping is None or source in used_sources:
-                continue
-            current_confidence = float(mapping.get("confidence") or 0.0)
-            llm_confidence = float(suggestion.get("confidence") or 0.0)
-            if current_confidence >= 0.9 or llm_confidence < 0.85:
-                continue
-            transform = str(suggestion.get("transform") or "")
-            mapping.update(
-                {
-                    "source": source,
-                    "confidence": llm_confidence,
-                    "transforms": [{"op": transform}] if transform else [],
-                    "suggested_by": "llm",
-                    "reason": str(suggestion.get("reason") or "")[:300],
-                }
-            )
-            used_sources.add(source)
-            applied += 1
-        return enhanced, {
-            **result.public_metadata(),
-            "suggestion_count": len(list(result.data.get("mappings") or [])),
-            "applied_count": applied,
-        }
 
     def _row_context(self, run: EtlRun, upload: EtlUpload, source_row: int) -> dict[str, Any]:
         return {

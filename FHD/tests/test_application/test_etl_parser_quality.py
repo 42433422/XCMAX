@@ -108,14 +108,18 @@ def test_mixed_workbook_splits_two_delivery_regions_and_excludes_other_domains(
         sheet.title = "业务员甲"
         sheet.append(["某公司送货单"])
         sheet.append(["购货单位：甲家具  联系人：张总  2026年01月21日  订单编号：A-1"])
-        sheet.append(["产品型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        sheet.append(
+            ["产品型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"]
+        )
         sheet.append(["P-1", "底漆", 1, 20, 20, 10, 200])
         sheet.append([None, "固化剂", 1, 20, 20, 12, 240])
         sheet.append(["合 计", None, 2, None, None, None, 440])
         sheet.append([])
         sheet.append(["某公司送货单"])
         sheet.append(["购货单位（乙方）：乙家具  联系人：王总  日期2025年04月14日  订单编号：B-1"])
-        sheet.append(["产品型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        sheet.append(
+            ["产品型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"]
+        )
         sheet.append([None, "面漆", 2, 25, 50, 17, 850])
         sheet.append([None, "运费", None, None, None, None, 60])
         sheet.append(["合计", None, 2, None, None, None, 910])
@@ -144,10 +148,7 @@ def test_mixed_workbook_splits_two_delivery_regions_and_excludes_other_domains(
     assert summary["selected"] == 2
     assert summary["business_rows"] == 3
     assert any(region["role"] == "product_catalog" for region in dataset.source_features["regions"])
-    assert any(
-        warning["code"] == "ETL_NON_PRODUCT_CHARGES_SKIPPED"
-        for warning in dataset.warnings
-    )
+    assert any(warning["code"] == "ETL_NON_PRODUCT_CHARGES_SKIPPED" for warning in dataset.warnings)
 
 
 def test_csv_preamble_and_dirty_values_are_normalized_deterministically(tmp_path):

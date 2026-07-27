@@ -100,11 +100,9 @@ def _header_candidate(values: tuple[Any, ...] | list[Any]) -> dict[str, Any] | N
 
 
 def _joined_row(values: tuple[Any, ...] | list[Any], *, max_col: int = 30) -> str:
-    return " ".join(
-        text
-        for value in list(values)[:max_col]
-        if (text := clean_cell_text(value))
-    )[:2000]
+    return " ".join(text for value in list(values)[:max_col] if (text := clean_cell_text(value)))[
+        :2000
+    ]
 
 
 def _extract_meta(
@@ -154,8 +152,7 @@ def _region_role(
     header: dict[str, Any],
 ) -> str:
     context = " ".join(
-        _joined_row(values, max_col=int(header["last_col"]))
-        for _row, values in context_rows[-4:]
+        _joined_row(values, max_col=int(header["last_col"])) for _row, values in context_rows[-4:]
     )
     combined = f"{sheet_name} {context}"
     if _FINANCE_RE.search(combined):
@@ -172,17 +169,11 @@ def _region_role(
 
 
 def _is_total_row(values: tuple[Any, ...] | list[Any], *, max_col: int) -> bool:
-    cells = [
-        clean_cell_text(value)
-        for value in list(values)[:max_col]
-        if clean_cell_text(value)
-    ]
+    cells = [clean_cell_text(value) for value in list(values)[:max_col] if clean_cell_text(value)]
     if not cells:
         return False
     first = semantic_key(cells[0])
-    return first in {"合计", "总计", "小计", "汇总"} or bool(
-        _TOTAL_RE.match(" ".join(cells[:2]))
-    )
+    return first in {"合计", "总计", "小计", "汇总"} or bool(_TOTAL_RE.match(" ".join(cells[:2])))
 
 
 def _value_at(values: tuple[Any, ...] | list[Any], column: int | None) -> Any:
@@ -320,13 +311,9 @@ def parse_customer_product_regions(path: Path, *, max_rows: int) -> ParsedDatase
                                 "customer_name": active["meta"]["customer_name"],
                             }
                             if active["meta"].get("contact_person"):
-                                source_values["contact_person"] = active["meta"][
-                                    "contact_person"
-                                ]
+                                source_values["contact_person"] = active["meta"]["contact_person"]
                             if active["meta"].get("contact_phone"):
-                                source_values["contact_phone"] = active["meta"][
-                                    "contact_phone"
-                                ]
+                                source_values["contact_phone"] = active["meta"]["contact_phone"]
                             original_fragment: dict[str, Any] = {}
                             columns: dict[str, int] = {}
                             for field, column in mapping.items():
@@ -371,9 +358,7 @@ def parse_customer_product_regions(path: Path, *, max_rows: int) -> ParsedDatase
                                         "meta_evidence": list(
                                             active["meta"].get("evidence_rows") or []
                                         ),
-                                        "external_order_no": active["meta"].get(
-                                            "order_number"
-                                        ),
+                                        "external_order_no": active["meta"].get("order_number"),
                                         "order_date": active["meta"].get("order_date"),
                                         "original_fragment": original_fragment,
                                         "columns": columns,
