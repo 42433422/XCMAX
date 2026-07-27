@@ -372,17 +372,13 @@ chmod 0644 \
   /etc/systemd/system/xcmax-dr-scheduler.service
 [[ ! -f /etc/systemd/system/xcmax-dr-payment.service ]] ||
   chmod 0644 /etc/systemd/system/xcmax-dr-payment.service
-cat >/etc/cron.d/xcmax-dr <<'EOF'
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-CRON_TZ=Asia/Shanghai
-
-# 校验 incoming 并封存为接收账号不可改写的 root 归档。
-*/10 * * * * root /usr/local/sbin/xcmax-dr-finalize >/dev/null 2>&1
-# 仅在 latest 快照变化时恢复；API 切换期间短暂停止本机 MODstore。
-7,22,37,52 * * * * root /usr/local/sbin/xcmax-dr-restore-latest >/dev/null 2>&1
-EOF
-chmod 0644 /etc/cron.d/xcmax-dr
+# /etc/cron.d/xcmax-dr is owned by xcmax_dr_install.sh.  Do not rewrite it
+# here: this helper also runs after every release apply, and an older two-line
+# cron block would silently remove WAL standby and exact-release schedules.
+[[ -f /etc/cron.d/xcmax-dr ]] || {
+  echo "缺少 /etc/cron.d/xcmax-dr，请先运行 xcmax_dr_install.sh" >&2
+  exit 1
+}
 
 systemctl daemon-reload
 systemctl disable --now \
