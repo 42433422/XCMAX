@@ -12,6 +12,7 @@ SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 CRON_FILE="/etc/cron.d/xcmax-dr"
 
 declare -A scripts=(
+  [xcmax_release_order.py]=xcmax-release-order
   [xcmax_dr_finalize.sh]=xcmax-dr-finalize
   [xcmax_dr_restore_latest.sh]=xcmax-dr-restore-latest
   [xcmax_dr_prepare_runtime.sh]=xcmax-dr-prepare-runtime

@@ -19,6 +19,7 @@ STATE="${OPS_DR_STATE:-/var/lib/xcmax-dr}"
 LOG="${OPS_DR_RELEASE_LOG:-/var/log/xcmax-dr/release-apply.log}"
 APP_GROUP="${OPS_DR_APP_GROUP:-xcmaxapp}"
 LOCK="/run/lock/xcmax-dr-release-apply.lock"
+RELEASE_ORDER="/usr/local/sbin/xcmax-release-order"
 REQUESTED_SHA=""
 if [[ "${1:-}" == "--sha" ]]; then
   REQUESTED_SHA="${2:-}"
@@ -42,6 +43,10 @@ install -d -m 0700 "$STATE" "$(dirname "$LOG")"
 touch "$LOG"
 exec 9>"$LOCK"
 flock -n 9 || exit 0
+[[ -x "$RELEASE_ORDER" ]] || {
+  echo "缺少发布顺序选择器: $RELEASE_ORDER" >&2
+  exit 1
+}
 
 log() {
   echo "[$(date -Is)] $*" | tee -a "$LOG"
@@ -61,23 +66,10 @@ wait_http() {
 if [[ -n "$REQUESTED_SHA" ]]; then
   incoming="$INCOMING/runtime-releases/$REQUESTED_SHA"
 else
-  current_modstore_sha="$(cat "$STATE/release_applied_modstore_sha" 2>/dev/null || true)"
-  current_fhd_sha="$(cat "$STATE/release_applied_fhd_sha" 2>/dev/null || true)"
   incoming="$(
-    while IFS= read -r candidate; do
-      candidate="${candidate#* }"
-      candidate_sha="$(basename "$candidate")"
-      if [[ -s "$candidate/modstore.MANIFEST.txt" &&
-        "$candidate_sha" != "$current_modstore_sha" ]] ||
-        [[ -s "$candidate/fhd.MANIFEST.txt" &&
-          "$candidate_sha" != "$current_fhd_sha" ]]; then
-        printf '%s\n' "$candidate"
-        break
-      fi
-    done < <(
-      find "$INCOMING/runtime-releases" -mindepth 1 -maxdepth 1 -type d \
-        -printf '%T@ %p\n' 2>/dev/null | sort -nr
-    )
+    "$RELEASE_ORDER" \
+      --incoming "$INCOMING/runtime-releases" \
+      --state "$STATE" select
   )"
 fi
 [[ -n "${incoming:-}" && -d "$incoming" ]] || exit 0
@@ -102,11 +94,27 @@ prepare_shared_venv() {
 }
 
 apply_modstore() {
+  local candidate_created_at rc
   [[ -s "$incoming/modstore.MANIFEST.txt" ]] || return 0
-  if [[ -f "$STATE/release_applied_modstore_sha" ]] &&
+  if [[ -z "$REQUESTED_SHA" ]]; then
+    "$RELEASE_ORDER" \
+      --incoming "$INCOMING/runtime-releases" \
+      --state "$STATE" should-apply \
+      --candidate "$incoming" --component modstore || {
+        rc="$?"
+        [[ "$rc" == "3" ]] && return 0
+        return "$rc"
+      }
+  elif [[ -f "$STATE/release_applied_modstore_sha" ]] &&
     [[ "$(cat "$STATE/release_applied_modstore_sha")" == "$sha" ]]; then
     return 0
   fi
+  candidate_created_at="$(
+    "$RELEASE_ORDER" \
+      --incoming "$INCOMING/runtime-releases" \
+      --state "$STATE" created-at \
+      --candidate "$incoming" --component modstore
+  )"
   (cd "$incoming" && sha256sum -c modstore.MANIFEST.txt)
   target="$release/source"
   systemctl stop xcmax-dr-modstore 2>/dev/null || true
@@ -144,15 +152,33 @@ apply_modstore() {
   systemctl restart xcmax-dr-modstore
   wait_http http://127.0.0.1:19999/api/health
   printf '%s\n' "$sha" >"$STATE/release_applied_modstore_sha"
+  printf '%s\n' "$candidate_created_at" \
+    >"$STATE/release_applied_modstore_created_at"
   log "MODstore DR 代码已切换: $sha"
 }
 
 apply_fhd() {
+  local candidate_created_at rc
   [[ -s "$incoming/fhd.MANIFEST.txt" ]] || return 0
-  if [[ -f "$STATE/release_applied_fhd_sha" ]] &&
+  if [[ -z "$REQUESTED_SHA" ]]; then
+    "$RELEASE_ORDER" \
+      --incoming "$INCOMING/runtime-releases" \
+      --state "$STATE" should-apply \
+      --candidate "$incoming" --component fhd || {
+        rc="$?"
+        [[ "$rc" == "3" ]] && return 0
+        return "$rc"
+      }
+  elif [[ -f "$STATE/release_applied_fhd_sha" ]] &&
     [[ "$(cat "$STATE/release_applied_fhd_sha")" == "$sha" ]]; then
     return 0
   fi
+  candidate_created_at="$(
+    "$RELEASE_ORDER" \
+      --incoming "$INCOMING/runtime-releases" \
+      --state "$STATE" created-at \
+      --candidate "$incoming" --component fhd
+  )"
   (cd "$incoming" && sha256sum -c fhd.MANIFEST.txt)
   artifact="$(
     python3 - "$incoming/fhd-manifest.json" <<'PY'
@@ -194,6 +220,8 @@ PY
     wait_http http://127.0.0.1:15100/api/health
   fi
   printf '%s\n' "$sha" >"$STATE/release_applied_fhd_sha"
+  printf '%s\n' "$candidate_created_at" \
+    >"$STATE/release_applied_fhd_created_at"
   log "FHD DR 代码已切换: $sha"
 }
 
