@@ -641,7 +641,98 @@
 
 
 <script src="./contact-intake.js?v=20260727b"></script>
-<script src="./contact-channels.js?v=20260727a"></script>
+<script src="./contact-channels.js?v=20260727d"></script>
+<script>
+/* 渠道点击兜底：外链脚本 404 / 被发版冲掉时仍可展开企微面板 */
+;(function () {
+  function bootContactChannels() {
+    if (window.__contactChannelsReady) return
+    window.__contactChannelsReady = true
+    var root = document.querySelector('.contact-channels')
+    if (!root) return
+    var buttons = Array.prototype.slice.call(
+      root.querySelectorAll('.contact-channel-btn[data-channel]'),
+    )
+    var panels = Array.prototype.slice.call(root.querySelectorAll('[data-channel-panel]'))
+    function closeAll() {
+      buttons.forEach(function (btn) {
+        btn.classList.remove('is-open')
+        btn.setAttribute('aria-expanded', 'false')
+      })
+      panels.forEach(function (panel) {
+        panel.hidden = true
+      })
+    }
+    function openChannel(channel) {
+      var btn = buttons.find(function (item) {
+        return item.getAttribute('data-channel') === channel
+      })
+      var panel = panels.find(function (item) {
+        return item.getAttribute('data-channel-panel') === channel
+      })
+      if (!btn || !panel) return
+      var alreadyOpen = btn.getAttribute('aria-expanded') === 'true'
+      closeAll()
+      if (alreadyOpen) return
+      btn.classList.add('is-open')
+      btn.setAttribute('aria-expanded', 'true')
+      panel.hidden = false
+      if (panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openChannel(btn.getAttribute('data-channel') || '')
+      })
+    })
+    Array.prototype.slice
+      .call(root.querySelectorAll('[data-copy-target]'))
+      .forEach(function (copyBtn) {
+        copyBtn.addEventListener('click', function () {
+          var targetId = copyBtn.getAttribute('data-copy-target') || ''
+          var target = targetId ? document.getElementById(targetId) : null
+          var text = ((target && target.textContent) || '').replace(/^\s+|\s+$/g, '')
+          var status = document.getElementById('contact-wecom-copy-status')
+          if (!text) return
+          function ok() {
+            if (status) status.textContent = '已复制企微客服链接'
+            window.setTimeout(function () {
+              if (status) status.textContent = ''
+            }, 2200)
+          }
+          function fail() {
+            if (status) status.textContent = '复制失败，请手动选择链接'
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(ok).catch(fail)
+            return
+          }
+          try {
+            var ta = document.createElement('textarea')
+            ta.value = text
+            ta.setAttribute('readonly', '')
+            ta.style.position = 'fixed'
+            ta.style.left = '-9999px'
+            document.body.appendChild(ta)
+            ta.select()
+            document.execCommand('copy')
+            document.body.removeChild(ta)
+            ok()
+          } catch (e) {
+            fail()
+          }
+        })
+      })
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeAll()
+    })
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootContactChannels)
+  } else {
+    bootContactChannels()
+  }
+})()
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   setTimeout(function () {
