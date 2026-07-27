@@ -242,6 +242,15 @@ export function blockingMergePollReason(pr, prNumber = '') {
   return '';
 }
 
+export function parseMergePollSnapshot(output) {
+  const pr = JSON.parse(String(output || '{}'));
+  return {
+    pr,
+    prState: String(pr.state || '').toUpperCase(),
+    mergeOid: String(pr.mergeCommit?.oid || ''),
+  };
+}
+
 export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
   const attempts = Math.max(0, Number(previous?.attempts || 0)) + 1;
   const delayMs = mergeRetryDelayMs(attempts);
@@ -846,6 +855,7 @@ async function mergePR(workspace, prNumber, repoFull) {
   // 轮询等待 PR merged（最多 30 分钟，每 30s 查一次）
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 30_000));
+    let pr = {};
     let prState = '';
     let mergeOid = '';
     try {
@@ -854,9 +864,7 @@ async function mergePR(workspace, prNumber, repoFull) {
         maxBuffer: 10 * 1024 * 1024,
         timeout: 30_000,
       });
-      const pr = JSON.parse(stdout || '{}');
-      prState = String(pr.state || '').toUpperCase();
-      mergeOid = String(pr.mergeCommit?.oid || '');
+      ({ pr, prState, mergeOid } = parseMergePollSnapshot(stdout));
     } catch (err) {
       log(`  轮询 PR #${prNumber} 状态失败: ${String(err).slice(0, 200)}`);
       continue;

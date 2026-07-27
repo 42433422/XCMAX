@@ -19,6 +19,7 @@ import {
   isTransientMergeFailure,
   mergeRetryDelayMs,
   nextMergeRetryState,
+  parseMergePollSnapshot,
   parseGithubRepo,
   parseReviewVerdict,
   reviewDiffInChunks,
@@ -167,6 +168,21 @@ test('merge polling stops for a restored human veto or terminal check failure', 
       730,
     ),
     '',
+  );
+});
+
+test('merge polling preserves the parsed PR snapshot for post-fetch policy checks', () => {
+  const snapshot = parseMergePollSnapshot(JSON.stringify({
+    state: 'OPEN',
+    mergeCommit: null,
+    labels: [{ name: 'hold-merge' }],
+    statusCheckRollup: [],
+  }));
+  assert.equal(snapshot.prState, 'OPEN');
+  assert.equal(snapshot.mergeOid, '');
+  assert.equal(
+    blockingMergePollReason(snapshot.pr, 761),
+    'manual-veto-active: PR #761 has hold-merge label',
   );
 });
 
