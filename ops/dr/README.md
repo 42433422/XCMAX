@@ -99,6 +99,28 @@ fence proof 格式：
 `/etc/xcmax-dr-auto-failover.env` 中的开关改为 `1`。自动回切默认禁止；
 旧主恢复后必须先确认其应用、scheduler 和数据库写入均被隔离，再重建为 standby。
 
+腾讯云 fencing 已提供执行器 `xcmax-dr-tencent-fence`。在 DR 预装 `tccli`，
+推荐给 DR CVM 绑定仅允许 `cvm:DescribeInstances`、`cvm:StopInstances`
+的 CAM 实例角色，其中 `StopInstances` 的资源限定到生产实例
+`ins-fsv07ypz`。root-only
+`/etc/xcmax-dr-tencent-fence.env`：
+
+```bash
+OPS_DR_TENCENT_USE_CVM_ROLE=1
+OPS_DR_PRIMARY_REGION=ap-chengdu
+OPS_DR_PRIMARY_INSTANCE_ID=ins-fsv07ypz
+OPS_DR_PRIMARY_IP=119.27.178.147
+```
+
+无法使用实例角色时可将 `OPS_DR_TENCENT_USE_CVM_ROLE=0`，再写入专用 CAM
+子用户的 `TENCENTCLOUD_SECRET_ID` 和 `TENCENTCLOUD_SECRET_KEY`；不要复用
+主账号密钥。
+
+只有前述三轮外部证据已满足时 guard 才调用 fencing；确认实例状态为
+`STOPPED`（主动关机还要求 `LatestOperationState=SUCCESS`）后才生成五分钟
+有效 proof 并提升数据库。CAM 凭据未配置或权限
+不足时保持 standby，不会降级为无 fencing 提升。
+
 ## 日常检查
 
 ```bash

@@ -19,6 +19,7 @@ declare -A scripts=(
   [xcmax_dr_prepare_tunnel_primary.sh]=xcmax-dr-prepare-tunnel-primary
   [xcmax_dr_prepare_active_peer.sh]=xcmax-dr-prepare-active-peer
   [xcmax_dr_failover_guard.py]=xcmax-dr-failover-guard
+  [xcmax_dr_tencent_fence.sh]=xcmax-dr-tencent-fence
   [xcmax_wal_prepare_standby.sh]=xcmax-dr-prepare-standby
   [xcmax_wal_prepare_standby_pg16.sh]=xcmax-dr-prepare-standby-pg16
   [xcmax_dr_apply_release.sh]=xcmax-dr-apply-release
@@ -46,6 +47,7 @@ OPS_DR_DOMAIN=xiu-ci.com
 OPS_DR_PRIMARY_HEALTH_PATH=/fhd-api/api/health
 OPS_DR_FAILOVER_THRESHOLD=3
 OPS_DR_FENCE_PROOF=/var/lib/xcmax-dr/provider-fence-proof.json
+OPS_DR_FENCE_COMMAND=/usr/local/sbin/xcmax-dr-tencent-fence
 EOF
   chmod 0600 /etc/xcmax-dr-auto-failover.env
 fi

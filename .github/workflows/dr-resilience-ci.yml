@@ -70,6 +70,11 @@ jobs:
           grep -q -- '--witness-file' ops/dr/xcmax_dr_promote.sh
           grep -q 'provider_fence_proof_missing' \
             ops/dr/xcmax_dr_failover_guard.py
+          grep -q 'StopInstances' ops/dr/xcmax_dr_tencent_fence.sh
+          grep -q 'DescribeInstances' ops/dr/xcmax_dr_tencent_fence.sh
+          grep -q -- '--StopType SOFT_FIRST' \
+            ops/dr/xcmax_dr_tencent_fence.sh
+          grep -q 'LatestOperationState' ops/dr/xcmax_dr_tencent_fence.sh
           grep -q 'authoritative_dns_has_not_fenced_primary' \
             ops/dr/xcmax_dr_failover_guard.py
           grep -q 'OPS_DR_AUTO_FAILOVER_ENABLED=0' \

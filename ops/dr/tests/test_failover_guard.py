@@ -79,6 +79,15 @@ class FailoverDecisionTest(unittest.TestCase):
                 GUARD.valid_fence_proof(path, "119.27.178.147", 201)
             )
 
+    def test_fence_command_must_be_root_owned_and_not_group_writable(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = (Path(tempdir) / "fence").resolve()
+            path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            os.chmod(path, 0o755)
+            self.assertEqual(GUARD.trusted_executable(path), os.geteuid() == 0)
+            os.chmod(path, 0o775)
+            self.assertFalse(GUARD.trusted_executable(path))
+
 
 if __name__ == "__main__":
     unittest.main()
