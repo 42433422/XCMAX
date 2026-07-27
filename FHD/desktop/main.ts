@@ -914,6 +914,7 @@ function runBackendMigration(options: {
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
+      XCAGI_SKIP_DESKTOP_RECOVERY_CHECK: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1',
     },

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from unittest.mock import Mock
 
 from app.desktop_runtime.database_profile import (
     apply_database_profile_to_env,
@@ -37,6 +38,17 @@ def test_configure_desktop_environment_sets_local_defaults(tmp_path, monkeypatch
     assert prof_path.is_file()
     assert profile["mode"] == "local"
     assert profile["remote"]["enabled"] is False
+
+
+def test_configure_desktop_environment_can_skip_duplicate_recovery_check(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("XCAGI_SKIP_DESKTOP_RECOVERY_CHECK", "1")
+    recover = Mock()
+    monkeypatch.setattr("app.desktop_runtime.migrate.recover_if_corrupt", recover)
+
+    configure_desktop_environment(tmp_path)
+
+    recover.assert_not_called()
 
 
 def test_database_profile_creates_default_json(tmp_path):
