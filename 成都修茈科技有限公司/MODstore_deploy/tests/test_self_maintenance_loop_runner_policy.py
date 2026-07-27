@@ -1180,6 +1180,31 @@ def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
     }
 
 
+def test_resume_review_qa_candidate_retries_executor_outage_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-executor-outage",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_executor_unavailable",
+                "run_id": "r-executor-outage",
+                "task_id": "task-executor-outage",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-executor-outage",
+        "failed_run_id": "r-executor-outage",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-executor-outage",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_only():
     branch = "devfleet/cursor/sub-1-legacy-target-ref"
     memory = {
@@ -1624,6 +1649,49 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_classifies_executor_outage_separately(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    outage = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":['
+                '"QA worker shell execution backend unavailable; could not run focused pytest.",'
+                '"Missing successful focused tested_commands entry.",'
+                '"Diff review not executed due same backend failure."],'
+                '"tested_commands":[{"command":"runtime-python -m pytest focused.py -q",'
+                '"exit_code":1,"status":"failed"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"new_failures":["focused pytest not executed"],'
+                '"new_errors":["shell execution backend unavailable; no observable exit codes"]},'
+                '"changed_files_scope":"medium","risk_class":"high"}'
+            ),
+        }
+    ]
+    real_failure = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["focused pytest assertion failed"],'
+                '"tested_commands":[{"command":"runtime-python -m pytest focused.py -q",'
+                '"exit_code":1,"status":"failed"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"new_failures":["test_policy assertion failed"],'
+                '"new_errors":[]},'
+                '"changed_files_scope":"medium","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(outage)["reason"] == "structured_qa_executor_unavailable"
+    assert _structured_report_gate(real_failure)["reason"] == "structured_qa_verdict_not_pass"
 
 
 def test_structured_report_gate_prioritizes_missing_target_ref(monkeypatch):

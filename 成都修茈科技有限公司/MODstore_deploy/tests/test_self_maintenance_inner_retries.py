@@ -355,6 +355,57 @@ def test_review_step_incomplete_dimensions_protocol_rerun(monkeypatch, captured_
     assert "missing_dimensions" in calls[1]["task_text"]
 
 
+def test_qa_executor_outage_retries_fresh_report_only_task(monkeypatch, captured_ledger):
+    """QA shell outage is infrastructure evidence, so retry QA instead of accepting FAIL."""
+    outage_report = (
+        "SELF_MAINTENANCE_QA_JSON: "
+        '{"verdict":"FAIL","blocking_findings":['
+        '"QA worker shell execution backend unavailable; could not run focused pytest.",'
+        '"Missing successful focused tested_commands entry.",'
+        '"Diff review not executed due same backend failure."],'
+        '"tested_commands":[{"command":"python -m pytest focused.py -q",'
+        '"exit_code":1,"status":"failed"}],'
+        '"quality_checks":{},'
+        '"target_branch_available":true,'
+        '"test_delta":{"new_failures":["focused pytest not executed"],'
+        '"new_errors":["shell execution backend unavailable; no observable exit codes"]},'
+        '"changed_files_scope":"medium","risk_class":"high"}'
+    )
+    pass_report = (
+        "SELF_MAINTENANCE_QA_JSON: "
+        '{"verdict":"PASS","blocking_findings":[],'
+        '"tested_commands":[{"command":"python -m pytest focused.py -q",'
+        '"exit_code":0,"status":"passed"}],'
+        '"quality_checks":{},'
+        '"target_branch_available":true,'
+        '"test_delta":{"new_failures":[],"new_errors":[]},'
+        '"changed_files_scope":"low","risk_class":"low"}'
+    )
+    calls = _patch_dispatch(
+        monkeypatch,
+        [
+            _make_result(ok=True, report=outage_report),
+            _make_result(ok=True, report=pass_report),
+        ],
+    )
+
+    _, ok, _, _, report, _, marker_rounds = mod._run_step_with_inner_retries(
+        employee_id="test-qa-runner",
+        step_name="qa",
+        task_text="base qa",
+        extra={},
+        user_id=1,
+        run_id="run-qa-executor-retry",
+    )
+
+    assert ok is True
+    assert marker_rounds == 1
+    assert pass_report in report
+    assert len(calls) == 2
+    assert "PREVIOUS QA EXECUTOR UNAVAILABLE" in calls[1]["task_text"]
+    assert captured_ledger[0]["error"] == "structured_qa_executor_unavailable"
+
+
 def test_review_step_dispatch_failure_no_inner_retry(monkeypatch, captured_ledger):
     """review step dispatch 失败 → 不重试内层（_execute_employee_task_with_retries 已重试瞬态）。"""
     calls = _patch_dispatch(
