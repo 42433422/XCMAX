@@ -34,12 +34,27 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     rejected_branch = str(candidate.get("branch") or "").strip()
     remediation_reason = str(candidate.get("remediation_reason") or "").strip()
     feedback = str(candidate.get("remediation_feedback") or "").strip()[:4000]
+    continue_on_branch = bool(candidate.get("continue_existing_code_task"))
+    if continue_on_branch:
+        strategy = (
+            "The previous Para merge task failed during post-dispatch required-check polling, "
+            "after the candidate branch already passed code/review/qa. Continue on the rejected "
+            "branch as the mutable base: diff it against main, keep the existing production fix "
+            "when already present on main, and only add the smallest delta still missing. Do not "
+            "restart from the clean baseline or reimplement an already-merged fix. If every "
+            "executable gap is already on main, update loop status with NO_ACTION instead of "
+            "marker-only edits."
+        )
+    else:
+        strategy = (
+            "The previous Para merge task ended in a terminal failure. Start from the configured "
+            "clean base. Use the rejected branch only as read-only evidence, then reproduce the "
+            "smallest valid production fix and focused regression test; do not inherit or "
+            "cherry-pick the whole rejected diff."
+        )
     return (
         "\n\n=== EXTERNAL MERGE FAILURE REMEDIATION ===\n"
-        "The previous Para merge task ended in a terminal failure. Start from the configured "
-        "clean base. Use the rejected branch only as read-only evidence, then reproduce the "
-        "smallest valid production fix and focused regression test; do not inherit or cherry-pick "
-        "the whole rejected diff. "
+        f"{strategy} "
         f"Reason: {remediation_reason or '(missing)'}. "
         f"Rejected reference branch: {rejected_branch or '(missing)'}. "
         f"Exact failure detail: {feedback or '(missing)'}"

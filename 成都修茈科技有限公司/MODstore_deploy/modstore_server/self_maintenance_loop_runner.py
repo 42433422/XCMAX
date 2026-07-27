@@ -2340,6 +2340,12 @@ def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
     return task if isinstance(task, dict) else {}
 
 
+def _is_para_post_dispatch_merge_failure(detail: str) -> bool:
+    """True when merge-worker stopped after required checks failed post-dispatch."""
+
+    return str(detail or "").strip().lower().startswith("post-dispatch-check-failed:")
+
+
 def _reconcile_requested_merge_feedback(
     memory: Dict[str, Any],
     *,
@@ -2463,6 +2469,9 @@ def _reconcile_requested_merge_feedback(
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
+            resume_from_clean_baseline = not (
+                reason == "para_merge_conflict" and _is_para_post_dispatch_merge_failure(detail)
+            )
             open_items.append(
                 {
                     "branch": rejected_branch,
@@ -2472,7 +2481,7 @@ def _reconcile_requested_merge_feedback(
                     "para_task_id": task_id,
                     "reason": reason,
                     "rejected_branch": rejected_branch,
-                    "resume_from_clean_baseline": True,
+                    "resume_from_clean_baseline": resume_from_clean_baseline,
                     "review_feedback": detail if source == "ai-review-veto" else "",
                     "run_id": str(run.get("run_id") or "").strip(),
                     "source": source,
