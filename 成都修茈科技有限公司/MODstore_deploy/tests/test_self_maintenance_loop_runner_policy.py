@@ -3385,6 +3385,50 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
     assert result is None
 
 
+def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatch):
+    """Exhausted QA on one branch must not prevent code resume on another hold."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        lambda *args, **kwargs: {"queued": True},
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-29b56e",
+                "kind": "failed_steps",
+                "para_task_id": "b3fd2376-34fd-4c14-91da-0e773229b56e",
+                "retry_count": 3,
+                "run_id": "f3e7bd4a-87df-4ed6-a95f-b8beaf747c32",
+                "steps": ["qa"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["reason"] == "structured_review_blocking_findings"
+
+
 def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
     """code类失败项应打印代码重试日志，而不是escalating to human review。"""
     from modstore_server import self_maintenance_loop_runner as loop_runner
