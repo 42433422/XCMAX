@@ -2343,7 +2343,9 @@ def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
 def _is_para_post_dispatch_merge_failure(detail: str) -> bool:
     """True when merge-worker stopped after required checks failed post-dispatch."""
 
-    return str(detail or "").strip().lower().startswith("post-dispatch-check-failed:")
+    normalized = str(detail or "").strip().lower()
+    # Para / merge-worker may prefix branch and "Error:" before the canonical token.
+    return "post-dispatch-check-failed:" in normalized
 
 
 def _reconcile_requested_merge_feedback(

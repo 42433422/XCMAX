@@ -2414,6 +2414,42 @@ def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():
     assert "docker-build-fhd-api" in prompt
 
 
+def test_reconcile_post_dispatch_merge_failure_continues_when_detail_is_prefixed():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-bd3ea8",
+                "para_task_id": "task-ci-prefixed",
+                "run_id": "run-ci-prefixed",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-bd3ea8",
+            "detail": (
+                "devfleet/cursor/sub-1-bd3ea8: Error: post-dispatch-check-failed: "
+                "PR #765 checks=docker-build-fhd-api"
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+
+
 # ---------------------------------------------------------------------------
 # _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
 # ---------------------------------------------------------------------------
