@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import csv
-import re
+import itertools
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from app.application.etl.errors import EtlError
+from app.application.etl.parser_structure import (
+    clean_cell_text,
+    detect_table_layout,
+    header_match_score,
+    is_auxiliary_sheet_name,
+    is_footer_or_note_row,
+    is_repeated_header,
+)
 from app.application.etl.parser_types import ParsedDataset, ParsedRow
 
 MAX_ROWS = 100_000
@@ -17,34 +25,107 @@ KNOWLEDGE_ONLY_SUFFIXES = {".doc", ".docx", ".ppt", ".pptx"}
 SUPPORTED_SUFFIXES = STRUCTURED_SUFFIXES | OCR_SUFFIXES | KNOWLEDGE_ONLY_SUFFIXES
 
 
-def _clean_header(value: Any, index: int) -> str:
-    text = re.sub(r"\s+", " ", str(value or "").strip())
-    return text[:160] if text else f"未命名列{index}"
+def _target_header_hints(target_type: str) -> list[str]:
+    try:
+        from app.application.etl.targets import get_adapter
+
+        adapter = get_adapter(target_type)
+    except EtlError:
+        return []
+    return [
+        value
+        for field in adapter.fields
+        for value in (field.key, field.label, *field.aliases)
+        if value
+    ]
 
 
-def _unique_headers(values: Iterable[Any]) -> list[str]:
-    seen: dict[str, int] = {}
-    result: list[str] = []
-    for index, raw in enumerate(values, start=1):
-        base = _clean_header(raw, index)
-        seen[base] = seen.get(base, 0) + 1
-        result.append(base if seen[base] == 1 else f"{base}_{seen[base]}")
+def _covers_required_target_fields(dataset: ParsedDataset, target_type: str) -> bool:
+    from app.application.etl.targets import get_adapter
+
+    adapter = get_adapter(target_type)
+    required_fields = [field for field in adapter.fields if field.required]
+    if not required_fields:
+        return True
+    pairs = sorted(
+        (
+            (
+                header_match_score(
+                    header,
+                    (field.key, field.label, *field.aliases),
+                ),
+                field_index,
+                header_index,
+            )
+            for field_index, field in enumerate(required_fields)
+            for header_index, header in enumerate(dataset.headers)
+        ),
+        reverse=True,
+    )
+    matched_fields: set[int] = set()
+    used_headers: set[int] = set()
+    for score, field_index, header_index in pairs:
+        if score < 0.75:
+            break
+        if field_index in matched_fields or header_index in used_headers:
+            continue
+        matched_fields.add(field_index)
+        used_headers.add(header_index)
+    return len(matched_fields) == len(required_fields)
+
+
+def _aligned_headers_by_sheet(
+    candidates: list[tuple[Any, Any]],
+    target_type: str,
+) -> dict[str, list[str]]:
+    """Align equivalent aliases across sheets to one source key per target field."""
+    from app.application.etl.targets import get_adapter
+
+    adapter = get_adapter(target_type)
+    if adapter.allow_dynamic_fields:
+        return {
+            worksheet.title: list(layout.headers)
+            for worksheet, layout in candidates
+            if layout is not None
+        }
+    canonical_by_field: dict[int, str] = {}
+    result: dict[str, list[str]] = {}
+    for worksheet, layout in candidates:
+        if layout is None:
+            continue
+        headers = list(layout.headers)
+        pairs = sorted(
+            (
+                (
+                    header_match_score(
+                        header,
+                        (field.key, field.label, *field.aliases),
+                    ),
+                    field_index,
+                    header_index,
+                )
+                for field_index, field in enumerate(adapter.fields)
+                for header_index, header in enumerate(headers)
+            ),
+            reverse=True,
+        )
+        used_fields: set[int] = set()
+        used_headers: set[int] = set()
+        for score, field_index, header_index in pairs:
+            # Only exact or contextual matches are safe to align automatically.
+            if score < 0.9:
+                break
+            if field_index in used_fields or header_index in used_headers:
+                continue
+            canonical = canonical_by_field.setdefault(field_index, headers[header_index])
+            headers[header_index] = canonical
+            used_fields.add(field_index)
+            used_headers.add(header_index)
+        result[worksheet.title] = headers
     return result
 
 
-def _header_score(values: list[Any]) -> float:
-    cells = [str(value or "").strip() for value in values]
-    non_empty = [value for value in cells if value]
-    if len(non_empty) < 2:
-        return -1
-    unique_ratio = len(set(non_empty)) / len(non_empty)
-    text_ratio = sum(not re.fullmatch(r"[-+]?\d+(?:\.\d+)?", value) for value in non_empty) / len(
-        non_empty
-    )
-    return len(non_empty) + unique_ratio + text_ratio
-
-
-def _parse_workbook(path: Path, max_rows: int) -> ParsedDataset:
+def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     from openpyxl import load_workbook
 
     workbook = load_workbook(
@@ -56,29 +137,56 @@ def _parse_workbook(path: Path, max_rows: int) -> ParsedDataset:
     result: list[ParsedRow] = []
     all_headers: list[str] = []
     sheets: list[dict[str, Any]] = []
+    skipped_sheets: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    repeated_header_count = 0
+    footer_count = 0
+    header_hints = _target_header_hints(target_type)
     try:
+        candidates: list[tuple[Any, Any]] = []
         for worksheet in workbook.worksheets:
-            probe = list(worksheet.iter_rows(min_row=1, max_row=20, values_only=True))
-            if not probe:
+            probe = list(worksheet.iter_rows(min_row=1, max_row=60, values_only=True))
+            layout = detect_table_layout(probe, header_hints=header_hints)
+            candidates.append((worksheet, layout))
+        any_target_match = any(
+            layout is not None and layout.matched_hint_count > 0 for _, layout in candidates
+        )
+        aligned_headers = _aligned_headers_by_sheet(candidates, target_type)
+
+        for worksheet, layout in candidates:
+            if layout is None:
+                skipped_sheets.append({"name": worksheet.title, "reason": "no_tabular_header"})
                 continue
-            header_offset, header_values = max(
-                enumerate(probe), key=lambda item: _header_score(list(item[1]))
-            )
-            if _header_score(list(header_values)) < 0:
+            if (
+                any_target_match
+                and layout.matched_hint_count == 0
+                and is_auxiliary_sheet_name(worksheet.title)
+            ):
+                skipped_sheets.append(
+                    {
+                        "name": worksheet.title,
+                        "reason": "auxiliary_sheet_without_target_fields",
+                    }
+                )
                 continue
-            headers = _unique_headers(header_values)
+            headers = aligned_headers.get(worksheet.title, layout.headers)
+            header_aliases = {
+                original: aligned
+                for original, aligned in zip(layout.headers, headers, strict=False)
+                if original != aligned
+            }
             all_headers.extend(header for header in headers if header not in all_headers)
             sheet_count = 0
             for row_number, values in enumerate(
-                worksheet.iter_rows(min_row=header_offset + 2, values_only=True),
-                start=header_offset + 2,
+                worksheet.iter_rows(min_row=layout.header_end + 2, values_only=True),
+                start=layout.header_end + 2,
             ):
-                if len(result) >= max_rows:
-                    raise EtlError(
-                        "ETL_ROW_LIMIT_EXCEEDED",
-                        f"文件超过 {max_rows} 行限制",
-                        status_code=413,
-                    )
+                if is_repeated_header(values, layout.headers):
+                    repeated_header_count += 1
+                    continue
+                if is_footer_or_note_row(values):
+                    footer_count += 1
+                    continue
                 data = {
                     headers[index]: value
                     for index, value in enumerate(values[: len(headers)])
@@ -86,6 +194,12 @@ def _parse_workbook(path: Path, max_rows: int) -> ParsedDataset:
                 }
                 if not data:
                     continue
+                if len(result) >= max_rows:
+                    raise EtlError(
+                        "ETL_ROW_LIMIT_EXCEEDED",
+                        f"文件超过 {max_rows} 行限制",
+                        status_code=413,
+                    )
                 result.append(
                     ParsedRow(
                         sheet=worksheet.title,
@@ -95,8 +209,14 @@ def _parse_workbook(path: Path, max_rows: int) -> ParsedDataset:
                             "sheet": worksheet.title,
                             "row": row_number,
                             "original_fragment": {
-                                headers[index]: value
+                                layout.headers[index]: value
                                 for index, value in enumerate(values[: len(headers)])
+                            },
+                            "header_aliases": header_aliases,
+                            "columns": {headers[index]: index + 1 for index in range(len(headers))},
+                            "header_rows": {
+                                "start": layout.header_start + 1,
+                                "end": layout.header_end + 1,
                             },
                         },
                     )
@@ -105,16 +225,55 @@ def _parse_workbook(path: Path, max_rows: int) -> ParsedDataset:
             sheets.append(
                 {
                     "name": worksheet.title,
-                    "header_row": header_offset + 1,
+                    "header_row": layout.header_end + 1,
+                    "header_start_row": layout.header_start + 1,
+                    "header_depth": layout.header_end - layout.header_start + 1,
+                    "header_confidence": layout.confidence,
+                    "header_reasons": list(layout.reasons),
+                    "matched_target_headers": layout.matched_hint_count,
+                    "source_headers": list(layout.headers),
+                    "aligned_headers": list(headers),
+                    "header_aliases": header_aliases,
                     "row_count": sheet_count,
                 }
             )
     finally:
         workbook.close()
+    if skipped_sheets:
+        warnings.append(
+            {
+                "code": "ETL_AUXILIARY_SHEETS_SKIPPED",
+                "message": f"已跳过 {len(skipped_sheets)} 个非业务或无法识别的工作表。",
+                "sheets": skipped_sheets,
+            }
+        )
+    if repeated_header_count:
+        warnings.append(
+            {
+                "code": "ETL_REPEATED_HEADERS_SKIPPED",
+                "message": f"已跳过 {repeated_header_count} 行重复表头。",
+                "count": repeated_header_count,
+            }
+        )
+    if footer_count:
+        warnings.append(
+            {
+                "code": "ETL_FOOTER_ROWS_SKIPPED",
+                "message": f"已跳过 {footer_count} 行合计、备注或签字尾行。",
+                "count": footer_count,
+            }
+        )
     return ParsedDataset(
         headers=all_headers,
         rows=result,
-        source_features={"kind": "workbook", "sheets": sheets, "headers": all_headers},
+        source_features={
+            "kind": "workbook",
+            "sheets": sheets,
+            "skipped_sheets": skipped_sheets,
+            "headers": all_headers,
+            "structure_detection": "deterministic_v2",
+        },
+        warnings=warnings,
     )
 
 
@@ -129,7 +288,7 @@ def _csv_reader(path: Path):
                 dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
             except csv.Error:
                 dialect = csv.excel
-            return handle, csv.reader(handle, dialect)
+            return handle, csv.reader(handle, dialect, skipinitialspace=True)
         except UnicodeDecodeError:
             if handle is not None:
                 handle.close()
@@ -137,19 +296,31 @@ def _csv_reader(path: Path):
     raise EtlError("ETL_CSV_ENCODING_UNSUPPORTED", "CSV 编码无法识别")
 
 
-def _parse_csv(path: Path, max_rows: int) -> ParsedDataset:
+def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     handle, reader = _csv_reader(path)
     try:
-        try:
-            headers = _unique_headers(next(reader))
-        except StopIteration:
+        probe = list(itertools.islice(reader, 60))
+        layout = detect_table_layout(
+            probe,
+            header_hints=_target_header_hints(target_type),
+        )
+        if layout is None:
             return ParsedDataset(headers=[], rows=[], source_features={"kind": "csv"})
+        headers = layout.headers
         rows: list[ParsedRow] = []
-        for row_number, values in enumerate(reader, start=2):
-            if len(rows) >= max_rows:
-                raise EtlError(
-                    "ETL_ROW_LIMIT_EXCEEDED", f"文件超过 {max_rows} 行限制", status_code=413
-                )
+        repeated_header_count = 0
+        footer_count = 0
+        remaining_probe = probe[layout.header_end + 1 :]
+        for row_number, values in enumerate(
+            itertools.chain(remaining_probe, reader),
+            start=layout.header_end + 2,
+        ):
+            if is_repeated_header(values, headers):
+                repeated_header_count += 1
+                continue
+            if is_footer_or_note_row(values):
+                footer_count += 1
+                continue
             data = {
                 headers[index]: value
                 for index, value in enumerate(values[: len(headers)])
@@ -157,6 +328,10 @@ def _parse_csv(path: Path, max_rows: int) -> ParsedDataset:
             }
             if not data:
                 continue
+            if len(rows) >= max_rows:
+                raise EtlError(
+                    "ETL_ROW_LIMIT_EXCEEDED", f"文件超过 {max_rows} 行限制", status_code=413
+                )
             rows.append(
                 ParsedRow(
                     sheet="CSV",
@@ -166,13 +341,46 @@ def _parse_csv(path: Path, max_rows: int) -> ParsedDataset:
                         "sheet": "CSV",
                         "row": row_number,
                         "original_fragment": dict(zip(headers, values)),
+                        "columns": {headers[index]: index + 1 for index in range(len(headers))},
+                        "header_rows": {
+                            "start": layout.header_start + 1,
+                            "end": layout.header_end + 1,
+                        },
                     },
                 )
+            )
+        warnings: list[dict[str, Any]] = []
+        if repeated_header_count:
+            warnings.append(
+                {
+                    "code": "ETL_REPEATED_HEADERS_SKIPPED",
+                    "message": f"已跳过 {repeated_header_count} 行重复表头。",
+                    "count": repeated_header_count,
+                }
+            )
+        if footer_count:
+            warnings.append(
+                {
+                    "code": "ETL_FOOTER_ROWS_SKIPPED",
+                    "message": f"已跳过 {footer_count} 行合计、备注或签字尾行。",
+                    "count": footer_count,
+                }
             )
         return ParsedDataset(
             headers=headers,
             rows=rows,
-            source_features={"kind": "csv", "headers": headers, "row_count": len(rows)},
+            source_features={
+                "kind": "csv",
+                "headers": headers,
+                "row_count": len(rows),
+                "header_row": layout.header_end + 1,
+                "header_start_row": layout.header_start + 1,
+                "header_depth": layout.header_end - layout.header_start + 1,
+                "header_confidence": layout.confidence,
+                "header_reasons": list(layout.reasons),
+                "structure_detection": "deterministic_v2",
+            },
+            warnings=warnings,
         )
     finally:
         handle.close()
@@ -204,7 +412,7 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
             source_features={"kind": "document", "knowledge_only": True},
         )
     if suffix == ".csv":
-        return _parse_csv(source, max_rows)
+        return _parse_csv(source, max_rows, target_type)
     if suffix in STRUCTURED_SUFFIXES:
         from app.application.etl.shipment_compat_parser import (
             parse_delivery_note_with_compat_profile,
@@ -216,8 +424,25 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
             max_rows=max_rows,
         )
         if compatibility is not None:
+            if target_type == "shipment_records":
+                return compatibility
+            try:
+                generic = _parse_workbook(source, max_rows, target_type)
+            except EtlError:
+                raise
+            except Exception:  # noqa: BLE001 - a proven legacy preset remains a safe fallback
+                return compatibility
+            if generic.rows and _covers_required_target_fields(generic, target_type):
+                generic.warnings.insert(
+                    0,
+                    {
+                        "code": "ETL_GENERIC_STRUCTURE_PREFERRED",
+                        "message": "文件已包含完整业务字段，已优先使用通用表格结构解析。",
+                    },
+                )
+                return generic
             return compatibility
-        return _parse_workbook(source, max_rows)
+        return _parse_workbook(source, max_rows, target_type)
 
     from app.application.shipment_excel_etl_ocr import ocr_source_to_workbook
 
@@ -227,7 +452,7 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
             str(result.get("error_code") or "ETL_OCR_FAILED").upper(),
             "OCR 无法可靠还原表格，请更换清晰文件后重试",
         )
-    dataset = _parse_workbook(Path(str(result["file_path"])), max_rows)
+    dataset = _parse_workbook(Path(str(result["file_path"])), max_rows, target_type)
     dataset.source_features.update(
         {
             "kind": "ocr",
@@ -240,6 +465,15 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
     page_by_sheet = {str(page.get("sheet_name") or ""): page for page in result.get("pages") or []}
     for item in dataset.rows:
         page = page_by_sheet.get(item.sheet, {})
+        evidence_by_cell = {
+            (
+                int(cell.get("workbook_row") or 0),
+                int(cell.get("workbook_column") or 0),
+            ): cell
+            for cell in page.get("grid_cells") or []
+            if cell.get("workbook_row") and cell.get("workbook_column")
+        }
+        columns = item.provenance.get("columns") or {}
         cell_evidence: dict[str, Any] = {}
         low_confidence_fields: list[str] = []
         confidences: list[float] = []
@@ -247,15 +481,17 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
             text = str(value or "").strip()
             if not text:
                 continue
-            evidence = next(
-                (
-                    block
-                    for block in page.get("blocks") or []
-                    if text == str(block.get("text") or "").strip()
-                    or text in str(block.get("text") or "")
-                ),
-                None,
-            )
+            column = int(columns.get(field_name) or 0)
+            evidence = evidence_by_cell.get((item.row_number, column))
+            if evidence is None:
+                evidence = next(
+                    (
+                        block
+                        for block in page.get("blocks") or []
+                        if text == clean_cell_text(block.get("text"))
+                    ),
+                    None,
+                )
             if not evidence:
                 low_confidence_fields.append(field_name)
                 cell_evidence[field_name] = {
@@ -289,6 +525,7 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
                     "sheet": item.sheet,
                     "row": item.row_number,
                     "data_start_row": page.get("data_start_row"),
+                    "columns": columns,
                 },
                 "ocr": True,
                 "confidence": min(confidences) if confidences else None,

@@ -31,6 +31,7 @@ from sqlalchemy.orm import sessionmaker
 from app.application.etl.parsers import parse_file
 from app.application.etl.service import EtlService
 from app.application.etl.targets import get_adapter
+from app.application.etl.transforms import apply_mapping
 from app.db.base import Base
 from app.db.models.customer import Customer
 from app.db.models.etl import (
@@ -278,6 +279,86 @@ def _mapping_acceptance(root: Path, service: EtlService) -> dict[str, Any]:
     }
 
 
+def _structure_quality_acceptance(root: Path, service: EtlService) -> dict[str, Any]:
+    """Gate the parser against sanitized complex-header and dirty-value cases."""
+    from openpyxl import Workbook
+
+    workbook_path = root / "structure-quality.xlsx"
+    workbook = Workbook()
+    detail = workbook.active
+    detail.title = "业务明细"
+    detail.append(["客户及产品资料"])
+    detail.append(["客户信息", None, None, "产品信息", None, None])
+    detail.merge_cells("A2:C2")
+    detail.merge_cells("D2:F2")
+    detail.append(["名称", "电话", "地址", "名称", "型号", "单价"])
+    detail.append(["甲公司", "13800000000", "上海", "底漆", "P-1", "￥ 1,200 元"])
+    detail.append(["名称", "电话", "地址", "名称", "型号", "单价"])
+    detail.append(["合计", None, None, None, None, 1200])
+    second = workbook.create_sheet("补充明细")
+    second.append(["客户名称", "电话", "地址", "产品名称", "型号", "单价"])
+    second.append(["乙公司", "13900000000", "杭州", "面漆", "P-2", 200])
+    notes = workbook.create_sheet("README")
+    notes.append(["此页仅用于填写说明"])
+    workbook.save(workbook_path)
+    workbook.close()
+
+    dataset = parse_file(workbook_path, target_type="customer_products")
+    if dataset.source_features.get("kind") != "workbook" or len(dataset.rows) != 2:
+        raise AssertionError("complex workbook was not routed through the generic structure parser")
+    if not any(
+        int(sheet.get("header_depth") or 0) == 2 for sheet in dataset.source_features["sheets"]
+    ):
+        raise AssertionError("multi-row header was not detected")
+    warning_codes = {warning.get("code") for warning in dataset.warnings}
+    required_warnings = {
+        "ETL_REPEATED_HEADERS_SKIPPED",
+        "ETL_FOOTER_ROWS_SKIPPED",
+        "ETL_AUXILIARY_SHEETS_SKIPPED",
+    }
+    if not required_warnings.issubset(warning_codes):
+        raise AssertionError(f"structure isolation warnings missing: {warning_codes}")
+    mappings = service._suggest_mappings(dataset, get_adapter("customer_products"))
+    sources = {str(item["target"]): str(item.get("source") or "") for item in mappings}
+    if sources.get("customer_name") != "客户信息/名称":
+        raise AssertionError(f"customer context header mismatch: {sources}")
+    if sources.get("name") != "产品信息/名称":
+        raise AssertionError(f"product context header mismatch: {sources}")
+
+    dirty_path = root / "dirty-values.csv"
+    dirty_path.write_text(
+        "客户产品导出\n"
+        "导出时间,2026-07-27\n"
+        "客户名称,单价,日期\n"
+        '\ufeff\u200b 甲\u3000公司 ,"￥ 1,234.50 元",20260727\n',
+        encoding="utf-8",
+    )
+    dirty = parse_file(dirty_path, target_type="customer_products")
+    normalized = apply_mapping(
+        dirty.rows[0].values,
+        [
+            {"source": "客户名称", "target": "customer", "transforms": [{"op": "trim"}]},
+            {"source": "单价", "target": "price", "transforms": [{"op": "number"}]},
+            {"source": "日期", "target": "date", "transforms": [{"op": "date"}]},
+        ],
+    )
+    if normalized != {
+        "customer": "甲 公司",
+        "price": "1234.50",
+        "date": "2026-07-27",
+    }:
+        raise AssertionError(f"dirty value normalization mismatch: {normalized}")
+    return {
+        "multi_row_header": True,
+        "multiple_business_sheets": True,
+        "auxiliary_sheet_isolation": True,
+        "repeated_header_isolation": True,
+        "footer_isolation": True,
+        "dirty_value_normalization": True,
+        "business_writes": 0,
+    }
+
+
 def _maker(root: Path):
     engine = create_engine(f"sqlite:///{root / 'etl-acceptance.sqlite'}")
     Base.metadata.create_all(
@@ -376,6 +457,7 @@ def run(rows: int) -> dict[str, Any]:
             "success": True,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "samples": _mapping_acceptance(root, service),
+            "structure_quality": _structure_quality_acceptance(root, service),
             "performance": _performance_acceptance(root, rows),
             "release_scope": {
                 "signed_installer": "separate_release_gate",

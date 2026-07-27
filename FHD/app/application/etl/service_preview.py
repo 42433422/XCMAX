@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlError
+from app.application.etl.parser_structure import header_match_score
 from app.application.etl.parsers import (
     KNOWLEDGE_ONLY_SUFFIXES,
     ParsedDataset,
@@ -21,7 +22,6 @@ from app.application.etl.service_support import (
     apply_validation_rules,
     dump_json,
     load_json,
-    mapping_key,
     new_id,
     new_session,
     safe_error,
@@ -321,7 +321,6 @@ class PreviewServiceMixin:
                 }
                 for header in dataset.headers
             ]
-        header_map = {mapping_key(header): header for header in dataset.headers}
         try:
             from app.application.excel_etl_kb import get_excel_etl_kb
 
@@ -333,7 +332,7 @@ class PreviewServiceMixin:
             "product_model": ("model_number",),
             "quantity": ("quantity_tins",),
         }
-        mappings: list[dict[str, Any]] = []
+        field_candidates: list[tuple[Any, tuple[str, ...]]] = []
         for field in adapter.fields:
             synonym_keys = (field.key, *compatibility_keys.get(field.key, ()))
             shared_candidates = tuple(
@@ -342,15 +341,36 @@ class PreviewServiceMixin:
                 for alias in shared_synonyms.get(synonym_key, [])
             )
             candidates = (field.key, field.label, *field.aliases, *shared_candidates)
-            matched = next(
+            field_candidates.append((field, candidates))
+
+        # Assign the strongest source/target pairs first so a generic leaf such
+        # as “名称” cannot steal “产品信息/名称” from the required product field.
+        scored_pairs = sorted(
+            (
                 (
-                    header_map[mapping_key(candidate)]
-                    for candidate in candidates
-                    if mapping_key(candidate) in header_map
-                ),
-                None,
-            )
-            confidence = 0.98 if matched else 0.0
+                    header_match_score(header, candidates),
+                    0 if field.required else 1,
+                    field_index,
+                    header_index,
+                )
+                for field_index, (field, candidates) in enumerate(field_candidates)
+                for header_index, header in enumerate(dataset.headers)
+            ),
+            key=lambda item: (-item[0], item[1], item[2], item[3]),
+        )
+        matched_by_field: dict[int, tuple[str, float]] = {}
+        used_headers: set[int] = set()
+        for score, _required_rank, field_index, header_index in scored_pairs:
+            if score < 0.75:
+                break
+            if field_index in matched_by_field or header_index in used_headers:
+                continue
+            matched_by_field[field_index] = (dataset.headers[header_index], score)
+            used_headers.add(header_index)
+
+        mappings: list[dict[str, Any]] = []
+        for field_index, (field, _candidates) in enumerate(field_candidates):
+            matched, confidence = matched_by_field.get(field_index, ("", 0.0))
             default_transforms: list[dict[str, Any]] = []
             if matched:
                 if field.type == "string":
@@ -363,10 +383,10 @@ class PreviewServiceMixin:
                     default_transforms = [{"op": "date"}]
             mappings.append(
                 {
-                    "source": matched or "",
+                    "source": matched,
                     "target": field.key,
                     "transforms": default_transforms,
-                    "confidence": confidence,
+                    "confidence": round(confidence, 2),
                     "required": field.required,
                 }
             )

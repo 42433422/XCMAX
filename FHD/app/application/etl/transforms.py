@@ -28,6 +28,13 @@ ALLOWED_TRANSFORMS = frozenset(
 )
 ALLOWED_FORMULA_OPERATORS = frozenset({"add", "sub", "mul", "div", "coalesce"})
 _DANGEROUS_FORMULA_PREFIXES = ("=", "+", "-", "@")
+_INVISIBLE_TEXT_RE = re.compile(r"[\ufeff\u200b\u200c\u200d\u2060]")
+
+
+def _clean_string(value: str) -> str:
+    text = _INVISIBLE_TEXT_RE.sub("", value)
+    text = text.replace("\xa0", " ").replace("\u3000", " ")
+    return re.sub(r"[\t\r\n ]+", " ", text).strip()
 
 
 def neutralize_spreadsheet_formula(value: Any) -> Any:
@@ -42,8 +49,19 @@ def neutralize_spreadsheet_formula(value: Any) -> Any:
 def _decimal(value: Any) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
-    text = str(value).strip().replace(",", "").replace("，", "")
-    text = re.sub(r"[￥¥$€£]", "", text)
+    if isinstance(value, Decimal):
+        return value
+    text = _clean_string(str(value))
+    negative = (text.startswith("(") and text.endswith(")")) or (
+        text.startswith("（") and text.endswith("）")
+    )
+    if negative:
+        text = text[1:-1]
+    text = re.sub(r"[\s,，]", "", text)
+    text = re.sub(r"^[￥¥$€£]", "", text)
+    text = re.sub(r"元$", "", text)
+    if negative:
+        text = "-" + text
     try:
         return Decimal(text)
     except InvalidOperation as exc:
@@ -57,7 +75,10 @@ def _date(value: Any, formats: list[str] | None = None) -> str:
         return value.date().isoformat()
     if isinstance(value, date):
         return value.isoformat()
-    text = str(value).strip()
+    text = _clean_string(str(value))
+    text = text.replace("－", "-").replace("／", "/").replace("．", ".").replace("。", ".")
+    if re.fullmatch(r"(?:19|20)\d{6}", text):
+        text = f"{text[:4]}-{text[4:6]}-{text[6:]}"
     candidates = formats or [
         "%Y-%m-%d",
         "%Y/%m/%d",
@@ -145,7 +166,7 @@ def apply_transform(value: Any, rule: dict[str, Any], row: dict[str, Any]) -> An
     if op not in ALLOWED_TRANSFORMS:
         raise EtlError("ETL_TRANSFORM_FORBIDDEN", f"不允许的转换操作: {op}")
     if op == "trim":
-        return value.strip() if isinstance(value, str) else value
+        return _clean_string(value) if isinstance(value, str) else value
     if op == "cast":
         return _cast(value, str(rule.get("type") or "string"))
     if op == "date":

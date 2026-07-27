@@ -38,13 +38,13 @@ def _cluster_axis(values: list[float], *, threshold: float) -> list[float]:
     return [sum(c) / len(c) for c in clusters]
 
 
-def text_blocks_to_grid(
+def _text_blocks_to_grid_result(
     blocks: list[dict[str, Any]],
     *,
     row_threshold: float | None = None,
     col_threshold: float | None = None,
-) -> list[list[str]]:
-    """将带坐标文本块聚类为二维表格（行优先、列从左到右）。"""
+) -> tuple[list[list[str]], list[dict[str, Any]]]:
+    """Return the clustered grid plus auditable block-to-cell coordinates."""
     cleaned: list[dict[str, Any]] = []
     for raw in blocks or []:
         text = str(raw.get("text") or "").strip()
@@ -59,9 +59,9 @@ def text_blocks_to_grid(
             height = float(raw.get("height") or 0)
             cx = left + width / 2.0
             cy = float(raw.get("y_center") or (top + height / 2.0))
-        cleaned.append({"text": text, "cx": cx, "cy": cy})
+        cleaned.append({"text": text, "cx": cx, "cy": cy, "raw": raw})
     if not cleaned:
-        return []
+        return [], []
 
     ys = [b["cy"] for b in cleaned]
     xs = [b["cx"] for b in cleaned]
@@ -73,16 +73,63 @@ def text_blocks_to_grid(
     row_centers = _cluster_axis(ys, threshold=row_th)
     col_centers = _cluster_axis(xs, threshold=col_th)
     if not row_centers or not col_centers:
-        return []
+        return [], []
 
     grid: list[list[str]] = [["" for _ in col_centers] for _ in row_centers]
+    slots: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for block in cleaned:
         r = min(range(len(row_centers)), key=lambda i: abs(row_centers[i] - block["cy"]))
         c = min(range(len(col_centers)), key=lambda i: abs(col_centers[i] - block["cx"]))
-        prev = grid[r][c]
-        grid[r][c] = f"{prev} {block['text']}".strip() if prev else block["text"]
-    # 去掉全空行
-    return [row for row in grid if any(str(cell).strip() for cell in row)]
+        slots.setdefault((r, c), []).append(block)
+
+    cells: list[dict[str, Any]] = []
+    for (row_index, column_index), parts in slots.items():
+        ordered = sorted(parts, key=lambda item: item["cx"])
+        text = " ".join(part["text"] for part in ordered).strip()
+        grid[row_index][column_index] = text
+        raw_parts = [part["raw"] for part in ordered]
+        confidences = [
+            float(raw.get("confidence", raw.get("score")))
+            for raw in raw_parts
+            if isinstance(raw.get("confidence", raw.get("score")), (int, float))
+        ]
+        lefts = [float(raw.get("left") or 0) for raw in raw_parts]
+        tops = [float(raw.get("top") or 0) for raw in raw_parts]
+        rights = [float(raw.get("left") or 0) + float(raw.get("width") or 0) for raw in raw_parts]
+        bottoms = [float(raw.get("top") or 0) + float(raw.get("height") or 0) for raw in raw_parts]
+        left = min(lefts, default=0.0)
+        top = min(tops, default=0.0)
+        right = max(rights, default=left)
+        bottom = max(bottoms, default=top)
+        cells.append(
+            {
+                "grid_row": row_index + 1,
+                "grid_column": column_index + 1,
+                "text": text,
+                "confidence": min(confidences) if confidences else None,
+                "left": left,
+                "top": top,
+                "width": max(0.0, right - left),
+                "height": max(0.0, bottom - top),
+                "center": [(left + right) / 2.0, (top + bottom) / 2.0],
+            }
+        )
+    return grid, cells
+
+
+def text_blocks_to_grid(
+    blocks: list[dict[str, Any]],
+    *,
+    row_threshold: float | None = None,
+    col_threshold: float | None = None,
+) -> list[list[str]]:
+    """将带坐标文本块聚类为二维表格（行优先、列从左到右）。"""
+    grid, _cells = _text_blocks_to_grid_result(
+        blocks,
+        row_threshold=row_threshold,
+        col_threshold=col_threshold,
+    )
+    return grid
 
 
 def grid_to_workbook_path(
@@ -145,6 +192,9 @@ def page_grids_to_workbook_path(
                 worksheet.cell(row_index, 1, text)
                 row_index += 1
         page["data_start_row"] = row_index
+        for cell in page.get("grid_cells") or []:
+            cell["workbook_row"] = row_index + int(cell.get("grid_row") or 1) - 1
+            cell["workbook_column"] = int(cell.get("grid_column") or 1)
         for row in page.get("grid") or []:
             for column, value in enumerate(row, start=1):
                 worksheet.cell(row_index, column, value)
@@ -218,11 +268,28 @@ def _guess_meta_lines(grid: list[list[str]]) -> list[str]:
     """把疑似抬头行抽成单列文本，便于 buyer regex。"""
     meta: list[str] = []
     for row in grid[:4]:
-        joined = " ".join(str(c).strip() for c in row if str(c).strip())
+        cells = [str(cell).strip() for cell in row if str(cell).strip()]
+        joined = " ".join(cells)
         if not joined:
             continue
-        if re.search(
-            r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order", joined, re.I
+        header_tokens = sum(
+            bool(
+                re.fullmatch(
+                    r"(客户(?:名称)?|购货单位|产品(?:名称)?|品名|型号|规格|数量|单价|金额|"
+                    r"联系人|电话|地址|日期|单号|订单号|备注)",
+                    cell,
+                    re.I,
+                )
+            )
+            for cell in cells
+        )
+        if len(cells) >= 2 and header_tokens >= 2 and not re.search(r"[:：]", joined):
+            # A real column-header row is table structure, not document metadata.
+            continue
+        if (len(cells) == 1 or bool(re.search(r"[:：]", joined))) and re.search(
+            r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order",
+            joined,
+            re.I,
         ):
             meta.append(joined)
     return meta[:3]
@@ -254,21 +321,38 @@ def ocr_source_to_workbook(
         for page_number, img in enumerate(images, start=1):
             blocks = ocr.recognize_text_blocks(img) or []
             all_blocks.extend(blocks)
-            grid = text_blocks_to_grid(blocks)
+            grid, grid_cells = _text_blocks_to_grid_result(blocks)
             if not grid:
                 continue
             meta_lines = _guess_meta_lines(grid)
             body = grid
+            body_row_indexes = list(range(1, len(grid) + 1))
             if meta_lines:
-                body = [
-                    row
-                    for row in grid
+                selected = [
+                    (index, row)
+                    for index, row in enumerate(grid, start=1)
                     if " ".join(str(c).strip() for c in row if str(c).strip()) not in meta_lines
-                ] or grid
+                ]
+                if selected:
+                    body_row_indexes = [index for index, _row in selected]
+                    body = [row for _index, row in selected]
+            row_remap = {
+                original_index: body_index
+                for body_index, original_index in enumerate(body_row_indexes, start=1)
+            }
+            body_cells = [
+                {
+                    **cell,
+                    "grid_row": row_remap[int(cell["grid_row"])],
+                }
+                for cell in grid_cells
+                if int(cell["grid_row"]) in row_remap
+            ]
             pages.append(
                 {
                     "page_number": page_number,
                     "grid": body,
+                    "grid_cells": body_cells,
                     "meta_lines": meta_lines,
                     "blocks": [_safe_ocr_block(block) for block in blocks],
                     "row_count": len(body),
