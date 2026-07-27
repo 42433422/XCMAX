@@ -353,11 +353,40 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         generator = ShipmentDocumentGenerator(db_path=get_db_path("products.db"))
         generator.OUTPUT_FOLDER = self.output_dir
         os.makedirs(self.output_dir, exist_ok=True)
+
+        # 开箱种子：无显式模板时优先用模板库默认发货单 / 运行时 templates 目录
+        resolved_template_name = (template_name or "").strip() or None
+        if not resolved_template_name:
+            try:
+                from app.bootstrap import get_template_app_service
+
+                default_tpl = get_template_app_service().get_default_for_type("发货单")
+                default_path = str((default_tpl or {}).get("path") or "").strip()
+                if default_path and os.path.isfile(default_path):
+                    resolved_template_name = os.path.basename(default_path)
+                    # 让 legacy 查找逻辑也能命中该绝对路径所在目录
+                    seed_dir = os.path.dirname(default_path)
+                    if seed_dir and seed_dir not in (
+                        getattr(generator, "base_dir", ""),
+                        os.path.join(getattr(generator, "base_dir", ""), "templates"),
+                    ):
+                        original_find = generator._find_template
+
+                        def _find_with_seed(name: str, _orig=original_find, _seed=seed_dir):
+                            candidate = os.path.join(_seed, name)
+                            if os.path.isfile(candidate):
+                                return candidate
+                            return _orig(name)
+
+                        generator._find_template = _find_with_seed  # type: ignore[method-assign]
+            except RECOVERABLE_ERRORS:
+                resolved_template_name = None
+
         doc = generator.generate_document(
             order_text="",
             parsed_data=parsed_data,
             purchase_unit=purchase_unit_info,
-            template_name=template_name,
+            template_name=resolved_template_name,
             custom_order_number=order_number,
         )
 

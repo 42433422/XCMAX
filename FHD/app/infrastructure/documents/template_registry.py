@@ -42,6 +42,37 @@ def list_templates(role: str | None = None) -> list[dict[str, Any]]:
     return rows
 
 
+def _candidate_paths_for_rel(rel: str) -> list[Path]:
+    """仓库相对路径 + 运行时/内置 resources 回退（开箱种子）。"""
+    rel_norm = (rel or "").replace("\\", "/").strip().lstrip("/")
+    candidates: list[Path] = []
+    if rel_norm:
+        candidates.append((fhd_repo_root() / rel_norm).resolve())
+    filename = Path(rel_norm).name if rel_norm else ""
+    if filename:
+        try:
+            from app.utils.path_utils import get_app_data_dir, get_resource_path
+            from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+            candidates.append(
+                (Path(get_app_data_dir()) / "424" / "document_templates" / filename).resolve()
+            )
+            candidates.append((Path(get_app_data_dir()) / "templates" / filename).resolve())
+            candidates.append(Path(get_resource_path("templates", filename)).resolve())
+        except RECOVERABLE_ERRORS:
+            pass
+    # 去重保序
+    out: list[Path] = []
+    seen: set[str] = set()
+    for p in candidates:
+        key = str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
+
+
 def resolve_template_path_with_meta(*, role: str, slug: str | None) -> tuple[Path, str]:
     rows = list_templates(role)
     hit = None
@@ -52,8 +83,11 @@ def resolve_template_path_with_meta(*, role: str, slug: str | None) -> tuple[Pat
     if hit is None:
         raise FileNotFoundError(f"no template for role={role}")
     rel = str(hit.get("storage_relpath") or "").strip()
-    p = (fhd_repo_root() / rel).resolve()
-    return p, rel
+    for p in _candidate_paths_for_rel(rel):
+        if p.is_file():
+            return p, rel
+    # 保持旧行为：返回约定路径，由调用方报 FileNotFoundError
+    return (fhd_repo_root() / rel).resolve(), rel
 
 
 def _relpath_parts_ok(storage_relpath: str) -> bool:
