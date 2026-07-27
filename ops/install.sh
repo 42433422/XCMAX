@@ -6,7 +6,7 @@
 # 做五件事：
 #   1. 把 ops/ 复制到 /usr/local/xcmax-ops（运行副本与仓库解耦，坏 pull 不影响监控）
 #   2. 生成 /etc/xcmax-ops.env（如无），建 state/log/backup 目录
-#   3. 写 /etc/cron.d/xcmax-ops：哨兵 */5、夜备 03:30、漂移 06:50
+#   3. 写 /etc/cron.d/xcmax-ops：哨兵 */5、WAL */15、夜备 03:30、漂移 06:50
 #      + 接通 FHD 拉取式发布链（fhd-auto-update.sh */5，替代手工 scp 热补）
 #   4. 清理旧的用户 crontab 里的 fhd-auto-update 行（避免双驱动），装 logrotate
 #   5. 自检：告警通道状态 + 发测试告警、哨兵跑一轮、备份 dry-run
@@ -63,7 +63,7 @@ AUTOUPDATE_LINE=""
 if [[ "${OPS_INSTALL_FHD_AUTOUPDATE:-1}" == "1" ]]; then
   AUTO_SCRIPT="${XCMAX_ROOT_VAL}/FHD/scripts/deploy/fhd-auto-update.sh"
   if [[ -f "$AUTO_SCRIPT" ]]; then
-    AUTOUPDATE_LINE="*/5 * * * * root . ${ENV_FILE}; bash ${AUTO_SCRIPT} >> /var/log/fhd-auto-update.log 2>&1"
+    AUTOUPDATE_LINE="*/5 * * * * root set -a; . ${ENV_FILE}; set +a; bash ${AUTO_SCRIPT} >> /var/log/fhd-auto-update.log 2>&1"
   else
     echo "  [warn] 未找到 $AUTO_SCRIPT，跳过发布链 cron（git 仓库不在 ${XCMAX_ROOT_VAL}?）"
   fi
@@ -72,15 +72,22 @@ fi
   echo "# XCMAX 运维 cron —— 由 ops/install.sh 生成，手改会在下次安装时被覆盖"
   echo "SHELL=/bin/bash"
   echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  echo "CRON_TZ=Asia/Shanghai"
   echo ""
   echo "# 哨兵：服务/健康/停摆/错误爆发/备份新鲜度/发布链/证书"
-  echo "*/5 * * * * root . ${ENV_FILE}; flock -n /tmp/xcmax-monitor.lock python3 ${INSTALL_DIR}/monitor/xcmax_monitor.py >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/monitor.log 2>&1"
+  echo "*/5 * * * * root set -a; . ${ENV_FILE}; set +a; flock -n /tmp/xcmax-monitor.lock python3 ${INSTALL_DIR}/monitor/xcmax_monitor.py >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/monitor.log 2>&1"
   echo ""
-  echo "# 夜间备份（UTC 19:30 = 北京 03:30）"
-  echo "30 19 * * * root . ${ENV_FILE}; bash ${INSTALL_DIR}/backup/xcmax_backup.sh >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/backup.log 2>&1"
+  echo "# PostgreSQL 10 WAL 增量异地同步（15 分钟，RPO 目标 <= 30 分钟）"
+  echo "*/15 * * * * root set -a; . ${ENV_FILE}; set +a; bash ${INSTALL_DIR}/dr/xcmax_wal_ship.sh >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/wal-ship.log 2>&1"
   echo ""
-  echo "# 漂移检测（UTC 22:50 = 北京 06:50）"
-  echo "50 22 * * * root . ${ENV_FILE}; bash ${INSTALL_DIR}/drift/xcmax_drift_check.sh >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/drift.log 2>&1"
+  echo "# 每周物理基础备份（周日 02:15），daily logical dump 继续保留"
+  echo "15 2 * * 0 root set -a; . ${ENV_FILE}; set +a; bash ${INSTALL_DIR}/dr/xcmax_wal_prepare_primary.sh >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/wal-base.log 2>&1"
+  echo ""
+  echo "# 夜间备份（北京 03:30）"
+  echo "30 3 * * * root set -a; . ${ENV_FILE}; set +a; bash ${INSTALL_DIR}/backup/xcmax_backup.sh >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/backup.log 2>&1"
+  echo ""
+  echo "# 漂移检测（北京 06:50）"
+  echo "50 6 * * * root set -a; . ${ENV_FILE}; set +a; bash ${INSTALL_DIR}/drift/xcmax_drift_check.sh >> ${OPS_LOG_DIR:-/var/log/xcmax-ops}/drift.log 2>&1"
   if [[ -n "$AUTOUPDATE_LINE" ]]; then
     echo ""
     echo "# FHD 拉取式发布链（CI 推 manifest+tarball → 本机校验/备份/健康门/自动回滚）"
@@ -90,7 +97,7 @@ fi
 chmod 644 "$CRON_FILE"
 
 echo "[4/5] 清理旧 crontab 双驱动 + logrotate"
-if crontab -l >/dev/null 2>&1; then
+if [[ -n "$AUTOUPDATE_LINE" ]] && crontab -l >/dev/null 2>&1; then
   if crontab -l | grep -q 'fhd-auto-update.sh'; then
     mkdir -p /root/cron-backups
     crontab -l > "/root/cron-backups/crontab-$(date +%Y%m%d-%H%M%S).bak"
@@ -116,21 +123,21 @@ else
   set +e
   echo "  -- 告警通道 --"
   # shellcheck disable=SC1090
-  (. "$ENV_FILE"; python3 "$INSTALL_DIR/lib/notify.py" --channel-status)
+  (set -a; . "$ENV_FILE"; set +a; python3 "$INSTALL_DIR/lib/notify.py" --channel-status)
   if [[ "$NO_TEST_ALERT" != "1" ]]; then
-    (. "$ENV_FILE"; python3 "$INSTALL_DIR/lib/notify.py" --self-test) \
+    (set -a; . "$ENV_FILE"; set +a; python3 "$INSTALL_DIR/lib/notify.py" --self-test) \
       || echo "  [warn] 测试告警未送达——检查 SMTP 配置（见上方通道状态）"
   fi
   echo "  -- 哨兵单轮（不告警）--"
-  (. "$ENV_FILE"; python3 "$INSTALL_DIR/monitor/xcmax_monitor.py" --no-alert)
+  (set -a; . "$ENV_FILE"; set +a; python3 "$INSTALL_DIR/monitor/xcmax_monitor.py" --no-alert)
   echo "  -- 备份 dry-run --"
-  (. "$ENV_FILE"; bash "$INSTALL_DIR/backup/xcmax_backup.sh" --dry-run)
+  (set -a; . "$ENV_FILE"; set +a; bash "$INSTALL_DIR/backup/xcmax_backup.sh" --dry-run)
   set -e
 fi
 
 echo ""
 echo "安装完成。"
 echo "  哨兵日志:   tail -f ${OPS_LOG_DIR:-/var/log/xcmax-ops}/monitor.log"
-echo "  手动跑一轮: . ${ENV_FILE}; python3 ${INSTALL_DIR}/monitor/xcmax_monitor.py"
-echo "  立即全量备份: . ${ENV_FILE}; bash ${INSTALL_DIR}/backup/xcmax_backup.sh"
+echo "  手动跑一轮: set -a; . ${ENV_FILE}; set +a; python3 ${INSTALL_DIR}/monitor/xcmax_monitor.py"
+echo "  立即全量备份: set -a; . ${ENV_FILE}; set +a; bash ${INSTALL_DIR}/backup/xcmax_backup.sh"
 echo "  运维手册:   ${XCMAX_ROOT_VAL}/ops/README.md"

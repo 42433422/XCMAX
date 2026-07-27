@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
-# XCMAX 夜间备份：FHD PostgreSQL + MODstore SQLite + 关键配置 → 本地轮转 + 可选 COS 异地。
+# XCMAX 夜间备份：FHD/Modstore/支付 PostgreSQL + MODstore SQLite + 关键配置 → 本地轮转 + 异地。
 #
 # 产物（/var/backups/xcmax/daily/<UTC日期>/）：
 #   fhd_pg.dump          pg_dump -Fc（自带压缩，可 pg_restore 单库恢复）
+#   modstore_pg.dump     MODstore 主 PostgreSQL
+#   payment_pg.dump      支付服务 PostgreSQL
 #   modstore_sqlite.db.gz  SQLite 在线备份（sqlite3 backup API，不脏读）
 #   configs.tar.gz       /root/fhd-full.env、MODstore .env、nginx、systemd 单元、crontab（0600，含秘密）
 #   MANIFEST.txt         各产物 sha256 与字节数
 #
 # 轮转：daily 保 7 份；每周日复制到 weekly/ 保 4 份；每月 1 号复制到 monthly/ 保 6 份。
-# 异地：装了 coscmd 且设置 OPS_COS_BUCKET 时上传当日目录（腾讯云 COS）。
+# 异地：
+#   - 设置 OPS_BACKUP_SSH_TARGET 时，用专用密钥推送到温备机 incoming；
+#   - 装了 coscmd 且设置 OPS_COS_BUCKET 时上传当日目录（腾讯云 COS）。
 # 验证：pg_restore --list、gzip -t、tar -tzf、sqlite PRAGMA quick_check 全过才算成功。
 # 失败：任何一步失败 → notify.py 发 crit 告警（哨兵还有 26h 新鲜度兜底）。
 #
 # 环境（/etc/xcmax-ops.env，由 cron 行 source）：
 #   OPS_BACKUP_DIR      默认 /var/backups/xcmax
 #   OPS_FHD_ENV         默认 /root/fhd-full.env（取 DATABASE_URL）
+#   OPS_MODSTORE_ENV    默认 /etc/xcmax/modstore.env
+#   OPS_PG_DUMP_CONTAINER_IMAGE 可选；宿主 pg_dump 版本不匹配时用该镜像导出
 #   OPS_MODSTORE_DIR    默认 /root/XCMAX/成都修茈科技有限公司/MODstore_deploy
 #   OPS_MODSTORE_DB     默认 $OPS_MODSTORE_DIR/modstore.db（可显式指定）
 #   OPS_COS_BUCKET      可选，如 xcmax-backup-1250000000
+#   OPS_BACKUP_SSH_TARGET 可选，如 xcmaxdr@43.138.211.142
+#   OPS_BACKUP_SSH_KEY  SSH 温备专用私钥
+#   OPS_BACKUP_SSH_DEST 接收端目录，默认 /srv/xcmax-dr/incoming
 #   OPS_BACKUP_EXTRA    可选，空格分隔的额外备份路径（如上传目录）
 #
 # 用法：xcmax_backup.sh [--dry-run]
@@ -29,6 +38,7 @@ NOTIFY="python3 ${OPS_ROOT}/lib/notify.py"
 
 BACKUP_DIR="${OPS_BACKUP_DIR:-/var/backups/xcmax}"
 FHD_ENV="${OPS_FHD_ENV:-/root/fhd-full.env}"
+MODSTORE_ENV="${OPS_MODSTORE_ENV:-/etc/xcmax/modstore.env}"
 MODSTORE_DIR="${OPS_MODSTORE_DIR:-/root/XCMAX/成都修茈科技有限公司/MODstore_deploy}"
 MODSTORE_DB="${OPS_MODSTORE_DB:-${MODSTORE_DIR}/modstore.db}"
 LOG_DIR="${OPS_LOG_DIR:-/var/log/xcmax-ops}"
@@ -62,31 +72,115 @@ if [[ "$DRY_RUN" == "1" ]]; then
 else
   mkdir -p "$DEST"
   chmod 700 "$BACKUP_DIR" "$BACKUP_DIR/daily" "$DEST" 2>/dev/null || true
+  # 同日重跑先撤销旧清单；只有本轮所有产物成功后才重新发布。
+  rm -f "$DEST/MANIFEST.txt"
 fi
 
-# ---------------------------------------------------------------- FHD PG
+# ----------------------------------------------------------- PostgreSQL
+extract_database_url() {
+  local env_file="$1" key="$2" inject_credentials="${3:-0}"
+  python3 - "$env_file" "$key" "$inject_credentials" <<'PY'
+import re
+import sys
+from urllib.parse import quote, urlsplit, urlunsplit
+
+values = {}
+with open(sys.argv[1], encoding="utf-8", errors="replace") as fh:
+    for raw in fh:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[7:]
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip("\"'")
+
+url = values.get(sys.argv[2], "")
+if url.startswith("jdbc:"):
+    url = url[5:]
+# SQLAlchemy 方言后缀 pg_dump 不认识（postgresql+psycopg:// → postgresql://）
+url = re.sub(r"^postgres(ql)?\+[a-z0-9_]+://", "postgresql://", url)
+if url and sys.argv[3] == "1":
+    parsed = urlsplit(url)
+    if parsed.username is None:
+        user = values.get("DATABASE_USER", "")
+        password = values.get("DATABASE_PASSWORD", "")
+        if user:
+            credentials = quote(user, safe="")
+            if password:
+                credentials += ":" + quote(password, safe="")
+            hostname = parsed.hostname or ""
+            if ":" in hostname and not hostname.startswith("["):
+                hostname = f"[{hostname}]"
+            host = hostname + (f":{parsed.port}" if parsed.port else "")
+            url = urlunsplit(
+                (parsed.scheme, f"{credentials}@{host}", parsed.path, parsed.query, parsed.fragment)
+            )
+print(url)
+PY
+}
+
+backup_pg_url() {
+  local label="$1" filename="$2" url="$3"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "[dry-run] 将导出 $label PostgreSQL → $filename（URL 已脱敏）"
+    return
+  fi
+  local out="$DEST/$filename"
+  local pg_image="${OPS_PG_DUMP_CONTAINER_IMAGE:-}"
+  if [[ -n "$pg_image" ]]; then
+    if ! command -v docker >/dev/null 2>&1; then
+      fail "已配置 OPS_PG_DUMP_CONTAINER_IMAGE，但 docker 不可用"
+      return
+    fi
+    if ! printf '%s\n' "$url" | docker run --rm -i --network host \
+      --entrypoint sh "$pg_image" -ceu \
+      'IFS= read -r url; exec pg_dump --no-password -Fc -d "$url"' \
+      >"$out" 2>>"$LOG"; then
+      fail "$label pg_dump 失败（容器镜像 $pg_image）"
+      return
+    fi
+  elif command -v pg_dump >/dev/null 2>&1; then
+    if ! pg_dump --no-password -Fc -d "$url" -f "$out" 2>>"$LOG"; then
+      fail "$label pg_dump 失败（本机客户端）"
+      return
+    fi
+  else
+    # 没装 pg 客户端：尝试用 postgres 容器内的 pg_dump
+    local container
+    container="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -im1 postgres || true)"
+    if [[ -z "$container" ]]; then
+      fail "$label pg_dump 不可用且未发现 postgres 容器——装 postgresql-client 或配置导出镜像"
+      return
+    fi
+    if ! docker exec "$container" pg_dump -Fc -d "$url" > "$out" 2>>"$LOG"; then
+      fail "$label pg_dump 失败（容器 $container）"
+      return
+    fi
+  fi
+  # 验证：能列出目录才算真备份
+  if [[ -n "$pg_image" ]]; then
+    if ! docker run --rm -i --network none --entrypoint pg_restore \
+      "$pg_image" --list <"$out" >/dev/null 2>>"$LOG"; then
+      fail "$filename 验证失败（容器 pg_restore --list）"
+      return
+    fi
+  elif command -v pg_restore >/dev/null 2>&1; then
+    if ! pg_restore --list "$out" >/dev/null 2>>"$LOG"; then
+      fail "$filename 验证失败（pg_restore --list）"
+      return
+    fi
+  fi
+  log "$label PG 备份完成: $(du -h "$out" | cut -f1)"
+}
+
 backup_fhd_pg() {
   if [[ ! -f "$FHD_ENV" ]]; then
     fail "FHD env 不存在: $FHD_ENV（无法取 DATABASE_URL）"
     return
   fi
   local url
-  url="$(python3 - "$FHD_ENV" <<'PY'
-import re, sys
-url = ""
-with open(sys.argv[1], encoding="utf-8", errors="replace") as fh:
-    for line in fh:
-        line = line.strip()
-        if line.startswith("export "):
-            line = line[7:]
-        m = re.match(r"DATABASE_URL=[\"']?([^\"']+)[\"']?$", line)
-        if m:
-            url = m.group(1)
-# SQLAlchemy 方言后缀 pg_dump 不认识（postgresql+psycopg:// → postgresql://）
-url = re.sub(r"^postgres(ql)?\+[a-z0-9]+://", "postgresql://", url)
-print(url)
-PY
-)"
+  url="$(extract_database_url "$FHD_ENV" DATABASE_URL)"
   if [[ -z "$url" ]]; then
     fail "未在 $FHD_ENV 找到 DATABASE_URL"
     return
@@ -99,37 +193,27 @@ PY
     fi
     return
   fi
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "[dry-run] 将执行 pg_dump -Fc（URL 已脱敏）"
+  backup_pg_url "FHD" "fhd_pg.dump" "$url"
+}
+
+backup_modstore_pg() {
+  if [[ ! -f "$MODSTORE_ENV" ]]; then
+    fail "MODstore env 不存在: $MODSTORE_ENV"
     return
   fi
-  local out="$DEST/fhd_pg.dump"
-  if command -v pg_dump >/dev/null 2>&1; then
-    if ! pg_dump --no-password -Fc -d "$url" -f "$out" 2>>"$LOG"; then
-      fail "pg_dump 失败（本机客户端）"
-      return
-    fi
+  local modstore_url payment_url
+  modstore_url="$(extract_database_url "$MODSTORE_ENV" DATABASE_URL)"
+  payment_url="$(extract_database_url "$MODSTORE_ENV" JAVA_DATABASE_URL 1)"
+  if [[ -z "$modstore_url" ]]; then
+    fail "未在 $MODSTORE_ENV 找到 DATABASE_URL"
   else
-    # 没装 pg 客户端：尝试用 postgres 容器内的 pg_dump
-    local container
-    container="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -im1 postgres || true)"
-    if [[ -z "$container" ]]; then
-      fail "pg_dump 不可用且未发现 postgres 容器——装 postgresql-client 或设 OPS_PG_CONTAINER"
-      return
-    fi
-    if ! docker exec "$container" pg_dump -Fc -d "$url" > "$out" 2>>"$LOG"; then
-      fail "pg_dump 失败（容器 $container）"
-      return
-    fi
+    backup_pg_url "MODstore" "modstore_pg.dump" "$modstore_url"
   fi
-  # 验证：能列出目录才算真备份
-  if command -v pg_restore >/dev/null 2>&1; then
-    if ! pg_restore --list "$out" >/dev/null 2>>"$LOG"; then
-      fail "fhd_pg.dump 验证失败（pg_restore --list）"
-      return
-    fi
+  if [[ -z "$payment_url" ]]; then
+    fail "未在 $MODSTORE_ENV 找到 JAVA_DATABASE_URL"
+  else
+    backup_pg_url "支付服务" "payment_pg.dump" "$payment_url"
   fi
-  log "FHD PG 备份完成: $(du -h "$out" | cut -f1)"
 }
 
 # ------------------------------------------------------------- MODstore
@@ -181,6 +265,7 @@ backup_configs() {
   local items=(
     "/root/fhd-full.env"
     "${MODSTORE_DIR}/.env"
+    "/etc/xcmax"
     "/etc/nginx"
     "/etc/xcmax-ops.env"
     "/etc/cron.d/xcmax-ops"
@@ -197,6 +282,9 @@ backup_configs() {
   for unit in fhd-full modstore modstore-scheduler modstore-payment fhd-sandbox; do
     [[ -f "/etc/systemd/system/${unit}.service" ]] \
       && cp -a "/etc/systemd/system/${unit}.service" "$staging/etc/systemd/system/"
+    if [[ -d "/etc/systemd/system/${unit}.service.d" ]]; then
+      cp -a "/etc/systemd/system/${unit}.service.d" "$staging/etc/systemd/system/"
+    fi
   done
   crontab -l > "$staging/root-crontab.txt" 2>/dev/null || true
   # 额外路径（如上传目录）——调用方自己对大小负责
@@ -267,14 +355,46 @@ offsite_cos() {
   fi
 }
 
+offsite_ssh() {
+  [[ "$DRY_RUN" == "1" ]] && return
+  local target="${OPS_BACKUP_SSH_TARGET:-}"
+  [[ -z "$target" ]] && return
+  local key="${OPS_BACKUP_SSH_KEY:-/root/.ssh/xcmax_dr_ed25519}"
+  local remote_root="${OPS_BACKUP_SSH_DEST:-.}"
+  if [[ ! -f "$key" ]]; then
+    fail "温备 SSH 私钥不存在: $key"
+    return
+  fi
+  if ! command -v rsync >/dev/null 2>&1; then
+    fail "温备推送需要 rsync"
+    return
+  fi
+  if rsync -a --partial \
+    -e "ssh -i $key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+    "$DEST/" "${target}:${remote_root}/${TODAY}/" >>"$LOG" 2>&1; then
+    date -u +%s > "${OPS_STATE_DIR:-/var/lib/xcmax-ops}/state/offsite_ssh_last_success" \
+      2>/dev/null || true
+    log "SSH 异地推送完成 → ${target}:${remote_root}/${TODAY}/"
+  else
+    fail "SSH 异地推送失败（target=$target）"
+  fi
+}
+
 # ------------------------------------------------------------------ main
 log "===== 备份开始 (dry-run=$DRY_RUN) ====="
 backup_fhd_pg
+backup_modstore_pg
 backup_modstore_sqlite
 backup_configs
-write_manifest
-rotate
-offsite_cos
+
+if [[ ${#FAILURES[@]} -eq 0 ]]; then
+  write_manifest
+  rotate
+  offsite_ssh
+  offsite_cos
+else
+  log "备份产物存在失败，跳过 MANIFEST、轮转和异地推送"
+fi
 
 if [[ ${#FAILURES[@]} -gt 0 ]]; then
   body="$(printf '%s\n' "${FAILURES[@]}")"
