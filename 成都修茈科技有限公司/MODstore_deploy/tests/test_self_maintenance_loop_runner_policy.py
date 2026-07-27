@@ -2412,6 +2412,108 @@ def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():
     prompt = _code_task_text("run-ci-retry", {"gaps": []}, memory, candidate)
     assert "Continue on the rejected branch as the mutable base" in prompt
     assert "docker-build-fhd-api" in prompt
+    assert memory["open_items"][0]["failed_post_dispatch_checks"] == ["docker-build-fhd-api"]
+
+
+def test_reconcile_post_dispatch_records_failed_check_names():
+    memory = {"closed_items": [], "open_items": [], "recent_runs": []}
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-bd3ea8",
+            "detail": "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api,backend-test",
+            "source": "merge-worker",
+        },
+    }
+    memory["recent_runs"] = [
+        {
+            "branch": "devfleet/cursor/sub-1-bd3ea8",
+            "para_task_id": "task-ci",
+            "run_id": "run-ci",
+            "status": "completed_merge_requested",
+        }
+    ]
+    _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+    assert memory["open_items"][0]["failed_post_dispatch_checks"] == [
+        "docker-build-fhd-api",
+        "backend-test",
+    ]
+
+
+def test_reconcile_superseded_post_dispatch_closes_when_branch_on_main():
+    from modstore_server.self_maintenance_post_dispatch_remediation import (
+        reconcile_superseded_post_dispatch_remediations,
+    )
+
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-bd3ea8",
+                "detail": "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api",
+                "kind": "automated_remediation",
+                "para_task_id": "task-ci",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": False,
+                "run_id": "run-ci",
+                "task_id": "task-ci",
+            }
+        ],
+    }
+    main_head = "a" * 40
+    branch_head = "b" * 40
+
+    result = reconcile_superseded_post_dispatch_remediations(
+        memory,
+        base_branch="main",
+        remote_branch_head=lambda _repo, branch: {
+            "main": main_head,
+            "devfleet/cursor/sub-1-bd3ea8": branch_head,
+        }.get(branch),
+        is_ancestor=lambda ancestor, descendant: ancestor == branch_head
+        and descendant == main_head,
+    )
+
+    assert result["closed_count"] == 1
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == "remediation_delta_already_on_main"
+
+
+def test_reconcile_superseded_post_dispatch_keeps_open_when_branch_ahead():
+    from modstore_server.self_maintenance_post_dispatch_remediation import (
+        reconcile_superseded_post_dispatch_remediations,
+    )
+
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-bd3ea8",
+                "detail": "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api",
+                "kind": "automated_remediation",
+                "para_task_id": "task-ci",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": False,
+            }
+        ],
+    }
+
+    result = reconcile_superseded_post_dispatch_remediations(
+        memory,
+        base_branch="main",
+        remote_branch_head=lambda _repo, branch: {
+            "main": "a" * 40,
+            "devfleet/cursor/sub-1-bd3ea8": "b" * 40,
+        }.get(branch),
+        is_ancestor=lambda _ancestor, _descendant: False,
+    )
+
+    assert result["closed_count"] == 0
+    assert len(memory["open_items"]) == 1
 
 
 # ---------------------------------------------------------------------------

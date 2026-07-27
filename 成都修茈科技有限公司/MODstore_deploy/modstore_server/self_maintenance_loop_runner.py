@@ -1172,6 +1172,11 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         if reason.startswith("para_merge_"):
             candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
             candidate["remediation_reason"] = reason
+            failed_checks = item.get("failed_post_dispatch_checks")
+            if isinstance(failed_checks, list) and failed_checks:
+                candidate["failed_post_dispatch_checks"] = [
+                    str(name).strip() for name in failed_checks if str(name).strip()
+                ]
         elif reason == RETORT_SCOPE_REASON:
             candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
             candidate["remediation_reason"] = reason
@@ -1275,6 +1280,11 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             if reason.startswith("para_merge_"):
                 candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
                 candidate["remediation_reason"] = reason
+                failed_checks = item.get("failed_post_dispatch_checks")
+                if isinstance(failed_checks, list) and failed_checks:
+                    candidate["failed_post_dispatch_checks"] = [
+                        str(name).strip() for name in failed_checks if str(name).strip()
+                    ]
             elif reason == RETORT_SCOPE_REASON:
                 candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
                 candidate["remediation_reason"] = reason
@@ -2472,23 +2482,30 @@ def _reconcile_requested_merge_feedback(
             resume_from_clean_baseline = not (
                 reason == "para_merge_conflict" and _is_para_post_dispatch_merge_failure(detail)
             )
-            open_items.append(
-                {
-                    "branch": rejected_branch,
-                    "created_at": _iso(_utc_now()),
-                    "detail": detail,
-                    "kind": "automated_remediation",
-                    "para_task_id": task_id,
-                    "reason": reason,
-                    "rejected_branch": rejected_branch,
-                    "resume_from_clean_baseline": resume_from_clean_baseline,
-                    "review_feedback": detail if source == "ai-review-veto" else "",
-                    "run_id": str(run.get("run_id") or "").strip(),
-                    "source": source,
-                    "task_status": task_status,
-                    "task_id": task_id,
-                }
-            )
+            remediation_item: Dict[str, Any] = {
+                "branch": rejected_branch,
+                "created_at": _iso(_utc_now()),
+                "detail": detail,
+                "kind": "automated_remediation",
+                "para_task_id": task_id,
+                "reason": reason,
+                "rejected_branch": rejected_branch,
+                "resume_from_clean_baseline": resume_from_clean_baseline,
+                "review_feedback": detail if source == "ai-review-veto" else "",
+                "run_id": str(run.get("run_id") or "").strip(),
+                "source": source,
+                "task_status": task_status,
+                "task_id": task_id,
+            }
+            if _is_para_post_dispatch_merge_failure(detail):
+                from .self_maintenance_post_dispatch_remediation import (
+                    parse_post_dispatch_failed_checks,
+                )
+
+                failed_checks = parse_post_dispatch_failed_checks(detail)
+                if failed_checks:
+                    remediation_item["failed_post_dispatch_checks"] = failed_checks
+            open_items.append(remediation_item)
             changed = True
             remediation_added += 1
 
@@ -6632,7 +6649,16 @@ def _run_self_maintenance_loop_unlocked(
     loop_memory = _load_loop_memory()
     merge_reconciliation = _reconcile_requested_merge_feedback(loop_memory)
     retort_scope_reconciliation = _reconcile_retort_scope_remediations(loop_memory)
-    if merge_reconciliation.get("changed") or retort_scope_reconciliation.get("changed"):
+    from .self_maintenance_post_dispatch_remediation import (
+        reconcile_superseded_post_dispatch_remediations,
+    )
+
+    post_dispatch_reconciliation = reconcile_superseded_post_dispatch_remediations(loop_memory)
+    if (
+        merge_reconciliation.get("changed")
+        or retort_scope_reconciliation.get("changed")
+        or post_dispatch_reconciliation.get("changed")
+    ):
         _write_loop_memory(loop_memory)
     resume_candidate = _resume_review_qa_candidate(loop_memory)
     start_record = {
@@ -6651,6 +6677,8 @@ def _run_self_maintenance_loop_unlocked(
     }
     if any(merge_reconciliation.values()):
         start_record["merge_reconciliation"] = merge_reconciliation
+    if post_dispatch_reconciliation.get("changed"):
+        start_record["post_dispatch_reconciliation"] = post_dispatch_reconciliation
     if retort_scope_reconciliation.get("changed"):
         start_record["retort_scope_reconciliation"] = retort_scope_reconciliation
     if resume_candidate:

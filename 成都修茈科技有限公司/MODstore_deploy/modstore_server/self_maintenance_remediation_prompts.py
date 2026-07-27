@@ -52,12 +52,18 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
             "smallest valid production fix and focused regression test; do not inherit or "
             "cherry-pick the whole rejected diff."
         )
+    failed_checks = candidate.get("failed_post_dispatch_checks")
+    checks_hint = ""
+    if isinstance(failed_checks, list) and failed_checks:
+        names = [str(name).strip() for name in failed_checks if str(name).strip()]
+        if names:
+            checks_hint = f" Failed required checks: {', '.join(names)}."
     return (
         "\n\n=== EXTERNAL MERGE FAILURE REMEDIATION ===\n"
         f"{strategy} "
         f"Reason: {remediation_reason or '(missing)'}. "
         f"Rejected reference branch: {rejected_branch or '(missing)'}. "
-        f"Exact failure detail: {feedback or '(missing)'}"
+        f"Exact failure detail: {feedback or '(missing)'}.{checks_hint}"
     )
 
 
