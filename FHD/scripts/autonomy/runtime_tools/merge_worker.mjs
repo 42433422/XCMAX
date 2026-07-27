@@ -30,6 +30,14 @@ const AI_REVIEW_TIMEOUT_MS = Math.max(
   30_000,
   Number.parseInt(process.env.MERGE_WORKER_AI_REVIEW_TIMEOUT_MS || '180000', 10),
 );
+export const AI_REVIEW_CHUNK_MAX_CHARS = Math.max(
+  8_000,
+  Number.parseInt(process.env.MERGE_WORKER_AI_REVIEW_CHUNK_MAX_CHARS || '22000', 10),
+);
+export const AI_REVIEW_MAX_CHUNKS = Math.max(
+  1,
+  Number.parseInt(process.env.MERGE_WORKER_AI_REVIEW_MAX_CHUNKS || '6', 10),
+);
 const MINIMAX_REVIEW_TIMEOUT_MS = Math.max(
   15_000,
   Number.parseInt(process.env.MERGE_WORKER_MINIMAX_REVIEW_TIMEOUT_MS || '90000', 10),
@@ -500,6 +508,97 @@ export async function resolveReviewWithFallback({ primary, fallback }) {
   };
 }
 
+export function chunkReviewDiff(diff, maxChars = AI_REVIEW_CHUNK_MAX_CHARS) {
+  const text = String(diff || '');
+  const limit = Math.max(1, Number(maxChars) || AI_REVIEW_CHUNK_MAX_CHARS);
+  if (!text) return [];
+  if (text.length <= limit) return [text];
+
+  const chunks = [];
+  let current = '';
+  for (const line of text.match(/[^\n]*\n|[^\n]+$/g) || []) {
+    let remainder = line;
+    while (remainder.length > 0) {
+      const room = limit - current.length;
+      if (room === 0) {
+        chunks.push(current);
+        current = '';
+        continue;
+      }
+      if (remainder.length <= room) {
+        current += remainder;
+        remainder = '';
+        continue;
+      }
+      current += remainder.slice(0, room);
+      remainder = remainder.slice(room);
+      chunks.push(current);
+      current = '';
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+export async function reviewDiffInChunks(
+  diff,
+  reviewChunk,
+  {
+    maxChars = AI_REVIEW_CHUNK_MAX_CHARS,
+    maxChunks = AI_REVIEW_MAX_CHUNKS,
+  } = {},
+) {
+  const chunks = chunkReviewDiff(diff, maxChars);
+  if (chunks.length === 0) {
+    return { verdict: 'reject', reason: 'empty-diff', raw: '' };
+  }
+  if (chunks.length > maxChunks) {
+    return {
+      verdict: 'reject',
+      reason: `diff-too-large:${String(diff).length}:chunks=${chunks.length}:limit=${maxChunks}`,
+      raw: '',
+    };
+  }
+
+  const approvals = [];
+  const indeterminate = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const result = await reviewChunk(chunks[index], {
+      index,
+      number: index + 1,
+      total: chunks.length,
+    });
+    if (result?.verdict === 'approve') {
+      approvals.push(result);
+      continue;
+    }
+    if (result?.reason === 'indeterminate-review') {
+      indeterminate.push({ chunk: index + 1, diagnostics: result.diagnostics || {} });
+      continue;
+    }
+    return {
+      ...result,
+      verdict: 'reject',
+      reason: `chunk ${index + 1}/${chunks.length}: ${result?.reason || 'indeterminate-review'}`,
+    };
+  }
+  if (indeterminate.length > 0) {
+    return {
+      verdict: 'reject',
+      reason: 'indeterminate-review',
+      raw: '',
+      diagnostics: { chunks: indeterminate },
+    };
+  }
+  const providers = [...new Set(approvals.map((item) => item.provider).filter(Boolean))];
+  return {
+    verdict: 'approve',
+    provider: providers.join('+') || 'unknown',
+    reviewed_chunks: chunks.length,
+    raw: '',
+  };
+}
+
 function normalizeMiniMaxAnthropicBaseUrl() {
   let base = String(
     process.env.MINIMAX_ANTHROPIC_BASE_URL
@@ -606,51 +705,55 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
     return { verdict: 'reject', reason: 'empty-diff', raw: '' };
   }
 
-  if (diff.length > 30000) {
-    log(`  diff=${diff.length} chars 超过完整审查上限，fail-closed REJECT`);
-    return { verdict: 'reject', reason: `diff-too-large:${diff.length}`, raw: '' };
-  }
-  const diffTruncated = diff;
-  const prompt = [
-    `你是代码审查员。下面是 PR 的 git diff 内容，请直接审查（不要执行任何命令）：`,
-    ``,
-    '```diff',
-    diffTruncated,
-    '```',
-    ``,
-    `必须覆盖三个维度：`,
-    `1) security — 注入/密钥/反序列化/权限绕过`,
-    `2) business_logic — 控制流/不变量/错误处理/API 契约/静默丢数据`,
-    `3) performance — 慢查询、N+1、无界循环、热路径 sleep`,
-    `任一维度有阻断问题则 REJECT。`,
-    `如果代码可以合并，输出一行：APPROVE`,
-    `如果有问题需要修改，输出一行：REJECT: <dimension>=<简要原因>`,
-    `也可输出 JSON：{"verdict":"approve|reject","reason":"..."}，不要输出其他 JSON。`,
-    `不要修改任何文件，只做审查。`,
-  ].join('\n');
-  log(`  AI review 开始 (trae-cli plan mode, diff=${diffSource}, ${diff.length} chars)...`);
-  const review = await resolveReviewWithFallback({
-    primary: async () => {
-      const { stdout } = await execFileAsync('trae-cli', [
-        '--print',
-        '--output-format', 'text',
-        '--permission-mode', 'plan',
-        prompt,
-      ], {
-        cwd: workspace || process.env.HOME,
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: AI_REVIEW_TIMEOUT_MS,
-        env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` },
-      });
-      return stdout;
-    },
-    fallback: async () => {
-      log(`  Trae review 无明确结论，切换 MiniMax ${MINIMAX_REVIEW_MODEL} 复审...`);
-      return runMiniMaxReview(prompt);
-    },
+  const review = await reviewDiffInChunks(diff, async (diffChunk, chunk) => {
+    const prompt = [
+      `你是代码审查员。下面是 PR 的 git diff 第 ${chunk.number}/${chunk.total} 段。`,
+      `这是按字符边界切出的连续原始片段；必须独立审查本段全部内容，不要执行任何命令：`,
+      ``,
+      '```diff',
+      diffChunk,
+      '```',
+      ``,
+      `必须覆盖三个维度：`,
+      `1) security — 注入/密钥/反序列化/权限绕过`,
+      `2) business_logic — 控制流/不变量/错误处理/API 契约/静默丢数据`,
+      `3) performance — 慢查询、N+1、无界循环、热路径 sleep`,
+      `任一维度有阻断问题则 REJECT。`,
+      `如果本段可以合并，输出一行：APPROVE`,
+      `如果本段有问题需要修改，输出一行：REJECT: <dimension>=<简要原因>`,
+      `也可输出 JSON：{"verdict":"approve|reject","reason":"..."}，不要输出其他 JSON。`,
+      `不要修改任何文件，只做审查。`,
+    ].join('\n');
+    log(
+      `  AI review 开始 chunk=${chunk.number}/${chunk.total} `
+      + `(trae-cli plan mode, diff=${diffSource}, ${diffChunk.length}/${diff.length} chars)...`,
+    );
+    return resolveReviewWithFallback({
+      primary: async () => {
+        const { stdout } = await execFileAsync('trae-cli', [
+          '--print',
+          '--output-format', 'text',
+          '--permission-mode', 'plan',
+          prompt,
+        ], {
+          cwd: workspace || process.env.HOME,
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: AI_REVIEW_TIMEOUT_MS,
+          env: { ...process.env, PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}` },
+        });
+        return stdout;
+      },
+      fallback: async () => {
+        log(`  Trae review 无明确结论，切换 MiniMax ${MINIMAX_REVIEW_MODEL} 复审...`);
+        return runMiniMaxReview(prompt);
+      },
+    });
   });
   if (review.verdict === 'approve') {
-    log(`  AI review APPROVE provider=${review.provider}`);
+    log(
+      `  AI review APPROVE provider=${review.provider} `
+      + `chunks=${review.reviewed_chunks || 1} total_chars=${diff.length}`,
+    );
     return review;
   }
   if (review.reason === 'indeterminate-review') {
