@@ -34,6 +34,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _matches_focused_test_command,
     _qa_task_text,
     _reconcile_requested_merge_feedback,
+    _reconcile_retort_scope_remediations,
     _reject_and_retry_kb_schema_failure,
     _resume_dispatch_context,
     _resume_review_qa_candidate,
@@ -699,6 +700,81 @@ def test_transient_para_api_outbox_failure_is_retryable():
     assert _is_transient_employee_dispatch_failure(result) is True
 
 
+def test_report_only_cursor_tls_failure_is_retryable():
+    error = (
+        ("echoed report-only prompt without transport evidence " * 300)
+        + "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: "
+        + "Client network socket disconnected before secure TLS connection was established"
+    )
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "error": error,
+                    "ok": False,
+                }
+            ]
+        }
+    }
+
+    assert _is_transient_employee_dispatch_failure(result) is True
+
+
+def test_report_only_executor_failure_without_transport_detail_is_retryable():
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "error": "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: Command failed",
+                    "handler": "para_delegate",
+                    "ok": False,
+                }
+            ]
+        }
+    }
+
+    assert _is_transient_employee_dispatch_failure(result) is True
+
+
+def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
+    attempts = [
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "error": (
+                            "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: "
+                            "Client network socket disconnected before secure TLS "
+                            "connection was established"
+                        ),
+                        "ok": False,
+                    }
+                ]
+            }
+        },
+        {"result": {"ok": True}},
+    ]
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "2")
+    monkeypatch.setattr(loop_runner, "_wait_for_para_device_online", lambda: {"online": True})
+    monkeypatch.setattr(loop_runner.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        loop_runner,
+        "execute_employee_task",
+        lambda *_args, **_kwargs: attempts.pop(0),
+    )
+
+    result = loop_runner._execute_employee_task_with_retries(
+        "test-qa-runner",
+        "report-only QA",
+        {},
+        user_id=0,
+    )
+
+    assert result["self_maintenance_retry_attempts"] == 2
+    assert result["result"]["ok"] is True
+    assert attempts == []
+
+
 def test_business_failure_is_not_retryable():
     result = {"result": {"outputs": [{"error": "pytest failed: assertion error"}]}}
 
@@ -980,6 +1056,47 @@ def test_resume_candidate_prefers_newer_same_task_code_hold_over_old_review_fail
     }
 
 
+def test_resume_candidate_prefers_latest_code_hold_over_stale_paired_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/stale",
+                "kind": "failed_steps",
+                "para_task_id": "task-stale",
+                "retry_count": 1,
+                "run_id": "run-stale-review",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/stale",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_black_not_passed",
+                "run_id": "run-stale-hold",
+                "task_id": "task-stale",
+            },
+            {
+                "branch": "devfleet/cursor/latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
+
+
 def test_resume_steps_rerun_failed_step_and_downstream_chain():
     assert _resume_steps(None) == {"code", "review", "qa"}
     assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
@@ -1105,12 +1222,11 @@ def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_onl
 @pytest.mark.parametrize(
     "hold_reason",
     [
-        "structured_review_blocking_findings",
         "structured_qa_verdict_not_pass",
         "structured_qa_blocking_findings",
     ],
 )
-def test_resume_review_qa_candidate_retries_structured_findings_on_existing_branch(
+def test_resume_review_qa_candidate_retries_structured_qa_on_existing_branch(
     hold_reason: str,
 ):
     memory = {
@@ -1143,7 +1259,110 @@ def test_resume_review_qa_candidate_retries_structured_findings_on_existing_bran
     )
 
 
-def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
+def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypatch):
+    memory = {
+        "last_policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/too-wide",
+                "kind": "failed_steps",
+                "para_task_id": "task-wide",
+                "retry_count": 1,
+                "run_id": "run-wide",
+                "steps": ["review"],
+            }
+        ],
+        "recent_runs": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/too-wide",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-wide",
+                "phase": "complete",
+                "retort_clarification": {
+                    "changed_file_count": 13,
+                    "clarification": {
+                        "questions": [
+                            {"reason": "elevated_risk_or_large_diff"},
+                        ]
+                    },
+                },
+                "run_id": "run-wide",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-wide"],
+    }
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/too-wide",
+        "failed_run_id": "run-wide",
+        "failed_steps": ["code"],
+        "para_task_id": "task-wide",
+        "reason": "resume_automated_remediation_candidate",
+        "remediation_feedback": (
+            "Retort requested risk acceptance for 13 changed files; "
+            "rebuild the smallest valid fix from the clean base."
+        ),
+        "remediation_reason": "retort_scope_too_large",
+    }
+    assert "continue_existing_code_task" not in result
+    prompt = _code_task_text("run-next", {}, memory, result)
+    assert "RETORT SCOPE REMEDIATION" in prompt
+    assert "Do not copy its repository-wide formatting churn" in prompt
+
+
+def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
+    memory = {"open_items": []}
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/ambiguous",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-ambiguous",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "missing_business_intent"}],
+                    },
+                },
+                "run_id": "run-ambiguous",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 0,
+        "changed": False,
+        "run_ids": [],
+    }
+    assert memory["open_items"] == []
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_review_dimension_fail",
+        "structured_review_high_severity",
+    ],
+)
+def test_resume_candidate_rebuilds_structured_review_rejection_from_clean_base(
+    hold_reason: str,
+):
     memory = {
         "open_items": [
             {
@@ -1157,7 +1376,7 @@ def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
             {
                 "branch": "devfleet/trae/current-review",
                 "kind": "automated_remediation",
-                "reason": "structured_review_blocking_findings",
+                "reason": hold_reason,
                 "run_id": "run-current",
                 "task_id": "task-current",
             },
@@ -1169,12 +1388,12 @@ def test_resume_candidate_prefers_newer_structured_hold_over_old_merge_veto():
 
     assert result == {
         "branch": "devfleet/trae/current-review",
-        "continue_existing_code_task": True,
         "failed_run_id": "run-current",
         "failed_steps": ["code"],
         "para_task_id": "task-current",
         "reason": "resume_automated_remediation_candidate",
     }
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
 
 
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
@@ -1302,15 +1521,27 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "platform-equivalent local `python -m pytest` command" in qa
     assert "same focused test file" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
-    assert "python -m black --check modman/ modstore_server/ tests/" in qa
-    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in qa
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
+    ) in qa
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
+    ) in qa
     assert "python scripts/dev/source_governance.py --top 10" in qa
     assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
-    assert "python -m black --check modman/ modstore_server/ tests/" in code
-    assert "python -m isort --check-only --diff modman/ modstore_server/ tests/" in code
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/feat/base --target-ref WORKTREE"
+    ) in code
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/feat/base --target-ref WORKTREE"
+    ) in code
     assert "python scripts/dev/source_governance.py --top 10" in code
     assert "executable_template object" in code
     assert "validate_kb_payload" in code
@@ -1565,6 +1796,22 @@ def test_structured_report_gate_requires_black_isort_and_source_governance(monke
 
 def test_quality_command_matchers_require_real_commands_and_scopes():
     assert matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert matches_isort_check_command(
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref HEAD"
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref HEAD"
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref HEAD --target-ref HEAD"
+    )
+    assert matches_black_check_command(
         "cd 成都修茈科技有限公司/MODstore_deploy && "
         "python3 -m black --check modman/ modstore_server/ tests/"
     )
@@ -1735,6 +1982,65 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+def test_update_loop_memory_retires_code_remediation_after_downstream_qa_failure(
+    monkeypatch, tmp_path
+):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/cursor/old-code",
+                        "kind": "automated_remediation",
+                        "reason": "structured_qa_black_not_passed",
+                        "run_id": "old-run",
+                        "task_id": "old-task",
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/cursor/delivered-code",
+            "completed_at": "2026-07-27T00:00:00+00:00",
+            "para_task_id": "new-task",
+            "policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+            "resume_candidate": {
+                "branch": "devfleet/cursor/old-code",
+                "failed_run_id": "old-run",
+                "failed_steps": ["code"],
+                "para_task_id": "old-task",
+            },
+            "run_id": "new-run",
+            "status": "failed",
+            "steps": [
+                {"ok": True, "step": "code"},
+                {"ok": True, "step": "review"},
+                {"ok": False, "step": "qa"},
+            ],
+        },
+        {"reason": "force"},
+    )
+    memory = _load_loop_memory()
+
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["branch"] == "devfleet/cursor/delivered-code"
+    assert memory["open_items"][0]["kind"] == "failed_steps"
+    assert memory["open_items"][0]["para_task_id"] == "new-task"
+    assert memory["open_items"][0]["run_id"] == "new-run"
+    assert memory["open_items"][0]["steps"] == ["qa"]
+    assert memory["closed_items"][-1]["original_item"]["run_id"] == "old-run"
+    assert memory["closed_items"][-1]["resolution_reason"] == "superseded_by_successful_code_step"
 
 
 def test_merge_request_does_not_close_open_remediation(monkeypatch, tmp_path):

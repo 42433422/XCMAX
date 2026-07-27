@@ -7,11 +7,35 @@ import pytest
 pytestmark = pytest.mark.release_gate
 
 from modstore_server.autonomy_scheduler import (  # noqa: E402
+    _reconcile_completed_loop_memory_safely,
     pending_automated_remediation,
     register_autonomy_jobs,
     run_pending_automated_remediation,
     self_maintenance_cooldown_minutes,
 )
+
+
+@pytest.fixture(autouse=True)
+def _disable_real_memory_reconciliation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler._reconcile_completed_loop_memory_safely",
+        lambda: None,
+    )
+
+
+def test_memory_reconciliation_failure_does_not_block_scheduler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fail() -> None:
+        raise OSError("ledger unavailable")
+
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_memory_reconciliation."
+        "reconcile_completed_loop_memory_from_ledger",
+        _fail,
+    )
+
+    _reconcile_completed_loop_memory_safely()
 
 
 def test_remediation_trigger_uses_shorter_bounded_cooldown(
