@@ -52,6 +52,7 @@ from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
     matches_isort_check_command,
     matches_source_governance_command,
+    quality_check_failure,
 )
 
 QUALITY_CHECKS_JSON = (
@@ -1180,6 +1181,31 @@ def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
     }
 
 
+def test_resume_review_qa_candidate_retries_executor_outage_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-executor-outage",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_executor_unavailable",
+                "run_id": "r-executor-outage",
+                "task_id": "task-executor-outage",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-executor-outage",
+        "failed_run_id": "r-executor-outage",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-executor-outage",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
 def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_only():
     branch = "devfleet/cursor/sub-1-legacy-target-ref"
     memory = {
@@ -1626,6 +1652,49 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
 
 
+def test_structured_report_gate_classifies_executor_outage_separately(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    outage = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":['
+                '"QA worker shell execution backend unavailable; could not run focused pytest.",'
+                '"Missing successful focused tested_commands entry.",'
+                '"Diff review not executed due same backend failure."],'
+                '"tested_commands":[{"command":"runtime-python -m pytest focused.py -q",'
+                '"exit_code":1,"status":"failed"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"new_failures":["focused pytest not executed"],'
+                '"new_errors":["shell execution backend unavailable; no observable exit codes"]},'
+                '"changed_files_scope":"medium","risk_class":"high"}'
+            ),
+        }
+    ]
+    real_failure = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["focused pytest assertion failed"],'
+                '"tested_commands":[{"command":"runtime-python -m pytest focused.py -q",'
+                '"exit_code":1,"status":"failed"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"new_failures":["test_policy assertion failed"],'
+                '"new_errors":[]},'
+                '"changed_files_scope":"medium","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(outage)["reason"] == "structured_qa_executor_unavailable"
+    assert _structured_report_gate(real_failure)["reason"] == "structured_qa_verdict_not_pass"
+
+
 def test_structured_report_gate_prioritizes_missing_target_ref(monkeypatch):
     monkeypatch.setenv(
         "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
@@ -1689,8 +1758,10 @@ def test_structured_report_gate_accepts_platform_equivalent_focused_command(
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
                 '"tested_commands":['
                 f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
-                '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
-                'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
+                '{"command":"cd /tmp/xcmax-qa-target && '
+                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' python3 -m pytest "
+                "'成都修茈科技有限公司/MODstore_deploy/tests/"
+                "test_self_maintenance_loop_runner_policy.py' -q\","
                 '"exit_code":0,"status":"passed (27 tests passed)"}],'
                 f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
@@ -1711,7 +1782,9 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"python3 -m pytest tests/test_other.py -q",'
+                '"tested_commands":[{"command":"cd /tmp/xcmax-qa-target && '
+                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' "
+                'python3 -m pytest tests/test_other.py -q",'
                 '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1807,6 +1880,16 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/main --target-ref HEAD"
     )
+    assert matches_black_check_command(
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert matches_isort_check_command(
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
     assert not matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/main --target-ref HEAD"
@@ -1830,9 +1913,46 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         "echo python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
     )
     assert matches_source_governance_command("python3 scripts/dev/source_governance.py --top 10")
+    assert matches_source_governance_command(
+        "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10"
+    )
     assert not matches_source_governance_command(
         "echo python3 scripts/dev/source_governance.py --top 10"
     )
+
+
+def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
+    diff_prefix = (
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality"
+    )
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": (
+                    f"{diff_prefix} --tool black --base-ref origin/main "
+                    "--target-ref origin/feature"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    f"{diff_prefix} --tool isort --base-ref origin/main "
+                    "--target-ref origin/feature"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert quality_check_failure(qa_json) is None
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
@@ -3265,6 +3385,50 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
     assert result is None
 
 
+def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatch):
+    """Exhausted QA on one branch must not prevent code resume on another hold."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        lambda *args, **kwargs: {"queued": True},
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-29b56e",
+                "kind": "failed_steps",
+                "para_task_id": "b3fd2376-34fd-4c14-91da-0e773229b56e",
+                "retry_count": 3,
+                "run_id": "f3e7bd4a-87df-4ed6-a95f-b8beaf747c32",
+                "steps": ["qa"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["reason"] == "structured_review_blocking_findings"
+
+
 def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
     """code类失败项应打印代码重试日志，而不是escalating to human review。"""
     from modstore_server import self_maintenance_loop_runner as loop_runner
@@ -3296,3 +3460,59 @@ def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypa
     assert "will retry code remediation" in caplog.text
     assert "escalating to human review" not in caplog.text
     assert result is None
+
+
+def test_run_cmd_excerpt_truncates_and_terminates_large_output_quickly():
+    import sys
+    import time
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    args = [
+        sys.executable,
+        "-c",
+        "import sys; sys.stdout.write('a' * 100000); sys.stdout.flush()",
+    ]
+    started = time.monotonic()
+    out = run_cmd_excerpt(args, max_chars=200, timeout=180)
+    elapsed = time.monotonic() - started
+    assert len(out) == 200
+    assert elapsed < 15
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_fully_read():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    with pytest.raises(RuntimeError, match="command failed"):
+        run_cmd_excerpt(
+            [sys.executable, "-c", "import sys; sys.exit(2)"],
+            max_chars=10_000,
+        )
+
+
+def test_run_cmd_excerpt_accepts_truncated_success_despite_late_exit():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    script = "import sys\n" "sys.stdout.write('z' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(0)\n"
+    out = run_cmd_excerpt(
+        [sys.executable, "-c", script],
+        max_chars=128,
+    )
+    assert out == "z" * 128
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_truncated():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    script = "import sys\n" "sys.stdout.write('x' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(2)\n"
+    with pytest.raises(RuntimeError, match="command failed"):
+        run_cmd_excerpt(
+            [sys.executable, "-c", script],
+            max_chars=128,
+        )

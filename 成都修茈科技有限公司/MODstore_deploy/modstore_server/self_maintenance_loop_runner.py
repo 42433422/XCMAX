@@ -52,12 +52,18 @@ from .self_maintenance_quality_gate import diff_quality_commands as _diff_qualit
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
 )
+from .self_maintenance_quality_gate import (
+    qa_executor_infrastructure_unavailable as _qa_executor_infrastructure_unavailable,
+)
+from .self_maintenance_quality_gate import qa_verdict_failure_reason as _qa_verdict_failure_reason
 from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
 from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
+    qa_executor_retry_prompt,
 )
 from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
+from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
 
 logger = logging.getLogger(__name__)
 
@@ -904,6 +910,7 @@ _AUTOMATED_REMEDIATION_QA_ONLY_REASONS = frozenset(
         "changed_files_outside_low_risk_globs",
         "missing_report_only_evidence",
         "max_retries_exceeded",
+        "structured_qa_executor_unavailable",
         "structured_qa_focused_command_not_passed",
         "structured_qa_target_branch_unavailable",
     }
@@ -974,7 +981,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         return None
     max_retries = int(os.environ.get("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES") or "3")
     open_items_raw = memory.get("open_items")
-    escalated_items = []
     successfully_enqueued_items = []
     if isinstance(open_items_raw, list):
         # First pass: collect items exceeding max retries, but only mark escalated after successful enqueue for non-code items
@@ -1033,7 +1039,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                         if result.get("queued"):
                             item["escalated"] = True
                             successfully_enqueued_items.append(item_key)
-                            escalated_items.append(item)
                             logger.info(
                                 "successfully enqueued escalated item run_id=%s to human queue",
                                 item.get("run_id"),
@@ -1073,9 +1078,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             ]
         else:
             memory["open_items"] = open_items_raw
-    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
-    if escalated_items:
-        return None
+    # Escalated non-code failures are removed from open_items above; do not stop
+    # the whole loop when other branches still have executable remediation holds.
 
     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
     # return None to trigger a fresh code step. The employee will see the
@@ -2172,23 +2176,10 @@ def _run_step_with_inner_retries(
     user_id: int,
     run_id: str,
 ) -> Tuple[Dict[str, Any], bool, str, Dict[str, Any], str, int, int]:
-    """Run a single step with inner fix-retry (code) or marker-retry (review/qa).
+    """Run code fix retries or report protocol/infrastructure retries.
 
-    返回 (result, ok, failure_reason, para_meta, report_excerpt,
-           code_fix_retry_rounds, marker_retry_rounds)。
-
-    内层重试边界：
-    - code step: MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES (默认 2) 额外轮数。
-      失败时把 failure_reason 反馈给员工，强制其重新跑测试/lint 直到通过再交付。
-      攻克 30/37 静默失败：员工代码测试不过 → loop 不再立即终止，而是给员工
-      N 次修代码机会，failure_reason 直接拼进 task_text 让 LLM 看到具体错误。
-    - review/qa step: MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES (默认 1) 额外轮数。
-      dispatch 成功但缺 SELF_MAINTENANCE_*_JSON marker 时，提醒员工按格式
-      重新输出，gate 标准不变。攻克 13 条 waiting_human_strategy 中因 marker
-      缺失而误判的部分。
-
-    每次内层尝试写一条 phase=step_retry 的 ledger 记录（最终结论由调用方写
-    phase=step），保证内层痕迹可观测但不污染 steps 列表。
+    Returns the final employee result plus retry counters. Intermediate attempts
+    are recorded as ``phase=step_retry`` without polluting the final step list.
     """
     if step_name == "code":
         inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
@@ -2245,9 +2236,15 @@ def _run_step_with_inner_retries(
             if not protocol_ok:
                 failure_reason = protocol_reason or "structured_protocol_invalid"
                 should_retry = True
+            elif step_name == "qa":
+                qa_json = _structured_report_from_step(
+                    {"report_excerpt": report_excerpt},
+                    STRUCTURED_QA_MARKER,
+                )
+                if _qa_executor_infrastructure_unavailable(qa_json):
+                    failure_reason = "structured_qa_executor_unavailable"
+                    should_retry = True
 
-        # 写非最终的 step_retry trace（最终 step 由调用方写）
-        # 只在确实要重试时才写 trace，避免 should_retry=False 时误写一条悬空 step_retry
         if not is_final and should_retry:
             trace_record = {
                 "employee_id": employee_id,
@@ -2278,6 +2275,9 @@ def _run_step_with_inner_retries(
                 + "report completion unless the previously failing command now exits 0."
             )
             code_fix_retry_rounds = attempt
+        elif failure_reason == "structured_qa_executor_unavailable":
+            last_task_text = qa_executor_retry_prompt(task_text, attempt, inner_max)
+            marker_retry_rounds = attempt
         else:  # marker / protocol
             last_task_text = (
                 task_text
@@ -3216,7 +3216,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
         if verdict != "PASS":
             return {
                 "ok": False,
-                "reason": "structured_qa_verdict_not_pass",
+                "reason": _qa_verdict_failure_reason(qa_json),
                 "qa": qa_json,
             }
         blocking = qa_json.get("blocking_findings")
@@ -5617,7 +5617,7 @@ def _auto_merge_local_repo(
     diff_stats = _diff_numstat_for_branch(
         base_branch=base_branch, branch=branch, workspace=workspace
     )
-    diff_excerpt = _run_cmd(
+    diff_excerpt = _run_cmd_excerpt(
         [
             "git",
             "-c",
@@ -5629,7 +5629,8 @@ def _auto_merge_local_repo(
         ],
         cwd=workspace,
         timeout=180,
-    )[:20000]
+        max_chars=20000,
+    )
     kb_validation = _validate_kb_json_changes_for_auto_merge(
         branch=branch,
         files=files,
