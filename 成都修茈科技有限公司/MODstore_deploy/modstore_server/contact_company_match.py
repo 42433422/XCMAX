@@ -15,10 +15,6 @@ from pathlib import Path
 from sqlalchemy import func
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
-from modstore_server.contact_company_web_search import (
-    contact_web_search_budget_sec,
-    search_company_names_via_web,
-)
 from modstore_server.models import LandingContactSubmission, get_session_factory
 from modstore_server.research_tools import (
     is_plausible_company_name,
@@ -176,6 +172,11 @@ async def build_company_match_payload(query: str, limit: int, web: bool) -> dict
     incomplete_query = len(query) >= 2 and not typed_exact
     if web:
         try:
+            from modstore_server.contact_company_web_search import (
+                contact_web_search_budget_sec,
+                search_company_names_via_web,
+            )
+
             web_names, web_error, web_via = await asyncio.wait_for(
                 search_company_names_via_web(query, max_results=limit),
                 timeout=contact_web_search_budget_sec() + 0.75,

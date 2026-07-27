@@ -880,6 +880,30 @@ body.page-contact .intake-wizard-body {
 }
 .intake-review-dl dt { margin: 0; color: var(--text-faint); font-weight: 700; }
 .intake-review-dl dd { margin: 0; color: var(--text); white-space: pre-wrap; }
+.intake-privacy-consent {
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #f8fafc;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.intake-privacy-consent input {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.intake-privacy-consent a {
+  color: var(--blue);
+  font-weight: 700;
+  text-decoration: none;
+}
+.intake-privacy-consent a:hover {
+  text-decoration: underline;
+}
 .intake-wizard-actions {
   display: flex;
   flex-wrap: wrap;

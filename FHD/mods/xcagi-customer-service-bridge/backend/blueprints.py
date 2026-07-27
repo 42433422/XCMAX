@@ -35,6 +35,9 @@ class DemandFormSyncBody(BaseModel):
     desktop_os: str = Field(default="", max_length=16)
     need_mobile: bool = Field(default=True)
     submitted_at: str = Field(default="", max_length=64)
+    campaign: str = Field(default="", max_length=128)
+    medium: str = Field(default="", max_length=64)
+    content: str = Field(default="", max_length=128)
 
 
 class LandingFunnelSyncBody(BaseModel):
@@ -50,6 +53,9 @@ class LandingFunnelSyncBody(BaseModel):
     need_mobile: bool = Field(default=True)
     submitted_at: str = Field(default="", max_length=64)
     intake_source: str = Field(default="", max_length=64)
+    campaign: str = Field(default="", max_length=128)
+    medium: str = Field(default="", max_length=64)
+    content: str = Field(default="", max_length=128)
 
 
 class ChangeRequestCreateBody(BaseModel):
@@ -248,32 +254,19 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             "use_llm": body.use_llm,
         }
         result = await _run_user_cs_employee(payload)
-        if result.get("success") and signed_url:
-            data = result.get("data") or {}
-            if isinstance(data, dict):
-                items = list(data.get("items") or [])
-                if items and isinstance(items[0], dict):
-                    items[0] = {**items[0], "form_url": signed_url}
-                    if isinstance(items[0].get("message_text"), str) and signed_url not in items[0]["message_text"]:
-                        items[0]["message_text"] = items[0]["message_text"].replace(
-                            body.form_url or "https://xiu-ci.com/contact.html",
-                            signed_url,
-                        )
-                    data["items"] = items
-                    data["form_url"] = signed_url
-                    result["data"] = data
-        if body.market_user_id and result.get("success"):
-            try:
-                from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.application.user_cs_demand_intake_bridge import (
+            mark_demand_intake_sent,
+            normalize_demand_intake_result,
+        )
 
-                doc = load_pipeline(int(body.market_user_id))
-                doc["intake_sent"] = True
-                doc["stage"] = "intake"
-                now = datetime.now(timezone.utc).isoformat()
-                tl = list(doc.get("timeline") or [])
-                tl.append({"stage": "intake", "at": now, "source": "demand_intake"})
-                doc["timeline"] = tl[-30:]
-                save_pipeline(doc)
+        result, employee_ok = normalize_demand_intake_result(
+            result,
+            signed_url=signed_url,
+            fallback_url=body.form_url or "https://xiu-ci.com/contact.html",
+        )
+        if body.market_user_id and employee_ok:
+            try:
+                mark_demand_intake_sent(int(body.market_user_id))
             except Exception:
                 logger.exception("pipeline update after demand intake failed")
         return result
