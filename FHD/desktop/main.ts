@@ -1225,26 +1225,24 @@ async function createWindow(): Promise<void> {
       .catch(() => undefined)
   }
 
-  const loadMainApplication = async (): Promise<void> => {
-    if (!mainWindow) {
-      throw new Error('主窗口在应用加载前已关闭')
-    }
-    try {
-      updateSplashProgress(92, '正在打开主界面…')
-      await mainWindow.loadURL(desktopInitialUrl(), {
-        extraHeaders: 'Cache-Control: no-cache\r\n'
-      })
-      tagDesktopWebContents(mainWindow)
-      if (process.platform === 'darwin') {
-        ensureMacWindowInWorkArea(mainWindow)
-      }
-      mainWindow.focus()
-    } catch (error) {
-      console.error('[xcagi-desktop] load main application failed', error)
-      throw error
-    }
-  }
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow) tagDesktopWebContents(mainWindow)
+  })
 
+  configureUpdater(mainWindow)
+}
+
+function beginMainApplicationReadiness(): void {
+  const loadMainApplication = async (): Promise<void> => {
+    if (!mainWindow) throw new Error('主窗口在应用加载前已关闭')
+    updateSplashProgress(92, '正在打开主界面…')
+    await mainWindow.loadURL(desktopInitialUrl(), {
+      extraHeaders: 'Cache-Control: no-cache\r\n'
+    })
+    tagDesktopWebContents(mainWindow)
+    if (process.platform === 'darwin') ensureMacWindowInWorkArea(mainWindow)
+    mainWindow.focus()
+  }
   const splashStarted = Date.now()
   const splashBudgetMs = packagedBackendHealthTimeoutMs()
   let splashPhase: 'boot' | 'routes' | 'done' = 'boot'
@@ -1290,10 +1288,6 @@ async function createWindow(): Promise<void> {
     })
     .finally(() => clearInterval(splashTicker))
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow) tagDesktopWebContents(mainWindow)
-  })
-
   void waitForBackendStatus(DEFAULT_PORT).then(status => {
     console.info(
       '[xcagi-desktop] startup',
@@ -1304,8 +1298,6 @@ async function createWindow(): Promise<void> {
     )
     void showDbRecoveryDialogIfNeeded(status)
   })
-
-  configureUpdater(mainWindow)
 }
 
 async function waitForMainApplicationReady(): Promise<void> {
@@ -1577,6 +1569,7 @@ function bootstrap(): void {
           app.quit()
           return
         }
+        beginMainApplicationReadiness()
         if (pendingRollback) {
           await waitForMainApplicationReady()
           await waitForPostUpdateStartupStability()
@@ -1643,7 +1636,7 @@ function bootstrap(): void {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createWindow()
+        void createWindow().then(() => beginMainApplicationReadiness())
       }
     })
   }
