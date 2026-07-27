@@ -15,6 +15,7 @@ _TRANSIENT_TERMS = (
     "para api 调用失败",
     "para_api_failed_outboxed",
     "para_api_rejected_outboxed",
+    "report-only 执行器失败",
     "socket hang up",
     "ssl_error_syscall",
     "timeout waiting for para",
