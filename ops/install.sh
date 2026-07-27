@@ -61,7 +61,7 @@ echo "[3/5] 写 $CRON_FILE"
 XCMAX_ROOT_VAL="${OPS_XCMAX_ROOT:-/root/XCMAX}"
 AUTOUPDATE_LINE=""
 if [[ "${OPS_INSTALL_FHD_AUTOUPDATE:-1}" == "1" ]]; then
-  AUTO_SCRIPT="${XCMAX_ROOT_VAL}/FHD/scripts/deploy/fhd-auto-update.sh"
+  AUTO_SCRIPT="${OPS_FHD_DEPLOY_ROOT:-/opt/fhd-full}/scripts/deploy/fhd-auto-update.sh"
   if [[ -f "$AUTO_SCRIPT" ]]; then
     AUTOUPDATE_LINE="*/5 * * * * root set -a; . ${ENV_FILE}; set +a; bash ${AUTO_SCRIPT} >> /var/log/fhd-auto-update.log 2>&1"
   else
@@ -98,11 +98,11 @@ chmod 644 "$CRON_FILE"
 
 echo "[4/5] 清理旧 crontab 双驱动 + logrotate"
 if [[ -n "$AUTOUPDATE_LINE" ]] && crontab -l >/dev/null 2>&1; then
-  if crontab -l | grep -q 'fhd-auto-update.sh'; then
+  if crontab -l | grep -Fq "$AUTO_SCRIPT"; then
     mkdir -p /root/cron-backups
     crontab -l > "/root/cron-backups/crontab-$(date +%Y%m%d-%H%M%S).bak"
-    crontab -l | grep -v 'fhd-auto-update.sh' | crontab -
-    echo "  已从用户 crontab 移除 fhd-auto-update 行（归口 ${CRON_FILE}），原表已备份"
+    crontab -l | grep -Fv "$AUTO_SCRIPT" | crontab -
+    echo "  已从用户 crontab 移除生产 fhd-auto-update 行（保留 staging，归口 ${CRON_FILE}），原表已备份"
   fi
 fi
 cat > /etc/logrotate.d/xcmax-ops <<'ROT'
