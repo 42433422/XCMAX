@@ -100,9 +100,16 @@ apply_modstore() {
   rm -rf -- "$target"
   install -d -m 0750 "$target"
   tar -xzf "$incoming/modstore-source.tar.gz" -C "$target"
+  mod_rel="成都修茈科技有限公司/MODstore_deploy"
+  [[ -s "$incoming/modstore-static.tar.gz" ]] || {
+    log "ERROR: MODstore DR 前端制品缺失"
+    return 1
+  }
+  install -d -m 0750 "$target/$mod_rel/market"
+  tar -xzf "$incoming/modstore-static.tar.gz" \
+    -C "$target/$mod_rel/market"
   cp "$incoming/modstore-release.json" "$target/.xcmax-release.json"
 
-  mod_rel="成都修茈科技有限公司/MODstore_deploy"
   prepare_shared_venv \
     "$RUNTIME/source/$mod_rel/.venv" "$SHARED/modstore-venv"
   [[ -x "$SHARED/modstore-venv/bin/python" ]] || {

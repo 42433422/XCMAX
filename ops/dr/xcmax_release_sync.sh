@@ -85,10 +85,18 @@ PY
   git -C "$SOURCE_ROOT" archive --format=tar.gz \
     --output="$staging/modstore-source.tar.gz" \
     "$SHA" -- "成都修茈科技有限公司"
+  runtime_dist="$MODSTORE_CURRENT/成都修茈科技有限公司/MODstore_deploy/market/dist"
+  [[ -f "$runtime_dist/index.html" ]] || {
+    log "ERROR: MODstore 生产前端产物不存在: $runtime_dist/index.html"
+    exit 1
+  }
+  tar -C "$(dirname "$runtime_dist")" -czf \
+    "$staging/modstore-static.tar.gz" dist
   cp "$MODSTORE_CURRENT/.xcmax-release.json" "$staging/modstore-release.json"
   (
     cd "$staging"
-    sha256sum modstore-source.tar.gz modstore-release.json \
+    sha256sum \
+      modstore-source.tar.gz modstore-static.tar.gz modstore-release.json \
       >modstore.MANIFEST.txt
   )
 else
