@@ -8,7 +8,7 @@
       name="description"
       content="联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260723j" />
+    <link rel="stylesheet" href="./styles.css?v=20260727a" />
   </head>
 <body class="page-contact">
 <header class="site-header">
@@ -513,6 +513,98 @@
           </div>
         </div>
       </section>
+
+      <section
+        class="section contact-channels-section"
+        aria-labelledby="contact-channels-title"
+      >
+        <div class="container">
+          <div class="contact-channels reveal">
+            <header class="contact-channels__head">
+              <h2 id="contact-channels-title">更多联系渠道</h2>
+              <p>点击图标即可获取对应联系方式；当前已开通企业微信客服。</p>
+            </header>
+            <ul class="contact-channel-grid" role="list">
+              <li>
+                <button
+                  type="button"
+                  class="contact-channel-btn"
+                  data-channel="wecom"
+                  aria-expanded="false"
+                  aria-controls="contact-channel-panel-wecom"
+                >
+                  <span class="contact-channel-btn__icon" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+                      <rect width="48" height="48" rx="12" fill="#07C160" />
+                      <path
+                        d="M16.2 19.6c0-4.1 4.2-7.4 9.3-7.4s9.3 3.3 9.3 7.4-4.2 7.4-9.3 7.4c-.7 0-1.4-.1-2-.2l-3.4 1.9.7-2.8c-2.7-1.3-4.6-3.6-4.6-6.3Zm-5.4 9.1c0-2.7 2.2-5.1 5.4-6.3-.2.7-.3 1.4-.3 2.1 0 3.7 3.4 6.9 8.1 7.7-1.1 2.5-3.9 4.3-7.3 4.3-.6 0-1.2-.1-1.7-.2l-2.9 1.6.6-2.4c-1.4-1-2-2.3-2-3.8Z"
+                        fill="#fff"
+                      />
+                    </svg>
+                  </span>
+                  <span class="contact-channel-btn__label">企业微信</span>
+                  <span class="contact-channel-btn__hint">点击获取</span>
+                </button>
+              </li>
+            </ul>
+
+            <div
+              id="contact-channel-panel-wecom"
+              class="contact-channel-panel"
+              data-channel-panel="wecom"
+              hidden
+              role="region"
+              aria-label="企业微信联系方式"
+            >
+              <div class="contact-channel-panel__card">
+                <div class="contact-channel-panel__qr">
+                  <img
+                    src="/assets/wecom-kf-qr.png"
+                    width="180"
+                    height="180"
+                    alt="企业微信客服二维码"
+                    loading="lazy"
+                  />
+                </div>
+                <div class="contact-channel-panel__meta">
+                  <p class="contact-channel-panel__eyebrow">企业微信 · 微信客服</p>
+                  <h3>小C助理</h3>
+                  <p class="contact-channel-panel__desc">
+                    微信扫码即可发起会话；手机可直接打开客服链接。
+                  </p>
+                  <p class="contact-channel-panel__link-row">
+                    <code id="contact-wecom-url"
+                      >https://work.weixin.qq.com/kfid/kfcf31d9feeca85a9b0</code
+                    >
+                  </p>
+                  <div class="contact-channel-panel__actions">
+                    <a
+                      class="btn btn-accent"
+                      href="https://work.weixin.qq.com/kfid/kfcf31d9feeca85a9b0"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      >打开企微客服</a
+                    >
+                    <button
+                      type="button"
+                      class="btn"
+                      id="contact-wecom-copy"
+                      data-copy-target="contact-wecom-url"
+                    >
+                      复制链接
+                    </button>
+                  </div>
+                  <p
+                    id="contact-wecom-copy-status"
+                    class="contact-channel-panel__status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 <footer class="site-footer">
       <div class="container footer-inner">
@@ -548,6 +640,7 @@
 
 
 <script src="./contact-intake.js?v=20260719b"></script>
+<script src="./contact-channels.js?v=20260727a"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   setTimeout(function () {
