@@ -1074,9 +1074,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             ]
         else:
             memory["open_items"] = open_items_raw
-    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
-    if escalated_items:
-        return None
+    # Escalated non-code failures are removed from open_items above; do not stop
+    # the whole loop when other branches still have executable remediation holds.
 
     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
     # return None to trigger a fresh code step. The employee will see the
