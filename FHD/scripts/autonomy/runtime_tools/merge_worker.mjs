@@ -767,8 +767,15 @@ function isExternalReviewRemediationTask(task) {
   return String(task?.description || '').includes('=== EXTERNAL MERGE REVIEW REMEDIATION ===');
 }
 
+function isSelfMaintenanceCanonicalMainTask(task) {
+  return String(task?.description || '').includes(
+    '=== SELF_MAINTENANCE_CANONICAL_MERGE_BASE:main ===',
+  );
+}
+
 export function selectTaskMergeBase(task, parentBaseBranch = '') {
   const configuredBase = String(task?.branch || 'main').trim() || 'main';
+  if (isSelfMaintenanceCanonicalMainTask(task)) return 'main';
   if (!isExternalReviewRemediationTask(task)) return configuredBase;
   const parentBase = String(parentBaseBranch || '').trim();
   if (!parentBase || parentBase === configuredBase) {
@@ -853,13 +860,15 @@ async function processTask(token, task, state) {
   }
   let baseBranch = String(task.branch || 'main').trim() || 'main';
   const isGithub = await isGitHubOrigin(workspaceExists ? workspace : '', repoUrl);
-  if (isGithub && isExternalReviewRemediationTask(task)) {
-    const parentBaseBranch = await findParentPullRequestBase(
-      workspaceExists ? workspace : '', baseBranch, repoFull,
-    );
+  if (isGithub && (
+    isExternalReviewRemediationTask(task) || isSelfMaintenanceCanonicalMainTask(task)
+  )) {
+    const parentBaseBranch = isExternalReviewRemediationTask(task)
+      ? await findParentPullRequestBase(workspaceExists ? workspace : '', baseBranch, repoFull)
+      : '';
     try {
       baseBranch = selectTaskMergeBase(task, parentBaseBranch);
-      log(`task ${task.id} 修复分支提升：parent=${task.branch} → canonical base=${baseBranch}`);
+      log(`task ${task.id} 分支提升：parent=${task.branch} → canonical base=${baseBranch}`);
     } catch (err) {
       const reason = String(err?.message || err);
       await reportMergeConflict(token, task, reason);
