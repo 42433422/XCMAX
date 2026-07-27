@@ -56,6 +56,10 @@ previous_segment="$(
     -regextype posix-extended -regex '.*/[0-9A-F]{24}' -printf '%f\n' |
     sort | tail -1
 )"
+restore_point="xcmax-dr-pg16-$(date -u +%Y%m%dT%H%M%SZ)"
+docker exec -u postgres "$CONTAINER" sh -ceu \
+  "psql -U \"\$POSTGRES_USER\" -d postgres -Atqc \
+  \"SELECT pg_create_restore_point('$restore_point')\"" >/dev/null
 primary_lsn="$(
   docker exec -u postgres "$CONTAINER" sh -ceu \
     'psql -U "$POSTGRES_USER" -d postgres -Atqc "SELECT pg_switch_wal()"'
