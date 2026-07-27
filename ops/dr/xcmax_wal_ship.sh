@@ -60,6 +60,13 @@ previous_segment="$(
     sort | tail -1
 )"
 
+# PostgreSQL can skip a switch when archive_timeout has just closed an otherwise
+# idle segment. Emit a harmless restore-point WAL record first so the following
+# switch always exercises archive_command instead of reporting a false failure.
+restore_point="xcmax-dr-$(date -u +%Y%m%dT%H%M%SZ)"
+sudo -u "$PG_OS_USER" psql -v ON_ERROR_STOP=1 -Atqc \
+  "SELECT pg_create_restore_point('${restore_point}')" postgres >/dev/null
+
 # PostgreSQL 10 uses the WAL function names. A forced switch bounds RPO even
 # during quiet periods; archive_timeout remains a second line of defence.
 primary_lsn="$(
