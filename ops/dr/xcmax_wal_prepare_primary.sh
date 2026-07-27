@@ -98,6 +98,26 @@ fi
   exit 1
 }
 
+# pg_basebackup reads every regular file in PGDATA. Historical root-owned
+# config backups are allowed only by explicit basename and receive group-read;
+# any other foreign-owned top-level file remains a hard failure.
+data_directory="$(pg_show data_directory)"
+while IFS= read -r -d '' foreign_file; do
+  case "$(basename "$foreign_file")" in
+    postgresql.conf.bak*|pg_hba.conf.bak*)
+      chgrp "$PG_OS_USER" "$foreign_file"
+      chmod g+r "$foreign_file"
+      log "允许 pg_basebackup 读取历史配置备份: $(basename "$foreign_file")"
+      ;;
+    *)
+      log "ERROR: PGDATA 存在非 postgres 所有的未知文件: $foreign_file"
+      exit 1
+      ;;
+  esac
+done < <(
+  find "$data_directory" -maxdepth 1 -type f ! -user "$PG_OS_USER" -print0
+)
+
 snapshot="$(date -u +%Y%m%dT%H%M%SZ)-$(pg_system_identifier)"
 staging="$BASE_ROOT/.staging-$snapshot"
 final="$BASE_ROOT/$snapshot"
