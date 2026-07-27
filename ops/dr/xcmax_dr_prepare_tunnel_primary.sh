@@ -93,6 +93,7 @@ Match User {user}
     AllowAgentForwarding no
     AllowTcpForwarding local
     GatewayPorts no
+Match all
 {end}
 """
 path.write_text(text.rstrip() + "\n\n" + block.strip() + "\n", encoding="utf-8")

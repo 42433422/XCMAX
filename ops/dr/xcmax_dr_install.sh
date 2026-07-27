@@ -62,7 +62,6 @@ ExecStart=/usr/local/sbin/xcmax-dr-failover-guard
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
-ProtectSystem=full
 EOF
 
 cat >/etc/systemd/system/xcmax-dr-failover-guard.timer <<'EOF'
