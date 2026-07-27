@@ -214,6 +214,7 @@ fhd_overrides = {
     "MODSTORE_DIGEST_BASE_URL": "http://127.0.0.1:19999",
     "MODSTORE_ALL_HANDS_BASE_URL": "http://127.0.0.1:19999",
     "XCMAX_NODE_ROLE": runtime_mode,
+    "XCAGI_PASSIVE_NODE": "1" if runtime_mode == "active-peer" else "0",
 }
 mod_overrides = {
     "DATABASE_URL": modstore_database_url,
@@ -431,8 +432,18 @@ systemctl enable xcmax-dr-modstore.service >/dev/null
 if [[ "$RUNTIME_MODE" == "active-peer" ]]; then
   systemctl enable xcmax-dr-fhd.service >/dev/null
   systemctl restart xcmax-dr-fhd.service xcmax-dr-modstore.service
-  curl -fsS http://127.0.0.1:15100/api/health >/dev/null
-  curl -fsS http://127.0.0.1:19999/api/health >/dev/null
+  deadline=$((SECONDS + 150))
+  while ((SECONDS < deadline)); do
+    if curl -fsS --max-time 5 http://127.0.0.1:15100/api/health >/dev/null &&
+      curl -fsS --max-time 5 http://127.0.0.1:19999/api/health >/dev/null; then
+      break
+    fi
+    systemctl is-active --quiet xcmax-dr-fhd.service
+    systemctl is-active --quiet xcmax-dr-modstore.service
+    sleep 2
+  done
+  curl -fsS --max-time 5 http://127.0.0.1:15100/api/health >/dev/null
+  curl -fsS --max-time 5 http://127.0.0.1:19999/api/health >/dev/null
   echo "活动应用节点已准备：FHD/MODstore 在线，后台任务与支付保持单 Leader"
 else
   systemctl restart xcmax-dr-modstore.service
