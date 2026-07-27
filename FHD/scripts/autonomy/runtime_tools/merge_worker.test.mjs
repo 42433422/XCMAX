@@ -262,6 +262,8 @@ test('installer repairs stale Node paths and reloads the LaunchAgent definition'
   assert.match(installer, /NODE_BIN=.*command -v node/);
   assert.match(installer, /Set :ProgramArguments:0 \$NODE_BIN/);
   assert.match(installer, /launchctl bootout "\$target"/);
-  assert.match(installer, /launchctl bootstrap "\$domain" "\$PLIST"/);
+  assert.match(installer, /bootstrap_agent\(\)/);
+  assert.match(installer, /for attempt in 1 2 3/);
+  assert.match(installer, /bootstrap_agent/);
   assert.match(installer, /trap .*EXIT/);
 });
