@@ -37,6 +37,7 @@ import {
   type RollbackTriggerResult,
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import { runBackendMigrationProcess } from './backend-migration'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
@@ -896,59 +897,30 @@ async function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResul
   }
 }
 
-function runBackendMigration(): Promise<string> {
+function runBackendMigration(options: {
+  attachToRollback?: boolean
+  ifNeeded?: boolean
+} = {}): Promise<string> {
   const executable = backendExecutable()
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
-      cwd: executable.cwd,
-      env: {
-        ...sanitizeBackendProxyEnv(process.env),
-        XCAGI_DESKTOP_MODE: '1',
-        XCAGI_DATA_DIR: app.getPath('userData'),
-        XCAGI_UVICORN_RELOAD: '0',
-        XCAGI_GLOBAL_RATE_LIMIT: '0',
-        ...backendEditionEnv(),
-        PYTHONUTF8: '1'
-      },
-      windowsHide: true
-    })
-    let stderr = ''
-    let stdout = ''
-    let databaseBackupPath = ''
-    let backupAttachError: unknown
-    child.stderr.on('data', data => {
-      stderr += String(data)
-      process.stderr.write(`[xcagi-migrate] ${data}`)
-    })
-    child.stdout.on('data', data => {
-      stdout += String(data)
-      process.stdout.write(`[xcagi-migrate] ${data}`)
-      if (!databaseBackupPath) {
-        const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
-        const candidate = match?.[1]?.trim() || ''
-        if (candidate) {
-          try {
-            attachDatabaseBackupToRollback(candidate)
-            databaseBackupPath = candidate
-          } catch (error) {
-            backupAttachError = error
-            child.kill()
-          }
-        }
-      }
-    })
-    child.on('error', reject)
-    child.on('exit', code => {
-      if (backupAttachError) {
-        reject(backupAttachError)
-        return
-      }
-      if (code === 0) {
-        resolve(databaseBackupPath)
-      } else {
-        reject(new Error(`数据库迁移失败（code=${code}）: ${stderr}`))
-      }
-    })
+  const args = [...executable.args, '--migrate-only', '--backup']
+  if (options.ifNeeded) args.push('--if-needed')
+  return runBackendMigrationProcess({
+    command: executable.command,
+    args,
+    cwd: executable.cwd,
+    env: {
+      ...sanitizeBackendProxyEnv(process.env),
+      XCAGI_DESKTOP_MODE: '1',
+      XCAGI_DATA_DIR: app.getPath('userData'),
+      XCAGI_UVICORN_RELOAD: '0',
+      XCAGI_GLOBAL_RATE_LIMIT: '0',
+      ...backendEditionEnv(),
+      PYTHONUTF8: '1',
+    },
+    attachBackup:
+      options.attachToRollback === false ? undefined : attachDatabaseBackupToRollback,
+    onStdout: data => process.stdout.write(`[xcagi-migrate] ${data}`),
+    onStderr: data => process.stderr.write(`[xcagi-migrate] ${data}`),
   })
 }
 
@@ -1583,7 +1555,9 @@ function bootstrap(): void {
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()
-        updateSplashProgress(12, '正在连接本地服务…')
+        updateSplashProgress(12, '正在检查本地数据…')
+        await runBackendMigration({ attachToRollback: false, ifNeeded: true })
+        updateSplashProgress(18, '正在连接本地服务…')
         await startBackend()
         if (!backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框

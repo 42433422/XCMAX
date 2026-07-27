@@ -71,3 +71,27 @@ def test_migrate_only_emits_machine_readable_backup_path(
 
     assert f"XCAGI_MIGRATION_BACKUP={backup}" in capsys.readouterr().out
     upgrade.assert_called_once_with(str(data_dir))
+
+
+def test_migrate_if_needed_skips_backup_when_schema_is_current(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _patch_desktop_bootstrap(monkeypatch)
+    data_dir = tmp_path / "data-root"
+
+    from app.desktop_runtime import migrate, paths
+
+    monkeypatch.setattr(paths, "configure_desktop_environment", lambda _path: None)
+    monkeypatch.setattr(migrate, "migration_required", lambda _path: False)
+    backup = Mock()
+    upgrade = Mock()
+    monkeypatch.setattr(migrate, "backup_database", backup)
+    monkeypatch.setattr(migrate, "run_alembic_upgrade", upgrade)
+
+    run_fastapi.main(["--migrate-only", "--backup", "--if-needed", "--data-dir", str(data_dir)])
+
+    assert "XCAGI_MIGRATION_STATUS=current" in capsys.readouterr().out
+    backup.assert_not_called()
+    upgrade.assert_not_called()

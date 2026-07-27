@@ -227,6 +227,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）"
     )
     parser.add_argument(
+        "--if-needed",
+        action="store_true",
+        help="仅在数据库版本落后时迁移（与 --migrate-only 合用）",
+    )
+    parser.add_argument(
         "--verify-frozen-critical-runtime",
         action="store_true",
         help="验证冻结包内办公与语音关键依赖后退出",
@@ -292,13 +297,20 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.migrate_only:
         _ensure_sys_path()
-        from app.desktop_runtime.migrate import backup_database, run_alembic_upgrade
+        from app.desktop_runtime.migrate import (
+            backup_database,
+            migration_required,
+            run_alembic_upgrade,
+        )
         from app.desktop_runtime.paths import (
             configure_desktop_environment,
             ensure_desktop_dirs,
         )
 
         configure_desktop_environment(args.data_dir)
+        if args.if_needed and not migration_required(args.data_dir):
+            print("XCAGI_MIGRATION_STATUS=current", flush=True)
+            return
         version = os.environ.get("XCAGI_VERSION", "unknown")
         if args.backup:
             dirs = ensure_desktop_dirs(args.data_dir)
