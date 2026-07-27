@@ -180,7 +180,13 @@ export const etlApi = {
       { method: 'POST', body: form },
     )
   },
-  preview: (body: { upload_id: string; target_type: string; template_id?: string; target_config_id?: string }) =>
+  preview: (body: {
+    upload_id: string
+    target_type: string
+    template_id?: string
+    compatibility_preset_id?: string
+    target_config_id?: string
+  }) =>
     request<EtlRun>('/api/etl/runs/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

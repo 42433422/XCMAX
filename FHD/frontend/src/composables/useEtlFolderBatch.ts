@@ -36,7 +36,8 @@ export type EtlBatchFile = EtlSelectedSourceFile & {
 type EtlFolderBatchOptions = {
   capabilities: Ref<EtlCapabilities | null>
   targetType: Ref<string>
-  templateId: Ref<string>
+  templateId: Readonly<Ref<string>>
+  compatibilityPresetId: Readonly<Ref<string>>
   targetConfigId: Ref<string>
   runs: Ref<EtlRun[]>
   currentRun: Ref<EtlRun | null>
@@ -260,6 +261,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
               upload_id: upload.upload_id,
               target_type: options.targetType.value,
               template_id: options.templateId.value || undefined,
+              compatibility_preset_id: options.compatibilityPresetId.value || undefined,
               target_config_id: options.targetConfigId.value || undefined,
             })
             item.runId = run.id

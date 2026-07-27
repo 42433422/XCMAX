@@ -262,8 +262,41 @@ describe('EtlCenterView folder workflow', () => {
 
     expect(wrapper.text()).toContain('选择整个文件夹')
     expect(wrapper.text()).toContain('单文件 100.0 MB')
+    expect(wrapper.text()).toContain('旧预设 · YAML')
+    expect(wrapper.text()).toContain('暂无个人模板')
+    expect(wrapper.text()).toContain('已获取 1 个旧 YAML/知识库兼容预设')
     expect(wrapper.find('input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
+  })
+
+  it('passes the selected read-only compatibility preset into preview', async () => {
+    etlApiMock.upload.mockResolvedValue({
+      upload_id: 'upload-legacy',
+      file_name: 'legacy.xlsx',
+      suffix: '.xlsx',
+      size_bytes: 4,
+      sha256: 'legacy',
+    })
+    etlApiMock.preview.mockResolvedValue(queuedRun('run-legacy', 'legacy.xlsx'))
+    const wrapper = await mountView()
+    await wrapper.find('select[aria-label="导入模板"]').setValue('preset:legacy')
+
+    const input = wrapper.find('input[type="file"][multiple]')
+    const file = new File(['data'], 'legacy.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await buttonByText(wrapper, '上传并开始预演')?.trigger('click')
+    await flushPromises()
+
+    expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
+      upload_id: 'upload-legacy',
+      target_type: 'customer_products',
+      compatibility_preset_id: 'legacy',
+    }))
+    expect(etlApiMock.preview.mock.calls[0][0].template_id).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('shows folder name, file count, relative paths, and batch action', async () => {

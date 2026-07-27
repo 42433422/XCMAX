@@ -386,7 +386,13 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
         handle.close()
 
 
-def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) -> ParsedDataset:
+def parse_file(
+    path: str | Path,
+    *,
+    target_type: str,
+    max_rows: int = MAX_ROWS,
+    compatibility_preset_id: str | None = None,
+) -> ParsedDataset:
     source = Path(path).expanduser().resolve()
     suffix = source.suffix.lower()
     if not source.is_file():
@@ -412,9 +418,24 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
             source_features={"kind": "document", "knowledge_only": True},
         )
     if suffix == ".csv":
+        if compatibility_preset_id:
+            raise EtlError(
+                "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED",
+                "兼容预设仅适用于 XLSX/XLSM 文件；CSV 请使用自动识别",
+            )
         return _parse_csv(source, max_rows, target_type)
     if suffix in STRUCTURED_SUFFIXES:
-        if target_type == "customer_products":
+        if compatibility_preset_id and target_type not in {
+            "customer_products",
+            "customers",
+            "products",
+            "shipment_records",
+        }:
+            raise EtlError(
+                "ETL_COMPATIBILITY_PRESET_TARGET_MISMATCH",
+                "兼容预设不适用于当前目标",
+            )
+        if target_type == "customer_products" and not compatibility_preset_id:
             try:
                 from app.application.etl.parser_regions import (
                     parse_customer_product_regions,
@@ -435,7 +456,15 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
             source,
             target_type=target_type,
             max_rows=max_rows,
+            compatibility_preset_id=compatibility_preset_id,
         )
+        if compatibility_preset_id:
+            if compatibility is None:
+                raise EtlError(
+                    "ETL_COMPATIBILITY_PRESET_NO_MATCH",
+                    "所选兼容预设未识别到可靠业务数据，请改用自动识别或其他预设",
+                )
+            return compatibility
         if compatibility is not None:
             if target_type == "shipment_records":
                 return compatibility
@@ -456,6 +485,12 @@ def parse_file(path: str | Path, *, target_type: str, max_rows: int = MAX_ROWS) 
                 return generic
             return compatibility
         return _parse_workbook(source, max_rows, target_type)
+
+    if compatibility_preset_id:
+        raise EtlError(
+            "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED",
+            "兼容预设仅适用于 XLSX/XLSM 文件；OCR 文件请使用自动识别",
+        )
 
     from app.application.shipment_excel_etl_ocr import ocr_source_to_workbook
 

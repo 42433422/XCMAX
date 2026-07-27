@@ -87,6 +87,7 @@ def parse_delivery_note_with_compat_profile(
     *,
     target_type: str,
     max_rows: int,
+    compatibility_preset_id: str | None = None,
 ) -> ParsedDataset | None:
     """Convert proven shipment profiles into general-ETL source rows."""
 
@@ -104,7 +105,11 @@ def parse_delivery_note_with_compat_profile(
             preview_shipment_excel_etl,
         )
 
-        result = preview_shipment_excel_etl(path, include_ledger=False)
+        result = preview_shipment_excel_etl(
+            path,
+            include_ledger=False,
+            profile_id=compatibility_preset_id,
+        )
     except Exception:  # noqa: BLE001 - compatibility detection is a non-blocking probe
         return None
     notes = result.get("notes") if isinstance(result, dict) else None
@@ -243,23 +248,22 @@ def parse_delivery_note_with_compat_profile(
                 "sheets": inherited_unit_sheets[:20],
             }
         )
+    source_features: dict[str, Any] = {
+        "kind": "shipment_profile",
+        "compatibility_preset": True,
+        "profile_ids": sorted(
+            {str(note.get("profile_id") or "universal") for note in notes if isinstance(note, dict)}
+        ),
+        "note_count": len(notes) - len(skipped_sheets),
+        "skipped_note_count": len(skipped_sheets),
+        "inherited_unit_note_count": len(inherited_unit_sheets),
+        "headers": headers,
+    }
+    if compatibility_preset_id:
+        source_features["compatibility_preset_id"] = compatibility_preset_id
     return ParsedDataset(
         headers=headers,
         rows=rows,
-        source_features={
-            "kind": "shipment_profile",
-            "compatibility_preset": True,
-            "profile_ids": sorted(
-                {
-                    str(note.get("profile_id") or "universal")
-                    for note in notes
-                    if isinstance(note, dict)
-                }
-            ),
-            "note_count": len(notes) - len(skipped_sheets),
-            "skipped_note_count": len(skipped_sheets),
-            "inherited_unit_note_count": len(inherited_unit_sheets),
-            "headers": headers,
-        },
+        source_features=source_features,
         warnings=warnings,
     )

@@ -199,6 +199,44 @@ def test_delivery_profile_converts_to_general_etl_rows(tmp_path, monkeypatch):
     assert len({row["legacy_note_fingerprint"] for row in values}) == 1
 
 
+def test_explicit_compatibility_preset_is_used_for_parsing(tmp_path, monkeypatch):
+    path = tmp_path / "explicit.xlsx"
+    path.write_bytes(b"placeholder")
+    captured: dict[str, object] = {}
+
+    def preview(*_args, **kwargs):
+        captured.update(kwargs)
+        return {
+            "success": True,
+            "notes": [
+                {
+                    "sheet": "送货单",
+                    "unit_name": "甲公司",
+                    "order_number": "A-1",
+                    "assist": {"ok": True},
+                    "profile_id": "custom-profile",
+                    "fingerprint": "fp-1",
+                    "items": [{"product_name": "底漆", "model_number": "P-1"}],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.application.shipment_excel_etl_app_service.preview_shipment_excel_etl",
+        preview,
+    )
+
+    dataset = parse_file(
+        path,
+        target_type="customer_products",
+        compatibility_preset_id="custom-profile",
+    )
+
+    assert captured["profile_id"] == "custom-profile"
+    assert dataset.source_features["compatibility_preset_id"] == "custom-profile"
+    assert dataset.rows[0].values["customer_name"] == "甲公司"
+
+
 def test_delivery_profile_skips_filename_fallback_sheets_and_total_rows(tmp_path, monkeypatch):
     path = tmp_path / "855237eb-59a4-419e-b22c-360ea04a8a56.xlsx"
     path.write_bytes(b"placeholder")
@@ -570,6 +608,69 @@ def test_templates_are_private_and_versions_are_immutable(etl_db):
         db = etl_db()
         with pytest.raises(EtlNotFound):
             service.get_template(db, template_id=template["id"], owner_user_id=1)
+        db.close()
+
+
+def test_preview_validates_and_audits_selected_compatibility_preset(etl_db, monkeypatch):
+    service = EtlService()
+    monkeypatch.setattr(service, "_submit_preview", lambda *_args: None)
+    monkeypatch.setattr(
+        "app.application.shipment_etl_profile.list_profiles",
+        lambda: [
+            {
+                "id": "legacy-profile",
+                "label": "旧送货单",
+                "source": "yaml",
+                "target": "shipment",
+            }
+        ],
+    )
+    with tenant_scope(11):
+        db = etl_db()
+        upload = service.save_upload(
+            db,
+            owner_user_id=3,
+            file_name="delivery.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            stream=BytesIO(b"placeholder"),
+        )
+        db.commit()
+        run = service.create_preview(
+            db,
+            owner_user_id=3,
+            upload_id=upload["upload_id"],
+            target_type="customer_products",
+            compatibility_preset_id="legacy-profile",
+        )
+        assert run["draft"]["compatibility_preset_id"] == "legacy-profile"
+
+        template = service.create_template(
+            db,
+            owner_user_id=3,
+            name="我的旧送货单模板",
+            target_type="customer_products",
+            draft=run["draft"],
+            source_features={"compatibility_preset_id": "legacy-profile"},
+        )
+        db.commit()
+        inherited = service.create_preview(
+            db,
+            owner_user_id=3,
+            upload_id=upload["upload_id"],
+            target_type="customer_products",
+            template_id=template["id"],
+        )
+        assert inherited["draft"]["compatibility_preset_id"] == "legacy-profile"
+
+        with pytest.raises(EtlError) as exc:
+            service.create_preview(
+                db,
+                owner_user_id=3,
+                upload_id=upload["upload_id"],
+                target_type="customer_products",
+                compatibility_preset_id="missing-profile",
+            )
+        assert exc.value.code == "ETL_COMPATIBILITY_PRESET_NOT_FOUND"
         db.close()
 
 

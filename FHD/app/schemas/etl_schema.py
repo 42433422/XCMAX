@@ -54,6 +54,7 @@ class EtlPreviewRequest(BaseModel):
     upload_id: str
     target_type: str
     template_id: str | None = None
+    compatibility_preset_id: str | None = Field(default=None, max_length=180)
     target_config_id: str | None = None
 
 

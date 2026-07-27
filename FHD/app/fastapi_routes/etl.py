@@ -113,6 +113,7 @@ def create_preview(
         upload_id=body.upload_id,
         target_type=body.target_type,
         template_id=body.template_id,
+        compatibility_preset_id=body.compatibility_preset_id,
         target_config_id=body.target_config_id,
     )
     return {"success": True, "data": data}

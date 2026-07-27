@@ -1,6 +1,6 @@
 <template src="./EtlCenterView.template.html"></template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   etlApi,
@@ -38,7 +38,7 @@ const targetConfigs = ref<EtlTargetConfig[]>([])
 const runs = ref<EtlRun[]>([])
 const currentRun = ref<EtlRun | null>(null)
 const targetType = ref('customer_products')
-const templateId = ref('')
+const templateSelection = ref('')
 const targetConfigId = ref('')
 const runRows = ref<EtlRunRow[]>([])
 const rowPage = ref(1)
@@ -57,6 +57,27 @@ const showWebhookForm = ref(false)
 const webhookDraft = reactive({ name: '', endpoint_url: '', headersJson: '{}', secret: '' })
 const webhookTestMessage = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+const compatibleTemplates = computed(() => templates.value.filter((item) => item.target_type === targetType.value))
+const compatiblePresets = computed(() => {
+  if (!['customer_products', 'customers', 'products', 'shipment_records'].includes(targetType.value)) {
+    return []
+  }
+  return capabilities.value?.compatibility_presets || []
+})
+const templateId = computed(() => (
+  templateSelection.value.startsWith('template:')
+    ? templateSelection.value.slice('template:'.length)
+    : ''
+))
+const compatibilityPresetId = computed(() => (
+  templateSelection.value.startsWith('preset:')
+    ? templateSelection.value.slice('preset:'.length)
+    : ''
+))
+const selectedCompatibilityPreset = computed(() => (
+  compatiblePresets.value.find((item) => item.id === compatibilityPresetId.value)
+))
 
 const {
   selectedFiles,
@@ -83,6 +104,7 @@ const {
   capabilities,
   targetType,
   templateId,
+  compatibilityPresetId,
   targetConfigId,
   runs,
   currentRun,
@@ -95,7 +117,6 @@ const {
   loadRows,
 })
 
-const compatibleTemplates = computed(() => templates.value.filter((item) => item.target_type === targetType.value))
 const currentCapability = computed(() => capabilities.value?.targets.find((item) => item.type === currentRun.value?.target_type || targetType.value))
 const updatableFields = computed(() => currentCapability.value?.fields.filter((field) => field.updatable) || [])
 function allowedActionsForRow(row: EtlRunRow): EtlAction[] {
@@ -475,6 +496,9 @@ function formatTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '—'
 }
 
+watch(targetType, () => {
+  templateSelection.value = ''
+})
 onMounted(bootstrap)
 onBeforeUnmount(() => {
   if (pollTimer) clearTimeout(pollTimer)

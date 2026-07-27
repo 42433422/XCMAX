@@ -44,6 +44,7 @@ class PreviewServiceMixin:
         upload_id: str,
         target_type: str,
         template_id: str | None = None,
+        compatibility_preset_id: str | None = None,
         target_config_id: str | None = None,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
@@ -64,11 +65,26 @@ class PreviewServiceMixin:
             "target_config_id": target_config_id,
             "ocr_confirmed": False,
         }
+        requested_preset_id = str(compatibility_preset_id or "").strip()
         if template_id:
             template = self._owned_template(db, template_id, owner_user_id)
             if template.target_type != target_type:
                 raise EtlError("ETL_TEMPLATE_TARGET_MISMATCH", "模板目标与本次目标不一致")
             version = self._current_version(db, template, owner_user_id)
+            template_source_features = load_json(version.source_features_json, {})
+            template_preset_id = str(
+                template_source_features.get("compatibility_preset_id") or ""
+            ).strip()
+            if (
+                requested_preset_id
+                and template_preset_id
+                and requested_preset_id != template_preset_id
+            ):
+                raise EtlError(
+                    "ETL_TEMPLATE_PRESET_CONFLICT",
+                    "个人模板已绑定兼容预设，不能同时指定另一个预设",
+                )
+            requested_preset_id = requested_preset_id or template_preset_id
             draft.update(
                 {
                     "field_mappings": load_json(version.field_mappings_json, []),
@@ -78,6 +94,13 @@ class PreviewServiceMixin:
                     "action_rules": load_json(version.action_rules_json, {}),
                 }
             )
+        if requested_preset_id:
+            self._validate_compatibility_preset(
+                requested_preset_id,
+                target_type=target_type,
+                upload_suffix=upload.suffix,
+            )
+            draft["compatibility_preset_id"] = requested_preset_id
         run = EtlRun(
             id=new_id(),
             tenant_id=tenant_id_for_write(),
@@ -145,10 +168,18 @@ class PreviewServiceMixin:
             run.error_message = None
             db.commit()
 
-            dataset = parse_file(upload.storage_path, target_type=run.target_type)
+            draft = load_json(run.draft_json, {})
+            compatibility_preset_id = str(draft.get("compatibility_preset_id") or "").strip()
+            dataset = parse_file(
+                upload.storage_path,
+                target_type=run.target_type,
+                compatibility_preset_id=compatibility_preset_id or None,
+            )
             run = self._owned_run(db, run_id, owner_user_id)
             draft = load_json(run.draft_json, {})
             source_features = dict(dataset.source_features or {})
+            if compatibility_preset_id:
+                source_features["compatibility_preset_id"] = compatibility_preset_id
             if not draft.get("field_mappings"):
                 deterministic_mappings = self._suggest_mappings(
                     dataset, get_adapter(run.target_type)
@@ -200,6 +231,49 @@ class PreviewServiceMixin:
         finally:
             db.close()
             reset_etl_llm_owner(llm_owner_token)
+
+    @staticmethod
+    def _validate_compatibility_preset(
+        preset_id: str,
+        *,
+        target_type: str,
+        upload_suffix: str,
+    ) -> None:
+        if target_type not in {
+            "customer_products",
+            "customers",
+            "products",
+            "shipment_records",
+        }:
+            raise EtlError(
+                "ETL_COMPATIBILITY_PRESET_TARGET_MISMATCH",
+                "兼容预设仅适用于客户、产品、客户及产品或发货记录",
+            )
+        if upload_suffix not in {".xlsx", ".xlsm"}:
+            raise EtlError(
+                "ETL_COMPATIBILITY_PRESET_FILE_UNSUPPORTED",
+                "兼容预设仅适用于 XLSX/XLSM 文件；其他文件请选择自动识别",
+            )
+        try:
+            from app.application.shipment_etl_profile import list_profiles
+
+            available = {
+                str(item.get("id") or "").strip()
+                for item in list_profiles()
+                if isinstance(item, dict)
+            }
+        except Exception as exc:  # noqa: BLE001 - fail closed when preset registry is unavailable
+            raise EtlError(
+                "ETL_COMPATIBILITY_PRESET_UNAVAILABLE",
+                "兼容预设暂时不可用，请选择自动识别",
+                status_code=503,
+            ) from exc
+        if preset_id not in available:
+            raise EtlError(
+                "ETL_COMPATIBILITY_PRESET_NOT_FOUND",
+                "兼容预设不存在或已失效，请刷新后重试",
+                status_code=404,
+            )
 
     @staticmethod
     def _record_preview_metrics(run: EtlRun, started_at: float, *, status: str) -> None:

@@ -110,17 +110,34 @@
             <span>适用于只维护单一主数据的文件；送货单、报价单等业务文件建议选择“客户及产品”。</span>
           </div>
           <label>
-            个人模板
-            <select v-model="templateId" :disabled="busy">
-              <option value="">新建任务（自动建议映射）</option>
-              <option
-                v-for="template in compatibleTemplates"
-                :key="template.id"
-                :value="template.id"
-              >
-                {{ template.name }} · v{{ template.current_version }}
-              </option>
+            导入模板
+            <select v-model="templateSelection" :disabled="busy" aria-label="导入模板">
+              <option value="">自动识别（预演后可保存为个人模板）</option>
+              <optgroup v-if="compatibleTemplates.length" label="我的个人模板">
+                <option
+                  v-for="template in compatibleTemplates"
+                  :key="template.id"
+                  :value="`template:${template.id}`"
+                >
+                  {{ template.name }} · v{{ template.current_version }}
+                </option>
+              </optgroup>
+              <optgroup v-if="compatiblePresets.length" label="只读兼容预设">
+                <option
+                  v-for="preset in compatiblePresets"
+                  :key="preset.id"
+                  :value="`preset:${preset.id}`"
+                >
+                  {{ preset.label }} · {{ preset.source === 'yaml' ? 'YAML' : '知识库' }}
+                </option>
+              </optgroup>
             </select>
+            <small v-if="!compatibleTemplates.length">
+              暂无个人模板；完成一次预演并保存后会显示在这里。
+            </small>
+            <small v-if="selectedCompatibilityPreset">
+              将固定使用“{{ selectedCompatibilityPreset.label }}”解析；它是只读预设，不会跨用户保存业务数据。
+            </small>
           </label>
           <label v-if="targetType === 'webhook'">
             Webhook 配置
@@ -214,8 +231,8 @@
         </ul>
       </details>
       <p v-if="capabilities?.compatibility_presets?.length" class="etl-compat-note">
-        已加载 {{ capabilities.compatibility_presets.length }} 个旧 YAML/知识库兼容预设；
-        预演确认后请保存为仅自己可见的个人模板。
+        已获取 {{ capabilities.compatibility_presets.length }} 个旧 YAML/知识库兼容预设，可在“导入模板”中选择；
+        预演确认后可保存为仅自己可见的个人模板。
       </p>
 
       <form v-if="showWebhookForm" class="etl-webhook-form" @submit.prevent="saveWebhook">
