@@ -16,6 +16,10 @@ from app.application.etl.parser_structure import (
     is_footer_or_note_row,
     is_repeated_header,
 )
+from app.application.etl.parser_target_match import (
+    covers_required_target_fields,
+    target_header_hints,
+)
 from app.application.etl.parser_types import ParsedDataset, ParsedRow
 
 MAX_ROWS = 100_000
@@ -23,55 +27,6 @@ STRUCTURED_SUFFIXES = {".xlsx", ".xlsm", ".csv"}
 OCR_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png"}
 KNOWLEDGE_ONLY_SUFFIXES = {".doc", ".docx", ".ppt", ".pptx"}
 SUPPORTED_SUFFIXES = STRUCTURED_SUFFIXES | OCR_SUFFIXES | KNOWLEDGE_ONLY_SUFFIXES
-
-
-def _target_header_hints(target_type: str) -> list[str]:
-    try:
-        from app.application.etl.targets import get_adapter
-
-        adapter = get_adapter(target_type)
-    except EtlError:
-        return []
-    return [
-        value
-        for field in adapter.fields
-        for value in (field.key, field.label, *field.aliases)
-        if value
-    ]
-
-
-def _covers_required_target_fields(dataset: ParsedDataset, target_type: str) -> bool:
-    from app.application.etl.targets import get_adapter
-
-    adapter = get_adapter(target_type)
-    required_fields = [field for field in adapter.fields if field.required]
-    if not required_fields:
-        return True
-    pairs = sorted(
-        (
-            (
-                header_match_score(
-                    header,
-                    (field.key, field.label, *field.aliases),
-                ),
-                field_index,
-                header_index,
-            )
-            for field_index, field in enumerate(required_fields)
-            for header_index, header in enumerate(dataset.headers)
-        ),
-        reverse=True,
-    )
-    matched_fields: set[int] = set()
-    used_headers: set[int] = set()
-    for score, field_index, header_index in pairs:
-        if score < 0.75:
-            break
-        if field_index in matched_fields or header_index in used_headers:
-            continue
-        matched_fields.add(field_index)
-        used_headers.add(header_index)
-    return len(matched_fields) == len(required_fields)
 
 
 def _aligned_headers_by_sheet(
@@ -141,7 +96,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     warnings: list[dict[str, Any]] = []
     repeated_header_count = 0
     footer_count = 0
-    header_hints = _target_header_hints(target_type)
+    header_hints = target_header_hints(target_type)
     try:
         candidates: list[tuple[Any, Any]] = []
         for worksheet in workbook.worksheets:
@@ -302,7 +257,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
         probe = list(itertools.islice(reader, 60))
         layout = detect_table_layout(
             probe,
-            header_hints=_target_header_hints(target_type),
+            header_hints=target_header_hints(target_type),
         )
         if layout is None:
             return ParsedDataset(headers=[], rows=[], source_features={"kind": "csv"})
@@ -446,7 +401,7 @@ def parse_file(
                 raise
             except Exception:  # noqa: BLE001 - legacy presets remain a safe fallback
                 regional = None
-            if regional is not None and _covers_required_target_fields(regional, target_type):
+            if regional is not None and covers_required_target_fields(regional, target_type):
                 return regional
         from app.application.etl.shipment_compat_parser import (
             parse_delivery_note_with_compat_profile,
@@ -474,7 +429,7 @@ def parse_file(
                 raise
             except Exception:  # noqa: BLE001 - a proven legacy preset remains a safe fallback
                 return compatibility
-            if generic.rows and _covers_required_target_fields(generic, target_type):
+            if generic.rows and covers_required_target_fields(generic, target_type):
                 generic.warnings.insert(
                     0,
                     {
