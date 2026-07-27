@@ -194,7 +194,7 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
         return "diff"
 
     monkeypatch.setattr(loop_runner, "_run_cmd", fake_command)
-    monkeypatch.setattr(loop_runner, "_run_cmd_excerpt", fake_command, raising=False)
+    monkeypatch.setattr(loop_runner, "_run_cmd_excerpt", fake_command)
     monkeypatch.setattr(
         loop_runner,
         "_validate_kb_json_changes_for_auto_merge",
