@@ -121,6 +121,8 @@ promote_cluster "$PAYMENT_CONTAINER" postgres "PostgreSQL 10 支付库"
 systemctl disable --now xcmax-dr-primary-tunnel.service >/dev/null 2>&1 || true
 OPS_DR_APP_PG_PORT="$APP_PORT" \
 OPS_DR_PAYMENT_PG_PORT="$PAYMENT_PORT" \
+OPS_DR_REDIS_PORT=6379 \
+OPS_DR_PAYMENT_API_PORT=18080 \
 OPS_DR_PG_PRESERVE_CREDENTIALS=1 \
 OPS_DR_RUNTIME_MODE=promoted \
   "$PREPARE_RUNTIME"

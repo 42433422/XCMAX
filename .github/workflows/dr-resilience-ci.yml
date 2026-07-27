@@ -68,6 +68,8 @@ jobs:
           set -euo pipefail
           grep -q -- '--confirm-primary-down' ops/dr/xcmax_dr_promote.sh
           grep -q -- '--witness-file' ops/dr/xcmax_dr_promote.sh
+          grep -q 'OPS_DR_PAYMENT_API_PORT=18080' \
+            ops/dr/xcmax_dr_promote.sh
           grep -q 'provider_fence_proof_missing' \
             ops/dr/xcmax_dr_failover_guard.py
           grep -q 'StopInstances' ops/dr/xcmax_dr_tencent_fence.sh
@@ -85,6 +87,8 @@ jobs:
           grep -q 'ExitOnForwardFailure=yes' \
             ops/dr/xcmax_dr_prepare_active_peer.sh
           grep -q '"MODSTORE_RUN_BACKGROUND_JOBS": "0"' \
+            ops/dr/xcmax_dr_prepare_runtime.sh
+          grep -q 'XCMAX_DR_SAVED_RUNTIME_MODE' \
             ops/dr/xcmax_dr_prepare_runtime.sh
           grep -q 'pg_is_in_recovery' ops/dr/xcmax_wal_prepare_standby.sh
           grep -q 'pg_is_in_recovery' ops/dr/xcmax_wal_prepare_standby_pg16.sh

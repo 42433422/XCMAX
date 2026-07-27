@@ -26,6 +26,8 @@ promotion 会产生脑裂，本方案明确禁止。
 - PostgreSQL、Redis 和无后台任务的 MODstore API 常驻，但只监听 `127.0.0.1`。
 - active-peer 模式下 FHD/MODstore 常态在线；scheduler/payment 保持停机。
 - 生产数据库、Redis 和写路径服务只通过受限 SSH 隧道开放给 DR，不开放公网端口。
+- 当前运行角色与内部端口持久化到 root-only
+  `/etc/xcmax-dr-runtime-role.env`，发布应用后不会静默退回 standby。
 
 正常状态下 WAL RPO 目标不超过 30 分钟；日级逻辑备份仍提供不依赖
 PostgreSQL 10 的恢复路径。
