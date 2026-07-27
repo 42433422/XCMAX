@@ -1136,10 +1136,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "reason": "resume_failed_code_step",
             }
 
-    # A later structured hold on the same branch/task supersedes an older
-    # review/QA failed_steps receipt.  Otherwise the older receipt is selected
-    # first forever and the loop repeatedly re-runs review/QA without ever
-    # reaching the code remediation requested by the latest quality gate.
+    # Code-level remediation takes priority over review/QA-only retries. Walk
+    # newest-first so a stale branch/failure pair cannot starve a later hold
+    # that already contains the current independent-review findings.
     for item in reversed(open_items):
         if not isinstance(item, dict) or item.get("kind") not in {
             "automated_remediation",
@@ -1159,24 +1158,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         if not branch or not para_task_id:
             continue
-        matching_older_failure = any(
-            isinstance(failed_item, dict)
-            and failed_item.get("kind") == "failed_steps"
-            and any(
-                str(step) in {"review", "qa"}
-                for step in (
-                    failed_item.get("steps") if isinstance(failed_item.get("steps"), list) else []
-                )
-            )
-            and (
-                str(failed_item.get("branch") or "").strip() == branch
-                or str(failed_item.get("para_task_id") or failed_item.get("task_id") or "").strip()
-                == para_task_id
-            )
-            for failed_item in open_items
-        )
-        if not matching_older_failure:
-            continue
         candidate: Dict[str, Any] = {
             "branch": branch,
             "failed_run_id": str(item.get("run_id") or "").strip(),
@@ -1184,7 +1165,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "para_task_id": para_task_id,
             "reason": "resume_automated_remediation_candidate",
         }
-        if reason == RETORT_SCOPE_REASON:
+        if reason.startswith("para_merge_"):
+            candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+            candidate["remediation_reason"] = reason
+        elif reason == RETORT_SCOPE_REASON:
             candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
             candidate["remediation_reason"] = reason
         if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
