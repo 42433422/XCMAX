@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Promote both PostgreSQL standbys and start DR application services.
-# The explicit confirmation flag is intentionally non-optional: promotion is
-# irreversible for this standby and must not happen while primary is writable.
+# Promote both PostgreSQL standbys and start DR application services. Promotion
+# requires either an explicit operator confirmation or a short-lived, root-only
+# witness created after authoritative DNS selection and provider-side fencing.
 
 set -euo pipefail
 
@@ -9,10 +9,21 @@ set -euo pipefail
   echo "请以 root 运行" >&2
   exit 2
 }
-[[ "${1:-}" == "--confirm-primary-down" ]] || {
-  echo "拒绝提升：请先确认生产已停止写入，再传 --confirm-primary-down" >&2
-  exit 2
-}
+CONFIRM_MODE=""
+WITNESS_FILE=""
+case "${1:-}" in
+  --confirm-primary-down)
+    CONFIRM_MODE="manual"
+    ;;
+  --witness-file)
+    CONFIRM_MODE="witness"
+    WITNESS_FILE="${2:-}"
+    ;;
+  *)
+    echo "用法: $0 --confirm-primary-down | --witness-file <见证文件>" >&2
+    exit 2
+    ;;
+esac
 
 DR_ROOT="${OPS_DR_ROOT:-/srv/xcmax-dr}"
 PAYMENT_CONTAINER="${OPS_DR_WAL_CONTAINER:-xcmax-dr-postgres10}"
@@ -23,6 +34,37 @@ STATE="${OPS_DR_STATE:-/var/lib/xcmax-dr}"
 LOG="${OPS_DR_PROMOTE_LOG:-/var/log/xcmax-dr/promote.log}"
 PREPARE_RUNTIME="${OPS_DR_PREPARE_RUNTIME:-/usr/local/sbin/xcmax-dr-prepare-runtime}"
 LOCK="/run/lock/xcmax-dr-promote.lock"
+
+if [[ "$CONFIRM_MODE" == "witness" ]]; then
+  [[ -s "$WITNESS_FILE" ]] || {
+    echo "拒绝提升：见证文件不存在" >&2
+    exit 1
+  }
+  python3 - "$WITNESS_FILE" <<'PY'
+import json
+import os
+import sys
+import time
+
+path = sys.argv[1]
+stat = os.stat(path)
+if stat.st_uid != 0 or stat.st_mode & 0o077:
+    raise SystemExit("拒绝提升：见证文件必须由 root 私有")
+doc = json.load(open(path, encoding="utf-8"))
+if doc.get("promote") is not True:
+    raise SystemExit("拒绝提升：见证决策不是 promote")
+if doc.get("reason") != "all_promotion_guards_satisfied":
+    raise SystemExit("拒绝提升：见证原因不匹配")
+if int(doc.get("expires_at", 0)) < int(time.time()):
+    raise SystemExit("拒绝提升：见证已过期")
+if doc.get("primary_https_ok") is not False or doc.get("primary_ssh_ok") is not False:
+    raise SystemExit("拒绝提升：生产仍可达")
+if doc.get("fence_ready") is not True or doc.get("standby_ready") is not True:
+    raise SystemExit("拒绝提升：fence 或 standby 未就绪")
+if doc.get("authoritative_addresses") != [doc.get("secondary_ip")]:
+    raise SystemExit("拒绝提升：权威 DNS 未唯一选择 DR")
+PY
+fi
 
 install -d -m 0700 "$STATE" "$(dirname "$LOG")"
 touch "$LOG"
@@ -76,9 +118,13 @@ promote_cluster() {
 promote_cluster "$APP_CONTAINER" "$APP_SUPERUSER" "PostgreSQL 16 应用库"
 promote_cluster "$PAYMENT_CONTAINER" postgres "PostgreSQL 10 支付库"
 
+systemctl disable --now xcmax-dr-primary-tunnel.service >/dev/null 2>&1 || true
 OPS_DR_APP_PG_PORT="$APP_PORT" \
 OPS_DR_PAYMENT_PG_PORT="$PAYMENT_PORT" \
+OPS_DR_REDIS_PORT=6379 \
+OPS_DR_PAYMENT_API_PORT=18080 \
 OPS_DR_PG_PRESERVE_CREDENTIALS=1 \
+OPS_DR_RUNTIME_MODE=promoted \
   "$PREPARE_RUNTIME"
 
 systemctl restart xcmax-dr-modstore
