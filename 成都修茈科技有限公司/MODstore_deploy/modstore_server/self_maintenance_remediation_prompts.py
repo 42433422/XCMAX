@@ -44,3 +44,14 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
         f"Rejected reference branch: {rejected_branch or '(missing)'}. "
         f"Exact failure detail: {feedback or '(missing)'}"
     )
+
+
+def qa_executor_retry_prompt(task_text: str, attempt: int, inner_max: int) -> str:
+    return (
+        task_text
+        + f"\n\n=== PREVIOUS QA EXECUTOR UNAVAILABLE (inner round {attempt}/{inner_max - 1}) ===\n"
+        "The previous report proved that the shell/command execution backend was unavailable; "
+        "it did not prove a code or test failure. Start a fresh report-only QA attempt and "
+        "actually run the required target-branch commands. Do not reuse invented exit codes "
+        "or the previous FAIL payload. If the backend is still unavailable, report it truthfully."
+    )
