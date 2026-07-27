@@ -999,6 +999,33 @@ body.page-contact .intake-wizard-actions {
   height: 100%;
   object-fit: cover;
 }
+.contact-channel-panel__card--wecom-person {
+  align-items: start;
+}
+.contact-channel-panel__poster {
+  width: min(240px, 100%);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(15, 35, 62, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 130, 239, 0.14);
+}
+.contact-channel-panel__poster img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.contact-channel-panel__desc--sub {
+  margin-top: -4px;
+}
+.contact-channel-panel__desc--sub a {
+  color: #0082ef;
+  font-weight: 700;
+  text-decoration: none;
+}
+.contact-channel-panel__desc--sub a:hover {
+  text-decoration: underline;
+}
 .contact-channel-panel__eyebrow {
   margin: 0 0 4px;
   font-size: 12px;
@@ -1059,6 +1086,9 @@ body.page-contact .intake-wizard-actions {
   }
   .contact-channel-panel__link-row code {
     text-align: left;
+  }
+  .contact-channel-panel__poster {
+    width: min(280px, 86vw);
   }
 }
 body.page-contact .contact-channels-section {
