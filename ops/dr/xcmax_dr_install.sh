@@ -46,4 +46,13 @@ CRON_TZ=Asia/Shanghai
 EOF
 chmod 0644 "$CRON_FILE"
 install -d -m 0700 /var/lib/xcmax-dr /var/log/xcmax-dr
+install -d -m 0700 /srv/xcmax-dr/incoming
+for incoming_dir in wal wal/base wal/archive wal/status runtime-releases; do
+  install -d -o xcmaxdr -g xcmaxdr -m 0700 \
+    "/srv/xcmax-dr/incoming/$incoming_dir"
+done
+if [[ "${XCMAX_DR_GIT_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  printf '%s\n' "$XCMAX_DR_GIT_SHA" >/var/lib/xcmax-dr/DEPLOYED_GIT_SHA
+  chmod 0644 /var/lib/xcmax-dr/DEPLOYED_GIT_SHA
+fi
 echo "DR 脚本与 cron 已安装"
