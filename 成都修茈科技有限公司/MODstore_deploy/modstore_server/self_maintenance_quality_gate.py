@@ -70,6 +70,18 @@ def _is_python_executable(token: str) -> bool:
     return _PYTHON_EXECUTABLE.fullmatch(Path(token).name) is not None
 
 
+_SHELL_ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.DOTALL)
+
+
+def _strip_leading_shell_env_assignments(tokens: list[str]) -> list[str]:
+    """Remove POSIX ``NAME=value`` prefixes before inspecting an executable."""
+
+    index = 0
+    while index < len(tokens) and _SHELL_ENV_ASSIGNMENT.fullmatch(tokens[index]):
+        index += 1
+    return tokens[index:]
+
+
 def matches_focused_test_command(command: Any, focused_command: str) -> bool:
     """Accept the focused pytest target across different worker runtimes."""
 
@@ -88,11 +100,12 @@ def matches_focused_test_command(command: Any, focused_command: str) -> bool:
         return False
 
     for segment in _shell_command_segments(tokens):
-        if len(segment) < 4 or segment[1:3] != ["-m", "pytest"]:
+        command_segment = _strip_leading_shell_env_assignments(segment)
+        if len(command_segment) < 4 or command_segment[1:3] != ["-m", "pytest"]:
             continue
-        if not _is_python_executable(segment[0]):
+        if not _is_python_executable(command_segment[0]):
             continue
-        if target_names <= _pytest_target_names(segment[3:]):
+        if target_names <= _pytest_target_names(command_segment[3:]):
             return True
     return False
 

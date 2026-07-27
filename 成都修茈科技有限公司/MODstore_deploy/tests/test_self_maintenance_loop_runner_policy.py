@@ -1689,8 +1689,10 @@ def test_structured_report_gate_accepts_platform_equivalent_focused_command(
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
                 '"tested_commands":['
                 f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
-                '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
-                'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
+                '{"command":"cd /tmp/xcmax-qa-target && '
+                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' python3 -m pytest "
+                "'成都修茈科技有限公司/MODstore_deploy/tests/"
+                "test_self_maintenance_loop_runner_policy.py' -q\","
                 '"exit_code":0,"status":"passed (27 tests passed)"}],'
                 f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
@@ -1711,7 +1713,9 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"python3 -m pytest tests/test_other.py -q",'
+                '"tested_commands":[{"command":"cd /tmp/xcmax-qa-target && '
+                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' "
+                'python3 -m pytest tests/test_other.py -q",'
                 '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
