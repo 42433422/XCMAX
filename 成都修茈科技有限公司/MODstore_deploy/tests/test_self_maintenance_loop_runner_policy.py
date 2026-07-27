@@ -720,6 +720,22 @@ def test_report_only_cursor_tls_failure_is_retryable():
     assert _is_transient_employee_dispatch_failure(result) is True
 
 
+def test_report_only_executor_failure_without_transport_detail_is_retryable():
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "error": "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: Command failed",
+                    "handler": "para_delegate",
+                    "ok": False,
+                }
+            ]
+        }
+    }
+
+    assert _is_transient_employee_dispatch_failure(result) is True
+
+
 def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
     attempts = [
         {
