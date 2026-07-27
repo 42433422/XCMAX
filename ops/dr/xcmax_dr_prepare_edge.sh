@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install a minimal, deterministic Nginx edge on DR using the backed-up
-# xiu-ci.com certificate. Drill mode blocks mutating HTTP methods to avoid a
-# split-brain write while production remains active.
+# Install a deterministic Nginx edge on DR using the backed-up xiu-ci.com
+# certificate. Active-peer mode serves safe reads locally and pins mutations,
+# file-backed routes and non-replicated services to the single primary.
 
 set -euo pipefail
 
@@ -13,8 +13,9 @@ set -euo pipefail
 MODE="drill"
 case "${1:-}" in
   ""|--drill) MODE="drill" ;;
+  --active-peer) MODE="active-peer" ;;
   --promoted) MODE="promoted" ;;
-  *) echo "用法: $0 [--drill|--promoted]" >&2; exit 2 ;;
+  *) echo "用法: $0 [--drill|--active-peer|--promoted]" >&2; exit 2 ;;
 esac
 
 DR_ROOT="${OPS_DR_ROOT:-/srv/xcmax-dr}"
@@ -22,8 +23,12 @@ RESTORE_CONFIG="${OPS_DR_RESTORE_CONFIG:-$DR_ROOT/restore-config}"
 SOURCE_ROOT="${OPS_DR_SOURCE_ROOT:-$DR_ROOT/runtime/source/成都修茈科技有限公司}"
 CERT_SOURCE="$RESTORE_CONFIG/etc/nginx/ssl"
 NGINX_CONF="/etc/nginx/sites-available/xcmax-dr.conf"
+PRIMARY_ROUTES_CONF="/etc/nginx/snippets/xcmax-dr-primary-routes.conf"
 FHD_PORT="${OPS_DR_FHD_PORT:-15100}"
 MODSTORE_PORT="${OPS_DR_MODSTORE_PORT:-19999}"
+PRIMARY_HTTPS_PORT="${OPS_DR_PRIMARY_HTTPS_PORT:-24443}"
+PRIMARY_FHD_PORT="${OPS_DR_PRIMARY_FHD_PORT:-25100}"
+PRIMARY_MODSTORE_PORT="${OPS_DR_PRIMARY_MODSTORE_PORT:-29999}"
 
 [[ -f "$CERT_SOURCE/xiu-ci.com.crt" && -f "$CERT_SOURCE/xiu-ci.com.key" ]] || {
   echo "缺少恢复的 xiu-ci.com 证书或私钥" >&2
@@ -65,6 +70,28 @@ mutation_guard=""
 if [[ "$MODE" == "drill" ]]; then
   mutation_guard='if ($request_method !~ ^(GET|HEAD|OPTIONS)$) { return 503; }'
 fi
+stateful_fhd_port="$FHD_PORT"
+stateful_modstore_port="$MODSTORE_PORT"
+if [[ "$MODE" == "active-peer" ]]; then
+  stateful_fhd_port="$PRIMARY_FHD_PORT"
+  stateful_modstore_port="$PRIMARY_MODSTORE_PORT"
+  cat >"$PRIMARY_ROUTES_CONF" <<EOF
+# Services which are not installed on the DR node remain pinned to production.
+location ^~ /api/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /kellai-api/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /downloads/kellai/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /sandbox/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /api/xcmax/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /api/realtime/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /api/workbench/voice/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /api/asr/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+location ^~ /uploads/ { include proxy_params; proxy_ssl_server_name on; proxy_ssl_name xiu-ci.com; proxy_pass https://127.0.0.1:${PRIMARY_HTTPS_PORT}; }
+EOF
+else
+  : >"$PRIMARY_ROUTES_CONF"
+fi
+chmod 0644 "$PRIMARY_ROUTES_CONF"
 
 cat >"$NGINX_CONF" <<EOF
 server {
@@ -85,6 +112,7 @@ server {
 
     add_header X-XCMAX-DR "43.138.211.142" always;
     add_header X-XCMAX-DR-Mode "$MODE" always;
+    add_header X-XCMAX-Node "dr-$MODE" always;
     $mutation_guard
 
     location = /__dr/health {
@@ -92,18 +120,35 @@ server {
         return 200 '{"status":"ok","node":"43.138.211.142","mode":"$MODE"}';
     }
 
+    include $PRIMARY_ROUTES_CONF;
+
     location /fhd-api/ {
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_pass http://127.0.0.1:${FHD_PORT}/;
+        set \$xcmax_fhd_upstream http://127.0.0.1:${FHD_PORT};
+        if (\$request_method !~ ^(GET|HEAD|OPTIONS)$) {
+            set \$xcmax_fhd_upstream http://127.0.0.1:${stateful_fhd_port};
+        }
+        if (\$uri ~* /(upload|download|file|asset|attachment|avatar|media|export)(/|s|$)) {
+            set \$xcmax_fhd_upstream http://127.0.0.1:${stateful_fhd_port};
+        }
+        rewrite ^/fhd-api/(.*)$ /\$1 break;
+        proxy_pass \$xcmax_fhd_upstream;
     }
 
     location /api/ {
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_pass http://127.0.0.1:${MODSTORE_PORT};
+        set \$xcmax_modstore_upstream http://127.0.0.1:${MODSTORE_PORT};
+        if (\$request_method !~ ^(GET|HEAD|OPTIONS)$) {
+            set \$xcmax_modstore_upstream http://127.0.0.1:${stateful_modstore_port};
+        }
+        if (\$uri ~* /(upload|download|file|asset|attachment|avatar|media|export)(/|s|$)) {
+            set \$xcmax_modstore_upstream http://127.0.0.1:${stateful_modstore_port};
+        }
+        proxy_pass \$xcmax_modstore_upstream;
     }
 
     location /market/ {
