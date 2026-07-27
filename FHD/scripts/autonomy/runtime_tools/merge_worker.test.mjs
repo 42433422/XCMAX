@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -187,4 +188,18 @@ test('self-maintenance continuation branches always merge to canonical main', ()
     ),
   };
   assert.equal(selectTaskMergeBase(task, ''), 'main');
+});
+
+
+test('installer repairs stale Node paths and reloads the LaunchAgent definition', () => {
+  const installer = readFileSync(
+    new URL('./install_merge_worker.sh', import.meta.url),
+    'utf8',
+  );
+  assert.match(installer, /configured_node=.*ProgramArguments:0/);
+  assert.match(installer, /NODE_BIN=.*command -v node/);
+  assert.match(installer, /Set :ProgramArguments:0 \$NODE_BIN/);
+  assert.match(installer, /launchctl bootout "\$target"/);
+  assert.match(installer, /launchctl bootstrap "\$domain" "\$PLIST"/);
+  assert.match(installer, /trap .*EXIT/);
 });
