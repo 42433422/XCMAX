@@ -1,6 +1,6 @@
 <template src="./EtlCenterView.template.html"></template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   etlApi,
@@ -17,6 +17,7 @@ import {
   ignoredReasonLabel,
   useEtlFolderBatch,
 } from '@/composables/useEtlFolderBatch'
+import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
 import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
 
@@ -38,7 +39,6 @@ const targetConfigs = ref<EtlTargetConfig[]>([])
 const runs = ref<EtlRun[]>([])
 const currentRun = ref<EtlRun | null>(null)
 const targetType = ref('customer_products')
-const templateSelection = ref('')
 const targetConfigId = ref('')
 const runRows = ref<EtlRunRow[]>([])
 const rowPage = ref(1)
@@ -58,26 +58,14 @@ const webhookDraft = reactive({ name: '', endpoint_url: '', headersJson: '{}', s
 const webhookTestMessage = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
-const compatibleTemplates = computed(() => templates.value.filter((item) => item.target_type === targetType.value))
-const compatiblePresets = computed(() => {
-  if (!['customer_products', 'customers', 'products', 'shipment_records'].includes(targetType.value)) {
-    return []
-  }
-  return capabilities.value?.compatibility_presets || []
-})
-const templateId = computed(() => (
-  templateSelection.value.startsWith('template:')
-    ? templateSelection.value.slice('template:'.length)
-    : ''
-))
-const compatibilityPresetId = computed(() => (
-  templateSelection.value.startsWith('preset:')
-    ? templateSelection.value.slice('preset:'.length)
-    : ''
-))
-const selectedCompatibilityPreset = computed(() => (
-  compatiblePresets.value.find((item) => item.id === compatibilityPresetId.value)
-))
+const {
+  templateSelection,
+  compatibleTemplates,
+  compatiblePresets,
+  templateId,
+  compatibilityPresetId,
+  selectedCompatibilityPreset,
+} = useEtlTemplateSelection({ capabilities, templates, targetType })
 
 const {
   selectedFiles,
@@ -496,9 +484,6 @@ function formatTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '—'
 }
 
-watch(targetType, () => {
-  templateSelection.value = ''
-})
 onMounted(bootstrap)
 onBeforeUnmount(() => {
   if (pollTimer) clearTimeout(pollTimer)
