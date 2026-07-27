@@ -206,12 +206,40 @@ export function isTransientMergeFailure(reason) {
     'empty-diff',
     'forbidden-auto-merge-paths',
     'is not a bot identity',
+    'manual-veto-active',
     'no-diff-available',
+    'post-dispatch-check-failed',
     'reject:',
     'required checks failed',
   ];
   if (terminal.some((pattern) => text.includes(pattern))) return false;
   return true;
+}
+
+export function blockingMergePollReason(pr, prNumber = '') {
+  const labels = Array.isArray(pr?.labels) ? pr.labels : [];
+  const hasManualVeto = labels.some(
+    (label) => String(label?.name || label || '').trim().toLowerCase() === 'hold-merge',
+  );
+  if (hasManualVeto) {
+    return `manual-veto-active: PR #${prNumber || '?'} has hold-merge label`;
+  }
+
+  const terminalConclusions = new Set([
+    'ACTION_REQUIRED',
+    'CANCELLED',
+    'FAILURE',
+    'STALE',
+    'STARTUP_FAILURE',
+    'TIMED_OUT',
+  ]);
+  const failedChecks = (Array.isArray(pr?.statusCheckRollup) ? pr.statusCheckRollup : [])
+    .filter((check) => terminalConclusions.has(String(check?.conclusion || '').toUpperCase()))
+    .map((check) => String(check?.name || 'unnamed-check'));
+  if (failedChecks.length > 0) {
+    return `post-dispatch-check-failed: PR #${prNumber || '?'} checks=${failedChecks.join(',')}`;
+  }
+  return '';
 }
 
 export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
@@ -764,12 +792,27 @@ async function aiReviewPR(workspace, branch, baseBranch, prNumber, repoFull) {
 
 async function mergePR(workspace, prNumber, repoFull) {
   const cwd = workspace || process.env.HOME;
+  const viewArgs = [
+    'pr', 'view', prNumber,
+    '--json', 'state,mergeCommit,labels,statusCheckRollup',
+  ];
+  if (repoFull) viewArgs.push('--repo', repoFull);
   if (REQUIRE_BOT_IDENTITY) {
     if (!BOT_MERGE_WORKFLOW) throw new Error('bot merge workflow is not configured');
     // Dispatch only after required checks are green.  The bot workflow scans
     // once per dispatch; dispatching while checks are pending would skip the
     // PR and leave the worker waiting for a later schedule tick.
     await waitForRequiredChecks(workspace, prNumber, repoFull);
+    const { stdout: preflightOut } = await execFileAsync('gh', viewArgs, {
+      cwd,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    const preflightBlocker = blockingMergePollReason(
+      JSON.parse(preflightOut || '{}'),
+      prNumber,
+    );
+    if (preflightBlocker) throw new Error(preflightBlocker);
     const dispatchArgs = [
       'workflow', 'run', BOT_MERGE_WORKFLOW,
       '--ref', 'main',
@@ -801,8 +844,6 @@ async function mergePR(workspace, prNumber, repoFull) {
     }
   }
   // 轮询等待 PR merged（最多 30 分钟，每 30s 查一次）
-  const viewArgs = ['pr', 'view', prNumber, '--json', 'state,mergeCommit'];
-  if (repoFull) viewArgs.push('--repo', repoFull);
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 30_000));
     let prState = '';
@@ -837,6 +878,8 @@ async function mergePR(workspace, prNumber, repoFull) {
     if (prState === 'CLOSED') {
       throw new Error(`PR #${prNumber} closed without merge`);
     }
+    const blocker = blockingMergePollReason(pr, prNumber);
+    if (blocker) throw new Error(blocker);
   }
   throw new Error(`PR #${prNumber} 30 分钟内未 merge`);
 }
@@ -1092,7 +1135,22 @@ async function processTask(token, task, state) {
               workspaceExists ? workspace : '', prNumber, repoFull, INITIAL_PR_LABELS,
             );
             if (!holdRemoved) throw new Error('hold-merge-label-remove-failed-after-review');
-            const mergeSha = await mergePR(workspaceExists ? workspace : '', prNumber, repoFull);
+            let mergeSha = '';
+            try {
+              mergeSha = await mergePR(
+                workspaceExists ? workspace : '',
+                prNumber,
+                repoFull,
+              );
+            } catch (err) {
+              await addPrLabels(
+                workspaceExists ? workspace : '',
+                prNumber,
+                repoFull,
+                INITIAL_PR_LABELS,
+              );
+              throw err;
+            }
             results.push({ branch, prUrl, prNumber, merged: true, sha: mergeSha });
             log(`  ✓ merged (${mergeSha.slice(0, 10)})`);
           } else if (review.reason === 'indeterminate-review') {
