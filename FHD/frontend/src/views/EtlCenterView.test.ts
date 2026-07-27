@@ -72,7 +72,7 @@ describe('EtlCenterView folder workflow', () => {
     vi.clearAllMocks()
     etlApiMock.capabilities.mockResolvedValue({
       enabled: true,
-      limits: { max_file_bytes: 50 * 1024 * 1024, max_rows: 100_000 },
+      limits: { max_file_bytes: 100 * 1024 * 1024, max_rows: 100_000 },
       inputs: { structured: [], ocr: [], knowledge_only: [], folder_upload: true },
       transforms: [],
       targets: [
@@ -97,6 +97,7 @@ describe('EtlCenterView folder workflow', () => {
     const wrapper = await mountView()
 
     expect(wrapper.text()).toContain('选择整个文件夹')
+    expect(wrapper.text()).toContain('单文件 100.0 MB')
     expect(wrapper.find('input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
   })

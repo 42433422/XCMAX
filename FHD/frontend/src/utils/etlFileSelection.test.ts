@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatEtlBytes, selectEtlSourceFiles } from './etlFileSelection'
+import {
+  ETL_MAX_FILE_BYTES,
+  formatEtlBytes,
+  selectEtlSourceFiles,
+} from './etlFileSelection'
 
 function folderFile(contents: string, name: string, relativePath: string) {
   const file = new File([contents], name, { lastModified: 123 })
@@ -46,6 +50,20 @@ describe('selectEtlSourceFiles', () => {
     ], 1024)
 
     expect(selection.accepted[0]?.relativePath).toBe('unsafe/data.csv')
+  })
+
+  it('accepts 100MB exactly and rejects the next byte', () => {
+    const exact = folderFile('a', 'exact.csv', '批次/exact.csv')
+    const over = folderFile('b', 'over.csv', '批次/over.csv')
+    Object.defineProperty(exact, 'size', { value: ETL_MAX_FILE_BYTES })
+    Object.defineProperty(over, 'size', { value: ETL_MAX_FILE_BYTES + 1 })
+
+    const selection = selectEtlSourceFiles([exact, over], ETL_MAX_FILE_BYTES)
+
+    expect(selection.accepted.map((item) => item.file.name)).toEqual(['exact.csv'])
+    expect(selection.ignored).toEqual([
+      { name: '批次/over.csv', reason: 'too_large' },
+    ])
   })
 })
 

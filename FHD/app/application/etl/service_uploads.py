@@ -13,6 +13,7 @@ from app.application.etl.errors import EtlError, EtlNotFound
 from app.application.etl.parsers import SUPPORTED_SUFFIXES
 from app.application.etl.service_support import (
     MAX_FILE_BYTES,
+    MAX_FILE_MIB,
     clean_batch_id,
     clean_filename,
     clean_relative_path,
@@ -65,7 +66,7 @@ class UploadServiceMixin:
                     if total > MAX_FILE_BYTES:
                         raise EtlError(
                             "ETL_FILE_TOO_LARGE",
-                            "单文件不能超过 50MB",
+                            f"单文件不能超过 {MAX_FILE_MIB}MB",
                             status_code=413,
                         )
                     digest.update(chunk)

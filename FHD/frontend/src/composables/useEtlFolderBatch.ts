@@ -7,6 +7,7 @@ import {
   type EtlRun,
 } from '@/api/etl'
 import {
+  ETL_MAX_FILE_BYTES,
   formatEtlBytes,
   selectEtlSourceFiles,
   type EtlIgnoredSourceFile,
@@ -78,10 +79,13 @@ export function batchFileStatusLabel(status: BatchFileStatus) {
   } as Record<BatchFileStatus, string>)[status]
 }
 
-export function ignoredReasonLabel(reason: EtlIgnoredSourceFile['reason']) {
+export function ignoredReasonLabel(
+  reason: EtlIgnoredSourceFile['reason'],
+  maxFileBytes = ETL_MAX_FILE_BYTES,
+) {
   return ({
     unsupported: '文件类型不支持',
-    too_large: '单文件超过 50MB',
+    too_large: `单文件超过 ${formatEtlBytes(maxFileBytes)}`,
     duplicate: '重复文件',
   } as Record<EtlIgnoredSourceFile['reason'], string>)[reason]
 }
@@ -96,7 +100,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   let batchPollTimer: ReturnType<typeof setTimeout> | null = null
 
   const maxFileBytes = computed(
-    () => options.capabilities.value?.limits.max_file_bytes || 50 * 1024 * 1024,
+    () => options.capabilities.value?.limits.max_file_bytes || ETL_MAX_FILE_BYTES,
   )
   const selectedTotalBytes = computed(
     () => selectedFiles.value.reduce((sum, item) => sum + item.file.size, 0),
@@ -322,6 +326,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     selectionFolderName,
     fileInput,
     folderInput,
+    maxFileBytes,
     selectedTotalBytes,
     incompatibleFiles,
     batchFinishedCount,

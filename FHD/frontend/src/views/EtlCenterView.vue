@@ -64,6 +64,7 @@ const {
   selectionFolderName,
   fileInput,
   folderInput,
+  maxFileBytes,
   selectedTotalBytes,
   incompatibleFiles,
   batchFinishedCount,

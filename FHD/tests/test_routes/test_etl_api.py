@@ -98,6 +98,7 @@ def test_etl_api_upload_preview_execute_and_owner_isolation(tmp_path, monkeypatc
         "webhook",
     }
     assert capabilities.json()["data"]["inputs"]["folder_upload"] is True
+    assert capabilities.json()["data"]["limits"]["max_file_bytes"] == 100 * 1024 * 1024
 
     uploaded = client.post(
         "/api/etl/uploads",

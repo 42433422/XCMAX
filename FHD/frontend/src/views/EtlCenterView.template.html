@@ -7,7 +7,7 @@
       </div>
       <div class="etl-hero__limits">
         <span>支持整文件夹</span>
-        <span>单文件 50MB</span>
+        <span>单文件 {{ formatEtlBytes(maxFileBytes) }}</span>
         <span>最多 10 万行</span>
         <span>模板仅自己可见</span>
       </div>
@@ -81,7 +81,8 @@
             已选择 {{ selectedFiles.length }} 个文件，共 {{ formatEtlBytes(selectedTotalBytes) }}
           </small>
           <small v-if="ignoredFiles.length" class="etl-selection-warning">
-            已忽略 {{ ignoredFiles.length }} 个不支持、重复或超过 50MB 的文件
+            已忽略 {{ ignoredFiles.length }} 个不支持、重复或超过
+            {{ formatEtlBytes(maxFileBytes) }} 的文件
           </small>
         </div>
 
@@ -208,7 +209,7 @@
         <summary>查看被忽略的 {{ ignoredFiles.length }} 个文件</summary>
         <ul>
           <li v-for="item in ignoredFiles" :key="`${item.name}-${item.reason}`">
-            {{ item.name }} · {{ ignoredReasonLabel(item.reason) }}
+            {{ item.name }} · {{ ignoredReasonLabel(item.reason, maxFileBytes) }}
           </li>
         </ul>
       </details>

@@ -16,7 +16,8 @@ from app.application.etl.targets import json_safe
 
 logger = logging.getLogger(__name__)
 
-MAX_FILE_BYTES = 50 * 1024 * 1024
+MAX_FILE_MIB = 100
+MAX_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
 EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="fhd-etl")
 SUBMITTED: set[str] = set()
 SUBMITTED_LOCK = threading.Lock()

@@ -1,5 +1,6 @@
 export const ETL_FILE_ACCEPT =
   '.xlsx,.xlsm,.csv,.pdf,.jpg,.jpeg,.png,.doc,.docx,.ppt,.pptx'
+export const ETL_MAX_FILE_BYTES = 100 * 1024 * 1024
 
 const SUPPORTED_SUFFIXES = new Set(ETL_FILE_ACCEPT.split(','))
 
