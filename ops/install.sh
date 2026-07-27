@@ -42,6 +42,15 @@ rsync -a --delete \
   "$SRC_DIR/" "$INSTALL_DIR/"
 find "$INSTALL_DIR" -name '*.sh' -exec chmod 755 {} +
 chmod 755 "$INSTALL_DIR"/lib/notify.py "$INSTALL_DIR"/monitor/xcmax_monitor.py
+OPS_SOURCE_SHA="${XCMAX_OPS_GIT_SHA:-}"
+if [[ -z "$OPS_SOURCE_SHA" ]] &&
+  git -C "$SRC_DIR/.." rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  OPS_SOURCE_SHA="$(git -C "$SRC_DIR/.." rev-parse HEAD)"
+fi
+if [[ "$OPS_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  printf '%s\n' "$OPS_SOURCE_SHA" >"$INSTALL_DIR/DEPLOYED_GIT_SHA"
+  chmod 0644 "$INSTALL_DIR/DEPLOYED_GIT_SHA"
+fi
 
 echo "[2/5] 配置与目录"
 if [[ ! -f "$ENV_FILE" ]]; then
