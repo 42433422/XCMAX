@@ -57,7 +57,7 @@ from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
 )
-from .self_maintenance_retry import is_transient_dispatch_failure
+from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
 
 logger = logging.getLogger(__name__)
 
@@ -2688,7 +2688,7 @@ def _code_task_text(
             f"{json.dumps(remediation_evidence, ensure_ascii=False, sort_keys=True)}"
         )
     return (
-        "Run a real MODstore self-maintenance improvement task. "
+        "Run a real MODstore self-maintenance improvement task. === SELF_MAINTENANCE_CANONICAL_MERGE_BASE:main === "
         "Use the previous loop memory and current evidence gaps to fix the highest-value "
         "executable gap in the self-maintenance loop. "
         "MANDATORY: Before reasoning from scratch, you MUST check the HISTORICAL FIXES below. "
@@ -6450,9 +6450,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             remediation_item["resume_from_clean_baseline"] = True
         open_items.append(remediation_item)
     memory["open_items"] = open_items
+    close_successful_code_resume(memory, final, _close_open_items_in_memory)
     resolution_record = _close_items_resolved_by_final(memory, final)
     knowledge_record = record_loop_evolution_knowledge(final, gate)
-
     # KB salvage: record_loop_evolution_knowledge only writes on
     # auto_merged_low_risk, so failed / await_human runs would otherwise lose
     # any KB files the Para employee already produced. Scan the workspace
