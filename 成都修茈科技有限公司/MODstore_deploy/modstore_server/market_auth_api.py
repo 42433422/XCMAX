@@ -38,7 +38,10 @@ from modstore_server.auth_service import (
     verify_password,
 )
 from modstore_server.contact_company_match import build_company_match_payload
-from modstore_server.digest_identity import normalize_digest_identity_code, verify_digest_identity
+from modstore_server.digest_identity import (
+    normalize_digest_identity_code,
+    verify_digest_identity,
+)
 from modstore_server.digest_identity_peer_api import call_upstream_digest_verify
 from modstore_server.email_service import (
     assert_email_outbound_configured,
@@ -46,7 +49,9 @@ from modstore_server.email_service import (
     generate_verification_code,
     send_verification_email,
 )
-from modstore_server.enterprise_entitlements import normalize_enterprise_entitlement_mod_ids
+from modstore_server.enterprise_entitlements import (
+    normalize_enterprise_entitlement_mod_ids,
+)
 from modstore_server.java_me_profile import fetch_java_user_overlay
 from modstore_server.market_shared import (
     _get_current_user,
@@ -64,6 +69,24 @@ from modstore_server.models import (
     VerificationCode,
     get_session_factory,
 )
+from modstore_server.public_contact_payloads import (
+    CONTACT_PRIVACY_URL,
+    CONTACT_PRIVACY_VERSION,
+    PublicContactDTO,
+)
+from modstore_server.public_contact_payloads import (
+    format_contact_audit_code as _format_contact_audit_code,
+)
+from modstore_server.public_contact_payloads import (
+    landing_submission_payload as _landing_submission_payload,
+)
+from modstore_server.public_contact_payloads import (
+    normalize_contact_tracking_fields,
+)
+from modstore_server.public_contact_payloads import normalize_desktop_os as _norm_os
+from modstore_server.public_contact_payloads import (
+    parse_contact_audit_code,
+)
 from modstore_server.user_avatar_service import (
     _MIME_BY_SUFFIX,
     avatar_path_column,
@@ -76,26 +99,6 @@ from modstore_server.user_avatar_service import (
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
-
-
-class PublicContactDTO(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    email: str = Field(..., min_length=4, max_length=256)
-    phone: str = Field("", max_length=64)
-    company: str = Field("", max_length=256)
-    message: str = Field("", max_length=8000)
-    source: str = Field("home", max_length=64)
-    desktop_os: str = Field(
-        default="",
-        max_length=16,
-        description="客户桌面系统：mac 或 win，用于交付对应安装包",
-    )
-    need_mobile: bool = Field(
-        default=True,
-        description="是否同时需要 Android 手机端安装包",
-    )
-    cs_uid: int | None = Field(default=None, gt=0)
-    cs_t: str = Field(default="", max_length=512)
 
 
 def _fhd_cs_bridge_base() -> str:
@@ -174,77 +177,6 @@ def _notify_cs_intake_webhook(payload: dict) -> None:
         logger.exception("cs intake webhook notify failed")
 
 
-_AUDIT_CODE_RE = re.compile(r"^XC-?0*(\d{1,8})$", re.IGNORECASE)
-
-
-def _format_contact_audit_code(submission_id: int) -> str:
-    """用户可见的需求单审核码（与入库 id 一一对应，便于客服查询）。"""
-    sid = max(0, int(submission_id))
-    return f"XC-{sid:06d}"
-
-
-def parse_contact_audit_code(code: str) -> int | None:
-    raw = re.sub(r"\s+", "", (code or "").strip().upper())
-    if not raw:
-        return None
-    m = _AUDIT_CODE_RE.match(raw)
-    if m:
-        sid = int(m.group(1))
-        return sid if sid > 0 else None
-    if raw.isdigit():
-        sid = int(raw)
-        return sid if sid > 0 else None
-    return None
-
-
-def _normalize_desktop_os(value: str | None) -> str:
-    raw = (value or "").strip().casefold()
-    if raw in ("mac", "macos", "darwin", "osx"):
-        return "mac"
-    if raw in ("win", "windows", "win32", "pc"):
-        return "win"
-    return ""
-
-
-def _landing_submission_payload(row: LandingContactSubmission) -> dict:
-    try:
-        meta = json.loads(row.meta_json or "{}")
-    except json.JSONDecodeError:
-        meta = {}
-    created = row.created_at
-    submitted_at = created.isoformat() if created else ""
-    desktop_os = _normalize_desktop_os(str(meta.get("desktop_os") or ""))
-    need_mobile = meta.get("need_mobile")
-    if need_mobile is None:
-        need_mobile_val = True
-    else:
-        need_mobile_val = (
-            bool(need_mobile)
-            if isinstance(need_mobile, bool)
-            else str(need_mobile).lower()
-            not in (
-                "0",
-                "false",
-                "no",
-            )
-        )
-    return {
-        "landing_contact_id": row.id,
-        "audit_code": _format_contact_audit_code(row.id),
-        "name": row.name,
-        "email": row.email,
-        "phone": row.phone,
-        "company": row.company,
-        "message": row.message,
-        "source": row.source,
-        "desktop_os": desktop_os or None,
-        "need_mobile": need_mobile_val,
-        "market_user_id": int(meta.get("market_user_id") or 0) or None,
-        "submitted_at": submitted_at,
-        "created_at": submitted_at,
-    }
-
-
 def _require_internal_api_key(request: Request) -> None:
     expected = (
         os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
@@ -269,16 +201,27 @@ def api_public_contact_submit(
     email = (body.email or "").strip()
     if not _CONTACT_EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="邮箱格式不正确")
+    if not body.privacy_agreed:
+        raise HTTPException(status_code=400, detail="请先阅读并同意用户协议与隐私政策")
     _public_contact_rate_allow(_public_contact_client_key(request))
+    submitted_at = datetime.now(timezone.utc).isoformat()
+    privacy_version = (body.privacy_version or CONTACT_PRIVACY_VERSION).strip()[:32]
+    privacy_url = (body.privacy_url or CONTACT_PRIVACY_URL).strip()[:256]
     meta = {
         "user_agent": (request.headers.get("user-agent") or "")[:512],
         "referer": (request.headers.get("referer") or "")[:512],
+        "privacy_agreed": True,
+        "privacy_version": privacy_version,
+        "privacy_url": privacy_url,
+        "privacy_agreed_at": submitted_at,
     }
-    desktop_os = _normalize_desktop_os(body.desktop_os)
+    desktop_os = _norm_os(body.desktop_os)
     if desktop_os:
         meta["desktop_os"] = desktop_os
     meta["need_mobile"] = bool(body.need_mobile)
     source = (body.source or "home").strip()[:64] or "home"
+    tracking = normalize_contact_tracking_fields(body.campaign, body.medium, body.content)
+    meta.update({k: v for k, v in tracking.items() if v})
     market_user_id: int | None = None
     try:
         from modstore_server.cs_intake_link import verify_cs_intake_token as _verify_cs
@@ -320,7 +263,6 @@ def api_public_contact_submit(
                         session.commit()
             except SQLAlchemyError:
                 logger.debug("bind market_user_id to landing meta failed", exc_info=True)
-    submitted_at = datetime.now(timezone.utc).isoformat()
     webhook_payload = {
         "market_user_id": market_user_id,
         "landing_contact_id": new_id,
@@ -332,8 +274,13 @@ def api_public_contact_submit(
         "message": row.message,
         "submitted_at": submitted_at,
         "intake_source": source,
+        **tracking,
         "desktop_os": desktop_os or None,
         "need_mobile": bool(body.need_mobile),
+        "privacy_agreed": True,
+        "privacy_version": privacy_version,
+        "privacy_url": privacy_url,
+        "privacy_agreed_at": submitted_at,
     }
     background_tasks.add_task(_notify_cs_intake_webhook, webhook_payload)
     return {"ok": True, "id": new_id, "audit_code": audit_code}
@@ -352,7 +299,13 @@ async def api_public_contact_company_match(
 ):
     query = (q or "").strip()
     if len(query) < 2:
-        return {"ok": True, "query": query, "matched": None, "suggestions": [], "found": False}
+        return {
+            "ok": True,
+            "query": query,
+            "matched": None,
+            "suggestions": [],
+            "found": False,
+        }
     _public_contact_company_match_rate_allow(_public_contact_client_key(request))
     return await build_company_match_payload(query, limit, web)
 
@@ -371,7 +324,13 @@ async def api_workbench_company_match(
 ):
     query = (q or "").strip()
     if len(query) < 2:
-        return {"ok": True, "query": query, "matched": None, "suggestions": [], "found": False}
+        return {
+            "ok": True,
+            "query": query,
+            "matched": None,
+            "suggestions": [],
+            "found": False,
+        }
     rate_key = f"user:{int(user.id)}" if user else _public_contact_client_key(request)
     _workbench_company_match_rate_allow(rate_key)
     return await build_company_match_payload(query, limit, web)
@@ -401,7 +360,11 @@ def api_internal_payment_summary(
     }
 
 
-@router.get("/internal/cs-intake/latest", summary="客服需求采集最新提交（服务间）", tags=["market"])
+@router.get(
+    "/internal/cs-intake/latest",
+    summary="客服需求采集最新提交（服务间）",
+    tags=["market"],
+)
 def api_internal_cs_intake_latest(market_user_id: int, request: Request):
     _require_internal_api_key(request)
     uid = int(market_user_id)
