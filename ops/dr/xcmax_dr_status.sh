@@ -17,6 +17,27 @@ printf 'release_modstore_sha=%s\n' \
 printf 'release_fhd_sha=%s\n' \
   "$(cat "$STATE/release_applied_fhd_sha" 2>/dev/null || true)"
 printf 'edge_mode=%s\n' "$(cat "$STATE/edge_mode" 2>/dev/null || true)"
+printf 'active_peer_enabled_at=%s\n' \
+  "$(cat "$STATE/active_peer_enabled_at" 2>/dev/null || true)"
+if [[ -f /etc/xcmax-dr-auto-failover.env ]]; then
+  auto_failover="$(
+    awk -F= '$1 == "OPS_DR_AUTO_FAILOVER_ENABLED" {print $2}' \
+      /etc/xcmax-dr-auto-failover.env | tail -1
+  )"
+  printf 'auto_failover_enabled=%s\n' "${auto_failover:-0}"
+fi
+if [[ -s "$STATE/failover-guard.json" ]]; then
+  python3 - "$STATE/failover-guard.json" <<'PY'
+import json
+import sys
+try:
+    doc = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    doc = {}
+for key in ("checked_at", "consecutive", "reason", "fence_ready"):
+    print(f"failover_{key}={doc.get(key, '')}")
+PY
+fi
 
 if docker inspect "$CONTAINER" >/dev/null 2>&1 &&
   [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" == "true" ]]; then
@@ -57,6 +78,8 @@ else
   printf 'wal_pg16_container=stopped\n'
 fi
 
-for unit in xcmax-dr-modstore xcmax-dr-fhd xcmax-dr-payment xcmax-dr-scheduler nginx; do
+for unit in \
+  xcmax-dr-primary-tunnel xcmax-dr-modstore xcmax-dr-fhd \
+  xcmax-dr-payment xcmax-dr-scheduler xcmax-dr-failover-guard.timer nginx; do
   printf '%s=%s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
 done

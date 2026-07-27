@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 在专用温备机上准备隔离运行环境。
-# - 复用已恢复的三套 PostgreSQL 与 SQLite；
-# - 业务 API 只监听 127.0.0.1，不接管公网；
-# - 禁止 MODstore 后台任务、日更编排和外发轮询；
-# - 不安装/启动 scheduler 与 payment，避免双主副作用。
+# 在专用容灾机上准备隔离运行环境。
+# - standby: 使用恢复库，FHD 停机，MODstore 仅供本机验证；
+# - active-peer: 应用常态在线，经受限隧道使用生产单主数据；
+# - promoted: 使用已提升的本地数据库，供灾难接管。
+# 所有模式都保持 scheduler/payment 单 Leader，除 promotion 外不启动。
 
 set -euo pipefail
 
@@ -19,11 +19,26 @@ RESTORE_CONFIG="$DR_ROOT/restore-config"
 FHD_ROOT="$RUNTIME/fhd"
 MODSTORE_ROOT="$RUNTIME/source/成都修茈科技有限公司/MODstore_deploy"
 PG_ENV="${OPS_DR_PG_ENV:-/etc/xcmax-dr-postgres.env}"
+RUNTIME_MODE="${OPS_DR_RUNTIME_MODE:-standby}"
 APP_PG_PORT="${OPS_DR_APP_PG_PORT:-${OPS_DR_PG_PORT:-5432}}"
 PAYMENT_PG_PORT="${OPS_DR_PAYMENT_PG_PORT:-$APP_PG_PORT}"
+REDIS_PORT="${OPS_DR_REDIS_PORT:-6379}"
+PAYMENT_API_PORT="${OPS_DR_PAYMENT_API_PORT:-18080}"
 PG_PRESERVE_CREDENTIALS="${OPS_DR_PG_PRESERVE_CREDENTIALS:-0}"
 APP_USER="${OPS_DR_APP_USER:-xcmaxapp}"
 PAYMENT_SHA256="${OPS_DR_PAYMENT_SHA256:-1df90282e5f1ca4d8192fe6b2f77fe54b6300e7c1ef3013b8bcb24a2bbde54b6}"
+
+case "$RUNTIME_MODE" in
+  standby|active-peer|promoted) ;;
+  *)
+    echo "OPS_DR_RUNTIME_MODE 必须是 standby、active-peer 或 promoted" >&2
+    exit 2
+    ;;
+esac
+if [[ "$RUNTIME_MODE" == "active-peer" && "$PG_PRESERVE_CREDENTIALS" != "1" ]]; then
+  echo "active-peer 必须保留生产数据库凭据" >&2
+  exit 2
+fi
 
 for required in \
   "$FHD_ROOT/XCAGI/run.py" \
@@ -93,7 +108,8 @@ python3 - \
   "$RESTORE_CONFIG/root/fhd-full.env" /etc/xcmax-dr-fhd.env \
   "$RESTORE_CONFIG/etc/xcmax/modstore.env" /etc/xcmax-dr-modstore.env \
   "$DATA" "$RUNTIME" "$APP_PG_PORT" "$PAYMENT_PG_PORT" \
-  "$PG_PRESERVE_CREDENTIALS" <<'PY'
+  "$REDIS_PORT" "$PAYMENT_API_PORT" "$PG_PRESERVE_CREDENTIALS" \
+  "$RUNTIME_MODE" <<'PY'
 import json
 import re
 import sys
@@ -105,7 +121,10 @@ pg_env, fhd_src, fhd_dst, mod_src, mod_dst, data_root, runtime_root = map(
 )
 app_pg_port = int(sys.argv[8])
 payment_pg_port = int(sys.argv[9])
-preserve_credentials = sys.argv[10] == "1"
+redis_port = int(sys.argv[10])
+payment_api_port = int(sys.argv[11])
+preserve_credentials = sys.argv[12] == "1"
+runtime_mode = sys.argv[13]
 
 def parse(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
@@ -194,6 +213,7 @@ fhd_overrides = {
     "MODSTORE_LOCAL_BASE_URL": "http://127.0.0.1:19999",
     "MODSTORE_DIGEST_BASE_URL": "http://127.0.0.1:19999",
     "MODSTORE_ALL_HANDS_BASE_URL": "http://127.0.0.1:19999",
+    "XCMAX_NODE_ROLE": runtime_mode,
 }
 mod_overrides = {
     "DATABASE_URL": modstore_database_url,
@@ -233,7 +253,25 @@ mod_overrides = {
     "MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED": "0",
     "MODSTORE_RELEASE_TRAIN_ENABLED": "0",
     "MODSTORE_SURFACE_AUDIT_AUTO_START": "0",
+    "XCMAX_NODE_ROLE": runtime_mode,
 }
+if runtime_mode == "active-peer":
+    source_redis_url = mod_source.get("REDIS_URL", "")
+    if not source_redis_url:
+        raise SystemExit("active-peer 缺少生产 REDIS_URL")
+    mod_overrides["REDIS_URL"] = localize_url(source_redis_url, redis_port)
+    mod_overrides["REDIS_PORT"] = str(redis_port)
+    payment_service_url = mod_source.get("JAVA_PAYMENT_SERVICE_URL", "")
+    if not payment_service_url:
+        raise SystemExit("active-peer 缺少生产 JAVA_PAYMENT_SERVICE_URL")
+    mod_overrides["JAVA_PAYMENT_SERVICE_URL"] = localize_url(
+        payment_service_url, payment_api_port
+    )
+    for redis_key in ("REDIS_URL", "CACHE_REDIS_URL", "XCAGI_REDIS_URL"):
+        if fhd_source.get(redis_key):
+            fhd_overrides[redis_key] = localize_url(
+                fhd_source[redis_key], redis_port
+            )
 release_manifest = source_root / ".xcmax-release.json"
 if release_manifest.is_file():
     try:
@@ -259,10 +297,15 @@ elif [[ "$(docker inspect -f '{{.State.Running}}' xcmax-dr-redis)" != "true" ]];
   docker start xcmax-dr-redis >/dev/null
 fi
 
+tunnel_after=""
+if [[ "$RUNTIME_MODE" == "active-peer" ]]; then
+  tunnel_after="xcmax-dr-primary-tunnel.service"
+fi
+
 cat >/etc/systemd/system/xcmax-dr-fhd.service <<EOF
 [Unit]
 Description=XCMAX DR FHD API (localhost only)
-After=network-online.target docker.service
+After=network-online.target docker.service $tunnel_after
 Wants=network-online.target
 
 [Service]
@@ -288,7 +331,7 @@ EOF
 cat >/etc/systemd/system/xcmax-dr-modstore.service <<EOF
 [Unit]
 Description=XCMAX DR MODstore API (localhost only, no background jobs)
-After=network-online.target docker.service xcmax-dr-fhd.service
+After=network-online.target docker.service xcmax-dr-fhd.service $tunnel_after
 Wants=network-online.target
 
 [Service]
@@ -385,6 +428,13 @@ systemctl disable --now \
   xcmax-dr-fhd.service xcmax-dr-scheduler.service xcmax-dr-payment.service \
   >/dev/null 2>&1 || true
 systemctl enable xcmax-dr-modstore.service >/dev/null
-systemctl restart xcmax-dr-modstore.service
-
-echo "温备运行环境已准备：FHD 已验证但默认停机；MODstore=127.0.0.1:19999（无后台任务）"
+if [[ "$RUNTIME_MODE" == "active-peer" ]]; then
+  systemctl enable xcmax-dr-fhd.service >/dev/null
+  systemctl restart xcmax-dr-fhd.service xcmax-dr-modstore.service
+  curl -fsS http://127.0.0.1:15100/api/health >/dev/null
+  curl -fsS http://127.0.0.1:19999/api/health >/dev/null
+  echo "活动应用节点已准备：FHD/MODstore 在线，后台任务与支付保持单 Leader"
+else
+  systemctl restart xcmax-dr-modstore.service
+  echo "温备运行环境已准备：FHD 默认停机；MODstore=127.0.0.1:19999（无后台任务）"
+fi
