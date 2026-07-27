@@ -19,12 +19,23 @@ RESTORE_CONFIG="$DR_ROOT/restore-config"
 FHD_ROOT="$RUNTIME/fhd"
 MODSTORE_ROOT="$RUNTIME/source/成都修茈科技有限公司/MODstore_deploy"
 PG_ENV="${OPS_DR_PG_ENV:-/etc/xcmax-dr-postgres.env}"
-RUNTIME_MODE="${OPS_DR_RUNTIME_MODE:-standby}"
-APP_PG_PORT="${OPS_DR_APP_PG_PORT:-${OPS_DR_PG_PORT:-5432}}"
-PAYMENT_PG_PORT="${OPS_DR_PAYMENT_PG_PORT:-$APP_PG_PORT}"
-REDIS_PORT="${OPS_DR_REDIS_PORT:-6379}"
-PAYMENT_API_PORT="${OPS_DR_PAYMENT_API_PORT:-18080}"
-PG_PRESERVE_CREDENTIALS="${OPS_DR_PG_PRESERVE_CREDENTIALS:-0}"
+ROLE_ENV="${OPS_DR_RUNTIME_ROLE_ENV:-/etc/xcmax-dr-runtime-role.env}"
+if [[ -s "$ROLE_ENV" ]]; then
+  role_owner="$(stat -c '%u' "$ROLE_ENV")"
+  role_mode="$(stat -c '%a' "$ROLE_ENV")"
+  [[ "$role_owner" == "0" && $((8#$role_mode & 077)) == 0 ]] || {
+    echo "运行角色配置必须归 root 且权限不高于 0600: $ROLE_ENV" >&2
+    exit 2
+  }
+  # shellcheck disable=SC1090
+  . "$ROLE_ENV"
+fi
+RUNTIME_MODE="${OPS_DR_RUNTIME_MODE:-${XCMAX_DR_SAVED_RUNTIME_MODE:-standby}}"
+APP_PG_PORT="${OPS_DR_APP_PG_PORT:-${OPS_DR_PG_PORT:-${XCMAX_DR_SAVED_APP_PG_PORT:-5432}}}"
+PAYMENT_PG_PORT="${OPS_DR_PAYMENT_PG_PORT:-${XCMAX_DR_SAVED_PAYMENT_PG_PORT:-$APP_PG_PORT}}"
+REDIS_PORT="${OPS_DR_REDIS_PORT:-${XCMAX_DR_SAVED_REDIS_PORT:-6379}}"
+PAYMENT_API_PORT="${OPS_DR_PAYMENT_API_PORT:-${XCMAX_DR_SAVED_PAYMENT_API_PORT:-18080}}"
+PG_PRESERVE_CREDENTIALS="${OPS_DR_PG_PRESERVE_CREDENTIALS:-${XCMAX_DR_SAVED_PG_PRESERVE_CREDENTIALS:-0}}"
 APP_USER="${OPS_DR_APP_USER:-xcmaxapp}"
 PAYMENT_SHA256="${OPS_DR_PAYMENT_SHA256:-1df90282e5f1ca4d8192fe6b2f77fe54b6300e7c1ef3013b8bcb24a2bbde54b6}"
 
@@ -39,6 +50,17 @@ if [[ "$RUNTIME_MODE" == "active-peer" && "$PG_PRESERVE_CREDENTIALS" != "1" ]]; 
   echo "active-peer 必须保留生产数据库凭据" >&2
   exit 2
 fi
+for port in "$APP_PG_PORT" "$PAYMENT_PG_PORT" "$REDIS_PORT" "$PAYMENT_API_PORT"; do
+  [[ "$port" =~ ^[1-9][0-9]*$ ]] && ((port <= 65535)) || {
+    echo "运行角色端口非法: $port" >&2
+    exit 2
+  }
+done
+[[ "$PG_PRESERVE_CREDENTIALS" == "0" ||
+  "$PG_PRESERVE_CREDENTIALS" == "1" ]] || {
+  echo "OPS_DR_PG_PRESERVE_CREDENTIALS 必须是 0 或 1" >&2
+  exit 2
+}
 
 for required in \
   "$FHD_ROOT/XCAGI/run.py" \
@@ -449,3 +471,18 @@ else
   systemctl restart xcmax-dr-modstore.service
   echo "温备运行环境已准备：FHD 默认停机；MODstore=127.0.0.1:19999（无后台任务）"
 fi
+
+role_tmp="$(mktemp "$(dirname "$ROLE_ENV")/.xcmax-dr-runtime-role.XXXXXX")"
+trap 'rm -f -- "$role_tmp"' EXIT
+cat >"$role_tmp" <<EOF
+XCMAX_DR_SAVED_RUNTIME_MODE=$RUNTIME_MODE
+XCMAX_DR_SAVED_APP_PG_PORT=$APP_PG_PORT
+XCMAX_DR_SAVED_PAYMENT_PG_PORT=$PAYMENT_PG_PORT
+XCMAX_DR_SAVED_REDIS_PORT=$REDIS_PORT
+XCMAX_DR_SAVED_PAYMENT_API_PORT=$PAYMENT_API_PORT
+XCMAX_DR_SAVED_PG_PRESERVE_CREDENTIALS=$PG_PRESERVE_CREDENTIALS
+EOF
+chmod 0600 "$role_tmp"
+chown root:root "$role_tmp"
+mv -f "$role_tmp" "$ROLE_ENV"
+trap - EXIT

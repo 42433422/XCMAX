@@ -19,6 +19,10 @@ printf 'release_fhd_sha=%s\n' \
 printf 'edge_mode=%s\n' "$(cat "$STATE/edge_mode" 2>/dev/null || true)"
 printf 'active_peer_enabled_at=%s\n' \
   "$(cat "$STATE/active_peer_enabled_at" 2>/dev/null || true)"
+printf 'runtime_mode=%s\n' "$(
+  sed -n 's/^XCMAX_DR_SAVED_RUNTIME_MODE=//p' \
+    /etc/xcmax-dr-runtime-role.env 2>/dev/null | head -n 1
+)"
 if [[ -f /etc/xcmax-dr-auto-failover.env ]]; then
   auto_failover="$(
     awk -F= '$1 == "OPS_DR_AUTO_FAILOVER_ENABLED" {print $2}' \
