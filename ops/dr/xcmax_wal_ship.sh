@@ -58,11 +58,11 @@ previous_segment="$(
     sort | tail -1
 )"
 
-# PostgreSQL 10 uses the xlog function names. A forced switch bounds RPO even
+# PostgreSQL 10 uses the WAL function names. A forced switch bounds RPO even
 # during quiet periods; archive_timeout remains a second line of defence.
 primary_lsn="$(
   sudo -u "$PG_OS_USER" psql -Atqc \
-    "SELECT pg_switch_xlog()" postgres
+    "SELECT pg_switch_wal()" postgres
 )"
 
 deadline=$((SECONDS + 60))
@@ -80,7 +80,7 @@ while ((SECONDS < deadline)); do
 done
 [[ -n "${latest_segment:-}" &&
   ( -z "$previous_segment" || "$latest_segment" != "$previous_segment" ) ]] || {
-  log "ERROR: pg_switch_xlog 后 60 秒仍无归档段"
+  log "ERROR: pg_switch_wal 后 60 秒仍无归档段"
   exit 1
 }
 

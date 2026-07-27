@@ -22,7 +22,7 @@ if docker inspect "$CONTAINER" >/dev/null 2>&1 &&
   replay_lsn="$(
     docker exec "$CONTAINER" \
       psql -U postgres -d postgres -Atqc \
-      "SELECT COALESCE(pg_last_xlog_replay_location()::text, '')"
+      "SELECT COALESCE(pg_last_wal_replay_lsn()::text, '')"
   )"
   printf 'wal_container=running\n'
   printf 'wal_in_recovery=%s\n' "$recovery"
