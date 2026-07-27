@@ -18,7 +18,7 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
-WAL_ROOT="${OPS_WAL_ROOT:-/var/backups/xcmax/wal}"
+WAL_ROOT="${OPS_WAL_ROOT:-/var/lib/pgsql/xcmax-wal}"
 ARCHIVE="$WAL_ROOT/archive"
 STATE="${OPS_STATE_DIR:-/var/lib/xcmax-ops}/state"
 LOG="${OPS_LOG_DIR:-/var/log/xcmax-ops}/wal-ship.log"
@@ -28,7 +28,7 @@ REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 LOCK="/run/lock/xcmax-wal-ship.lock"
 PG_OS_USER="${OPS_PG_OS_USER:-postgres}"
 
-[[ "$WAL_ROOT" == /var/backups/xcmax/wal ]] || {
+[[ "$WAL_ROOT" == /var/lib/pgsql/xcmax-wal ]] || {
   echo "拒绝非标准 WAL 根目录: $WAL_ROOT" >&2
   exit 2
 }
