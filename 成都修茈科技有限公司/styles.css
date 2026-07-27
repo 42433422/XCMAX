@@ -986,6 +986,12 @@ body.page-contact .intake-wizard-actions {
   border: 1px solid rgba(0, 130, 239, 0.16);
   background: rgba(0, 130, 239, 0.04);
 }
+.contact-qr-pair--single {
+  grid-template-columns: minmax(0, 220px);
+  justify-content: center;
+  border-color: rgba(17, 17, 17, 0.12);
+  background: rgba(17, 17, 17, 0.03);
+}
 .contact-qr-item {
   display: grid;
   justify-items: center;

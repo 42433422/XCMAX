@@ -8,7 +8,7 @@
       name="description"
       content="联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260727f" />
+    <link rel="stylesheet" href="./styles.css?v=20260727g" />
   </head>
 <body class="page-contact">
 <header class="site-header">
@@ -522,7 +522,7 @@
           <div class="contact-channels reveal">
             <header class="contact-channels__head">
               <h2 id="contact-channels-title">更多联系渠道</h2>
-              <p>点击图标即可获取对应联系方式；当前已开通企业微信客服。</p>
+              <p>点击图标即可获取对应联系方式；当前已开通企业微信、抖音。</p>
             </header>
             <ul class="contact-channel-grid" role="list">
               <li>
@@ -544,6 +544,28 @@
                     />
                   </span>
                   <span class="contact-channel-btn__label">企业微信</span>
+                  <span class="contact-channel-btn__hint">点击获取</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  class="contact-channel-btn"
+                  data-channel="douyin"
+                  aria-expanded="false"
+                  aria-controls="contact-channel-panel-douyin"
+                >
+                  <span class="contact-channel-btn__icon" aria-hidden="true">
+                    <img
+                      class="contact-channel-btn__logo"
+                      src="/assets/douyin-icon.svg?v=20260727g"
+                      width="48"
+                      height="48"
+                      alt=""
+                      decoding="async"
+                    />
+                  </span>
+                  <span class="contact-channel-btn__label">抖音</span>
                   <span class="contact-channel-btn__hint">点击获取</span>
                 </button>
               </li>
@@ -577,6 +599,28 @@
                     loading="lazy"
                   />
                   <span class="contact-qr-item__name">企业微信</span>
+                </li>
+              </ul>
+            </div>
+
+            <div
+              id="contact-channel-panel-douyin"
+              class="contact-channel-panel"
+              data-channel-panel="douyin"
+              hidden
+              role="region"
+              aria-label="抖音联系方式"
+            >
+              <ul class="contact-qr-pair contact-qr-pair--single" role="list">
+                <li class="contact-qr-item">
+                  <img
+                    src="/assets/douyin-qr.png?v=20260727g"
+                    width="180"
+                    height="180"
+                    alt="抖音二维码"
+                    loading="lazy"
+                  />
+                  <span class="contact-qr-item__name">抖音</span>
                 </li>
               </ul>
             </div>
@@ -618,7 +662,7 @@
 
 
 <script src="./contact-intake.js?v=20260727b"></script>
-<script src="./contact-channels.js?v=20260727d"></script>
+<script src="./contact-channels.js?v=20260727g"></script>
 <script>
 /* 渠道点击兜底：外链脚本 404 / 被发版冲掉时仍可展开企微面板 */
 ;(function () {
