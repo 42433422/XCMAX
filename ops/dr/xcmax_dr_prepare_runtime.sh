@@ -153,8 +153,8 @@ def rewrite(src: Path, dst: Path, overrides: dict[str, str]) -> None:
 
 def localize_url(value: str, port: int) -> str:
     parsed = urlsplit(value)
-    if not parsed.scheme or not parsed.path:
-        raise SystemExit(f"无法本地化数据库 URL: {value[:24]}...")
+    if not parsed.scheme or not parsed.netloc:
+        raise SystemExit(f"无法本地化服务 URL: {value[:24]}...")
     userinfo = parsed.netloc.rsplit("@", 1)[0] + "@" if "@" in parsed.netloc else ""
     return urlunsplit(
         (parsed.scheme, f"{userinfo}127.0.0.1:{port}", parsed.path, parsed.query, parsed.fragment)
