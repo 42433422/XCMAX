@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
+_MOD_BACKEND_IMPORT_LOCK = threading.RLock()
 
 
 def is_mods_disabled() -> bool:
@@ -171,28 +173,33 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     从指定 Mod 的 backend/<stem>.py 按文件路径加载为唯一模块名，避免多个 Mod 都叫 blueprints/services 时 sys.modules 冲突。
     stem 不含 .py；允许 ``employees/name`` 这类 backend 内相对模块路径。
     """
-    backend_path = _trusted_child_path(mod_path, "backend", directory=True)
-    path = _trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
-    if path is None:
-        raise FileNotFoundError(f"Mod {mod_id} backend file missing")
-    safe = "".join(c if c.isalnum() else "_" for c in mod_id)
-    # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
-    import hashlib
+    with _MOD_BACKEND_IMPORT_LOCK:
+        backend_path = _trusted_child_path(mod_path, "backend", directory=True)
+        path = _trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
+        if path is None:
+            raise FileNotFoundError(f"Mod {mod_id} backend file missing")
+        safe = "".join(c if c.isalnum() else "_" for c in mod_id)
+        # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
+        import hashlib
 
-    path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
-        :16
-    ]
-    spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
-    existing = sys.modules.get(spec_name)
-    if existing is not None:
-        return existing
-    spec = importlib.util.spec_from_file_location(spec_name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load spec for {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec_name] = module
-    spec.loader.exec_module(module)
-    return module
+        path_digest = hashlib.sha256(
+            os.path.normpath(os.path.abspath(mod_path)).encode()
+        ).hexdigest()[:16]
+        spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
+        existing = sys.modules.get(spec_name)
+        if existing is not None:
+            return existing
+        spec = importlib.util.spec_from_file_location(spec_name, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load spec for {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(spec_name, None)
+            raise
+        return module
 
 
 def _register_mod_hooks(mod_id: str, metadata: ModMetadata) -> None:
