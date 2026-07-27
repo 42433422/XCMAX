@@ -3261,6 +3261,50 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
     assert result is None
 
 
+def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatch):
+    """Exhausted QA on one branch must not prevent code resume on another hold."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        lambda *args, **kwargs: {"queued": True},
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-29b56e",
+                "kind": "failed_steps",
+                "para_task_id": "b3fd2376-34fd-4c14-91da-0e773229b56e",
+                "retry_count": 3,
+                "run_id": "f3e7bd4a-87df-4ed6-a95f-b8beaf747c32",
+                "steps": ["qa"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["reason"] == "structured_review_blocking_findings"
+
+
 def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
     """code类失败项应打印代码重试日志，而不是escalating to human review。"""
     from modstore_server import self_maintenance_loop_runner as loop_runner
@@ -3292,3 +3336,59 @@ def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypa
     assert "will retry code remediation" in caplog.text
     assert "escalating to human review" not in caplog.text
     assert result is None
+
+
+def test_run_cmd_excerpt_truncates_and_terminates_large_output_quickly():
+    import sys
+    import time
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    args = [
+        sys.executable,
+        "-c",
+        "import sys; sys.stdout.write('a' * 100000); sys.stdout.flush()",
+    ]
+    started = time.monotonic()
+    out = run_cmd_excerpt(args, max_chars=200, timeout=180)
+    elapsed = time.monotonic() - started
+    assert len(out) == 200
+    assert elapsed < 15
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_fully_read():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    with pytest.raises(RuntimeError, match="command failed"):
+        run_cmd_excerpt(
+            [sys.executable, "-c", "import sys; sys.exit(2)"],
+            max_chars=10_000,
+        )
+
+
+def test_run_cmd_excerpt_accepts_truncated_success_despite_late_exit():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    script = "import sys\n" "sys.stdout.write('z' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(0)\n"
+    out = run_cmd_excerpt(
+        [sys.executable, "-c", script],
+        max_chars=128,
+    )
+    assert out == "z" * 128
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_truncated():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    script = "import sys\n" "sys.stdout.write('x' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(2)\n"
+    with pytest.raises(RuntimeError, match="command failed"):
+        run_cmd_excerpt(
+            [sys.executable, "-c", script],
+            max_chars=128,
+        )
