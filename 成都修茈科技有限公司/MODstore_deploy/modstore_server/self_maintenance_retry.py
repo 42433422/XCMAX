@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any, Callable, Dict, Iterable, Optional
 
 _FAILURE_TEXT_KEYS = frozenset(
     {"content", "detail", "error", "message", "reason", "status", "stderr", "stdout"}
@@ -50,3 +50,44 @@ def is_transient_dispatch_failure(result: Any) -> bool:
         if any(term in text for term in _TRANSIENT_TERMS):
             return True
     return False
+
+
+def successful_code_resume_resolution(final: Any) -> Optional[Dict[str, str]]:
+    """Return identifiers for a resume candidate replaced by delivered code."""
+
+    if not isinstance(final, dict):
+        return None
+    resume_candidate = final.get("resume_candidate")
+    steps = final.get("steps")
+    if not isinstance(resume_candidate, dict) or not isinstance(steps, list):
+        return None
+    if not any(
+        isinstance(step, dict) and step.get("step") == "code" and step.get("ok") is True
+        for step in steps
+    ):
+        return None
+    return {
+        "branch": str(resume_candidate.get("branch") or ""),
+        "run_id": str(resume_candidate.get("failed_run_id") or ""),
+        "task_id": str(resume_candidate.get("para_task_id") or ""),
+    }
+
+
+def close_successful_code_resume(
+    memory: Dict[str, Any],
+    final: Dict[str, Any],
+    close_items: Callable[..., Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Close only the prior retry item after replacement code is delivered."""
+
+    resolution = successful_code_resume_resolution(final)
+    if not resolution:
+        return {"closed_count": 0, "closed_items": []}
+    return close_items(
+        memory,
+        actor="self_maintenance_loop",
+        branches=[resolution["branch"]],
+        resolution_reason="superseded_by_successful_code_step",
+        run_ids=[resolution["run_id"]],
+        task_ids=[resolution["task_id"]],
+    )
