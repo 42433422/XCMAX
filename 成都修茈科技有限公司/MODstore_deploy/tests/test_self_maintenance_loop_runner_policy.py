@@ -1984,6 +1984,65 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["last_resolution_record"]["closed_count"] == 1
 
 
+def test_update_loop_memory_retires_code_remediation_after_downstream_qa_failure(
+    monkeypatch, tmp_path
+):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/cursor/old-code",
+                        "kind": "automated_remediation",
+                        "reason": "structured_qa_black_not_passed",
+                        "run_id": "old-run",
+                        "task_id": "old-task",
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/cursor/delivered-code",
+            "completed_at": "2026-07-27T00:00:00+00:00",
+            "para_task_id": "new-task",
+            "policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+            "resume_candidate": {
+                "branch": "devfleet/cursor/old-code",
+                "failed_run_id": "old-run",
+                "failed_steps": ["code"],
+                "para_task_id": "old-task",
+            },
+            "run_id": "new-run",
+            "status": "failed",
+            "steps": [
+                {"ok": True, "step": "code"},
+                {"ok": True, "step": "review"},
+                {"ok": False, "step": "qa"},
+            ],
+        },
+        {"reason": "force"},
+    )
+    memory = _load_loop_memory()
+
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["branch"] == "devfleet/cursor/delivered-code"
+    assert memory["open_items"][0]["kind"] == "failed_steps"
+    assert memory["open_items"][0]["para_task_id"] == "new-task"
+    assert memory["open_items"][0]["run_id"] == "new-run"
+    assert memory["open_items"][0]["steps"] == ["qa"]
+    assert memory["closed_items"][-1]["original_item"]["run_id"] == "old-run"
+    assert memory["closed_items"][-1]["resolution_reason"] == "superseded_by_successful_code_step"
+
+
 def test_merge_request_does_not_close_open_remediation(monkeypatch, tmp_path):
     memory_path = tmp_path / "loop_memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
