@@ -23,6 +23,12 @@ const REQUIRE_BOT_IDENTITY = process.env.MERGE_WORKER_REQUIRE_BOT_IDENTITY !== '
 const BOT_MERGE_WORKFLOW = String(
   process.env.MERGE_WORKER_BOT_WORKFLOW || 'fhd-ai-self-heal-auto-merge.yml',
 ).trim();
+const BACKEND_CI_WORKFLOW = String(
+  process.env.MERGE_WORKER_BACKEND_CI_WORKFLOW || 'modstore-ci-backend-python.yml',
+).trim();
+const PRODUCTION_DEPLOY_WORKFLOW = String(
+  process.env.MERGE_WORKER_PRODUCTION_DEPLOY_WORKFLOW || 'modstore-prod-deploy.yml',
+).trim();
 const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
 const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
@@ -103,6 +109,15 @@ async function fetchMergeQueue(token) {
   if (!resp.ok) throw new Error(`merge-queue ${resp.status}`);
   const body = await resp.json();
   return body.tasks || [];
+}
+
+async function fetchTask(token, taskId) {
+  const resp = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) throw new Error(`task ${taskId} ${resp.status}`);
+  const body = await resp.json();
+  return body.task || body;
 }
 
 function loadProcessed() {
@@ -242,6 +257,35 @@ export function blockingMergePollReason(pr, prNumber = '') {
   return '';
 }
 
+export function parseMergePollSnapshot(output) {
+  const pr = JSON.parse(String(output || '{}'));
+  return {
+    pr,
+    prState: String(pr.state || '').toUpperCase(),
+    mergeOid: String(pr.mergeCommit?.oid || ''),
+  };
+}
+
+export function extractSelfMaintenanceRunId(task) {
+  const direct = String(task?.self_maintenance_run_id || task?.run_id || '').trim();
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidPattern.test(direct)) return direct.toLowerCase();
+  const description = String(task?.description || '');
+  const match = description.match(
+    /\bLOOP_RUN_ID\s*=\s*['"]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})['"]/i,
+  );
+  return match ? match[1].toLowerCase() : '';
+}
+
+export function selectMatchingWorkflowRun(rows, mergeSha) {
+  const wanted = String(mergeSha || '').trim().toLowerCase();
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => String(row?.headSha || '').trim().toLowerCase() === wanted)
+    .sort((left, right) => (
+      Date.parse(String(right?.createdAt || '')) - Date.parse(String(left?.createdAt || ''))
+    ))[0] || null;
+}
+
 export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
   const attempts = Math.max(0, Number(previous?.attempts || 0)) + 1;
   const delayMs = mergeRetryDelayMs(attempts);
@@ -253,6 +297,160 @@ export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
     reason: String(reason || '').slice(0, 2000),
     status: 'retrying',
   };
+}
+
+async function listWorkflowRuns(workspace, repoFull, workflow, mergeSha) {
+  const args = [
+    'run', 'list',
+    '--workflow', workflow,
+    '--event', 'workflow_dispatch',
+    '--commit', mergeSha,
+    '--limit', '20',
+    '--json', 'databaseId,status,conclusion,headSha,createdAt,url',
+  ];
+  if (repoFull) args.push('--repo', repoFull);
+  const { stdout } = await execFileAsync('gh', args, {
+    cwd: workspace || process.env.HOME,
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  const rows = JSON.parse(stdout || '[]');
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function waitForSuccessfulBackendCI(workspace, repoFull, mergeSha) {
+  const deadline = Date.now() + CI_WAIT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const run = selectMatchingWorkflowRun(
+      await listWorkflowRuns(workspace, repoFull, BACKEND_CI_WORKFLOW, mergeSha),
+      mergeSha,
+    );
+    const status = String(run?.status || '').toLowerCase();
+    const conclusion = String(run?.conclusion || '').toLowerCase();
+    if (status === 'completed' && conclusion === 'success') return run;
+    if (status === 'completed' && conclusion && conclusion !== 'success') {
+      throw new Error(
+        `post-merge-backend-ci-failed: sha=${mergeSha} conclusion=${conclusion}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+  throw new Error(`post-merge-backend-ci-timeout: sha=${mergeSha}`);
+}
+
+async function dispatchCorrelatedProductionDeploy(
+  workspace,
+  repoFull,
+  mergeSha,
+  runId,
+) {
+  const cwd = workspace || process.env.HOME;
+  if (!repoFull) throw new Error('production-deploy-repo-missing');
+  if (!PRODUCTION_DEPLOY_WORKFLOW) throw new Error('production-deploy-workflow-missing');
+
+  const headArgs = ['api', `repos/${repoFull}/commits/main`, '--jq', '.sha'];
+  const { stdout: headOut } = await execFileAsync('gh', headArgs, {
+    cwd,
+    maxBuffer: 1024 * 1024,
+    timeout: 30_000,
+  });
+  const mainHead = String(headOut || '').trim().toLowerCase();
+  if (mainHead !== String(mergeSha || '').trim().toLowerCase()) {
+    throw new Error(`production-deploy-main-head-mismatch: expected=${mergeSha} actual=${mainHead}`);
+  }
+
+  const backendRun = await waitForSuccessfulBackendCI(workspace, repoFull, mergeSha);
+  const baseline = new Set(
+    (await listWorkflowRuns(
+      workspace,
+      repoFull,
+      PRODUCTION_DEPLOY_WORKFLOW,
+      mergeSha,
+    )).map((row) => String(row?.databaseId || '')),
+  );
+  const dispatchArgs = [
+    'workflow', 'run', PRODUCTION_DEPLOY_WORKFLOW,
+    '--ref', 'main',
+    '-f', `git_sha=${mergeSha}`,
+    '-f', 'require_platform_key=true',
+    '-f', `self_maintenance_run_id=${runId}`,
+  ];
+  if (repoFull) dispatchArgs.push('--repo', repoFull);
+  await execFileAsync('gh', dispatchArgs, {
+    cwd,
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 60_000,
+  });
+
+  const captureDeadline = Date.now() + 90_000;
+  while (Date.now() < captureDeadline) {
+    const runs = await listWorkflowRuns(
+      workspace,
+      repoFull,
+      PRODUCTION_DEPLOY_WORKFLOW,
+      mergeSha,
+    );
+    const run = selectMatchingWorkflowRun(
+      runs.filter((row) => !baseline.has(String(row?.databaseId || ''))),
+      mergeSha,
+    );
+    if (run) {
+      return {
+        status: 'dispatched',
+        run_id: runId,
+        merge_sha: mergeSha,
+        backend_ci_run_id: String(backendRun?.databaseId || ''),
+        workflow_run_id: String(run.databaseId || ''),
+        workflow_url: String(run.url || ''),
+        at: new Date().toISOString(),
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+  throw new Error(`production-deploy-run-capture-timeout: sha=${mergeSha}`);
+}
+
+async function reconcileMergedDeployments(token, state) {
+  for (const [taskId, record] of Object.entries(state)) {
+    if (record?.status !== 'ai_reviewed_merged') continue;
+    if (['dispatched', 'not_applicable', 'stale'].includes(record?.deployment?.status)) continue;
+    try {
+      const task = await fetchTask(token, taskId);
+      const runId = extractSelfMaintenanceRunId(task);
+      if (!runId) {
+        record.deployment = {
+          status: 'not_applicable',
+          reason: 'self_maintenance_run_id_missing',
+          at: new Date().toISOString(),
+        };
+        saveProcessed(state);
+        continue;
+      }
+      const repoFull = parseGithubRepo(task.repo_url);
+      const deployment = await dispatchCorrelatedProductionDeploy(
+        '',
+        repoFull,
+        String(record.sha || ''),
+        runId,
+      );
+      record.run_id = runId;
+      record.deployment = deployment;
+      saveProcessed(state);
+      log(
+        `task ${taskId} → production deploy dispatched `
+        + `run=${deployment.workflow_run_id} sha=${String(record.sha || '').slice(0, 10)}`,
+      );
+    } catch (err) {
+      const reason = String(err?.message || err);
+      record.deployment = {
+        status: reason.includes('main-head-mismatch') ? 'stale' : 'retrying',
+        reason: reason.slice(0, 1000),
+        at: new Date().toISOString(),
+      };
+      saveProcessed(state);
+      log(`task ${taskId} deployment reconciliation: ${reason.slice(0, 300)}`);
+    }
+  }
 }
 
 async function verifyAutomationIdentity(workspace, repoFull) {
@@ -846,6 +1044,7 @@ async function mergePR(workspace, prNumber, repoFull) {
   // 轮询等待 PR merged（最多 30 分钟，每 30s 查一次）
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 30_000));
+    let pr = {};
     let prState = '';
     let mergeOid = '';
     try {
@@ -854,9 +1053,7 @@ async function mergePR(workspace, prNumber, repoFull) {
         maxBuffer: 10 * 1024 * 1024,
         timeout: 30_000,
       });
-      const pr = JSON.parse(stdout || '{}');
-      prState = String(pr.state || '').toUpperCase();
-      mergeOid = String(pr.mergeCommit?.oid || '');
+      ({ pr, prState, mergeOid } = parseMergePollSnapshot(stdout));
     } catch (err) {
       log(`  轮询 PR #${prNumber} 状态失败: ${String(err).slice(0, 200)}`);
       continue;
@@ -1198,10 +1395,13 @@ async function processTask(token, task, state) {
             status: 'ai_reviewed_merged',
             at: new Date().toISOString(),
             sha: finalSha,
+            run_id: extractSelfMaintenanceRunId(task),
+            deployment: { status: 'pending', at: new Date().toISOString() },
             prs: results.map((r) => ({ branch: r.branch, number: r.prNumber, url: r.prUrl, merged: r.merged })),
           };
           saveProcessed(state);
           log(`task ${task.id} → ai_reviewed_merged (${merged.length}/${results.length} PR merged)`);
+          await reconcileMergedDeployments(token, state);
         } else {
           log(`task ${task.id} merge 回传失败 ${status}: ${JSON.stringify(body).slice(0, 200)}`);
         }
@@ -1284,6 +1484,7 @@ async function main() {
   while (true) {
     try {
       const token = await guestToken();
+      await reconcileMergedDeployments(token, state);
       const queue = await fetchMergeQueue(token);
       if (queue.length > 0) {
         log(`队列 ${queue.length} 个任务`);
