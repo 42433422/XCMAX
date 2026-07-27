@@ -2373,6 +2373,47 @@ def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, ex
     assert len(memory["open_items"]) == 1
 
 
+def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-bd3ea8",
+                "para_task_id": "task-ci",
+                "run_id": "run-ci",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-bd3ea8",
+            "detail": "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-bd3ea8",
+    )
+    prompt = _code_task_text("run-ci-retry", {"gaps": []}, memory, candidate)
+    assert "Continue on the rejected branch as the mutable base" in prompt
+    assert "docker-build-fhd-api" in prompt
+
+
 # ---------------------------------------------------------------------------
 # _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
 # ---------------------------------------------------------------------------
