@@ -269,3 +269,57 @@ def quality_check_failure(qa_json: dict[str, Any]) -> Optional[str]:
     ):
         return "structured_qa_source_governance_not_passed"
     return None
+
+
+_QA_EXECUTOR_STRONG_SIGNALS = (
+    "command execution backend unavailable",
+    "execution backend unavailable",
+    "executor backend unavailable",
+    "no observable exit code",
+    "shell backend unavailable",
+    "shell execution backend unavailable",
+)
+_QA_EXECUTOR_DERIVED_SIGNALS = (
+    "could not run",
+    "executor unavailable",
+    "missing successful focused",
+    "not executed",
+    "same backend failure",
+)
+
+
+def qa_executor_infrastructure_unavailable(obj: Any) -> bool:
+    """Identify a truthful QA infrastructure outage without masking test failures."""
+
+    if not isinstance(obj, dict):
+        return False
+    if str(obj.get("verdict") or "").strip().upper() != "FAIL":
+        return False
+    if obj.get("target_branch_available") is not True:
+        return False
+    test_delta = obj.get("test_delta") if isinstance(obj.get("test_delta"), dict) else {}
+    new_errors = test_delta.get("new_errors")
+    if not isinstance(new_errors, list) or not new_errors:
+        return False
+    normalized_errors = [str(value or "").strip().lower() for value in new_errors]
+    if not all(
+        any(signal in value for signal in _QA_EXECUTOR_STRONG_SIGNALS)
+        for value in normalized_errors
+    ):
+        return False
+    supporting = [
+        str(value or "").strip().lower() for value in test_delta.get("new_failures") or []
+    ]
+    supporting.extend(
+        str(value or "").strip().lower() for value in obj.get("blocking_findings") or []
+    )
+    allowed_signals = _QA_EXECUTOR_STRONG_SIGNALS + _QA_EXECUTOR_DERIVED_SIGNALS
+    return bool(supporting) and all(
+        any(signal in value for signal in allowed_signals) for value in supporting
+    )
+
+
+def qa_verdict_failure_reason(obj: Any) -> str:
+    if qa_executor_infrastructure_unavailable(obj):
+        return "structured_qa_executor_unavailable"
+    return "structured_qa_verdict_not_pass"
