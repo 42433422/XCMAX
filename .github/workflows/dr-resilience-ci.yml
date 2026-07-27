@@ -64,6 +64,7 @@ jobs:
           set -euo pipefail
           grep -q -- '--confirm-primary-down' ops/dr/xcmax_dr_promote.sh
           grep -q 'pg_is_in_recovery' ops/dr/xcmax_wal_prepare_standby.sh
+          grep -q 'pg_is_in_recovery' ops/dr/xcmax_wal_prepare_standby_pg16.sh
           grep -q 'X-XCMAX-DR' ops/dr/xcmax_dr_prepare_edge.sh
           grep -q 'runtime-releases' ops/dr/xcmax_release_sync.sh
           grep -q 'xcmax_release_sync.sh' FHD/scripts/deploy/fhd-auto-update.sh

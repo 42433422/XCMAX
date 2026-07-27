@@ -19,7 +19,8 @@ RESTORE_CONFIG="$DR_ROOT/restore-config"
 FHD_ROOT="$RUNTIME/fhd"
 MODSTORE_ROOT="$RUNTIME/source/成都修茈科技有限公司/MODstore_deploy"
 PG_ENV="${OPS_DR_PG_ENV:-/etc/xcmax-dr-postgres.env}"
-PG_PORT="${OPS_DR_PG_PORT:-5432}"
+APP_PG_PORT="${OPS_DR_APP_PG_PORT:-${OPS_DR_PG_PORT:-5432}}"
+PAYMENT_PG_PORT="${OPS_DR_PAYMENT_PG_PORT:-$APP_PG_PORT}"
 PG_PRESERVE_CREDENTIALS="${OPS_DR_PG_PRESERVE_CREDENTIALS:-0}"
 APP_USER="${OPS_DR_APP_USER:-xcmaxapp}"
 PAYMENT_SHA256="${OPS_DR_PAYMENT_SHA256:-1df90282e5f1ca4d8192fe6b2f77fe54b6300e7c1ef3013b8bcb24a2bbde54b6}"
@@ -91,7 +92,8 @@ python3 - \
   "$PG_ENV" \
   "$RESTORE_CONFIG/root/fhd-full.env" /etc/xcmax-dr-fhd.env \
   "$RESTORE_CONFIG/etc/xcmax/modstore.env" /etc/xcmax-dr-modstore.env \
-  "$DATA" "$RUNTIME" "$PG_PORT" "$PG_PRESERVE_CREDENTIALS" <<'PY'
+  "$DATA" "$RUNTIME" "$APP_PG_PORT" "$PAYMENT_PG_PORT" \
+  "$PG_PRESERVE_CREDENTIALS" <<'PY'
 import json
 import re
 import sys
@@ -101,8 +103,9 @@ from urllib.parse import quote, urlsplit, urlunsplit
 pg_env, fhd_src, fhd_dst, mod_src, mod_dst, data_root, runtime_root = map(
     Path, sys.argv[1:8]
 )
-pg_port = int(sys.argv[8])
-preserve_credentials = sys.argv[9] == "1"
+app_pg_port = int(sys.argv[8])
+payment_pg_port = int(sys.argv[9])
+preserve_credentials = sys.argv[10] == "1"
 
 def parse(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
@@ -148,23 +151,29 @@ fhd_source = parse(fhd_src)
 mod_source = parse(mod_src)
 
 if preserve_credentials:
-    fhd_database_url = localize_url(fhd_source.get("DATABASE_URL", ""), pg_port)
-    modstore_database_url = localize_url(mod_source.get("DATABASE_URL", ""), pg_port)
+    fhd_database_url = localize_url(
+        fhd_source.get("DATABASE_URL", ""), app_pg_port
+    )
+    modstore_database_url = localize_url(
+        mod_source.get("DATABASE_URL", ""), app_pg_port
+    )
     java_database_url = re.sub(
         r"^(jdbc:postgresql://)[^/]+/",
-        rf"\g<1>127.0.0.1:{pg_port}/",
+        rf"\g<1>127.0.0.1:{payment_pg_port}/",
         mod_source.get("JAVA_DATABASE_URL", ""),
     )
     database_user = mod_source.get("DATABASE_USER", "")
     database_password = mod_source.get("DATABASE_PASSWORD", "")
 else:
     fhd_database_url = (
-        f"postgresql+psycopg://{encoded}@127.0.0.1:{pg_port}/xcagi"
+        f"postgresql+psycopg://{encoded}@127.0.0.1:{app_pg_port}/xcagi"
     )
     modstore_database_url = (
-        f"postgresql+psycopg2://{encoded}@127.0.0.1:{pg_port}/modstore"
+        f"postgresql+psycopg2://{encoded}@127.0.0.1:{app_pg_port}/modstore"
     )
-    java_database_url = f"jdbc:postgresql://127.0.0.1:{pg_port}/payment_db"
+    java_database_url = (
+        f"jdbc:postgresql://127.0.0.1:{payment_pg_port}/payment_db"
+    )
     database_user = user
     database_password = password
 
@@ -193,7 +202,7 @@ mod_overrides = {
     "JAVA_DATABASE_URL": java_database_url,
     "SERVER_ADDRESS": "127.0.0.1",
     "SERVER_PORT": "18080",
-    "POSTGRES_PORT": str(pg_port),
+    "POSTGRES_PORT": str(app_pg_port),
     "REDIS_URL": "redis://127.0.0.1:6379/0",
     "REDIS_PORT": "6379",
     "RABBITMQ_URL": "amqp://guest:guest@127.0.0.1:5672/",

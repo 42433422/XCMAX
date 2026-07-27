@@ -16,6 +16,7 @@ declare -A scripts=(
   [xcmax_dr_restore_latest.sh]=xcmax-dr-restore-latest
   [xcmax_dr_prepare_runtime.sh]=xcmax-dr-prepare-runtime
   [xcmax_wal_prepare_standby.sh]=xcmax-dr-prepare-standby
+  [xcmax_wal_prepare_standby_pg16.sh]=xcmax-dr-prepare-standby-pg16
   [xcmax_dr_apply_release.sh]=xcmax-dr-apply-release
   [xcmax_dr_prepare_edge.sh]=xcmax-dr-prepare-edge
   [xcmax_dr_promote.sh]=xcmax-dr-promote
@@ -43,11 +44,16 @@ CRON_TZ=Asia/Shanghai
 2,12,22,32,42,52 * * * * root /usr/local/sbin/xcmax-dr-apply-release >/dev/null 2>&1
 # 新物理基础备份到达后重建 PG10 standby；平时立即退出。
 17 * * * * root /usr/local/sbin/xcmax-dr-prepare-standby >/dev/null 2>&1
+# 新物理基础备份到达后重建 PG16 application standby。
+27 * * * * root /usr/local/sbin/xcmax-dr-prepare-standby-pg16 >/dev/null 2>&1
 EOF
 chmod 0644 "$CRON_FILE"
 install -d -m 0700 /var/lib/xcmax-dr /var/log/xcmax-dr
 install -d -m 0700 /srv/xcmax-dr/incoming
-for incoming_dir in wal wal/base wal/archive wal/status runtime-releases; do
+for incoming_dir in \
+  wal wal/base wal/archive wal/status \
+  wal-pg16 wal-pg16/base wal-pg16/archive wal-pg16/status \
+  runtime-releases; do
   install -d -o xcmaxdr -g xcmaxdr -m 0700 \
     "/srv/xcmax-dr/incoming/$incoming_dir"
 done

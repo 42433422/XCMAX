@@ -326,10 +326,22 @@ def check_wal_freshness():
     checks = (
         ("wal:ship", "wal_ship_last_success", WAL_MAX_AGE_SECONDS, "WAL 异地推送"),
         (
+            "wal:pg16-ship",
+            "wal_pg16_ship_last_success",
+            WAL_MAX_AGE_SECONDS,
+            "PostgreSQL 16 WAL 异地推送",
+        ),
+        (
             "wal:base",
             "wal_base_last_success",
             WAL_BASE_MAX_AGE_SECONDS,
             "WAL 物理基础备份",
+        ),
+        (
+            "wal:pg16-base",
+            "wal_pg16_base_last_success",
+            WAL_BASE_MAX_AGE_SECONDS,
+            "PostgreSQL 16 物理基础备份",
         ),
     )
     for check_id, filename, max_age, label in checks:
