@@ -120,7 +120,7 @@ docker exec "$CONTAINER" pg_isready -q -d postgres || {
 }
 
 in_recovery="$(
-  docker exec "$CONTAINER" \
+  docker exec -u postgres "$CONTAINER" \
     psql -U postgres -d postgres -Atqc "SELECT pg_is_in_recovery()"
 )"
 [[ "$in_recovery" == "t" ]] || {

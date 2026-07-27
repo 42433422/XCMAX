@@ -16,11 +16,11 @@ printf 'edge_mode=%s\n' "$(cat "$STATE/edge_mode" 2>/dev/null || true)"
 if docker inspect "$CONTAINER" >/dev/null 2>&1 &&
   [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" == "true" ]]; then
   recovery="$(
-    docker exec "$CONTAINER" \
+    docker exec -u postgres "$CONTAINER" \
       psql -U postgres -d postgres -Atqc "SELECT pg_is_in_recovery()"
   )"
   replay_lsn="$(
-    docker exec "$CONTAINER" \
+    docker exec -u postgres "$CONTAINER" \
       psql -U postgres -d postgres -Atqc \
       "SELECT COALESCE(pg_last_wal_replay_lsn()::text, '')"
   )"

@@ -41,7 +41,7 @@ docker inspect "$CONTAINER" >/dev/null 2>&1 || {
 }
 
 recovery="$(
-  docker exec "$CONTAINER" \
+  docker exec -u postgres "$CONTAINER" \
     psql -U postgres -d postgres -Atqc "SELECT pg_is_in_recovery()"
 )"
 if [[ "$recovery" == "t" ]]; then
@@ -53,7 +53,7 @@ fi
 deadline=$((SECONDS + 60))
 while ((SECONDS < deadline)); do
   recovery="$(
-    docker exec "$CONTAINER" \
+    docker exec -u postgres "$CONTAINER" \
       psql -U postgres -d postgres -Atqc "SELECT pg_is_in_recovery()"
   )"
   [[ "$recovery" == "f" ]] && break
