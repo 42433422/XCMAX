@@ -1520,6 +1520,10 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "`verified-python -m pytest focused.py -q`" in qa
     assert "platform-equivalent local `python -m pytest` command" in qa
     assert "same focused test file" in qa
+    assert "Materialize the COMPLETE target ref" in qa
+    assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
+    assert "sibling `FHD/` autonomy-guard SSOT" in qa
+    assert "never report PASS with no successful focused tested_commands entry" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
     assert (
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
