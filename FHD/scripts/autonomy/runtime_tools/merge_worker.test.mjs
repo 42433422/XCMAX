@@ -14,6 +14,7 @@ import {
   blockingMergePollReason,
   chunkReviewDiff,
   forbiddenAutoMergePaths,
+  extractSelfMaintenanceRunId,
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
   isTransientMergeFailure,
@@ -24,6 +25,7 @@ import {
   parseReviewVerdict,
   reviewDiffInChunks,
   resolveReviewWithFallback,
+  selectMatchingWorkflowRun,
   selectTaskMergeBase,
 } from './merge_worker.mjs';
 
@@ -183,6 +185,47 @@ test('merge polling preserves the parsed PR snapshot for post-fetch policy check
   assert.equal(
     blockingMergePollReason(snapshot.pr, 761),
     'manual-veto-active: PR #761 has hold-merge label',
+  );
+});
+
+test('self-maintenance deployment correlation requires the explicit loop run marker', () => {
+  assert.equal(
+    extractSelfMaintenanceRunId({
+      description: "task text LOOP_RUN_ID='02b3e3c8-1dc7-4449-a348-b375694be9a8'",
+    }),
+    '02b3e3c8-1dc7-4449-a348-b375694be9a8',
+  );
+  assert.equal(
+    extractSelfMaintenanceRunId({
+      description: 'unrelated uuid 02b3e3c8-1dc7-4449-a348-b375694be9a8',
+    }),
+    '',
+  );
+});
+
+test('workflow correlation selects the newest run for the exact merge SHA', () => {
+  assert.deepEqual(
+    selectMatchingWorkflowRun(
+      [
+        {
+          databaseId: 1,
+          headSha: 'a'.repeat(40),
+          createdAt: '2026-07-27T00:00:00Z',
+        },
+        {
+          databaseId: 2,
+          headSha: 'b'.repeat(40),
+          createdAt: '2026-07-27T00:02:00Z',
+        },
+        {
+          databaseId: 3,
+          headSha: 'a'.repeat(40),
+          createdAt: '2026-07-27T00:01:00Z',
+        },
+      ],
+      'a'.repeat(40),
+    )?.databaseId,
+    3,
   );
 });
 
