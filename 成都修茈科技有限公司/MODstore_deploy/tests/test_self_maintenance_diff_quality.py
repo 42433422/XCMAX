@@ -80,15 +80,83 @@ def test_quality_tool_runs_black_on_every_changed_target(monkeypatch, tmp_path):
         run_quality_tool(
             tool="black",
             base_ref="origin/main",
-            target_ref="HEAD",
+            target_ref="WORKTREE",
             repo_root=repo_root,
             modstore_root=modstore_root,
         )
         == 0
     )
-    assert calls[1][0][1:4] == ["-m", "black", "--check"]
-    assert calls[1][0][-2:] == ["modstore_server/a.py", "tests/test_a.py"]
-    assert calls[1][1]["cwd"] == modstore_root
+    assert calls[-1][0][1:4] == ["-m", "black", "--check"]
+    assert calls[-1][0][-2:] == ["modstore_server/a.py", "tests/test_a.py"]
+    assert calls[-1][1]["cwd"] == modstore_root
+
+
+def test_quality_tool_materializes_files_from_target_tree(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    modstore_root = repo_root / "company" / "MODstore_deploy"
+    modstore_root.mkdir(parents=True)
+    quality_calls = []
+
+    def _run(args, **kwargs):
+        if args[0:2] == ["git", "diff"]:
+            return CompletedProcess(
+                args,
+                0,
+                stdout=b"company/MODstore_deploy/modstore_server/new_file.py\0",
+                stderr=b"",
+            )
+        if args[0:2] == ["git", "show"]:
+            if args[-1].endswith("/pyproject.toml"):
+                return CompletedProcess(args, 0, stdout=b"[tool.black]\n", stderr=b"")
+            if args[-1].endswith("/modstore_server/new_file.py"):
+                return CompletedProcess(args, 0, stdout=b"answer = 42\n", stderr=b"")
+        quality_calls.append((args, kwargs))
+        checked_root = kwargs["cwd"]
+        assert checked_root != modstore_root
+        assert (checked_root / "pyproject.toml").read_text() == "[tool.black]\n"
+        assert (checked_root / "modstore_server" / "new_file.py").read_text() == "answer = 42\n"
+        return CompletedProcess(args, 0)
+
+    monkeypatch.setattr("subprocess.run", _run)
+
+    assert (
+        run_quality_tool(
+            tool="black",
+            base_ref="origin/main",
+            target_ref="origin/feature",
+            repo_root=repo_root,
+            modstore_root=modstore_root,
+        )
+        == 0
+    )
+    assert quality_calls[0][0][-1] == "modstore_server/new_file.py"
+
+
+def test_quality_tool_fails_closed_when_target_blob_is_missing(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    modstore_root = repo_root / "company" / "MODstore_deploy"
+    modstore_root.mkdir(parents=True)
+
+    def _run(args, **kwargs):
+        if args[0:2] == ["git", "diff"]:
+            return CompletedProcess(
+                args,
+                0,
+                stdout=b"company/MODstore_deploy/modstore_server/missing.py\0",
+                stderr=b"",
+            )
+        return CompletedProcess(args, 128, stdout=b"", stderr=b"missing blob")
+
+    monkeypatch.setattr("subprocess.run", _run)
+
+    with pytest.raises(RuntimeError, match="git show failed"):
+        run_quality_tool(
+            tool="black",
+            base_ref="origin/main",
+            target_ref="origin/feature",
+            repo_root=repo_root,
+            modstore_root=modstore_root,
+        )
 
 
 @pytest.mark.parametrize("ref", ["", "--help", "origin/main..bad", "bad ref"])
