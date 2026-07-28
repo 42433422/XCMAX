@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 import httpx
 
 from modstore_server.catalog_store import files_dir
+from modstore_server.duty_burn_in_handlers import bind_reviewed_burn_in_handlers
 from modstore_server.employee_runtime import (
     build_employee_context,
     load_employee_pack_resolved,
@@ -2366,7 +2367,7 @@ def execute_employee_task(
         with sf() as session:
             try:
                 pack = load_employee_pack_resolved(session, employee_id)
-                manifest = pack.get("manifest") or {}
+                manifest, burn_in_eligibility = pack.get("manifest") or {}, {}
                 reviewed_contract, reviewed_manifest = _trusted_system_duty_contract_execution(
                     employee_id,
                     payload,
@@ -2400,15 +2401,15 @@ def execute_employee_task(
 
                     manifest = load_reviewed_duty_manifest(employee_id)
                     reviewed_contract = workforce_contract_map().get(employee_id) or {}
-                    eligibility = assess_burn_in_eligibility(
+                    burn_in_eligibility = assess_burn_in_eligibility(
                         employee_id,
                         reviewed_contract,
                         manifest,
                     )
-                    if eligibility.get("eligible") is not True:
+                    if burn_in_eligibility.get("eligible") is not True:
                         raise RuntimeError(
                             "duty burn-in eligibility rejected: "
-                            + str(eligibility.get("reason") or "unknown")
+                            + str(burn_in_eligibility.get("reason") or "unknown")
                         )
                     # Never trust a caller-supplied contract risk label.  The
                     # risk SSOT receives the reviewed on-disk contract.
@@ -2432,6 +2433,7 @@ def execute_employee_task(
                         exc_info=True,
                     )
                     runtime_policy = {}
+                config = bind_reviewed_burn_in_handlers(config, burn_in_eligibility)
                 actions_section = config.get("actions") or {}
                 actions_inner = (
                     actions_section.get("actions")
@@ -2439,9 +2441,7 @@ def execute_employee_task(
                     else actions_section
                 )
                 handler_list = list((actions_inner or {}).get("handlers") or [])
-
                 gate = _evaluate_employee_risk_gate(employee_id, manifest, handler_list, payload)
-
                 if not gate.get("ok"):
                     duration_ms = round((time.perf_counter() - t0) * 1000, 3)
                     session.add(
