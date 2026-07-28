@@ -47,7 +47,26 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-def _stream_shipment_preview_payload(message: str) -> dict[str, Any] | None:
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Read the authenticated owner only from server request state.
+
+    ``body.user_id`` is a chat/session identifier and may be client supplied;
+    it must never select a private ETL preview.
+    """
+
+    try:
+        value = getattr(request.state, "user_id", None)
+        owner = int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner if owner > 0 else None
+
+
+def _stream_shipment_preview_payload(
+    message: str,
+    *,
+    authenticated_owner_user_id: int | None = None,
+) -> dict[str, Any] | None:
     """Return the deterministic *preview* for an order-like chat message.
 
     The regular stream path used to jump straight to the legacy LLM planner.
@@ -68,7 +87,10 @@ def _stream_shipment_preview_payload(message: str) -> dict[str, Any] | None:
         route = route_normal_mode_message(message)
         if route.get("intent") != "shipment":
             return None
-        payload = run_normal_slot_shipment_preview(message)
+        payload = run_normal_slot_shipment_preview(
+            message,
+            authenticated_owner_user_id=authenticated_owner_user_id,
+        )
         return payload if isinstance(payload, dict) else None
     except RECOVERABLE_ERRORS:
         # A deterministic convenience path must never hide the normal,
@@ -421,6 +443,7 @@ async def _execute_ai_chat_mainline(
     *,
     message: str | None = None,
     kitten_extra: dict[str, Any] | None = None,
+    authenticated_owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     from app.application.ai_chat_app_service import AIChatApplicationService
 
@@ -439,6 +462,7 @@ async def _execute_ai_chat_mainline(
         context=dict(runtime_context or {}),
         source=getattr(body, "source", None),
         file_context=file_context,
+        authenticated_owner_user_id=authenticated_owner_user_id,
     )
     if not isinstance(payload, dict):
         payload = _xcagi_compat_reply_payload(str(payload))
@@ -545,6 +569,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
                     body,
                     planner_runtime_context,
                     kitten_extra=kitten_extra or None,
+                    authenticated_owner_user_id=_authenticated_owner_user_id(request),
                 ),
                 timeout=timeout,
             )
@@ -1015,12 +1040,28 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    # Yield before any parser, preview-store read, persona lookup, or model
+    # transport work.  A delivery-order request is normally handled locally,
+    # but its owner-scoped ETL evidence still requires a database read.  This
+    # protocol-level progress frame prevents a slow local dependency from
+    # being misreported by the desktop as a model "first packet" timeout.
+    yield _sse_event_line(
+        {
+            "type": "tool_progress",
+            "label": "正在识别需求",
+            "phase": "intent_recognition",
+        }
+    )
+
     # Shipping / order phrases are deliberately handled before persona and
     # model work for both normal and pro callers.  This only renders the
     # confirmation task; it does not execute a tool, write a record, or submit
     # a print job.  Keeping it at the common stream entry makes the UI's
     # default `/api/ai/chat/stream` route behave like the non-streaming path.
-    shipment_preview = _stream_shipment_preview_payload(body.message)
+    shipment_preview = _stream_shipment_preview_payload(
+        body.message,
+        authenticated_owner_user_id=_authenticated_owner_user_id(request),
+    )
     if shipment_preview is not None:
         response_text = str(
             shipment_preview.get("response") or shipment_preview.get("message") or ""
@@ -1034,18 +1075,14 @@ async def compat_chat_stream_async(
     # the existing confirmation-only shipment and print paths above.
     business_query = _stream_read_only_business_query_payload(body.message)
     if business_query is not None:
-        response_text = str(
-            business_query.get("response") or business_query.get("message") or ""
-        )
+        response_text = str(business_query.get("response") or business_query.get("message") or "")
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": business_query})
         return
 
-    # Emit a protocol-level progress event before any persona lookup or
-    # blocking model call.  Desktop clients understand `tool_progress`, so
-    # this gives visible feedback without polluting the assistant reply.  The
-    # underlying guarded stream still reports its explicit provider error or
-    # total timeout; this is not a synthetic success/fallback answer.
+    # The first progress event above guarantees a prompt first packet.  This
+    # second phase tells the user where the remaining wait is happening; it
+    # does not create a synthetic answer or hide a provider error.
     yield _sse_event_line(
         {
             "type": "tool_progress",

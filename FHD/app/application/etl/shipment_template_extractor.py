@@ -24,13 +24,40 @@ def _last_nonempty_row(worksheet: Any, start: int, end: int, last_col: int) -> i
     return start
 
 
-def _template_bounds(regions: list[dict[str, Any]]) -> tuple[dict[str, Any], int, int]:
+def _template_bounds(
+    regions: list[dict[str, Any]],
+    *,
+    source_region_id: str | None = None,
+) -> tuple[dict[str, Any], int, int]:
+    """Choose one explicitly selected delivery-note region.
+
+    A workbook can carry several historical delivery-note layouts.  The
+    caller may supply the audited region id selected in the ETL preview; when
+    it does, never silently substitute the first layout on a different
+    customer/document.  Legacy callers omit it and retain the deterministic
+    first-region behaviour.
+    """
+
     selected = [row for row in regions if row.get("status") == "selected"]
     if not selected:
         raise EtlError("ETL_SHIPMENT_TEMPLATE_REGION_MISSING", "未识别到可提取的送货单版式")
-    region = sorted(selected, key=lambda row: (str(row.get("sheet")), int(row.get("header_row") or 0)))[
-        0
-    ]
+    requested = str(source_region_id or "").strip()
+    if requested:
+        region = next(
+            (row for row in selected if str(row.get("id") or "") == requested),
+            None,
+        )
+        if region is None:
+            raise EtlError(
+                "ETL_SHIPMENT_TEMPLATE_REGION_NOT_FOUND",
+                "所选发货单版式不在当前预演中，请重新选择",
+                status_code=409,
+            )
+    else:
+        region = sorted(
+            selected,
+            key=lambda row: (str(row.get("sheet")), int(row.get("header_row") or 0)),
+        )[0]
     header_row = int(region.get("header_row") or 0)
     evidence_rows = [
         int(item.get("row") or 0)
@@ -77,11 +104,7 @@ def _copy_sheet_region(
         target.column_dimensions[letter].width = source.column_dimensions[letter].width
         target.column_dimensions[letter].hidden = source.column_dimensions[letter].hidden
     for merged in source.merged_cells.ranges:
-        if (
-            merged.min_row >= start_row
-            and merged.max_row <= end_row
-            and merged.max_col <= last_col
-        ):
+        if merged.min_row >= start_row and merged.max_row <= end_row and merged.max_col <= last_col:
             target.merge_cells(
                 start_row=merged.min_row - start_row + 1,
                 end_row=merged.max_row - start_row + 1,
@@ -124,13 +147,13 @@ def extract_shipment_template(
     *,
     source_features: dict[str, Any],
     destination: str | Path,
+    source_region_id: str | None = None,
 ) -> dict[str, Any]:
-    regions = [
-        item
-        for item in source_features.get("regions") or []
-        if isinstance(item, dict)
-    ]
-    region, start_row, end_limit = _template_bounds(regions)
+    regions = [item for item in source_features.get("regions") or [] if isinstance(item, dict)]
+    region, start_row, end_limit = _template_bounds(
+        regions,
+        source_region_id=source_region_id,
+    )
     workbook = load_workbook(source_path, data_only=False, keep_links=False)
     try:
         sheet_name = str(region.get("sheet") or "")

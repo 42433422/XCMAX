@@ -14,6 +14,7 @@ from app.application.etl.shipment_preview_fallback import (
     find_latest_preview_layout_candidate,
     materialize_preview_layout_candidate,
     resolve_preview_product_candidate,
+    resolve_preview_product_candidate_outcome,
 )
 from app.application.shipment_template_resolve import resolve_shipment_template
 from app.db.models.etl import EtlRun, EtlRunRow, EtlTemplate, EtlTemplateVersion, EtlUpload
@@ -148,6 +149,139 @@ def test_product_preview_candidate_is_exact_and_double_scoped():
     assert candidate["provenance"]["resolved_product"]["unit_price"] == 48.0
 
 
+def test_product_preview_prefers_newest_business_date_over_newest_upload():
+    engine = _preview_engine()
+    with Session(engine) as db:
+        older_upload = _add_upload_and_run(
+            db,
+            key="old-upload",
+            tenant_id=7,
+            owner_user_id=9,
+            target_type="customer_products",
+        )
+        newer_upload = _add_upload_and_run(
+            db,
+            key="new-upload",
+            tenant_id=7,
+            owner_user_id=9,
+            target_type="customer_products",
+        )
+        db.add_all(
+            [
+                EtlRunRow(
+                    run_id=older_upload.id,
+                    tenant_id=7,
+                    owner_user_id=9,
+                    source_sheet="25年出货",
+                    source_row=354,
+                    normalized_json=(
+                        '{"customer_name":"金汉武家私","name":"黑棕面用修色精",'
+                        '"model_number":"方和","price":48,"specification":4}'
+                    ),
+                    provenance_json='{"source_date":"2026-01-17"}',
+                    validation_json="[]",
+                    suggested_action="new",
+                    final_action="new",
+                ),
+                EtlRunRow(
+                    run_id=newer_upload.id,
+                    tenant_id=7,
+                    owner_user_id=9,
+                    source_sheet="旧档",
+                    source_row=9,
+                    normalized_json=(
+                        '{"customer_name":"金汉武家私","name":"黑棕面用修色精",'
+                        '"model_number":"方和","price":40,"specification":4}'
+                    ),
+                    provenance_json='{"source_date":"2025-01-17"}',
+                    validation_json="[]",
+                    suggested_action="new",
+                    final_action="new",
+                ),
+            ]
+        )
+        db.commit()
+
+    with (
+        patch(
+            "app.application.etl.shipment_preview_fallback.get_db",
+            side_effect=lambda: _session_context(engine),
+        ),
+        tenant_scope(7),
+    ):
+        candidate = resolve_preview_product_candidate(
+            owner_user_id=9,
+            unit_name="金汉武",
+            product_name="黑棕面用修色精",
+        )
+
+    assert candidate is not None
+    assert candidate["price"] == 48.0
+    assert candidate["source_date"] == "2026-01-17"
+    assert candidate["provenance"]["source_row"] == 354
+
+
+def test_product_preview_fails_closed_for_conflicting_same_day_facts():
+    engine = _preview_engine()
+    with Session(engine) as db:
+        run = _add_upload_and_run(
+            db,
+            key="same-day-conflict",
+            tenant_id=7,
+            owner_user_id=9,
+            target_type="customer_products",
+        )
+        for row_id, price in ((1, 48), (2, 50)):
+            db.add(
+                EtlRunRow(
+                    run_id=run.id,
+                    tenant_id=7,
+                    owner_user_id=9,
+                    source_sheet="出货历史",
+                    source_row=row_id,
+                    normalized_json=(
+                        '{"customer_name":"金汉武家私","name":"黑棕面用修色精",'
+                        f'"model_number":"方和","price":{price},"specification":4}}'
+                    ),
+                    provenance_json='{"source_date":"2026-01-17"}',
+                    validation_json="[]",
+                    suggested_action="new",
+                    final_action="new",
+                )
+            )
+        db.commit()
+
+    with (
+        patch(
+            "app.application.etl.shipment_preview_fallback.get_db",
+            side_effect=lambda: _session_context(engine),
+        ),
+        tenant_scope(7),
+    ):
+        outcome = resolve_preview_product_candidate_outcome(
+            owner_user_id=9,
+            unit_name="金汉武",
+            product_name="黑棕面用修色精",
+        )
+
+    assert outcome == {"status": "conflict", "candidate": None}
+
+    with (
+        patch(
+            "app.application.etl.shipment_preview_fallback.get_db",
+            side_effect=lambda: _session_context(engine),
+        ),
+        tenant_scope(7),
+    ):
+        candidate = resolve_preview_product_candidate(
+            owner_user_id=9,
+            unit_name="金汉武",
+            product_name="黑棕面用修色精",
+        )
+
+    assert candidate is None
+
+
 def test_layout_candidate_is_owner_scoped_and_exposes_no_source_path():
     engine = _preview_engine()
     source_features = (
@@ -218,8 +352,9 @@ def test_preview_layout_is_extracted_to_one_use_temp_file_then_cleaned(tmp_path:
         )
         db.commit()
 
-    def fake_extract(_source, *, source_features, destination):
+    def fake_extract(_source, *, source_features, destination, source_region_id=None):
         assert source_features["regions"][0]["id"] == "r-own"
+        assert source_region_id == "r-own"
         Path(destination).write_bytes(b"one-use-layout")
         return {"source_region_id": "r-own"}
 
@@ -330,7 +465,19 @@ def test_preview_layout_beats_generic_template_but_not_saved_private_customer_la
 def test_number_mode_uses_preview_product_for_one_confirmed_document_only():
     service = ShipmentNumberModeService()
     service._query_active_purchase_unit_names = MagicMock(return_value=["金汉武家私"])
-    service._load_active_product_catalog = MagicMock(return_value=[])
+    # The current product library is intentionally stale.  A resolved
+    # authenticated ETL preview must win for model/price, while the user's
+    # explicit 28kg tin specification remains untouched.
+    service._load_active_product_catalog = MagicMock(
+        return_value=[
+            {
+                "unit": "金汉武家私",
+                "name": "黑棕面用修色精",
+                "model_number": "旧方和",
+                "price": 40.0,
+            }
+        ]
+    )
     app_service = MagicMock()
     app_service.generate_shipment_document.return_value = {
         "success": True,
@@ -342,6 +489,7 @@ def test_number_mode_uses_preview_product_for_one_confirmed_document_only():
         "name": "黑棕面用修色精",
         "model_number": "方和",
         "price": 48.0,
+        "specification": 4.0,
         "provenance": {
             "kind": "etl_preview_product_candidate",
             "run_id": "run-own",
@@ -371,8 +519,8 @@ def test_number_mode_uses_preview_product_for_one_confirmed_document_only():
             return_value=app_service,
         ),
         patch(
-            "app.application.etl.shipment_preview_fallback.resolve_preview_product_candidate",
-            return_value=preview_candidate,
+            "app.application.etl.shipment_preview_fallback.resolve_preview_product_candidate_outcome",
+            return_value={"status": "resolved", "candidate": preview_candidate},
         ) as preview_lookup,
     ):
         payload, status = service.execute(

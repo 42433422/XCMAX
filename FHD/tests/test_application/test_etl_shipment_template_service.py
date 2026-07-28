@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from app.application.etl.service_shipment_templates import (
     ShipmentTemplateServiceMixin,
     shipment_template_candidate,
+    shipment_template_candidates,
 )
 from app.db.models.etl import EtlTemplate, EtlTemplateVersion
 
@@ -54,6 +55,43 @@ def test_detected_layout_candidate_is_visible_without_persisting_template():
     }
 
 
+def test_multiple_detected_layouts_are_selectable_by_audited_region_id():
+    source_features = {
+        "regions": [
+            {
+                "id": "侯雪梅!R3C1:10",
+                "sheet": "侯雪梅",
+                "header_row": 3,
+                "status": "selected",
+                "customer_name": "金汉武家私",
+            },
+            {
+                "id": "侯雪梅!R29C1:10",
+                "sheet": "侯雪梅",
+                "header_row": 29,
+                "status": "selected",
+                "customer_name": "宏运家具",
+            },
+        ]
+    }
+
+    candidates = shipment_template_candidates(source_features, "侯雪梅.xlsx")
+
+    assert [candidate["source_region_id"] for candidate in candidates] == [
+        "侯雪梅!R3C1:10",
+        "侯雪梅!R29C1:10",
+    ]
+    assert candidates[0]["is_default"] is True
+    assert candidates[1]["is_default"] is False
+    selected = shipment_template_candidate(
+        source_features,
+        "侯雪梅.xlsx",
+        "侯雪梅!R29C1:10",
+    )
+    assert selected is not None
+    assert selected["name"] == "宏运家具-发货单版式"
+
+
 def test_save_delivery_layout_defaults_to_selected_customer_name(tmp_path):
     run = SimpleNamespace(
         target_type="shipment_records",
@@ -73,7 +111,10 @@ def test_save_delivery_layout_defaults_to_selected_customer_name(tmp_path):
 
     with (
         patch("app.application.etl.service_shipment_templates.tenant_id_for_write", return_value=7),
-        patch("app.application.etl.service_shipment_templates.get_app_data_dir", return_value=str(tmp_path)),
+        patch(
+            "app.application.etl.service_shipment_templates.get_app_data_dir",
+            return_value=str(tmp_path),
+        ),
         patch(
             "app.application.etl.service_shipment_templates.extract_shipment_template",
             return_value={"source_region_id": "侯雪梅!R3C1:9"},

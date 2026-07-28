@@ -176,3 +176,87 @@ def test_confirmation_card_carries_explicit_document_number_without_execution():
     assert payload["params"]["order_number"] == "9803"
     assert payload["params"]["order_number_provenance"]["kind"] == "explicit_document_number"
     assert preview["data"]["order_number_provenance"]["value"] == "9803"
+
+
+def test_confirmation_card_hydrates_owner_scoped_etl_evidence_without_changing_payload():
+    """Preview evidence improves the card only; confirmation re-resolves it."""
+
+    from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+
+    candidate = {
+        "name": "黑棕面用修色精",
+        "model_number": "方和",
+        "price": 48.0,
+        "specification": 4.0,
+        "source_date": "2026-01-17",
+        "provenance": {
+            "kind": "etl_preview_product_candidate",
+            "run_id": "run-own",
+            "source_sheet": "25年出货",
+            "source_row": 354,
+        },
+    }
+    layout = {
+        "template_id": "etl-preview:run-own-layout",
+        "name": "金汉武家私-发货单版式",
+        "source_region_id": "侯雪梅!R3C1:10",
+        "sheet": "侯雪梅",
+    }
+    with (
+        patch(
+            "app.application.etl.shipment_preview_fallback.resolve_preview_product_candidate",
+            return_value=candidate,
+        ) as resolve_product,
+        patch(
+            "app.application.etl.shipment_preview_fallback.find_latest_preview_layout_candidate",
+            return_value=layout,
+        ) as resolve_layout,
+    ):
+        preview = build_shipment_preview_response_dict(
+            "金汉武",
+            PARSED_NAMED_ORDER["products"],
+            ORDER_TEXT,
+            authenticated_owner_user_id=9,
+        )
+
+    assert preview["task"]["items"] == [
+        {
+            "单位": "金汉武",
+            "型号": "方和",
+            "产品名称": "黑棕面用修色精",
+            "桶数": 3,
+            "规格": 28.0,
+            "单价": "48.00",
+            "总价": "4032.00",
+        }
+    ]
+    assert "4032" in preview["task"]["description"]
+    assert "不同于历史记录 4.00kg/桶" in preview["task"]["description"]
+    assert preview["data"]["etl_preview"]["layout"]["name"] == "金汉武家私-发货单版式"
+    payload = preview["task"]["payload"]
+    assert payload["params"]["products"] == PARSED_NAMED_ORDER["products"]
+    assert "owner" not in str(payload).lower()
+    assert "etl-preview" not in str(payload)
+    resolve_product.assert_called_once_with(
+        owner_user_id=9,
+        unit_name="金汉武",
+        product_name="黑棕面用修色精",
+    )
+    resolve_layout.assert_called_once_with(owner_user_id=9, unit_name="金汉武")
+
+
+def test_confirmation_card_does_not_read_personal_preview_without_trusted_owner():
+    from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+
+    with patch(
+        "app.application.etl.shipment_preview_fallback.resolve_preview_product_candidate"
+    ) as resolve_product:
+        preview = build_shipment_preview_response_dict(
+            "金汉武",
+            PARSED_NAMED_ORDER["products"],
+            ORDER_TEXT,
+            authenticated_owner_user_id=0,
+        )
+
+    assert preview["task"]["items"][0]["型号"] == "黑棕面用修色精"
+    resolve_product.assert_not_called()

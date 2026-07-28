@@ -297,7 +297,11 @@ def resolve_tool_execution_profile(runtime_context: dict[str, Any] | None) -> st
     return "pro_default"
 
 
-def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
+def run_normal_slot_shipment_preview(
+    order_text: str,
+    *,
+    authenticated_owner_user_id: int | None = None,
+) -> dict[str, Any]:
     """
     normal_slot_dispatch.shipment_preview：与普通版 unified_chat shipment 分支同源（编号解析 + 预览任务）。
     延迟导入避免循环依赖。
@@ -334,6 +338,7 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
             if isinstance(parsed.get("order_number_provenance"), dict)
             else None
         ),
+        authenticated_owner_user_id=authenticated_owner_user_id,
     )
     body["normal_slot_dispatch"] = True
     return body

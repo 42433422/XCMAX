@@ -359,7 +359,7 @@
             :disabled="busy"
             @click="previewCustomerProductsFromShipment"
           >
-            预演客户及产品
+            {{ linkedCustomerProductPreview ? '查看客户及产品预演' : '预演客户及产品' }}
           </button>
           <button
             v-if="currentRun?.target_type === 'shipment_records'"
@@ -428,6 +428,19 @@
             <template v-if="shipmentTemplateCandidate.customer_name"> · 客户 {{ String(shipmentTemplateCandidate.customer_name) }}</template>
             <template v-if="shipmentTemplateCandidate.order_number"> · 样例单号 {{ String(shipmentTemplateCandidate.order_number) }}</template>
           </span>
+          <label v-if="shipmentTemplateCandidates.length > 1" class="etl-layout-candidate__select">
+            选择要保存/开单使用的版式
+            <select v-model="selectedShipmentTemplateRegionId" :disabled="busy">
+              <option
+                v-for="candidate in shipmentTemplateCandidates"
+                :key="String(candidate.source_region_id)"
+                :value="String(candidate.source_region_id)"
+              >
+                {{ String(candidate.customer_name || candidate.name || '送货单版式') }} ·
+                {{ String(candidate.sheet || '工作表') }} 第 {{ Number(candidate.header_row || 0) }} 行
+              </option>
+            </select>
+          </label>
           <span>版式已经识别，但尚未保存；点击“保存发货单版式”后才会进入仅你可见的模板库。</span>
         </div>
         <div
@@ -443,10 +456,16 @@
           v-if="currentRun.target_type === 'shipment_records'"
           class="etl-target-scope-note"
         >
-          <strong>要同时补全客户库和产品库？</strong>
+          <strong>{{ linkedCustomerProductPreview ? '已自动规划客户库和产品库预演' : '要同时补全客户库和产品库？' }}</strong>
           <span>
-            当前任务只预演发货记录。可从同一上传文件创建“客户及产品”预演，读取历史出货、报价等安全附表；
-            这一步不会写入任何客户或产品，仍需你在新预演中确认执行。
+            <template v-if="linkedCustomerProductPreview">
+              同一上传文件的客户及产品预演状态：{{ statusLabel(String(linkedCustomerProductPreview.status || 'queued')) }}。
+              读取历史出货、报价等安全附表；点击“查看客户及产品预演”可核对结果。它不会写入任何客户或产品。
+            </template>
+            <template v-else>
+              当前任务只预演发货记录。可从同一上传文件创建“客户及产品”预演，读取历史出货、报价等安全附表；
+              这一步不会写入任何客户或产品，仍需你在新预演中确认执行。
+            </template>
           </span>
         </div>
         <div v-if="regionSummary" class="etl-target-scope-note">

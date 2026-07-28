@@ -161,6 +161,7 @@ class AIChatApplicationService(
         context: dict[str, Any] | None = None,
         source: str | None = None,
         file_context: dict[str, Any] | None = None,
+        authenticated_owner_user_id: int | None = None,
     ) -> dict[str, Any]:
         """
         处理聊天请求
@@ -301,6 +302,7 @@ class AIChatApplicationService(
             source=source,
             context=ctx,
             file_context=file_context or {},
+            authenticated_owner_user_id=authenticated_owner_user_id,
         )
         if workflow_result is not None:
             return _finalize(workflow_result)
@@ -722,6 +724,7 @@ class AIChatApplicationService(
         source: str | None,
         context: dict[str, Any],
         file_context: dict[str, Any],
+        authenticated_owner_user_id: int | None = None,
     ) -> dict[str, Any] | None:
         text = str(message or "").strip()
         if not text:
@@ -1164,7 +1167,10 @@ class AIChatApplicationService(
                 if pq:
                     return pq
             if rr.get("intent") == "shipment":
-                ship = run_normal_slot_shipment_preview(text)
+                ship = run_normal_slot_shipment_preview(
+                    text,
+                    authenticated_owner_user_id=authenticated_owner_user_id,
+                )
                 if ship.get("success"):
                     ship.pop("normal_slot_dispatch", None)
                     return ship

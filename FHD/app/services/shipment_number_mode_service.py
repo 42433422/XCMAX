@@ -57,6 +57,71 @@ class ShipmentNumberModeService:
             return row[tuple_index]
         return None
 
+    @staticmethod
+    def _resolve_owner_preview_product_candidate(
+        *,
+        owner_user_id: int,
+        unit_name: str,
+        product_name: str,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Read one authenticated user's ETL preview without weakening scope.
+
+        The outcome deliberately separates ``not_found`` from ``conflict``.
+        A missing private preview may use the tenant-local master catalogue;
+        conflicting private preview facts must stop the confirmed shipment
+        instead of silently accepting possibly stale master model/price data.
+        """
+
+        if owner_user_id <= 0 or not str(product_name or "").strip():
+            return "not_requested", None
+        try:
+            from app.application.etl.shipment_preview_fallback import (
+                resolve_preview_product_candidate_outcome,
+            )
+
+            outcome = resolve_preview_product_candidate_outcome(
+                owner_user_id=owner_user_id,
+                unit_name=unit_name,
+                product_name=product_name,
+            )
+        except RECOVERABLE_ERRORS:
+            return "unavailable", None
+
+        if not isinstance(outcome, Mapping):
+            return "unavailable", None
+        status = str(outcome.get("status") or "").strip().lower()
+        candidate = outcome.get("candidate")
+        if status == "resolved" and isinstance(candidate, Mapping):
+            return status, dict(candidate)
+        if status in {"not_found", "conflict", "unavailable"}:
+            return status, None
+        return "unavailable", None
+
+    @staticmethod
+    def _preview_product_conflict_payload(
+        *,
+        parsed: dict[str, Any],
+        unit_name: str,
+        product_name: str,
+    ) -> dict[str, Any]:
+        """Return a stable, non-leaking failure for conflicting ETL facts."""
+
+        return {
+            "success": False,
+            "message": (
+                "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                f"失败原因：购买单位“{unit_name}”下的产品“{product_name}”存在冲突的 ETL 预演信息，"
+                "请先在数据对接中心确认或修正后重试。"
+            ),
+            "error_code": "NUMBER_MODE_ETL_PREVIEW_CONFLICT",
+            "data": {
+                "parsed_data": parsed,
+                "unit_name": unit_name,
+                "product_name": product_name,
+                "match_error_code": "NUMBER_MODE_ETL_PREVIEW_CONFLICT",
+            },
+        }
+
     def _load_active_product_catalog(self) -> list[dict[str, Any]]:
         """Load only the current tenant's active product rows.
 
@@ -568,61 +633,70 @@ class ShipmentNumberModeService:
                     "data": {"parsed_data": parsed},
                 }, 400
 
-            product_from_preview: dict[str, Any] | None = None
-            if not model_number:
-                matched_product, resolution_error, related_rows = self._resolve_scoped_product_name(
-                    product_name=product_name,
+            preview_status, preview_candidate = self._resolve_owner_preview_product_candidate(
+                owner_user_id=trusted_owner_user_id,
+                unit_name=unit_to_use,
+                product_name=product_name,
+            )
+            if preview_status == "conflict":
+                return self._preview_product_conflict_payload(
+                    parsed=parsed,
                     unit_name=unit_to_use,
-                    product_catalog=product_catalog,
-                )
-                if matched_product is None:
-                    if resolution_error == "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS":
-                        candidates = [
-                            {
-                                "name": str(row.get("name") or ""),
-                                "model_number": str(row.get("model_number") or ""),
-                            }
-                            for row in related_rows
-                        ]
-                        return {
-                            "success": False,
-                            "message": (
-                                "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
-                                f"失败原因：购买单位“{unit_to_use}”下的产品名称“{product_name}”匹配到多个产品。"
-                            ),
-                            "error_code": "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS",
-                            "data": {
-                                "parsed_data": parsed,
-                                "unit_name": unit_to_use,
-                                "product_name": product_name,
-                                "candidates": candidates,
-                            },
-                        }, 400
-                    # A candidate never becomes a master product here.  Only
-                    # an authenticated user's preview-ready ETL snapshot can
-                    # supply an exact literal name for this one confirmed
-                    # document; missing/ambiguous candidates retain the strict
-                    # product-not-found response below.
-                    if trusted_owner_user_id > 0:
-                        try:
-                            from app.application.etl.shipment_preview_fallback import (
-                                resolve_preview_product_candidate,
-                            )
+                    product_name=product_name,
+                ), 400
 
-                            product_from_preview = resolve_preview_product_candidate(
-                                owner_user_id=trusted_owner_user_id,
-                                unit_name=unit_to_use,
-                                product_name=product_name,
-                            )
-                        except RECOVERABLE_ERRORS:
-                            product_from_preview = None
-                    if product_from_preview is not None:
-                        matched_product = {
-                            "name": product_from_preview.get("name"),
-                            "model_number": product_from_preview.get("model_number"),
-                            "price": product_from_preview.get("price"),
-                        }
-                    else:
+            product_from_preview: dict[str, Any] | None = None
+            matched_product: dict[str, Any] | None = None
+            preview_model = (
+                str(preview_candidate.get("model_number") if preview_candidate else "")
+                .strip()
+                .upper()
+            )
+
+            if not model_number:
+                # An exact, validated owner-scoped preview is newer business
+                # evidence than the master catalogue, which may still carry a
+                # historic model or price.  A preview without a usable model
+                # cannot satisfy strict number mode, so master matching remains
+                # available for that incomplete case.
+                if preview_candidate is not None and preview_model:
+                    matched_product = {
+                        "name": preview_candidate.get("name"),
+                        "model_number": preview_model,
+                        "price": preview_candidate.get("price"),
+                    }
+                    product_from_preview = preview_candidate
+                else:
+                    matched_product, resolution_error, related_rows = (
+                        self._resolve_scoped_product_name(
+                            product_name=product_name,
+                            unit_name=unit_to_use,
+                            product_catalog=product_catalog,
+                        )
+                    )
+                    if matched_product is None:
+                        if resolution_error == "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS":
+                            candidates = [
+                                {
+                                    "name": str(row.get("name") or ""),
+                                    "model_number": str(row.get("model_number") or ""),
+                                }
+                                for row in related_rows
+                            ]
+                            return {
+                                "success": False,
+                                "message": (
+                                    "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                    f"失败原因：购买单位“{unit_to_use}”下的产品名称“{product_name}”匹配到多个产品。"
+                                ),
+                                "error_code": "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS",
+                                "data": {
+                                    "parsed_data": parsed,
+                                    "unit_name": unit_to_use,
+                                    "product_name": product_name,
+                                    "candidates": candidates,
+                                },
+                            }, 400
                         return {
                             "success": False,
                             "message": (
@@ -646,55 +720,68 @@ class ShipmentNumberModeService:
                     model_number = canonical_model
                 if product.get("unit_price") in (None, ""):
                     product["unit_price"] = matched_product.get("price")
-                if product_from_preview is not None:
-                    provenance = product_from_preview.get("provenance")
-                    if isinstance(provenance, dict):
-                        preview_product_provenance.append(dict(provenance))
 
             if model_number and product_from_preview is None:
-                matched_product, resolution_error, related_rows = (
-                    self._resolve_scoped_product_model(
-                        model_number=model_number,
-                        unit_name=unit_to_use,
-                        product_catalog=product_catalog,
+                # A caller-supplied model remains authoritative.  When the
+                # private preview agrees, it can still provide the fresher
+                # price; disagreement is an explicit business-fact conflict.
+                if preview_candidate is not None and preview_model:
+                    if preview_model != model_number:
+                        return self._preview_product_conflict_payload(
+                            parsed=parsed,
+                            unit_name=unit_to_use,
+                            product_name=product_name,
+                        ), 400
+                    matched_product = {
+                        "name": preview_candidate.get("name"),
+                        "model_number": preview_model,
+                        "price": preview_candidate.get("price"),
+                    }
+                    product_from_preview = preview_candidate
+                else:
+                    matched_product, resolution_error, related_rows = (
+                        self._resolve_scoped_product_model(
+                            model_number=model_number,
+                            unit_name=unit_to_use,
+                            product_catalog=product_catalog,
+                        )
                     )
-                )
-                if matched_product is None:
-                    if resolution_error == "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS":
-                        candidates = [
-                            {
-                                "name": str(row.get("name") or ""),
-                                "model_number": str(row.get("model_number") or ""),
-                            }
-                            for row in related_rows
-                        ]
+                    if matched_product is None:
+                        if resolution_error == "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS":
+                            candidates = [
+                                {
+                                    "name": str(row.get("name") or ""),
+                                    "model_number": str(row.get("model_number") or ""),
+                                }
+                                for row in related_rows
+                            ]
+                            return {
+                                "success": False,
+                                "message": (
+                                    "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                    f"失败原因：购买单位“{unit_to_use}”下的型号“{model_number}”匹配到多个产品。"
+                                ),
+                                "error_code": "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS",
+                                "data": {
+                                    "parsed_data": parsed,
+                                    "unit_name": unit_to_use,
+                                    "model_number": model_number,
+                                    "candidates": candidates,
+                                },
+                            }, 400
                         return {
                             "success": False,
                             "message": (
                                 "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
-                                f"失败原因：购买单位“{unit_to_use}”下的型号“{model_number}”匹配到多个产品。"
+                                f"失败原因：型号不存在或不属于购买单位“{unit_to_use}”（{model_number}）。"
                             ),
-                            "error_code": "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS",
+                            "error_code": "NUMBER_MODE_STRICT_FAILED",
                             "data": {
                                 "parsed_data": parsed,
-                                "unit_name": unit_to_use,
-                                "model_number": model_number,
-                                "candidates": candidates,
+                                "missing_model_number": model_number,
+                                "match_error_code": "NUMBER_MODE_PRODUCT_MODEL_NOT_FOUND",
                             },
                         }, 400
-                    return {
-                        "success": False,
-                        "message": (
-                            "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
-                            f"失败原因：型号不存在或不属于购买单位“{unit_to_use}”（{model_number}）。"
-                        ),
-                        "error_code": "NUMBER_MODE_STRICT_FAILED",
-                        "data": {
-                            "parsed_data": parsed,
-                            "missing_model_number": model_number,
-                            "match_error_code": "NUMBER_MODE_PRODUCT_MODEL_NOT_FOUND",
-                        },
-                    }, 400
 
                 canonical_name = str(matched_product.get("name") or product_name).strip()
                 canonical_model = (
@@ -706,6 +793,11 @@ class ShipmentNumberModeService:
                 product["model_number"] = canonical_model
                 if product.get("unit_price") in (None, ""):
                     product["unit_price"] = matched_product.get("price")
+
+            if product_from_preview is not None:
+                provenance = product_from_preview.get("provenance")
+                if isinstance(provenance, dict):
+                    preview_product_provenance.append(dict(provenance))
 
         parsed_order_number = str(parsed.get("order_number") or "").strip()
         requested_order_number = str(custom_order_number or "").strip()

@@ -109,7 +109,9 @@ def _mixed_delivery_workbook_bytes(tmp_path: Path) -> bytes:
     delivery.append(["合计", None, 3, None, 84, None, 4032])
 
     history = workbook.create_sheet("出货历史")
-    history.append(["金汉武（宾驰）", "45659", "2", "方和", None, None, "黑棕面用修色精", 3, 4, 12, 48, 576])
+    history.append(
+        ["金汉武（宾驰）", "45659", "2", "方和", None, None, "黑棕面用修色精", 3, 4, 12, 48, 576]
+    )
 
     finance = workbook.create_sheet("25年回款")
     finance.append(["客户名", "回款金额", "余额"])
@@ -221,9 +223,7 @@ def test_etl_api_auto_target_resolves_before_preview(tmp_path, monkeypatch):
     }
 
 
-def test_etl_api_mixed_delivery_preview_exposes_companion_and_private_layout(
-    tmp_path, monkeypatch
-):
+def test_etl_api_mixed_delivery_preview_exposes_companion_and_private_layout(tmp_path, monkeypatch):
     """The docking loop stays preview-only until the caller explicitly executes it."""
 
     client, _ = _test_app(tmp_path, monkeypatch)
@@ -252,6 +252,10 @@ def test_etl_api_mixed_delivery_preview_exposes_companion_and_private_layout(
     assert shipment_run["source_features"]["target_detection"]["document_type"] == (
         "delivery_note_workbook"
     )
+    linked_preview = shipment_run["details"]["linked_customer_products_preview"]
+    assert linked_preview["target_type"] == "customer_products"
+    assert linked_preview["preview_only"] is True
+    assert linked_preview["status"] == "preview_ready"
     sheet_plan = {row["sheet"]: row for row in shipment_run["source_features"]["sheet_plan"]}
     assert sheet_plan["出货历史"]["role"] == "supporting_customer_product_data"
     assert sheet_plan["25年回款"]["status"] == "excluded"
@@ -283,15 +287,12 @@ def test_etl_api_mixed_delivery_preview_exposes_companion_and_private_layout(
         },
     )
     assert invalid_mapping.status_code == 409
-    assert invalid_mapping.json()["detail"]["code"] == (
-        "ETL_SHIPMENT_TEMPLATE_NOT_IMPORT_TEMPLATE"
-    )
+    assert invalid_mapping.json()["detail"]["code"] == ("ETL_SHIPMENT_TEMPLATE_NOT_IMPORT_TEMPLATE")
 
-    customer_product_preview = client.post(
-        "/api/etl/runs/preview",
-        json={"upload_id": upload_id, "target_type": "customer_products"},
+    customer_product_preview = client.get(
+        f"/api/etl/runs/{linked_preview['run_id']}",
     )
-    assert customer_product_preview.status_code == 202
+    assert customer_product_preview.status_code == 200
     companion = customer_product_preview.json()["data"]
     assert companion["target_type"] == "customer_products"
     assert companion["status"] == "preview_ready"

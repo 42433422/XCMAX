@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections import deque
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -295,6 +296,62 @@ def _companion_source_date(row: ParsedRow) -> str:
     return value if re.fullmatch(r"(?:19|20)\d{2}-\d{2}-\d{2}", value) else ""
 
 
+def _normalized_order_date(value: Any) -> str:
+    """Normalize a delivery-note date into the same ordering evidence as ledgers."""
+
+    text = clean_cell_text(value)
+    match = _DATE_RE.search(text)
+    if not match:
+        return ""
+    normalized = match.group(1).replace("年", "-").replace("月", "-").replace("日", "")
+    try:
+        return date.fromisoformat(normalized).isoformat()
+    except ValueError:
+        return ""
+
+
+def _is_future_companion(row: ParsedRow) -> bool:
+    source_date = _companion_source_date(row)
+    if not source_date:
+        return False
+    try:
+        return date.fromisoformat(source_date) > date.today()
+    except ValueError:
+        return False
+
+
+def _same_date_conflict(candidate: ParsedRow, current: ParsedRow) -> bool:
+    """Detect contradictory same-day facts from different sheets.
+
+    A workbook tab order is not a business rule.  Preserve both candidates as
+    blocking rows when the same customer/product/date disagrees on a value
+    that would affect the product default or a printed document.
+    """
+
+    candidate_date = _companion_source_date(candidate)
+    current_date = _companion_source_date(current)
+    if not candidate_date or candidate_date != current_date or candidate.sheet == current.sheet:
+        return False
+    keys = ("model_number", "specification", "price")
+    return any(
+        str(candidate.values.get(key) or "").strip() != str(current.values.get(key) or "").strip()
+        for key in keys
+    )
+
+
+def _mark_same_date_conflict(*rows: ParsedRow) -> None:
+    issue = {
+        "code": "ETL_LATEST_SOURCE_CONFLICT",
+        "field": "source_date",
+        "severity": "error",
+        "message": "同一客户产品在不同工作表同日出现冲突价格、规格或型号，需人工确认后再导入",
+    }
+    for row in rows:
+        issues = row.provenance.setdefault("validation_issues", [])
+        if not any(isinstance(item, dict) and item.get("code") == issue["code"] for item in issues):
+            issues.append(dict(issue))
+
+
 def _prefer_newer_companion(candidate: ParsedRow, current: ParsedRow) -> bool:
     """Choose only evidenced newer data, never workbook-tab order by accident."""
     candidate_date = _companion_source_date(candidate)
@@ -347,9 +404,13 @@ def _attach_delivery_fingerprints(rows: list[ParsedRow]) -> None:
             "unit": str(first.values.get("purchase_unit") or "").strip(),
             "order": str(first.values.get("external_order_no") or "").strip(),
             "date": str(first.provenance.get("order_date") or "").strip(),
-            "items": sorted(items, key=lambda item: (item["m"], item["n"], item["q"], item["k"], item["p"])),
+            "items": sorted(
+                items, key=lambda item: (item["m"], item["n"], item["q"], item["k"], item["p"])
+            ),
         }
-        note_raw = json.dumps(note_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        note_raw = json.dumps(
+            note_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
         note_fingerprint = hashlib.sha256(note_raw.encode("utf-8")).hexdigest()[:28]
         for item_index, row in enumerate(ordered, start=1):
             line_payload = {
@@ -418,6 +479,8 @@ def parse_customer_product_regions(
     companion_sheet_counts: dict[str, int] = {}
     companion_candidate_count = 0
     companion_stale_records_skipped = 0
+    future_dated_source_rows: list[dict[str, Any]] = []
+    same_date_source_conflicts = 0
     model_identity_ambiguity_count = 0
     sheet_domain_hints: dict[str, str] = {}
     try:
@@ -573,6 +636,14 @@ def parse_customer_product_regions(
                                         ),
                                         "external_order_no": active["meta"].get("order_number"),
                                         "order_date": active["meta"].get("order_date"),
+                                        # Make selected delivery-note lines
+                                        # comparable with appendix ledgers.
+                                        # ``order_date`` remains untouched for
+                                        # audit/display, while ``source_date``
+                                        # is the normalized latest-record key.
+                                        "source_date": _normalized_order_date(
+                                            active["meta"].get("order_date")
+                                        ),
                                         "original_fragment": original_fragment,
                                         "columns": columns,
                                     },
@@ -602,8 +673,7 @@ def parse_customer_product_regions(
         # preview can reuse the exact same discovery result after the user asks
         # for it from the UI.
         sheet_domain_hints = {
-            worksheet.title: _sheet_domain_hint(worksheet)
-            for worksheet in workbook.worksheets
+            worksheet.title: _sheet_domain_hint(worksheet) for worksheet in workbook.worksheets
         }
         canonical_candidates: dict[str, set[str]] = {}
         for region in regions:
@@ -618,6 +688,28 @@ def parse_customer_product_regions(
             for alias, names in canonical_candidates.items()
             if len(names) == 1
         }
+        # Customer/product previews are a current-fact view, not a replay of
+        # every delivery line.  Start with selected delivery-note rows and let
+        # newer supporting ledgers/quotes replace them by *business date*.
+        # Shipment-record previews retain their actual line list unchanged.
+        customer_product_latest: dict[tuple[str, str, str], ParsedRow] = {}
+        same_date_conflict_rows: list[ParsedRow] = []
+        if target_type == "customer_products":
+            for row in parsed_rows:
+                key = product_match_key(row.values)
+                current = customer_product_latest.get(key)
+                if current is None:
+                    customer_product_latest[key] = row
+                elif _same_date_conflict(row, current):
+                    _mark_same_date_conflict(row, current)
+                    same_date_conflict_rows.extend((current, row))
+                    same_date_source_conflicts += 1
+                elif _prefer_newer_companion(row, current):
+                    customer_product_latest[key] = row
+                    companion_stale_records_skipped += 1
+                else:
+                    companion_stale_records_skipped += 1
+
         existing_keys = {product_match_key(row.values) for row in parsed_rows}
         history_latest: dict[tuple[str, str, str], ParsedRow] = {}
         delivery_sheets = {
@@ -631,7 +723,7 @@ def parse_customer_product_regions(
             if sheet_domain_hints.get(worksheet.title) == "finance_or_reconciliation":
                 continue
             remaining = (
-                max_rows - len(parsed_rows) - len(history_latest)
+                max_rows - len(customer_product_latest)
                 if target_type == "customer_products"
                 else max_rows - len(history_latest)
             )
@@ -657,27 +749,64 @@ def parse_customer_product_regions(
             if companion_rows:
                 companion_sheet_counts[worksheet.title] = len(companion_rows)
             for row in companion_rows:
-                key = product_match_key(row.values)
-                if key in existing_keys:
+                if _is_future_companion(row):
+                    future_dated_source_rows.append(
+                        {
+                            "sheet": row.sheet,
+                            "row": row.row_number,
+                            "source_date": _companion_source_date(row),
+                        }
+                    )
                     continue
-                existing = history_latest.get(key)
-                if existing is None:
-                    history_latest[key] = row
-                elif _prefer_newer_companion(row, existing):
-                    history_latest[key] = row
-                    companion_stale_records_skipped += 1
+                key = product_match_key(row.values)
+                if target_type == "customer_products":
+                    existing = customer_product_latest.get(key)
+                    if existing is None:
+                        customer_product_latest[key] = row
+                    elif _same_date_conflict(row, existing):
+                        _mark_same_date_conflict(row, existing)
+                        same_date_conflict_rows.extend((existing, row))
+                        same_date_source_conflicts += 1
+                    elif _prefer_newer_companion(row, existing):
+                        customer_product_latest[key] = row
+                        companion_stale_records_skipped += 1
+                    else:
+                        companion_stale_records_skipped += 1
                 else:
-                    companion_stale_records_skipped += 1
+                    if key in existing_keys:
+                        continue
+                    existing = history_latest.get(key)
+                    if existing is None:
+                        history_latest[key] = row
+                    elif _prefer_newer_companion(row, existing):
+                        history_latest[key] = row
+                        companion_stale_records_skipped += 1
+                    else:
+                        companion_stale_records_skipped += 1
 
         companion_candidate_count = len(history_latest)
         if target_type == "customer_products":
-            history_rows = list(history_latest.values())
+            selected_rows: list[ParsedRow] = []
+            seen_rows: set[tuple[str, int]] = set()
+            for row in [*customer_product_latest.values(), *same_date_conflict_rows]:
+                row_key = (str(row.sheet), int(row.row_number))
+                if row_key in seen_rows:
+                    continue
+                seen_rows.add(row_key)
+                selected_rows.append(row)
+            parsed_rows = selected_rows
+            history_rows = [
+                row
+                for row in parsed_rows
+                if str(row.provenance.get("source_kind") or "")
+                in {"shipment_history_ledger", "structured_shipment_history", "customer_quote"}
+            ]
             history_product_count = len(history_rows)
-            for row in history_rows:
+            companion_candidate_count = history_product_count
+            for row in parsed_rows:
                 for header in row.values:
                     if header not in all_headers:
                         all_headers.append(header)
-            parsed_rows.extend(history_rows)
             if history_rows:
                 for sheet in {row.sheet for row in history_rows}:
                     imported_by_sheet[sheet] = imported_by_sheet.get(sheet, 0) + sum(
@@ -739,6 +868,29 @@ def parse_customer_product_regions(
                 "message": f"已跳过 {len(excluded_charge_rows)} 行运费等非产品费用。",
                 "count": len(excluded_charge_rows),
                 "rows": excluded_charge_rows[:50],
+            }
+        )
+    if future_dated_source_rows:
+        warnings.append(
+            {
+                "code": "ETL_FUTURE_DATED_SOURCE_ROW",
+                "message": (
+                    f"已隔离 {len(future_dated_source_rows)} 条日期晚于当前日期的历史/报价记录，"
+                    "它们不会被当作最新客户产品事实。"
+                ),
+                "count": len(future_dated_source_rows),
+                "rows": future_dated_source_rows[:50],
+            }
+        )
+    if same_date_source_conflicts:
+        warnings.append(
+            {
+                "code": "ETL_LATEST_SOURCE_CONFLICT",
+                "message": (
+                    f"发现 {same_date_source_conflicts} 组同日跨表产品事实冲突，"
+                    "已保留为错误行，需人工确认。"
+                ),
+                "count": same_date_source_conflicts,
             }
         )
     if history_product_count:
@@ -807,6 +959,8 @@ def parse_customer_product_regions(
                 "basis": "source_date_then_same_sheet_row",
                 "unique_candidates": companion_candidate_count,
                 "stale_records_skipped": companion_stale_records_skipped,
+                "future_dated_records_skipped": len(future_dated_source_rows),
+                "same_date_conflicts": same_date_source_conflicts,
                 "model_identity_ambiguity_groups": model_identity_ambiguity_count,
             },
             "sheet_plan": sheet_plan,

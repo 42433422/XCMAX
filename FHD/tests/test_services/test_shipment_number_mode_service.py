@@ -721,7 +721,9 @@ class TestExecute:
             )
         assert status == 400
 
-    def test_confirmed_preview_click_resolves_named_product_from_in_memory_customer_catalog(self, svc):
+    def test_confirmed_preview_click_resolves_named_product_from_in_memory_customer_catalog(
+        self, svc
+    ):
         """A confirmation-card click canonicalizes customer/product data.
 
         The chat preserves the user's explicit 规格/桶数 in its preview.  At
@@ -791,6 +793,56 @@ class TestExecute:
             }
         ]
         assert call_kwargs["owner_user_id"] == 42
+
+    def test_conflicting_authenticated_preview_blocks_stale_master_product(self, svc):
+        """A known ETL conflict must not quietly fall back to an old catalogue row."""
+
+        mock_app_svc = MagicMock()
+        stale_catalog = [
+            {
+                "unit": "金汉武家私",
+                "name": "黑棕面用修色精",
+                "model_number": "旧方和",
+                "price": 40.0,
+            }
+        ]
+        with (
+            patch(
+                "app.services.shipment_number_mode_service.get_shipment_app_service",
+                return_value=mock_app_svc,
+            ),
+            patch.object(svc, "_query_active_purchase_unit_names", return_value=["金汉武家私"]),
+            patch.object(svc, "_load_active_product_catalog", return_value=stale_catalog),
+            patch(
+                "app.application.etl.shipment_preview_fallback.resolve_preview_product_candidate_outcome",
+                return_value={"status": "conflict", "candidate": None},
+            ) as preview_lookup,
+        ):
+            result, status = svc.execute(
+                order_text="",
+                custom_order_number="",
+                direct_unit_name="金汉武",
+                direct_products=[
+                    {
+                        "name": "黑棕面用修色精",
+                        "tin_spec": 28.0,
+                        "quantity_tins": 3,
+                    }
+                ],
+                parse_order_text=lambda _text: {"success": False},
+                owner_user_id=9,
+            )
+
+        assert status == 400
+        assert result["success"] is False
+        assert result["error_code"] == "NUMBER_MODE_ETL_PREVIEW_CONFLICT"
+        assert result["data"]["match_error_code"] == "NUMBER_MODE_ETL_PREVIEW_CONFLICT"
+        preview_lookup.assert_called_once_with(
+            owner_user_id=9,
+            unit_name="金汉武家私",
+            product_name="黑棕面用修色精",
+        )
+        mock_app_svc.generate_shipment_document.assert_not_called()
 
     def test_named_product_not_found_fails_closed(self, svc):
         from app.services.tools_execution.order_parser import _parse_order_text

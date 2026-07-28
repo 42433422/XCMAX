@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const authenticatedRequestInitMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@/utils/erpDomainPaths', () => ({
   resolveErpApiPath: (p: string) => `http://localhost${p}`,
+}))
+vi.mock('@/utils/authenticatedRequest', () => ({
+  authenticatedRequestInit: authenticatedRequestInitMock,
 }))
 
 import { usePrintService } from './usePrintService'
@@ -11,6 +16,13 @@ describe('usePrintService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    authenticatedRequestInitMock.mockResolvedValue({
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': 'csrf-from-helper',
+      },
+    })
     service = usePrintService()
   })
 
@@ -65,6 +77,27 @@ describe('usePrintService', () => {
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.copies).toBe(3)
       expect(body.require_confirm).toBe(false)
+    })
+
+    it('uses the authenticated request helper for an explicit print action', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      } as Response)
+
+      await service.printLabel('/path/to/label.pdf')
+
+      expect(authenticatedRequestInitMock).toHaveBeenCalledWith('POST', {
+        'Content-Type': 'application/json',
+      })
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost/api/print/label',
+        expect.objectContaining({
+          credentials: 'include',
+          headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-from-helper' }),
+        }),
+      )
     })
 
     it('defaults copies to 1', async () => {

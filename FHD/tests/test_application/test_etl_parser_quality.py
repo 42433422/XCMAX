@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -171,7 +172,20 @@ def test_delivery_workbook_plans_companion_history_without_misreading_finance(
 
         history = workbook.create_sheet("出货历史")
         history.append(
-            ["金汉武（宾驰）", "45659", "2", "方和", None, None, "黑棕面用修色精", 3, 4, 12, 48, 576]
+            [
+                "金汉武（宾驰）",
+                "45659",
+                "2",
+                "方和",
+                None,
+                None,
+                "黑棕面用修色精",
+                3,
+                4,
+                12,
+                48,
+                576,
+            ]
         )
 
         quote = workbook.create_sheet("报价")
@@ -205,9 +219,7 @@ def test_delivery_workbook_plans_companion_history_without_misreading_finance(
 
     customer_products = parse_file(path, target_type="customer_products")
     black = next(
-        row
-        for row in customer_products.rows
-        if row.values.get("name") == "黑棕面用修色精"
+        row for row in customer_products.rows if row.values.get("name") == "黑棕面用修色精"
     )
     assert black.values == {
         "customer_name": "金汉武家私",
@@ -248,21 +260,58 @@ def test_companion_history_uses_source_date_not_workbook_row_order(tmp_path, mon
     )
 
     dataset = parse_file(path, target_type="customer_products")
-    product = next(
-        row for row in dataset.rows if row.values.get("name") == "黑棕面用修色精"
-    )
+    product = next(row for row in dataset.rows if row.values.get("name") == "黑棕面用修色精")
     assert product.values["price"] == 48.0
     assert product.provenance["source_date"]
     assert dataset.source_features["latest_record_selection"] == {
         "basis": "source_date_then_same_sheet_row",
         "unique_candidates": 1,
         "stale_records_skipped": 1,
+        "future_dated_records_skipped": 0,
+        "same_date_conflicts": 0,
         "model_identity_ambiguity_groups": 0,
     }
     assert any(
-        warning["code"] == "ETL_LATEST_PRODUCT_DATA_SELECTED"
-        for warning in dataset.warnings
+        warning["code"] == "ETL_LATEST_PRODUCT_DATA_SELECTED" for warning in dataset.warnings
     )
+
+
+def test_companion_history_excludes_future_dated_fact_from_latest_selection(tmp_path, monkeypatch):
+    path = tmp_path / "future-history.xlsx"
+    future_date = f"{date.today().year + 1}-01-17"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：金汉武家私  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["9803", "测试面漆", 1, 20, 20, 17, 340])
+        delivery.append(["合计", None, 1, None, 20, None, 340])
+        history = workbook.create_sheet("出货历史")
+        history.append(
+            ["金汉武", "2026-01-17", "2", "方和", None, None, "黑棕面用修色精", 1, 4, 4, 48, 192]
+        )
+        history.append(
+            ["金汉武", future_date, "2", "方和", None, None, "黑棕面用修色精", 1, 4, 4, 99, 396]
+        )
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    dataset = parse_file(path, target_type="customer_products")
+    product = next(row for row in dataset.rows if row.values.get("name") == "黑棕面用修色精")
+
+    assert product.values["price"] == 48.0
+    assert dataset.source_features["latest_record_selection"]["future_dated_records_skipped"] == 1
+    warning = next(
+        warning for warning in dataset.warnings if warning["code"] == "ETL_FUTURE_DATED_SOURCE_ROW"
+    )
+    assert warning["rows"] == [{"sheet": "出货历史", "row": 2, "source_date": future_date}]
 
 
 def test_companion_history_keeps_evidenced_numeric_models_separate(tmp_path, monkeypatch):
@@ -281,8 +330,12 @@ def test_companion_history_keeps_evidenced_numeric_models_separate(tmp_path, mon
         history = workbook.create_sheet("出货历史")
         # A positive 9804 variant, its return, and a 6832 variant mirror a
         # real ledger shape: order marker | numeric SKU | blank columns | product.
-        history.append(["金汉武", 45702, "1号", 9804, None, None, "PE 白底漆", 5, 28, 140, 9.2, 1288])
-        history.append(["金汉武", 45702, "1号", "退货9804", None, None, "PE 白底漆", -3, 28, -84, 9.2, -772.8])
+        history.append(
+            ["金汉武", 45702, "1号", 9804, None, None, "PE 白底漆", 5, 28, 140, 9.2, 1288]
+        )
+        history.append(
+            ["金汉武", 45702, "1号", "退货9804", None, None, "PE 白底漆", -3, 28, -84, 9.2, -772.8]
+        )
         history.append(["金汉武", 45702, "1号", 6832, None, None, "PE 白底漆", 2, 30, 60, 8, 480])
 
     _save_workbook(path, build)
@@ -296,8 +349,7 @@ def test_companion_history_keeps_evidenced_numeric_models_separate(tmp_path, mon
     products = [
         row
         for row in dataset.rows
-        if row.values.get("customer_name") == "金汉武家私"
-        and row.values.get("name") == "PE 白底漆"
+        if row.values.get("customer_name") == "金汉武家私" and row.values.get("name") == "PE 白底漆"
     ]
 
     assert {
@@ -352,10 +404,10 @@ def test_modeled_delivery_and_model_less_newer_quote_are_blocked_for_review(tmp_
         for row in conflict_rows
         for issue in row.provenance["validation_issues"]
     )
-    assert dataset.source_features["latest_record_selection"]["model_identity_ambiguity_groups"] == 1
-    assert any(
-        warning["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY" for warning in dataset.warnings
+    assert (
+        dataset.source_features["latest_record_selection"]["model_identity_ambiguity_groups"] == 1
     )
+    assert any(warning["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY" for warning in dataset.warnings)
 
 
 def test_shipment_history_order_note_is_not_treated_as_product_model(tmp_path, monkeypatch):
@@ -373,8 +425,12 @@ def test_shipment_history_order_note_is_not_treated_as_product_model(tmp_path, m
 
         history = workbook.create_sheet("出货历史")
         # "未签单" is an order-state note in the model column, not a SKU.
-        history.append(["名品（晶美鑫）", 46000, "2", "未签单", None, None, "全哑黑面漆", 1, 20, 20, 18, 360])
-        history.append(["名品（晶美鑫）", 45900, "2", None, None, None, "全哑黑面漆", 1, 20, 20, 17, 340])
+        history.append(
+            ["名品（晶美鑫）", 46000, "2", "未签单", None, None, "全哑黑面漆", 1, 20, 20, 18, 360]
+        )
+        history.append(
+            ["名品（晶美鑫）", 45900, "2", None, None, None, "全哑黑面漆", 1, 20, 20, 17, 340]
+        )
 
     _save_workbook(path, build)
     monkeypatch.setenv("FHD_ETL_LLM", "off")
@@ -414,7 +470,17 @@ def test_mixed_workbook_projects_delivery_regions_and_reuses_extracted_layout(
         sheet.append(["购货单位：甲家具  联系人：张总  2026年01月21日  订单编号：A-1"])
         sheet.merge_cells("A2:I2")
         sheet.append(
-            ["产品型号", None, None, "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"]
+            [
+                "产品型号",
+                None,
+                None,
+                "产品名称",
+                "数量/件",
+                "规格/KG",
+                "数量/KG",
+                "单价/元",
+                "金额/元",
+            ]
         )
         sheet.merge_cells("A3:C3")
         for row in range(4, 8):
@@ -422,7 +488,9 @@ def test_mixed_workbook_projects_delivery_regions_and_reuses_extracted_layout(
         sheet.append(["P-1", None, None, "底漆", 1, 20, 20, 10, 200])
         sheet.append([None, None, None, "固化剂", 1, 20, 20, 12, 240])
         sheet.append([None])
-        sheet.append(["合 计", None, None, None, "=SUM(E4:E7)", None, "=SUM(G4:G7)", None, "=SUM(I4:I7)"])
+        sheet.append(
+            ["合 计", None, None, None, "=SUM(E4:E7)", None, "=SUM(G4:G7)", None, "=SUM(I4:I7)"]
+        )
         sheet.merge_cells("A8:C8")
         sheet.append(["销售协议", "测试协议"])
         sheet.append(["销售单位：某公司"])
@@ -500,10 +568,7 @@ def test_mixed_workbook_projects_delivery_regions_and_reuses_extracted_layout(
         assert sheet["F4"].value == 28
         assert sheet["G4"].value == 84
         assert sheet["I4"].value == 1428
-        assert any(
-            sheet.cell(row, 1).value == "销售协议"
-            for row in range(1, sheet.max_row + 1)
-        )
+        assert any(sheet.cell(row, 1).value == "销售协议" for row in range(1, sheet.max_row + 1))
     finally:
         workbook.close()
 

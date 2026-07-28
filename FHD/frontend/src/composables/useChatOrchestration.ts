@@ -35,6 +35,7 @@ import { useAgentRunEventSync } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { authenticatedRequestInit } from '@/utils/authenticatedRequest'
 
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
@@ -891,12 +892,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     try {
       let result
       if (method === 'GET') {
-        result = await fetch(apiUrl)
+        result = await fetch(apiUrl, await authenticatedRequestInit('GET'))
       } else {
+        const requestInit = await authenticatedRequestInit('POST', {
+          'Content-Type': 'application/json',
+        })
         result = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          ...requestInit,
+          body: JSON.stringify(payload),
         })
       }
 

@@ -121,6 +121,14 @@ const {
   },
 }))
 
+const authenticatedRequestInitMock = vi.hoisted(() => vi.fn().mockResolvedValue({
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': 'csrf-from-helper',
+  },
+}))
+
 // ── 可控 ref 状态（在 async vi.mock 工厂中赋值到 state） ──────
 let capturedExcelCallbacks: {
   onAnalyzed?: (e: unknown) => void
@@ -370,6 +378,9 @@ vi.mock('@/constants/coreWorkflowMod', () => ({
 }))
 vi.mock('@/fhd/dbTokenHeaders', () => ({
   FHD_DB_WRITE_UNLOCKED_EVENT: 'fhd:db-write-unlocked',
+}))
+vi.mock('@/utils/authenticatedRequest', () => ({
+  authenticatedRequestInit: authenticatedRequestInitMock,
 }))
 
 import { useChatOrchestration } from './useChatOrchestration'
@@ -993,8 +1004,16 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/tools/execute',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(payload),
+        credentials: 'include',
+        headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-from-helper' }),
+      }),
     )
+    expect(authenticatedRequestInitMock).toHaveBeenCalledWith('POST', {
+      'Content-Type': 'application/json',
+    })
     vi.unstubAllGlobals()
   })
 })
@@ -1049,7 +1068,10 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(fetch).toHaveBeenCalledWith('/api/get')
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/get',
+      expect.objectContaining({ credentials: 'include' }),
+    )
     expect(api.currentTask.value?.completed).toBe(true)
     vi.unstubAllGlobals()
   })

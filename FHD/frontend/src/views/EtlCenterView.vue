@@ -58,6 +58,7 @@ const webhookDraft = reactive({ name: '', endpoint_url: '', headersJson: '{}', s
 const webhookTestMessage = ref('')
 const shipmentTemplateMessage = ref('')
 const customerProductPreviewMessage = ref('')
+const selectedShipmentTemplateRegionId = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 const {
@@ -146,15 +147,33 @@ const savedShipmentTemplate = computed<Record<string, unknown> | null>(() => {
 const savedShipmentTemplateName = computed(() => (
   String(savedShipmentTemplate.value?.name || '').trim()
 ))
+const shipmentTemplateCandidates = computed<Array<Record<string, unknown>>>(() => {
+  const listed = currentRun.value?.source_features?.shipment_template_candidates
+  if (Array.isArray(listed)) {
+    return listed.filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+    )
+  }
+  const legacy = currentRun.value?.source_features?.shipment_template_candidate
+  return legacy && typeof legacy === 'object' && !Array.isArray(legacy)
+    ? [legacy as Record<string, unknown>]
+    : []
+})
 const shipmentTemplateCandidate = computed<Record<string, unknown> | null>(() => {
-  const candidate = currentRun.value?.source_features?.shipment_template_candidate
-  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-    ? candidate as Record<string, unknown>
-    : null
+  const selected = shipmentTemplateCandidates.value.find(
+    (candidate) => String(candidate.source_region_id || '') === selectedShipmentTemplateRegionId.value,
+  )
+  return selected || shipmentTemplateCandidates.value[0] || null
 })
 const shipmentTemplateCandidateName = computed(() => (
   String(shipmentTemplateCandidate.value?.name || '').trim()
 ))
+const linkedCustomerProductPreview = computed<Record<string, unknown> | null>(() => {
+  const linked = currentRun.value?.details?.linked_customer_products_preview
+  return linked && typeof linked === 'object' && !Array.isArray(linked)
+    ? linked as Record<string, unknown>
+    : null
+})
 const linkedCustomerNames = computed(() => {
   const names = runRows.value
     .map((row) => String(row.normalized.customer_name || '').trim())
@@ -267,6 +286,12 @@ function schedulePoll() {
 
 function syncDraft() {
   if (!currentRun.value) return
+  const candidateIds = shipmentTemplateCandidates.value
+    .map((candidate) => String(candidate.source_region_id || '').trim())
+    .filter(Boolean)
+  if (!candidateIds.includes(selectedShipmentTemplateRegionId.value)) {
+    selectedShipmentTemplateRegionId.value = candidateIds[0] || ''
+  }
   editableMappings.value = (currentRun.value.draft.field_mappings || []).map((item) => ({
     ...item,
     transforms: [...(item.transforms || [])],
@@ -400,7 +425,11 @@ async function saveCurrentAsShipmentTemplate() {
   busy.value = true
   shipmentTemplateMessage.value = ''
   try {
-    const result = await etlApi.saveShipmentTemplate(currentRun.value.id, name)
+    const result = await etlApi.saveShipmentTemplate(
+      currentRun.value.id,
+      name,
+      String(shipmentTemplateCandidate.value?.source_region_id || ''),
+    )
     shipmentTemplateMessage.value = result.name
       ? `已保存“${result.name}”。${result.message}`
       : result.message
@@ -415,6 +444,34 @@ async function saveCurrentAsShipmentTemplate() {
 async function previewCustomerProductsFromShipment() {
   if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
   const sourceRun = currentRun.value
+  const linkedRunId = String(linkedCustomerProductPreview.value?.run_id || '').trim()
+  if (linkedRunId) {
+    busy.value = true
+    pageError.value = ''
+    try {
+      const customerProductRun = await etlApi.run(linkedRunId)
+      currentRun.value = customerProductRun
+      targetType.value = 'customer_products'
+      rowPage.value = 1
+      rowActionFilter.value = ''
+      runRows.value = []
+      rowTotal.value = 0
+      if (!runs.value.some((run) => run.id === customerProductRun.id)) {
+        runs.value = [customerProductRun, ...runs.value]
+      }
+      customerProductPreviewMessage.value = '这是同一上传文件自动建立的客户及产品预演；尚未执行，不会写入客户库或产品库。'
+      syncDraft()
+      activeTab.value = tabForRunStatus(customerProductRun.status)
+      if (customerProductRun.status === 'preview_ready') await loadRows()
+      await router.replace({ path: '/business-docking', query: { run_id: customerProductRun.id } })
+      schedulePoll()
+    } catch (error) {
+      pageError.value = error instanceof Error ? error.message : '读取关联客户及产品预演失败'
+    } finally {
+      busy.value = false
+    }
+    return
+  }
   if (!sourceRun.upload_id) {
     pageError.value = '原始上传文件不可用，无法创建客户及产品预演。请重新上传该工作簿。'
     return
@@ -594,8 +651,14 @@ function sheetPlanRows(item: Record<string, unknown>) {
 }
 function latestRecordSelectionText(selection: Record<string, unknown>) {
   const stale = Number(selection.stale_records_skipped || 0)
-  if (!Number.isFinite(stale) || stale <= 0) return '同一客户同一产品按来源日期择最新有效记录。'
-  return `同一客户同一产品已按来源日期选择最新有效记录，并排除 ${stale} 条较早或同日旧记录。`
+  const future = Number(selection.future_dated_records_skipped || 0)
+  const parts = [
+    !Number.isFinite(stale) || stale <= 0
+      ? '同一客户同一产品按来源日期择最新有效记录。'
+      : `同一客户同一产品已按来源日期选择最新有效记录，并排除 ${stale} 条较早或同日旧记录。`,
+  ]
+  if (Number.isFinite(future) && future > 0) parts.push(`另隔离 ${future} 条未来日期记录。`)
+  return parts.join(' ')
 }
 function confidenceClass(value: number) {
   return value >= 0.9 ? 'confidence-high' : value >= 0.6 ? 'confidence-medium' : 'confidence-low'

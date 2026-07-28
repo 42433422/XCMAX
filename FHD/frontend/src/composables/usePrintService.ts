@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { resolveErpApiPath } from '@/utils/erpDomainPaths'
+import { authenticatedRequestInit } from '@/utils/authenticatedRequest'
 
 export interface PrintResult {
   success: boolean
@@ -33,9 +34,12 @@ export function usePrintService() {
 
   async function printLabel(filePath: string, copies: number = 1): Promise<PrintResult> {
     try {
+      const requestInit = await authenticatedRequestInit('POST', {
+        'Content-Type': 'application/json',
+      })
       const resp = await fetch(resolveErpApiPath('/api/print/label'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        ...requestInit,
         // This call only runs after the user clicks “开始打印”; that click is
         // the explicit confirmation for both labels and the shipment document.
         body: JSON.stringify({ file_path: filePath, copies, require_confirm: false })
@@ -64,9 +68,12 @@ export function usePrintService() {
     orderId?: number,
   ): Promise<PrintResult> {
     try {
+      const requestInit = await authenticatedRequestInit('POST', {
+        'Content-Type': 'application/json',
+      })
       const resp = await fetch(resolveErpApiPath('/api/print/document'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        ...requestInit,
         body: JSON.stringify({
           file_path: filePath,
           print_token: printToken,
@@ -117,7 +124,9 @@ export function usePrintService() {
 
       const resp = await fetch(resolveErpApiPath('/api/shipment/print'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        ...(await authenticatedRequestInit('POST', {
+          'Content-Type': 'application/json',
+        })),
         body: JSON.stringify(payload)
       })
       const data = (await resp.json().catch(() => ({}))) as ApiResultPayload

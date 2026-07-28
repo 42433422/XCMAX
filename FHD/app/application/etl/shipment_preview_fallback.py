@@ -17,7 +17,7 @@ import math
 import os
 import re
 import tempfile
-from datetime import UTC
+from datetime import UTC, date
 from pathlib import Path
 from typing import Any
 
@@ -115,6 +115,32 @@ def _candidate_price(normalized: dict[str, Any]) -> float | None:
     return price if math.isfinite(price) and price >= 0 else None
 
 
+def _candidate_specification(normalized: dict[str, Any]) -> float | None:
+    value = normalized.get("specification")
+    if value in (None, ""):
+        value = normalized.get("tin_spec")
+    if value in (None, ""):
+        return None
+    try:
+        specification = float(str(value).replace(",", "").replace("KG", "").replace("kg", ""))
+    except (TypeError, ValueError):
+        return None
+    return specification if math.isfinite(specification) and specification > 0 else None
+
+
+def _candidate_source_date(row: EtlRunRow) -> str:
+    """Return only an evidenced ISO business date from a persisted row."""
+
+    provenance = load_json(row.provenance_json, {})
+    if not isinstance(provenance, dict):
+        return ""
+    value = str(provenance.get("source_date") or provenance.get("order_date") or "").strip()
+    try:
+        return date.fromisoformat(value).isoformat()
+    except (TypeError, ValueError):
+        return ""
+
+
 def _preview_runs(
     db: Any,
     *,
@@ -138,35 +164,43 @@ def _preview_runs(
     )
 
 
-def resolve_preview_product_candidate(
+def resolve_preview_product_candidate_outcome(
     *,
     owner_user_id: int | None,
     unit_name: str,
     product_name: str,
-) -> dict[str, Any] | None:
-    """Find one exact, valid product candidate from this user's ETL preview.
+) -> dict[str, Any]:
+    """Resolve a scoped preview candidate without hiding a data conflict.
 
     This is an intentionally conservative match.  The requested customer and
     product must match exactly after the same harmless alias normalization used
-    by the shipment flow.  If a newer run contains conflicting candidate
-    details for the same product, the function fails closed instead of choosing
-    a price or model on the user's behalf.
+    by the shipment flow.  ``status`` is one of ``resolved``, ``not_found``,
+    ``conflict`` or ``unavailable``.  The structured status lets confirmed
+    shipment execution distinguish a genuinely absent personal preview from
+    conflicting personal preview facts: the latter must not silently fall back
+    to stale master-product data.
+
+    The legacy :func:`resolve_preview_product_candidate` wrapper below retains
+    its original ``dict | None`` contract for display-only callers.
     """
 
     scope = _valid_owner_and_tenant(owner_user_id)
     normalized_unit = _normalize_customer_name(unit_name)
     normalized_product = _normalize_product_name(product_name)
     if scope is None or not normalized_unit or not normalized_product:
-        return None
+        return {"status": "unavailable", "candidate": None}
     tenant_id, owner = scope
 
     try:
         with get_db() as db:
-            for run in _preview_runs(
-                db,
-                tenant_id=tenant_id,
-                owner_user_id=owner,
-                target_type="customer_products",
+            matches: list[dict[str, Any]] = []
+            for run_rank, run in enumerate(
+                _preview_runs(
+                    db,
+                    tenant_id=tenant_id,
+                    owner_user_id=owner,
+                    target_type="customer_products",
+                )
             ):
                 rows = (
                     db.query(EtlRunRow)
@@ -182,7 +216,6 @@ def resolve_preview_product_candidate(
                     )
                     .all()
                 )
-                matches: list[tuple[EtlRunRow, dict[str, Any], str, str, float | None]] = []
                 for row in rows:
                     normalized = _row_is_valid_candidate(row)
                     if normalized is None:
@@ -196,51 +229,123 @@ def resolve_preview_product_candidate(
                         continue
                     model_number = str(normalized.get("model_number") or "").strip().upper()
                     price = _candidate_price(normalized)
-                    matches.append((row, normalized, candidate_name, model_number, price))
-
-                if not matches:
-                    continue
-
-                # Repeated delivery rows are normal.  They are safe only when
-                # all business attributes that could affect the printed order
-                # agree; otherwise the user needs to select/correct the row in
-                # the ETL preview first.
-                identities = {
-                    (
-                        _normalize_product_name(name),
-                        model_number,
-                        price,
+                    matches.append(
+                        {
+                            "run": run,
+                            "run_rank": run_rank,
+                            "row": row,
+                            "normalized": normalized,
+                            "name": candidate_name,
+                            "model_number": model_number,
+                            "price": price,
+                            "specification": _candidate_specification(normalized),
+                            "source_date": _candidate_source_date(row),
+                        }
                     )
-                    for _row, _normalized, name, model_number, price in matches
-                }
-                if len(identities) != 1:
-                    return None
 
-                row, _normalized, candidate_name, model_number, price = matches[0]
-                return {
+            if not matches:
+                return {"status": "not_found", "candidate": None}
+
+            # Prefer the newest *business fact*, not the most recently
+            # uploaded workbook.  An old upload with a newer delivery date is
+            # still more authoritative than a newly uploaded historical file.
+            dated = [match for match in matches if match["source_date"]]
+            if dated:
+                newest_date = max(str(match["source_date"]) for match in dated)
+                finalists = [match for match in dated if match["source_date"] == newest_date]
+            else:
+                # Legacy previews without provenance dates retain their
+                # newest-preview ordering, but must still agree exactly.
+                newest_run_rank = min(int(match["run_rank"]) for match in matches)
+                finalists = [
+                    match for match in matches if int(match["run_rank"]) == newest_run_rank
+                ]
+
+            # Repeated delivery rows are normal.  Conflicting same-date facts
+            # are not: do not choose a model/price/specification based on a
+            # worksheet or upload ordering the user never confirmed.
+            identities = {
+                (
+                    _normalize_product_name(str(match["name"])),
+                    str(match["model_number"]),
+                    match["price"],
+                    match["specification"],
+                )
+                for match in finalists
+            }
+            if len(identities) != 1:
+                return {"status": "conflict", "candidate": None}
+
+            finalist = sorted(
+                finalists,
+                key=lambda match: (
+                    int(match["run_rank"]),
+                    str(match["row"].source_sheet or ""),
+                    int(match["row"].source_row),
+                    int(match["row"].id or 0),
+                ),
+            )[0]
+            row = finalist["row"]
+            candidate_name = str(finalist["name"])
+            model_number = str(finalist["model_number"])
+            price = finalist["price"]
+            specification = finalist["specification"]
+            source_date = str(finalist["source_date"])
+            return {
+                "status": "resolved",
+                "candidate": {
                     "name": candidate_name,
                     "model_number": model_number,
                     "price": price,
+                    "specification": specification,
+                    "source_date": source_date or None,
                     "unit_name": str(unit_name or "").strip(),
                     "warning": PRODUCT_PREVIEW_WARNING,
                     "provenance": {
                         "kind": "etl_preview_product_candidate",
-                        "run_id": str(run.id),
+                        "run_id": str(finalist["run"].id),
                         "source_sheet": str(row.source_sheet or ""),
                         "source_row": int(row.source_row),
+                        "source_date": source_date or None,
                         "resolved_product": {
                             "name": candidate_name,
                             "model_number": model_number,
                             "unit_price": price,
+                            "specification": specification,
                         },
                     },
-                }
+                },
+            }
     except RECOVERABLE_ERRORS:
         # A preview fallback must never turn an unavailable ETL store into a
         # permissive document generation path.  Callers retain their normal
-        # strict product-not-found response.
+        # strict product-not-found response unless a known conflict was found.
+        return {"status": "unavailable", "candidate": None}
+    return {"status": "not_found", "candidate": None}
+
+
+def resolve_preview_product_candidate(
+    *,
+    owner_user_id: int | None,
+    unit_name: str,
+    product_name: str,
+) -> dict[str, Any] | None:
+    """Find one exact, valid product candidate from this user's ETL preview.
+
+    Backward-compatible display-oriented wrapper.  Callers that must keep a
+    confirmed shipment from falling back to stale master data on a known ETL
+    conflict should use :func:`resolve_preview_product_candidate_outcome`.
+    """
+
+    outcome = resolve_preview_product_candidate_outcome(
+        owner_user_id=owner_user_id,
+        unit_name=unit_name,
+        product_name=product_name,
+    )
+    if not isinstance(outcome, dict) or outcome.get("status") != "resolved":
         return None
-    return None
+    candidate = outcome.get("candidate")
+    return dict(candidate) if isinstance(candidate, dict) else None
 
 
 def _selected_region(
@@ -268,27 +373,40 @@ def _layout_candidate_for_run(
     source_features = load_json(run.source_features_json, {})
     if not isinstance(source_features, dict):
         return None
-    candidate = source_features.get("shipment_template_candidate")
-    if not isinstance(candidate, dict):
+    candidates_raw = source_features.get("shipment_template_candidates")
+    candidates = (
+        [candidate for candidate in candidates_raw if isinstance(candidate, dict)]
+        if isinstance(candidates_raw, list)
+        else []
+    )
+    if not candidates:
+        candidate = source_features.get("shipment_template_candidate")
+        if isinstance(candidate, dict):
+            candidates = [candidate]
+    if not candidates:
         # Runs produced before the visible-candidate UI shipped still carry the
         # same selected region evidence.  Build the metadata only; do not save
         # a template record.
-        from app.application.etl.service_shipment_templates import shipment_template_candidate
+        from app.application.etl.service_shipment_templates import shipment_template_candidates
 
-        candidate = shipment_template_candidate(source_features, "发货单.xlsx")
-    if not isinstance(candidate, dict) or candidate.get("status") != "detected":
+        candidates = shipment_template_candidates(source_features, "发货单.xlsx")
+    candidate = next(
+        (
+            item
+            for item in candidates
+            if str(item.get("status") or "") == "detected"
+            and _normalize_customer_name(str(item.get("customer_name") or ""))
+            == _normalize_customer_name(unit_name)
+        ),
+        None,
+    )
+    if not isinstance(candidate, dict):
         return None
     source_region_id = str(candidate.get("source_region_id") or "").strip()
-    if not source_region_id:
-        return None
     region = _selected_region(source_features, source_region_id)
-    if region is None:
+    if not source_region_id or region is None:
         return None
     customer_name = str(region.get("customer_name") or candidate.get("customer_name") or "").strip()
-    if not customer_name or _normalize_customer_name(customer_name) != _normalize_customer_name(
-        unit_name
-    ):
-        return None
     upload = (
         db.query(EtlUpload)
         .filter(
@@ -490,6 +608,7 @@ def materialize_preview_layout_candidate(
             upload_path,
             source_features=record["source_features"],
             destination=destination,
+            source_region_id=str(record.get("source_region_id") or ""),
         )
         if not destination.is_file() or destination.stat().st_size <= 0:
             raise OSError("ETL preview layout extraction produced no file")
@@ -533,4 +652,5 @@ __all__ = [
     "find_latest_preview_layout_candidate",
     "materialize_preview_layout_candidate",
     "resolve_preview_product_candidate",
+    "resolve_preview_product_candidate_outcome",
 ]

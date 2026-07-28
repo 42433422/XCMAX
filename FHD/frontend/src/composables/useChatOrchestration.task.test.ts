@@ -8,6 +8,13 @@ const executePrintTask = vi.fn()
 const buildPrintSummaryMessage = vi.fn(() => '打印完成')
 const upsertTask = vi.fn()
 const handleChatRequiresToken = vi.fn()
+const authenticatedRequestInitMock = vi.hoisted(() => vi.fn().mockResolvedValue({
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': 'csrf-from-helper',
+  },
+}))
 
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
@@ -201,6 +208,9 @@ vi.mock('@/utils/shipmentMgmtPostPrint', () => ({
 }))
 vi.mock('@/workflow/coreWorkflowDispatcher', () => ({ dispatchCoreWorkflowModRun: vi.fn() }))
 vi.mock('@/constants/coreWorkflowMod', () => ({ isCoreWorkflowModInstalled: () => false }))
+vi.mock('@/utils/authenticatedRequest', () => ({
+  authenticatedRequestInit: authenticatedRequestInitMock,
+}))
 
 import { useChatOrchestration } from './useChatOrchestration'
 

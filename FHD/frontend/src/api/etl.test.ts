@@ -111,6 +111,26 @@ describe('etlApi', () => {
     })
   })
 
+  it('sends the explicitly selected shipment layout region to the save API', async () => {
+    await etlApi.saveShipmentTemplate(
+      'run/1',
+      '金汉武家私-发货单版式',
+      '侯雪梅!R29C1:10',
+    )
+
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      '/api/etl/runs/run%2F1/shipment-template',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: '金汉武家私-发货单版式',
+          source_region_id: '侯雪梅!R29C1:10',
+        }),
+      }),
+    )
+    expect(primeCsrfCookieMock).toHaveBeenCalledTimes(1)
+  })
+
   it('falls back to an HTTP error when the response body is not JSON', async () => {
     apiFetchMock.mockResolvedValueOnce({
       ok: false,

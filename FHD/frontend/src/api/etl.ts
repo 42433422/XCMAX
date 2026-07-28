@@ -213,7 +213,7 @@ export const etlApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ confirmed: true, valid_rows_only: validRowsOnly }),
     }),
-  saveShipmentTemplate: (id: string, name = '') =>
+  saveShipmentTemplate: (id: string, name = '', sourceRegionId = '') =>
     request<{
       template_id: string
       name: string
@@ -223,7 +223,10 @@ export const etlApi = {
     }>(`/api/etl/runs/${encodeURIComponent(id)}/shipment-template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({
+        name,
+        ...(sourceRegionId ? { source_region_id: sourceRegionId } : {}),
+      }),
     }),
   retry: (id: string) =>
     request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),

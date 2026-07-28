@@ -660,6 +660,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
       run.id,
       '',
+      '',
     )
     expect(wrapper.text()).toContain('金汉武家私-发货单版式')
     expect(wrapper.text()).toContain('后续开单会自动匹配')
@@ -710,6 +711,60 @@ describe('EtlCenterView folder workflow', () => {
     expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
       run.id,
       '金汉武专用打印版式',
+      '',
+    )
+    wrapper.unmount()
+  })
+
+  it('uses the operator-selected shipment layout region when saving a multi-layout workbook', async () => {
+    const run = {
+      ...previewRun('shipment-multi-layout-run'),
+      file_name: '侯雪梅.xlsx',
+      target_type: 'shipment_records',
+      source_features: {
+        shipment_template_candidates: [
+          {
+            name: '金汉武家私-发货单版式',
+            source_region_id: '侯雪梅!R3C1:10',
+            sheet: '侯雪梅',
+            header_row: 3,
+            customer_name: '金汉武家私',
+          },
+          {
+            name: '宏运家具-发货单版式',
+            source_region_id: '侯雪梅!R29C1:10',
+            sheet: '侯雪梅',
+            header_row: 29,
+            customer_name: '宏运家具',
+          },
+        ],
+      },
+    }
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.saveShipmentTemplate.mockResolvedValue({
+      template_id: 'db:14',
+      name: '宏运家具-发货单版式',
+      file_path: '/runtime/宏运家具-发货单版式.xlsx',
+      source_region_id: '侯雪梅!R29C1:10',
+      message: '已保存发货单版式',
+    })
+    vi.spyOn(window, 'prompt').mockReturnValue('')
+
+    const wrapper = await mountView(run.id)
+    const layoutSelect = wrapper.find('[data-testid="shipment-template-candidate"] select')
+    expect(layoutSelect.exists()).toBe(true)
+    expect(wrapper.text()).toContain('金汉武家私-发货单版式')
+
+    await layoutSelect.setValue('侯雪梅!R29C1:10')
+    await flushPromises()
+    expect(wrapper.text()).toContain('宏运家具-发货单版式')
+    await buttonByText(wrapper, '保存发货单版式')?.trigger('click')
+    await flushPromises()
+
+    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
+      run.id,
+      '',
+      '侯雪梅!R29C1:10',
     )
     wrapper.unmount()
   })
@@ -760,6 +815,51 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('客户及产品预演已创建')
     expect(wrapper.text()).toContain('不会写入客户库或产品库')
     expect(wrapper.text()).toContain('正在规划客户与产品附表')
+    wrapper.unmount()
+  })
+
+  it('opens the automatically linked customer-products preview without creating another run', async () => {
+    const shipment = {
+      ...previewRun('shipment-linked-preview-run'),
+      file_name: '侯雪梅.xlsx',
+      upload_id: 'upload-houxuemei',
+      target_type: 'shipment_records',
+      details: {
+        linked_customer_products_preview: {
+          run_id: 'customer-products-linked-run',
+          target_type: 'customer_products',
+          preview_only: true,
+          status: 'preview_ready',
+        },
+      },
+      source_features: {
+        business_document_type: 'delivery_note',
+      },
+    }
+    const linked = {
+      ...previewRun('customer-products-linked-run'),
+      file_name: '侯雪梅.xlsx',
+      upload_id: 'upload-houxuemei',
+      target_type: 'customer_products',
+    }
+    etlApiMock.run.mockImplementation(async (id: string) => (
+      id === shipment.id ? shipment : linked
+    ))
+
+    const wrapper = await mountView(shipment.id)
+    expect(wrapper.text()).toContain('已自动规划客户库和产品库预演')
+    expect(buttonByText(wrapper, '查看客户及产品预演')).toBeTruthy()
+    etlApiMock.preview.mockClear()
+    etlApiMock.execute.mockClear()
+
+    await buttonByText(wrapper, '查看客户及产品预演')?.trigger('click')
+    await flushPromises()
+
+    expect(etlApiMock.run).toHaveBeenLastCalledWith('customer-products-linked-run')
+    expect(etlApiMock.preview).not.toHaveBeenCalled()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('这是同一上传文件自动建立的客户及产品预演')
+    expect(wrapper.text()).toContain('客户及产品')
     wrapper.unmount()
   })
 

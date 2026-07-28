@@ -148,8 +148,71 @@ class PreviewServiceMixin:
         db.flush()
         run_id = run.id
         tenant_id = tenant_id_for_write()
+        companion_run: EtlRun | None = None
+        # A multi-sheet delivery workbook normally contains both a printable
+        # delivery-note layout and customer/product facts in supporting tabs.
+        # Auto detection therefore creates a second, *preview-only* snapshot
+        # of those facts.  It is not an execution, does not touch master data,
+        # and keeps the primary shipment run as the task the user sees first.
+        # This lets the later authenticated chat confirmation resolve exactly
+        # the same uploaded evidence without making the user discover a hidden
+        # second "预演客户及产品" step.
+        is_auto_shipment_preview = bool(
+            target_detection and adapter.type == "shipment_records" and not template_id
+        )
+        if is_auto_shipment_preview and upload.suffix.lower() in {".xlsx", ".xlsm"}:
+            companion_adapter = get_adapter("customer_products")
+            companion_draft: dict[str, Any] = {
+                "field_mappings": [],
+                "validation_rules": [],
+                "match_keys": list(companion_adapter.default_match_keys),
+                "allowed_update_fields": [],
+                "action_rules": {"duplicate": "skip"},
+                "target_config_id": None,
+                "ocr_confirmed": False,
+                "linked_preview": {
+                    "kind": "shipment_companion_customer_products",
+                    "parent_run_id": run_id,
+                    "read_only": True,
+                },
+            }
+            companion_run = EtlRun(
+                id=new_id(),
+                tenant_id=tenant_id,
+                owner_user_id=owner_user_id,
+                upload_id=upload.id,
+                target_type="customer_products",
+                status="queued",
+                stage="queued",
+                progress=0,
+                file_sha256=upload.sha256,
+                summary_json=dump_json(
+                    {
+                        "file_name": upload.file_name,
+                        "file_sha256": upload.sha256,
+                        "batch_id": upload.batch_id,
+                        "relative_path": upload.relative_path or upload.file_name,
+                        "linked_from_shipment_preview": run_id,
+                        "preview_only": True,
+                    }
+                ),
+                draft_json=dump_json(companion_draft),
+                reversible=companion_adapter.reversible,
+            )
+            db.add(companion_run)
+            primary_summary = load_json(run.summary_json, {})
+            primary_summary["linked_customer_products_preview"] = {
+                "run_id": companion_run.id,
+                "target_type": "customer_products",
+                "status": "queued",
+                "preview_only": True,
+                "message": "正在从同一文件的附表生成客户及产品预演；不会写入客户库或产品库。",
+            }
+            run.summary_json = dump_json(primary_summary)
         db.commit()
         self._submit_preview(run_id, tenant_id, owner_user_id)
+        if companion_run is not None:
+            self._submit_preview(companion_run.id, tenant_id, owner_user_id)
         db.expire_all()
         return self.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
 
@@ -208,12 +271,16 @@ class PreviewServiceMixin:
                 # the preview.  The user must still explicitly save it before
                 # it enters their private template library.
                 from app.application.etl.service_shipment_templates import (
-                    shipment_template_candidate,
+                    shipment_template_candidates,
                 )
 
-                candidate = shipment_template_candidate(source_features, upload.file_name)
-                if candidate:
-                    source_features["shipment_template_candidate"] = candidate
+                candidates = shipment_template_candidates(source_features, upload.file_name)
+                if candidates:
+                    # Keep the legacy scalar for callers released before
+                    # multi-layout selection, while exposing every auditable
+                    # layout to the data-docking UI and chat resolver.
+                    source_features["shipment_template_candidates"] = candidates
+                    source_features["shipment_template_candidate"] = dict(candidates[0])
             if not draft.get("field_mappings"):
                 deterministic_mappings = self._suggest_mappings(
                     dataset, get_adapter(run.target_type)
@@ -246,6 +313,7 @@ class PreviewServiceMixin:
             run.stage = "preview_ready"
             run.progress = 100
             run.processed_rows = run.total_rows
+            self._update_linked_companion_summary(db, run, status="preview_ready")
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")
         except Exception as exc:  # noqa: BLE001
@@ -257,6 +325,7 @@ class PreviewServiceMixin:
                 run.stage = "failed"
                 run.error_code = code
                 run.error_message = message[:500]
+                self._update_linked_companion_summary(db, run, status="failed")
                 db.commit()
                 self._record_preview_metrics(run, started_at, status="failed")
             except Exception:  # noqa: BLE001
@@ -265,6 +334,59 @@ class PreviewServiceMixin:
         finally:
             db.close()
             reset_etl_llm_owner(llm_owner_token)
+
+    @staticmethod
+    def _update_linked_companion_summary(
+        db: Session,
+        run: EtlRun,
+        *,
+        status: str,
+    ) -> None:
+        """Reflect a companion preview state on its shipment parent.
+
+        The linkage is UI/trace metadata only.  It never copies rows into the
+        shipment target and never changes any customer or product record.
+        """
+
+        details = load_json(run.summary_json, {})
+        parent_id = str(details.get("linked_from_shipment_preview") or "").strip()
+        if not parent_id:
+            return
+        parent = (
+            db.query(EtlRun)
+            .filter(
+                EtlRun.id == parent_id,
+                EtlRun.tenant_id == run.tenant_id,
+                EtlRun.owner_user_id == run.owner_user_id,
+                EtlRun.target_type == "shipment_records",
+            )
+            .first()
+        )
+        if parent is None:
+            return
+        parent_details = load_json(parent.summary_json, {})
+        link = parent_details.get("linked_customer_products_preview")
+        if not isinstance(link, dict) or str(link.get("run_id") or "") != str(run.id):
+            return
+        link = {
+            **link,
+            "status": status,
+            "progress": int(run.progress or 0),
+            "total_rows": int(run.total_rows or 0),
+            "summary": {
+                "new": int(run.new_rows or 0),
+                "update": int(run.update_rows or 0),
+                "skip": int(run.skip_rows or 0),
+                "error": int(run.error_rows or 0),
+            },
+            "error": (
+                {"code": run.error_code, "message": run.error_message}
+                if status == "failed" and run.error_code
+                else None
+            ),
+        }
+        parent_details["linked_customer_products_preview"] = link
+        parent.summary_json = dump_json(parent_details)
 
     @staticmethod
     def _record_preview_metrics(run: EtlRun, started_at: float, *, status: str) -> None:

@@ -229,6 +229,7 @@ def save_shipment_template(
             run_id=run_id,
             owner_user_id=_user_id(user),
             name=body.name,
+            source_region_id=body.source_region_id,
         ),
     }
 

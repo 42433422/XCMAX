@@ -76,6 +76,7 @@ class EtlExecuteRequest(BaseModel):
 
 class EtlShipmentTemplateRequest(BaseModel):
     name: str = Field(default="", max_length=160)
+    source_region_id: str | None = Field(default=None, max_length=300)
 
 
 class EtlTemplateRequest(BaseModel):

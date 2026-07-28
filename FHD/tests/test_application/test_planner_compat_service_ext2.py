@@ -1118,10 +1118,15 @@ class TestCompatChatStreamAsync:
                 chunks.append(chunk)
             assert self._event(chunks[0]) == {
                 "type": "tool_progress",
+                "label": "正在识别需求",
+                "phase": "intent_recognition",
+            }
+            assert self._event(chunks[1]) == {
+                "type": "tool_progress",
                 "label": "正在连接模型服务",
                 "phase": "model_connect",
             }
-            assert chunks[1:] == [b"chunk1", b"chunk2"]
+            assert chunks[2:] == [b"chunk1", b"chunk2"]
 
     @pytest.mark.asyncio
     async def test_stream_with_explicit_ai_tier(self):
@@ -1141,8 +1146,9 @@ class TestCompatChatStreamAsync:
             chunks = []
             async for chunk in compat_chat_stream_async(request, body, ai_tier="p2"):
                 chunks.append(chunk)
-            assert self._event(chunks[0])["type"] == "tool_progress"
-            assert chunks[1:] == [b"data"]
+            assert self._event(chunks[0])["phase"] == "intent_recognition"
+            assert self._event(chunks[1])["phase"] == "model_connect"
+            assert chunks[2:] == [b"data"]
             # Verify ai_tier was passed through
             _, kwargs = mock_planner_stream.call_args
             assert kwargs.get("ai_tier") == "p2"
@@ -1198,6 +1204,11 @@ class TestCompatChatStreamAsync:
         stream_fn.assert_not_called()
         events = [self._event(chunk) for chunk in chunks]
         assert events == [
+            {
+                "type": "tool_progress",
+                "label": "正在识别需求",
+                "phase": "intent_recognition",
+            },
             {"type": "token", "text": preview["response"]},
             {"type": "done", "result": preview},
         ]
@@ -1205,10 +1216,47 @@ class TestCompatChatStreamAsync:
         assert "print" not in events[-1]["result"]
 
     @pytest.mark.asyncio
+    async def test_shipment_preview_uses_request_state_owner_not_client_session_id(self):
+        body = XcagiCompatChatBody(
+            message="打印金汉武发货单，编号9803，规格28，3桶",
+            user_id="999999",
+        )
+        request = _make_request()
+        request.state.user_id = 42
+        preview = {"success": True, "response": "已识别订单", "task": {"type": "shipment_generate"}}
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment", "slots": {}},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
+                return_value=preview,
+            ) as preview_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        assert preview_fn.call_args.args == (body.message,)
+        assert preview_fn.call_args.kwargs["authenticated_owner_user_id"] == 42
+        assert [self._event(chunk)["type"] for chunk in chunks] == [
+            "tool_progress",
+            "token",
+            "done",
+        ]
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("message", "intent", "builder_name", "response"),
         [
-            ("有哪些客户？", "customers_query", "build_customers_query_response_dict", "共找到 2 位客户：\n- 甲公司"),
+            (
+                "有哪些客户？",
+                "customers_query",
+                "build_customers_query_response_dict",
+                "共找到 2 位客户：\n- 甲公司",
+            ),
             ("查产品", "product_query", "build_product_query_response_dict", "已打开产品副窗。"),
         ],
     )
@@ -1232,7 +1280,9 @@ class TestCompatChatStreamAsync:
             ) as builder,
             patch(
                 "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
-                side_effect=AssertionError("read-only business query must not invoke the LLM stream"),
+                side_effect=AssertionError(
+                    "read-only business query must not invoke the LLM stream"
+                ),
             ) as stream_fn,
         ):
             chunks = []
@@ -1242,6 +1292,11 @@ class TestCompatChatStreamAsync:
         builder.assert_called_once()
         stream_fn.assert_not_called()
         assert [self._event(chunk) for chunk in chunks] == [
+            {
+                "type": "tool_progress",
+                "label": "正在识别需求",
+                "phase": "intent_recognition",
+            },
             {"type": "token", "text": response},
             {"type": "done", "result": payload},
         ]
@@ -1267,5 +1322,6 @@ class TestCompatChatStreamAsync:
                 chunks.append(chunk)
 
         stream_fn.assert_called_once()
-        assert self._event(chunks[0])["type"] == "tool_progress"
-        assert chunks[1:] == [b"normal-path"]
+        assert self._event(chunks[0])["phase"] == "intent_recognition"
+        assert self._event(chunks[1])["phase"] == "model_connect"
+        assert chunks[2:] == [b"normal-path"]

@@ -27,13 +27,15 @@ def _safe_template_name(value: str, fallback: str) -> str:
     return text or "发货单版式"
 
 
-def _selected_shipment_region(source_features: dict[str, Any]) -> dict[str, Any]:
-    """Return the same first selected region the extractor promotes to a layout.
+def _selected_shipment_region(
+    source_features: dict[str, Any],
+    source_region_id: str | None = None,
+) -> dict[str, Any]:
+    """Return one selected region, optionally chosen by its audited id.
 
-    A workbook can contain more than one delivery-note region. The saved
-    document template must be named for the actual region that becomes the
-    template, rather than for the arbitrary upload filename. Keep this sort
-    order aligned with ``extract_shipment_template``'s region selection.
+    The fallback sort keeps compatibility for older callers.  New callers
+    pass ``source_region_id`` from an ETL preview so a multi-document workbook
+    never saves a template for a different customer by accident.
     """
 
     selected = [
@@ -43,6 +45,12 @@ def _selected_shipment_region(source_features: dict[str, Any]) -> dict[str, Any]
     ]
     if not selected:
         return {}
+    requested = str(source_region_id or "").strip()
+    if requested:
+        return next(
+            (region for region in selected if str(region.get("id") or "") == requested),
+            {},
+        )
     return sorted(
         selected,
         key=lambda region: (
@@ -52,15 +60,16 @@ def _selected_shipment_region(source_features: dict[str, Any]) -> dict[str, Any]
     )[0]
 
 
-def _shipment_template_default_name(source_features: dict[str, Any], file_name: str) -> str:
+def _shipment_template_default_name(
+    source_features: dict[str, Any],
+    file_name: str,
+    source_region_id: str | None = None,
+) -> str:
     """Prefer the selected region's canonical customer name for a layout name."""
 
-    region = _selected_shipment_region(source_features)
+    region = _selected_shipment_region(source_features, source_region_id)
     customer_name = str(
-        region.get("customer_name")
-        or region.get("purchase_unit")
-        or region.get("unit_name")
-        or ""
+        region.get("customer_name") or region.get("purchase_unit") or region.get("unit_name") or ""
     ).strip()
     if customer_name:
         return f"{customer_name}-发货单版式"
@@ -70,6 +79,7 @@ def _shipment_template_default_name(source_features: dict[str, Any], file_name: 
 def shipment_template_candidate(
     source_features: dict[str, Any],
     file_name: str,
+    source_region_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Describe an extracted layout before a user decides to save it.
 
@@ -81,10 +91,10 @@ def shipment_template_candidate(
     an ``etl_templates`` row.
     """
 
-    region = _selected_shipment_region(source_features)
+    region = _selected_shipment_region(source_features, source_region_id)
     if not region:
         return None
-    name = _shipment_template_default_name(source_features, file_name)
+    name = _shipment_template_default_name(source_features, file_name, source_region_id)
     return {
         "kind": "shipment_document_layout_candidate",
         "status": "detected",
@@ -102,6 +112,43 @@ def shipment_template_candidate(
     }
 
 
+def shipment_template_candidates(
+    source_features: dict[str, Any],
+    file_name: str,
+) -> list[dict[str, Any]]:
+    """Return every selectable delivery-note layout in stable preview order.
+
+    This only describes source evidence; it does not save a template or expose
+    a source path.  The first entry remains the legacy default candidate.
+    """
+
+    selected = [
+        region
+        for region in source_features.get("regions") or []
+        if isinstance(region, dict) and region.get("status") == "selected"
+    ]
+    candidates: list[dict[str, Any]] = []
+    for index, region in enumerate(
+        sorted(
+            selected,
+            key=lambda item: (
+                str(item.get("sheet") or ""),
+                int(item.get("header_row") or 0),
+                str(item.get("id") or ""),
+            ),
+        )
+    ):
+        candidate = shipment_template_candidate(
+            source_features,
+            file_name,
+            str(region.get("id") or ""),
+        )
+        if candidate is not None:
+            candidate["is_default"] = index == 0
+            candidates.append(candidate)
+    return candidates
+
+
 class ShipmentTemplateServiceMixin:
     def save_run_shipment_template(
         self,
@@ -110,6 +157,7 @@ class ShipmentTemplateServiceMixin:
         run_id: str,
         owner_user_id: int,
         name: str = "",
+        source_region_id: str | None = None,
     ) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         if run.target_type != "shipment_records":
@@ -124,15 +172,37 @@ class ShipmentTemplateServiceMixin:
                 status_code=409,
             )
         details = load_json(run.summary_json, {})
-        existing = details.get("shipment_document_template")
-        if isinstance(existing, dict) and existing.get("template_id"):
-            return dict(existing)
-
         upload = self._owned_upload(db, run.upload_id, owner_user_id)
         source_features = load_json(run.source_features_json, {})
+        selected_region = _selected_shipment_region(source_features, source_region_id)
+        if not selected_region:
+            raise EtlError(
+                "ETL_SHIPMENT_TEMPLATE_REGION_NOT_FOUND",
+                "所选发货单版式不在当前预演中，请重新选择",
+                status_code=409,
+            )
+        selected_region_id = str(selected_region.get("id") or "").strip()
+        existing_by_region = details.get("shipment_document_templates")
+        if isinstance(existing_by_region, dict):
+            existing = existing_by_region.get(selected_region_id)
+            if isinstance(existing, dict) and existing.get("template_id"):
+                return dict(existing)
+        # Runs created before multiple layout selection only carried a scalar
+        # receipt.  Reuse it only when it is for the same selected region.
+        existing = details.get("shipment_document_template")
+        if (
+            isinstance(existing, dict)
+            and existing.get("template_id")
+            and str(existing.get("source_region_id") or "") == selected_region_id
+        ):
+            return dict(existing)
         base_name = _safe_template_name(
             name,
-            _shipment_template_default_name(source_features, upload.file_name),
+            _shipment_template_default_name(
+                source_features,
+                upload.file_name,
+                selected_region_id,
+            ),
         )
         tenant_id = tenant_id_for_write()
         template_dir = (
@@ -142,10 +212,7 @@ class ShipmentTemplateServiceMixin:
             / "document_templates"
             / str(owner_user_id)
         )
-        destination = (
-            template_dir
-            / f"{base_name}-{run.file_sha256[:12]}.xlsx"
-        ).resolve()
+        destination = (template_dir / f"{base_name}-{run.file_sha256[:12]}.xlsx").resolve()
         if template_dir.resolve() not in destination.parents:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
 
@@ -153,15 +220,7 @@ class ShipmentTemplateServiceMixin:
             upload.storage_path,
             source_features=source_features,
             destination=destination,
-        )
-        selected_region = next(
-            (
-                region
-                for region in source_features.get("regions") or []
-                if isinstance(region, dict)
-                and region.get("id") == extracted.get("source_region_id")
-            ),
-            _selected_shipment_region(source_features),
+            source_region_id=selected_region_id,
         )
         template_fields = [
             {"label": header, "name": header, "value": header}
@@ -187,6 +246,10 @@ class ShipmentTemplateServiceMixin:
             "version": version.version,
             "message": "已保存为当前用户私有发货单版式，后续开单会按客户名自动匹配",
         }
+        saved_by_region = dict(existing_by_region) if isinstance(existing_by_region, dict) else {}
+        saved_by_region[selected_region_id] = result
+        details["shipment_document_templates"] = saved_by_region
+        # Keep the old scalar receipt for already released UIs.
         details["shipment_document_template"] = result
         run.summary_json = dump_json(details)
         try:
