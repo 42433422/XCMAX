@@ -102,10 +102,13 @@ jobs:
 
           sha = os.environ["MERGE_SHA"]
           catalog_root = Path("成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data")
-          changed = subprocess.check_output(
-              ["git", "diff", "--name-only", f"{sha}^1", sha, "--", str(catalog_root)],
-              text=True,
-          ).splitlines()
+          changed = [
+              os.fsdecode(name)
+              for name in subprocess.check_output(
+                  ["git", "diff", "--name-only", "-z", f"{sha}^1", sha, "--", str(catalog_root)]
+              ).split(b"\0")
+              if name
+          ]
           archives = {
               Path(name).name
               for name in changed
