@@ -217,10 +217,7 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
     for workflow in (source, published):
         trigger = workflow[True]
         assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
-        assert (
-            trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"]
-            is True
-        )
+        assert trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"] is True
         assert "package_source_sha" in trigger["workflow_dispatch"]["inputs"]
         receipt = workflow["jobs"]["receipt"]
         assert "workflow_run.conclusion == 'success'" in receipt["if"]
