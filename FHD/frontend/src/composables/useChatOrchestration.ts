@@ -690,11 +690,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (existingOrderNo) {
       nextTask.customOrderNumber = existingOrderNo
-      return
+    } else {
+      nextTask.customOrderNumber = ''
+      hydrateTaskOrderNumber(nextTask).catch(() => { })
     }
 
-    nextTask.customOrderNumber = ''
-    hydrateTaskOrderNumber(nextTask).catch(() => { })
+    // A supplied order number means we must not allocate another one, not that
+    // the preview is already enriched.  Keep the server-authoritative ETL
+    // fields intact while allowing incomplete fallback cards to be completed.
     enrichShipmentPreviewProducts(nextTask).catch(() => { })
   }
 

@@ -973,7 +973,7 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('ORD-002')
   })
 
-  it('从 canonical payload.params.order_number 获取已存在单号且不补全', () => {
+  it('从 canonical payload.params.order_number 获取已存在单号、不补号但补全预览', () => {
     const api = createApi()
     api.showTaskConfirm({
       type: 'shipment_generate',
@@ -983,7 +983,7 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     })
     expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('9803')
     expect(mockHydrateTaskOrderNumber).not.toHaveBeenCalled()
-    expect(mockEnrichShipmentPreviewProducts).not.toHaveBeenCalled()
+    expect(mockEnrichShipmentPreviewProducts).toHaveBeenCalled()
   })
 
   it('shipment preview carries its canonical payload only after the explicit click', async () => {

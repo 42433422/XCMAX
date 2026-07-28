@@ -86,7 +86,6 @@ def require_identified_user(
 
 def session_id_from_request(request: Request) -> str:
     headers = getattr(request, "headers", {}) or {}
-    cookies = getattr(request, "cookies", {}) or {}
     # 移动端 AuthInterceptor 显式发 X-Session-ID；优先用，避免把 JWT 当 session_id 解析失败。
     x_sid_raw = headers.get("X-Session-ID") or ""
     x_sid = x_sid_raw.strip() if isinstance(x_sid_raw, str) else ""
@@ -95,27 +94,50 @@ def session_id_from_request(request: Request) -> str:
     auth_raw = headers.get("Authorization") or ""
     auth = auth_raw if isinstance(auth_raw, str) else ""
     if auth.startswith("Bearer "):
-        return auth[7:].strip()
+        bearer = auth[7:].strip()
+        if bearer:
+            return bearer
+    return _cookie_session_id(request)
+
+
+def _cookie_session_id(request: Request) -> str:
+    """Return the desktop session cookie without changing header precedence.
+
+    ``session_id_from_request`` deliberately keeps explicit mobile and Bearer
+    credentials ahead of cookies.  Authentication resolution also needs access
+    to the cookie independently: the embedded market shell may attach its own
+    (non-FHD) Bearer token to a same-origin desktop request that already has a
+    valid FHD session cookie.
+    """
+    cookies = getattr(request, "cookies", {}) or {}
     cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
     cookie_raw = cookies.get(cookie_name) or ""
     return cookie_raw.strip() if isinstance(cookie_raw, str) else ""
 
 
-def resolve_session_user(request: Request) -> Any | None:
+def _resolve_stateful_session_user(session_id: str) -> Any | None:
+    """Validate one FHD session id, including the desktop admin gate."""
     from app.application.facades.session_facade import get_session_service
 
-    sid = session_id_from_request(request)
-    if not sid:
+    if not session_id:
         return None
     # 桌面进程：存量 admin 会话一律作废（管理端仅网页）
     try:
         from app.application.desktop_admin_gate import assert_desktop_allows_session_id
 
-        if assert_desktop_allows_session_id(sid) is not None:
+        if assert_desktop_allows_session_id(session_id) is not None:
             return None
     except Exception:  # noqa: BLE001
         pass
-    user = get_session_service().validate_session(sid)
+    return get_session_service().validate_session(session_id)
+
+
+def resolve_session_user(request: Request) -> Any | None:
+    sid = session_id_from_request(request)
+    if not sid:
+        return None
+
+    user = _resolve_stateful_session_user(sid)
     if user is not None:
         return user
     # 增量无状态 JWT（XCAGI_WEB_JWT_AUTH=1 时）：Bearer 非有效 session 时尝试 web JWT 验签。
@@ -123,8 +145,23 @@ def resolve_session_user(request: Request) -> Any | None:
     try:
         from app.security.web_jwt import resolve_user_from_web_jwt
     except ImportError:
-        return None
-    return resolve_user_from_web_jwt(sid)
+        jwt_user = None
+    else:
+        jwt_user = resolve_user_from_web_jwt(sid)
+    if jwt_user is not None:
+        return jwt_user
+
+    # The desktop chat client can carry a market access token in Authorization
+    # while the browser supplies its valid FHD ``session_id`` cookie.  A token
+    # that is neither an FHD session nor a valid FHD web JWT must not suppress
+    # that independently authenticated desktop session.  This keeps explicit
+    # valid FHD credentials authoritative while allowing private ETL previews
+    # to retain their tenant/user context instead of fail-closing to a generic
+    # card.
+    cookie_sid = _cookie_session_id(request)
+    if cookie_sid and cookie_sid != sid:
+        return _resolve_stateful_session_user(cookie_sid)
+    return None
 
 
 def get_logged_in_user(request: Request) -> Any:
