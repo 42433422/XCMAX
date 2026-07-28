@@ -71,7 +71,7 @@ jobs:
       MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
       MODSTORE_REPO_ROOT: ${{ github.workspace }}
       MODSTORE_ENABLE_CATALOG_GAP_SCAN: 'true'
-      EVOLUTION_PROPOSAL_PATH: ${{ runner.temp }}/evolution-proposal.json
+      EVOLUTION_PROPOSAL_PATH: ${{ github.workspace }}/.evolution-proposal.json
     steps:
       - uses: actions/checkout@v4
         with:

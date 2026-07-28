@@ -33,6 +33,12 @@ def test_orchestrator_recovers_actions_bot_suppressed_push_bootstrap():
     assert "if: steps.scan_scope.outputs.should_scan == 'true'" in text
 
 
+def test_orchestrator_only_uses_job_level_expression_contexts_available_to_github():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert "EVOLUTION_PROPOSAL_PATH: ${{ github.workspace }}/.evolution-proposal.json" in text
+    assert "EVOLUTION_PROPOSAL_PATH: ${{ runner.temp }}" not in text
+
+
 def test_orchestrator_source_and_published_copy_are_exact():
     source = SOURCE.read_text(encoding="utf-8")
     published = PUBLISHED.read_text(encoding="utf-8")
