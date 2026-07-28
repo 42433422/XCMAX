@@ -33,6 +33,7 @@ _PREVIEW_READY = "preview_ready"
 _PRODUCT_ACTIONS = frozenset({"new", "update"})
 _LAYOUT_SUFFIXES = frozenset({".xlsx", ".xlsm"})
 _TEMP_PREFIX = "fhd-etl-preview-layout-"
+_PARENTHETICAL_CUSTOMER_ALIAS_RE = re.compile(r"[（(][^）)]*[）)]")
 
 PRODUCT_PREVIEW_WARNING = (
     "产品信息来自尚未执行的 ETL 预演候选，仅用于本次已确认的发货单；未写入产品库。"
@@ -48,6 +49,11 @@ def _normalize_customer_name(value: Any) -> str:
     text = str(value or "").strip().lower()
     if not text:
         return ""
+    # The ETL parser records a parenthetical trade/shop marker as alias
+    # provenance and chooses the delivery-note customer as canonical.  Apply
+    # that same conservative normalization here so preview product/layout
+    # lookups do not lose known aliases before the confirmation service runs.
+    text = _PARENTHETICAL_CUSTOMER_ALIAS_RE.sub("", text)
     text = re.sub(r"(有限责任公司|有限公司|公司|家私|家具|商贸|贸易|建材|装饰)", "", text)
     return re.sub(r"[\s\-_()（）【】\[\]·,，.。/\\]+", "", text)
 

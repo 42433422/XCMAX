@@ -23,12 +23,18 @@ class ShipmentNumberModeService:
     MODIFY_VERB_PATTERN = re.compile(
         r"(再加|还要|继续加|再补|加上|增加|减少|减去|删掉|删除|去掉|移除|改成|改为|改)"
     )
+    # Customer ledgers often use a parenthetical trading/shop alias while the
+    # delivery note records the legal/customer-facing name.  Keep this in
+    # lockstep with ``customer_alias_key`` used by the ETL parser, so a known
+    # value such as ``金汉武（宾驰）`` can still reach the canonical customer.
+    _PARENTHETICAL_UNIT_ALIAS_RE = re.compile(r"[（(][^）)]*[）)]")
 
     @staticmethod
     def _normalize_unit_name(value: str) -> str:
         text = str(value or "").strip().lower()
         if not text:
             return ""
+        text = ShipmentNumberModeService._PARENTHETICAL_UNIT_ALIAS_RE.sub("", text)
         text = re.sub(r"(有限责任公司|有限公司|公司|家私|家具|商贸|贸易|建材|装饰)", "", text)
         text = re.sub(r"[\s\-_()（）【】\[\]·,，.。/\\]+", "", text)
         return text
@@ -283,29 +289,54 @@ class ShipmentNumberModeService:
             if len(normalized_exact) == 1:
                 return normalized_exact[0]
 
-            contains = [
+            # A shorter, user-facing customer name may safely point at one
+            # longer canonical tenant name (for example ``七彩乐园`` ->
+            # ``成都七彩乐园家具有限公司``).  The reverse is not safe: a
+            # longer input that merely contains a canonical name can carry a
+            # meaningful business qualifier (``金汉武三江源`` is not
+            # automatically ``金汉武家私``).  Known parenthetical aliases are
+            # normalized above before this comparison.
+            short_alias_matches = [
                 unit
                 for unit in unit_pool
-                if normalized_typed in self._normalize_unit_name(unit)
-                or self._normalize_unit_name(unit) in normalized_typed
+                if (
+                    (normalized_unit := self._normalize_unit_name(unit))
+                    and normalized_typed != normalized_unit
+                    and normalized_typed in normalized_unit
+                )
             ]
-            if len(contains) == 1:
-                return contains[0]
-            if len(contains) > 1:
+            if len(short_alias_matches) == 1:
+                return short_alias_matches[0]
+            if len(short_alias_matches) > 1:
                 typed_digits = _tail_digits(normalized_typed)
                 if typed_digits:
                     digit_matched = [
                         unit
-                        for unit in contains
+                        for unit in short_alias_matches
                         if _tail_digits(self._normalize_unit_name(unit)) == typed_digits
                     ]
                     if len(digit_matched) == 1:
                         return digit_matched[0]
                     if len(digit_matched) > 1:
-                        contains = digit_matched
+                        short_alias_matches = digit_matched
 
+            # Do not allow fuzzy matching to re-introduce the rejected
+            # canonical-substring direction above.  The remaining candidates
+            # preserve the historical typo-tolerance without swallowing a
+            # longer, qualified customer name.
+            score_pool = short_alias_matches or [
+                unit
+                for unit in unit_pool
+                if (
+                    (normalized_unit := self._normalize_unit_name(unit))
+                    and not (
+                        normalized_unit != normalized_typed
+                        and normalized_unit in normalized_typed
+                    )
+                )
+            ]
             scored = []
-            for unit in contains or unit_pool:
+            for unit in score_pool:
                 normalized_unit = self._normalize_unit_name(unit)
                 if not normalized_unit:
                     continue

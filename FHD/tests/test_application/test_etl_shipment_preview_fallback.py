@@ -141,12 +141,25 @@ def test_product_preview_candidate_is_exact_and_double_scoped():
             unit_name="金汉武",
             product_name="黑棕面用修色精",
         )
+        parenthetical_alias_candidate = resolve_preview_product_candidate(
+            owner_user_id=9,
+            unit_name="金汉武（宾驰）",
+            product_name="黑棕面用修色精",
+        )
+        qualified_customer_candidate = resolve_preview_product_candidate(
+            owner_user_id=9,
+            unit_name="金汉武三江源",
+            product_name="黑棕面用修色精",
+        )
 
     assert candidate is not None
+    assert parenthetical_alias_candidate is not None
+    assert qualified_customer_candidate is None
     assert candidate["model_number"] == "方和"
     assert candidate["price"] == 48.0
     assert candidate["provenance"]["run_id"] == "run-own"
     assert candidate["provenance"]["resolved_product"]["unit_price"] == 48.0
+    assert parenthetical_alias_candidate["provenance"] == candidate["provenance"]
 
 
 def test_product_preview_prefers_newest_business_date_over_newest_upload():
@@ -320,13 +333,24 @@ def test_layout_candidate_is_owner_scoped_and_exposes_no_source_path():
             owner_user_id=9,
             unit_name="金汉武",
         )
+        parenthetical_alias_candidate = find_latest_preview_layout_candidate(
+            owner_user_id=9,
+            unit_name="金汉武（宾驰）",
+        )
+        qualified_customer_candidate = find_latest_preview_layout_candidate(
+            owner_user_id=9,
+            unit_name="金汉武三江源",
+        )
 
     assert candidate is not None
+    assert parenthetical_alias_candidate is not None
+    assert qualified_customer_candidate is None
     assert candidate["run_id"] == "run-own-layout"
     assert candidate["template_id"] == "etl-preview:run-own-layout"
     assert candidate["customer_name"] == "金汉武家私"
     assert "path" not in candidate
     assert candidate["provenance"]["source_sheet"] == "侯雪梅"
+    assert parenthetical_alias_candidate["template_id"] == candidate["template_id"]
 
 
 def test_preview_layout_is_extracted_to_one_use_temp_file_then_cleaned(tmp_path: Path):
