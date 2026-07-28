@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import time
 from datetime import date
 from html import unescape
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -788,6 +789,15 @@ def _contact_web_search_timeout_sec() -> float:
         return 28.0 if _contact_bing_uses_edge() else 18.0
 
 
+def contact_web_search_budget_sec() -> float:
+    """联系页联网检索总墙钟预算（公网 UX：超时后立即退回本地库）。"""
+    try:
+        raw = (os.environ.get("MODSTORE_CONTACT_WEB_SEARCH_BUDGET") or "5").strip()
+        return max(2.0, min(float(raw), 20.0))
+    except ValueError:
+        return 5.0
+
+
 def _contact_bing_uses_edge() -> bool:
     contact = (os.environ.get("MODSTORE_CONTACT_WEB_BING") or "edge").strip().lower()
     if contact in ("http", "httpx"):
@@ -903,15 +913,26 @@ async def contact_known_site_company_lookup(query: str, *, max_results: int = 5)
 
 
 async def _contact_company_web_fetch_one(
-    search_query: str, *, user_query: str, max_results: int
+    search_query: str,
+    *,
+    user_query: str,
+    max_results: int,
+    timeout_sec: float | None = None,
 ) -> Tuple[List[Dict[str, Any]], str, List[str]]:
     """单条搜索词：百度 → Bing → Tavily/SearXNG/DDG（企查查式 SERP，不走官网捷径）。"""
     sq = (search_query or "").strip()
     uq = (user_query or sq).strip()
     rn = max(8, min(int(max_results), 20))
-    deadline = _contact_web_search_timeout_sec()
+    deadline = (
+        max(1.0, float(timeout_sec))
+        if timeout_sec is not None
+        else _contact_web_search_timeout_sec()
+    )
     edge_bing = _contact_bing_uses_edge()
     per_try = min(32.0, deadline * 0.92) if edge_bing else min(11.0, deadline * 0.55)
+    # 公网短预算下压低单引擎等待，避免 Edge Playwright 拖死整次请求
+    if timeout_sec is not None:
+        per_try = min(per_try, max(1.2, deadline * 0.55))
     ddg_try = min(7.0, deadline * 0.4)
     err_parts: List[str] = []
     merged: List[Dict[str, Any]] = []
@@ -1020,10 +1041,26 @@ async def search_company_names_via_web(
         return [], None, ""
     err_parts: List[str] = []
     via = ""
+    budget = contact_web_search_budget_sec()
+    deadline = time.monotonic() + budget
     for sq in contact_company_web_search_queries(q):
-        results, via, crawl_errors = await _contact_company_web_fetch_one(
-            sq, user_query=q, max_results=max(12, max_results)
-        )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.25:
+            err_parts.append("budget_exhausted")
+            break
+        try:
+            results, via, crawl_errors = await asyncio.wait_for(
+                _contact_company_web_fetch_one(
+                    sq,
+                    user_query=q,
+                    max_results=max(12, max_results),
+                    timeout_sec=remaining,
+                ),
+                timeout=remaining,
+            )
+        except asyncio.TimeoutError:
+            err_parts.append("timeout")
+            break
         err_parts.extend(crawl_errors or [])
         if not results:
             continue

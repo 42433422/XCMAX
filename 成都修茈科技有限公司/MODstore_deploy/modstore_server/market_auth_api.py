@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -65,6 +66,7 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.research_tools import (
+    contact_web_search_budget_sec,
     is_plausible_company_name,
     sanitize_contact_company_web_error,
     search_company_names_via_web,
@@ -492,8 +494,9 @@ async def _company_match_payload(query: str, limit: int, web: bool) -> dict:
     incomplete_query = len(query) >= 2 and not typed_exact
     if web:
         try:
-            web_names, web_error, web_via = await search_company_names_via_web(
-                query, max_results=limit
+            web_names, web_error, web_via = await asyncio.wait_for(
+                search_company_names_via_web(query, max_results=limit),
+                timeout=contact_web_search_budget_sec() + 0.75,
             )
             if web_names:
                 web_used = True
@@ -515,6 +518,9 @@ async def _company_match_payload(query: str, limit: int, web: bool) -> dict:
                     "last_submitted_at": (existing or {}).get("last_submitted_at"),
                     "_score": max(int((existing or {}).get("_score") or 0), score),
                 }
+        except asyncio.TimeoutError:
+            logger.warning("company match web search timed out for q=%r", query)
+            web_error = "联网检索超时"
         except Exception as exc:
             logger.warning("company match web search failed: %s", exc)
             web_error = "联网检索暂时不可用"
@@ -532,22 +538,26 @@ async def _company_match_payload(query: str, limit: int, web: bool) -> dict:
     )
     suggestions: list[dict] = []
     matched = None
+    # 仅在联网真正命中时优先 web；超时/失败时仍用本地库作为 matched
+    prefer_web = bool(web and web_used)
     for item in ranked:
         score = int(item.get("_score") or 0)
         payload = {k: v for k, v in item.items() if k != "_score"}
         if score < 60:
             continue
         is_web = payload.get("source") == "web"
-        if web and not is_web:
+        if prefer_web and not is_web:
             if len(suggestions) < limit:
                 suggestions.append(payload)
             continue
-        if matched is None and (not web or is_web):
+        if matched is None and (not prefer_web or is_web):
             matched = payload
         if len(suggestions) < limit:
             suggestions.append(payload)
 
-    found = bool(matched) if web else bool(matched or suggestions)
+    if matched is None and suggestions:
+        matched = suggestions[0]
+    found = bool(matched or suggestions)
     return {
         "ok": True,
         "query": query,
