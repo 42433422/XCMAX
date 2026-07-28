@@ -1,18 +1,24 @@
 name: Evolution Orchestrator
 
 # 演化闭环编排：
-#   - schedule: 每周一 04:00 UTC 扫描信号 → LLM 提议 → 开 issue（打 ai-implement 标签）
+#   - schedule: 每周一 04:00 UTC 扫描信号 → LLM 提议 → 开 issue → 安全源码 PR
+#   - push: 编排器自身修复合并后启动一次 bootstrap 扫描
 #   - workflow_dispatch: 手动触发
 #   - pull_request (closed): PR 合并后构建 employee_pack + 注册 catalog + 审核
 #
-# 与 ai-issue-implement.yml 协作：
-#   - 本 workflow 负责 "信号 → issue" 阶段
-#   - ai-issue-implement.yml 负责 "issue → 实现 → PR" 阶段
-#   - 本 workflow 负责 "PR 合并 → 上架 catalog" 阶段
+# 生成器只允许创建 manifest.json / prompt.txt / skills.json 三个文件；
+# 源码、制品和生产部署分别经过独立 PR / CI / 审核 / 回执门禁。
 
 on:
   schedule:
     - cron: '0 4 * * 1'  # 每周一 04:00 UTC
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fhd-evolution-orchestrator.yml'
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_pack_proposal.py'
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_pack_proposal_scaffold.py'
+      - '成都修茈科技有限公司/MODstore_deploy/modstore_server/evolution_signal_collector.py'
   workflow_dispatch:
     inputs:
       force_run:
@@ -36,19 +42,30 @@ defaults:
 
 jobs:
   scan-and-propose:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       GITHUB_REPO: ${{ github.repository }}
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      XCAGI_LLM_ENDPOINT: ${{ secrets.XCAGI_LLM_ENDPOINT }}
       MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
+      MODSTORE_REPO_ROOT: ${{ github.workspace }}
+      MODSTORE_ENABLE_CATALOG_GAP_SCAN: 'true'
+      EVOLUTION_PROPOSAL_PATH: ${{ runner.temp }}/evolution-proposal.json
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          token: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -58,8 +75,7 @@ jobs:
         working-directory: 成都修茈科技有限公司/MODstore_deploy
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt 2>/dev/null || true
-          pip install httpx apscheduler 2>/dev/null || true
+          python -m pip install httpx
 
       - name: Aggregate evolution signals + LLM propose + open issue
         working-directory: 成都修茈科技有限公司/MODstore_deploy
@@ -68,7 +84,7 @@ jobs:
           python -c "
           import os, sys, json
           from modstore_server.evolution_signal_collector import aggregate_signals
-          from modstore_server.employee_autonomy_service import propose_employee_pack
+          from modstore_server.employee_pack_proposal import propose_employee_pack
           from modstore_server.gap_to_issue import open_issue_for_proposal
           from modstore_server.evolution_ledger import append_event
 
@@ -84,14 +100,16 @@ jobs:
 
           proposal = propose_employee_pack(signals)
           if not proposal:
-              print('LLM returned no proposal, exiting.')
+              print('No validated proposal was produced, exiting.')
               with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
                   fh.write('issue_url=\n')
               sys.exit(0)
 
           print(f'Proposal: {proposal}')
+          with open(os.environ['EVOLUTION_PROPOSAL_PATH'], 'w', encoding='utf-8') as fh:
+              json.dump(proposal, fh, ensure_ascii=False, sort_keys=True)
           try:
-              # 不打 ai-implement：连接点 4 由 ledger implement-pack 显式 gh workflow run
+              # The bounded source generator below replaces the generic patch workflow.
               issue_url = open_issue_for_proposal(proposal, add_implement_label=False)
               print(f'Opened issue: {issue_url}')
               with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
@@ -102,15 +120,41 @@ jobs:
               sys.exit(1)
           "
 
-      - name: Ledger implement-pack (connection point 4)
+      - name: Generate bounded employee-pack source and open PR
         if: steps.scan.outputs.issue_url != ''
-        working-directory: FHD
+        working-directory: .
         env:
-          EVOLUTION_IMPLEMENT_MODE: workflow
-          EVOLUTION_IMPLEMENT_WORKFLOW: fhd-ai-issue-implement.yml
+          ISSUE_URL: ${{ steps.scan.outputs.issue_url }}
+          PYTHONPATH: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy
         run: |
-          python scripts/autonomy/evolution_decision_ledger.py implement-pack \
-            --issue-url "${{ steps.scan.outputs.issue_url }}"
+          set -euo pipefail
+          python -m modstore_server.employee_pack_proposal_scaffold \
+            --proposal-file "$EVOLUTION_PROPOSAL_PATH" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            > "$RUNNER_TEMP/evolution-scaffold.json"
+          source_dir="$(jq -r '.source_dir' "$RUNNER_TEMP/evolution-scaffold.json")"
+          package_id="$(jq -r '.package_id' "$RUNNER_TEMP/evolution-scaffold.json")"
+          version="$(jq -r '.version' "$RUNNER_TEMP/evolution-scaffold.json")"
+          test -n "$source_dir"
+          test -d "$source_dir"
+          test "$(find "$source_dir" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "3"
+
+          branch="automation/evolution-source-${GITHUB_RUN_ID}"
+          git checkout -b "$branch"
+          git config user.name "xcmax-evolution-bot"
+          git config user.email "xcmax-evolution-bot@users.noreply.github.com"
+          git add -- "$source_dir"
+          git diff --cached --check
+          git commit -m "feat(evolution): add ${package_id} ${version} source"
+          git push --set-upstream origin "$branch"
+          pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "feat(evolution): add ${package_id} ${version} source" \
+            --body "Closes ${ISSUE_URL}. Autonomously generated from a repository-derived capability gap. The change is restricted to three employee-pack source files. CI, protected review, artifact packaging, MODstore deployment, production readback, and veto remain independent gates.")"
+          gh pr merge "$pr_url" --auto --merge
+          python FHD/scripts/dev/append_evolution_event.py \
+            --event proactive_evolution_source_pr_opened || true
 
       - name: Upload ledger
         if: always()
@@ -140,12 +184,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install deps
-        working-directory: 成都修茈科技有限公司/MODstore_deploy
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt 2>/dev/null || true
 
       - name: Build employee_pack from merge commit
         id: build

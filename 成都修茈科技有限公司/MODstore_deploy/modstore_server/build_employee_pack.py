@@ -24,6 +24,7 @@ VALID_DEPARTMENTS = {"engineering", "quality", "ops", "growth", "support", "secu
 PACK_FILES_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/"
 _PACK_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$")
 _PACK_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 
 
 class PackSchemaError(ValueError):
@@ -143,7 +144,11 @@ def build_xcemp_archive(manifest: Dict[str, Any], *, files_dir: Path) -> Path:
 
 
 def register_in_packages_json(
-    manifest: Dict[str, Any], *, files_dir: Path, archive_path: Path | None = None
+    manifest: Dict[str, Any],
+    *,
+    files_dir: Path,
+    archive_path: Path | None = None,
+    source_commit_sha: str = "",
 ) -> str:
     """把 employee_pack 注册到 catalog_data/packages.json。"""
     validate_pack_schema(manifest)
@@ -172,28 +177,30 @@ def register_in_packages_json(
         raise PackSchemaError("employee pack archive must be inside catalog files root")
     from modstore_server.catalog_store import sha256_file
 
-    packages.append(
-        {
-            "id": package_id,
-            "name": package_id,
-            "version": version,
-            "description": str(manifest.get("description") or "")[:2000],
-            "department": manifest["department"],
-            "artifact": "employee_pack",
-            "release_channel": "stable",
-            "commerce": {"mode": "free", "price": 0},
-            "license": {"type": "internal", "verify_url": None},
-            "sha256": sha256_file(archive_path),
-            "file_size": archive_path.stat().st_size,
-            "stored_filename": archive_path.name,
-            "employee_scope": "store",
-            "employee_source": "autonomous_evolution",
-            "is_duty_employee": False,
-            "is_store_employee": True,
-            "market_visible": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    package_record = {
+        "id": package_id,
+        "name": package_id,
+        "version": version,
+        "description": str(manifest.get("description") or "")[:2000],
+        "department": manifest["department"],
+        "artifact": "employee_pack",
+        "release_channel": "stable",
+        "commerce": {"mode": "free", "price": 0},
+        "license": {"type": "internal", "verify_url": None},
+        "sha256": sha256_file(archive_path),
+        "file_size": archive_path.stat().st_size,
+        "stored_filename": archive_path.name,
+        "employee_scope": "store",
+        "employee_source": "autonomous_evolution",
+        "is_duty_employee": False,
+        "is_store_employee": True,
+        "market_visible": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    clean_source_commit = str(source_commit_sha or "").strip().lower()
+    if _COMMIT_RE.fullmatch(clean_source_commit):
+        package_record["source_commit_sha"] = clean_source_commit
+    packages.append(package_record)
     data["packages"] = packages
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
     catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -231,7 +238,10 @@ def build_pack_from_commit(*, commit_sha: str, repo_root: Path) -> Dict[str, Any
 
     # 注册
     pack_id_resolved = register_in_packages_json(
-        manifest, files_dir=files_dir, archive_path=archive_path
+        manifest,
+        files_dir=files_dir,
+        archive_path=archive_path,
+        source_commit_sha=commit_sha,
     )
 
     # 触发审核（Task 10 会实现 evaluate_employee_pack，测试里已 mock）
@@ -266,6 +276,11 @@ def build_pack_from_commit(*, commit_sha: str, repo_root: Path) -> Dict[str, Any
         "version": str(manifest["version"]),
         "package_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
         "stored_filename": archive_path.name,
+        "source_commit_sha": (
+            str(commit_sha).strip().lower()
+            if _COMMIT_RE.fullmatch(str(commit_sha).strip().lower())
+            else ""
+        ),
         "approved": approved,
         "risk_level": risk_level,
         "reason": reason,
