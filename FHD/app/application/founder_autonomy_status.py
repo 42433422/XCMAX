@@ -89,12 +89,8 @@ def build_founder_autonomy_snapshot(
         *timeline_rows,
         *_as_list(_as_dict(runtime.get("governance_audit")).get("recent")),
     ]
-    autonomous_triggers = {
-        "automated_remediation",
-        "incident_event",
-        "proactive_signal",
-        "scheduler",
-    }
+    autonomous_triggers = {"incident_event", "proactive_signal", "scheduler"}
+    autonomous_triggers.add("automated_remediation")
     autonomous_run_ids = {
         str(_as_dict(row).get("run_id") or "").strip()
         for row in all_rows
