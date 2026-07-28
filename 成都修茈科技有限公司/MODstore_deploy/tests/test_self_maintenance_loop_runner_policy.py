@@ -1318,6 +1318,46 @@ def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_onl
 
 
 @pytest.mark.parametrize(
+    ("hold_reason", "expected_steps", "expect_continue_code"),
+    [
+        ("missing_structured_qa_result", ["qa"], False),
+        ("missing_structured_review_object", ["review"], False),
+        ("invalid_max_severity", ["review"], False),
+    ],
+)
+def test_resume_review_qa_candidate_retries_report_only_protocol_holds(
+    hold_reason: str,
+    expected_steps: list[str],
+    expect_continue_code: bool,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-protocol",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "r-protocol",
+                "task_id": "task-protocol",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result is not None
+    assert result["failed_steps"] == expected_steps
+    assert result["para_task_id"] == "task-protocol"
+    if expect_continue_code:
+        assert result.get("continue_existing_code_task") is True
+    else:
+        assert "continue_existing_code_task" not in result
+    assert _resume_steps(result) == set(expected_steps) | (
+        {"qa"} if "review" in expected_steps else set()
+    )
+
+
+@pytest.mark.parametrize(
     "hold_reason",
     [
         "structured_qa_verdict_not_pass",

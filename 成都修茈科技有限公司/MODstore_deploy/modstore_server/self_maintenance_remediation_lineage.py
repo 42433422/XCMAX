@@ -11,9 +11,33 @@ _QA_ONLY_REASONS = frozenset(
         "changed_files_outside_low_risk_globs",
         "missing_report_only_evidence",
         "max_retries_exceeded",
+        "missing_structured_qa_result",
+        "invalid_qa_verdict",
+        "qa_blocking_findings_not_list",
+        "qa_tested_commands_not_list",
+        "qa_target_branch_available_not_bool",
         "structured_qa_executor_unavailable",
         "structured_qa_focused_command_not_passed",
         "structured_qa_target_branch_unavailable",
+    }
+)
+_REVIEW_PROTOCOL_PREFIXES = (
+    "blocking_findings_not_",
+    "dimension_fail_without_",
+    "dimension_fail_severity_",
+    "dimension_findings_not_list_",
+    "invalid_dimension_status_",
+    "missing_dimension_",
+    "tested_commands_not_",
+    "target_branch_available_not_",
+)
+_REVIEW_ONLY_REASONS = frozenset(
+    {
+        "missing_structured_review_object",
+        "missing_structured_review_result",
+        "invalid_max_severity",
+        "invalid_risk_class",
+        "missing_dimensions",
     }
 )
 _CODE_REASONS = frozenset(
@@ -32,11 +56,19 @@ _CODE_REASONS = frozenset(
 )
 
 
+def _is_review_protocol_retry_reason(normalized: str) -> bool:
+    if normalized in _REVIEW_ONLY_REASONS:
+        return True
+    return any(normalized.startswith(prefix) for prefix in _REVIEW_PROTOCOL_PREFIXES)
+
+
 def automated_remediation_resume_plan(reason: str) -> tuple[list[str], bool] | None:
     """Map durable hold reasons to downstream steps and branch pinning."""
     normalized = str(reason or "").strip()
     if normalized in _QA_ONLY_REASONS:
         return (["qa"], False)
+    if _is_review_protocol_retry_reason(normalized):
+        return (["review"], False)
     if normalized.startswith("structured_review_"):
         return (["code"], False)
     if normalized in _CODE_REASONS or normalized.startswith("structured_qa_new_"):
