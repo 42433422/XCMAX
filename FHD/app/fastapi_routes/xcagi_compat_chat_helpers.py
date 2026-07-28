@@ -220,6 +220,70 @@ def _market_connection_label() -> str:
         return "修茈市场"
 
 
+def _market_429_error_detail(exc: BaseException, *, force_429: bool = False) -> dict[str, str] | None:
+    """Translate a provider-side 429 into a safe, actionable chat error.
+
+    Market adapters intentionally keep the upstream body in their exception for
+    diagnostics.  Do not return that body to the desktop: it can be opaque,
+    unstable, and occasionally contains provider-specific implementation
+    details.  The chat API instead exposes a stable code and a Chinese action.
+    """
+
+    raw_parts = [str(exc)]
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    try:
+        response_text = str(getattr(response, "text", "") or "")
+    except RuntimeError:  # pragma: no cover - unread streaming response
+        response_text = ""
+    if response_text:
+        raw_parts.append(response_text[:500])
+    raw = " ".join(raw_parts).lower()
+    is_429 = force_429 or status_code == 429 or bool(re.search(r"(?<!\d)429(?!\d)", raw))
+    if not is_429:
+        return None
+
+    quota_markers = (
+        "quota exhausted",
+        "quota_exhausted",
+        "insufficient quota",
+        "insufficient_quota",
+        "配额",
+        "额度",
+        "余额不足",
+    )
+    if any(marker in raw for marker in quota_markers):
+        return {
+            "code": "MODEL_QUOTA_EXHAUSTED",
+            "message": "模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。",
+        }
+    return {
+        "code": "MODEL_RATE_LIMITED",
+        "message": "模型服务请求过于频繁，请稍后重试。",
+    }
+
+
+def _xcagi_chat_error_event(exc: HTTPException) -> dict[str, Any]:
+    """Serialize a chat exception for SSE without losing a stable error code."""
+
+    raw_detail = exc.detail
+    if isinstance(raw_detail, dict):
+        message = str(raw_detail.get("message") or "对话处理失败")
+        code = str(raw_detail.get("code") or "").strip()
+    else:
+        message = str(raw_detail)
+        code = ""
+    payload: dict[str, Any] = {
+        "type": "error",
+        "message": message,
+        "status_code": exc.status_code,
+    }
+    if code:
+        payload["code"] = code
+        payload["error_code"] = code
+    return payload
+
+
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, TimeoutError):
         msg = str(exc).strip() or "大模型响应超时，请稍后重试。"
@@ -232,6 +296,9 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
                 status_code=503,
                 detail=f"无法连接修茈平台 LLM（{_market_connection_label()}）",
             )
+        market_429 = _market_429_error_detail(exc)
+        if market_429 is not None:
+            return HTTPException(status_code=429, detail=market_429)
         if isinstance(exc, httpx.HTTPError):
             return HTTPException(status_code=502, detail="修茈平台 LLM 请求失败")
     except ImportError:
@@ -239,7 +306,10 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, AuthenticationError):
         return HTTPException(status_code=401, detail=f"大模型鉴权失败: {exc}")
     if isinstance(exc, RateLimitError):
-        return HTTPException(status_code=429, detail=f"大模型限流: {exc}")
+        return HTTPException(
+            status_code=429,
+            detail=_market_429_error_detail(exc, force_429=True),
+        )
     if isinstance(exc, APIConnectionError):
         return HTTPException(status_code=503, detail=f"无法连接大模型服务: {exc}")
     if isinstance(exc, APIError):
@@ -252,6 +322,9 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, ValueError):
         msg = str(exc).strip()
+        market_429 = _market_429_error_detail(exc)
+        if market_429 is not None:
+            return HTTPException(status_code=429, detail=market_429)
         if "余额不足" in msg or "402" in msg:
             return HTTPException(
                 status_code=402,
@@ -559,8 +632,7 @@ def _xcagi_guarded_planner_stream_events(
             return
         if isinstance(item, BaseException):
             exc = _xcagi_chat_http_exc(item)
-            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            yield {"type": "error", "message": detail, "status_code": exc.status_code}
+            yield _xcagi_chat_error_event(exc)
             return
 
         first_event_seen = True
@@ -853,13 +925,18 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         yield _sse_event_line({"type": "done", "result": payload})
     except RECOVERABLE_ERRORS as e:
         exc = _xcagi_chat_http_exc(e)
-        message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        error_event = _xcagi_chat_error_event(exc)
+        message = str(error_event["message"])
         if pre_run is not None:
             payload = {
                 "success": False,
                 "message": message,
                 "response": message,
-                "data": {"error": message, "status_code": exc.status_code},
+                "data": {
+                    "error": message,
+                    "status_code": exc.status_code,
+                    "error_code": error_event.get("error_code"),
+                },
             }
             finalize_legacy_chat_run(
                 pre_run.run_id,
@@ -872,11 +949,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             )
         yield _sse_event_line(
             _sse_payload_with_run_id(
-                {
-                    "type": "error",
-                    "message": message,
-                    "status_code": exc.status_code,
-                },
+                error_event,
                 getattr(pre_run, "run_id", None),
             )
         )

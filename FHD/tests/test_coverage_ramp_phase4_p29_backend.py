@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.application.normal_chat_dispatch import (
     build_customers_query_response_dict,
@@ -97,14 +93,13 @@ def test_build_product_query_wrong_intent() -> None:
     assert build_product_query_response_dict({"intent": "shipment"}) is None
 
 
-def test_build_customers_query_response_dict(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = [
-        {"customer_name": "甲公司", "contact_person": "张三"}
-    ]
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+@patch("app.bootstrap.get_customer_app_service")
+def test_build_customers_query_response_dict(mock_get: MagicMock) -> None:
+    mock_get.return_value.get_all.return_value = {
+        "success": True,
+        "data": [{"customer_name": "甲公司", "contact_person": "张三"}],
+        "total": 1,
+    }
     rr = route_normal_mode_message("查甲公司客户")
     body = build_customers_query_response_dict(rr)
     assert body is not None

@@ -57,13 +57,34 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         "客户名单",
     )
     if any(k in text for k in customer_keywords):
+        # 「有哪些客户？」是一个枚举请求，不应把「有哪些」当作名称关键词，
+        # 否则会稳定地查出空列表。这里仅对完整的列表话术清空关键词；带有
+        # 具体公司名的查询仍走下面的名称提取逻辑。
+        normalized_customer_list_query = re.sub(r"[\s，,。！？!?：:]", "", text)
+        if re.fullmatch(
+            r"(?:有哪些|所有|全部)(?:的)?(?:客户|购买单位)(?:列表|名单)?"
+            r"|(?:客户|购买单位)(?:有哪些|列表|名单)"
+            r"|(?:查询|查找|搜索|查看|看|列出)(?:所有|全部)?(?:客户|购买单位)",
+            normalized_customer_list_query,
+        ):
+            return {"intent": "customers_query", "slots": {"keyword": ""}}
         keyword_match = re.search(
-            r"(?:查询|查找|找到|搜索)?\s*([^\s，,。]{2,})\s*(?:的)?(?:客户|购买单位)", text
+            r"(?:查询|查找|找到|搜索|查一下|查下|查)?\s*([^\s，,。]{2,})\s*(?:的)?(?:客户|购买单位)",
+            text,
         )
         return {
             "intent": "customers_query",
             "slots": {"keyword": (keyword_match.group(1) if keyword_match else "").strip()},
         }
+
+    # 同样把纯产品列表话术识别为无关键词查询。不要把这个规则扩展到
+    # 「产品价格怎么定」等开放式问题，后者仍交给正常聊天处理。
+    normalized_product_list_query = re.sub(r"[\s，,。！？!?：:]", "", text)
+    if re.fullmatch(
+        r"(?:查|查询|查看|看|看看|列出|有哪些|所有|全部)?(?:的)?(?:产品|商品)(?:库|列表|名单)?",
+        normalized_product_list_query,
+    ):
+        return {"intent": "product_query", "slots": {"keyword": ""}}
 
     # 库存预警
     inventory_keywords = ("库存", "库存预警", "低库存", "库存不足", "缺货", "原材料库存", "仓库")
@@ -332,12 +353,24 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
         return None
     keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
     try:
-        from app.services.customers_service import CustomerService
+        # 统一经当前请求 Mod 上下文感知的应用服务读取。历史上这里引用了
+        # 不存在的 ``app.services.customers_service``，导致本地槽位命中后反而
+        # 降级为“服务不可用”。这个路径只调用 get_all，不会产生写入。
+        from app.bootstrap import get_customer_app_service
 
-        svc = CustomerService()
-        customers = svc.search(keyword=keyword) if keyword else svc.get_all()
+        result = get_customer_app_service().get_all(
+            keyword=keyword or None,
+            page=1,
+            per_page=20,
+        )
+        if not isinstance(result, dict) or not result.get("success"):
+            raise RuntimeError(
+                str(result.get("message") if isinstance(result, dict) else "客户查询失败")
+            )
+        customers = result.get("data") or []
         if not isinstance(customers, list):
             customers = []
+        total = int(result.get("total") or len(customers))
         if not customers:
             msg = f"未找到关键词「{keyword}」相关的客户。" if keyword else "暂无客户数据。"
         else:
@@ -345,11 +378,15 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
                 f"- {c.get('customer_name', '')} {c.get('contact_person', '')}"
                 for c in customers[:10]
             ]
-            msg = f"共找到 {len(customers)} 位客户：\n" + "\n".join(lines)
+            msg = f"共找到 {total} 位客户：\n" + "\n".join(lines)
         return {
             "success": True,
             "response": msg,
-            "data": {"intent": "customers_query", "customers": customers[:20]},
+            "data": {
+                "intent": "customers_query",
+                "customers": customers[:20],
+                "total": total,
+            },
             "normal_slot_dispatch": True,
         }
     except RECOVERABLE_ERRORS as e:

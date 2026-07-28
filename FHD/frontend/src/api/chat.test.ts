@@ -66,6 +66,22 @@ describe('parseChatStreamErrorResponse', () => {
     expect(await parseChatStreamErrorResponse(res)).toBe('出错了')
   })
 
+  it('extracts the stable message from a nested HTTP error detail', async () => {
+    const res = {
+      status: 429,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        detail: {
+          code: 'MODEL_QUOTA_EXHAUSTED',
+          message: '模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。',
+        },
+      }),
+    } as unknown as Response
+    expect(await parseChatStreamErrorResponse(res)).toBe(
+      '模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。',
+    )
+  })
+
   it('falls back to default on non-json', async () => {
     const res = {
       status: 500,

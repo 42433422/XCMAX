@@ -32,6 +32,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
     _sse_event_line,
+    _xcagi_chat_error_event,
     _xcagi_chat_http_exc,
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,
@@ -75,6 +76,62 @@ def _stream_shipment_preview_payload(message: str) -> dict[str, Any] | None:
         # temporarily unavailable.
         logger.debug("stream shipment preview fast path skipped", exc_info=True)
         return None
+
+
+def _stream_read_only_business_query_payload(message: str) -> dict[str, Any] | None:
+    """Return a deterministic answer for narrow, read-only business queries.
+
+    Customer and product list requests are already represented by normal-chat
+    slots and backed by local application services.  Serving those slots before
+    the model makes them available when a configured provider is rate-limited
+    or out of quota.  Keep the scope deliberately small: no import, document,
+    print, or mutation intent is handled here.
+
+    Raw database-read wording is intentionally excluded so this convenience
+    path cannot weaken the existing DB-read-token policy.
+    """
+
+    try:
+        # Do not infer intent from raw-database wording.  The complete
+        # authorization path (including DB_READ_TOKEN) must remain in charge
+        # of phrases such as “客户数据库 / 数据表 / schema / SQL”, even when the
+        # message also contains a customer or product keyword.
+        raw_db_markers = (
+            "数据库",
+            "数据表",
+            "表结构",
+            "schema",
+            "sql",
+            "raw",
+            "原始",
+            "全库",
+            "整库",
+            "数据库文件",
+        )
+        if any(marker in str(message or "").lower() for marker in raw_db_markers):
+            return None
+        if _message_requires_db_read_token(message):
+            return None
+
+        from app.application.normal_chat_dispatch import (
+            build_customers_query_response_dict,
+            build_product_query_response_dict,
+            route_normal_mode_message,
+        )
+
+        route = route_normal_mode_message(message)
+        intent = route.get("intent")
+        if intent == "customers_query":
+            return build_customers_query_response_dict(route)
+        if intent == "product_query":
+            return build_product_query_response_dict(route)
+    except RECOVERABLE_ERRORS:
+        # If a local read dependency is temporarily unavailable, return its
+        # explicit, side-effect-free error payload when available rather than
+        # pretending the model has a business receipt.  Unexpected programming
+        # errors still reach the normal boundary.
+        logger.debug("stream read-only business query fast path skipped", exc_info=True)
+    return None
 
 
 def _request_session_candidates(request: Request) -> list[str]:
@@ -758,16 +815,19 @@ async def execute_compat_chat_batch(
             except RECOVERABLE_ERRORS as e:
                 if not _legacy_chat_fallback_allowed(planner_runtime_context):
                     err = _xcagi_chat_http_exc(e)
+                    error_event = _xcagi_chat_error_event(err)
+                    error_message = str(error_event["message"])
                     results.append(
                         {
                             "success": False,
-                            "message": (
-                                err.detail if isinstance(err.detail, str) else str(err.detail)
-                            ),
-                            "response": err.detail
-                            if isinstance(err.detail, str)
-                            else str(err.detail),
-                            "data": {"error": str(e)},
+                            "message": error_message,
+                            "response": error_message,
+                            "error_code": error_event.get("error_code"),
+                            "data": {
+                                "error": error_message,
+                                "status_code": err.status_code,
+                                "error_code": error_event.get("error_code"),
+                            },
                         }
                     )
                     continue
@@ -883,9 +943,15 @@ async def execute_compat_chat_batch(
                 )
         except RECOVERABLE_ERRORS as e:
             err = _xcagi_chat_http_exc(e)
+            error_event = _xcagi_chat_error_event(err)
             payload = {
                 "success": False,
-                "message": err.detail if isinstance(err.detail, str) else str(err.detail),
+                "message": str(error_event["message"]),
+                "error_code": error_event.get("error_code"),
+                "data": {
+                    "status_code": err.status_code,
+                    "error_code": error_event.get("error_code"),
+                },
             }
             if pre_run is not None:
                 results.append(
@@ -961,6 +1027,18 @@ async def compat_chat_stream_async(
         )
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": shipment_preview})
+        return
+
+    # Read-only customer/product slots do not need an LLM.  This avoids a
+    # provider 429/quota failure for simple business lookups while preserving
+    # the existing confirmation-only shipment and print paths above.
+    business_query = _stream_read_only_business_query_payload(body.message)
+    if business_query is not None:
+        response_text = str(
+            business_query.get("response") or business_query.get("message") or ""
+        )
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": business_query})
         return
 
     # Emit a protocol-level progress event before any persona lookup or

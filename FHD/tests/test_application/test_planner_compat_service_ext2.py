@@ -1203,3 +1203,69 @@ class TestCompatChatStreamAsync:
         ]
         assert events[-1]["result"]["task"]["type"] == "shipment_generate"
         assert "print" not in events[-1]["result"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("message", "intent", "builder_name", "response"),
+        [
+            ("有哪些客户？", "customers_query", "build_customers_query_response_dict", "共找到 2 位客户：\n- 甲公司"),
+            ("查产品", "product_query", "build_product_query_response_dict", "已打开产品副窗。"),
+        ],
+    )
+    async def test_read_only_business_query_bypasses_llm_when_provider_is_unavailable(
+        self, message: str, intent: str, builder_name: str, response: str
+    ):
+        """客户/产品读取走本地槽位，绝不因模型配额耗尽而失败。"""
+
+        body = XcagiCompatChatBody(message=message)
+        request = _make_request()
+        payload = {"success": True, "response": response, "data": {"intent": intent}}
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": intent, "slots": {"keyword": ""}},
+            ),
+            patch(
+                f"app.application.normal_chat_dispatch.{builder_name}",
+                return_value=payload,
+            ) as builder,
+            patch(
+                "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
+                side_effect=AssertionError("read-only business query must not invoke the LLM stream"),
+            ) as stream_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        builder.assert_called_once()
+        stream_fn.assert_not_called()
+        assert [self._event(chunk) for chunk in chunks] == [
+            {"type": "token", "text": response},
+            {"type": "done", "result": payload},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_raw_database_phrase_does_not_bypass_existing_read_token_guard(self):
+        """快捷只覆盖受控客户/产品读取，不能偷跑原始数据库读取。"""
+
+        body = XcagiCompatChatBody(message="查客户数据库", system_prompt="test")
+        request = _make_request()
+
+        async def mock_stream(*args, **kwargs):
+            yield b"normal-path"
+
+        with (
+            patch(
+                "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
+                return_value=mock_stream(),
+            ) as stream_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        stream_fn.assert_called_once()
+        assert self._event(chunks[0])["type"] == "tool_progress"
+        assert chunks[1:] == [b"normal-path"]

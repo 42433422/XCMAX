@@ -96,6 +96,23 @@ class TestXcagiChatHttpExcExtended:
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 502
 
+    def test_market_quota_429_uses_stable_code_and_safe_message(self):
+        exc = ValueError("平台错误(429): {\"error\": \"quota exhausted\"}")
+        result = ch._xcagi_chat_http_exc(exc)
+
+        assert result.status_code == 429
+        assert result.detail == {
+            "code": "MODEL_QUOTA_EXHAUSTED",
+            "message": "模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。",
+        }
+        assert ch._xcagi_chat_error_event(result) == {
+            "type": "error",
+            "message": "模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。",
+            "status_code": 429,
+            "code": "MODEL_QUOTA_EXHAUSTED",
+            "error_code": "MODEL_QUOTA_EXHAUSTED",
+        }
+
     def test_value_error_generic(self):
         exc = ValueError("some other error")
         result = ch._xcagi_chat_http_exc(exc)
