@@ -7,6 +7,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE = REPO_ROOT / "FHD" / ".github" / "workflows" / "evolution-orchestrator.yml"
 PUBLISHED = REPO_ROOT / ".github" / "workflows" / "fhd-evolution-orchestrator.yml"
+CI_SOURCE = REPO_ROOT / "FHD" / ".github" / "workflows" / "ci-cd.yml"
 
 
 def test_orchestrator_uses_lightweight_bounded_source_path():
@@ -37,6 +38,17 @@ def test_orchestrator_only_uses_job_level_expression_contexts_available_to_githu
     text = SOURCE.read_text(encoding="utf-8")
     assert "EVOLUTION_PROPOSAL_PATH: ${{ github.workspace }}/.evolution-proposal.json" in text
     assert "EVOLUTION_PROPOSAL_PATH: ${{ runner.temp }}" not in text
+
+
+def test_exact_cvm_receipt_dispatches_evolution_with_pat():
+    text = CI_SOURCE.read_text(encoding="utf-8")
+    assert "dispatch-evolution-after-cvm:" in text
+    assert "needs: [cvm-push-release]" in text
+    assert "inputs.push_to_cvm == true" in text
+    assert "needs.cvm-push-release.result == 'success'" in text
+    assert "GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}" in text
+    assert "gh workflow run fhd-evolution-orchestrator.yml" in text
+    assert "-f force_run=false" in text
 
 
 def test_orchestrator_source_and_published_copy_are_exact():
