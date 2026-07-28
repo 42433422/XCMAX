@@ -44,8 +44,9 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
   触发的 PR 更新进入需要人工批准的 workflow 状态
 
 合并后发布闭环（2026-07-26）：
-- `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须显式
-  workflow_dispatch FHD CI/CD 与 MODstore 主干 CI
+- `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须用
+  独立 `WORKFLOW_DISPATCH_TOKEN` 显式 workflow_dispatch FHD CI/CD 与
+  MODstore 主干 CI，确保下游 `workflow_run` CD 事件不会被递归触发保护吞掉
 - 任一派发失败都记为 `post_merge_dispatch_failed`、标记 `needs-human`，
   并让本次 SLA workflow 失败，禁止把“已合并”冒充“已发布”
 
@@ -55,6 +56,8 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
   GITHUB_TOKEN    必填
   GITHUB_REPOSITORY  必填（如 "owner/repo"）
   BRANCH_UPDATE_TOKEN  behind PR 更新专用 token（CI 使用 CI_COMMIT_TOKEN）
+  WORKFLOW_DISPATCH_TOKEN  主干 CI 派发专用 token（CI 使用 CI_COMMIT_TOKEN）
+  REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN=1 时缺 token 即 fail closed
   AUTO_IMPLEMENT_ALLOWLIST_PATH  可选，覆盖 allowlist 路径（默认 <repo_root>/config/auto-implement-allowlist.yaml）
 """
 
@@ -165,6 +168,21 @@ class GitHubClient:
                 },
             )
             if branch_update_token
+            else None
+        )
+        workflow_dispatch_token = (os.environ.get("WORKFLOW_DISPATCH_TOKEN") or "").strip()
+        self.require_independent_workflow_dispatch = (
+            os.environ.get("REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN") == "1"
+        )
+        self.workflow_dispatch_client = (
+            httpx.Client(
+                timeout=30.0,
+                headers={
+                    "Authorization": f"Bearer {workflow_dispatch_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            if workflow_dispatch_token
             else None
         )
 
@@ -403,13 +421,22 @@ class GitHubClient:
         ref: str = "main",
         inputs: dict[str, str] | None = None,
     ) -> tuple[bool, str]:
-        """显式派发 workflow_dispatch，绕过 GITHUB_TOKEN push 事件抑制。"""
+        """用独立 token 派发，保留下游 ``workflow_run`` 自动 CD 事件。"""
 
         url = f"{GITHUB_API}/repos/{self.repo}/actions/workflows/{workflow_file}/dispatches"
         payload: dict[str, Any] = {"ref": ref}
         if inputs:
             payload["inputs"] = inputs
-        resp = self.client.post(url, json=payload)
+        dispatch_client = getattr(self, "workflow_dispatch_client", None)
+        if dispatch_client is None:
+            if getattr(
+                self,
+                "require_independent_workflow_dispatch",
+                False,
+            ):
+                return False, "workflow_dispatch_token_missing"
+            dispatch_client = self.client
+        resp = dispatch_client.post(url, json=payload)
         if resp.status_code == 204:
             return True, "ok"
         try:
