@@ -239,6 +239,18 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
         assert "timeout-minutes: 90" in workflow
 
 
+def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
+    source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
+    published = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
+    )
+
+    for workflow in (source, published):
+        job = workflow["jobs"]["dispatch-evolution-after-cvm"]
+        assert job["steps"][0]["working-directory"] == "."
+        assert "actions/checkout" not in str(job["steps"])
+
+
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
     workflow_paths = [
         REPO_ROOT / ".github/workflows/fhd-ci-cd.yml",
