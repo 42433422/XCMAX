@@ -2525,6 +2525,67 @@ def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():
     assert "docker-build-fhd-api" in prompt
 
 
+def test_reconcile_hold_merge_label_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-81ba09",
+                "para_task_id": "task-hold",
+                "run_id": "run-hold",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-81ba09",
+            "detail": "hold-merge-label-failed-before-review",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-81ba09",
+    )
+    prompt = _code_task_text("run-hold-retry", {"gaps": []}, memory, candidate)
+    assert "hold-merge-label-failed-before-review" in prompt
+    assert "Continue on the rejected branch as the mutable base" in prompt
+
+
+def test_para_merge_remediation_branch_preserving_helpers():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_branch_preserving_para_merge_failure_detail,
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    assert is_branch_preserving_para_merge_failure_detail(
+        "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api"
+    )
+    assert is_branch_preserving_para_merge_failure_detail("hold-merge-label-failed-before-review")
+    assert not is_branch_preserving_para_merge_failure_detail("git merge conflict in foo.py")
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict", "hold-merge-label-failed-before-review"
+        )
+        is False
+    )
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict") is True
+
+
 # ---------------------------------------------------------------------------
 # _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
 # ---------------------------------------------------------------------------
