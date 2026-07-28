@@ -17,8 +17,10 @@ import {
   buildMergeConflictPayload,
   blockingMergePollReason,
   chunkReviewDiff,
+  decodeSelfUpdatePayload,
   forbiddenAutoMergePaths,
   extractSelfMaintenanceRunId,
+  gitBlobSha,
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
   isTransientMergeFailure,
@@ -34,6 +36,46 @@ import {
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
 } from './merge_worker.mjs';
+
+test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
+  const source = Buffer.from(
+    '#!/usr/bin/env node\n// Para /api/tasks/merge-queue test fixture\n',
+    'utf8',
+  );
+  const payload = {
+    content: source.toString('base64'),
+    encoding: 'base64',
+    sha: gitBlobSha(source),
+  };
+  const decoded = decodeSelfUpdatePayload(payload);
+  assert.deepEqual(decoded.source, source);
+  assert.equal(decoded.blobSha, payload.sha);
+  assert.match(decoded.digest, /^[0-9a-f]{64}$/);
+});
+
+test('self-update rejects tampered or unrelated GitHub content', () => {
+  const source = Buffer.from(
+    '#!/usr/bin/env node\n// Para /api/tasks/merge-queue test fixture\n',
+    'utf8',
+  );
+  assert.throws(
+    () => decodeSelfUpdatePayload({
+      content: Buffer.from(`${source.toString('utf8')}tampered`).toString('base64'),
+      encoding: 'base64',
+      sha: gitBlobSha(source),
+    }),
+    /self-update-blob-sha-mismatch/,
+  );
+  const unrelated = Buffer.from('#!/usr/bin/env node\nconsole.log("other")\n', 'utf8');
+  assert.throws(
+    () => decodeSelfUpdatePayload({
+      content: unrelated.toString('base64'),
+      encoding: 'base64',
+      sha: gitBlobSha(unrelated),
+    }),
+    /self-update-source-identity-invalid/,
+  );
+});
 
 
 test('merge review veto uses the Para merge-conflict API contract', () => {
@@ -488,6 +530,8 @@ test('installer repairs stale Node paths and reloads the LaunchAgent definition'
   assert.match(installer, /configured_node=.*ProgramArguments:0/);
   assert.match(installer, /NODE_BIN=.*command -v node/);
   assert.match(installer, /Set :ProgramArguments:0 \$NODE_BIN/);
+  assert.match(installer, /MERGE_WORKER_SELF_UPDATE string 1/);
+  assert.match(installer, /MERGE_WORKER_SELF_UPDATE_BRANCH string main/);
   assert.match(installer, /launchctl bootout "\$target"/);
   assert.match(installer, /bootstrap_agent\(\)/);
   assert.match(installer, /for attempt in 1 2 3/);

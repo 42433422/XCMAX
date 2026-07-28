@@ -7,9 +7,19 @@
 // 冲突：保留 PR + hold-merge veto，并写入 merge-conflict 供后续自治修复。
 
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -26,6 +36,20 @@ const BOT_MERGE_WORKFLOW = String(
 const BOT_MERGE_WATCHDOG_REPOSITORY = String(
   process.env.MERGE_WORKER_REPOSITORY || '',
 ).trim();
+const SELF_UPDATE_ENABLED = process.env.MERGE_WORKER_SELF_UPDATE !== '0';
+const SELF_UPDATE_BRANCH = String(
+  process.env.MERGE_WORKER_SELF_UPDATE_BRANCH || 'main',
+).trim();
+const SELF_UPDATE_SOURCE_PATH = (
+  'FHD/scripts/autonomy/runtime_tools/merge_worker.mjs'
+);
+const SELF_UPDATE_CHECK_MS = Math.max(
+  5 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_SELF_UPDATE_CHECK_MS || String(15 * 60 * 1000),
+    10,
+  ),
+);
 export const BOT_MERGE_WATCHDOG_STALE_MS = Math.max(
   30 * 60 * 1000,
   Number.parseInt(
@@ -118,9 +142,102 @@ let cachedToken = '';
 let cachedTokenAt = 0;
 let botMergeWatchdogLastCheckedAt = 0;
 let botMergeWatchdogLastDispatchAt = 0;
+let selfUpdateLastCheckedAt = 0;
 
 function log(...args) {
   console.log(new Date().toISOString().slice(11, 19), '[merge-worker]', ...args);
+}
+
+export function gitBlobSha(source) {
+  const body = Buffer.isBuffer(source) ? source : Buffer.from(String(source || ''), 'utf8');
+  return createHash('sha1')
+    .update(Buffer.from(`blob ${body.length}\0`, 'utf8'))
+    .update(body)
+    .digest('hex');
+}
+
+export function decodeSelfUpdatePayload(payload) {
+  if (String(payload?.encoding || '').trim().toLowerCase() !== 'base64') {
+    throw new Error('self-update-content-encoding-invalid');
+  }
+  const expectedBlobSha = String(payload?.sha || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(expectedBlobSha)) {
+    throw new Error('self-update-blob-sha-invalid');
+  }
+  const encoded = String(payload?.content || '').replace(/\s+/g, '');
+  if (!encoded) throw new Error('self-update-content-empty');
+  const source = Buffer.from(encoded, 'base64');
+  if (source.length === 0 || source.length > 5 * 1024 * 1024) {
+    throw new Error('self-update-content-size-invalid');
+  }
+  if (gitBlobSha(source) !== expectedBlobSha) {
+    throw new Error('self-update-blob-sha-mismatch');
+  }
+  const text = source.toString('utf8');
+  if (
+    !text.startsWith('#!/usr/bin/env node')
+    || !text.includes('Para /api/tasks/merge-queue')
+  ) {
+    throw new Error('self-update-source-identity-invalid');
+  }
+  return {
+    blobSha: expectedBlobSha,
+    digest: createHash('sha256').update(source).digest('hex'),
+    source,
+  };
+}
+
+async function maybeSelfUpdate(nowMs = Date.now()) {
+  if (
+    !SELF_UPDATE_ENABLED
+    || !BOT_MERGE_WATCHDOG_REPOSITORY
+    || !SELF_UPDATE_BRANCH
+  ) {
+    return false;
+  }
+  if (nowMs - selfUpdateLastCheckedAt < SELF_UPDATE_CHECK_MS) return false;
+  selfUpdateLastCheckedAt = nowMs;
+
+  const { stdout } = await execFileAsync('gh', [
+    'api',
+    '--method', 'GET',
+    `repos/${BOT_MERGE_WATCHDOG_REPOSITORY}/contents/${SELF_UPDATE_SOURCE_PATH}`,
+    '-f', `ref=${SELF_UPDATE_BRANCH}`,
+  ], {
+    cwd: process.env.HOME || '/tmp',
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  const remote = decodeSelfUpdatePayload(JSON.parse(stdout || '{}'));
+  const currentFile = fileURLToPath(import.meta.url);
+  const current = readFileSync(currentFile);
+  const currentDigest = createHash('sha256').update(current).digest('hex');
+  if (currentDigest === remote.digest) return false;
+
+  const temporary = `${currentFile}.self-update.${process.pid}`;
+  try {
+    writeFileSync(temporary, remote.source, { mode: statSync(currentFile).mode & 0o777 });
+    chmodSync(temporary, statSync(currentFile).mode & 0o777);
+    await execFileAsync(process.execPath, ['--check', temporary], {
+      cwd: dirname(currentFile),
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    renameSync(temporary, currentFile);
+    writeFileSync(
+      `${currentFile}.sha256`,
+      `${remote.digest}  source_blob=${remote.blobSha} branch=${SELF_UPDATE_BRANCH}\n`,
+      { mode: 0o600 },
+    );
+  } catch (error) {
+    if (existsSync(temporary)) unlinkSync(temporary);
+    throw error;
+  }
+  log(
+    `自更新完成：branch=${SELF_UPDATE_BRANCH} `
+    + `blob=${remote.blobSha.slice(0, 12)} sha256=${remote.digest.slice(0, 12)}`,
+  );
+  return true;
 }
 
 async function guestToken() {
@@ -1681,6 +1798,14 @@ async function main() {
   log(`已有 ${Object.keys(state).length} 条历史记录`);
 
   while (true) {
+    try {
+      if (await maybeSelfUpdate()) {
+        log('自更新已原子落盘，退出并由 launchd 拉起新版本');
+        process.exit(75);
+      }
+    } catch (err) {
+      log(`自更新异常，继续运行当前已验证版本：${String(err).slice(0, 300)}`);
+    }
     try {
       await maybeRecoverStaleBotMergeWorkflow();
     } catch (err) {

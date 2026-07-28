@@ -93,6 +93,8 @@ for setting in \
   "MERGE_WORKER_EXPECTED_GITHUB_ACTOR string $EXPECTED_ACTOR" \
   "MERGE_WORKER_REQUIRE_BOT_IDENTITY string 1" \
   "MERGE_WORKER_BOT_WORKFLOW string fhd-ai-self-heal-auto-merge.yml" \
+  "MERGE_WORKER_SELF_UPDATE string 1" \
+  "MERGE_WORKER_SELF_UPDATE_BRANCH string main" \
   "MERGE_WORKER_REPOSITORY string $REPOSITORY"; do
   key="${setting%% *}"
   rest="${setting#* }"
