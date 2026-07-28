@@ -530,10 +530,20 @@ describe('EtlCenterView folder workflow', () => {
     wrapper.unmount()
   })
 
-  it('applies deterministic row overrides and reloads the filtered preview', async () => {
+  it('applies deterministic row overrides and shows only the selected action rows', async () => {
     const run = previewRun()
     etlApiMock.run.mockResolvedValue(run)
     etlApiMock.patchDraft.mockResolvedValue(run)
+    const rows = previewRows()
+    etlApiMock.rows.mockImplementation(async (
+      _id: string,
+      page: number,
+      pageSize: number,
+      action = '',
+    ) => {
+      const items = action ? rows.filter((row) => row.final_action === action) : rows
+      return { page, page_size: pageSize, total: items.length, items }
+    })
     const wrapper = await mountView(run.id)
 
     await buttonByText(wrapper, '本页可新增行设为新增')?.trigger('click')
@@ -559,6 +569,16 @@ describe('EtlCenterView folder workflow', () => {
     await actionFilter.setValue('error')
     await flushPromises()
     expect(etlApiMock.rows).toHaveBeenLastCalledWith(run.id, 1, 50, 'error')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('低置信客户')
+    expect(wrapper.text()).not.toContain('国圣化工')
+
+    await wrapper.findAll('.etl-summary-grid button')[0].trigger('click')
+    await flushPromises()
+    expect(etlApiMock.rows).toHaveBeenLastCalledWith(run.id, 1, 50, 'new')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('底漆')
+    expect(wrapper.text()).not.toContain('低置信客户')
     wrapper.unmount()
   })
 

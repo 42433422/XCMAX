@@ -343,6 +343,17 @@ async function loadRows() {
   hasOcrRows.value = result.items.some((row) => row.provenance.ocr === true)
 }
 
+async function setRowActionFilter(action: string) {
+  if (action === rowActionFilter.value) return
+  rowActionFilter.value = action
+  rowPage.value = 1
+  await loadRows()
+}
+
+function onRowActionFilterChange(event: Event) {
+  void setRowActionFilter((event.target as HTMLSelectElement).value)
+}
+
 async function overrideRow(row: EtlRunRow, event: Event) {
   if (!currentRun.value) return
   const action = (event.target as HTMLSelectElement).value

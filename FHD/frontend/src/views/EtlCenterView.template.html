@@ -509,7 +509,7 @@
           </details>
         </div>
         <div class="etl-summary-grid">
-          <button v-for="item in summaryCards" :key="item.action" type="button" @click="rowActionFilter = item.action">
+          <button v-for="item in summaryCards" :key="item.action" type="button" @click="setRowActionFilter(item.action)">
             <span :class="`etl-dot etl-dot--${item.action}`"></span>
             <strong>{{ item.count }}</strong>
             <small>{{ item.label }}</small>
@@ -530,7 +530,7 @@
         </div>
         <div class="etl-table-toolbar">
           <div class="etl-bulk-actions">
-            <select v-model="rowActionFilter" @change="loadRows">
+            <select :value="rowActionFilter" @change="onRowActionFilterChange">
               <option value="">全部动作</option>
               <option value="new">新增</option>
               <option value="update">更新</option>
