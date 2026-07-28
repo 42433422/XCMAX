@@ -54,6 +54,10 @@ from modstore_server.self_maintenance_quality_gate import (
     matches_source_governance_command,
     quality_check_failure,
 )
+from modstore_server.self_maintenance_remediation_lineage import (
+    remediation_lineage_fields,
+    resume_candidate_from_context,
+)
 
 QUALITY_CHECKS_JSON = (
     '"quality_checks":{'
@@ -64,6 +68,73 @@ QUALITY_CHECKS_JSON = (
     '"source_governance":{"command":"python3 scripts/dev/source_governance.py --top 10",'
     '"exit_code":0,"status":"passed"}},'
 )
+
+
+def test_scheduler_selected_remediation_is_resolved_exactly() -> None:
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "run_id": "newer-general-run",
+                "branch": "devfleet/cursor/newer",
+                "para_task_id": "newer-task",
+                "steps": ["review"],
+            },
+            {
+                "kind": "automated_remediation",
+                "run_id": "incident-run",
+                "branch": "devfleet/cursor/incident",
+                "task_id": "incident-task",
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        ]
+    }
+    context = {
+        "branch": "devfleet/cursor/incident",
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "reason": "structured_qa_verdict_not_pass",
+        "run_id": "incident-run",
+        "task_id": "incident-task",
+    }
+
+    assert resume_candidate_from_context(memory, context) == {
+        "branch": "devfleet/cursor/incident",
+        "continue_existing_code_task": True,
+        "failed_run_id": "incident-run",
+        "failed_steps": ["code"],
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "para_task_id": "incident-task",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_remediation_lineage_emits_scorecard_visible_event() -> None:
+    assert remediation_lineage_fields(
+        {
+            "origin_reason": "nginx error",
+            "origin_run_id": "incident-run",
+            "origin_triggered_by": "incident_event",
+            "run_id": "parent-run",
+        }
+    ) == {
+        "event": "incident_remediation",
+        "origin_reason": "nginx error",
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "parent_run_id": "parent-run",
+    }
+    assert (
+        remediation_lineage_fields(
+            {
+                "origin_run_id": "evolution-run",
+                "origin_triggered_by": "proactive_signal",
+                "run_id": "parent-run",
+            }
+        )["event"]
+        == "proactive_evolution_remediation"
+    )
 
 
 def _stats(line_changes=12, binary_files=None):

@@ -63,6 +63,18 @@ from .self_maintenance_quality_gate import (
 )
 from .self_maintenance_quality_gate import qa_verdict_failure_reason as _qa_verdict_failure_reason
 from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
+from .self_maintenance_remediation_lineage import (
+    automated_remediation_resume_plan as _automated_remediation_resume_plan,
+)
+from .self_maintenance_remediation_lineage import (
+    remediation_lineage_fields as _remediation_lineage_fields,
+)
+from .self_maintenance_remediation_lineage import (
+    resume_candidate_from_context as _resume_candidate_from_remediation_context,
+)
+from .self_maintenance_remediation_lineage import (
+    unavailable_context_record as _unavailable_remediation_context_record,
+)
 from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
@@ -907,49 +919,6 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         run_ids=run_ids,
         task_ids=task_ids,
     )
-
-
-_AUTOMATED_REMEDIATION_QA_ONLY_REASONS = frozenset(
-    {
-        "changed_files_match_forbidden_globs",
-        "changed_files_outside_dynamic_low_risk_scope",
-        "changed_files_outside_low_risk_globs",
-        "missing_report_only_evidence",
-        "max_retries_exceeded",
-        "structured_qa_executor_unavailable",
-        "structured_qa_focused_command_not_passed",
-        "structured_qa_target_branch_unavailable",
-    }
-)
-_AUTOMATED_REMEDIATION_CODE_REASONS = frozenset(
-    {
-        "para_merge_conflict",
-        "para_merge_task_failed",
-        RETORT_SCOPE_REASON,
-        "structured_qa_blocking_findings",
-        "structured_qa_black_not_passed",
-        "structured_qa_isort_not_passed",
-        "structured_qa_new_errors",
-        "structured_qa_new_failures",
-        "structured_qa_source_governance_not_passed",
-        "structured_qa_verdict_not_pass",
-    }
-)
-
-
-def _automated_remediation_resume_plan(reason: str) -> Optional[Tuple[List[str], bool]]:
-    """Map hold_for_automated_remediation reasons to resume steps and branch pinning."""
-
-    normalized = str(reason or "").strip()
-    if normalized in _AUTOMATED_REMEDIATION_QA_ONLY_REASONS:
-        return (["qa"], False)
-    if normalized.startswith("structured_review_"):
-        return (["code"], False)
-    if normalized in _AUTOMATED_REMEDIATION_CODE_REASONS:
-        return (["code"], True)
-    if normalized.startswith("structured_qa_new_"):
-        return (["code"], True)
-    return None
 
 
 def _stored_qa_target_ref_missing(memory: Dict[str, Any], item: Dict[str, Any]) -> bool:
@@ -6601,7 +6570,11 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
 
 
 def _run_self_maintenance_loop_unlocked(
-    *, triggered_by: str = "manual", force: bool = False, reason: Optional[str] = None
+    *,
+    triggered_by: str = "manual",
+    force: bool = False,
+    reason: Optional[str] = None,
+    remediation_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run the real employee maintenance chain when gates allow it."""
 
@@ -6625,6 +6598,7 @@ def _run_self_maintenance_loop_unlocked(
             "status": f"skipped_{gate.get('reason')}",
             "triggered_by": triggered_by,
         }
+        record.update(_remediation_lineage_fields(remediation_context))
         _append_ledger(record)
         return record
 
@@ -6639,7 +6613,25 @@ def _run_self_maintenance_loop_unlocked(
         or post_dispatch_reconciliation.get("changed")
     ):
         _write_loop_memory(loop_memory)
-    resume_candidate = _resume_review_qa_candidate(loop_memory)
+    resume_candidate = (
+        _resume_candidate_from_remediation_context(
+            loop_memory,
+            remediation_context,
+        )
+        if remediation_context
+        else _resume_review_qa_candidate(loop_memory)
+    )
+    if remediation_context and resume_candidate is None:
+        record = _unavailable_remediation_context_record(
+            created_at=_iso(started_at),
+            force=force,
+            gate=gate,
+            remediation_context=remediation_context,
+            run_id=run_id,
+            triggered_by=triggered_by,
+        )
+        _append_ledger(record)
+        return record
     start_record = {
         "created_at": _iso(started_at),
         "force": force,
@@ -6654,6 +6646,7 @@ def _run_self_maintenance_loop_unlocked(
         "user_id": user_id,
         "runtime_provenance": gate.get("runtime_provenance"),
     }
+    start_record.update(_remediation_lineage_fields(remediation_context))
     if any(merge_reconciliation.values()):
         start_record["merge_reconciliation"] = merge_reconciliation
     if post_dispatch_reconciliation.get("changed"):
@@ -6783,6 +6776,8 @@ def _run_self_maintenance_loop_unlocked(
                         "triggered_by": triggered_by,
                         "retort_clarification": retort_gate,
                     }
+                    if resume_candidate:
+                        final["resume_candidate"] = resume_candidate
                     if scope_only:
                         final["policy_decision"] = {
                             "action": "hold_for_automated_remediation",
@@ -6986,7 +6981,11 @@ def _run_self_maintenance_loop_unlocked(
 
 @platform_llm_scoped
 def run_self_maintenance_loop(
-    *, triggered_by: str = "manual", force: bool = False, reason: Optional[str] = None
+    *,
+    triggered_by: str = "manual",
+    force: bool = False,
+    reason: Optional[str] = None,
+    remediation_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run one maintenance transaction under an OS-backed exclusive lease."""
 
@@ -6996,6 +6995,7 @@ def run_self_maintenance_loop(
                 triggered_by=triggered_by,
                 force=force,
                 reason=reason,
+                remediation_context=remediation_context,
             )
         run_id = str(uuid.uuid4())
         record = {
@@ -7007,6 +7007,7 @@ def run_self_maintenance_loop(
             "status": "skipped_active_lease",
             "triggered_by": triggered_by,
         }
+        record.update(_remediation_lineage_fields(remediation_context))
         _append_ledger(record)
         return record
 
