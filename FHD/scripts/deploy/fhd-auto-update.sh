@@ -130,7 +130,11 @@ PY
 
 sync_dr_release() {
   [[ "${CHANNEL:-}" == "stable" ]] || return 0
-  local sync_script="${FHD_DR_SYNC_SCRIPT:-/usr/local/xcmax-ops/dr/xcmax_release_sync.sh}"
+  local bundled_sync="$DEPLOY_ROOT/scripts/deploy/xcmax-release-sync.sh"
+  local sync_script="${FHD_DR_SYNC_SCRIPT:-$bundled_sync}"
+  if [[ ! -x "$sync_script" && -z "${FHD_DR_SYNC_SCRIPT:-}" ]]; then
+    sync_script="/usr/local/xcmax-ops/dr/xcmax_release_sync.sh"
+  fi
   if [[ ! -x "$sync_script" ]]; then
     log "ERROR: DR 发布同步脚本不可用: $sync_script"
     [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]

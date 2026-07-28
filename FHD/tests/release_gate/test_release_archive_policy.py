@@ -69,3 +69,12 @@ def test_pack_release_invokes_archive_verifier() -> None:
     assert "export COPYFILE_DISABLE=1" in script
     assert 'python3 "$ARCHIVE_VERIFY" --archive "$TARBALL"' in script
     assert '"$SCRIPT_DIR/lib/verify_release_archive.py"' in script
+
+
+def test_pack_release_bundles_immutable_dr_sync_helper() -> None:
+    pack = (FHD_ROOT / "scripts/deploy/fhd-pack-release.sh").read_text(encoding="utf-8")
+    auto_update = (FHD_ROOT / "scripts/deploy/fhd-auto-update.sh").read_text(encoding="utf-8")
+
+    assert 'DR_RELEASE_SYNC="$REPO_ROOT/ops/dr/xcmax_release_sync.sh"' in pack
+    assert 'cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"' in pack
+    assert 'bundled_sync="$DEPLOY_ROOT/scripts/deploy/xcmax-release-sync.sh"' in auto_update
