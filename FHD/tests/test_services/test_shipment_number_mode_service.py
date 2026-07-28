@@ -352,6 +352,66 @@ class TestNormalizeSuccessPayload:
 
 
 # ---------------------------------------------------------------------------
+# _load_active_product_catalog
+# ---------------------------------------------------------------------------
+
+
+class TestLoadActiveProductCatalog:
+    def test_copies_orm_values_before_session_close(self, svc):
+        """Normal confirmation must not lazy-load a detached Product row."""
+
+        class ExpiringRow:
+            def __init__(self):
+                self.attached = True
+                self.model_number = "方和"
+                self.name = "黑棕面用修色精"
+                self.unit = "金汉武家私"
+                self.price = 48
+
+            def __getattribute__(self, name):
+                if name in {"model_number", "name", "unit", "price"}:
+                    if not object.__getattribute__(self, "attached"):
+                        raise AssertionError("attempted to read a detached product")
+                return object.__getattribute__(self, name)
+
+        row = ExpiringRow()
+
+        class Query:
+            def filter(self, *_args):
+                return self
+
+            def all(self):
+                return [row]
+
+        class Db:
+            def query(self, _model):
+                return Query()
+
+        @contextlib.contextmanager
+        def closing_db():
+            yield Db()
+            row.attached = False
+
+        with (
+            patch("app.services.shipment_number_mode_service.get_db", closing_db),
+            patch(
+                "app.services.shipment_number_mode_service.apply_tenant_filter",
+                side_effect=lambda query, _model: query,
+            ),
+        ):
+            catalog = svc._load_active_product_catalog()
+
+        assert catalog == [
+            {
+                "model_number": "方和",
+                "name": "黑棕面用修色精",
+                "unit": "金汉武家私",
+                "price": 48,
+            }
+        ]
+
+
+# ---------------------------------------------------------------------------
 # execute (main entry point)
 # ---------------------------------------------------------------------------
 

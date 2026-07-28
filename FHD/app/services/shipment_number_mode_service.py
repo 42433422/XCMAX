@@ -131,6 +131,11 @@ class ShipmentNumberModeService:
         unit and price are available for deterministic customer-product matching.
         """
 
+        # ``get_db`` commits when its context exits.  SQLAlchemy's default
+        # session policy then expires ORM instances, so copying the catalogue
+        # *after* this block would attempt a lazy refresh on detached Product
+        # rows during a normal chat shipment confirmation.  Make a plain data
+        # snapshot while the session is alive instead.
         with get_db() as db:
             rows = (
                 apply_tenant_filter(db.query(Product), Product)
@@ -141,20 +146,23 @@ class ShipmentNumberModeService:
                 )
                 .all()
             )
-
-        catalog: list[dict[str, Any]] = []
-        for row in rows or []:
-            catalog.append(
-                {
-                    "model_number": str(
-                        self._product_row_value(row, "model_number", tuple_index=0) or ""
-                    ).strip(),
-                    "name": str(self._product_row_value(row, "name", tuple_index=1) or "").strip(),
-                    "unit": str(self._product_row_value(row, "unit", tuple_index=2) or "").strip(),
-                    "price": self._product_row_value(row, "price", tuple_index=3),
-                }
-            )
-        return catalog
+            catalog: list[dict[str, Any]] = []
+            for row in rows or []:
+                catalog.append(
+                    {
+                        "model_number": str(
+                            self._product_row_value(row, "model_number", tuple_index=0) or ""
+                        ).strip(),
+                        "name": str(
+                            self._product_row_value(row, "name", tuple_index=1) or ""
+                        ).strip(),
+                        "unit": str(
+                            self._product_row_value(row, "unit", tuple_index=2) or ""
+                        ).strip(),
+                        "price": self._product_row_value(row, "price", tuple_index=3),
+                    }
+                )
+            return catalog
 
     def _resolve_scoped_product_name(
         self,
