@@ -51,11 +51,7 @@ def test_clean_ci_llm_client_parses_openai_json(monkeypatch):
         def json(self):
             return {
                 "choices": [
-                    {
-                        "message": {
-                            "content": 'proposal follows: {"proposal_id":"clean-ci"}'
-                        }
-                    }
+                    {"message": {"content": 'proposal follows: {"proposal_id":"clean-ci"}'}}
                 ]
             }
 

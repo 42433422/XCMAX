@@ -36,9 +36,7 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
         raise ProposalScaffoldError("unsafe package version")
 
     skills = [_bounded_text(item, limit=96) for item in pack["skills"][:12]]
-    criteria = [
-        _bounded_text(item, limit=400) for item in pack["acceptance_criteria"][:12]
-    ]
+    criteria = [_bounded_text(item, limit=400) for item in pack["acceptance_criteria"][:12]]
     prompt = _bounded_text(pack.get("prompt_template"), limit=12000)
     responsibility = _bounded_text(pack.get("responsibility"), limit=600)
     if not prompt or not criteria:
@@ -103,9 +101,7 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def materialize_proposal(
-    proposal: Dict[str, Any], *, repo_root: Path
-) -> Dict[str, Any]:
+def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[str, Any]:
     """Create a new source directory, refusing overwrite or path escape."""
 
     files = build_source_files(proposal)

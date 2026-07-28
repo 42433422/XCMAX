@@ -145,9 +145,7 @@ def test_source_bound_pack_records_one_autonomous_code_qa_deploy_run(monkeypatch
 
     assert result["recorded"] == 1
     assert len(events) == 5
-    assert {event["run_id"] for event in events} == {
-        "evolution-deploy-67890-autonomy-gap-analyst"
-    }
+    assert {event["run_id"] for event in events} == {"evolution-deploy-67890-autonomy-gap-analyst"}
     assert events[0]["phase"] == "start"
     assert events[0]["triggered_by"] == "proactive_signal"
     assert events[0]["force"] is False
