@@ -217,11 +217,22 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
     for workflow in (source, published):
         trigger = workflow[True]
         assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
+        assert (
+            trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"]
+            is True
+        )
+        assert "package_source_sha" in trigger["workflow_dispatch"]["inputs"]
         receipt = workflow["jobs"]["receipt"]
         assert "workflow_run.conclusion == 'success'" in receipt["if"]
+        assert "github.event_name == 'workflow_dispatch'" in receipt["if"]
         rendered = str(receipt)
         assert workflow["permissions"]["pull-requests"] == "read"
         assert "actions/download-artifact@v4" in rendered
+        assert "source deployment run id must be numeric" in rendered
+        assert '.name == "Deploy MODstore Production"' in rendered
+        assert ".head_sha == $merge_sha" in rendered
+        assert "package source SHA is not an ancestor of deployed SHA" in rendered
+        assert "steps.source.outputs.package_source_sha" in rendered
         assert "/commits/${merge_sha}/pulls" in rendered
         assert "attested_branch_head_sha" in rendered
         assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
