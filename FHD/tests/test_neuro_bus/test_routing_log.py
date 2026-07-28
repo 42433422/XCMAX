@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from app.neuro_bus.routing import routing_log
 from app.neuro_bus.routing.routing_log import append_routing_decision
 
 
@@ -157,3 +158,33 @@ def test_append_creates_parent_directory(tmp_path, monkeypatch):
     rows = _read_rows(log_path)
     assert rows[0]["sla_hit"] is None
     assert rows[0]["success"] is None
+
+
+def test_default_log_path_uses_desktop_data_dir_not_signed_bundle(tmp_path, monkeypatch):
+    """Packaged desktop telemetry must never mutate Contents/Resources."""
+    desktop_data_dir = tmp_path / "Library" / "Application Support" / "XCAGI"
+    signed_bundle_root = tmp_path / "XCAGI.app" / "Contents" / "Resources" / "backend" / "_internal"
+    monkeypatch.delenv("XCAGI_ROUTING_LOG_PATH", raising=False)
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(desktop_data_dir))
+    monkeypatch.setattr(routing_log, "_is_frozen_runtime", lambda: True)
+
+    log_path = routing_log._default_log_path()
+
+    assert log_path == desktop_data_dir / "logs" / "routing_policies" / "routing_decisions.jsonl"
+    assert log_path.parent.is_dir()
+    assert not log_path.is_relative_to(signed_bundle_root)
+
+
+def test_default_log_path_uses_user_data_when_frozen_env_is_missing(tmp_path, monkeypatch):
+    """A missing Electron env still cannot redirect writes into the bundle."""
+    fallback_data_dir = tmp_path / "Library" / "Application Support" / "XCAGI"
+    monkeypatch.delenv("XCAGI_ROUTING_LOG_PATH", raising=False)
+    monkeypatch.delenv("XCAGI_DATA_DIR", raising=False)
+    monkeypatch.delenv("XCAGI_DESKTOP_DATA_DIR", raising=False)
+    monkeypatch.setattr(routing_log, "_is_frozen_runtime", lambda: True)
+    monkeypatch.setattr(routing_log, "get_app_data_dir", lambda: str(fallback_data_dir))
+
+    log_path = routing_log._default_log_path()
+
+    assert log_path == fallback_data_dir / "logs" / "routing_policies" / "routing_decisions.jsonl"
+    assert log_path.parent.is_dir()
