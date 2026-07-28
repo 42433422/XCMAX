@@ -6,16 +6,21 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
-import pandas as pd
+from typing import TYPE_CHECKING, Any
 
 from app.application.ports.embedder import EmbedderPort
 from app.application.ports.vector_store import VectorStorePort
-from app.infrastructure.persistence.pg_vector_store import PgVectorStore
-from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from app.infrastructure.persistence.pg_vector_store import PgVectorStore
+    from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
+
+PgVectorStore: Any | None = None
+SQLiteVectorStore: Any | None = None
 
 
 @dataclass
@@ -87,6 +92,34 @@ def _get_default_embedder() -> EmbedderPort:
     return HashEmbedder()
 
 
+def _read_excel_sheets(file_path: str) -> dict[str, pd.DataFrame]:
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise RuntimeError("Excel 向量索引需要安装 pandas 运行时依赖") from exc
+    return pd.read_excel(file_path, sheet_name=None)
+
+
+def _pg_vector_store_class() -> Any:
+    global PgVectorStore
+    if PgVectorStore is None:
+        from app.infrastructure.persistence.pg_vector_store import PgVectorStore as store_cls
+
+        PgVectorStore = store_cls
+    return PgVectorStore
+
+
+def _sqlite_vector_store_class() -> Any:
+    global SQLiteVectorStore
+    if SQLiteVectorStore is None:
+        from app.infrastructure.persistence.sqlite_vector_store import (
+            SQLiteVectorStore as store_cls,
+        )
+
+        SQLiteVectorStore = store_cls
+    return SQLiteVectorStore
+
+
 class ExcelVectorIngestApplicationService:
     def __init__(
         self,
@@ -111,7 +144,7 @@ class ExcelVectorIngestApplicationService:
         target_index_id = index_id or uuid.uuid4().hex
         name = (index_name or path.stem or target_index_id).strip()
 
-        sheets = pd.read_excel(file_path, sheet_name=None)
+        sheets = _read_excel_sheets(file_path)
         chunks = self._build_chunks(sheets, source_file=path.name)
         if not chunks:
             return {"success": False, "message": "Excel 中没有可索引的有效数据"}
@@ -145,9 +178,7 @@ class ExcelVectorIngestApplicationService:
             "chunk_count": written,
         }
 
-    def _build_chunks(
-        self, sheets: dict[str, pd.DataFrame], source_file: str
-    ) -> list[ExcelVectorChunk]:
+    def _build_chunks(self, sheets: dict[str, pd.DataFrame], source_file: str) -> list[ExcelVectorChunk]:
         chunks: list[ExcelVectorChunk] = []
 
         for sheet_name, df in sheets.items():
@@ -283,7 +314,8 @@ _excel_vector_search_service_instance: ExcelVectorSearchApplicationService | Non
 def get_sqlite_vector_store() -> SQLiteVectorStore:
     global _sqlite_vector_store_instance
     if _sqlite_vector_store_instance is None:
-        _sqlite_vector_store_instance = SQLiteVectorStore(db_path=_default_vector_db_path())
+        store_cls = _sqlite_vector_store_class()
+        _sqlite_vector_store_instance = store_cls(db_path=_default_vector_db_path())
     return _sqlite_vector_store_instance
 
 
@@ -293,7 +325,8 @@ def get_pg_vector_store() -> PgVectorStore:
         db_url = os.environ.get("VECTOR_DB_URL") or os.environ.get("DATABASE_URL")
         if not db_url:
             raise ValueError("缺少 VECTOR_DB_URL / DATABASE_URL 配置")
-        _pg_vector_store_instance = PgVectorStore(database_url=db_url)
+        store_cls = _pg_vector_store_class()
+        _pg_vector_store_instance = store_cls(database_url=db_url)
     return _pg_vector_store_instance
 
 

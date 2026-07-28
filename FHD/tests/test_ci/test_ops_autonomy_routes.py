@@ -172,3 +172,20 @@ class TestCsSsotRetrieve:
         assert data["ssot"] == "admin_persy_knowledge"
         assert data["chunks"][0]["text"] == "会员年付"
         fake_svc.query.assert_called_once()
+        _, kwargs = fake_svc.query.call_args
+        assert kwargs["tenant_id"] == "public"
+        assert kwargs["metadata_filter"] == {
+            "audience": "public",
+            "publication_status": "published",
+            "knowledge_owner": "chengdu-xiuci-technology",
+        }
+
+    def test_cs_ssot_retrieve_rejects_private_dataset(
+        self, autonomy_client: TestClient
+    ) -> None:
+        response = autonomy_client.post(
+            "/api/ops/autonomy/cs-ssot/retrieve",
+            headers=_AUTH_HEADERS,
+            json={"query": "客户私有知识", "dataset_id": "user_acme"},
+        )
+        assert response.status_code == 403

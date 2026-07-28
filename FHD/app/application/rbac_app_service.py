@@ -2,12 +2,50 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from typing import Any
+
+from app.db.models.tenant import Tenant
+from app.db.session import get_db
+from app.errors import DatabaseError, ErrorCode
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 class RbacAppService:
+    def __init__(self, *, db_factory: Callable[[], Any] | None = None) -> None:
+        self._db_factory = db_factory
+
     def list_tenants(self) -> list[dict[str, Any]]:
-        return []
+        factory = self._db_factory or get_db
+        try:
+            with factory() as db:
+                rows = (
+                    db.query(Tenant)
+                    .filter(Tenant.is_active.is_(True))
+                    .order_by(Tenant.name.asc(), Tenant.id.asc())
+                    .all()
+                )
+                return [
+                    {
+                        "id": int(row.id),
+                        "tenant_id": str(row.id),
+                        "code": str(row.code or ""),
+                        "name": str(row.name or row.code or f"企业 {row.id}"),
+                        "is_active": bool(row.is_active),
+                        "plan_id": str(row.plan_id or ""),
+                    }
+                    for row in rows
+                ]
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Tenant directory unavailable: %s", exc)
+            raise DatabaseError(
+                ErrorCode.DB_QUERY_FAILED,
+                "企业目录暂时不可用",
+                detail={"reason": type(exc).__name__},
+            ) from exc
 
     def list_data_scopes(self, tenant_id: str | None) -> list[dict[str, Any]]:
         return []
