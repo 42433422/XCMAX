@@ -684,6 +684,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       || nextTask.order_number
       || nextTask.data?.order_number
       || nextTask.document?.order_number
+      || nextTask.payload?.params?.order_number
       || ''
     ).trim()
 

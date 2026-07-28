@@ -1248,6 +1248,52 @@ class TestCompatChatStreamAsync:
         ]
 
     @pytest.mark.asyncio
+    async def test_shipment_preview_keeps_request_state_tenant_after_stream_starts(self):
+        """ETL evidence remains tenant-scoped after middleware has unwound.
+
+        A streaming generator cannot rely on the request ContextVar that an
+        outer ``BaseHTTPMiddleware`` has already reset.  The public stream
+        wrapper must restore the server-authenticated tenant for the local
+        shipment preview read, without accepting a tenant from the body.
+        """
+
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        body = XcagiCompatChatBody(message="打印金汉武发货单，编号9803，规格28，3桶")
+        request = _make_request()
+        request.state.user_id = 42
+        request.state.tenant_id = 17
+        preview = {"success": True, "response": "已识别订单", "task": {"type": "shipment_generate"}}
+        observed_tenants: list[int | None] = []
+        tenant_before_stream = current_tenant_id()
+
+        def build_preview(*_args, **_kwargs):
+            observed_tenants.append(current_tenant_id())
+            return preview
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment", "slots": {}},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
+                side_effect=build_preview,
+            ),
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        assert observed_tenants == [17]
+        assert current_tenant_id() == tenant_before_stream
+        assert [self._event(chunk)["type"] for chunk in chunks] == [
+            "tool_progress",
+            "token",
+            "done",
+        ]
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("message", "intent", "builder_name", "response"),
         [

@@ -62,6 +62,24 @@ def _authenticated_owner_user_id(request: Request) -> int | None:
     return owner if owner > 0 else None
 
 
+def _authenticated_tenant_id(request: Request) -> int | None:
+    """Read the tenant only from server-authenticated request state.
+
+    Streaming responses begin after ``BaseHTTPMiddleware`` has returned its
+    ``StreamingResponse`` object.  The request ContextVar is therefore not a
+    safe source for a tenant during later generator iterations; the immutable
+    server-populated ``request.state`` is.  Keep this helper deliberately
+    separate from any client chat/session identifier.
+    """
+
+    try:
+        value = getattr(request.state, "tenant_id", None)
+        tenant = int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return tenant if tenant > 0 else None
+
+
 def _stream_shipment_preview_payload(
     message: str,
     *,
@@ -1038,6 +1056,30 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 
 
 async def compat_chat_stream_async(
+    request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
+):
+    """Stream a chat response with the authenticated tenant kept in scope.
+
+    Most ordinary request handlers can recover their tenant through the
+    request ContextVar.  A ``StreamingResponse`` runs this generator after
+    middleware has unwound, however, so owner-scoped ETL preview reads would
+    otherwise fail closed and render a shipment card without its proven
+    model/price/layout.  This scope is server-derived and read-only for the
+    preview path; it does not trust a client-supplied tenant or session id.
+    """
+
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(_authenticated_tenant_id(request)):
+        async for chunk in _compat_chat_stream_with_tenant_scope(
+            request,
+            body,
+            ai_tier=ai_tier,
+        ):
+            yield chunk
+
+
+async def _compat_chat_stream_with_tenant_scope(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
     # Yield before any parser, preview-store read, persona lookup, or model

@@ -973,6 +973,19 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('ORD-002')
   })
 
+  it('从 canonical payload.params.order_number 获取已存在单号且不补全', () => {
+    const api = createApi()
+    api.showTaskConfirm({
+      type: 'shipment_generate',
+      completed: false,
+      api_url: '/api/test',
+      payload: { params: { order_number: '9803' } },
+    })
+    expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('9803')
+    expect(mockHydrateTaskOrderNumber).not.toHaveBeenCalled()
+    expect(mockEnrichShipmentPreviewProducts).not.toHaveBeenCalled()
+  })
+
   it('shipment preview carries its canonical payload only after the explicit click', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -1232,7 +1245,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shipment_generate 无 customOrderNumber 时先 hydrate', async () => {
+  it('shipment_generate 从 canonical payload 恢复单号时不 hydrate', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -1250,7 +1263,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: { params: { order_number: 'OLD' } },
     })
     await api.confirmTask()
-    expect(mockHydrateTaskOrderNumber).toHaveBeenCalled()
+    expect(mockHydrateTaskOrderNumber).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
 })
