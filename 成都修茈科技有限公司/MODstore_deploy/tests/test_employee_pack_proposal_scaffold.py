@@ -107,3 +107,16 @@ def test_llm_cannot_redirect_catalog_gap_package_identity():
     )
     assert proposal["employee_pack"]["name"] == "autonomy-gap-analyst"
     assert proposal["estimated_files"] == 3
+
+
+def test_malformed_llm_catalog_proposal_uses_safe_fallback():
+    proposal = propose_employee_pack(
+        _signals(),
+        llm_call=lambda _prompt: {
+            "proposal_id": "incomplete",
+            "department": "quality",
+            "employee_pack": {"name": "anything"},
+        },
+    )
+    assert proposal["proposal_mode"] == "deterministic_safe_fallback"
+    assert proposal["employee_pack"]["name"] == "autonomy-gap-analyst"

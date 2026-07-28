@@ -230,15 +230,24 @@ def propose_employee_pack(
 
     call = llm_call or _call_llm
     raw = call(_build_proposal_prompt(strongest, signals))
-    if not raw and strongest == "catalog_capability_gap":
-        raw = _catalog_gap_fallback(signals)
     if not raw:
-        return None
-    if strongest == "catalog_capability_gap":
-        raw = _normalize_catalog_gap_proposal(raw, signals)
-    raw.setdefault("triggered_by", strongest)
-    raw.setdefault("signal_score", score)
-    validate_proposal(raw)
+        if strongest != "catalog_capability_gap":
+            return None
+        raw = _catalog_gap_fallback(signals)
+    try:
+        if strongest == "catalog_capability_gap":
+            raw = _normalize_catalog_gap_proposal(raw, signals)
+        raw.setdefault("triggered_by", strongest)
+        raw.setdefault("signal_score", score)
+        validate_proposal(raw)
+    except (ProposalValidationError, TypeError, ValueError) as exc:
+        if strongest != "catalog_capability_gap":
+            raise
+        logger.warning("unsafe LLM proposal replaced by bounded fallback: %s", exc)
+        raw = _catalog_gap_fallback(signals)
+        raw.setdefault("triggered_by", strongest)
+        raw.setdefault("signal_score", score)
+        validate_proposal(raw)
     return raw
 
 
