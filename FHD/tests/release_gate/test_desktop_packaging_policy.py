@@ -314,8 +314,8 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
         encoding="utf-8"
     )
 
-    assert "xattr -cr desktop/node_modules/electron/dist" in installer
-    assert '"--config.electronDist=node_modules/electron/dist"' in installer
+    assert 'xattr -cr "${DESKTOP_ELECTRON_DIST}"' in installer
+    assert '"--config.electronDist=${DESKTOP_ELECTRON_DIST}"' in installer
     assert '"--config.directories.output=${package_stage}"' in installer
     assert 'for staged_file in "${package_stage}"/*' in installer
     assert 'ditto --norsrc "${staged_file}" "${out_dir}/$(basename "${staged_file}")"' in installer
@@ -342,6 +342,35 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "path.join(distDir, 'package.json')" in before_pack
     assert "main: 'main.js'" in before_pack
     assert "desktop runtime entry is missing" in before_pack
+
+
+def test_desktop_release_uses_locked_physical_dependencies_and_checks_asar_closure() -> None:
+    scripts = REPO_ROOT / "scripts" / "package"
+    mac_installer = (scripts / "build-installer.sh").read_text(encoding="utf-8")
+    windows_installer = (scripts / "build-windows-installer.sh").read_text(encoding="utf-8")
+    windows_thin = (scripts / "build-windows-electron-only.sh").read_text(encoding="utf-8")
+    windows_ps = (scripts / "build-installer.ps1").read_text(encoding="utf-8")
+    asar_verifier = (REPO_ROOT / "desktop" / "build" / "verify-runtime-asar.cjs").read_text(
+        encoding="utf-8"
+    )
+
+    for script in (mac_installer, windows_installer, windows_thin):
+        assert "desktop/node_modules must be a physical directory" in script
+        assert "npm ci --no-audit --fund=false" in script
+        assert "verify-runtime-asar.cjs" in script
+
+    assert "XCAGI_ELECTRON_DIST_SOURCE" in mac_installer
+    assert "npm ci --ignore-scripts --no-audit --fund=false" in mac_installer
+    assert "external Electron version mismatch" in mac_installer
+    assert "DESKTOP_ELECTRON_DIST" in mac_installer
+    assert "ReparsePoint" in windows_ps
+    assert "npm ci --no-audit --fund=false" in windows_ps
+    assert "verify-runtime-asar.cjs" in windows_ps
+
+    assert "asar.listPackage" in asar_verifier
+    assert "optionalDependencies" in asar_verifier
+    assert "runtime dependency is missing" in asar_verifier
+    assert "findPackageManifest" in asar_verifier
 
 
 def test_desktop_staging_bundles_visible_office_employee_executors() -> None:

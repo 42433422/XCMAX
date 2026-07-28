@@ -41,6 +41,14 @@ sku_update_url() {
   esac
 }
 
+require_physical_desktop_node_modules() {
+  if [ -L "${ROOT}/desktop/node_modules" ]; then
+    echo "[err] desktop/node_modules must be a physical directory for release packaging; refusing linked dependencies" >&2
+    echo "[err] create a clean candidate worktree and run the build there" >&2
+    exit 1
+  fi
+}
+
 LABEL="$(sku_label "${SKU}")"
 OUT_DIR="${ROOT}/release/xcagi-v${VERSION}/${SKU}"
 mkdir -p "${OUT_DIR}"
@@ -63,7 +71,8 @@ printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-
 # 薄壳模式：不打包 Mac/Linux PyInstaller 产物（Windows 无法运行）
 rm -rf "${ROOT}/dist/xcagi-backend"
 
-(cd desktop && [ -d node_modules ] || npm install)
+require_physical_desktop_node_modules
+(cd desktop && npm ci --no-audit --fund=false)
 npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --prefix desktop --allow-same-version
 
 APP_ID="$(sku_app_id "${SKU}")"
@@ -86,6 +95,13 @@ SETUP="$(find "${OUT_DIR}" -maxdepth 1 -type f -name "XCAGI-${LABEL}-Setup-*.exe
 
 FINAL="${OUT_DIR}/XCAGI-${LABEL}-Setup-${VERSION}-x64.exe"
 [[ "${SETUP}" == "${FINAL}" ]] || mv -f "${SETUP}" "${FINAL}"
+
+UNPACKED="${OUT_DIR}/win-unpacked/resources"
+if [[ ! -f "${UNPACKED}/app.asar" ]]; then
+  echo "[err] packaged Windows diagnostic shell is missing app.asar: ${UNPACKED}/app.asar" >&2
+  exit 1
+fi
+(cd desktop && node build/verify-runtime-asar.cjs "${UNPACKED}/app.asar")
 
 XCAGI_PRODUCT_VERSION="${VERSION}" \
   node scripts/package/generate-update-metadata.mjs "${FINAL}" "${TOOLCHAIN_VERSION}" win

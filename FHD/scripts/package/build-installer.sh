@@ -74,6 +74,58 @@ sku_update_url() {
   esac
 }
 
+# Release packaging must never reuse a linked development node_modules tree.
+# Apart from mutating the shared target during npm ci, a link can retain an old
+# electron-builder that silently emits an incomplete ASAR. The candidate
+# worktree must own a physical, lockfile-derived dependency tree.
+require_physical_desktop_node_modules() {
+  if [ -L "${ROOT}/desktop/node_modules" ]; then
+    echo "[err] desktop/node_modules must be a physical directory for release packaging; refusing linked dependencies" >&2
+    echo "[err] create a clean candidate worktree and run the build there" >&2
+    exit 1
+  fi
+}
+
+# Installs the exact lockfile tree. When Electron's CDN is unavailable, callers
+# may set XCAGI_ELECTRON_DIST_SOURCE to a previously verified Electron dist
+# directory (for example .../electron/dist). Only that version-checked runtime
+# payload is reused; electron-builder and all JS dependencies still come from
+# a fresh npm ci tree.
+prepare_desktop_dependencies() {
+  require_physical_desktop_node_modules
+  DESKTOP_ELECTRON_DIST="${ROOT}/desktop/node_modules/electron/dist"
+  if [ -z "${XCAGI_ELECTRON_DIST_SOURCE:-}" ]; then
+    (cd desktop && npm ci --no-audit --fund=false)
+  else
+    (cd desktop && npm ci --ignore-scripts --no-audit --fund=false)
+
+    local external_dist="${XCAGI_ELECTRON_DIST_SOURCE}"
+    if [ ! -d "${external_dist}" ]; then
+      echo "[err] XCAGI_ELECTRON_DIST_SOURCE is not a directory: ${external_dist}" >&2
+      exit 1
+    fi
+    external_dist="$(cd "${external_dist}" && pwd -P)"
+    if [ ! -f "${external_dist}/version" ] || [ ! -x "${external_dist}/Electron.app/Contents/MacOS/Electron" ]; then
+      echo "[err] XCAGI_ELECTRON_DIST_SOURCE is not a macOS Electron dist: ${external_dist}" >&2
+      exit 1
+    fi
+
+    local expected_electron_version actual_electron_version
+    expected_electron_version="$(cd desktop && node -p 'require("./node_modules/electron/package.json").version')"
+    actual_electron_version="$(tr -d '[:space:]' < "${external_dist}/version")"
+    if [ "${actual_electron_version}" != "${expected_electron_version}" ]; then
+      echo "[err] external Electron version mismatch: expected ${expected_electron_version}, got ${actual_electron_version}" >&2
+      exit 1
+    fi
+    DESKTOP_ELECTRON_DIST="${external_dist}"
+  fi
+
+  if [ ! -d "${DESKTOP_ELECTRON_DIST}" ]; then
+    echo "[err] Electron dist is missing after locked dependency install: ${DESKTOP_ELECTRON_DIST}" >&2
+    exit 1
+  fi
+}
+
 build_one_sku() {
   local sku="$1"
   local label
@@ -104,11 +156,11 @@ build_one_sku() {
   export XCAGI_BUILD_SHA="${build_sha}"
   "${PYTHON:-python3}" scripts/package/generate-desktop-resources.py
 
-  (cd desktop && [ -d node_modules ] || npm install)
+  prepare_desktop_dependencies
   # Finder/provenance xattrs can survive npm's Electron extraction and make
   # codesign reject helper binaries as containing resource-fork detritus.
   if command -v xattr >/dev/null 2>&1; then
-    xattr -cr desktop/node_modules/electron/dist
+    xattr -cr "${DESKTOP_ELECTRON_DIST}"
   fi
   (cd desktop && npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --allow-same-version)
   if [ "${SKIP_DESKTOP_BUILD:-0}" != "1" ]; then
@@ -128,7 +180,7 @@ build_one_sku() {
   local package_ok=0
   for package_attempt in 1 2 3; do
     if (cd desktop && PATH="${ROOT}/scripts/package/codesign-retry-bin:${PATH}" npx electron-builder --mac zip --publish never \
-      "--config.electronDist=node_modules/electron/dist" \
+      "--config.electronDist=${DESKTOP_ELECTRON_DIST}" \
       "--config.directories.output=${package_stage}" \
       "--config.artifactName=${artifact_name}" \
       "--config.appId=$(sku_app_id "$sku")" \
@@ -154,6 +206,12 @@ build_one_sku() {
     echo "[err] signed macOS application was not produced in ${package_stage}" >&2
     exit 1
   fi
+  local app_asar="${app_path}/Contents/Resources/app.asar"
+  if [ ! -f "${app_asar}" ]; then
+    echo "[err] packaged macOS application is missing app.asar: ${app_asar}" >&2
+    exit 1
+  fi
+  (cd desktop && node build/verify-runtime-asar.cjs "${app_asar}")
   local artifact_arch
   case "$(uname -m)" in
     arm64) artifact_arch="arm64" ;;
