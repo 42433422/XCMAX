@@ -11,6 +11,7 @@ DEST="${MERGE_WORKER_DEST:-/Users/a4243342/XCMAX-runtime/para-main-agent/merge-w
 LABEL="${MERGE_WORKER_LAUNCHD_LABEL:-com.xcmax.para-merge-worker}"
 PLIST="${MERGE_WORKER_LAUNCHD_PLIST:-$HOME/Library/LaunchAgents/${LABEL}.plist}"
 EXPECTED_ACTOR="${MERGE_WORKER_EXPECTED_GITHUB_ACTOR:-}"
+REPOSITORY="${MERGE_WORKER_REPOSITORY:-}"
 NODE_BIN="${MERGE_WORKER_NODE_BIN:-}"
 
 if [[ ! -f "$SRC" ]]; then
@@ -84,10 +85,17 @@ if [[ -z "$EXPECTED_ACTOR" ]]; then
   EXPECTED_ACTOR="$(gh api user --jq .login)"
 fi
 [[ -n "$EXPECTED_ACTOR" ]] || { echo "[error] GitHub actor is empty" >&2; exit 1; }
+if [[ -z "$REPOSITORY" ]]; then
+  REPOSITORY="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+fi
+[[ "$REPOSITORY" == */* ]] || { echo "[error] GitHub repository is invalid: ${REPOSITORY:-<empty>}" >&2; exit 1; }
 for setting in \
   "MERGE_WORKER_EXPECTED_GITHUB_ACTOR string $EXPECTED_ACTOR" \
   "MERGE_WORKER_REQUIRE_BOT_IDENTITY string 1" \
-  "MERGE_WORKER_BOT_WORKFLOW string fhd-ai-self-heal-auto-merge.yml"; do
+  "MERGE_WORKER_BOT_WORKFLOW string fhd-ai-self-heal-auto-merge.yml" \
+  "MERGE_WORKER_SELF_UPDATE string 1" \
+  "MERGE_WORKER_SELF_UPDATE_BRANCH string main" \
+  "MERGE_WORKER_REPOSITORY string $REPOSITORY"; do
   key="${setting%% *}"
   rest="${setting#* }"
   type="${rest%% *}"
