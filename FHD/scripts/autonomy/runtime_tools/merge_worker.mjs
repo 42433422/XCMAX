@@ -113,18 +113,22 @@ export const INITIAL_PR_LABELS = Object.freeze(['hold-merge']);
 
 // CI 等待策略（写进代码，不做隐式默认）：
 // - 等哪些 check：`gh pr checks` 返回的全部检查，与 bot merge SLA 的三重门禁一致
-// - 超时：MERGE_WORKER_CI_WAIT_TIMEOUT_MS，默认 30min
-// - 超时后：MERGE_WORKER_CI_TIMEOUT_POLICY=fail|human
+// - 超时：MERGE_WORKER_CI_WAIT_TIMEOUT_MS，默认 60min
+// - 超时后：MERGE_WORKER_CI_TIMEOUT_POLICY=retry|fail|human
+//     retry → 退避后重新读取完整 rollup（默认；不把 CI 排队/长测误判为 AI 拒绝）
 //     fail  → 抛错并标 terminal（不自动合并；merge-worker 记 failed）
 //     human → 抛错文案含 needs-human，走人工（非 transient，不空转重试）
 export const CI_WAIT_MODE = 'bot-merge-gate';
 export const CI_WAIT_TIMEOUT_MS = Math.max(
   60_000,
-  Number.parseInt(process.env.MERGE_WORKER_CI_WAIT_TIMEOUT_MS || String(30 * 60 * 1000), 10),
+  Number.parseInt(process.env.MERGE_WORKER_CI_WAIT_TIMEOUT_MS || String(60 * 60 * 1000), 10),
 );
-export const CI_TIMEOUT_POLICY = String(process.env.MERGE_WORKER_CI_TIMEOUT_POLICY || 'fail').trim().toLowerCase() === 'human'
-  ? 'human'
-  : 'fail';
+const requestedCiTimeoutPolicy = String(
+  process.env.MERGE_WORKER_CI_TIMEOUT_POLICY || 'retry',
+).trim().toLowerCase();
+export const CI_TIMEOUT_POLICY = ['retry', 'fail', 'human'].includes(requestedCiTimeoutPolicy)
+  ? requestedCiTimeoutPolicy
+  : 'retry';
 
 const FORBIDDEN_AUTO_MERGE_PATHS = [
   /^\.github\/workflows\//,
@@ -187,6 +191,10 @@ export function decodeSelfUpdatePayload(payload) {
   };
 }
 
+export function selfUpdateTemporaryPath(currentFile, pid = process.pid) {
+  return `${currentFile}.self-update.${pid}.mjs`;
+}
+
 async function maybeSelfUpdate(nowMs = Date.now()) {
   if (
     !SELF_UPDATE_ENABLED
@@ -214,7 +222,7 @@ async function maybeSelfUpdate(nowMs = Date.now()) {
   const currentDigest = createHash('sha256').update(current).digest('hex');
   if (currentDigest === remote.digest) return false;
 
-  const temporary = `${currentFile}.self-update.${process.pid}`;
+  const temporary = selfUpdateTemporaryPath(currentFile);
   try {
     writeFileSync(temporary, remote.source, { mode: statSync(currentFile).mode & 0o777 });
     chmodSync(temporary, statSync(currentFile).mode & 0o777);
@@ -378,6 +386,17 @@ export function isTransientMergeFailure(reason) {
   ];
   if (terminal.some((pattern) => text.includes(pattern))) return false;
   return true;
+}
+
+export function isProcessTimeoutError(err) {
+  const message = String(err?.message || err || '');
+  const code = String(err?.code || '').toUpperCase();
+  const signal = String(err?.signal || '').toUpperCase();
+  return err?.killed === true
+    || code === 'ETIMEDOUT'
+    || signal === 'SIGTERM'
+    || signal === 'SIGKILL'
+    || /ETIMEDOUT|timed?\s*out|timeout/i.test(message);
 }
 
 export function blockingMergePollReason(pr, prNumber = '') {
@@ -972,13 +991,18 @@ async function waitForRequiredChecks(workspace, prNumber, repoFull) {
     });
   } catch (err) {
     const message = String(err?.message || err);
-    const timedOut = /ETIMEDOUT|timed?\s*out|timeout/i.test(message)
-      || /kill|SIGTERM/i.test(message);
+    const timedOut = isProcessTimeoutError(err);
     if (timedOut) {
       if (CI_TIMEOUT_POLICY === 'human') {
         throw new Error(
           `ci-wait-timeout-needs-human: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
           + `escalate to human (policy=human). detail=${message.slice(0, 600)}`,
+        );
+      }
+      if (CI_TIMEOUT_POLICY === 'retry') {
+        throw new Error(
+          `ci-wait-timeout-retry: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+          + `retry with backoff (policy=retry). detail=${message.slice(0, 600)}`,
         );
       }
       throw new Error(
