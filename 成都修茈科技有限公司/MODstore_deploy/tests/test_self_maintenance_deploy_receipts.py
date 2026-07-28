@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from dataclasses import dataclass, field
 
 import pytest
@@ -40,6 +41,37 @@ def test_deployment_receipt_callback_requires_exact_shared_token(monkeypatch) ->
     assert _deployment_receipt_token_valid(None, "expected-token") is True
     assert _deployment_receipt_token_valid("Bearer wrong-token", None) is False
     assert _deployment_receipt_token_valid(None, None) is False
+
+
+def test_git_is_ancestor_fetches_missing_exact_commit_before_compare(tmp_path, monkeypatch) -> None:
+    ancestor = "c" * 40
+    descendant = "d" * 40
+    calls: list[list[str]] = []
+    return_codes = iter([1, 0, 0, 0, 0])
+
+    def fake_run(args, **_kwargs):
+        calls.append(list(args))
+        return subprocess.CompletedProcess(args=args, returncode=next(return_codes))
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.setattr(self_maintenance_loop_api.subprocess, "run", fake_run)
+
+    assert self_maintenance_loop_api._git_is_ancestor(ancestor, descendant) is True
+    assert calls == [
+        ["git", "-C", str(tmp_path), "cat-file", "-e", f"{ancestor}^{{commit}}"],
+        ["git", "-C", str(tmp_path), "fetch", "--quiet", "--no-tags", "origin", ancestor],
+        ["git", "-C", str(tmp_path), "cat-file", "-e", f"{ancestor}^{{commit}}"],
+        ["git", "-C", str(tmp_path), "cat-file", "-e", f"{descendant}^{{commit}}"],
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "merge-base",
+            "--is-ancestor",
+            ancestor,
+            descendant,
+        ],
+    ]
 
 
 def test_only_verified_production_receipt_credits_release_officer(tmp_path, monkeypatch) -> None:
