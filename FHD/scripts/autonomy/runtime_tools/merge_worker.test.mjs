@@ -23,6 +23,7 @@ import {
   gitBlobSha,
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
+  isProcessTimeoutError,
   isTransientMergeFailure,
   mergeRetryDelayMs,
   nextMergeRetryState,
@@ -295,7 +296,28 @@ test('operational failures retry but explicit review and identity vetoes are ter
   assert.equal(isTransientMergeFailure('post-dispatch-check-failed: PR #730 checks=test'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-fail: required checks'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-needs-human: escalate'), false);
+  assert.equal(isTransientMergeFailure('ci-wait-timeout-retry: checks still queued'), true);
   assert.equal(isTransientMergeFailure('bot merge checks failed or unavailable'), false);
+});
+
+test('child process timeout detection includes killed and signal metadata', () => {
+  assert.equal(
+    isProcessTimeoutError({
+      message: 'Command failed: gh pr checks 816 --watch',
+      killed: true,
+      signal: 'SIGTERM',
+    }),
+    true,
+  );
+  assert.equal(
+    isProcessTimeoutError({
+      message: 'Command failed: gh pr checks 816 --watch',
+      killed: false,
+      signal: null,
+      code: 1,
+    }),
+    false,
+  );
 });
 
 test('merge polling stops for a restored human veto or terminal check failure', () => {
@@ -396,8 +418,8 @@ test('workflow correlation selects the newest run for the exact merge SHA', () =
 
 test('CI wait policy is explicit in code', () => {
   assert.equal(CI_WAIT_MODE, 'bot-merge-gate');
-  assert.equal(CI_WAIT_TIMEOUT_MS >= 60_000, true);
-  assert.equal(['fail', 'human'].includes(CI_TIMEOUT_POLICY), true);
+  assert.equal(CI_WAIT_TIMEOUT_MS >= 60 * 60 * 1000, true);
+  assert.equal(['retry', 'fail', 'human'].includes(CI_TIMEOUT_POLICY), true);
   const args = botMergeCheckArgs(801, '42433422/XCMAX');
   assert.equal(args.includes('--required'), false);
   assert.deepEqual(args.slice(0, 3), ['pr', 'checks', '801']);
