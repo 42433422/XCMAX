@@ -4,9 +4,9 @@ name: AI Self-Heal Auto-Merge SLA
 
 on:
   schedule:
-    # 每 30 分钟：普通 PR auto-merge 三重门禁闭环 + ai-self-heal/ai-generated SLA
-    # （原 6h 间隔对普通 PR 延迟过大，2026-07-20 收紧到 30min）
-    - cron: "*/30 * * * *"
+    # 每 30 分钟：避开 GitHub Actions 整点高负载，降低 schedule 延迟/丢弃概率。
+    # 普通 PR auto-merge 三重门禁闭环 + ai-self-heal/ai-generated SLA。
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
