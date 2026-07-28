@@ -32,10 +32,20 @@ def test_sync_bundled_template_files_copies_to_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    # 预先放入会污染扫描的历史文件，确认 sync 会清掉
+    noisy = tmp_path / "templates"
+    noisy.mkdir(parents=True)
+    (noisy / "尹玉华1.xlsx").write_bytes(b"noise")
+    (noisy / "price_list_default.docx").write_bytes(b"noise")
+
     files = sync_bundled_template_files()
     assert Path(files["shipment_path"]).is_file()
     assert Path(files["price_list_path"]).is_file()
-    assert (tmp_path / "templates" / "尹玉华1.xlsx").is_file()
+    assert "424" in str(files["price_list_path"]).replace("\\", "/")
+    assert not (tmp_path / "templates" / "尹玉华1.xlsx").exists()
+    assert not (tmp_path / "templates" / "price_list_default.docx").exists()
+    assert (tmp_path / "templates" / "发货单模板.xlsx").is_file()
+    assert int(files.get("removed_count") or 0) >= 2
 
 
 def test_ensure_initial_document_templates_inserts_and_skips(

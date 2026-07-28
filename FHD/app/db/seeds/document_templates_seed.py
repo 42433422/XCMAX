@@ -68,12 +68,30 @@ def _copy_if_missing(src: Path, dst: Path) -> bool:
     return True
 
 
+def _remove_if_present(path: Path) -> bool:
+    """清掉会污染模板库扫描的历史落盘（幂等）。"""
+    try:
+        if path.is_file():
+            path.unlink()
+            return True
+    except RECOVERABLE_ERRORS as exc:
+        logger.debug("清理污染模板跳过 %s: %s", path, exc)
+    return False
+
+
 def sync_bundled_template_files() -> dict[str, Any]:
-    """把内置模板复制到运行时目录（仅补缺失）。"""
+    """把内置模板复制到运行时目录（仅补缺失）。
+
+    约定：
+    - 可扫描目录 ``templates/`` 只放正式业务表 + ``发货单模板.xlsx``
+    - 价格表只落 ``424/document_templates/``（注册表 SSOT）
+    - ``尹玉华1.xlsx`` 仅供老生成器 ``ai_assistant/uploads``，不进模板库目录
+    """
     src_dir = bundled_templates_dir()
     runtime_tpl = _runtime_templates_dir()
     runtime_price = _runtime_price_list_dir()
     copied: list[str] = []
+    removed: list[str] = []
     runtime_paths: dict[str, str] = {}
 
     shipment_src = src_dir / _SHIPMENT_FILENAME
@@ -82,10 +100,16 @@ def sync_bundled_template_files() -> dict[str, Any]:
     if not legacy_src.is_file() and shipment_src.is_file():
         legacy_src = shipment_src
 
+    # 根治历史污染：别名发货单 / 价目表不应出现在可扫描 templates/
+    for noise in (
+        runtime_tpl / _SHIPMENT_LEGACY_ALIAS,
+        runtime_tpl / _PRICE_LIST_FILENAME,
+    ):
+        if _remove_if_present(noise):
+            removed.append(str(noise))
+
     core_targets = [
         (shipment_src, runtime_tpl / _SHIPMENT_FILENAME, SEED_SHIPMENT_KEY),
-        (legacy_src, runtime_tpl / _SHIPMENT_LEGACY_ALIAS, None),
-        (price_src, runtime_tpl / _PRICE_LIST_FILENAME, None),
         (price_src, runtime_price / _PRICE_LIST_FILENAME, SEED_PRICE_LIST_KEY),
     ]
     for src, dst, key in core_targets:
@@ -100,14 +124,14 @@ def sync_bundled_template_files() -> dict[str, Any]:
         if _copy_if_missing(price_src, repo_price_dir / _PRICE_LIST_FILENAME):
             copied.append(str(repo_price_dir / _PRICE_LIST_FILENAME))
 
-    # legacy 生成器优先找 resources/ai_assistant/uploads
+    # legacy 生成器优先找 resources/ai_assistant/uploads（不进模板库扫描）
     try:
         from app.utils.path_utils import get_resource_path
 
         uploads = Path(get_resource_path("ai_assistant", "uploads"))
         for src, name in (
             (shipment_src, _SHIPMENT_FILENAME),
-            (legacy_src, _SHIPMENT_LEGACY_ALIAS),
+            (legacy_src if legacy_src.is_file() else shipment_src, _SHIPMENT_LEGACY_ALIAS),
         ):
             if _copy_if_missing(src, uploads / name):
                 copied.append(str(uploads / name))
@@ -125,6 +149,8 @@ def sync_bundled_template_files() -> dict[str, Any]:
     return {
         "copied_count": len(copied),
         "copied": copied,
+        "removed_count": len(removed),
+        "removed": removed,
         "shipment_path": runtime_paths.get(
             SEED_SHIPMENT_KEY, str(runtime_tpl / _SHIPMENT_FILENAME)
         ),

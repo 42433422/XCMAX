@@ -292,6 +292,7 @@ def main() -> None:
     ship = out / "发货单模板.xlsx"
     build_shipment_xlsx(ship)
     written.append(str(ship))
+    # 仅作老生成器 uploads 别名源；运行时不会拷进可扫描 templates/
     alias = out / "尹玉华1.xlsx"
     alias.write_bytes(ship.read_bytes())
     written.append(str(alias))
