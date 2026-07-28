@@ -191,6 +191,10 @@ export function decodeSelfUpdatePayload(payload) {
   };
 }
 
+export function selfUpdateTemporaryPath(currentFile, pid = process.pid) {
+  return `${currentFile}.self-update.${pid}.mjs`;
+}
+
 async function maybeSelfUpdate(nowMs = Date.now()) {
   if (
     !SELF_UPDATE_ENABLED
@@ -218,7 +222,7 @@ async function maybeSelfUpdate(nowMs = Date.now()) {
   const currentDigest = createHash('sha256').update(current).digest('hex');
   if (currentDigest === remote.digest) return false;
 
-  const temporary = `${currentFile}.self-update.${process.pid}`;
+  const temporary = selfUpdateTemporaryPath(currentFile);
   try {
     writeFileSync(temporary, remote.source, { mode: statSync(currentFile).mode & 0o777 });
     chmodSync(temporary, statSync(currentFile).mode & 0o777);
