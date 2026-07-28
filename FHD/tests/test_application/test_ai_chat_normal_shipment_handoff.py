@@ -199,6 +199,7 @@ def test_confirmation_card_hydrates_owner_scoped_etl_evidence_without_changing_p
     layout = {
         "template_id": "etl-preview:run-own-layout",
         "name": "金汉武家私-发货单版式",
+        "customer_name": "金汉武家私",
         "source_region_id": "侯雪梅!R3C1:10",
         "sheet": "侯雪梅",
     }
@@ -221,7 +222,7 @@ def test_confirmation_card_hydrates_owner_scoped_etl_evidence_without_changing_p
 
     assert preview["task"]["items"] == [
         {
-            "单位": "金汉武",
+            "单位": "金汉武家私",
             "型号": "方和",
             "产品名称": "黑棕面用修色精",
             "桶数": 3,
@@ -231,9 +232,11 @@ def test_confirmation_card_hydrates_owner_scoped_etl_evidence_without_changing_p
         }
     ]
     assert "4032" in preview["task"]["description"]
+    assert "“金汉武”识别为“金汉武家私”" in preview["task"]["description"]
     assert "不同于历史记录 4.00kg/桶" in preview["task"]["description"]
     assert preview["data"]["etl_preview"]["layout"]["name"] == "金汉武家私-发货单版式"
     payload = preview["task"]["payload"]
+    assert payload["params"]["unit_name"] == "金汉武"
     assert payload["params"]["products"] == PARSED_NAMED_ORDER["products"]
     assert "owner" not in str(payload).lower()
     assert "etl-preview" not in str(payload)

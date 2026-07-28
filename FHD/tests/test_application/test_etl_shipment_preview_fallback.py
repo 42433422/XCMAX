@@ -324,6 +324,7 @@ def test_layout_candidate_is_owner_scoped_and_exposes_no_source_path():
     assert candidate is not None
     assert candidate["run_id"] == "run-own-layout"
     assert candidate["template_id"] == "etl-preview:run-own-layout"
+    assert candidate["customer_name"] == "金汉武家私"
     assert "path" not in candidate
     assert candidate["provenance"]["source_sheet"] == "侯雪梅"
 

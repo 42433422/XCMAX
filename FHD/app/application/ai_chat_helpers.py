@@ -293,7 +293,16 @@ def build_shipment_preview_response_dict(
             authenticated_owner_user_id=authenticated_owner_user_id,
         )
     )
-    preview = _build_number_preview_items(unit_name, display_products)
+    # ``find_latest_preview_layout_candidate`` only returns a layout after its
+    # tenant + owner scoped lookup matched this requested unit.  Use its
+    # evidenced customer spelling on the *card* so an abbreviated chat input
+    # (for example ``金汉武``) is transparent to the user.  Keep the original
+    # parsed unit in ``params`` below: confirmation must re-resolve all ETL
+    # evidence from the authenticated request, never trust display metadata.
+    display_unit_name = str(
+        etl_layout.get("customer_name") if isinstance(etl_layout, dict) else ""
+    ).strip() or str(unit_name or "").strip()
+    preview = _build_number_preview_items(display_unit_name, display_products)
     total_text = (
         f"，预估总价 ¥{format_money(preview['grand_total'])}"
         if preview.get("grand_total") is not None
@@ -326,6 +335,11 @@ def build_shipment_preview_response_dict(
             "layout": dict(etl_layout) if etl_layout else None,
         }
     description_suffix = ""
+    if display_unit_name and display_unit_name != str(unit_name or "").strip():
+        description_suffix += (
+            f' 已按当前用户的 ETL 预演将“{str(unit_name or "").strip()}”'
+            f'识别为“{display_unit_name}”，确认时会再次校验。'
+        )
     if etl_product_evidence:
         description_suffix += " 已按当前用户的 ETL 预演补全型号和单价，确认时会再次校验。"
     if etl_layout:
@@ -343,7 +357,7 @@ def build_shipment_preview_response_dict(
             "type": "shipment_generate",
             "title": "发货单预览",
             "description": (
-                f"单位：{unit_name}，共 {len(raw_products)} 项{total_text}{order_number_text}。"
+                f"单位：{display_unit_name}，共 {len(raw_products)} 项{total_text}{order_number_text}。"
                 f"确认后将生成并可继续打印。{description_suffix}"
             ),
             "items": items,
