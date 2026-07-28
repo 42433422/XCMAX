@@ -63,12 +63,12 @@ export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
 export const INITIAL_PR_LABELS = Object.freeze(['hold-merge']);
 
 // CI 等待策略（写进代码，不做隐式默认）：
-// - 等哪些 check：`gh pr checks --required`（branch protection 上标记为 required 的全部）
+// - 等哪些 check：`gh pr checks` 返回的全部检查，与 bot merge SLA 的三重门禁一致
 // - 超时：MERGE_WORKER_CI_WAIT_TIMEOUT_MS，默认 30min
 // - 超时后：MERGE_WORKER_CI_TIMEOUT_POLICY=fail|human
 //     fail  → 抛错并标 terminal（不自动合并；merge-worker 记 failed）
 //     human → 抛错文案含 needs-human，走人工（非 transient，不空转重试）
-export const CI_WAIT_MODE = 'required'; // only branch-protection required checks
+export const CI_WAIT_MODE = 'bot-merge-gate';
 export const CI_WAIT_TIMEOUT_MS = Math.max(
   60_000,
   Number.parseInt(process.env.MERGE_WORKER_CI_WAIT_TIMEOUT_MS || String(30 * 60 * 1000), 10),
@@ -217,6 +217,7 @@ export function isTransientMergeFailure(reason) {
   const text = String(reason || '').toLowerCase();
   const terminal = [
     'actor mismatch',
+    'bot merge checks failed',
     'changed-files-empty',
     'ci-wait-timeout-fail',
     'ci-wait-timeout-needs-human',
@@ -672,17 +673,23 @@ async function updatePullRequestBranch(workspace, prNumber, repoFull) {
   }
 }
 
-async function waitForRequiredChecks(workspace, prNumber, repoFull) {
-  if (!prNumber) throw new Error('cannot wait for required checks without PR number');
-  // Explicit policy: wait ONLY for branch-protection required checks (CI_WAIT_MODE=required).
+export function botMergeCheckArgs(prNumber, repoFull = '') {
   const args = [
-    'pr', 'checks', prNumber,
-    '--required',
+    'pr', 'checks', String(prNumber),
     '--watch',
     '--fail-fast',
     '--interval', '10',
   ];
   if (repoFull) args.push('--repo', repoFull);
+  return args;
+}
+
+async function waitForRequiredChecks(workspace, prNumber, repoFull) {
+  if (!prNumber) throw new Error('cannot wait for required checks without PR number');
+  // The bot workflow checks the complete rollup, not only branch-protection
+  // required checks. Dispatching earlier makes the bot skip the PR and leaves
+  // this worker polling for 30 minutes with no merge attempt in flight.
+  const args = botMergeCheckArgs(prNumber, repoFull);
   try {
     await execFileAsync('gh', args, {
       cwd: workspace || process.env.HOME,
@@ -696,16 +703,16 @@ async function waitForRequiredChecks(workspace, prNumber, repoFull) {
     if (timedOut) {
       if (CI_TIMEOUT_POLICY === 'human') {
         throw new Error(
-          `ci-wait-timeout-needs-human: required checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+          `ci-wait-timeout-needs-human: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
           + `escalate to human (policy=human). detail=${message.slice(0, 600)}`,
         );
       }
       throw new Error(
-        `ci-wait-timeout-fail: required checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+        `ci-wait-timeout-fail: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
         + `merge aborted (policy=fail). detail=${message.slice(0, 600)}`,
       );
     }
-    throw new Error(`required checks failed or unavailable: ${message.slice(0, 1000)}`);
+    throw new Error(`bot merge checks failed or unavailable: ${message.slice(0, 1000)}`);
   }
 }
 
