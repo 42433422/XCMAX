@@ -97,6 +97,61 @@ def _reconcile_completed_loop_memory_safely() -> None:
         logger.exception("failed to reconcile verified self-maintenance merge receipts")
 
 
+def _remediation_lineage_by_run_id() -> dict[str, dict[str, str]]:
+    """Recover the original autonomous trigger for resumable ledger runs."""
+    from modstore_server.self_maintenance_loop_runner import _read_ledger
+
+    lineage: dict[str, dict[str, str]] = {}
+    for row in _read_ledger(limit=5000):
+        if not isinstance(row, dict) or str(row.get("phase") or "") != "start":
+            continue
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        triggered_by = str(row.get("triggered_by") or "").strip()
+        origin_triggered_by = str(row.get("origin_triggered_by") or "").strip()
+        if not origin_triggered_by and triggered_by != "automated_remediation":
+            origin_triggered_by = triggered_by
+        if not origin_triggered_by:
+            continue
+        lineage[run_id] = {
+            "origin_run_id": str(row.get("origin_run_id") or run_id).strip(),
+            "origin_triggered_by": origin_triggered_by,
+            "origin_reason": str(row.get("origin_reason") or row.get("reason") or "").strip(),
+        }
+    return lineage
+
+
+def _with_remediation_lineage(
+    candidate: dict[str, Any],
+    item: dict[str, Any],
+    lineage_by_run_id: dict[str, dict[str, str]],
+) -> dict[str, Any]:
+    run_id = str(candidate.get("run_id") or "").strip()
+    lineage = {
+        "origin_run_id": str(item.get("origin_run_id") or "").strip(),
+        "origin_triggered_by": str(item.get("origin_triggered_by") or "").strip(),
+        "origin_reason": str(item.get("origin_reason") or "").strip(),
+    }
+    stored = lineage_by_run_id.get(run_id) or {}
+    for key in ("origin_run_id", "origin_triggered_by", "origin_reason"):
+        if not lineage[key]:
+            lineage[key] = str(stored.get(key) or "").strip()
+        if lineage[key]:
+            candidate[key] = lineage[key]
+    return candidate
+
+
+def _remediation_priority(candidate: dict[str, Any], item_index: int) -> tuple[int, int]:
+    """Prioritize safety recovery while preserving newest-first behavior per class."""
+    origin = str(candidate.get("origin_triggered_by") or "").strip()
+    origin_priority = {
+        "incident_event": 30,
+        "proactive_signal": 20,
+    }.get(origin, 10)
+    return origin_priority, item_index
+
+
 def pending_automated_remediation() -> dict[str, Any] | None:
     """Settle verified receipts, then return one executable unattended repair."""
     from modstore_server.self_maintenance_loop_runner import (
@@ -109,7 +164,9 @@ def pending_automated_remediation() -> dict[str, Any] | None:
     open_items = memory.get("open_items") if isinstance(memory, dict) else None
     if not isinstance(open_items, list):
         return None
-    for item in reversed(open_items):
+    lineage_by_run_id = _remediation_lineage_by_run_id()
+    candidates: list[tuple[tuple[int, int], dict[str, Any]]] = []
+    for item_index, item in enumerate(open_items):
         if not isinstance(item, dict):
             continue
         if item.get("escalated"):
@@ -134,13 +191,18 @@ def pending_automated_remediation() -> dict[str, Any] | None:
                 minimum=1,
             )
             if steps and retry_count < max_retries and branch and task_id:
-                return {
-                    "branch": branch,
-                    "reason": f"failed_steps:{','.join(steps)}",
-                    "run_id": str(item.get("run_id") or "").strip(),
-                    "steps": steps,
-                    "task_id": task_id,
-                }
+                candidate = _with_remediation_lineage(
+                    {
+                        "branch": branch,
+                        "reason": f"failed_steps:{','.join(steps)}",
+                        "run_id": str(item.get("run_id") or "").strip(),
+                        "steps": steps,
+                        "task_id": task_id,
+                    },
+                    item,
+                    lineage_by_run_id,
+                )
+                candidates.append((_remediation_priority(candidate, item_index), candidate))
             continue
         if kind != "automated_remediation":
             continue
@@ -151,13 +213,18 @@ def pending_automated_remediation() -> dict[str, Any] | None:
             or _automated_remediation_resume_plan(reason) is not None
         )
         if resumable and branch and task_id:
-            return {
-                "branch": branch,
-                "reason": reason,
-                "run_id": str(item.get("run_id") or "").strip(),
-                "task_id": task_id,
-            }
-    return None
+            candidate = _with_remediation_lineage(
+                {
+                    "branch": branch,
+                    "reason": reason,
+                    "run_id": str(item.get("run_id") or "").strip(),
+                    "task_id": task_id,
+                },
+                item,
+                lineage_by_run_id,
+            )
+            candidates.append((_remediation_priority(candidate, item_index), candidate))
+    return max(candidates, key=lambda entry: entry[0])[1] if candidates else None
 
 
 def run_pending_automated_remediation() -> dict[str, Any]:
@@ -172,6 +239,7 @@ def run_pending_automated_remediation() -> dict[str, Any]:
         triggered_by="automated_remediation",
         force=False,
         reason=f"resume:{pending['reason']}",
+        remediation_context=pending,
     )
     status = str(result.get("status") or "")
     if status == "failed":
