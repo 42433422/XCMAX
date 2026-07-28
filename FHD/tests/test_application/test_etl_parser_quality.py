@@ -276,6 +276,43 @@ def test_companion_history_uses_source_date_not_workbook_row_order(tmp_path, mon
     )
 
 
+def test_shipment_preview_keeps_companion_notice_when_history_has_stale_rows(tmp_path, monkeypatch):
+    """Shipment preview must explain that appendices were read despite stale-row selection."""
+    path = tmp_path / "shipment-companion-stale-history.xlsx"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：金汉武家私  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["9803", "测试面漆", 1, 20, 20, 17, 340])
+        delivery.append(["合计", None, 1, None, 20, None, 340])
+
+        history = workbook.create_sheet("出货历史")
+        history.append(
+            ["金汉武", 46000, "2", "方和", None, None, "黑棕面用修色精", 1, 4, 4, 48, 192]
+        )
+        history.append(
+            ["金汉武", 45900, "2", "方和", None, None, "黑棕面用修色精", 1, 4, 4, 40, 160]
+        )
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    shipment = parse_file(path, target_type="shipment_records")
+    warning_codes = {warning["code"] for warning in shipment.warnings}
+
+    assert shipment.source_features["shipment_history_product_candidates"] == 1
+    assert shipment.source_features["latest_record_selection"]["stale_records_skipped"] == 1
+    assert "ETL_LATEST_PRODUCT_DATA_SELECTED" in warning_codes
+    assert "ETL_COMPANION_CUSTOMER_PRODUCT_DATA_FOUND" in warning_codes
+
+
 def test_companion_history_excludes_future_dated_fact_from_latest_selection(tmp_path, monkeypatch):
     path = tmp_path / "future-history.xlsx"
     future_date = f"{date.today().year + 1}-01-17"

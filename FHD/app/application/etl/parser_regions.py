@@ -926,7 +926,12 @@ def parse_customer_product_regions(
                 "count": companion_stale_records_skipped,
             }
         )
-    elif companion_candidate_count and target_type == "shipment_records":
+    # A shipment-record preview never writes companion history/quote rows.
+    # Keep that fact visible even when deduplication also found stale product
+    # facts: otherwise the generic "latest data" notice crowds out the
+    # actionable explanation that the workbook's appendices were read and are
+    # available through the linked customer/product preview.
+    if companion_candidate_count and target_type == "shipment_records":
         warnings.append(
             {
                 "code": "ETL_COMPANION_CUSTOMER_PRODUCT_DATA_FOUND",
