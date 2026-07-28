@@ -71,9 +71,9 @@ def _get_template_store():
     except RECOVERABLE_ERRORS:
         pass
     from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
-    from app.utils.path_utils import get_base_dir
+    from app.utils.path_utils import get_app_data_dir
 
-    return FileSystemTemplateStore(base_dir=get_base_dir())
+    return FileSystemTemplateStore(base_dir=get_app_data_dir())
 
 
 def _normalize_unit_token(value: str) -> str:

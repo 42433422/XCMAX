@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 from datetime import datetime
 from typing import Any, cast
 
@@ -26,7 +27,16 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def __init__(self, base_dir: str):
         self._base_dir = base_dir
-        self._template_dir = os.path.join(base_dir, "templates")
+        # The bundled directory is a read-only seed source in desktop builds.
+        # Persisted templates must be kept in userData or macOS will invalidate
+        # the application signature after a user saves a template.
+        packaged_or_desktop = bool(getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"))
+        packaged_or_desktop = packaged_or_desktop or os.environ.get(
+            "XCAGI_DESKTOP_MODE", ""
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        writable_base = get_app_data_dir() if packaged_or_desktop else base_dir
+        self._template_dir = os.path.join(writable_base, "templates")
+        self._write_dir = self._template_dir if packaged_or_desktop else self._base_dir
         os.makedirs(self._template_dir, exist_ok=True)
 
     def _legacy_templates(self) -> list[dict]:
@@ -383,7 +393,7 @@ class FileSystemTemplateStore(TemplateStorePort):
             alt = os.path.join(self._template_dir, source_name)
             source_path = alt if os.path.exists(alt) else source_path
 
-        target_path = os.path.join(self._base_dir, target_name)
+        target_path = os.path.join(self._write_dir, target_name)
 
         if not os.path.exists(source_path):
             return {"success": False, "message": f"源模板不存在: {source_name}"}

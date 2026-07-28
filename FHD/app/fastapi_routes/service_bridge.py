@@ -13,26 +13,42 @@ from pydantic import BaseModel, Field
 
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/service-bridge", tags=["service-bridge"])
 
-_INSTANCE_ID_FILE = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", ".service_bridge_instance_id"
-)
+# Compatibility/test override.  Do not resolve the normal value at module import:
+# the packaged backend lives below ``XCAGI.app/Contents/Resources`` and runtime
+# state must never be created there.
+_INSTANCE_ID_FILE: str | None = None
+
+
+def _instance_id_file() -> str:
+    """Return the persistent bridge identity path under desktop userData."""
+
+    if _INSTANCE_ID_FILE:
+        return _INSTANCE_ID_FILE
+    return os.path.join(
+        get_app_data_dir(),
+        "config",
+        "service_bridge",
+        ".service_bridge_instance_id",
+    )
 
 
 def _get_or_create_instance_id() -> str:
     try:
-        os.makedirs(os.path.dirname(_INSTANCE_ID_FILE), exist_ok=True)
-        if os.path.exists(_INSTANCE_ID_FILE):
-            with open(_INSTANCE_ID_FILE, encoding="utf-8") as f:
+        instance_file = _instance_id_file()
+        os.makedirs(os.path.dirname(instance_file), exist_ok=True)
+        if os.path.exists(instance_file):
+            with open(instance_file, encoding="utf-8") as f:
                 cached = f.read().strip()
                 if cached:
                     return cached
         instance_id = f"xcagi-host-{uuid.uuid4().hex[:8]}"
-        with open(_INSTANCE_ID_FILE, "w", encoding="utf-8") as f:
+        with open(instance_file, "w", encoding="utf-8") as f:
             f.write(instance_id)
         return instance_id
     except RECOVERABLE_ERRORS:
