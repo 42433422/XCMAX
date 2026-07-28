@@ -184,7 +184,6 @@ async def test_search_company_names_via_web_respects_budget(
     import time
 
     from modstore_server import contact_company_web_search as ccw
-    from modstore_server import research_tools as rt
 
     monkeypatch.setenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", "1.2")
     monkeypatch.setattr(ccw, "contact_web_company_search_enabled", lambda: True)
