@@ -142,7 +142,7 @@ def test_compat_ai_generate_parse_success_but_empty_products_returns_400() -> No
     assert "空" in body["message"]
 
 
-def test_compat_ai_generate_service_failure_returns_500() -> None:
+def test_compat_ai_generate_returns_confirmation_without_calling_service() -> None:
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
@@ -154,21 +154,21 @@ def test_compat_ai_generate_service_failure_returns_500() -> None:
             "products": [{"name": "漆", "quantity": 1, "price": 10}],
         }
         mock_svc = MagicMock()
-        mock_svc.generate_shipment_document.return_value = {
-            "success": False,
-            "message": "生成失败",
-        }
         mock_svc_get.return_value = mock_svc
         resp = client.post(
             "/api/generate",
             json={"order_text": "甲公司 漆 1 10", "template_name": "default"},
         )
-    assert resp.status_code == 500
+    assert resp.status_code == 200
     body = resp.json()
-    assert body["success"] is False
+    assert body["success"] is True
+    assert body["confirmation_required"] is True
+    assert body["task"]["type"] == "shipment_generate"
+    assert body["task"]["payload"]["params"]["template_name"] == "default"
+    mock_svc.generate_shipment_document.assert_not_called()
 
 
-def test_compat_ai_generate_success_returns_doc_info() -> None:
+def test_compat_ai_generate_returns_preview_instead_of_doc_info() -> None:
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
@@ -180,14 +180,6 @@ def test_compat_ai_generate_success_returns_doc_info() -> None:
             "products": [{"name": "漆", "quantity": 1, "price": 10}],
         }
         mock_svc = MagicMock()
-        mock_svc.generate_shipment_document.return_value = {
-            "success": True,
-            "file_path": "/tmp/shipment/foo.docx",
-            "doc_name": "foo.docx",
-            "order_number": "ORD-1",
-            "total_amount": 10.0,
-            "total_quantity": 1,
-        }
         mock_svc_get.return_value = mock_svc
         resp = client.post(
             "/api/generate",
@@ -196,10 +188,11 @@ def test_compat_ai_generate_success_returns_doc_info() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert body["data"]["doc_name"] == "foo.docx"
-    assert body["data"]["download_url"] == "/api/shipment/download/foo.docx"
-    assert body["data"]["order_number"] == "ORD-1"
-    assert body["filename"] == "foo.docx"
+    assert body["confirmation_required"] is True
+    assert body["task"]["api_url"] == "/api/tools/execute"
+    assert body["task"]["payload"]["params"]["order_text"] == "甲公司 漆 1 10"
+    assert "doc_name" not in body["data"]
+    mock_svc.generate_shipment_document.assert_not_called()
 
 
 def test_compat_ai_generate_success_attaches_agent_run() -> None:
@@ -207,7 +200,6 @@ def test_compat_ai_generate_success_attaches_agent_run() -> None:
     repo = InMemoryAgentRunRepository()
     with (
         patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
-        patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
         patch(
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
@@ -218,16 +210,6 @@ def test_compat_ai_generate_success_attaches_agent_run() -> None:
             "unit_name": "甲公司",
             "products": [{"name": "漆", "quantity": 1, "price": 10}],
         }
-        mock_svc = MagicMock()
-        mock_svc.generate_shipment_document.return_value = {
-            "success": True,
-            "file_path": "/tmp/shipment/foo.docx",
-            "doc_name": "foo.docx",
-            "order_number": "ORD-1",
-            "total_amount": 10.0,
-            "total_quantity": 1,
-        }
-        mock_svc_get.return_value = mock_svc
         resp = client.post("/api/generate", json={"order_text": "甲公司 漆 1 10"})
 
     assert resp.status_code == 200
@@ -239,21 +221,23 @@ def test_compat_ai_generate_success_attaches_agent_run() -> None:
     assert run.intent == "ai_assistant_compat_route"
     assert run.metadata["channel"] == "ai_assistant_compat"
     assert run.metadata["runtime_context"]["route"] == "/api/generate"
-    assert run.metadata["runtime_context"]["action"] == "generate_shipment_document"
+    assert run.metadata["runtime_context"]["action"] == "shipment_preview"
 
 
 def test_compat_ai_generate_recoverable_error_returns_500() -> None:
     client = _ai_assistant_client()
     with (
         patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
-        patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
+        patch(
+            "app.application.ai_chat_helpers.build_shipment_preview_response_dict",
+            side_effect=RuntimeError("preview unavailable"),
+        ),
     ):
         mock_parse.return_value = {
             "success": True,
             "unit_name": "甲公司",
             "products": [{"name": "漆", "quantity": 1, "price": 10}],
         }
-        mock_svc_get.side_effect = RuntimeError("shipment service down")
         resp = client.post(
             "/api/generate",
             json={"order_text": "甲公司 漆 1 10"},
@@ -262,7 +246,7 @@ def test_compat_ai_generate_recoverable_error_returns_500() -> None:
     body = resp.json()
     assert body["success"] is False
     assert body["message"] == "生成失败"
-    assert "shipment service down" not in body["message"]
+    assert "preview unavailable" not in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -765,12 +749,11 @@ def test_compat_print_shipment_file_success_returns_200(
             "/api/print/foo.docx",
             json={"printer_name": "p1"},
         )
-    assert resp.status_code == 200
+    assert resp.status_code == 403
     body = resp.json()
-    assert body["success"] is True
-    mock_svc.print_document.assert_called_once()
-    call_kwargs = mock_svc.print_document.call_args.kwargs
-    assert call_kwargs["printer_name"] == "p1"
+    assert body["success"] is False
+    assert body["error_code"] == "PRINT_AUTH_REQUIRED"
+    mock_svc.print_document.assert_not_called()
 
 
 def test_compat_print_shipment_file_failure_returns_400(
@@ -791,9 +774,11 @@ def test_compat_print_shipment_file_failure_returns_400(
         }
         mock_svc_get.return_value = mock_svc
         resp = client.post("/api/print/bar.docx", json={})
-    assert resp.status_code == 400
+    assert resp.status_code == 403
     body = resp.json()
     assert body["success"] is False
+    assert body["error_code"] == "PRINT_AUTH_REQUIRED"
+    mock_svc.print_document.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

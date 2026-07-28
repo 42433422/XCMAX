@@ -210,7 +210,8 @@ class FileSystemTemplateStore(TemplateStorePort):
                     text(
                         f"""
                         SELECT id, template_key, template_name, template_type,
-                               original_file_path, is_active, tenant_id
+                               original_file_path, analyzed_data, business_rules,
+                               is_active, tenant_id
                         FROM templates
                         WHERE (is_active IS NULL OR is_active = 1)
                           AND ({tenant_sql})
@@ -223,6 +224,22 @@ class FileSystemTemplateStore(TemplateStorePort):
 
         out: list[dict] = []
         for r in rows:
+            # Pre-V1 ETL promotion wrote personal delivery layouts into the
+            # tenant-wide generic template table, which has no owner column.
+            # Keep those legacy rows fail-closed rather than exposing a
+            # previous user's layout. New ETL layouts live in etl_templates.
+            try:
+                analyzed = json.loads(getattr(r, "analyzed_data", None) or "{}")
+                rules = json.loads(getattr(r, "business_rules", None) or "{}")
+            except (TypeError, ValueError):
+                analyzed, rules = {}, {}
+            source = str(
+                (rules.get("source") if isinstance(rules, dict) else "")
+                or (analyzed.get("source") if isinstance(analyzed, dict) else "")
+                or "db"
+            ).strip()
+            if source == "etl_shipment_template":
+                continue
             path = r.original_file_path if getattr(r, "original_file_path", None) else None
             exists = bool(path and os.path.exists(path))
             lower_fp = str(path or "").lower()
@@ -312,14 +329,31 @@ class FileSystemTemplateStore(TemplateStorePort):
                 db_id = None
             if db_id is not None:
                 try:
+                    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
+
+                    tenant_sql, tenant_bind = templates_tenant_where_sql()
                     with get_db() as db:
                         row = db.execute(
                             text(
-                                "SELECT original_file_path FROM templates "
-                                "WHERE id = :id AND (is_active IS NULL OR is_active = 1)"
+                                "SELECT original_file_path, analyzed_data, business_rules FROM templates "
+                                "WHERE id = :id AND (is_active IS NULL OR is_active = 1) "
+                                f"AND ({tenant_sql})"
                             ),
-                            {"id": db_id},
+                            {"id": db_id, **tenant_bind},
                         ).fetchone()
+                    if row:
+                        try:
+                            analyzed = json.loads(getattr(row, "analyzed_data", None) or "{}")
+                            rules = json.loads(getattr(row, "business_rules", None) or "{}")
+                        except (TypeError, ValueError):
+                            analyzed, rules = {}, {}
+                        source = str(
+                            (rules.get("source") if isinstance(rules, dict) else "")
+                            or (analyzed.get("source") if isinstance(analyzed, dict) else "")
+                            or "db"
+                        ).strip()
+                        if source == "etl_shipment_template":
+                            return None
                     if row and row.original_file_path and os.path.exists(row.original_file_path):
                         return cast("str | None", row.original_file_path)
                 except RECOVERABLE_ERRORS:

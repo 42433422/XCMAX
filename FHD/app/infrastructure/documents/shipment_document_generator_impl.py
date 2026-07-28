@@ -26,6 +26,7 @@ from app.domain.shipment.shipment_product_parser import prepare_parsed_products
 from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
+from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.legacy.documents.legacy_shipment_document import (
     load_legacy_shipment_document_generator,
 )
@@ -276,10 +277,21 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         self.output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def _load_products_from_main_db(self) -> list[dict[str, Any]]:
+    def _load_products_from_main_db(self, *, unit_name: str) -> list[dict[str, Any]]:
+        """Load only products that belong to the resolved customer in this tenant.
+
+        A model number is not globally meaningful in the desktop product master.
+        The ETL aggregate writes products under ``Product.unit`` and chat order
+        generation must preserve that same customer-product relationship rather
+        than letting a product from another customer fill a delivery note.
+        """
         products: list[dict[str, Any]] = []
         with get_db() as db:
-            rows = db.query(Product).filter(Product.is_active == 1).all()
+            rows = (
+                apply_tenant_filter(db.query(Product), Product)
+                .filter(Product.is_active == 1, Product.unit == str(unit_name or "").strip())
+                .all()
+            )
             for p in rows:
                 products.append(
                     {
@@ -328,7 +340,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         )
 
         # 4) 产品匹配（仅主库 products）
-        db_products = self._load_products_from_main_db()
+        db_products = self._load_products_from_main_db(unit_name=resolved.unit_name)
         parsed_products: list[dict[str, Any]] = prepare_parsed_products(
             input_products=products,
             db_products=db_products,
@@ -351,27 +363,64 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         from app.db.init_db import get_db_path
 
         generator = ShipmentDocumentGenerator(db_path=get_db_path("products.db"))
-        doc = generator.generate_document(
-            order_text="",
-            parsed_data=parsed_data,
-            purchase_unit=purchase_unit_info,
-            template_name=template_name,
-            custom_order_number=order_number,
-        )
+        template_path = str(template_name or "").strip()
+        if template_path and os.path.isfile(template_path):
+            from app.infrastructure.documents.shipment_workbook_filler import (
+                fill_shipment_workbook,
+                safe_shipment_filename,
+            )
 
-        if hasattr(doc, "to_dict"):
-            info = doc.to_dict()
+            resolved_order_number = (
+                str(order_number or "").strip() or generator._generate_order_number()
+            )
+            output_path = os.path.join(
+                self.output_dir,
+                safe_shipment_filename(resolved_order_number),
+            )
+            info = fill_shipment_workbook(
+                template_path,
+                output_path=output_path,
+                unit_name=resolved.unit_name,
+                contact_person=resolved.contact_person or "",
+                products=parsed_products,
+                order_number=resolved_order_number,
+                date=date,
+            )
             file_path = info.get("filepath")
-            filename = info.get("filename") or (os.path.basename(file_path) if file_path else "")
-            order_number = info.get("order_number")
+            file_path = file_path or info.get("file_path")
+            filename = info.get("filename") or (
+                os.path.basename(file_path) if file_path else ""
+            )
+            order_number = info.get("order_number") or resolved_order_number
             total_amount = info.get("total_amount")
             total_quantity = info.get("total_quantity")
         else:
-            file_path = getattr(doc, "filepath", None)
-            filename = getattr(doc, "filename", os.path.basename(file_path) if file_path else "")
-            order_number = getattr(doc, "order_number", None)
-            total_amount = getattr(doc, "total_amount", None)
-            total_quantity = getattr(doc, "total_quantity", None)
+            doc = generator.generate_document(
+                order_text="",
+                parsed_data=parsed_data,
+                purchase_unit=purchase_unit_info,
+                template_name=template_name,
+                custom_order_number=order_number,
+            )
+            if hasattr(doc, "to_dict"):
+                info = doc.to_dict()
+                file_path = info.get("filepath")
+                filename = info.get("filename") or (
+                    os.path.basename(file_path) if file_path else ""
+                )
+                order_number = info.get("order_number")
+                total_amount = info.get("total_amount")
+                total_quantity = info.get("total_quantity")
+            else:
+                file_path = getattr(doc, "filepath", None)
+                filename = getattr(
+                    doc,
+                    "filename",
+                    os.path.basename(file_path) if file_path else "",
+                )
+                order_number = getattr(doc, "order_number", None)
+                total_amount = getattr(doc, "total_amount", None)
+                total_quantity = getattr(doc, "total_quantity", None)
 
         # 6) 生成标签图片
         labels_dir = get_resource_path("ai_assistant", "商标导出")

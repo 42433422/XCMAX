@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -20,7 +22,10 @@ from app.db.models.etl import (
     EtlTemplateVersion,
     EtlUpload,
 )
+from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
+from app.db.models.shipment import ShipmentRecord
+from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.fastapi_routes.shipment_etl_compat import shipment_etl_preview
 from app.infrastructure.tenant_scope import tenant_scope
 
@@ -39,6 +44,9 @@ def _test_app(tmp_path, monkeypatch):
             EtlRunRow.__table__,
             EtlTargetConfig.__table__,
             PurchaseUnit.__table__,
+            Product.__table__,
+            ShipmentRecord.__table__,
+            ShipmentEtlImportFingerprint.__table__,
         ],
     )
     maker = sessionmaker(bind=engine, expire_on_commit=False)
@@ -48,6 +56,7 @@ def _test_app(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "app-data"))
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("FHD_ETL_CENTER_ENABLED", "1")
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
 
     def inline_preview(run_id: str, _tenant_id: int, owner_user_id: int) -> None:
         service._preview_worker(run_id, owner_user_id)
@@ -84,6 +93,30 @@ def _test_app(tmp_path, monkeypatch):
     app.dependency_overrides[etl_routes._target_manage] = user
     app.dependency_overrides[etl_routes.get_db_dependency] = db_dependency
     return TestClient(app), current_user
+
+
+def _mixed_delivery_workbook_bytes(tmp_path: Path) -> bytes:
+    """A compact mixed workbook: delivery + product history + finance appendix."""
+
+    path = tmp_path / "mixed-delivery.xlsx"
+    workbook = Workbook()
+    delivery = workbook.active
+    delivery.title = "侯雪梅"
+    delivery.append(["某公司送货单"])
+    delivery.append(["购货单位：金汉武家私  联系人：张总  2026年01月21日  订单编号：A-9803"])
+    delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+    delivery.append(["9803", "黑棕面用修色精", 3, 28, 84, 48, 4032])
+    delivery.append(["合计", None, 3, None, 84, None, 4032])
+
+    history = workbook.create_sheet("出货历史")
+    history.append(["金汉武（宾驰）", "45659", "2", "方和", None, None, "黑棕面用修色精", 3, 4, 12, 48, 576])
+
+    finance = workbook.create_sheet("25年回款")
+    finance.append(["客户名", "回款金额", "余额"])
+    finance.append(["金汉武家私", 1000, 200])
+    workbook.save(path)
+    workbook.close()
+    return path.read_bytes()
 
 
 def test_etl_api_upload_preview_execute_and_owner_isolation(tmp_path, monkeypatch):
@@ -154,6 +187,128 @@ def test_etl_api_rejects_non_enterprise_build(tmp_path, monkeypatch):
     response = client.get("/api/etl/capabilities")
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "ETL_ENTERPRISE_REQUIRED"
+
+
+def test_etl_api_auto_target_resolves_before_preview(tmp_path, monkeypatch):
+    client, _ = _test_app(tmp_path, monkeypatch)
+    uploaded = client.post(
+        "/api/etl/uploads",
+        files={
+            "file": (
+                "customers.csv",
+                "客户名称,电话\n自动识别客户,13800000000\n".encode(),
+                "text/csv",
+            )
+        },
+    )
+    upload_id = uploaded.json()["data"]["upload_id"]
+
+    preview = client.post(
+        "/api/etl/runs/preview",
+        json={"upload_id": upload_id, "target_type": "auto"},
+    )
+
+    assert preview.status_code == 202
+    run = preview.json()["data"]
+    assert run["target_type"] == "customers"
+    assert run["status"] == "preview_ready"
+    assert run["details"]["requested_target_type"] == "auto"
+    assert run["source_features"]["target_detection"] == {
+        "target_type": "customers",
+        "document_type": "customer_table",
+        "confidence": 0.74,
+        "reason": "customer_headers",
+    }
+
+
+def test_etl_api_mixed_delivery_preview_exposes_companion_and_private_layout(
+    tmp_path, monkeypatch
+):
+    """The docking loop stays preview-only until the caller explicitly executes it."""
+
+    client, _ = _test_app(tmp_path, monkeypatch)
+    uploaded = client.post(
+        "/api/etl/uploads",
+        files={
+            "file": (
+                "侯雪梅.xlsx",
+                _mixed_delivery_workbook_bytes(tmp_path),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert uploaded.status_code == 201
+    upload_id = uploaded.json()["data"]["upload_id"]
+
+    shipment_preview = client.post(
+        "/api/etl/runs/preview",
+        json={"upload_id": upload_id, "target_type": "auto"},
+    )
+    assert shipment_preview.status_code == 202
+    shipment_run = shipment_preview.json()["data"]
+    assert shipment_run["target_type"] == "shipment_records"
+    assert shipment_run["status"] == "preview_ready"
+    assert shipment_run["details"]["requested_target_type"] == "auto"
+    assert shipment_run["source_features"]["target_detection"]["document_type"] == (
+        "delivery_note_workbook"
+    )
+    sheet_plan = {row["sheet"]: row for row in shipment_run["source_features"]["sheet_plan"]}
+    assert sheet_plan["出货历史"]["role"] == "supporting_customer_product_data"
+    assert sheet_plan["25年回款"]["status"] == "excluded"
+
+    saved_layout = client.post(
+        f"/api/etl/runs/{shipment_run['id']}/shipment-template",
+        json={"name": ""},
+    )
+    assert saved_layout.status_code == 200
+    layout = saved_layout.json()["data"]
+    assert layout["template_id"].startswith("etl:")
+    assert layout["name"] == "金汉武家私-发货单版式"
+    assert Path(layout["file_path"]).is_file()
+    assert "/document_templates/101/" in layout["file_path"]
+
+    # A printing layout is deliberately hidden from import-template selection
+    # and fails closed if a caller tries to use its raw ID as an ETL mapping.
+    templates = client.get("/api/etl/templates")
+    assert templates.status_code == 200
+    assert layout["template_id"].removeprefix("etl:") not in {
+        row["id"] for row in templates.json()["data"]
+    }
+    invalid_mapping = client.post(
+        "/api/etl/runs/preview",
+        json={
+            "upload_id": upload_id,
+            "target_type": "shipment_records",
+            "template_id": layout["template_id"].removeprefix("etl:"),
+        },
+    )
+    assert invalid_mapping.status_code == 409
+    assert invalid_mapping.json()["detail"]["code"] == (
+        "ETL_SHIPMENT_TEMPLATE_NOT_IMPORT_TEMPLATE"
+    )
+
+    customer_product_preview = client.post(
+        "/api/etl/runs/preview",
+        json={"upload_id": upload_id, "target_type": "customer_products"},
+    )
+    assert customer_product_preview.status_code == 202
+    companion = customer_product_preview.json()["data"]
+    assert companion["target_type"] == "customer_products"
+    assert companion["status"] == "preview_ready"
+    assert companion["total_rows"] >= 1
+    assert companion["source_features"]["sheet_plan"]
+
+    # Neither preview creates customer/product records. Only /execute can
+    # perform that state change, and this test intentionally never calls it.
+    from app.application.etl import service as etl_service_module
+
+    with tenant_scope(4):
+        db = etl_service_module.SessionLocal()
+        try:
+            assert db.query(PurchaseUnit).count() == 0
+            assert db.query(Product).count() == 0
+        finally:
+            db.close()
 
 
 def test_etl_api_is_fail_closed_when_feature_flag_is_missing(tmp_path, monkeypatch):

@@ -153,6 +153,20 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                 reason="linked_customer_fields_conflict",
             )
         product = self._product_preview_state(db, data, allowed_update_fields, context)
+        if product.get("model_ambiguity_issues"):
+            return PreviewDecision(
+                "error",
+                before={
+                    "customer": json_safe(customer["before"]),
+                    "product": json_safe(product["before"]),
+                },
+                after={
+                    "customer": json_safe(customer["after"]),
+                    "product": json_safe(product["after"]),
+                },
+                issues=list(product["model_ambiguity_issues"]),
+                reason="linked_product_model_ambiguous",
+            )
         before = {
             "customer": json_safe(customer["before"]),
             "product": json_safe(product["before"]),
@@ -252,11 +266,19 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
 
     def execute_row(self, db, data, *, action, match_ref, allowed_update_fields, context):
         _customer_id, preview_product_id = self._parse_match_ref(match_ref)
+        product_data = self._product_data(data)
+        product_adapter = ProductAdapter()
+        if action == "new":
+            ambiguity = product_adapter.model_ambiguity_issue(
+                product_data,
+                product_adapter._same_name_candidates(db, product_data),
+                exact_match=False,
+            )
+            if ambiguity:
+                raise EtlError(ambiguity["code"], ambiguity["message"], status_code=409)
         customer, customer_created, customer_updated, customer_before = self._ensure_customer(
             db, data, allowed_update_fields, context
         )
-        product_data = self._product_data(data)
-        product_adapter = ProductAdapter()
         product = (
             owned_query(db, Product).filter(Product.id == preview_product_id).first()
             if preview_product_id

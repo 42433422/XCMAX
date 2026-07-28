@@ -238,7 +238,9 @@ def test_print_document(mock_get: MagicMock) -> None:
         "pro",
         "",
     )
-    assert out["success"] is True
+    assert out["success"] is False
+    assert out["error_code"] == "PRINT_CAPABILITY_ROUTE_REQUIRED"
+    mock_get.return_value.print_document.assert_not_called()
 
 
 @patch("app.services.get_system_service")

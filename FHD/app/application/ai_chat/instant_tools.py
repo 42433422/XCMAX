@@ -72,31 +72,35 @@ class AIChatInstantToolsMixin:
 
             effective_products = parsed_products or products_list
             effective_unit_name = parsed_unit_name or unit_name
-            response_data["toolCall"] = {
-                "tool_id": tool_key,
-                "action": "执行",
-                "params": {
-                    "order_text": order_text,
-                    **parsed_params,
-                    **ai_result.get("data", {}),
-                    "products": effective_products,
+            if not effective_products and (model_number or slots.get("product_name")):
+                product_slot: dict[str, Any] = {}
+                if model_number:
+                    product_slot["model_number"] = model_number
+                product_name = str(slots.get("product_name") or "").strip()
+                if product_name:
+                    product_slot["name"] = product_name
+                if tin_spec not in (None, ""):
+                    product_slot["tin_spec"] = tin_spec
+                if quantity_tins not in (None, ""):
+                    product_slot["quantity_tins"] = quantity_tins
+                effective_products = [product_slot]
+            # A pro-mode shortcut is still a natural-language request, not an
+            # already-authorized document write.  Return the same explicit
+            # confirmation card as normal chat; only its button may call the
+            # legacy shipment execution endpoint.
+            return self._build_shipment_confirmation_preview(
+                response_data,
+                parsed_params,
+                ai_result,
+                slots=slots,
+                original_message=original_message,
+                order_text=order_text,
+                parsed_order={
+                    "success": bool(effective_unit_name and effective_products),
                     "unit_name": effective_unit_name,
-                    "template_id": slots.get("template_id") or parsed_params.get("template_id"),
-                    "template_name": (
-                        slots.get("template_name")
-                        or slots.get("template")
-                        or parsed_params.get("template_name")
-                        or parsed_params.get("template")
-                    ),
-                    "preferred_template": (
-                        slots.get("preferred_template")
-                        or slots.get("template")
-                        or parsed_params.get("preferred_template")
-                    ),
+                    "products": effective_products,
                 },
-            }
-            response_data["response"] = ai_result.get("text", "")
-            return response_data
+            )
         else:
             response_data["toolCall"] = {
                 "tool_id": tool_key,
@@ -117,10 +121,21 @@ class AIChatInstantToolsMixin:
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
         result_data: dict[str, Any],
+        slots: dict[str, Any] | None = None,
+        original_message: str = "",
     ) -> dict[str, Any]:
         """执行普通模式工具"""
         if tool_key == "shipment_generate":
-            return self._execute_shipment_generate(response_data, parsed_params, ai_result)
+            # Public chat is preview-first.  Do not call the compatibility
+            # execution primitive here: only the task card's explicit click
+            # reaches the document-generation endpoint.
+            return self._build_shipment_confirmation_preview(
+                response_data,
+                parsed_params,
+                ai_result,
+                slots=slots,
+                original_message=original_message,
+            )
         elif tool_key == "shipments":
             return self._execute_shipments_query(response_data)
         else:
@@ -376,25 +391,208 @@ class AIChatInstantToolsMixin:
 
         return ""
 
+    def _build_shipment_confirmation_preview(
+        self,
+        response_data: dict[str, Any],
+        parsed_params: dict[str, Any],
+        ai_result: dict[str, Any],
+        *,
+        slots: dict[str, Any] | None = None,
+        original_message: str = "",
+        order_text: str = "",
+        parsed_order: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a shipment preview card without generating a document.
+
+        Both the public normal chat and the professional shortcut must stop at
+        a preview.  The client later sends this deterministic payload only when
+        the user explicitly clicks ``确认执行``.  This keeps model output
+        advisory and prevents a chat response from silently writing a shipment
+        record or creating a print-ready file.
+        """
+        try:
+            from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+            from app.application.facades.tools_facade import _parse_order_text
+
+            safe_slots = slots if isinstance(slots, dict) else {}
+            raw_original_message = str(original_message or "").strip()
+            parsed_params = parsed_params if isinstance(parsed_params, dict) else {}
+
+            parsed = parsed_order if isinstance(parsed_order, dict) else {"success": False}
+            safe_order_text = str(order_text or "").strip()
+            if raw_original_message:
+                # The user's wording is the source of record.  In particular,
+                # do not replace their spec/quantity with a model paraphrase.
+                safe_order_text = raw_original_message
+                # Pro mode may already have complete deterministic slots.  A
+                # conversational original that is not parseable must not erase
+                # those slots (for example a terse “好” after slot extraction).
+                if not parsed.get("success"):
+                    parsed = _parse_order_text(safe_order_text)
+
+            if not parsed.get("success"):
+                fallback_order_text = str(
+                    parsed_params.get("order_text")
+                    or safe_slots.get("order_text")
+                    or ""
+                ).strip()
+                if fallback_order_text and fallback_order_text != safe_order_text:
+                    safe_order_text = fallback_order_text
+                    parsed = _parse_order_text(safe_order_text)
+
+            structured_products = parsed_params.get("products") or safe_slots.get("products") or []
+            if not isinstance(structured_products, list):
+                structured_products = []
+            structured_unit_name = str(
+                parsed_params.get("unit_name") or safe_slots.get("unit_name") or ""
+            ).strip()
+            if not structured_products:
+                slot_model = str(
+                    safe_slots.get("model_number")
+                    or safe_slots.get("product_model")
+                    or parsed_params.get("model_number")
+                    or ""
+                ).strip()
+                slot_name = str(
+                    safe_slots.get("name")
+                    or safe_slots.get("product_name")
+                    or parsed_params.get("name")
+                    or parsed_params.get("product_name")
+                    or ""
+                ).strip()
+                slot_spec = safe_slots.get("tin_spec") or parsed_params.get("tin_spec")
+                slot_quantity = safe_slots.get("quantity_tins") or parsed_params.get(
+                    "quantity_tins"
+                )
+                if slot_model or slot_name:
+                    structured_product: dict[str, Any] = {}
+                    if slot_model:
+                        structured_product["model_number"] = slot_model
+                    if slot_name:
+                        structured_product["name"] = slot_name
+                    if slot_spec not in (None, ""):
+                        structured_product["tin_spec"] = slot_spec
+                    if slot_quantity not in (None, ""):
+                        structured_product["quantity_tins"] = slot_quantity
+                    structured_products = [structured_product]
+
+            unit_name = str(parsed.get("unit_name") or structured_unit_name or "").strip()
+            products = parsed.get("products") or structured_products
+            if not isinstance(products, list):
+                products = []
+
+            if not unit_name or not products:
+                response_data["message"] = "订单信息不完整，请补充后再确认"
+                response_data["response"] = str(
+                    parsed.get("message") or "订单信息不完整，请补充单位、产品、规格和桶数。"
+                )
+                response_data.setdefault("data", {})["data"] = {
+                    "intent": "shipment_preview",
+                    "parsed_data": parsed,
+                }
+                response_data.pop("toolCall", None)
+                response_data.pop("task", None)
+                return response_data
+
+            if not safe_order_text:
+                # Structured slots are already deterministic.  Reconstruct a
+                # transparent transport string from those slots rather than
+                # sending an unrelated LLM acknowledgement to execution.
+                safe_order_text = self._build_order_text_from_products(
+                    unit_name,
+                    products,
+                    "",
+                    "",
+                    "",
+                )
+
+            preview = build_shipment_preview_response_dict(unit_name, products, safe_order_text)
+            preview_params = preview["task"]["payload"]["params"]
+
+            # Template preferences are carried to the click payload, but no
+            # client-supplied owner id is ever added here.  The server injects
+            # the authenticated owner after confirmation.
+            optional_params = {
+                "template_id": safe_slots.get("template_id")
+                or parsed_params.get("template_id"),
+                "template_name": safe_slots.get("template_name")
+                or safe_slots.get("template")
+                or parsed_params.get("template_name")
+                or parsed_params.get("template"),
+                "preferred_template": safe_slots.get("preferred_template")
+                or safe_slots.get("template")
+                or parsed_params.get("preferred_template"),
+                "date": parsed_params.get("date") or safe_slots.get("date"),
+                "order_number": parsed_params.get("order_number")
+                or safe_slots.get("order_number"),
+            }
+            for key, value in optional_params.items():
+                if value is not None and str(value).strip():
+                    preview_params[key] = value
+
+            return preview
+        except RECOVERABLE_ERRORS as tool_err:
+            logger.error("构建 shipment_generate 预演失败: %s", tool_err, exc_info=True)
+            response_data["message"] = "发货单预演失败"
+            response_data["response"] = f"发货单预演失败：{str(tool_err)}"
+
+        return response_data
+
     def _execute_shipment_generate(
         self,
         response_data: dict[str, Any],
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
+        *,
+        slots: dict[str, Any] | None = None,
+        original_message: str = "",
     ) -> dict[str, Any]:
-        """执行发货单生成"""
+        """Execute a shipment only after a caller has obtained confirmation.
+
+        This is a compatibility primitive for the explicit execution layer;
+        it is intentionally *not* used by normal or Pro natural-language chat
+        entry points.  Those entries call
+        :meth:`_build_shipment_confirmation_preview` and the user's button
+        reaches ``/api/tools/execute`` instead.
+        """
+
         try:
             from app.application.facades.tools_facade import _parse_order_text
             from app.bootstrap import get_shipment_app_service
 
-            order_text = parsed_params.get("order_text") or ai_result.get("text", "")
-            parsed = _parse_order_text(order_text)
+            safe_slots = slots if isinstance(slots, dict) else {}
+            raw_original_message = str(original_message or "").strip()
+            parsed_params = parsed_params if isinstance(parsed_params, dict) else {}
 
-            if parsed.get("success"):
+            parsed = {"success": False}
+            order_text = ""
+            if raw_original_message:
+                order_text = raw_original_message
+                parsed = _parse_order_text(order_text)
+
+            if not parsed.get("success"):
+                fallback_order_text = str(
+                    parsed_params.get("order_text")
+                    or safe_slots.get("order_text")
+                    or ai_result.get("text", "")
+                    or ""
+                ).strip()
+                if fallback_order_text and fallback_order_text != order_text:
+                    order_text = fallback_order_text
+                    parsed = _parse_order_text(order_text)
+
+            structured_products = parsed_params.get("products") or safe_slots.get("products") or []
+            if not isinstance(structured_products, list):
+                structured_products = []
+            structured_unit_name = str(
+                parsed_params.get("unit_name") or safe_slots.get("unit_name") or ""
+            ).strip()
+
+            if parsed.get("success") or (structured_unit_name and structured_products):
                 app_service = get_shipment_app_service()
                 doc_result = app_service.generate_shipment_document(
-                    unit_name=parsed.get("unit_name", ""),
-                    products=parsed.get("products") or [],
+                    unit_name=parsed.get("unit_name") or structured_unit_name,
+                    products=parsed.get("products") or structured_products,
                     template_name=(
                         parsed_params.get("template_name") or parsed_params.get("template")
                     ),
@@ -408,7 +606,7 @@ class AIChatInstantToolsMixin:
                     allow_products_from_db=True,
                     raw_text=order_text,
                 )
-                response_data["data"]["data"] = {"document": doc_result}
+                response_data.setdefault("data", {})["data"] = {"document": doc_result}
 
                 if doc_result.get("success"):
                     doc_name = doc_result.get("doc_name") or ""
@@ -420,7 +618,7 @@ class AIChatInstantToolsMixin:
             else:
                 response_data["response"] = parsed.get("message", "订单解析失败")
         except RECOVERABLE_ERRORS as tool_err:
-            logger.error("自动执行 shipment_generate 失败: %s", tool_err, exc_info=True)
+            logger.error("确认后的 shipment_generate 执行失败: %s", tool_err, exc_info=True)
             response_data["response"] = f"生成发货单失败：{str(tool_err)}"
 
         return response_data

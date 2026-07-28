@@ -519,6 +519,18 @@ def _registered_router_shipment_orders(
 
         svc = get_shipment_app_service()
 
+    # ``owner_user_id`` is created only from ``request.state.user_id`` by the
+    # HTTP entrypoint.  Do not infer it from the generic AgentRun ``user_id``:
+    # that value intentionally supports legacy headers/body input and is not a
+    # trustworthy authority for a personal ETL template.
+    try:
+        owner_value = runtime_context.get("owner_user_id")
+        owner_user_id = int(owner_value) if owner_value is not None else None
+    except (TypeError, ValueError):
+        owner_user_id = None
+    if owner_user_id is not None and owner_user_id <= 0:
+        owner_user_id = None
+
     if action == "generate":
         unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
         products = params.get("products") or params.get("items") or []
@@ -543,6 +555,8 @@ def _registered_router_shipment_orders(
             )
         if params.get("order_number"):
             gen_kwargs["order_number"] = params.get("order_number")
+        if owner_user_id is not None:
+            gen_kwargs["owner_user_id"] = owner_user_id
         return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
 
     if action == "generate_batch":
@@ -575,6 +589,8 @@ def _registered_router_shipment_orders(
                     batch_kwargs["template_name"] = shipment.get("template_name")
                 if shipment.get("template_id"):
                     batch_kwargs["template_id"] = shipment.get("template_id")
+                if owner_user_id is not None:
+                    batch_kwargs["owner_user_id"] = owner_user_id
                 result = svc.generate_shipment_document(**batch_kwargs)
                 if result.get("success"):
                     ok_count += 1
@@ -1259,6 +1275,16 @@ def _registered_router_print(
             int(params.get("copies") or 1),
         )
     if action == "print_document":
+        # Only the HTTP print endpoint may enter this branch: it has already
+        # consumed an owner-bound generated-document capability.  Direct
+        # workflow/tool calls have no equivalent trustworthy click/owner proof
+        # and must use ``POST /api/print/document`` instead.
+        if str(runtime_context.get("service_source") or "") != "fastapi_print_route":
+            return {
+                "success": False,
+                "error_code": "PRINT_CAPABILITY_ROUTE_REQUIRED",
+                "message": "请通过已生成发货单的打印按钮提交，不能直接调用打印工具",
+            }
         return svc.print_document(
             str(params.get("file_path") or "").strip(),
             params.get("printer_name"),

@@ -519,13 +519,20 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const filePath = context.filePath || ''
     const purchaseUnit = String(context.purchaseUnit || '').trim()
     const orderId = context.orderId
+    const printToken = String(context.printToken || '').trim()
 
     if (!labelPaths.length && !filePath) {
       await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成发货单后再试。', 'ai')
       return true
     }
 
-    const summary = await executePrintTask(labelPaths, filePath, orderId ?? undefined, purchaseUnit)
+    const summary = await executePrintTask(
+      labelPaths,
+      filePath,
+      orderId ?? undefined,
+      purchaseUnit,
+      printToken,
+    )
     const resultText = buildPrintSummaryMessage(summary, labelPaths.length, filePath, purchaseUnit)
     await addAndSaveMessage(resultText, 'ai')
     upsertTask({
@@ -643,18 +650,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   function shouldAutoRunTask(task: ShipmentTask | null): boolean {
     if (!task || task.completed) return false
-    const taskType = String(task.type || '').trim().toLowerCase()
-    if (taskType === 'excel_import') return true
-    if (taskType.includes('excel') && taskType.includes('import')) return true
-
-    const toolId = String(
-      task.payload?.tool_id
-      || task.payload?.params?.tool_id
-      || task.tool_id
-      || ''
-    ).trim().toLowerCase()
-    if (toolId === 'import_excel_to_database' || toolId === 'excel_import') return true
-    if (toolId.includes('excel') && toolId.includes('import')) return true
+    // V1 data docking is preview-first: imports and all other executable task
+    // cards require an explicit click.  In particular, do not turn an ETL
+    // preview into a database write merely because its type contains “excel”.
+    // Read-only navigation/light actions are handled by their own UI actions,
+    // not by this execution path.
     return false
   }
 
@@ -790,6 +790,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const row = asRecord(data)
     const nestedData = asRecord(row.data)
     const document = asRecord(row.document || nestedData.document)
+    const printAuthorization = asRecord(
+      row.print_authorization
+      || nestedData.print_authorization
+      || document.print_authorization,
+    )
     const filePath = asString(row.file_path || nestedData.file_path || document.filepath)
     const purchaseUnit = String(
       row.purchase_unit
@@ -831,7 +836,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       filePath,
       purchaseUnit,
       orderId,
-      labelPaths: Array.from(new Set(labelPaths))
+      labelPaths: Array.from(new Set(labelPaths)),
+      printToken: asString(
+        printAuthorization.document_token
+        || row.print_token
+        || nestedData.print_token
+        || document.print_token,
+      ),
     }
   }
 

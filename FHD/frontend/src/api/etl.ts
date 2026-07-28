@@ -213,6 +213,18 @@ export const etlApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ confirmed: true, valid_rows_only: validRowsOnly }),
     }),
+  saveShipmentTemplate: (id: string, name = '') =>
+    request<{
+      template_id: string
+      name: string
+      file_path: string
+      source_region_id?: string
+      message: string
+    }>(`/api/etl/runs/${encodeURIComponent(id)}/shipment-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
   retry: (id: string) =>
     request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
   rollback: (id: string) =>

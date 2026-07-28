@@ -160,7 +160,8 @@ def test_print_document_validation(print_client, tmp_path) -> None:
     doc = tmp_path / "doc.pdf"
     doc.write_bytes(b"%PDF")
     ok = print_client.post("/api/print/document", json={"file_path": str(doc)})
-    assert ok.status_code == 200
+    assert ok.status_code == 403
+    assert ok.json()["error_code"] == "PRINT_AUTH_REQUIRED"
 
 
 def test_print_label_confirm_flow(print_client, tmp_path) -> None:

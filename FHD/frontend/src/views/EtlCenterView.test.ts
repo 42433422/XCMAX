@@ -16,6 +16,7 @@ const { etlApiMock } = vi.hoisted(() => ({
     execute: vi.fn(),
     retry: vi.fn(),
     rollback: vi.fn(),
+    saveShipmentTemplate: vi.fn(),
     createTemplate: vi.fn(),
     createTargetConfig: vi.fn(),
     testTarget: vi.fn(),
@@ -226,6 +227,15 @@ describe('EtlCenterView folder workflow', () => {
           reversible: false,
           allow_dynamic_fields: true,
         },
+        {
+          type: 'shipment_records',
+          label: '发货记录',
+          fields: [],
+          required_fields: [],
+          default_match_keys: [],
+          supported_actions: ['new', 'skip'],
+          reversible: true,
+        },
       ],
       compatibility_presets: [{ id: 'legacy', label: '旧预设', source: 'yaml', target: 'customer_products' }],
       execution_policy: {},
@@ -262,11 +272,76 @@ describe('EtlCenterView folder workflow', () => {
 
     expect(wrapper.text()).toContain('选择整个文件夹')
     expect(wrapper.text()).toContain('单文件 100.0 MB')
-    expect(wrapper.text()).toContain('旧预设 · YAML')
-    expect(wrapper.text()).toContain('暂无个人模板')
+    expect(wrapper.text()).toContain('智能识别（推荐）')
+    expect(wrapper.text()).toContain('送货单会自动选择“发货记录”')
     expect(wrapper.text()).toContain('已获取 1 个旧 YAML/知识库兼容预设')
     expect(wrapper.find('input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
+  })
+
+  it('explains the 100MB single-file limit before a file reaches the API', async () => {
+    const wrapper = await mountView()
+    const input = wrapper.find('input[type="file"][multiple]')
+    const oversized = new File(['x'], 'over-limit.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    Object.defineProperty(oversized, 'size', { value: 100 * 1024 * 1024 + 1 })
+    Object.defineProperty(input.element, 'files', { value: [oversized] })
+
+    await input.trigger('change')
+
+    expect(wrapper.text()).toContain('已忽略 1 个不支持、重复或超过 100.0 MB 的文件')
+    expect(wrapper.text()).toContain('over-limit.xlsx · 单文件超过 100.0 MB')
+    expect(etlApiMock.upload).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('opens a ready auto-detected shipment preview with the companion preview action', async () => {
+    const shipment = {
+      ...previewRun('auto-shipment-run'),
+      file_name: '侯雪梅.xlsx',
+      upload_id: 'upload-houxuemei',
+      target_type: 'shipment_records',
+      source_features: {
+        business_document_type: 'delivery_note',
+        target_detection: {
+          target_type: 'shipment_records',
+          document_type: 'delivery_note_workbook',
+        },
+        sheet_plan: [
+          { sheet: '侯雪梅', role: 'delivery_note_template_and_records', status: 'included', rows: 6 },
+          { sheet: '25年回款', role: 'finance_or_reconciliation', status: 'excluded', rows: 0 },
+        ],
+      },
+    }
+    etlApiMock.upload.mockResolvedValue({
+      upload_id: 'upload-houxuemei',
+      file_name: '侯雪梅.xlsx',
+      suffix: '.xlsx',
+      size_bytes: 4,
+      sha256: 'source-hash',
+    })
+    etlApiMock.preview.mockResolvedValue(shipment)
+    const wrapper = await mountView()
+    const input = wrapper.find('input[type="file"][multiple]')
+    const source = new File(['data'], '侯雪梅.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    Object.defineProperty(input.element, 'files', { value: [source] })
+    await input.trigger('change')
+    await buttonByText(wrapper, '上传并开始预演')?.trigger('click')
+    await flushPromises()
+
+    expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
+      upload_id: 'upload-houxuemei',
+      target_type: 'auto',
+    }))
+    expect(wrapper.text()).toContain('写入目标')
+    expect(wrapper.text()).toContain('发货记录')
+    expect(wrapper.text()).toContain('要同时补全客户库和产品库？')
+    expect(buttonByText(wrapper, '预演客户及产品')).toBeTruthy()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('passes the selected read-only compatibility preset into preview', async () => {
@@ -279,6 +354,8 @@ describe('EtlCenterView folder workflow', () => {
     })
     etlApiMock.preview.mockResolvedValue(queuedRun('run-legacy', 'legacy.xlsx'))
     const wrapper = await mountView()
+    await wrapper.find('.etl-form-card select').setValue('customer_products')
+    await flushPromises()
     await wrapper.find('select[aria-label="导入模板"]').setValue('preset:legacy')
 
     const input = wrapper.find('input[type="file"][multiple]')
@@ -467,6 +544,34 @@ describe('EtlCenterView folder workflow', () => {
           status: 'excluded',
         },
       ],
+      sheet_plan: [
+        {
+          sheet: '侯雪梅',
+          role: 'delivery_note_template_and_records',
+          status: 'included',
+          rows: 6,
+          reason: '识别到购货单位、产品表头与合计行',
+        },
+        {
+          sheet: '侯雪梅出货',
+          role: 'supporting_customer_product_data',
+          status: 'included',
+          rows: 93,
+          reason: '识别到高置信出货历史或客户报价',
+        },
+        {
+          sheet: '25年回款',
+          role: 'finance_or_reconciliation',
+          status: 'excluded',
+          rows: 0,
+          reason: '财务/对账附表不写入客户产品或发货记录',
+        },
+      ],
+      latest_record_selection: {
+        basis: 'source_date_then_same_sheet_row',
+        unique_candidates: 93,
+        stale_records_skipped: 12,
+      },
       llm_structure: { used_llm: true, degraded: false },
     }
     etlApiMock.run.mockResolvedValue(run)
@@ -479,6 +584,145 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('排除 3 个其他区块')
     expect(wrapper.text()).toContain('软件 LLM 已参与结构或字段建议')
     expect(wrapper.text()).toContain('客户 甲家具')
+    expect(wrapper.text()).toContain('工作簿附表规划 · 已检查 3 个工作表')
+    expect(wrapper.text()).toContain('侯雪梅出货')
+    expect(wrapper.text()).toContain('客户与产品补充数据')
+    expect(wrapper.text()).toContain('25年回款')
+    expect(wrapper.text()).toContain('财务或对账附表')
+    expect(wrapper.text()).toContain('按来源日期选择最新有效记录，并排除 12 条较早或同日旧记录')
+    wrapper.unmount()
+  })
+
+  it('lets the backend name a detected shipment layout from its canonical customer', async () => {
+    const run = {
+      ...previewRun('shipment-run'),
+      file_name: '侯雪梅.xlsx',
+      target_type: 'shipment_records',
+      source_features: {
+        business_document_type: 'delivery_note',
+        region_summary: { selected: 2, excluded: 3, business_rows: 6 },
+      },
+    }
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.saveShipmentTemplate.mockResolvedValue({
+      template_id: 'db:12',
+      name: '金汉武家私-发货单版式',
+      file_path: '/runtime/金汉武家私-发货单版式.xlsx',
+      message: '已保存发货单版式，后续开单会自动匹配',
+    })
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('')
+
+    const wrapper = await mountView(run.id)
+    await buttonByText(wrapper, '保存发货单版式')?.trigger('click')
+    await flushPromises()
+
+    expect(prompt).toHaveBeenCalledWith(
+      '发货单版式名称（可选；留空将按识别到的客户命名）',
+      '',
+    )
+    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
+      run.id,
+      '',
+    )
+    expect(wrapper.text()).toContain('金汉武家私-发货单版式')
+    expect(wrapper.text()).toContain('后续开单会自动匹配')
+    wrapper.unmount()
+  })
+
+  it('shows a previously saved private shipment layout after the run is reopened', async () => {
+    const run = {
+      ...previewRun('saved-shipment-layout-run'),
+      file_name: '侯雪梅.xlsx',
+      target_type: 'shipment_records',
+      details: {
+        shipment_document_template: {
+          template_id: 'etl:private-layout',
+          name: '金汉武家私-发货单版式',
+        },
+      },
+    }
+    etlApiMock.run.mockResolvedValue(run)
+
+    const wrapper = await mountView(run.id)
+
+    expect(wrapper.text()).toContain('已保存个人发货单版式')
+    expect(wrapper.text()).toContain('金汉武家私-发货单版式')
+    expect(wrapper.text()).toContain('仅当前用户可见')
+    wrapper.unmount()
+  })
+
+  it('keeps an explicitly entered shipment layout name', async () => {
+    const run = {
+      ...previewRun('shipment-custom-layout-run'),
+      file_name: '侯雪梅.xlsx',
+      target_type: 'shipment_records',
+    }
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.saveShipmentTemplate.mockResolvedValue({
+      template_id: 'db:13',
+      name: '金汉武专用打印版式',
+      file_path: '/runtime/金汉武专用打印版式.xlsx',
+      message: '已保存发货单版式',
+    })
+    vi.spyOn(window, 'prompt').mockReturnValue('  金汉武专用打印版式  ')
+
+    const wrapper = await mountView(run.id)
+    await buttonByText(wrapper, '保存发货单版式')?.trigger('click')
+    await flushPromises()
+
+    expect(etlApiMock.saveShipmentTemplate).toHaveBeenCalledWith(
+      run.id,
+      '金汉武专用打印版式',
+    )
+    wrapper.unmount()
+  })
+
+  it('creates a customer-products preview from the shipment upload without writing data', async () => {
+    const shipment = {
+      ...previewRun('shipment-product-run'),
+      file_name: '侯雪梅.xlsx',
+      upload_id: 'upload-houxuemei',
+      target_type: 'shipment_records',
+      source_features: {
+        business_document_type: 'delivery_note',
+        sheet_plan: [
+          {
+            sheet: '侯雪梅',
+            role: 'delivery_note_template_and_records',
+            status: 'included',
+            rows: 6,
+          },
+          {
+            sheet: '侯雪梅出货',
+            role: 'supporting_customer_product_data',
+            status: 'included',
+            rows: 93,
+          },
+        ],
+      },
+    }
+    const customerProductPreview = {
+      ...queuedRun('customer-product-preview', '侯雪梅.xlsx'),
+      upload_id: 'upload-houxuemei',
+      target_type: 'customer_products',
+      status: 'queued',
+      stage: 'queued',
+    }
+    etlApiMock.run.mockResolvedValue(shipment)
+    etlApiMock.preview.mockResolvedValue(customerProductPreview)
+
+    const wrapper = await mountView(shipment.id)
+    await buttonByText(wrapper, '预演客户及产品')?.trigger('click')
+    await flushPromises()
+
+    expect(etlApiMock.preview).toHaveBeenCalledWith({
+      upload_id: 'upload-houxuemei',
+      target_type: 'customer_products',
+    })
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('客户及产品预演已创建')
+    expect(wrapper.text()).toContain('不会写入客户库或产品库')
+    expect(wrapper.text()).toContain('正在规划客户与产品附表')
     wrapper.unmount()
   })
 

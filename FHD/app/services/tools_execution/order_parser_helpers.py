@@ -62,6 +62,7 @@ def cleanup_unit_name(raw: str) -> str:
     s = (raw or "").strip()
     s = re.sub(r"^(哎|嗯|啊|呃)[，,\s]*", "", s)
     s = re.sub(r"^(帮我|给我|请)?\s*打印(一下)?", "", s)
+    s = re.sub(r"^(帮我|给我|请)?\s*(开单|打单|生成)\s*", "", s)
     s = re.sub(r"^(把|给)?", "", s)
     s = re.sub(
         r"^(再加|还要|继续加|再补|加上|增加|加|减少|减去|减|删掉|删除|去掉|移除|改成|改为|改)\s*",
@@ -72,6 +73,9 @@ def cleanup_unit_name(raw: str) -> str:
     for token in [
         "打印一下",
         "打印",
+        "开单",
+        "打单",
+        "生成",
         "给我",
         "帮我",
         "一下",
@@ -100,6 +104,7 @@ def cleanup_unit_name(raw: str) -> str:
         s = s.replace(token, "")
     s = re.sub(r"[0-9A-Za-z-]{3,16}", "", s)
     s = re.sub(r"\s+", "", s)
+    s = s.strip("/／")
     s = s.rstrip("的").strip()
     return s
 

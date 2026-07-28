@@ -390,13 +390,17 @@ def parse_file(
                 "ETL_COMPATIBILITY_PRESET_TARGET_MISMATCH",
                 "兼容预设不适用于当前目标",
             )
-        if target_type == "customer_products" and not compatibility_preset_id:
+        if target_type in {"customer_products", "shipment_records"} and not compatibility_preset_id:
             try:
                 from app.application.etl.parser_regions import (
                     parse_customer_product_regions,
                 )
 
-                regional = parse_customer_product_regions(source, max_rows=max_rows)
+                regional = parse_customer_product_regions(
+                    source,
+                    max_rows=max_rows,
+                    target_type=target_type,
+                )
             except EtlError:
                 raise
             except Exception:  # noqa: BLE001 - legacy presets remain a safe fallback

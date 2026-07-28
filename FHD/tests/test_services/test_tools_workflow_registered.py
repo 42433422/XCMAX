@@ -399,7 +399,9 @@ class TestPrintRouter:
             result = _registered_router_print(
                 "print_document", {"file_path": "/tmp/doc.pdf"}, {}, "admin", ""
             )
-            assert result["success"] is True
+            assert result["success"] is False
+            assert result["error_code"] == "PRINT_CAPABILITY_ROUTE_REQUIRED"
+            mock_svc.print_document.assert_not_called()
 
     def test_test_action(self):
         mock_svc = MagicMock()

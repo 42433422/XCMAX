@@ -190,8 +190,8 @@ def test_delivery_profile_converts_to_general_etl_rows(tmp_path, monkeypatch):
     with tenant_scope(1):
         dataset = parse_file(path, target_type="shipment_records")
 
-    assert dataset.source_features["kind"] == "shipment_profile"
-    assert dataset.source_features["compatibility_preset"] is True
+    assert dataset.source_features["kind"] == "workbook_delivery_regions"
+    assert dataset.source_features["business_document_type"] == "delivery_note"
     assert len(dataset.rows) == 2
     values = [row.values for row in dataset.rows]
     assert {row["product_name"] for row in values} == {"底漆", "面漆"}
@@ -724,6 +724,63 @@ def test_product_adapter_requires_confirmed_update_fields_and_rolls_back(etl_db)
         )
         db.commit()
         assert str(db.get(Product, int(created["match_ref"])).price) == "10.00"
+        db.close()
+
+
+def test_product_adapters_fail_closed_for_modeled_and_model_less_identity(etl_db):
+    """A later modeled row must not be added beside a legacy model-less product."""
+    modeled = {
+        "unit": "金汉武家私",
+        "model_number": "6824A",
+        "name": "PE封固底漆",
+        "price": "11.3",
+    }
+    with tenant_scope(120):
+        db = etl_db()
+        db.add(
+            Product(
+                tenant_id=120,
+                unit="金汉武家私",
+                model_number=None,
+                name="PE封固底漆",
+                price="12.5",
+            )
+        )
+        db.commit()
+
+        product_preview = ProductAdapter().preview(
+            db,
+            modeled,
+            allowed_update_fields=set(),
+            context={"_preview_cache": {}},
+        )
+        assert product_preview.action == "error"
+        assert product_preview.issues[0]["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY"
+
+        with pytest.raises(EtlError) as exc:
+            ProductAdapter().execute_row(
+                db,
+                modeled,
+                action="new",
+                match_ref="",
+                allowed_update_fields=set(),
+                context={},
+            )
+        assert exc.value.code == "ETL_PRODUCT_MODEL_AMBIGUITY"
+
+        linked_preview = CustomerProductsAdapter().preview(
+            db,
+            {
+                "customer_name": "金汉武家私",
+                "model_number": "6824A",
+                "name": "PE封固底漆",
+                "price": "11.3",
+            },
+            allowed_update_fields=set(),
+            context={"_preview_cache": {}},
+        )
+        assert linked_preview.action == "error"
+        assert linked_preview.issues[0]["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY"
         db.close()
 
 
@@ -1296,6 +1353,80 @@ def test_shipment_adapter_consults_legacy_and_general_fingerprints(etl_db):
             .count()
             == 0
         )
+        db.close()
+
+
+def test_shipment_adapter_allows_distinct_lines_of_one_order_in_same_run(etl_db):
+    """A delivery note's rows share an order number but not a line fingerprint."""
+
+    adapter = ShipmentAdapter()
+    with tenant_scope(115):
+        db = etl_db()
+        context = {
+            "file_sha256": "delivery-file",
+            "file_name": "delivery.xlsx",
+            "run_id": "delivery-run",
+        }
+        first = {
+            "purchase_unit": "甲公司",
+            "external_order_no": "SO-MULTI-1",
+            "legacy_note_fingerprint": "legacy-note-multi",
+            "source_fingerprint": "delivery-line-1",
+            "product_name": "底漆",
+            "quantity_tins": "1",
+        }
+        second = {
+            **first,
+            "source_fingerprint": "delivery-line-2",
+            "product_name": "面漆",
+            "quantity_tins": "2",
+        }
+        assert adapter.preview(
+            db, first, allowed_update_fields=set(), context={**context, "source_row": 1}
+        ).action == "new"
+        adapter.execute_row(
+            db,
+            first,
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={**context, "source_row": 1},
+        )
+        db.commit()
+
+        assert adapter.preview(
+            db, second, allowed_update_fields=set(), context={**context, "source_row": 2}
+        ).action == "new"
+        adapter.execute_row(
+            db,
+            second,
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={**context, "source_row": 2},
+        )
+        db.commit()
+        assert (
+            db.query(ShipmentRecord)
+            .filter(ShipmentRecord.purchase_unit == "甲公司")
+            .count()
+            == 2
+        )
+
+        replay = adapter.preview(
+            db, second, allowed_update_fields=set(), context={**context, "source_row": 2}
+        )
+        assert replay.action == "skip"
+        assert replay.reason == "legacy_fingerprint_duplicate"
+
+        later_run = adapter.preview(
+            db,
+            {**second, "source_fingerprint": "delivery-line-other-run"},
+            allowed_update_fields=set(),
+            context={**context, "run_id": "another-run", "source_row": 2},
+        )
+        assert later_run.action == "skip"
+        assert later_run.reason == "external_order_duplicate"
         db.close()
 
 

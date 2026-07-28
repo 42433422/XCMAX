@@ -592,6 +592,7 @@ class ShipmentApplicationService:
         order_number: str | None = None,
         template_id: str | None = None,
         preferred_template: str | None = None,
+        owner_user_id: int | None = None,
         intent: str = "shipment_generate",
         allow_products_from_db: bool = False,
         strict_template: bool | None = None,
@@ -642,6 +643,7 @@ class ShipmentApplicationService:
                 template_name=template_name,
                 preferred=preferred_template,
                 unit_name=unit_name,
+                owner_user_id=owner_user_id,
                 intent=intent,
                 strict=strict,
                 log_usage=False,
@@ -727,6 +729,27 @@ class ShipmentApplicationService:
             except RECOVERABLE_ERRORS:
                 # 记录写入失败不影响文档生成返回
                 pass
+        if result.get("success"):
+            # A generated document is not printable merely because a client
+            # knows its local path.  Bind the one-click print capability to the
+            # authenticated owner that selected the personal template.  Calls
+            # without that trusted owner retain document generation/download
+            # compatibility, but deliberately receive no physical-print grant.
+            try:
+                from app.application.print_authorization import issue_document_print_capability
+
+                authorization = issue_document_print_capability(
+                    file_path=result.get("file_path") or result.get("filepath"),
+                    owner_user_id=owner_user_id,
+                    order_id=result.get("order_id") or result.get("record_id"),
+                )
+                if authorization:
+                    result["print_authorization"] = authorization
+            except RECOVERABLE_ERRORS:
+                # Printing remains fail-closed: a capability creation problem
+                # must never make an arbitrary path printable, nor invalidate
+                # an already-generated business document.
+                logger.exception("failed to issue generated shipment print capability")
         return result
 
 

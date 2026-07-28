@@ -1289,7 +1289,8 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="这是ACME的订单，需要5桶M1规格25",
         )
-        assert result["toolCall"]["params"]["order_text"] == "这是ACME的订单，需要5桶M1规格25"
+        assert result["task"]["payload"]["params"]["order_text"] == "这是ACME的订单，需要5桶M1规格25"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_all_slots_no_original(self):
         svc = _make_svc()
@@ -1303,8 +1304,10 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="ok",
         )
-        assert "ACME" in result["toolCall"]["params"]["order_text"]
-        assert "5" in result["toolCall"]["params"]["order_text"]
+        params = result["task"]["payload"]["params"]
+        assert params["unit_name"] == "ACME"
+        assert params["products"][0]["quantity_tins"] == 5
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_products_list(self):
         svc = _make_svc()
@@ -1319,7 +1322,8 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="ok",
         )
-        assert "ACME" in result["toolCall"]["params"]["order_text"]
+        assert result["task"]["payload"]["params"]["unit_name"] == "ACME"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_parsed_order_products(self):
         svc = _make_svc()
@@ -1341,8 +1345,9 @@ class TestExecuteProModeToolsEdge:
                 ai_result,
                 original_message="打Parsed的货单",
             )
-        assert result["toolCall"]["params"]["unit_name"] == "Parsed"
-        assert len(result["toolCall"]["params"]["products"]) == 1
+        assert result["task"]["payload"]["params"]["unit_name"] == "Parsed"
+        assert len(result["task"]["payload"]["params"]["products"]) == 1
+        assert "toolCall" not in result
 
     def test_shipment_generate_fallback_to_ai_text(self):
         svc = _make_svc()
@@ -1356,7 +1361,8 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="ok",
         )
-        assert result["toolCall"]["params"]["order_text"] == "fallback text"
+        assert "task" not in result
+        assert result["message"] == "订单信息不完整，请补充后再确认"
 
     def test_other_tool_pro_mode(self):
         svc = _make_svc()

@@ -6,9 +6,12 @@ from openpyxl import Workbook
 
 from app.application.etl.parsers import parse_file
 from app.application.etl.service import EtlService
+from app.application.etl.shipment_template_extractor import extract_shipment_template
+from app.application.etl.target_detection import detect_etl_target
 from app.application.etl.targets import get_adapter
 from app.application.etl.transforms import apply_mapping
 from app.application.shipment_excel_etl_ocr import _guess_meta_lines
+from app.infrastructure.documents.shipment_workbook_filler import fill_shipment_workbook
 
 
 def _save_workbook(path: Path, build) -> Path:
@@ -140,15 +143,280 @@ def test_mixed_workbook_splits_two_delivery_regions_and_excludes_other_domains(
 
     dataset = parse_file(path, target_type="customer_products")
 
-    assert len(dataset.rows) == 3
+    assert len(dataset.rows) == 4
     assert {row.values["customer_name"] for row in dataset.rows} == {"甲家具", "乙家具"}
-    assert {row.values["name"] for row in dataset.rows} == {"底漆", "固化剂", "面漆"}
+    assert {row.values["name"] for row in dataset.rows} == {"底漆", "固化剂", "面漆", "清漆"}
     assert all(row.values["customer_name"] != "业务员甲" for row in dataset.rows)
     summary = dataset.source_features["region_summary"]
     assert summary["selected"] == 2
-    assert summary["business_rows"] == 3
+    assert summary["business_rows"] == 4
     assert any(region["role"] == "product_catalog" for region in dataset.source_features["regions"])
     assert any(warning["code"] == "ETL_NON_PRODUCT_CHARGES_SKIPPED" for warning in dataset.warnings)
+
+
+def test_delivery_workbook_plans_companion_history_without_misreading_finance(
+    tmp_path, monkeypatch
+):
+    """A delivery-note upload exposes companion product data, but never writes it as shipments."""
+    path = tmp_path / "multi-sheet-delivery.xlsx"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：金汉武家私  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["9803", "测试面漆", 1, 20, 20, 17, 340])
+        delivery.append(["合计", None, 1, None, 20, None, 340])
+
+        history = workbook.create_sheet("出货历史")
+        history.append(
+            ["金汉武（宾驰）", "45659", "2", "方和", None, None, "黑棕面用修色精", 3, 4, 12, 48, 576]
+        )
+
+        quote = workbook.create_sheet("报价")
+        quote.append(["金汉武报价"])
+        quote.append(["名称", "规格", "单位", "现金价"])
+        quote.append(["PU实色漆", 25, "kg/桶", 17])
+
+        reconciliation = workbook.create_sheet("Sheet1")
+        reconciliation.append(["名品对账单"])
+        reconciliation.append(["欠款年月", "欠款金额/元", "收款金额/元", "期末欠款金额/元"])
+        reconciliation.append(["2026年1月", 1000, 0, 1000])
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    shipment = parse_file(path, target_type="shipment_records")
+    assert len(shipment.rows) == 1
+    assert shipment.rows[0].values["purchase_unit"] == "金汉武家私"
+    assert shipment.source_features["shipment_history_product_candidates"] == 2
+    shipment_plan = {item["sheet"]: item for item in shipment.source_features["sheet_plan"]}
+    assert shipment_plan["出货历史"]["role"] == "supporting_customer_product_data"
+    assert shipment_plan["Sheet1"]["role"] == "finance_or_reconciliation"
+    assert any(
+        warning["code"] == "ETL_COMPANION_CUSTOMER_PRODUCT_DATA_FOUND"
+        for warning in shipment.warnings
+    )
+
+    customer_products = parse_file(path, target_type="customer_products")
+    black = next(
+        row
+        for row in customer_products.rows
+        if row.values.get("name") == "黑棕面用修色精"
+    )
+    assert black.values == {
+        "customer_name": "金汉武家私",
+        "name": "黑棕面用修色精",
+        "specification": 4.0,
+        "price": 48.0,
+        "model_number": "方和",
+    }
+    assert all(row.sheet != "Sheet1" for row in customer_products.rows)
+
+
+def test_companion_history_uses_source_date_not_workbook_row_order(tmp_path, monkeypatch):
+    path = tmp_path / "latest-history.xlsx"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：金汉武家私  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["9803", "测试面漆", 1, 20, 20, 17, 340])
+        delivery.append(["合计", None, 1, None, 20, None, 340])
+        history = workbook.create_sheet("出货历史")
+        # The latest source date intentionally appears first. A simple
+        # last-row-wins import would regress the 48 price to 40.
+        history.append(
+            ["金汉武", 46000, "2", "方和", None, None, "黑棕面用修色精", 1, 4, 4, 48, 192]
+        )
+        history.append(
+            ["金汉武", 45900, "2", "方和", None, None, "黑棕面用修色精", 1, 4, 4, 40, 160]
+        )
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    dataset = parse_file(path, target_type="customer_products")
+    product = next(
+        row for row in dataset.rows if row.values.get("name") == "黑棕面用修色精"
+    )
+    assert product.values["price"] == 48.0
+    assert product.provenance["source_date"]
+    assert dataset.source_features["latest_record_selection"] == {
+        "basis": "source_date_then_same_sheet_row",
+        "unique_candidates": 1,
+        "stale_records_skipped": 1,
+        "model_identity_ambiguity_groups": 0,
+    }
+    assert any(
+        warning["code"] == "ETL_LATEST_PRODUCT_DATA_SELECTED"
+        for warning in dataset.warnings
+    )
+
+
+def test_modeled_delivery_and_model_less_newer_quote_are_blocked_for_review(tmp_path, monkeypatch):
+    """Regression for the 侯雪梅 workbook pattern: never guess a duplicate product."""
+    path = tmp_path / "侯雪梅-产品歧义.xlsx"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：金汉武家私  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["6824A", "PE封固底漆", 1, 20, 20, 12.5, 250])
+        delivery.append(["合计", None, 1, None, 20, None, 250])
+
+        quote = workbook.create_sheet("报价")
+        quote.append(["金汉武家私报价 2025年05月25日"])
+        quote.append(["名称", "规格", "现金价"])
+        # The later quote deliberately has no model, just like the real workbook.
+        quote.append(["PE封固底漆", 20, 11.3])
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    dataset = parse_file(path, target_type="customer_products")
+    conflict_rows = [
+        row
+        for row in dataset.rows
+        if row.values.get("customer_name") == "金汉武家私"
+        and row.values.get("name") == "PE封固底漆"
+    ]
+
+    assert len(conflict_rows) == 2
+    assert {str(row.values.get("model_number") or "") for row in conflict_rows} == {"", "6824A"}
+    assert all(
+        issue["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY"
+        for row in conflict_rows
+        for issue in row.provenance["validation_issues"]
+    )
+    assert dataset.source_features["latest_record_selection"]["model_identity_ambiguity_groups"] == 1
+    assert any(
+        warning["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY" for warning in dataset.warnings
+    )
+
+
+def test_mixed_workbook_projects_delivery_regions_and_reuses_extracted_layout(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "侯雪梅.xlsx"
+
+    def build(workbook):
+        sheet = workbook.active
+        sheet.title = "侯雪梅"
+        sheet.append(["某公司送货单"])
+        sheet.merge_cells("A1:I1")
+        sheet.append(["购货单位：甲家具  联系人：张总  2026年01月21日  订单编号：A-1"])
+        sheet.merge_cells("A2:I2")
+        sheet.append(
+            ["产品型号", None, None, "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"]
+        )
+        sheet.merge_cells("A3:C3")
+        for row in range(4, 8):
+            sheet.merge_cells(start_row=row, end_row=row, start_column=1, end_column=3)
+        sheet.append(["P-1", None, None, "底漆", 1, 20, 20, 10, 200])
+        sheet.append([None, None, None, "固化剂", 1, 20, 20, 12, 240])
+        sheet.append([None])
+        sheet.append(["合 计", None, None, None, "=SUM(E4:E7)", None, "=SUM(G4:G7)", None, "=SUM(I4:I7)"])
+        sheet.merge_cells("A8:C8")
+        sheet.append(["销售协议", "测试协议"])
+        sheet.append(["销售单位：某公司"])
+        finance = workbook.create_sheet("回款")
+        finance.append(["客户名", "回款金额", "余额"])
+        finance.append(["甲家具", 100, 200])
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    detection = detect_etl_target(path)
+    assert detection["target_type"] == "shipment_records"
+
+    dataset = parse_file(path, target_type="shipment_records")
+    assert len(dataset.rows) == 2
+    assert dataset.source_features["business_document_type"] == "delivery_note"
+    assert {
+        key: value
+        for key, value in dataset.rows[0].values.items()
+        if key not in {"source_fingerprint", "legacy_note_fingerprint"}
+    } == {
+        "purchase_unit": "甲家具",
+        "model_number": "P-1",
+        "product_name": "底漆",
+        "quantity_tins": 1,
+        "tin_spec": 20,
+        "quantity_kg": 20,
+        "unit_price": 10,
+        "amount": 200,
+        "external_order_no": "A-1",
+    }
+    assert len(dataset.rows[0].values["source_fingerprint"]) == 64
+    assert len(dataset.rows[0].values["legacy_note_fingerprint"]) == 28
+    assert all(row.sheet != "回款" for row in dataset.rows)
+
+    template = tmp_path / "侯雪梅-发货单版式.xlsx"
+    extracted = extract_shipment_template(
+        path,
+        source_features=dataset.source_features,
+        destination=template,
+    )
+    assert extracted["source_region_id"] == "侯雪梅!R3C1:9"
+
+    generated = tmp_path / "发货单_TEST-001.xlsx"
+    fill_shipment_workbook(
+        template,
+        output_path=generated,
+        unit_name="侯雪梅",
+        contact_person="侯女士",
+        products=[
+            {
+                "model_number": "9803",
+                "name": "测试面漆",
+                "quantity_tins": 3,
+                "tin_spec": 28,
+                "unit_price": 17,
+            }
+        ],
+        order_number="TEST-001",
+    )
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(generated, data_only=False)
+    try:
+        sheet = workbook.active
+        assert "购货单位：侯雪梅" in sheet["A2"].value
+        assert "订单编号：TEST-001" in sheet["A2"].value
+        assert sheet["A4"].value == "9803"
+        assert sheet["D4"].value == "测试面漆"
+        assert sheet["E4"].value == 3
+        assert sheet["F4"].value == 28
+        assert sheet["G4"].value == 84
+        assert sheet["I4"].value == 1428
+        assert any(
+            sheet.cell(row, 1).value == "销售协议"
+            for row in range(1, sheet.max_row + 1)
+        )
+    finally:
+        workbook.close()
 
 
 def test_csv_preamble_and_dirty_values_are_normalized_deterministically(tmp_path):

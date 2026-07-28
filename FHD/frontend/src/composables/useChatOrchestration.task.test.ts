@@ -233,10 +233,17 @@ describe('useChatOrchestration task/print', () => {
       filePath: '/tmp/doc.pdf',
       labelPaths: ['/tmp/label.pdf'],
       purchaseUnit: '甲公司',
+      printToken: 'generated-print-token',
     }
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
     await api.sendMessage('开始打印')
-    expect(executePrintTask).toHaveBeenCalled()
+    expect(executePrintTask).toHaveBeenCalledWith(
+      ['/tmp/label.pdf'],
+      '/tmp/doc.pdf',
+      undefined,
+      '甲公司',
+      'generated-print-token',
+    )
     expect(buildPrintSummaryMessage).toHaveBeenCalled()
   })
 

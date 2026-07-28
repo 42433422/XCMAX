@@ -521,6 +521,24 @@ def _user_id_from_tool_request(request: Request, body: dict[str, Any]) -> str:
     ).strip()
 
 
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Return the middleware-authenticated owner id, never client input.
+
+    ``/api/tools/execute`` retains its legacy header/body user id for agent-run
+    tracing, but a private ETL-derived document template must only be selected
+    with the authenticated request identity injected by
+    :class:`IndustryContextMiddleware`.  In particular, do not promote
+    ``X-User-Id`` or a JSON ``user_id`` into this value.
+    """
+
+    try:
+        value = getattr(request.state, "user_id", None)
+        owner_user_id = int(value) if value is not None else 0
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner_user_id if owner_user_id > 0 else None
+
+
 def _tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
     final_output = getattr(run, "final_output", None)
     node_outputs = dict((final_output or {}).get("node_outputs") or {})
@@ -593,17 +611,28 @@ def _run_tools_execute_agent(
         risk_level=str(registry[tool_id]["actions"][action].get("risk") or "low"),
         metadata={"source": "tools_execute_route", "route": route_path},
     )
-    user_id = _user_id_from_tool_request(request, body)
+    owner_user_id = _authenticated_owner_user_id(request)
+    # The authenticated owner is authoritative whenever it is available.  The
+    # header/body fallback below remains only for old unauthenticated routes'
+    # AgentRun attribution; it is deliberately not used for private templates.
+    user_id = (
+        str(owner_user_id)
+        if owner_user_id is not None
+        else _user_id_from_tool_request(request, body)
+    )
+    runtime_context = {
+        "source": "tools_execute_route",
+        "route": route_path,
+        "request_path": str(request.url.path),
+        "user_id": user_id,
+    }
+    if owner_user_id is not None:
+        runtime_context["owner_user_id"] = owner_user_id
     run = AgentOrchestrator().start_run_from_plan(
         user_id=user_id,
         message=str(body.get("message") or f"Execute {tool_id}.{action}"),
         plan=plan,
-        runtime_context={
-            "source": "tools_execute_route",
-            "route": route_path,
-            "request_path": str(request.url.path),
-            "user_id": user_id,
-        },
+        runtime_context=runtime_context,
     )
     payload = _tool_route_agent_payload(run, node_id)
     if run.status in {"waiting_user", "blocked"}:
@@ -843,7 +872,10 @@ def skills_execute(request: Request, body: dict = Body(default_factory=dict)):
         return JSONResponse(agent_result[0], status_code=agent_result[1])
     from app.application.facades.tools_facade import run_archive_tools_execute
 
-    data, code = run_archive_tools_execute(body)
+    data, code = run_archive_tools_execute(
+        body,
+        owner_user_id=_authenticated_owner_user_id(request),
+    )
     return JSONResponse(data, status_code=code)
 
 
@@ -858,7 +890,10 @@ def tools_execute_route(request: Request, body: dict = Body(default_factory=dict
         return JSONResponse(agent_result[0], status_code=agent_result[1])
     from app.application.facades.tools_facade import run_archive_tools_execute
 
-    data, code = run_archive_tools_execute(body)
+    data, code = run_archive_tools_execute(
+        body,
+        owner_user_id=_authenticated_owner_user_id(request),
+    )
     return JSONResponse(data, status_code=code)
 
 

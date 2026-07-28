@@ -18,8 +18,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -37,10 +35,6 @@ _INTENT_TEMPLATE_TYPES: dict[str, tuple[str, ...]] = {
 _SHIPMENT_NAME_HINTS = ("发货", "送货", "出货", "shipment", "delivery")
 _LAYOUT_EXTS = {".xlsx", ".xls", ".xlsm"}
 _DATA_SCOPES = frozenset({"products", "materials", "customers", "salesReport"})
-_LIST_CACHE_TTL_SEC = 30.0
-
-_list_cache_lock = threading.Lock()
-_list_cache: tuple[float, list[dict[str, Any]]] | None = None
 
 
 def shipment_template_strict_enabled(explicit: bool | None = None) -> bool:
@@ -55,9 +49,15 @@ def shipment_template_strict_enabled(explicit: bool | None = None) -> bool:
 
 
 def clear_template_list_cache() -> None:
-    global _list_cache
-    with _list_cache_lock:
-        _list_cache = None
+    """Compatibility hook.
+
+    Template lists used to be held in one process-global cache.  That cache
+    had no tenant/owner key and could expose a prior request's list to another
+    user.  Lists are intentionally read fresh now; the individual DB queries
+    are small and every access remains scoped by the caller.
+    """
+
+    return None
 
 
 def _get_template_store():
@@ -95,18 +95,165 @@ def _row_active(row: dict[str, Any]) -> bool:
 
 
 def _list_templates_cached(store: Any) -> list[dict[str, Any]]:
-    global _list_cache
-    now = time.monotonic()
-    with _list_cache_lock:
-        if _list_cache and (now - _list_cache[0]) < _LIST_CACHE_TTL_SEC:
-            return list(_list_cache[1])
     try:
-        rows = list(store.list_templates() or [])
+        return list(store.list_templates() or [])
     except RECOVERABLE_ERRORS:
-        rows = []
-    with _list_cache_lock:
-        _list_cache = (now, rows)
-    return list(rows)
+        return []
+
+
+def _current_owner_user_id(explicit_owner_user_id: int | None = None) -> int | None:
+    """Resolve the authenticated desktop user's id without accepting a guess.
+
+    Private ETL layouts must never fall back to a tenant-wide default.  Direct
+    service callers can pass the id explicitly; HTTP callers receive it from
+    the request context established by ``IndustryContextMiddleware``.
+    """
+
+    if explicit_owner_user_id is not None:
+        try:
+            value = int(explicit_owner_user_id)
+            return value if value > 0 else None
+        except (TypeError, ValueError):
+            return None
+    try:
+        from app.infrastructure.request_context import get_current_request
+
+        request = get_current_request()
+        value = getattr(getattr(request, "state", None), "user_id", None)
+        value = int(value) if value is not None else None
+        return value if value and value > 0 else None
+    except (ImportError, TypeError, ValueError, AttributeError):
+        return None
+
+
+def _private_layout_root(tenant_id: int, owner_user_id: int) -> Path:
+    from app.utils.path_utils import get_app_data_dir
+
+    return (
+        Path(get_app_data_dir()).resolve()
+        / "tenants"
+        / str(int(tenant_id))
+        / "document_templates"
+        / str(int(owner_user_id))
+    ).resolve()
+
+
+def _safe_private_layout_path(
+    value: str | os.PathLike[str] | None,
+    *,
+    tenant_id: int | None,
+    owner_user_id: int | None,
+) -> str | None:
+    """Return an existing layout only when it lives under this user's root."""
+
+    if tenant_id is None or owner_user_id is None:
+        return None
+    try:
+        candidate = Path(value or "").expanduser().resolve()
+        root = _private_layout_root(tenant_id, owner_user_id)
+    except (OSError, TypeError, ValueError):
+        return None
+    if root not in candidate.parents:
+        return None
+    if not candidate.is_file() or not _is_layout_file(str(candidate)):
+        return None
+    return str(candidate)
+
+
+def _is_any_private_layout_path(value: str | os.PathLike[str] | None) -> bool:
+    """Whether a path points into any tenant's owner-scoped layout directory."""
+
+    try:
+        candidate = Path(value or "").expanduser().resolve()
+        parts = candidate.parts
+        marker = "document_templates"
+        if marker not in parts:
+            return False
+        index = parts.index(marker)
+        return index >= 2 and len(parts) > index + 2 and parts[index - 2] == "tenants"
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def _private_layout_rows(owner_user_id: int | None) -> list[dict[str, Any]]:
+    """Read only this tenant + user's ETL-promoted shipment layouts."""
+
+    if owner_user_id is None:
+        return []
+    try:
+        from app.application.etl.service_support import load_json
+        from app.db.models.etl import EtlTemplate, EtlTemplateVersion
+        from app.db.session import get_db
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        tenant_id = current_tenant_id()
+        if tenant_id is None:
+            return []
+        with get_db() as db:
+            templates = (
+                db.query(EtlTemplate)
+                .filter(
+                    EtlTemplate.id.is_not(None),
+                    EtlTemplate.tenant_id == int(tenant_id),
+                    EtlTemplate.owner_user_id == int(owner_user_id),
+                    EtlTemplate.target_type == "shipment_records",
+                    EtlTemplate.is_active.is_(True),
+                    EtlTemplate.description == "ETL_SHIPMENT_DOCUMENT_TEMPLATE",
+                )
+                .order_by(EtlTemplate.updated_at.desc())
+                .all()
+            )
+            rows: list[dict[str, Any]] = []
+            for template in templates:
+                version = (
+                    db.query(EtlTemplateVersion)
+                    .filter(
+                        EtlTemplateVersion.template_id == template.id,
+                        EtlTemplateVersion.tenant_id == int(tenant_id),
+                        EtlTemplateVersion.owner_user_id == int(owner_user_id),
+                        EtlTemplateVersion.version == template.current_version,
+                    )
+                    .first()
+                )
+                if version is None:
+                    continue
+                features = load_json(version.source_features_json, {})
+                meta = features.get("shipment_document_template") if isinstance(features, dict) else {}
+                if not isinstance(meta, dict):
+                    continue
+                path = _safe_private_layout_path(
+                    meta.get("file_path"),
+                    tenant_id=int(tenant_id),
+                    owner_user_id=int(owner_user_id),
+                )
+                if not path:
+                    continue
+                rows.append(
+                    {
+                        "id": f"etl:{template.id}",
+                        "name": str(template.name or ""),
+                        "path": path,
+                        "file_path": path,
+                        "filename": Path(path).name,
+                        "template_type": "发货单",
+                        "category": "excel",
+                        "source": "etl_private",
+                        "is_active": 1,
+                        "version": int(version.version),
+                        "updated_at": getattr(template, "updated_at", None),
+                    }
+                )
+            return rows
+    except RECOVERABLE_ERRORS:
+        logger.warning("读取私有 ETL 发货单版式失败", exc_info=True)
+        return []
+
+
+def _resolve_private_layout_id(template_id: str, owner_user_id: int | None) -> dict[str, Any] | None:
+    normalized = str(template_id or "").strip()
+    if not normalized.startswith("etl:"):
+        return None
+    return next((row for row in _private_layout_rows(owner_user_id) if row["id"] == normalized), None)
 
 
 def _score_template(
@@ -252,6 +399,7 @@ def resolve_shipment_template(
     template_name: str | None = None,
     preferred: str | None = None,
     unit_name: str | None = None,
+    owner_user_id: int | None = None,
     intent: str = "shipment_generate",
     strict: bool | None = None,
     log_usage: bool = False,
@@ -266,6 +414,33 @@ def resolve_shipment_template(
         intent_key, _INTENT_TEMPLATE_TYPES["shipment_generate"]
     )
     strict_mode = shipment_template_strict_enabled(strict)
+    scoped_owner_user_id = _current_owner_user_id(owner_user_id)
+
+    # Private ETL layouts never enter the tenant-wide generic template store.
+    # Resolve an opaque ``etl:<uuid>`` only against the authenticated owner's
+    # own tenant-scoped record before considering any legacy IDs.
+    if tid.startswith("etl:"):
+        row = _resolve_private_layout_id(tid, scoped_owner_user_id)
+        if row:
+            path = str(row["path"])
+            out = _result(
+                ok=True,
+                path=path,
+                template_id=str(row["id"]),
+                template_name=row.get("name") or Path(path).name,
+                template_type=row.get("template_type"),
+                source="etl_private",
+                reason="resolved_private_etl_template_id",
+                unit_name=unit or None,
+            )
+            return out
+        return _result(
+            ok=False,
+            template_id=tid,
+            reason="private_template_not_found",
+            error_code="ETL_PRIVATE_TEMPLATE_NOT_FOUND",
+            unit_name=unit or None,
+        )
 
     try:
         store = _get_template_store()
@@ -280,6 +455,8 @@ def resolve_shipment_template(
             error_code="TEMPLATE_STORE_UNAVAILABLE",
             unit_name=unit or None,
         )
+
+    private_rows = _private_layout_rows(scoped_owner_user_id)
 
     # 1) template_id
     if tid:
@@ -308,6 +485,28 @@ def resolve_shipment_template(
 
     # 1.5) 用户偏好 / 槽位 preferred（可是 id 或名称）
     if pref and not tid:
+        if pref.startswith("etl:"):
+            row = _resolve_private_layout_id(pref, scoped_owner_user_id)
+            if row:
+                path = str(row["path"])
+                return _result(
+                    ok=True,
+                    path=path,
+                    template_id=str(row["id"]),
+                    template_name=row.get("name") or Path(path).name,
+                    template_type=row.get("template_type"),
+                    source="etl_private",
+                    reason="resolved_private_etl_preference_id",
+                    unit_name=unit or None,
+                )
+            if strict_mode:
+                return _result(
+                    ok=False,
+                    template_id=pref,
+                    reason="private_template_not_found",
+                    error_code="ETL_PRIVATE_TEMPLATE_NOT_FOUND",
+                    unit_name=unit or None,
+                )
         if pref.startswith(("db:", "fs:", "shipment")) or pref.isdigit():
             path = store.resolve_template_file(
                 pref if pref.startswith(("db:", "fs:")) else f"db:{pref}"
@@ -327,7 +526,7 @@ def resolve_shipment_template(
                         out["template_id"], action="resolve", result_text=out["reason"]
                     )
                 return out
-        rows = _list_templates_cached(store)
+        rows = private_rows + _list_templates_cached(store)
         row = _match_row_by_name(rows, pref)
         if row:
             path = str(row["path"])
@@ -349,9 +548,24 @@ def resolve_shipment_template(
     if tname:
         as_path = Path(tname).expanduser()
         if as_path.is_file() and _is_layout_file(str(as_path)):
+            from app.infrastructure.tenant_scope import current_tenant_id
+
+            private_path = _safe_private_layout_path(
+                as_path,
+                tenant_id=current_tenant_id(),
+                owner_user_id=scoped_owner_user_id,
+            )
+            if _is_any_private_layout_path(as_path) and not private_path:
+                return _result(
+                    ok=False,
+                    template_name=tname,
+                    reason="private_template_path_forbidden",
+                    error_code="ETL_PRIVATE_TEMPLATE_FORBIDDEN",
+                    unit_name=unit or None,
+                )
             out = _result(
                 ok=True,
-                path=str(as_path.resolve()),
+                path=private_path or str(as_path.resolve()),
                 template_id=tid or None,
                 template_name=as_path.name,
                 source="explicit_path",
@@ -359,7 +573,7 @@ def resolve_shipment_template(
                 unit_name=unit or None,
             )
             return out
-        rows = _list_templates_cached(store)
+        rows = private_rows + _list_templates_cached(store)
         row = _match_row_by_name(rows, tname)
         if row:
             path = str(row["path"])
@@ -395,7 +609,7 @@ def resolve_shipment_template(
             unit_name=unit or None,
         )
 
-    rows = _list_templates_cached(store)
+    rows = private_rows + _list_templates_cached(store)
 
     # 3) 客户名匹配版式
     if unit:

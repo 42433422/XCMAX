@@ -74,6 +74,10 @@ class EtlExecuteRequest(BaseModel):
     valid_rows_only: bool = False
 
 
+class EtlShipmentTemplateRequest(BaseModel):
+    name: str = Field(default="", max_length=160)
+
+
 class EtlTemplateRequest(BaseModel):
     name: str
     target_type: str

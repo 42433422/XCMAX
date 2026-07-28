@@ -37,6 +37,197 @@ def _svc():
     return get_shipment_application_service_core()
 
 
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Return only the middleware-authenticated owner identity.
+
+    The old shipment compatibility endpoints accept a number of legacy body
+    and header fields for tracing.  They are never an authority for a private
+    ETL-derived document or a post-print state transition.  The middleware is
+    the single source of the authenticated owner identity.
+    """
+
+    try:
+        raw_value = getattr(request.state, "user_id", None)
+        user_id = int(raw_value) if raw_value is not None else 0
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return user_id if user_id > 0 else None
+
+
+def _shipment_preview_order_text(
+    *, unit_name: str, products: list[dict[str, Any]], payload: dict[str, Any]
+) -> str:
+    """Keep a deterministic source string for legacy structured requests.
+
+    ``shipment_generate`` execution receives the structured ``products`` too,
+    so this text is intentionally only a transparent fallback rather than a
+    second parser authority.  Prefer the caller's original order text when it
+    exists; otherwise make a minimal readable representation for the
+    confirmation card and the later explicit execution click.
+    """
+
+    original = str(payload.get("order_text") or "").strip()
+    if original:
+        return original
+
+    parts: list[str] = []
+    for product in products:
+        if not isinstance(product, dict):
+            continue
+        name = str(
+            product.get("name")
+            or product.get("product_name")
+            or product.get("model_number")
+            or product.get("model")
+            or "产品"
+        ).strip()
+        quantity = product.get("quantity_tins") or product.get("quantity") or product.get("qty")
+        specification = product.get("tin_spec") or product.get("spec") or product.get("规格")
+        fragment = name
+        if quantity not in (None, ""):
+            fragment += f" {quantity}桶"
+        if specification not in (None, ""):
+            fragment += f" 规格{specification}"
+        parts.append(fragment)
+    return f"{unit_name}，{'；'.join(parts)}" if parts else unit_name
+
+
+def _shipment_confirmation_preview(
+    *,
+    unit_name: str,
+    products: list[dict[str, Any]],
+    payload: dict[str, Any],
+    compatibility_endpoint: str,
+) -> dict[str, Any]:
+    """Return the shared card used by chat before shipment generation.
+
+    This route used to mark a high-risk Agent node as confirmed and continue
+    it immediately.  Compatibility clients now receive the same declarative
+    task as chat: only its explicit button sends the payload to
+    ``/api/tools/execute``.  In particular, do not include an owner id from a
+    JSON body/header; that endpoint injects the authenticated owner itself.
+    """
+
+    from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+
+    order_text = _shipment_preview_order_text(
+        unit_name=unit_name,
+        products=products,
+        payload=payload,
+    )
+    preview = build_shipment_preview_response_dict(unit_name, products, order_text)
+    params = preview["task"]["payload"]["params"]
+
+    # Layout preferences describe a user choice, not access rights.  Preserve
+    # them across the preview while deliberately excluding user/owner fields.
+    for key, value in {
+        "template_name": payload.get("template_name") or payload.get("template"),
+        "template_id": payload.get("template_id"),
+        "preferred_template": payload.get("preferred_template") or payload.get("template"),
+        "date": payload.get("date"),
+        "order_number": payload.get("order_number"),
+    }.items():
+        if value is not None and str(value).strip():
+            params[key] = value
+
+    preview["confirmation_required"] = True
+    preview["data"] = {
+        **(preview.get("data") or {}),
+        "compatibility_endpoint": compatibility_endpoint,
+        "execution_endpoint": "/api/tools/execute",
+    }
+    return preview
+
+
+def _shipment_batch_confirmation_preview(
+    shipments: list[Any],
+) -> dict[str, Any]:
+    """Build one explicit confirmation task per valid legacy batch item.
+
+    A batch must not turn into one hidden write after a broad confirmation.
+    Each child remains the ordinary ``shipment_generate`` task whose explicit
+    click goes through the owner-bound tools endpoint.  Invalid items are
+    returned as preview issues and never invoke the shipment service.
+    """
+
+    tasks: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for index, shipment in enumerate(shipments):
+        if not isinstance(shipment, dict):
+            errors.append(
+                {
+                    "index": index,
+                    "error_code": "invalid_shipment_item",
+                    "message": "条目必须是对象",
+                }
+            )
+            continue
+        unit_name = str(shipment.get("unit_name") or shipment.get("customer_name") or "").strip()
+        products = shipment.get("products") or shipment.get("items") or []
+        if not unit_name:
+            errors.append(
+                {
+                    "index": index,
+                    "error_code": "shipment_unit_required",
+                    "message": "单位名称不能为空",
+                }
+            )
+            continue
+        if not isinstance(products, list) or not products:
+            errors.append(
+                {
+                    "index": index,
+                    "error_code": "shipment_products_required",
+                    "message": "产品列表不能为空",
+                }
+            )
+            continue
+        if not all(isinstance(product, dict) for product in products):
+            errors.append(
+                {
+                    "index": index,
+                    "error_code": "shipment_product_invalid",
+                    "message": "产品列表条目必须是对象",
+                }
+            )
+            continue
+        preview = _shipment_confirmation_preview(
+            unit_name=unit_name,
+            products=products,
+            payload=shipment,
+            compatibility_endpoint="/api/shipment/generate-batch",
+        )
+        task = dict(preview["task"])
+        task["title"] = f"发货单预览 {index + 1}"
+        task["batch_index"] = index
+        tasks.append(task)
+
+    count = len(tasks)
+    all_valid = not errors
+    return {
+        "success": bool(tasks),
+        "confirmation_required": True,
+        "message": (
+            f"已生成 {count} 条发货单预演，请逐条确认执行"
+            if all_valid
+            else f"已生成 {count} 条可确认预演，另有 {len(errors)} 条需要修正"
+        ),
+        "response": "批量发货单尚未生成，请逐条点击“确认执行”。",
+        # Keep a singular ``task`` for old renderers when there is exactly one
+        # item.  Multiple tasks intentionally have no batch execution URL.
+        "task": tasks[0] if count == 1 else None,
+        "tasks": tasks,
+        "data": {
+            "routing": "legacy_shipment_batch_preview",
+            "compatibility_endpoint": "/api/shipment/generate-batch",
+            "execution_endpoint": "/api/tools/execute",
+            "total": len(shipments),
+            "preview_count": count,
+            "errors": errors,
+        },
+    }
+
+
 def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
     from pathlib import Path
 
@@ -269,17 +460,23 @@ def orders_next_number_under_api(suffix: str = Query(default="A")):
 
 @router.post("/api/shipment/generate-batch")
 def shipment_generate_batch(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    """批量生成：兼容测试与旧前端字段（customer_name / items）。"""
+    """Preview a legacy batch; each document still needs an explicit click."""
     shipments = payload.get("shipments") or []
-    if not shipments:
+    if not isinstance(shipments, list) or not shipments:
         raise HTTPException(status_code=400, detail="shipments 不能为空")
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="generate_batch",
-        params={"shipments": shipments},
-        route_path="/api/shipment/generate-batch",
-    )
-    return JSONResponse(jsonable_encoder(result), status_code=200)
+    try:
+        result = _shipment_batch_confirmation_preview(shipments)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
+    except RECOVERABLE_ERRORS as e:
+        logger.exception("shipment batch preview: %s", e)
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "shipment_preview_failed",
+                "message": "发货单预演失败",
+            },
+            status_code=500,
+        )
 
 
 @router.post("/api/shipment/generate")
@@ -291,56 +488,120 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
         raise HTTPException(status_code=400, detail="单位名称不能为空")
     if not products:
         raise HTTPException(status_code=400, detail="产品列表不能为空")
+    if not isinstance(products, list) or not all(isinstance(product, dict) for product in products):
+        raise HTTPException(status_code=400, detail="产品列表条目必须是对象")
     try:
-        result = _run_shipment_orders_agent(
-            request=request,
-            action="generate",
-            params={"unit_name": unit_name, "products": products, "date": date},
-            route_path="/api/shipment/generate",
+        result = _shipment_confirmation_preview(
+            unit_name=unit_name,
+            products=products,
+            payload={**payload, "date": date},
+            compatibility_endpoint="/api/shipment/generate",
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
     except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment generate: %s", e)
+        logger.exception("shipment generate preview: %s", e)
         return JSONResponse(
-            {"success": False, "message": f"生成失败：{str(e)}"},
+            {
+                "success": False,
+                "error_code": "shipment_preview_failed",
+                "message": "发货单预演失败",
+            },
             status_code=500,
         )
 
 
 @router.post("/api/shipment/print")
 def shipment_print(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    file_path = payload.get("file_path")
+    """Mark a shipment printed only after a server-issued print receipt.
+
+    This historical endpoint never submits a physical print job itself.  Its
+    only remaining responsibility is the record-state transition after
+    ``/api/print/document`` has successfully spent the owner-bound document
+    capability.  A guessed local file path, legacy header, or JSON user id is
+    not sufficient authority to mark a shipment as printed.
+    """
+
+    file_path = str(payload.get("file_path") or "").strip()
     order_id = payload.get("order_id")
     printer_name = payload.get("printer_name")
+    post_print_receipt = payload.get("post_print_receipt")
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
-    if not os.path.exists(str(file_path)):
-        raise HTTPException(status_code=404, detail="文件不存在")
+    if not str(post_print_receipt or "").strip():
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "PRINT_RECEIPT_REQUIRED",
+                "message": "缺少打印回执，不能直接更新打印状态",
+            },
+            status_code=409,
+        )
 
     try:
-        if order_id:
+        normalized_order_id: int | None = None
+        if order_id not in (None, ""):
             try:
-                int(order_id)
-            except RECOVERABLE_ERRORS:
+                normalized_order_id = int(order_id)
+            except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail="order_id 无效")
-        result = _run_shipment_orders_agent(
-            request=request,
-            action="print",
-            params={
-                "file_path": str(file_path),
-                "order_id": order_id,
-                "printer_name": printer_name,
-            },
-            route_path="/api/shipment/print",
+            if normalized_order_id <= 0:
+                raise HTTPException(status_code=400, detail="order_id 无效")
+
+        from app.application.print_authorization import consume_post_print_receipt
+
+        receipt = consume_post_print_receipt(
+            post_print_receipt,
+            owner_user_id=_authenticated_owner_user_id(request),
+            file_path=file_path,
+            order_id=normalized_order_id,
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
+        if not receipt.get("success"):
+            error_code = str(receipt.get("error_code") or "")
+            status_code = 403 if error_code == "PRINT_RECEIPT_OWNER_MISMATCH" else 409
+            return JSONResponse(receipt, status_code=status_code)
+
+        # The receipt canonicalises the generated artifact path.  Use that
+        # value rather than a client spelling/symlink variant in the audit
+        # response.  No Agent auto-continue occurs on this route.
+        confirmed_file_path = str(receipt.get("file_path") or file_path)
+        receipt_order_id = receipt.get("order_id")
+        if normalized_order_id is None:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": "发货单已打印，但未更新记录（缺少 order_id）",
+                    "printed_at": datetime.now().isoformat(),
+                    "file_path": confirmed_file_path,
+                    "updated": False,
+                    "warning": "缺少 order_id，已跳过数据库状态更新",
+                },
+                status_code=200,
+            )
+
+        result = dict(
+            _svc().mark_as_printed(
+                normalized_order_id,
+                printer_name=str(printer_name or ""),
+            )
+            or {}
+        )
+        result["file_path"] = confirmed_file_path
+        result["order_id"] = receipt_order_id or normalized_order_id
+        result.setdefault("updated", bool(result.get("success")))
+        return JSONResponse(
+            jsonable_encoder(result), status_code=200 if result.get("success") else 400
+        )
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment print: %s", e)
+        logger.exception("shipment printed-state update: %s", e)
         return JSONResponse(
-            {"success": False, "message": f"打印失败：{str(e)}"},
+            {
+                "success": False,
+                "error_code": "shipment_print_state_update_failed",
+                "message": "打印状态更新失败",
+            },
             status_code=500,
         )
 

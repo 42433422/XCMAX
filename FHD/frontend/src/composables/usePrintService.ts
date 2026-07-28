@@ -4,6 +4,7 @@ import { resolveErpApiPath } from '@/utils/erpDomainPaths'
 export interface PrintResult {
   success: boolean
   message: string
+  postPrintReceipt?: string
 }
 
 export interface PrintSummary {
@@ -20,6 +21,7 @@ type ApiResultPayload = {
   success?: boolean
   message?: string
   updated?: boolean
+  post_print_receipt?: string
 }
 
 function errorMessage(error: unknown): string {
@@ -34,7 +36,9 @@ export function usePrintService() {
       const resp = await fetch(resolveErpApiPath('/api/print/label'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path: filePath, copies })
+        // This call only runs after the user clicks “开始打印”; that click is
+        // the explicit confirmation for both labels and the shipment document.
+        body: JSON.stringify({ file_path: filePath, copies, require_confirm: false })
       })
       const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
 
@@ -54,17 +58,29 @@ export function usePrintService() {
     }
   }
 
-  async function printDocument(filePath: string): Promise<PrintResult> {
+  async function printDocument(
+    filePath: string,
+    printToken: string = '',
+    orderId?: number,
+  ): Promise<PrintResult> {
     try {
       const resp = await fetch(resolveErpApiPath('/api/print/document'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path: filePath })
+        body: JSON.stringify({
+          file_path: filePath,
+          print_token: printToken,
+          ...(orderId ? { order_id: orderId } : {}),
+        })
       })
       const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
 
       if (resp.ok && data?.success) {
-        return { success: true, message: '发货单打印成功' }
+        return {
+          success: true,
+          message: '发货单打印成功',
+          postPrintReceipt: String(data.post_print_receipt || '').trim() || undefined,
+        }
       } else {
         return {
           success: false,
@@ -79,9 +95,22 @@ export function usePrintService() {
     }
   }
 
-  async function markAsPrinted(filePath: string, orderId?: number): Promise<PrintResult> {
+  async function markAsPrinted(
+    filePath: string,
+    orderId?: number,
+    postPrintReceipt: string = '',
+  ): Promise<PrintResult> {
+    if (!postPrintReceipt.trim()) {
+      return {
+        success: false,
+        message: '缺少本次实际打印回执，未更新发货单打印状态',
+      }
+    }
     try {
-      const payload: Record<string, unknown> = { file_path: filePath }
+      const payload: Record<string, unknown> = {
+        file_path: filePath,
+        post_print_receipt: postPrintReceipt,
+      }
       if (orderId) {
         payload.order_id = orderId
       }
@@ -113,7 +142,8 @@ export function usePrintService() {
     labelPaths: string[],
     filePath: string,
     orderId?: number,
-    _purchaseUnit?: string
+    _purchaseUnit?: string,
+    printToken: string = '',
   ): Promise<PrintSummary> {
     isPrinting.value = true
 
@@ -138,22 +168,24 @@ export function usePrintService() {
     }
 
     if (filePath) {
-      const docResult = await printDocument(filePath)
+      const docResult = await printDocument(filePath, printToken, orderId)
       summary.shipmentPrinted = docResult.success
 
       if (!docResult.success) {
         summary.logs.push(`发货单打印失败：${docResult.message}`)
       }
 
-      const markResult = await markAsPrinted(filePath, orderId)
-      summary.shipmentMarked = markResult.success
-
-      if (!markResult.success) {
-        summary.logs.push(`打印状态更新失败：${markResult.message}`)
-      }
-
       if (!orderId) {
         summary.logs.push('打印状态未落库：缺少记录ID')
+      } else if (!docResult.success) {
+        summary.logs.push('打印状态未落库：发货单未成功提交打印')
+      } else {
+        const markResult = await markAsPrinted(filePath, orderId, docResult.postPrintReceipt)
+        summary.shipmentMarked = markResult.success
+
+        if (!markResult.success) {
+          summary.logs.push(`打印状态更新失败：${markResult.message}`)
+        }
       }
     }
 

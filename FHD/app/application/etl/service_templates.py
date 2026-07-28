@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlError, EtlNotFound
-from app.application.etl.service_support import dump_json, load_json, new_id
+from app.application.etl.service_support import (
+    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+    dump_json,
+    load_json,
+    new_id,
+)
 from app.application.etl.targets import get_adapter
 from app.db.models.etl import EtlTemplate, EtlTemplateVersion
 from app.infrastructure.tenant_scope import tenant_id_for_write
@@ -104,11 +110,18 @@ class TemplateServiceMixin:
         )
 
     def list_templates(self, db: Session, *, owner_user_id: int) -> list[dict[str, Any]]:
+        # Print layouts share the private ETL persistence namespace for tenant
+        # and owner isolation, but their fields describe a document layout —
+        # never an import mapping. The document resolver reads them directly.
         templates = (
             db.query(EtlTemplate)
             .filter(
                 EtlTemplate.owner_user_id == owner_user_id,
                 EtlTemplate.is_active.is_(True),
+                or_(
+                    EtlTemplate.description.is_(None),
+                    EtlTemplate.description != ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+                ),
             )
             .order_by(EtlTemplate.updated_at.desc())
             .all()

@@ -239,6 +239,19 @@ class ShipmentAdapter(TargetAdapter):
             json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()
         ).hexdigest()
 
+    @staticmethod
+    def _belongs_to_current_run(record: ShipmentRecord, run_id: Any) -> bool:
+        """Allow distinct delivery lines of one external order in one ETL run."""
+
+        expected = str(run_id or "").strip()
+        if not expected:
+            return False
+        try:
+            parsed = json.loads(str(record.parsed_data or "{}"))
+        except (TypeError, ValueError):
+            return False
+        return isinstance(parsed, dict) and str(parsed.get("etl_run_id") or "") == expected
+
     def preview(self, db, data, *, allowed_update_fields, context):
         issues = self.validate(data)
         if data.get("quantity_kg") in (None, "") and data.get("quantity_tins") in (None, ""):
@@ -270,6 +283,10 @@ class ShipmentAdapter(TargetAdapter):
                 .filter(
                     ShipmentEtlImportFingerprint.tenant_key == tenant_key,
                     ShipmentEtlImportFingerprint.fingerprint == legacy_note_fingerprint,
+                    or_(
+                        ShipmentEtlImportFingerprint.source_kind.is_(None),
+                        ShipmentEtlImportFingerprint.source_kind != "general_etl_legacy_note",
+                    ),
                 )
                 .first()
             )
@@ -304,7 +321,7 @@ class ShipmentAdapter(TargetAdapter):
                 reason="legacy_source_duplicate",
             )
         if order_no:
-            existing = (
+            existing_records = (
                 db.query(ShipmentRecord)
                 .filter(
                     or_(
@@ -318,11 +335,21 @@ class ShipmentAdapter(TargetAdapter):
                         ),
                     )
                 )
-                .first()
+                .all()
             )
-            if existing:
+            # One delivery note commonly contains multiple product lines with
+            # one external order number. The source fingerprint makes each
+            # line idempotent; only records from another run make this order a
+            # duplicate. Without this exemption the second line would fail
+            # during execution after the first was inserted.
+            if any(
+                not self._belongs_to_current_run(record, context.get("run_id"))
+                for record in existing_records
+            ):
                 return PreviewDecision(
-                    "skip", match_ref=str(existing.id), reason="external_order_duplicate"
+                    "skip",
+                    match_ref=str(existing_records[0].id),
+                    reason="external_order_duplicate",
                 )
         return PreviewDecision(
             "new",
@@ -381,30 +408,9 @@ class ShipmentAdapter(TargetAdapter):
                 meta_json=json.dumps({"run_id": context.get("run_id")}),
             )
         )
-        legacy_note_fingerprint = str(data.get("legacy_note_fingerprint") or "").strip()
-        if legacy_note_fingerprint:
-            tenant_key = f"tenant:{tenant_id_for_write()}"
-            legacy_exists = (
-                db.query(ShipmentEtlImportFingerprint)
-                .filter(
-                    ShipmentEtlImportFingerprint.tenant_key == tenant_key,
-                    ShipmentEtlImportFingerprint.fingerprint == legacy_note_fingerprint,
-                )
-                .first()
-            )
-            if not legacy_exists:
-                db.add(
-                    ShipmentEtlImportFingerprint(
-                        tenant_key=tenant_key,
-                        fingerprint=legacy_note_fingerprint,
-                        shipment_id=obj.id,
-                        unit_name=obj.purchase_unit,
-                        order_number=optional_text(data.get("external_order_no")),
-                        file_name=str(context.get("file_name") or ""),
-                        source_kind="general_etl_legacy_note",
-                        meta_json=json.dumps({"run_id": context.get("run_id")}),
-                    )
-                )
+        # ``legacy_note_fingerprint`` is read only: it detects records created
+        # by the old shipment ETL. Do not write it for every line of a new
+        # multi-line note, otherwise line two would see line one as a duplicate.
         return {"match_ref": str(obj.id), "after": obj.to_dict()}
 
     def rollback_row(self, db, *, match_ref, before, after, context):

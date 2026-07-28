@@ -112,7 +112,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     )),
   )
   const incompatibleFiles = computed(
-    () => options.targetType.value === 'knowledge' ? [] : knowledgeOnlyFiles.value,
+    () => ['auto', 'knowledge'].includes(options.targetType.value) ? [] : knowledgeOnlyFiles.value,
   )
   const batchFinishedCount = computed(
     () => selectedFiles.value.filter((item) => TERMINAL_STATUSES.has(item.status)).length,
@@ -288,13 +288,25 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
           ),
         ]
         options.currentRun.value = createdRuns[0]
+        if (selectedFiles.value.length === 1 && options.targetType.value === 'auto') {
+          options.targetType.value = createdRuns[0].target_type
+        }
         options.syncDraft()
         await options.router.replace({
           path: '/business-docking',
           query: { run_id: createdRuns[0].id },
         })
-        if (selectedFiles.value.length === 1) options.schedulePoll()
-        else scheduleBatchPoll()
+        if (selectedFiles.value.length === 1) {
+          // The desktop normally receives a queued run, but small workbooks
+          // can finish before the create-preview response returns. In that
+          // case surface the preview and its safe companion actions now
+          // instead of leaving the user on the upload tab until a refresh.
+          options.activeTab.value = tabForRunStatus(createdRuns[0].status)
+          if (createdRuns[0].status === 'preview_ready') await options.loadRows()
+          options.schedulePoll()
+        } else {
+          scheduleBatchPoll()
+        }
       }
       if (batchFailedCount.value) {
         options.pageError.value =

@@ -7,6 +7,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlError
+from app.application.etl.product_identity import (
+    database_model_ambiguity_issue,
+    product_name_key,
+)
 from app.application.etl.targets.base import (
     PreviewDecision,
     TargetAdapter,
@@ -60,28 +64,72 @@ class ProductAdapter(TargetAdapter):
             return query.filter(Product.model_number == model).first()
         return query.filter(Product.name == str(data.get("name") or "")).first()
 
+    @staticmethod
+    def _name_key(data: dict[str, Any]) -> tuple[str, str]:
+        return product_name_key(data, unit_field="unit")
+
+    @classmethod
+    def model_ambiguity_issue(
+        cls,
+        data: dict[str, Any],
+        candidates: list[Any],
+        *,
+        exact_match: bool,
+    ) -> dict[str, Any] | None:
+        return database_model_ambiguity_issue(
+            data,
+            candidates,
+            exact_match=exact_match,
+        )
+
+    def _same_name_candidates(self, db: Session, data: dict[str, Any]) -> list[Product]:
+        return (
+            owned_query(db, Product)
+            .filter(
+                Product.unit == str(data.get("unit") or ""),
+                Product.name == str(data.get("name") or ""),
+            )
+            .all()
+        )
+
     def preview(self, db, data, *, allowed_update_fields, context):
         issues = self.validate(data)
         if issues:
             return PreviewDecision("error", issues=issues, reason="validation_failed")
         cache = context.setdefault("_preview_cache", {})
         index = cache.get("product_by_match_key")
-        if index is None:
-            index = {
-                self._match_key(
-                    {
-                        "unit": item.unit,
-                        "model_number": item.model_number,
-                        "name": item.name,
-                    }
-                ): item
-                for item in owned_query(db, Product).all()
-            }
+        name_index = cache.get("product_by_name_key")
+        if index is None or name_index is None:
+            products = owned_query(db, Product).all()
+            index = {}
+            name_index = {}
+            for item in products:
+                item_data = {
+                    "unit": item.unit,
+                    "model_number": item.model_number,
+                    "name": item.name,
+                }
+                index[self._match_key(item_data)] = item
+                name_index.setdefault(self._name_key(item_data), []).append(item)
             cache["product_by_match_key"] = index
+            cache["product_by_name_key"] = name_index
         match_key = self._match_key(data)
         obj = index.get(match_key)
+        ambiguity = self.model_ambiguity_issue(
+            data,
+            list((name_index or {}).get(self._name_key(data), [])),
+            exact_match=bool(obj),
+        )
+        if ambiguity:
+            return PreviewDecision(
+                "error",
+                issues=[ambiguity],
+                reason="product_model_ambiguous",
+            )
         if not obj:
-            index[match_key] = {"_etl_virtual": True, **json_safe(data)}
+            virtual = {"_etl_virtual": True, **json_safe(data)}
+            index[match_key] = virtual
+            (name_index or {}).setdefault(self._name_key(data), []).append(virtual)
             return PreviewDecision("new", after=json_safe(data), reason="product_not_found")
         if isinstance(obj, dict):
             return PreviewDecision(
@@ -112,6 +160,13 @@ class ProductAdapter(TargetAdapter):
 
     def execute_row(self, db, data, *, action, match_ref, allowed_update_fields, context):
         if action == "new":
+            ambiguity = self.model_ambiguity_issue(
+                data,
+                self._same_name_candidates(db, data),
+                exact_match=False,
+            )
+            if ambiguity:
+                raise EtlError(ambiguity["code"], ambiguity["message"], status_code=409)
             if self._match(db, data):
                 raise EtlError(
                     "ETL_MATCH_CHANGED",

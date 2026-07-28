@@ -19,6 +19,7 @@ from app.schemas.etl_schema import (
     EtlDraftPatch,
     EtlExecuteRequest,
     EtlPreviewRequest,
+    EtlShipmentTemplateRequest,
     EtlTemplateRequest,
     EtlTemplateUpdateRequest,
 )
@@ -210,6 +211,24 @@ def execute_run(
             owner_user_id=_user_id(user),
             confirmed=body.confirmed,
             valid_rows_only=body.valid_rows_only,
+        ),
+    }
+
+
+@router.post("/runs/{run_id}/shipment-template")
+def save_shipment_template(
+    run_id: str,
+    body: EtlShipmentTemplateRequest,
+    db: Session = Depends(get_db_dependency),
+    user: Any = Depends(_template_manage),
+):
+    return {
+        "success": True,
+        "data": get_etl_service().save_run_shipment_template(
+            db,
+            run_id=run_id,
+            owner_user_id=_user_id(user),
+            name=body.name,
         ),
     }
 

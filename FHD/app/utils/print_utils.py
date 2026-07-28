@@ -29,6 +29,21 @@ _CUPS_ERRORS = RECOVERABLE_ERRORS + (subprocess.SubprocessError,)
 _CUPS_LP = "/usr/bin/lp"
 _CUPS_LPSTAT = "/usr/bin/lpstat"
 _CUPS_PRINTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}$")
+_MAC_OSASCRIPT = "/usr/bin/osascript"
+_MAC_NUMBERS = "/Applications/Numbers.app"
+_NUMBERS_PDF_EXPORT_SCRIPT = """
+on run argv
+    set sourceFile to POSIX file (item 1 of argv)
+    set outputFile to POSIX file (item 2 of argv)
+    tell application "Numbers" to launch
+    delay 1
+    tell application "Numbers"
+        set sourceDocument to open sourceFile
+        export sourceDocument to outputFile as PDF
+        close sourceDocument saving no
+    end tell
+end run
+"""
 
 
 class PrinterUtils:
@@ -258,6 +273,75 @@ class PrinterUtils:
                 "message": "打印失败：macOS 打印服务暂不可用",
                 "printer": validated_printer,
             }
+
+    def _convert_excel_to_pdf_macos(self, file_path: str) -> tuple[str | None, str]:
+        validated_file = self._resolve_allowed_print_path(file_path)
+        if validated_file is None:
+            return None, "发货单文件不在允许的打印目录中"
+        if not (
+            os.path.isfile(_MAC_OSASCRIPT)
+            and os.access(_MAC_OSASCRIPT, os.X_OK)
+            and os.path.isdir(_MAC_NUMBERS)
+        ):
+            return None, "未安装 Apple Numbers，无法将 Excel 发货单转换为可打印格式"
+
+        file_descriptor, pdf_path = tempfile.mkstemp(
+            prefix="xcagi-shipment-print-",
+            suffix=".pdf",
+            dir=tempfile.gettempdir(),
+        )
+        os.close(file_descriptor)
+        os.unlink(pdf_path)
+        try:
+            result = subprocess.run(
+                [
+                    _MAC_OSASCRIPT,
+                    "-e",
+                    _NUMBERS_PDF_EXPORT_SCRIPT,
+                    validated_file,
+                    pdf_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+            if result.returncode != 0 or not os.path.isfile(pdf_path):
+                detail = result.stderr.strip() or result.stdout.strip()
+                logger.warning("Numbers PDF export failed: %s", detail or "unknown error")
+                if os.path.exists(pdf_path):
+                    os.unlink(pdf_path)
+                return None, "Numbers 转换发货单失败，请检查自动化权限后重试"
+            return pdf_path, ""
+        except _CUPS_ERRORS as exc:
+            logger.warning("Numbers PDF export unavailable: %s", exc)
+            if os.path.exists(pdf_path):
+                os.unlink(pdf_path)
+            return None, "Numbers 转换发货单失败，请检查自动化权限后重试"
+
+    def _print_excel_macos(self, file_path: str, printer_name: str) -> dict:
+        pdf_path, error = self._convert_excel_to_pdf_macos(file_path)
+        if pdf_path is None:
+            return {
+                "success": False,
+                "message": f"打印失败：{error}",
+                "printer": printer_name,
+            }
+        try:
+            result = self._print_cups(pdf_path, printer_name)
+            if result.get("success"):
+                result.update(
+                    {
+                        "file": os.path.basename(file_path),
+                        "method": "numbers_pdf_cups",
+                    }
+                )
+            return result
+        finally:
+            try:
+                os.unlink(pdf_path)
+            except OSError:
+                logger.warning("Unable to remove temporary print PDF: %s", pdf_path)
 
     def _monitor_cups_print_job(self, printer_name: str, timeout: int) -> bool:
         validated_printer = self._resolve_cups_printer_name(printer_name)
@@ -509,7 +593,7 @@ class PrinterUtils:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
         if win32api is None and not hasattr(os, "startfile"):
-            return self._print_cups(file_path, printer_name)
+            return self._print_excel_macos(file_path, printer_name)
         try:
             logger.info("开始打印Excel文件: %s", file_path)
             logger.info("使用打印机: %s", printer_name)

@@ -104,26 +104,43 @@ class CustomerProductPreviewMixin:
         product_data = self._product_data(data)
         cache = context.setdefault("_preview_cache", {})
         index = cache.get("customer_product_product_by_match_key")
+        name_index = cache.get("customer_product_product_by_name_key")
         product_adapter = ProductAdapter()
-        if index is None:
-            index = {
-                product_adapter._match_key(
-                    {
-                        "unit": item.unit,
-                        "model_number": item.model_number,
-                        "name": item.name,
-                    }
-                ): {
+        if index is None or name_index is None:
+            index = {}
+            name_index = {}
+            for item in owned_query(db, Product).all():
+                item_data = {
+                    "unit": item.unit,
+                    "model_number": item.model_number,
+                    "name": item.name,
+                }
+                state = {
                     "id": item.id,
                     "before": model_values(item, ProductAdapter.fields),
                     "after": model_values(item, ProductAdapter.fields),
                     "is_new": False,
                 }
-                for item in owned_query(db, Product).all()
-            }
+                index[product_adapter._match_key(item_data)] = state
+                name_index.setdefault(product_adapter._name_key(item_data), []).append(state)
             cache["customer_product_product_by_match_key"] = index
+            cache["customer_product_product_by_name_key"] = name_index
         match_key = product_adapter._match_key(product_data)
         state = index.get(match_key)
+        ambiguity = product_adapter.model_ambiguity_issue(
+            product_data,
+            list(name_index.get(product_adapter._name_key(product_data), [])),
+            exact_match=bool(state),
+        )
+        if ambiguity:
+            existing = state or {}
+            return {
+                "id": existing.get("id"),
+                "before": existing.get("before", {}),
+                "after": existing.get("after", json_safe(product_data)),
+                "is_new": state is None,
+                "model_ambiguity_issues": [ambiguity],
+            }
         if state is None:
             state = {
                 "id": None,
@@ -133,6 +150,7 @@ class CustomerProductPreviewMixin:
                 "seen": True,
             }
             index[match_key] = state
+            name_index.setdefault(product_adapter._name_key(product_data), []).append(state)
             return state
         if state.get("seen"):
             state["duplicate_in_source"] = True

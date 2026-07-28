@@ -38,7 +38,7 @@ const templates = ref<EtlTemplate[]>([])
 const targetConfigs = ref<EtlTargetConfig[]>([])
 const runs = ref<EtlRun[]>([])
 const currentRun = ref<EtlRun | null>(null)
-const targetType = ref('customer_products')
+const targetType = ref('auto')
 const targetConfigId = ref('')
 const runRows = ref<EtlRunRow[]>([])
 const rowPage = ref(1)
@@ -56,6 +56,8 @@ const hasOcrRows = ref(false)
 const showWebhookForm = ref(false)
 const webhookDraft = reactive({ name: '', endpoint_url: '', headersJson: '{}', secret: '' })
 const webhookTestMessage = ref('')
+const shipmentTemplateMessage = ref('')
+const customerProductPreviewMessage = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 const {
@@ -105,7 +107,10 @@ const {
   loadRows,
 })
 
-const currentCapability = computed(() => capabilities.value?.targets.find((item) => item.type === currentRun.value?.target_type || targetType.value))
+const currentCapability = computed(() => {
+  const target = currentRun.value?.target_type || targetType.value
+  return capabilities.value?.targets.find((item) => item.type === target)
+})
 const updatableFields = computed(() => currentCapability.value?.fields.filter((field) => field.updatable) || [])
 function allowedActionsForRow(row: EtlRunRow): EtlAction[] {
   const actions = currentCapability.value?.supported_actions || ['new', 'skip']
@@ -132,6 +137,15 @@ const summaryCards = computed(() => [
   { action: 'skip', label: '跳过', count: currentRun.value?.summary.skip || 0 },
   { action: 'error', label: '错误', count: currentRun.value?.summary.error || 0 },
 ])
+const savedShipmentTemplate = computed<Record<string, unknown> | null>(() => {
+  const candidate = currentRun.value?.details?.shipment_document_template
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : null
+})
+const savedShipmentTemplateName = computed(() => (
+  String(savedShipmentTemplate.value?.name || '').trim()
+))
 const linkedCustomerNames = computed(() => {
   const names = runRows.value
     .map((row) => String(row.normalized.customer_name || '').trim())
@@ -164,6 +178,18 @@ const detectedRegions = computed<Array<Record<string, unknown>>>(() => {
     ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
     : []
 })
+const workbookSheetPlan = computed<Array<Record<string, unknown>>>(() => {
+  const value = currentRun.value?.source_features?.sheet_plan
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    : []
+})
+const latestRecordSelection = computed<Record<string, unknown> | null>(() => {
+  const value = currentRun.value?.source_features?.latest_record_selection
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+})
 const llmPlanningText = computed(() => {
   const structure = currentRun.value?.source_features?.llm_structure
   const mapping = currentRun.value?.source_features?.llm_mapping
@@ -189,8 +215,11 @@ async function bootstrap() {
     templates.value = templateRows
     runs.value = history
     targetConfigs.value = configs
-    if (!caps.targets.some((item) => item.type === targetType.value)) {
-      targetType.value = caps.targets[0]?.type || 'customer_products'
+    if (
+      targetType.value !== 'auto'
+      && !caps.targets.some((item) => item.type === targetType.value)
+    ) {
+      targetType.value = 'auto'
     }
     const requestedRun = String(route.query.run_id || '')
     if (requestedRun) {
@@ -351,6 +380,73 @@ async function saveCurrentAsTemplate() {
   }
 }
 
+async function saveCurrentAsShipmentTemplate() {
+  if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
+  const requestedName = window.prompt(
+    '发货单版式名称（可选；留空将按识别到的客户命名）',
+    '',
+  )
+  if (requestedName === null) return
+  const name = requestedName.trim()
+  busy.value = true
+  shipmentTemplateMessage.value = ''
+  try {
+    const result = await etlApi.saveShipmentTemplate(currentRun.value.id, name)
+    shipmentTemplateMessage.value = result.name
+      ? `已保存“${result.name}”。${result.message}`
+      : result.message
+    currentRun.value = await etlApi.run(currentRun.value.id)
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : '发货单版式保存失败'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function previewCustomerProductsFromShipment() {
+  if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
+  const sourceRun = currentRun.value
+  if (!sourceRun.upload_id) {
+    pageError.value = '原始上传文件不可用，无法创建客户及产品预演。请重新上传该工作簿。'
+    return
+  }
+  busy.value = true
+  pageError.value = ''
+  shipmentTemplateMessage.value = ''
+  customerProductPreviewMessage.value = ''
+  try {
+    const customerProductRun = await etlApi.preview({
+      upload_id: sourceRun.upload_id,
+      target_type: 'customer_products',
+    })
+    currentRun.value = customerProductRun
+    targetType.value = 'customer_products'
+    rowPage.value = 1
+    rowActionFilter.value = ''
+    runRows.value = []
+    rowTotal.value = 0
+    const retainedRuns = runs.value.some((run) => run.id === sourceRun.id)
+      ? runs.value
+      : [sourceRun, ...runs.value]
+    runs.value = [
+      customerProductRun,
+      ...retainedRuns.filter((run) => run.id !== customerProductRun.id),
+    ]
+    customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品预演；请先核对附表规划与行级结果，点击“确认执行”前不会写入客户库或产品库。'
+    syncDraft()
+    activeTab.value = 'preview'
+    await router.replace({
+      path: '/business-docking',
+      query: { run_id: customerProductRun.id },
+    })
+    schedulePoll()
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : '创建客户及产品预演失败'
+  } finally {
+    busy.value = false
+  }
+}
+
 async function refreshRuns() {
   runs.value = await etlApi.runs()
   if (currentRun.value) {
@@ -360,6 +456,7 @@ async function refreshRuns() {
 }
 
 async function selectRun(run: EtlRun) {
+  customerProductPreviewMessage.value = ''
   currentRun.value = await etlApi.run(run.id)
   syncDraft()
   activeTab.value = 'history'
@@ -451,6 +548,7 @@ function mappingSample(source: string): string {
   return value == null ? '—' : String(value).slice(0, 80)
 }
 function targetLabel(type: string) {
+  if (type === 'auto') return '智能识别（推荐）'
   return capabilities.value?.targets.find((item) => item.type === type)?.label || type
 }
 function actionLabel(action: string) {
@@ -464,6 +562,31 @@ function stageLabel(stage: string) {
 }
 function statusLabel(status: string) {
   return ({ queued: '排队中', previewing: '预演中', preview_ready: '待确认', executing: '执行中', completed: '已完成', failed: '失败', interrupted: '已中断' } as Record<string, string>)[status] || status
+}
+function sheetRoleLabel(role: unknown) {
+  return ({
+    delivery_note_template_and_records: '送货单版式与发货数据',
+    supporting_customer_product_data: '客户与产品补充数据',
+    finance_or_reconciliation: '财务或对账附表',
+    reference_catalog: '参考目录',
+    non_target_appendix: '非业务附表',
+  } as Record<string, string>)[String(role || '')] || '工作表'
+}
+function sheetPlanStatusLabel(status: unknown) {
+  return ({
+    included: '纳入预演',
+    reviewed: '已读取，仅作参考',
+    excluded: '已排除',
+  } as Record<string, string>)[String(status || '')] || '已检查'
+}
+function sheetPlanRows(item: Record<string, unknown>) {
+  const rows = Number(item.rows || 0)
+  return Number.isFinite(rows) && rows > 0 ? `${rows} 行候选数据` : ''
+}
+function latestRecordSelectionText(selection: Record<string, unknown>) {
+  const stale = Number(selection.stale_records_skipped || 0)
+  if (!Number.isFinite(stale) || stale <= 0) return '同一客户同一产品按来源日期择最新有效记录。'
+  return `同一客户同一产品已按来源日期选择最新有效记录，并排除 ${stale} 条较早或同日旧记录。`
 }
 function confidenceClass(value: number) {
   return value >= 0.9 ? 'confidence-high' : value >= 0.6 ? 'confidence-medium' : 'confidence-low'

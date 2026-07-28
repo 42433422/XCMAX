@@ -9,6 +9,11 @@ const COMPATIBILITY_TARGETS = new Set([
   'shipment_records',
 ])
 
+// A saved delivery layout is intentionally stored in the same private ETL
+// tables as mappings so it can retain tenant + owner isolation. It is not an
+// import mapping, however, and must never be offered to the import selector.
+const SHIPMENT_DOCUMENT_LAYOUT_DESCRIPTION = 'ETL_SHIPMENT_DOCUMENT_TEMPLATE'
+
 export function useEtlTemplateSelection(options: {
   capabilities: Ref<EtlCapabilities | null>
   templates: Ref<EtlTemplate[]>
@@ -16,7 +21,10 @@ export function useEtlTemplateSelection(options: {
 }) {
   const templateSelection = ref('')
   const compatibleTemplates = computed(() => (
-    options.templates.value.filter((item) => item.target_type === options.targetType.value)
+    options.templates.value.filter((item) => (
+      item.target_type === options.targetType.value
+      && item.description !== SHIPMENT_DOCUMENT_LAYOUT_DESCRIPTION
+    ))
   ))
   const compatiblePresets = computed(() => (
     COMPATIBILITY_TARGETS.has(options.targetType.value)

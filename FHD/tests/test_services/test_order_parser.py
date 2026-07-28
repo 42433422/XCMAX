@@ -83,6 +83,49 @@ class TestParseOrderTextWithUnitName:
         result = _parse_order_text("打印一下张三的发货单 编号：ABC-123 规格20 5桶")
         assert isinstance(result, dict)
 
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "打印侯雪梅发货单，编号9803，规格28，3桶",
+            "开单 侯雪梅 编号9803 规格28 3桶",
+            "打单侯雪梅 型号9803 规格28 三桶",
+        ],
+    )
+    def test_delivery_natural_language_keeps_customer_and_product_slots(self, text):
+        result = _parse_order_text(text)
+        assert result["success"] is True
+        assert result["unit_name"] == "侯雪梅"
+        assert result["products"] == [
+            {
+                "name": "",
+                "model_number": "9803",
+                "quantity_tins": 3,
+                "tin_spec": 28.0,
+            }
+        ]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "打印金汉武发货单，黑棕面用修色精，规格28，3桶",
+            "开单 金汉武，黑棕面用修色精，规格28，3桶",
+        ],
+    )
+    def test_delivery_natural_language_accepts_named_product_without_model(self, text):
+        result = _parse_order_text(text)
+
+        assert result == {
+            "success": True,
+            "unit_name": "金汉武",
+            "products": [
+                {
+                    "name": "黑棕面用修色精",
+                    "quantity_tins": 3,
+                    "tin_spec": 28.0,
+                }
+            ],
+        }
+
 
 class TestParseOrderTextBoxAndKg:
     def test_box_quantity(self):

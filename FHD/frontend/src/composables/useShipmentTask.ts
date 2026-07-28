@@ -74,6 +74,8 @@ export function useShipmentTask(
     purchaseUnit: string
     orderId: number | null
     labelPaths: string[]
+    /** One-click server capability returned with this generated document. */
+    printToken?: string
     /** 右侧任务列表中「发货单生成」条目的 id，用于生成后衔接打印再标为 100% */
     taskListId?: string
   } | null>(null)

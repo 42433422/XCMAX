@@ -812,8 +812,9 @@ def test_ai_generate_with_template_name(
         json={"order_text": "七彩乐园 9803", "template_name": "default.docx"},
     )
     assert r.status_code == 200
-    svc.generate_shipment_document.assert_called_once()
-    assert svc.generate_shipment_document.call_args.kwargs["template_name"] == "default.docx"
+    assert r.json()["confirmation_required"] is True
+    assert r.json()["task"]["payload"]["params"]["template_name"] == "default.docx"
+    svc.generate_shipment_document.assert_not_called()
 
 
 def test_ai_single_label_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -863,8 +864,9 @@ def test_ai_print_file_failure(
     printer.print_document.return_value = {"success": False, "message": "offline"}
     monkeypatch.setattr(ai_routes_mod, "_printer_svc", lambda: printer)
     r = ai_client.post("/api/print/fail.docx", json={"printer_name": "HP"})
-    assert r.status_code == 400
-    assert r.json()["message"] == "offline"
+    assert r.status_code == 403
+    assert r.json()["error_code"] == "PRINT_AUTH_REQUIRED"
+    printer.print_document.assert_not_called()
 
 
 def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:

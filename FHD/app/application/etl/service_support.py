@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 MAX_FILE_MIB = 100
 MAX_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
+# A delivery layout is a private printing resource, not an ETL field-mapping
+# template. It shares owner-scoped ETL persistence so document resolution can
+# enforce tenant + owner isolation, but it must not be selectable for import.
+ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ETL_SHIPMENT_DOCUMENT_TEMPLATE"
 EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="fhd-etl")
 SUBMITTED: set[str] = set()
 SUBMITTED_LOCK = threading.Lock()

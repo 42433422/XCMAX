@@ -401,7 +401,8 @@ def test_execute_pro_mode_shipment_generate(chat_svc: AIChatApplicationService) 
             ai_result,
             "甲公司 2桶5003规格25",
         )
-    assert out.get("toolCall", {}).get("tool_id") == "shipment_generate"
+    assert out.get("task", {}).get("type") == "shipment_generate"
+    assert "toolCall" not in out
 
 
 def test_execute_pro_mode_unknown_tool(chat_svc: AIChatApplicationService) -> None:

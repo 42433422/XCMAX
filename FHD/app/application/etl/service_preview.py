@@ -17,7 +17,9 @@ from app.application.etl.parsers import (
     ParsedDataset,
     parse_file,
 )
+from app.application.etl.product_identity import provenance_validation_issues
 from app.application.etl.service_support import (
+    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     EXECUTOR,
     SUBMITTED,
     SUBMITTED_LOCK,
@@ -49,6 +51,15 @@ class PreviewServiceMixin:
         target_config_id: str | None = None,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
+        target_detection: dict[str, Any] | None = None
+        if str(target_type or "").strip().lower() == "auto":
+            from app.application.etl.target_detection import detect_etl_target
+
+            target_detection = detect_etl_target(
+                upload.storage_path,
+                suffix=upload.suffix,
+            )
+            target_type = str(target_detection["target_type"])
         adapter = get_adapter(target_type)
         if upload.suffix in KNOWLEDGE_ONLY_SUFFIXES and adapter.type != "knowledge":
             raise EtlError(
@@ -69,6 +80,12 @@ class PreviewServiceMixin:
         requested_preset_id = str(compatibility_preset_id or "").strip()
         if template_id:
             template = self._owned_template(db, template_id, owner_user_id)
+            if template.description == ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION:
+                raise EtlError(
+                    "ETL_SHIPMENT_TEMPLATE_NOT_IMPORT_TEMPLATE",
+                    "发货单版式仅用于开单打印，不能作为导入字段模板",
+                    status_code=409,
+                )
             if template.target_type != target_type:
                 raise EtlError("ETL_TEMPLATE_TARGET_MISMATCH", "模板目标与本次目标不一致")
             version = self._current_version(db, template, owner_user_id)
@@ -120,6 +137,8 @@ class PreviewServiceMixin:
                     "file_sha256": upload.sha256,
                     "batch_id": upload.batch_id,
                     "relative_path": upload.relative_path or upload.file_name,
+                    "requested_target_type": "auto" if target_detection else target_type,
+                    "target_detection": target_detection or {},
                 }
             ),
             draft_json=dump_json(draft),
@@ -179,6 +198,9 @@ class PreviewServiceMixin:
             run = self._owned_run(db, run_id, owner_user_id)
             draft = load_json(run.draft_json, {})
             source_features = dict(dataset.source_features or {})
+            summary = load_json(run.summary_json, {})
+            if summary.get("target_detection"):
+                source_features["target_detection"] = summary["target_detection"]
             if compatibility_preset_id:
                 source_features["compatibility_preset_id"] = compatibility_preset_id
             if not draft.get("field_mappings"):
@@ -196,7 +218,7 @@ class PreviewServiceMixin:
             run.source_features_json = dump_json(source_features)
             run.summary_json = dump_json(
                 {
-                    **load_json(run.summary_json, {}),
+                    **summary,
                     "warnings": dataset.warnings,
                 }
             )
@@ -292,6 +314,7 @@ class PreviewServiceMixin:
                     }
                 )
             issues.extend(apply_validation_rules(normalized, validation_rules))
+            issues.extend(provenance_validation_issues(source.provenance))
             if source.provenance.get("ocr") and not draft.get("ocr_confirmed"):
                 issues.append(
                     {

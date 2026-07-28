@@ -16,13 +16,33 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-def execute_tool_from_payload(data):
-    return _execute_tool_from_payload_inner(data)
+def _normalize_trusted_owner_user_id(value):
+    """Accept only a positive route-injected owner id.
 
+    This helper deliberately has no knowledge of HTTP headers or JSON payloads.
+    Callers at the route boundary own authentication and may pass the resulting
+    identity through this internal argument.
+    """
 
-def _execute_tool_from_payload_inner(data):
     try:
-        logger.info("[DEBUG] /api/tools/execute 收到请求 - data: %s", data)
+        owner_user_id = int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        return None
+    return owner_user_id if owner_user_id > 0 else None
+
+
+def execute_tool_from_payload(data, *, owner_user_id=None):
+    return _execute_tool_from_payload_inner(data, owner_user_id=owner_user_id)
+
+
+def _execute_tool_from_payload_inner(data, *, owner_user_id=None):
+    try:
+        # Tool parameters can contain a one-time print capability (and other
+        # credentials).  Record structure for diagnostics, never raw payloads.
+        logger.info(
+            "[DEBUG] /api/tools/execute 收到请求 - keys: %s",
+            sorted(str(key) for key in data.keys()) if isinstance(data, dict) else [],
+        )
 
         if not data:
             logger.error("[DEBUG] /api/tools/execute 请求数据为空")
@@ -54,8 +74,8 @@ def _execute_tool_from_payload_inner(data):
         )
         if "order_text" in params:
             logger.info(
-                "[DEBUG] order_text=%s",
-                params.get("order_text")[:200] if params.get("order_text") else None,
+                "[DEBUG] order_text_present=true length=%s",
+                len(str(params.get("order_text") or "")),
             )
 
         return dispatch_legacy_tool_payload(
@@ -65,6 +85,7 @@ def _execute_tool_from_payload_inner(data):
             json_response_fn=_j,
             hdr_getter=_hdr,
             parse_order_text_fn=_parse_order_text,
+            owner_user_id=_normalize_trusted_owner_user_id(owner_user_id),
         )
 
     except RECOVERABLE_ERRORS as e:

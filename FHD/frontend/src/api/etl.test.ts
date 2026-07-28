@@ -41,6 +41,7 @@ describe('etlApi', () => {
     await etlApi.rows('run/1', 2, 25, 'new')
     await etlApi.patchDraft('run/1', { allowed_update_fields: ['phone'] })
     await etlApi.execute('run/1', true)
+    await etlApi.saveShipmentTemplate('run/1', '侯雪梅-发货单版式')
     await etlApi.retry('run/1')
     await etlApi.rollback('run/1')
     await etlApi.templates()
@@ -71,6 +72,7 @@ describe('etlApi', () => {
       '/api/etl/runs/run%2F1/rows?page=2&page_size=25&action=new',
       '/api/etl/runs/run%2F1/draft',
       '/api/etl/runs/run%2F1/execute',
+      '/api/etl/runs/run%2F1/shipment-template',
       '/api/etl/runs/run%2F1/retry',
       '/api/etl/runs/run%2F1/rollback',
       '/api/etl/templates',
@@ -83,7 +85,7 @@ describe('etlApi', () => {
     const uploadBody = apiFetchMock.mock.calls[1]?.[1]?.body as FormData
     expect(uploadBody.get('batch_id')).toBe('11111111-1111-4111-8111-111111111111')
     expect(uploadBody.get('relative_path')).toBe('客户资料/test.csv')
-    expect(primeCsrfCookieMock).toHaveBeenCalledTimes(10)
+    expect(primeCsrfCookieMock).toHaveBeenCalledTimes(11)
     expect(etlApi.exportUrl('run/1')).toBe('/api/etl/runs/run%2F1/download')
     expect(etlApi.errorExportUrl('run/1')).toBe('/api/etl/runs/run%2F1/errors/export')
   })

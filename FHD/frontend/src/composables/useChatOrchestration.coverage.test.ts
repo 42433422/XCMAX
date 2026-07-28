@@ -850,7 +850,7 @@ describe('useChatOrchestration coverage – refetchTaskOrderNumber / setCustomOr
   })
 })
 
-describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConfirmTask', () => {
+describe('useChatOrchestration coverage – confirmation gate', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
@@ -862,18 +862,38 @@ describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConf
     vi.useRealTimers()
   })
 
-  it('showTaskConfirm excel_import 类型任务自动确认', () => {
+  it('ETL import preview never executes until the user explicitly confirms', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: '导入完成' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const api = createApi()
     api.showTaskConfirm({
       type: 'excel_import',
       completed: false,
-      api_url: '/api/import',
+      api_url: '/api/etl/runs/run-1/execute',
+      payload: { run_id: 'run-1' },
     })
     expect(api.currentTask.value).toBeTruthy()
-    vi.advanceTimersByTime(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(api.currentTask.value?.completed).not.toBe(true)
+
+    await api.confirmTask()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/etl/runs/run-1/execute',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ run_id: 'run-1' }) }),
+    )
+    vi.unstubAllGlobals()
   })
 
-  it('showTaskConfirm tool_id 为 import_excel_to_database 时自动确认', () => {
+  it('legacy import tool payload also remains a preview until explicit confirmation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: '导入完成' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const api = createApi()
     api.showTaskConfirm({
       type: 'custom',
@@ -881,7 +901,12 @@ describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConf
       api_url: '/api/import',
       payload: { tool_id: 'import_excel_to_database' },
     })
-    vi.advanceTimersByTime(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await api.confirmTask()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
   })
 
   it('showTaskConfirm 已完成任务不自动确认', () => {
@@ -935,6 +960,42 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
       data: { order_number: 'ORD-002' },
     })
     expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('ORD-002')
+  })
+
+  it('shipment preview carries its canonical payload only after the explicit click', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: '发货单已生成' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createApi()
+    const payload = {
+      tool_id: 'shipment_generate',
+      action: '执行',
+      params: {
+        order_text: '打印金汉武发货单，黑棕面用修色精，规格28，3桶',
+        unit_name: '金汉武',
+        products: [
+          { name: '黑棕面用修色精', model_number: '方和', unit_price: 48, tin_spec: 28, quantity_tins: 3 },
+        ],
+      },
+    }
+    api.showTaskConfirm({
+      type: 'shipment_generate',
+      completed: false,
+      api_url: '/api/tools/execute',
+      method: 'POST',
+      payload,
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    await api.confirmTask()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tools/execute',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) }),
+    )
+    vi.unstubAllGlobals()
   })
 })
 

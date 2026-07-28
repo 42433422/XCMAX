@@ -20,6 +20,7 @@ from app.application.etl.service_draft import DraftServiceMixin
 from app.application.etl.service_execution import ExecutionServiceMixin
 from app.application.etl.service_history import HistoryServiceMixin
 from app.application.etl.service_preview import PreviewServiceMixin
+from app.application.etl.service_shipment_templates import ShipmentTemplateServiceMixin
 from app.application.etl.service_support import MAX_FILE_BYTES
 from app.application.etl.service_targets import TargetConfigServiceMixin
 from app.application.etl.service_templates import TemplateServiceMixin
@@ -38,6 +39,7 @@ class EtlService(
     DraftServiceMixin,
     ExecutionServiceMixin,
     TemplateServiceMixin,
+    ShipmentTemplateServiceMixin,
     TargetConfigServiceMixin,
 ):
     def __init__(self, *, adviser: EtlRowAdviser | None = None) -> None:

@@ -65,6 +65,22 @@ def _print_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
     ).strip()
 
 
+def _authenticated_print_owner_id(request: Request) -> int | None:
+    """Read only the middleware-authenticated owner for physical printing.
+
+    Legacy callers still use header/body ids for harmless AgentRun attribution
+    on older routes.  A document print is different: it spends a private,
+    one-click capability and must never treat either client-controlled field
+    as an authorization decision.
+    """
+
+    try:
+        owner_user_id = int(getattr(request.state, "user_id", None) or 0)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner_user_id if owner_user_id > 0 else None
+
+
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
     final_output = getattr(run, "final_output", None)
     node_outputs = dict((final_output or {}).get("node_outputs") or {})
@@ -100,6 +116,7 @@ def _run_print_agent(
     action: str,
     params: dict[str, Any],
     route_path: str,
+    authenticated_owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -115,7 +132,11 @@ def _run_print_agent(
         }
 
     node_id = f"print_{action}"
-    user_id = _print_agent_user_id(request, params)
+    user_id = (
+        str(authenticated_owner_user_id)
+        if authenticated_owner_user_id is not None
+        else _print_agent_user_id(request, params)
+    )
     plan = PlanGraph(
         plan_id=node_id,
         intent=node_id,
@@ -227,28 +248,64 @@ def get_default_printer():
 
 @router.post("/document")
 def print_document(request: Request, data: dict[str, Any] = Body(default_factory=dict)):
+    reservation: dict[str, Any] | None = None
     try:
         file_path = data.get("file_path", "")
         printer_name = data.get("printer_name")
         use_automation = data.get("use_automation", False)
+        print_token = data.get("print_token")
+        order_id = data.get("order_id")
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
         if not os.path.exists(file_path):
             return JSONResponse(
                 {"success": False, "message": f"文件不存在: {file_path}"}, status_code=400
             )
+        from app.application.print_authorization import (
+            finish_document_print_capability,
+            reserve_document_print_capability,
+        )
+
+        owner_user_id = _authenticated_print_owner_id(request)
+        reservation = reserve_document_print_capability(
+            print_token,
+            owner_user_id=owner_user_id,
+            file_path=file_path,
+            order_id=order_id,
+        )
+        if not reservation.get("success"):
+            error_code = str(reservation.get("error_code") or "")
+            status_code = 403 if error_code in {
+                "PRINT_AUTH_REQUIRED",
+                "PRINT_CONFIRMATION_OWNER_MISMATCH",
+            } else 409
+            return JSONResponse(reservation, status_code=status_code)
         result = _run_print_agent(
             request=request,
             action="print_document",
             params={
-                "file_path": str(file_path),
+                "file_path": str(reservation["file_path"]),
                 "printer_name": printer_name,
                 "use_automation": use_automation,
             },
             route_path="/api/print/document",
+            authenticated_owner_user_id=owner_user_id,
         )
+        post_print_receipt = finish_document_print_capability(
+            reservation,
+            print_succeeded=bool(result.get("success")),
+        )
+        reservation = None
+        if result.get("success"):
+            result["post_print_receipt"] = post_print_receipt
+            result["printed_file_path"] = str(data.get("file_path") or "")
+            result["printed_order_id"] = order_id
         return JSONResponse(result, status_code=_print_agent_status_code(result))
     except RECOVERABLE_ERRORS as e:
+        if reservation and reservation.get("success"):
+            from app.application.print_authorization import finish_document_print_capability
+
+            finish_document_print_capability(reservation, print_succeeded=False)
         logger.error("打印文档失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": f"打印失败: {str(e)}"}, status_code=500)
 

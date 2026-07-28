@@ -64,6 +64,7 @@ describe('usePrintService', () => {
       await service.printLabel('/path/to/label.pdf', 3)
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.copies).toBe(3)
+      expect(body.require_confirm).toBe(false)
     })
 
     it('defaults copies to 1', async () => {
@@ -126,7 +127,7 @@ describe('usePrintService', () => {
         status: 200,
         json: async () => ({ success: true, updated: true }),
       } as Response)
-      const result = await service.markAsPrinted('/path/to/doc.pdf', 123)
+      const result = await service.markAsPrinted('/path/to/doc.pdf', 123, 'receipt-123')
       expect(result.success).toBe(true)
       expect(result.message).toContain('打印状态已更新')
     })
@@ -137,9 +138,10 @@ describe('usePrintService', () => {
         status: 200,
         json: async () => ({ success: true, updated: true }),
       } as Response)
-      await service.markAsPrinted('/path/to/doc.pdf', 42)
+      await service.markAsPrinted('/path/to/doc.pdf', 42, 'receipt-42')
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.order_id).toBe(42)
+      expect(body.post_print_receipt).toBe('receipt-42')
     })
 
     it('omits orderId when not provided', async () => {
@@ -148,7 +150,7 @@ describe('usePrintService', () => {
         status: 200,
         json: async () => ({ success: true, updated: true }),
       } as Response)
-      await service.markAsPrinted('/path/to/doc.pdf')
+      await service.markAsPrinted('/path/to/doc.pdf', undefined, 'receipt-no-order')
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.order_id).toBeUndefined()
     })
@@ -159,8 +161,15 @@ describe('usePrintService', () => {
         status: 200,
         json: async () => ({ success: true, updated: false }),
       } as Response)
-      const result = await service.markAsPrinted('/path/to/doc.pdf')
+      const result = await service.markAsPrinted('/path/to/doc.pdf', undefined, 'receipt-failed')
       expect(result.success).toBe(false)
+    })
+
+    it('does not call the mark route without a physical-print receipt', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      const result = await service.markAsPrinted('/path/to/doc.pdf', 42)
+      expect(result.success).toBe(false)
+      expect(fetchSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -181,9 +190,9 @@ describe('usePrintService', () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ success: true, updated: true }),
+        json: async () => ({ success: true, updated: true, post_print_receipt: 'receipt-1' }),
       } as Response)
-      const summary = await service.executePrintTask(['/label1.pdf', '/label2.pdf'], '/doc.pdf', 1)
+      const summary = await service.executePrintTask(['/label1.pdf', '/label2.pdf'], '/doc.pdf', 1, undefined, 'token-1')
       expect(summary.labelSuccess).toBe(2)
       expect(summary.labelFailed).toBe(0)
       expect(summary.shipmentPrinted).toBe(true)
@@ -201,9 +210,9 @@ describe('usePrintService', () => {
         .mockResolvedValue({
           ok: true,
           status: 200,
-          json: async () => ({ success: true, updated: true }),
+          json: async () => ({ success: true, updated: true, post_print_receipt: 'receipt-2' }),
         } as Response)
-      const summary = await service.executePrintTask(['/bad.pdf'], '/doc.pdf', 1)
+      const summary = await service.executePrintTask(['/bad.pdf'], '/doc.pdf', 1, undefined, 'token-2')
       expect(summary.labelFailed).toBe(1)
       expect(summary.logs).toHaveLength(1)
       expect(summary.logs[0]).toContain('标签打印失败')

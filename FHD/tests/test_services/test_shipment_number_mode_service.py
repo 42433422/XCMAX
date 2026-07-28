@@ -11,6 +11,7 @@ Extends test_shipment_number_mode_helpers.py with comprehensive coverage for:
 from __future__ import annotations
 
 import contextlib
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -719,6 +720,214 @@ class TestExecute:
                 parse_order_text=lambda x: {"success": False, "message": "no match"},
             )
         assert status == 400
+
+    def test_confirmed_preview_click_resolves_named_product_from_in_memory_customer_catalog(self, svc):
+        """A confirmation-card click canonicalizes customer/product data.
+
+        The chat preserves the user's explicit 规格/桶数 in its preview.  At
+        execution, the tenant-local customer-product catalogue supplies the
+        canonical customer name, model, and price before document generation.
+        """
+        from app.services.tools_execution.order_parser import _parse_order_text
+
+        mock_app_svc = MagicMock()
+        mock_app_svc.generate_shipment_document.return_value = {
+            "success": True,
+            "doc_name": "金汉武发货单.xlsx",
+            "order_number": "ORD001",
+            "record_id": 1,
+        }
+        in_memory_customer_product_catalog = [
+            {
+                "unit": "金汉武家私",
+                "name": "黑棕面用修色精",
+                "model_number": "方和",
+                "price": 48,
+            }
+        ]
+        with (
+            patch(
+                "app.services.shipment_number_mode_service.get_shipment_app_service",
+                return_value=mock_app_svc,
+            ),
+            patch.object(svc, "_query_active_purchase_unit_names", return_value=["金汉武家私"]),
+            patch.object(
+                svc,
+                "_load_active_product_catalog",
+                return_value=in_memory_customer_product_catalog,
+            ) as load_catalog,
+        ):
+            result, status = svc.execute(
+                order_text="打印金汉武发货单，黑棕面用修色精，规格28，3桶",
+                custom_order_number="",
+                # Exactly the values in the normal/pro confirmation card.  It
+                # contains the user-facing alias and named product; neither
+                # model nor price are invented by chat.
+                direct_unit_name="金汉武",
+                direct_products=[
+                    {
+                        "name": "黑棕面用修色精",
+                        "tin_spec": 28.0,
+                        "quantity_tins": 3,
+                    }
+                ],
+                parse_order_text=_parse_order_text,
+                owner_user_id=42,
+            )
+
+        assert status == 200
+        assert result["success"] is True
+        load_catalog.assert_called_once()
+        call_kwargs = mock_app_svc.generate_shipment_document.call_args.kwargs
+        assert call_kwargs["unit_name"] == "金汉武家私"
+        assert call_kwargs["products"] == [
+            {
+                "name": "黑棕面用修色精",
+                "product_name": "黑棕面用修色精",
+                "model_number": "方和",
+                "quantity_tins": 3,
+                "tin_spec": 28.0,
+                "unit_price": 48,
+            }
+        ]
+        assert call_kwargs["owner_user_id"] == 42
+
+    def test_named_product_not_found_fails_closed(self, svc):
+        from app.services.tools_execution.order_parser import _parse_order_text
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.all.return_value = [
+            SimpleNamespace(
+                model_number="方和",
+                name="其他修色精",
+                unit="金汉武家私",
+                price=48,
+            )
+        ]
+        with (
+            patch.object(svc, "_query_active_purchase_unit_names", return_value=["金汉武家私"]),
+            patch("app.services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+        ):
+            result, status = svc.execute(
+                order_text="打印金汉武发货单，黑棕面用修色精，规格28，3桶",
+                custom_order_number="",
+                direct_unit_name="",
+                direct_products=[],
+                parse_order_text=_parse_order_text,
+            )
+
+        assert status == 400
+        assert result["success"] is False
+        assert result["error_code"] == "NUMBER_MODE_PRODUCT_NAME_NOT_FOUND"
+        assert "型号缺失" in result["message"]
+
+    def test_model_number_cannot_resolve_to_another_customers_product(self, svc):
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.all.return_value = [
+            SimpleNamespace(
+                model_number="9803",
+                name="其他客户产品",
+                unit="其他家具",
+                price=48,
+            )
+        ]
+        with (
+            patch.object(svc, "_query_active_purchase_unit_names", return_value=["金汉武家私"]),
+            patch("app.services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+        ):
+            result, status = svc.execute(
+                order_text="",
+                custom_order_number="",
+                direct_unit_name="金汉武",
+                direct_products=[
+                    {
+                        "model_number": "9803",
+                        "tin_spec": 28,
+                        "quantity_tins": 3,
+                    }
+                ],
+                parse_order_text=lambda _text: {"success": False},
+            )
+
+        assert status == 400
+        assert result["success"] is False
+        assert result["error_code"] == "NUMBER_MODE_STRICT_FAILED"
+        assert result["data"]["match_error_code"] == "NUMBER_MODE_PRODUCT_MODEL_NOT_FOUND"
+        assert "不属于购买单位" in result["message"]
+
+    def test_model_number_ambiguity_within_customer_fails_closed(self, svc):
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.all.return_value = [
+            SimpleNamespace(
+                model_number="9803",
+                name="黑棕面用修色精",
+                unit="金汉武家私",
+                price=48,
+            ),
+            SimpleNamespace(
+                model_number="9803",
+                name="黑棕底漆",
+                unit="金汉武家私",
+                price=49,
+            ),
+        ]
+        with (
+            patch.object(svc, "_query_active_purchase_unit_names", return_value=["金汉武家私"]),
+            patch("app.services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+        ):
+            result, status = svc.execute(
+                order_text="",
+                custom_order_number="",
+                direct_unit_name="金汉武",
+                direct_products=[
+                    {
+                        "model_number": "9803",
+                        "tin_spec": 28,
+                        "quantity_tins": 3,
+                    }
+                ],
+                parse_order_text=lambda _text: {"success": False},
+            )
+
+        assert status == 400
+        assert result["success"] is False
+        assert result["error_code"] == "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS"
+        assert len(result["data"]["candidates"]) == 2
+
+    def test_named_product_ambiguity_fails_closed(self, svc):
+        from app.services.tools_execution.order_parser import _parse_order_text
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.all.return_value = [
+            SimpleNamespace(
+                model_number="方和",
+                name="黑棕面用修色精",
+                unit="金汉武家私",
+                price=48,
+            ),
+            SimpleNamespace(
+                model_number="方圆",
+                name="黑棕面用修色精",
+                unit="金汉武家私",
+                price=49,
+            ),
+        ]
+        with (
+            patch.object(svc, "_query_active_purchase_unit_names", return_value=["金汉武家私"]),
+            patch("app.services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+        ):
+            result, status = svc.execute(
+                order_text="开单 金汉武，黑棕面用修色精，规格28，3桶",
+                custom_order_number="",
+                direct_unit_name="",
+                direct_products=[],
+                parse_order_text=_parse_order_text,
+            )
+
+        assert status == 400
+        assert result["success"] is False
+        assert result["error_code"] == "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS"
+        assert len(result["data"]["candidates"]) == 2
 
 
 # ---------------------------------------------------------------------------

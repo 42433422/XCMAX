@@ -1692,8 +1692,8 @@ class TestExecuteProModeTools:
             {"text": "generate shipment", "data": {}},
             "this is a very long original message for testing",
         )
-        assert "toolCall" in result
-        assert result["toolCall"]["tool_id"] == "shipment_generate"
+        assert result["task"]["type"] == "shipment_generate"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_all_slots(self):
         svc = _make_svc()
@@ -1705,9 +1705,11 @@ class TestExecuteProModeTools:
             {"text": "gen", "data": {}},
             "hi",
         )
-        assert "toolCall" in result
-        params = result["toolCall"]["params"]
-        assert "ACME" in params["order_text"]
+        assert result["task"]["type"] == "shipment_generate"
+        params = result["task"]["payload"]["params"]
+        assert params["unit_name"] == "ACME"
+        assert params["products"][0]["model_number"] == "M1"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_products_list(self):
         svc = _make_svc()
@@ -1720,7 +1722,8 @@ class TestExecuteProModeTools:
             {"text": "gen", "data": {}},
             "hi",
         )
-        assert "toolCall" in result
+        assert result["task"]["type"] == "shipment_generate"
+        assert "toolCall" not in result
 
     def test_shipment_generate_fallback_to_ai_text(self):
         svc = _make_svc()
@@ -1732,7 +1735,8 @@ class TestExecuteProModeTools:
             {"text": "ai response text", "data": {}},
             "",
         )
-        assert result["toolCall"]["params"]["order_text"] == "ai response text"
+        assert "task" not in result
+        assert "订单信息不完整" in result["response"]
 
     def test_other_tool_pro_mode(self):
         svc = _make_svc()
@@ -1761,8 +1765,9 @@ class TestExecuteProModeTools:
                 {"text": "gen", "data": {}},
                 "long original message here",
             )
-        assert result["toolCall"]["params"]["unit_name"] == "Parsed"
-        assert result["toolCall"]["params"]["products"][0]["model"] == "X1"
+        assert result["task"]["payload"]["params"]["unit_name"] == "Parsed"
+        assert result["task"]["payload"]["params"]["products"][0]["model"] == "X1"
+        assert "toolCall" not in result
 
     def test_shipment_generate_parse_error_falls_back(self):
         svc = _make_svc()
@@ -1778,7 +1783,8 @@ class TestExecuteProModeTools:
                 {"text": "gen", "data": {}},
                 "hi",
             )
-        assert "toolCall" in result
+        assert result["task"]["type"] == "shipment_generate"
+        assert "toolCall" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -3449,11 +3455,15 @@ class TestExecuteNormalModeTools:
 
     def test_shipment_generate(self):
         svc = _make_svc()
-        svc._execute_shipment_generate = Mock(return_value={"success": True, "shipment": True})
+        svc._execute_shipment_generate = Mock()
+        svc._build_shipment_confirmation_preview = Mock(
+            return_value={"success": True, "shipment_preview": True}
+        )
         result = svc._execute_normal_mode_tools(
             {"data": {}}, "shipment_generate", {}, {"text": "gen"}, {}
         )
-        assert result["shipment"] is True
+        assert result["shipment_preview"] is True
+        svc._execute_shipment_generate.assert_not_called()
 
     def test_shipments_query(self):
         svc = _make_svc()

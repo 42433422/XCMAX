@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
 from app.application.etl.parsers import MAX_ROWS
+from app.application.etl.product_identity import provenance_validation_issues
 from app.application.etl.service_support import (
     ALLOWED_VALIDATION_OPS,
     EXECUTOR,
@@ -244,6 +245,7 @@ class DraftServiceMixin:
                     )
                 issues.extend(apply_validation_rules(normalized, validation_rules))
                 provenance = load_json(row.provenance_json, {})
+                issues.extend(provenance_validation_issues(provenance))
                 if provenance.get("ocr") and not draft.get("ocr_confirmed"):
                     issues.append(
                         {

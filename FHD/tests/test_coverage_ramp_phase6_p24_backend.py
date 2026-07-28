@@ -364,8 +364,9 @@ class TestPrintRoutesDocument:
                 "/api/print/document",
                 json={"file_path": "/tmp/x.pdf", "printer_name": "P1"},
             )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
+        assert r.status_code == 403
+        assert r.json()["error_code"] == "PRINT_AUTH_REQUIRED"
+        svc.return_value.print_document.assert_not_called()
 
     def test_print_document_failed_result_returns_400(self, print_client: TestClient):
         with (
@@ -377,7 +378,9 @@ class TestPrintRoutesDocument:
                 "message": "printer busy",
             }
             r = print_client.post("/api/print/document", json={"file_path": "/tmp/x.pdf"})
-        assert r.status_code == 400
+        assert r.status_code == 403
+        assert r.json()["error_code"] == "PRINT_AUTH_REQUIRED"
+        svc.return_value.print_document.assert_not_called()
 
     def test_print_document_exception(self, print_client: TestClient):
         with (
@@ -386,7 +389,9 @@ class TestPrintRoutesDocument:
         ):
             svc.return_value.print_document.side_effect = RuntimeError("boom")
             r = print_client.post("/api/print/document", json={"file_path": "/tmp/x.pdf"})
-        assert r.status_code == 500
+        assert r.status_code == 403
+        assert r.json()["error_code"] == "PRINT_AUTH_REQUIRED"
+        svc.return_value.print_document.assert_not_called()
 
 
 class TestPrintRoutesLabel:

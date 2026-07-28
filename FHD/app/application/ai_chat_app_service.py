@@ -1358,7 +1358,7 @@ class AIChatApplicationService(
                 if parsed_quick.get("success"):
                     # 结构与 _build_tool_call_response 一致，避免把多余键摊进 toolCall.params
                     quick_ai = {
-                        "text": "已识别订单，正在生成发货单…",
+                        "text": "已识别订单，请确认生成发货单。",
                         "action": "tool_call",
                         "data": {
                             "tool_key": "shipment_generate",
@@ -2033,7 +2033,13 @@ class AIChatApplicationService(
             )
         else:
             response_data = self._execute_normal_mode_tools(
-                response_data, tool_key, parsed_params, ai_result, result_data
+                response_data,
+                tool_key,
+                parsed_params,
+                ai_result,
+                result_data,
+                slots=slots,
+                original_message=original_message,
             )
 
         return response_data
