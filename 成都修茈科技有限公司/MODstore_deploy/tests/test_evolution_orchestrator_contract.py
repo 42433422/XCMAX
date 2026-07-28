@@ -21,6 +21,18 @@ def test_orchestrator_uses_lightweight_bounded_source_path():
     assert "EVOLUTION_IMPLEMENT_WORKFLOW" not in text
 
 
+def test_orchestrator_recovers_actions_bot_suppressed_push_bootstrap():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert "workflow_run:" in text
+    assert "workflows: ['CI/CD Pipeline']" in text
+    assert "github.event.workflow_run.conclusion == 'success'" in text
+    assert "github.event.workflow_run.head_branch == 'main'" in text
+    assert "Decide whether workflow-run bootstrap should scan" in text
+    assert "git diff-tree --no-commit-id --name-only" in text
+    assert "should_scan=false" in text
+    assert "if: steps.scan_scope.outputs.should_scan == 'true'" in text
+
+
 def test_orchestrator_source_and_published_copy_are_exact():
     source = SOURCE.read_text(encoding="utf-8")
     published = PUBLISHED.read_text(encoding="utf-8")
