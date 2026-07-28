@@ -807,6 +807,94 @@ def test_forced_history_cannot_inflate_unattended_code_progress() -> None:
     )
 
 
+def test_scheduler_automated_remediation_counts_exact_deploy_chain() -> None:
+    run_id = "automated-remediation-run"
+    merge_sha = "b" * 40
+    workflow_run_id = "workflow-automated-remediation"
+    rows = [
+        {
+            "run_id": run_id,
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "automated_remediation",
+            "force": False,
+        },
+        *[
+            {
+                "run_id": run_id,
+                "phase": "step",
+                "step": step,
+                "status": "success",
+                "ok": True,
+            }
+            for step in ("code", "review", "qa")
+        ],
+        {
+            "run_id": run_id,
+            "phase": "complete",
+            "status": "completed_merge_requested",
+        },
+        {
+            "run_id": run_id,
+            "phase": "deployment",
+            "event": "deploy_dispatch",
+            "environment": "production",
+            "status": "accepted",
+            "ok": True,
+            "merge_sha": merge_sha,
+            "workflow_run_id": workflow_run_id,
+        },
+        {
+            "run_id": run_id,
+            "phase": "deployment",
+            "event": "post_deploy_verified",
+            "environment": "production",
+            "status": "verified",
+            "ok": True,
+            "identity_verified": True,
+            "merge_sha": merge_sha,
+            "workflow_run_id": workflow_run_id,
+        },
+        {
+            "run_id": run_id,
+            "phase": "merge",
+            "event": "merge_completed",
+            "environment": "production",
+            "status": "completed_merged",
+            "ok": True,
+            "merge_sha": merge_sha,
+            "workflow_run_id": workflow_run_id,
+        },
+    ]
+
+    snapshot = build_founder_autonomy_snapshot(
+        runtime={
+            "evidence": {
+                "milestone_rows": rows,
+                "latest_complete": rows[4],
+                "open_run_ids": [],
+            }
+        },
+        generated_at=NOW,
+    )
+    code = _dimensions(snapshot)["code"]
+
+    assert code["progress"] == 100
+    assert {gate["key"] for gate in code["evidence"]} == {
+        "write",
+        "review",
+        "qa",
+        "merge",
+        "dispatch",
+        "verify",
+    }
+    assert snapshot["live_summary"]["latest_autonomous_complete_status"] == (
+        "completed_merge_requested"
+    )
+    assert snapshot["live_summary"]["real_deploy_dispatched"] is True
+    assert snapshot["live_summary"]["deploy_verified"] is True
+
+
 def test_fault_loop_cannot_mix_repair_and_recovery_across_run_ids() -> None:
     snapshot = build_founder_autonomy_snapshot(
         runtime={
