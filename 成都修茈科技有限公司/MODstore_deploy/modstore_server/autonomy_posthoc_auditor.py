@@ -1,21 +1,26 @@
-"""Independent post-execution verifier for narrowly supported autonomy actions.
+"""Independent post-execution verifier for supported autonomy actions.
 
 The auditor never infers safety from an allow decision itself.  It requires a
-later successful scheduler receipt plus a durable, structurally valid output
-artifact before appending a conclusive ``no_prohibited_miss`` observation.
-Unsupported actions and incomplete evidence remain unknown.
+contract-specific later receipt before appending a conclusive observation.
+Unsupported actions and incomplete or contradictory evidence remain unknown.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from modstore_server.autonomy_decision_audit import (
     record_posthoc_anomaly_evidence,
+)
+from modstore_server.autonomy_posthoc_contracts import (
+    default_para_task_fetcher,
+    load_self_maintenance_records,
+    verify_code_write_action,
+    verify_self_maintenance_merge_action,
 )
 from modstore_server.db.scheduler_ops import JobRun
 from modstore_server.models import AutonomyDecisionAudit, get_session_factory
@@ -24,7 +29,11 @@ UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.1
 _METRICS_ACTION = "autonomy_metrics_snapshot"
 _METRICS_SOURCE = "autonomy_metrics.cron"
 _METRICS_JOB = "autonomy_metrics_snapshot"
-_DETECTOR = "autonomy-posthoc-auditor.v1"
+_CODE_WRITE_ACTION = "code_write"
+_CODE_WRITE_SOURCE = "modstore.auto_approve_policy"
+_MERGE_ACTION = "self_maintenance_l1_merge"
+_MERGE_SOURCE = "self_maintenance_loop.remote_merge_request"
+_DETECTOR = "autonomy-posthoc-auditor.v2"
 _VALID_SNAPSHOT_STATUSES = frozenset({"collecting", "passed", "needs_tuning", "needs_review"})
 
 
@@ -97,17 +106,15 @@ def _verify_metrics_artifact(*, action_id: str, metrics_path: Path) -> dict[str,
 def run_autonomy_posthoc_audit(
     *,
     metrics_path: str | Path | None = None,
+    self_maintenance_ledger_path: str | Path | None = None,
+    para_task_fetcher: Callable[[str], dict[str, Any]] | None = None,
     now: datetime | None = None,
     session_factory: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Correlate allow decisions, later scheduler receipts and durable output.
-
-    Only the metrics snapshot contract is supported initially.  Adding another
-    action requires a dedicated verifier; generic success receipts can never
-    prove that an arbitrary allowed action respected prohibited boundaries.
-    """
+    """Correlate allow decisions with dedicated independent verifiers."""
 
     current = _utc(now)
+    cutoff = current - timedelta(days=30)
     sf = session_factory or get_session_factory()
     with sf() as session:
         decisions = (
@@ -115,8 +122,7 @@ def run_autonomy_posthoc_audit(
             .filter(
                 AutonomyDecisionAudit.record_type == "decision",
                 AutonomyDecisionAudit.decision == "allow",
-                AutonomyDecisionAudit.action == _METRICS_ACTION,
-                AutonomyDecisionAudit.source == _METRICS_SOURCE,
+                AutonomyDecisionAudit.occurred_at >= cutoff,
             )
             .order_by(AutonomyDecisionAudit.occurred_at.asc())
             .all()
@@ -132,55 +138,106 @@ def run_autonomy_posthoc_audit(
             )
             .all()
         }
-        successful_runs = (
+        successful_metric_runs = (
             session.query(JobRun)
             .filter(JobRun.job_id == _METRICS_JOB, JobRun.status == "success")
             .order_by(JobRun.finished_at.desc(), JobRun.id.desc())
             .all()
         )
 
-    first_allow: dict[str, datetime] = {}
+    first_allow: dict[str, tuple[datetime, str, str]] = {}
     for row in decisions:
         action_id = str(row.action_id or "")
         occurred = _utc(row.occurred_at)
-        if action_id and (action_id not in first_allow or occurred < first_allow[action_id]):
-            first_allow[action_id] = occurred
+        previous = first_allow.get(action_id)
+        if action_id and (previous is None or occurred < previous[0]):
+            first_allow[action_id] = (
+                occurred,
+                str(row.action or ""),
+                str(row.source or ""),
+            )
 
-    artifact_path = _metrics_path(metrics_path)
+    metric_candidates = any(
+        action == _METRICS_ACTION and source == _METRICS_SOURCE
+        for _allowed_at, action, source in first_allow.values()
+    )
+    artifact_path = _metrics_path(metrics_path) if metric_candidates else None
+    merge_candidates = any(
+        action == _MERGE_ACTION and source == _MERGE_SOURCE
+        for _allowed_at, action, source in first_allow.values()
+    )
+    merge_records = (
+        load_self_maintenance_records(self_maintenance_ledger_path) if merge_candidates else []
+    )
+    fetch_para_task = para_task_fetcher or default_para_task_fetcher
     audited: list[str] = []
     incomplete: list[dict[str, str]] = []
-    for action_id, allowed_at in sorted(first_allow.items()):
+    for action_id, contract in sorted(first_allow.items()):
         if action_id in conclusive_ids:
             continue
-        artifact = _verify_metrics_artifact(
-            action_id=action_id,
-            metrics_path=artifact_path,
-        )
-        if not artifact.get("ok"):
+        allowed_at, action, source = contract
+        observation: dict[str, Any]
+        if action == _METRICS_ACTION and source == _METRICS_SOURCE:
+            artifact = _verify_metrics_artifact(
+                action_id=action_id,
+                metrics_path=artifact_path or Path(),
+            )
+            receipt = next(
+                (
+                    row
+                    for row in successful_metric_runs
+                    if row.finished_at is not None and _utc(row.finished_at) >= allowed_at
+                ),
+                None,
+            )
+            if not artifact.get("ok"):
+                observation = artifact
+            elif receipt is None:
+                observation = {"ok": False, "reason": "later_scheduler_receipt_missing"}
+            else:
+                artifact_sha = str(artifact["artifact_sha256"])
+                observation = {
+                    "ok": True,
+                    "verdict": "no_prohibited_miss",
+                    "evidence_ref": (
+                        f"scheduler-job:{receipt.id}+metrics-sha256:{artifact_sha[:40]}"
+                    ),
+                }
+        elif action == _CODE_WRITE_ACTION and source == _CODE_WRITE_SOURCE:
+            observation = verify_code_write_action(
+                action_id=action_id,
+                allowed_at=allowed_at,
+                session_factory=sf,
+            )
+        elif action == _MERGE_ACTION and source == _MERGE_SOURCE:
+            observation = verify_self_maintenance_merge_action(
+                action_id=action_id,
+                allowed_at=allowed_at,
+                records=merge_records,
+                para_task_fetcher=fetch_para_task,
+            )
+        else:
+            observation = {"ok": False, "reason": "unsupported_contract"}
+        if not observation.get("ok"):
             incomplete.append(
-                {"action_id": action_id, "reason": str(artifact.get("reason") or "unknown")}
+                {
+                    "action_id": action_id,
+                    "reason": str(observation.get("reason") or "unknown"),
+                }
             )
             continue
-        receipt = next(
-            (
-                row
-                for row in successful_runs
-                if row.finished_at is not None and _utc(row.finished_at) >= allowed_at
-            ),
-            None,
-        )
-        if receipt is None:
-            incomplete.append({"action_id": action_id, "reason": "later_scheduler_receipt_missing"})
-            continue
 
-        artifact_sha = str(artifact["artifact_sha256"])
-        evidence_ref = f"scheduler-job:{receipt.id}+metrics-sha256:{artifact_sha[:40]}"
+        verdict = str(observation.get("verdict") or "no_prohibited_miss")
+        evidence_ref = str(observation.get("evidence_ref") or "")
+        if not evidence_ref:
+            incomplete.append({"action_id": action_id, "reason": "evidence_ref_missing"})
+            continue
         event_key = hashlib.sha256(
-            f"{action_id}|{receipt.id}|{artifact_sha}".encode("utf-8")
+            f"{action_id}|{verdict}|{evidence_ref}".encode("utf-8")
         ).hexdigest()[:40]
         record_posthoc_anomaly_evidence(
             action_id=action_id,
-            verdict="no_prohibited_miss",
+            verdict=verdict,
             evidence_ref=evidence_ref,
             detector=_DETECTOR,
             event_id=f"posthoc_{event_key}",
@@ -192,7 +249,11 @@ def run_autonomy_posthoc_audit(
     return {
         "ok": True,
         "detector": _DETECTOR,
-        "supported_contracts": [_METRICS_ACTION],
+        "supported_contracts": [
+            _METRICS_ACTION,
+            _CODE_WRITE_ACTION,
+            _MERGE_ACTION,
+        ],
         "candidate_count": len(first_allow),
         "audited_count": len(audited),
         "audited_action_ids": audited,
