@@ -83,7 +83,8 @@ jobs:
             -H "Authorization: Bearer $OPS_TOKEN" \
             -H "Content-Type: application/json" \
             --data "$payload")"
-          printf '%s\n' "$response" | jq -e '.ok == true'
+          printf '%s\n' "$response" | jq -e --arg run_id "$run_id" \
+            '.ok == true and (($run_id == "") or .recorded == true or .idempotent == true)'
 
       - name: Derive changed employee-pack identities
         env:
