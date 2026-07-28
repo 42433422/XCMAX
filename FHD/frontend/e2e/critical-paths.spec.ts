@@ -300,7 +300,7 @@ test.describe('P0 critical paths', () => {
     const loginText = await loginResponse.text();
     expect(loginResponse.status(), loginText).toBe(200);
     expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
-    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/);
+    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);

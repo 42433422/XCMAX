@@ -779,7 +779,6 @@ def web_search_result_titles(
     return out
 
 
-
 # 联系页联网检索实现见 contact_company_web_search（防 oversized 棘轮回退）
 from modstore_server.contact_company_web_search import (  # noqa: E402
     _contact_company_web_fetch_one,
@@ -790,7 +789,6 @@ from modstore_server.contact_company_web_search import (  # noqa: E402
     rank_contact_serp_rows,
     search_company_names_via_web,
 )
-
 
 
 async def _web_search_free_tier(

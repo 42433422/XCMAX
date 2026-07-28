@@ -12,12 +12,12 @@ import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from modstore_server.research_tools import (
-    contact_web_company_search_enabled,
-    _contact_searxng_fallback_bases,
     _company_name_key,
+    _contact_searxng_fallback_bases,
     _query_matches_company_name,
     _request_error_fragment,
     contact_searxng_search,
+    contact_web_company_search_enabled,
     duckduckgo_html_search,
     extract_company_names_from_text,
     is_plausible_company_name,

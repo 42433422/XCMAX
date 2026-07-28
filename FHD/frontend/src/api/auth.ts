@@ -56,6 +56,26 @@ export interface RegisterRequest {
   industry_id?: string;
 }
 
+const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const;
+
+function isTransientLoginError(error: unknown): boolean {
+  const status = Number((error as { status?: unknown } | null)?.status);
+  return status === 0 || status >= 500;
+}
+
+async function withTransientLoginRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientLoginError(error) || attempt >= LOGIN_RETRY_DELAYS_MS.length) {
+        throw error;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, LOGIN_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
 async function invalidateSessionScopedUiCaches(): Promise<void> {
   invalidateEnterpriseSessionCache();
   try {
@@ -74,13 +94,19 @@ export const authApi = {
   ): Promise<ApiResponse<LoginResponse>> {
     await primeCsrfCookie();
     invalidateEnterpriseSessionCache();
-    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/login', {
-      username,
-      password,
-      account_kind: accountKind,
-    }, {
-      timeoutMs: 30_000,
-    });
+    const res = await withTransientLoginRetry(() =>
+      api.post<ApiResponse<LoginResponse>>(
+        '/api/auth/login',
+        {
+          username,
+          password,
+          account_kind: accountKind,
+        },
+        {
+          timeoutMs: 30_000,
+        },
+      ),
+    );
     await invalidateSessionScopedUiCaches();
     if (res?.success === true || res?.data?.success === true) {
       markEnterpriseSessionValid();
@@ -95,13 +121,19 @@ export const authApi = {
   ): Promise<ApiResponse<LoginResponse>> {
     await primeCsrfCookie();
     invalidateEnterpriseSessionCache();
-    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/login-with-phone-code', {
-      phone,
-      code,
-      account_kind: accountKind,
-    }, {
-      timeoutMs: 30_000,
-    });
+    const res = await withTransientLoginRetry(() =>
+      api.post<ApiResponse<LoginResponse>>(
+        '/api/auth/login-with-phone-code',
+        {
+          phone,
+          code,
+          account_kind: accountKind,
+        },
+        {
+          timeoutMs: 30_000,
+        },
+      ),
+    );
     await invalidateSessionScopedUiCaches();
     if (res?.success === true || res?.data?.success === true) {
       markEnterpriseSessionValid();

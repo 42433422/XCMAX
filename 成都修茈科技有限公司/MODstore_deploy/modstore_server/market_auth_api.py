@@ -37,6 +37,7 @@ from modstore_server.auth_service import (
     register_user,
     verify_password,
 )
+from modstore_server.contact_company_match import build_company_match_payload
 from modstore_server.digest_identity import normalize_digest_identity_code, verify_digest_identity
 from modstore_server.digest_identity_peer_api import call_upstream_digest_verify
 from modstore_server.email_service import (
@@ -63,7 +64,6 @@ from modstore_server.models import (
     VerificationCode,
     get_session_factory,
 )
-from modstore_server.contact_company_match import build_company_match_payload
 from modstore_server.user_avatar_service import (
     _MIME_BY_SUFFIX,
     avatar_path_column,
