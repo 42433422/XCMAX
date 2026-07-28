@@ -6,15 +6,21 @@ import {
   AI_REVIEW_CHUNK_MAX_CHARS,
   AI_REVIEW_MAX_CHUNKS,
   AUTO_PR_LABELS,
+  BOT_MERGE_WATCHDOG_STALE_MS,
   CI_TIMEOUT_POLICY,
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
   INITIAL_PR_LABELS,
+  TASK_CONCURRENCY,
+  botMergeCheckArgs,
+  botMergeWatchdogDecision,
   buildMergeConflictPayload,
   blockingMergePollReason,
   chunkReviewDiff,
+  decodeSelfUpdatePayload,
   forbiddenAutoMergePaths,
   extractSelfMaintenanceRunId,
+  gitBlobSha,
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
   isTransientMergeFailure,
@@ -23,11 +29,53 @@ import {
   parseMergePollSnapshot,
   parseGithubRepo,
   parseReviewVerdict,
+  requiredLabelsPresent,
   reviewDiffInChunks,
   resolveReviewWithFallback,
+  runTaskQueueFairly,
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
 } from './merge_worker.mjs';
+
+test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
+  const source = Buffer.from(
+    '#!/usr/bin/env node\n// Para /api/tasks/merge-queue test fixture\n',
+    'utf8',
+  );
+  const payload = {
+    content: source.toString('base64'),
+    encoding: 'base64',
+    sha: gitBlobSha(source),
+  };
+  const decoded = decodeSelfUpdatePayload(payload);
+  assert.deepEqual(decoded.source, source);
+  assert.equal(decoded.blobSha, payload.sha);
+  assert.match(decoded.digest, /^[0-9a-f]{64}$/);
+});
+
+test('self-update rejects tampered or unrelated GitHub content', () => {
+  const source = Buffer.from(
+    '#!/usr/bin/env node\n// Para /api/tasks/merge-queue test fixture\n',
+    'utf8',
+  );
+  assert.throws(
+    () => decodeSelfUpdatePayload({
+      content: Buffer.from(`${source.toString('utf8')}tampered`).toString('base64'),
+      encoding: 'base64',
+      sha: gitBlobSha(source),
+    }),
+    /self-update-blob-sha-mismatch/,
+  );
+  const unrelated = Buffer.from('#!/usr/bin/env node\nconsole.log("other")\n', 'utf8');
+  assert.throws(
+    () => decodeSelfUpdatePayload({
+      content: unrelated.toString('base64'),
+      encoding: 'base64',
+      sha: gitBlobSha(unrelated),
+    }),
+    /self-update-source-identity-invalid/,
+  );
+});
 
 
 test('merge review veto uses the Para merge-conflict API contract', () => {
@@ -59,6 +107,17 @@ test('veto labels use the issue labels REST endpoint', () => {
     githubIssueLabelEndpoint('42433422/XCMAX', '555', 'hold-merge'),
     'repos/42433422/XCMAX/issues/555/labels/hold-merge',
   );
+});
+
+test('label writes are idempotent when the remote state already satisfies the gate', () => {
+  assert.equal(
+    requiredLabelsPresent(
+      [{ name: 'risk:r0' }, { name: 'hold-merge' }],
+      ['hold-merge'],
+    ),
+    true,
+  );
+  assert.equal(requiredLabelsPresent(['risk:r0'], ['risk:r0', 'hold-merge']), false);
 });
 
 
@@ -114,6 +173,111 @@ test('merge retries use bounded exponential backoff', () => {
   assert.ok(Date.parse(retry.next_retry_at) > 1_000);
 });
 
+test('merge task queue uses bounded concurrency without head-of-line blocking', async () => {
+  let releaseFirst;
+  const firstBlocked = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstStarted = false;
+  let secondCompleted = false;
+
+  const run = runTaskQueueFairly(
+    ['first', 'second', 'third'],
+    async (item) => {
+      if (item === 'first') {
+        firstStarted = true;
+        await firstBlocked;
+      }
+      if (item === 'second') secondCompleted = true;
+      return item;
+    },
+    2,
+  );
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(firstStarted, true);
+  assert.equal(secondCompleted, true);
+  releaseFirst();
+  const results = await run;
+  assert.deepEqual(results.map((result) => result.value), ['first', 'second', 'third']);
+  assert.ok(TASK_CONCURRENCY >= 1 && TASK_CONCURRENCY <= 8);
+});
+
+test('merge task queue never exceeds the configured concurrency', async () => {
+  let active = 0;
+  let peak = 0;
+  const results = await runTaskQueueFairly(
+    [1, 2, 3, 4, 5],
+    async (item) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return item * 2;
+    },
+    2,
+  );
+  assert.equal(peak, 2);
+  assert.deepEqual(results.map((result) => result.value), [2, 4, 6, 8, 10]);
+});
+
+test('bot merge watchdog dispatches only for stale or missing workflow runs', () => {
+  const nowMs = Date.parse('2026-07-28T12:30:00Z');
+  assert.equal(
+    botMergeWatchdogDecision(
+      [{ status: 'completed', createdAt: '2026-07-28T12:00:01Z' }],
+      { nowMs, staleAfterMs: 45 * 60 * 1000 },
+    ).dispatch,
+    false,
+  );
+  assert.deepEqual(
+    botMergeWatchdogDecision(
+      [{ status: 'completed', createdAt: '2026-07-28T11:00:00Z' }],
+      { nowMs, staleAfterMs: 45 * 60 * 1000 },
+    ),
+    {
+      dispatch: true,
+      reason: 'workflow-stale',
+      latest_run_at: '2026-07-28T11:00:00.000Z',
+    },
+  );
+  assert.equal(botMergeWatchdogDecision([], { nowMs }).reason, 'workflow-missing');
+  assert.ok(BOT_MERGE_WATCHDOG_STALE_MS >= 30 * 60 * 1000);
+});
+
+test('bot merge watchdog respects active runs and dispatch cooldown', () => {
+  const nowMs = Date.parse('2026-07-28T12:30:00Z');
+  assert.equal(
+    botMergeWatchdogDecision(
+      [{ status: 'in_progress', createdAt: '2026-07-28T10:00:00Z' }],
+      { nowMs, staleAfterMs: 45 * 60 * 1000 },
+    ).reason,
+    'workflow-active',
+  );
+  assert.equal(
+    botMergeWatchdogDecision(
+      [{ status: 'completed', createdAt: '2026-07-28T10:00:00Z' }],
+      {
+        nowMs,
+        staleAfterMs: 45 * 60 * 1000,
+        lastDispatchAtMs: nowMs - 5 * 60 * 1000,
+        dispatchCooldownMs: 30 * 60 * 1000,
+      },
+    ).reason,
+    'dispatch-cooldown',
+  );
+});
+
+test('bot merge watchdog uses the workflow-runs REST API instead of gh workflow resolution', () => {
+  const source = readFileSync(
+    new URL('./merge_worker.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /actions\/workflows\/\$\{BOT_MERGE_WORKFLOW\}\/runs/);
+  assert.match(source, /payload\.workflow_runs/);
+  assert.doesNotMatch(source, /'run', 'list',[\s\S]*'--workflow', BOT_MERGE_WORKFLOW/);
+});
+
 
 test('operational failures retry but explicit review and identity vetoes are terminal', () => {
   assert.equal(isTransientMergeFailure('HTTP 503 service unavailable'), true);
@@ -131,7 +295,7 @@ test('operational failures retry but explicit review and identity vetoes are ter
   assert.equal(isTransientMergeFailure('post-dispatch-check-failed: PR #730 checks=test'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-fail: required checks'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-needs-human: escalate'), false);
-  assert.equal(isTransientMergeFailure('required checks failed or unavailable'), false);
+  assert.equal(isTransientMergeFailure('bot merge checks failed or unavailable'), false);
 });
 
 test('merge polling stops for a restored human veto or terminal check failure', () => {
@@ -231,9 +395,13 @@ test('workflow correlation selects the newest run for the exact merge SHA', () =
 
 
 test('CI wait policy is explicit in code', () => {
-  assert.equal(CI_WAIT_MODE, 'required');
+  assert.equal(CI_WAIT_MODE, 'bot-merge-gate');
   assert.equal(CI_WAIT_TIMEOUT_MS >= 60_000, true);
   assert.equal(['fail', 'human'].includes(CI_TIMEOUT_POLICY), true);
+  const args = botMergeCheckArgs(801, '42433422/XCMAX');
+  assert.equal(args.includes('--required'), false);
+  assert.deepEqual(args.slice(0, 3), ['pr', 'checks', '801']);
+  assert.deepEqual(args.slice(-2), ['--repo', '42433422/XCMAX']);
 });
 
 
@@ -362,6 +530,8 @@ test('installer repairs stale Node paths and reloads the LaunchAgent definition'
   assert.match(installer, /configured_node=.*ProgramArguments:0/);
   assert.match(installer, /NODE_BIN=.*command -v node/);
   assert.match(installer, /Set :ProgramArguments:0 \$NODE_BIN/);
+  assert.match(installer, /MERGE_WORKER_SELF_UPDATE string 1/);
+  assert.match(installer, /MERGE_WORKER_SELF_UPDATE_BRANCH string main/);
   assert.match(installer, /launchctl bootout "\$target"/);
   assert.match(installer, /bootstrap_agent\(\)/);
   assert.match(installer, /for attempt in 1 2 3/);
