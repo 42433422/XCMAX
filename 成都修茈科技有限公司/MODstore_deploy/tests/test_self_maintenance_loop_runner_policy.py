@@ -21,6 +21,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _employee_result_ok,
     _existing_kb_schema_retry_item,
     _extract_failure_reason,
+    _failed_open_item_identity,
     _find_delivery_validation,
     _find_pr_number_for_branch,
     _focused_test_command,
@@ -3404,6 +3405,38 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
     result = _find_pr_number_for_branch("any-branch")
     assert result is None
+
+
+def test_over_retry_non_code_duplicate_enqueue_removes_item(monkeypatch):
+    """人工队列返回 duplicate 时视为已升级，应从 open_items 移除。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    item = {
+        "branch": "devfleet/codex/review-dup",
+        "created_at": "2026-07-24T00:00:00+00:00",
+        "kind": "failed_steps",
+        "para_task_id": "task-dup",
+        "retry_count": 3,
+        "run_id": "run-dup",
+        "steps": ["review"],
+    }
+    memory = {"open_items": [item], "recent_runs": []}
+
+    def fake_enqueue(**kwargs):
+        return {"queued": False, "reason": "duplicate", "fingerprint": "abc"}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result is None
+    assert memory["open_items"] == []
+    assert item.get("escalated") is True
 
 
 def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monkeypatch, caplog):
