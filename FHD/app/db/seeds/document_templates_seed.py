@@ -1,10 +1,10 @@
 """开箱 / 演示用初始单据模板种子（幂等）。
 
 目标：
-1. 把仓库内 ``resources/templates`` 的发货单 Excel、价格表 Word 复制到运行时目录
+1. 把仓库内 ``resources/templates`` 的通用 Excel / 发货单 / 价格表复制到运行时目录
 2. 写入 ``templates`` 表，便于模板库与默认模板解析开箱即用
 
-不覆盖用户已有同名文件或同 ``template_key`` 记录。
+不覆盖用户已有同名文件；同 ``template_key`` 仅在路径失效时回填。
 """
 
 from __future__ import annotations
@@ -15,6 +15,10 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from app.db.seeds.document_templates_catalog import (
+    CORE_DOCUMENT_SEED_SPECS,
+    GENERIC_EXCEL_SEED_SPECS,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -70,6 +74,7 @@ def sync_bundled_template_files() -> dict[str, Any]:
     runtime_tpl = _runtime_templates_dir()
     runtime_price = _runtime_price_list_dir()
     copied: list[str] = []
+    runtime_paths: dict[str, str] = {}
 
     shipment_src = src_dir / _SHIPMENT_FILENAME
     price_src = src_dir / _PRICE_LIST_FILENAME
@@ -77,14 +82,17 @@ def sync_bundled_template_files() -> dict[str, Any]:
     if not legacy_src.is_file() and shipment_src.is_file():
         legacy_src = shipment_src
 
-    for src, dst in (
-        (shipment_src, runtime_tpl / _SHIPMENT_FILENAME),
-        (legacy_src, runtime_tpl / _SHIPMENT_LEGACY_ALIAS),
-        (price_src, runtime_tpl / _PRICE_LIST_FILENAME),
-        (price_src, runtime_price / _PRICE_LIST_FILENAME),
-    ):
+    core_targets = [
+        (shipment_src, runtime_tpl / _SHIPMENT_FILENAME, SEED_SHIPMENT_KEY),
+        (legacy_src, runtime_tpl / _SHIPMENT_LEGACY_ALIAS, None),
+        (price_src, runtime_tpl / _PRICE_LIST_FILENAME, None),
+        (price_src, runtime_price / _PRICE_LIST_FILENAME, SEED_PRICE_LIST_KEY),
+    ]
+    for src, dst, key in core_targets:
         if _copy_if_missing(src, dst):
             copied.append(str(dst))
+        if key:
+            runtime_paths[key] = str(dst)
 
     # 兼容价目表注册表相对仓库路径解析
     repo_price_dir = _repo_price_list_dir()
@@ -106,53 +114,46 @@ def sync_bundled_template_files() -> dict[str, Any]:
     except RECOVERABLE_ERRORS as exc:
         logger.debug("复制到 ai_assistant/uploads 跳过: %s", exc)
 
+    for spec in GENERIC_EXCEL_SEED_SPECS:
+        filename = str(spec["filename"])
+        src = src_dir / filename
+        dst = runtime_tpl / filename
+        if _copy_if_missing(src, dst):
+            copied.append(str(dst))
+        runtime_paths[str(spec["template_key"])] = str(dst)
+
     return {
         "copied_count": len(copied),
         "copied": copied,
-        "shipment_path": str(runtime_tpl / _SHIPMENT_FILENAME),
-        "price_list_path": str(runtime_price / _PRICE_LIST_FILENAME),
+        "shipment_path": runtime_paths.get(
+            SEED_SHIPMENT_KEY, str(runtime_tpl / _SHIPMENT_FILENAME)
+        ),
+        "price_list_path": runtime_paths.get(
+            SEED_PRICE_LIST_KEY, str(runtime_price / _PRICE_LIST_FILENAME)
+        ),
+        "runtime_paths": runtime_paths,
     }
 
 
-def _seed_specs(runtime_paths: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        {
-            "template_key": SEED_SHIPMENT_KEY,
-            "template_name": "演示发货单模板",
-            "template_type": "发货单",
-            "category": "excel",
-            "file_path": runtime_paths["shipment_path"],
-            "business_scope": "",
-            "fields": [
-                {"label": "购买单位"},
-                {"label": "产品型号"},
-                {"label": "产品名称"},
-                {"label": "数量"},
-                {"label": "规格"},
-                {"label": "单价"},
-                {"label": "金额"},
-            ],
-        },
-        {
-            "template_key": SEED_PRICE_LIST_KEY,
-            "template_name": "演示产品价格表",
-            "template_type": "价格表",
-            "category": "word",
-            "file_path": runtime_paths["price_list_path"],
-            "business_scope": "",
-            "fields": [
-                {"label": "客户名称"},
-                {"label": "型号"},
-                {"label": "名称"},
-                {"label": "规格"},
-                {"label": "单价"},
-            ],
-        },
-    ]
+def _all_seed_specs(runtime_paths: dict[str, Any]) -> list[dict[str, Any]]:
+    paths = dict(runtime_paths.get("runtime_paths") or {})
+    specs: list[dict[str, Any]] = []
+    for core in CORE_DOCUMENT_SEED_SPECS:
+        key = str(core["template_key"])
+        file_path = paths.get(key) or (
+            runtime_paths.get("shipment_path")
+            if key == SEED_SHIPMENT_KEY
+            else runtime_paths.get("price_list_path")
+        )
+        specs.append({**core, "file_path": file_path})
+    for excel in GENERIC_EXCEL_SEED_SPECS:
+        key = str(excel["template_key"])
+        specs.append({**excel, "file_path": paths.get(key)})
+    return specs
 
 
 def _insert_template_row(spec: dict[str, Any]) -> str:
-    """返回 inserted / skipped / failed。"""
+    """返回 inserted / repaired / skipped / failed。"""
     from sqlalchemy import text
 
     from app.db.session import get_db
@@ -271,7 +272,7 @@ def ensure_initial_document_templates() -> dict[str, Any]:
     skipped: list[str] = []
     failed: list[str] = []
 
-    for spec in _seed_specs(files):
+    for spec in _all_seed_specs(files):
         status = _insert_template_row(spec)
         key = str(spec["template_key"])
         if status == "inserted":
@@ -292,6 +293,7 @@ def ensure_initial_document_templates() -> dict[str, Any]:
         "failed": failed,
         "shipment_path": files.get("shipment_path"),
         "price_list_path": files.get("price_list_path"),
+        "template_count": len(inserted) + len(repaired) + len(skipped),
     }
     if inserted or repaired or files.get("copied_count"):
         logger.info(

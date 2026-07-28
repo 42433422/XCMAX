@@ -17,12 +17,15 @@ from app.infrastructure.documents.template_registry import resolve_template_path
 
 
 def test_bundled_seed_files_exist() -> None:
+    from app.db.seeds.document_templates_catalog import GENERIC_EXCEL_SEED_SPECS
     from app.db.seeds.document_templates_seed import bundled_templates_dir
 
     root = bundled_templates_dir()
     assert (root / "发货单模板.xlsx").is_file()
     assert (root / "尹玉华1.xlsx").is_file()
     assert (root / "price_list_default.docx").is_file()
+    for spec in GENERIC_EXCEL_SEED_SPECS:
+        assert (root / str(spec["filename"])).is_file(), spec["filename"]
 
 
 def test_sync_bundled_template_files_copies_to_runtime(
@@ -40,15 +43,22 @@ def test_ensure_initial_document_templates_inserts_and_skips(
 ) -> None:
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
 
+    from app.db.seeds.document_templates_catalog import (
+        CORE_DOCUMENT_SEED_SPECS,
+        GENERIC_EXCEL_SEED_SPECS,
+    )
+
+    all_keys = {str(s["template_key"]) for s in (*CORE_DOCUMENT_SEED_SPECS, *GENERIC_EXCEL_SEED_SPECS)}
+    known_keys: set[str] = set()
+
     db = MagicMock()
-    first_calls = {"n": 0}
 
     def _execute(stmt, params=None):
         sql = str(stmt)
         result = MagicMock()
         if "SELECT" in sql.upper() and "template_key" in sql:
-            first_calls["n"] += 1
-            if first_calls["n"] <= 2:
+            key = str((params or {}).get("k") or "")
+            if key and key not in known_keys:
                 result.fetchone.return_value = None
             else:
                 row = MagicMock()
@@ -56,6 +66,10 @@ def test_ensure_initial_document_templates_inserts_and_skips(
                 row.original_file_path = str(tmp_path / "templates" / "发货单模板.xlsx")
                 row.is_active = 1
                 result.fetchone.return_value = row
+        elif "INSERT" in sql.upper():
+            key = str((params or {}).get("template_key") or "")
+            if key:
+                known_keys.add(key)
         return result
 
     db.execute.side_effect = _execute
@@ -80,10 +94,12 @@ def test_ensure_initial_document_templates_inserts_and_skips(
         second = ensure_initial_document_templates()
 
     assert first["success"] is True
-    assert set(first["inserted"]) == {SEED_SHIPMENT_KEY, SEED_PRICE_LIST_KEY}
+    assert set(first["inserted"]) == all_keys
+    assert SEED_SHIPMENT_KEY in first["inserted"]
+    assert SEED_PRICE_LIST_KEY in first["inserted"]
     assert Path(first["shipment_path"]).is_file()
     assert second["success"] is True
-    assert set(second["skipped"]) == {SEED_SHIPMENT_KEY, SEED_PRICE_LIST_KEY}
+    assert set(second["skipped"]) == all_keys
     assert second["inserted"] == []
 
 

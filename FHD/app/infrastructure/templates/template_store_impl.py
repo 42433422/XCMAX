@@ -58,17 +58,26 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def _infer_template_type_from_filename(self, filename: str) -> str:
         name = (filename or "").lower()
+        # 先匹配更具体的业务表，避免「出货记录」被「出货」误收成发货单
         if "考勤" in name:
             return "考勤记录"
-        if "客户" in name:
-            return "客户"
-        if "原材料" in name or "材料" in name:
-            return "原材料"
-        if "产品" in name:
-            return "产品"
+        if "销售报表" in name or "销售" in name and "报表" in name:
+            return "销售报表"
+        if "汇总统计" in name or "汇总" in name:
+            return "汇总统计"
+        if "出货明细" in name:
+            return "出货明细"
         if "出货记录" in name:
             return "出货记录"
-        if "发货" in name or "出货单" in name:
+        if "客户" in name:
+            return "客户"
+        if "原材料" in name or ("材料" in name and "原" in name):
+            return "原材料"
+        if "产品目录" in name or "产品" in name:
+            return "产品目录"
+        if "价目" in name or "价格表" in name:
+            return "价格表"
+        if "发货" in name or "出货单" in name or "送货单" in name:
             return "发货单"
         return "Excel"
 
