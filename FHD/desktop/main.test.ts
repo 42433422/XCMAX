@@ -301,11 +301,24 @@ describe('main — packaged chat transport defaults', () => {
     electronMocks.app.isPackaged = false
   })
 
-  it('uses non-native Modstore streaming with a 60s first-result budget in a package', async () => {
+  it('uses non-native Modstore streaming with a 75s first-result budget in a package', async () => {
     const { desktopChatTransportEnv } = await import('./main.js')
     expect(desktopChatTransportEnv({}, true)).toEqual({
       XCAGI_MODSTORE_USE_NATIVE_STREAM: '0',
-      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '60',
+      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '75',
+    })
+  })
+
+  it('upgrades an inherited legacy 20s first-result budget in a package', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(
+      desktopChatTransportEnv(
+        { XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '20' },
+        true,
+      ),
+    ).toEqual({
+      XCAGI_MODSTORE_USE_NATIVE_STREAM: '0',
+      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '75',
     })
   })
 

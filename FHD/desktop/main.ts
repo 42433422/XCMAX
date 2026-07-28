@@ -366,10 +366,22 @@ export function desktopChatTransportEnv(
     resolved.XCAGI_MODSTORE_USE_NATIVE_STREAM = '0'
   }
   // The non-native request returns one synthetic SSE chunk only after the
-  // model has finished.  Do not let the legacy 20s native-first-token budget
-  // reject that valid request before it can be adapted for the UI.
-  if (!String(env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '').trim()) {
-    resolved.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC = '60'
+  // model has finished.  Do not let a missing or inherited legacy 20s
+  // native-first-token budget reject that valid request before the adapter
+  // can surface a real provider response (for example quota exhaustion).
+  // Keep an explicit value above 20s intact for operators who deliberately
+  // tune the desktop budget.
+  const configuredFirstTokenTimeout = Number(
+    String(env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '').trim(),
+  )
+  if (
+    !Number.isFinite(configuredFirstTokenTimeout) ||
+    configuredFirstTokenTimeout <= 20
+  ) {
+    // The market adapter's synchronous fallback has a 60s transport timeout.
+    // Leave a small margin so its structured provider error wins the race over
+    // this UI-facing guard instead of being mislabeled as a first-token timeout.
+    resolved.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC = '75'
   }
   return resolved
 }
