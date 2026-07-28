@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -125,3 +124,28 @@ def test_aggregate_legacy_high_ratio_triggers_signal(tmp_reports, monkeypatch):
     out = aggregate_signals()
     assert out["legacy_usage"]["signal_score"] > 0
     assert out["legacy_usage"]["below_threshold"] is True
+
+
+def test_catalog_gap_scan_is_explicit_bounded_and_self_closing(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_ENABLE_CATALOG_GAP_SCAN", "true")
+    monkeypatch.setenv("MODSTORE_REPO_ROOT", str(tmp_path))
+    out = aggregate_signals()
+    gap = out["catalog_capability_gap"]
+    assert gap["signal_score"] == 1.0
+    assert gap["report"]["package_id"] == "autonomy-gap-analyst"
+    assert gap["report"]["bounded_files"] == 3
+
+    source_dir = (
+        tmp_path
+        / "成都修茈科技有限公司"
+        / "MODstore_deploy"
+        / "modstore_server"
+        / "catalog_data"
+        / "files"
+        / "autonomy-gap-analyst@1.0.0"
+    )
+    source_dir.mkdir(parents=True)
+    (source_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    closed = aggregate_signals()["catalog_capability_gap"]
+    assert closed["signal_score"] == 0.0
+    assert closed["report"]["source_present"] is True
