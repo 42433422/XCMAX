@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-28T03:24:00+00:00",
+  "symptom": "自维护独立 review/QA 在一个 CLI 运行时不可用时只能切换一次工具；生产运行 ae8c9416-c1a0-4ee9-856d-b4e8122d455e 连续三次以 Trae CLI Models is required 结束，未继续尝试设备上其余可用 CLI。",
+  "root_cause": "_post_para_api 把 _resolve_max_attempts(req) 同时用作单个 Para 子任务重试次数和跨 CLI fallback 次数。report_only 为防止同一评审任务重复执行会把单任务 max_attempts 固定为 1，因此跨工具恢复也被错误限制为一次，外层重试又从相同候选顺序重新开始。",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler.py\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler.py\n@@ -960,8 +960,8 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:\n     attempts: list = []\n     excluded: set[str] = set(_excluded_tools(req))\n     result = _post_para_api_once(req)\n-    max_attempts = _resolve_max_attempts(req)\n-    for _ in range(max_attempts):\n+    fallback_budget = max(0, len(_tool_candidates(req)) - 1)\n+    for _ in range(fallback_budget):\n         if bool(result.get(\"ok\")):\n             return _attach_tool_fallback_meta(result, attempts=attempts)\n",
+  "metadata": {
+    "component": "para_delegate_handler",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_para_delegate_tier.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "A report_only Para task fails with a CLI runtime/configuration error, more than two distinct CLI candidates are available on the selected device, and dispatch stops before trying every distinct candidate once.",
+    "patch_strategy": "Keep each report_only Para subtask max_attempts at one, but derive the cross-CLI fallback budget from the number of distinct eligible tool candidates minus the first attempt; exclude each failed CLI before opening the next task.",
+    "rollback_plan": "Restore the fallback loop bound to _resolve_max_attempts(req), accepting that report_only work will try at most one alternate CLI.",
+    "required_tests": [
+      "test_para_delegate_tier.py::test_post_para_api_retries_next_cli_after_spawn_enoent",
+      "test_para_delegate_tier.py::test_report_only_fallback_tries_each_distinct_cli_once"
+    ]
+  }
+}
