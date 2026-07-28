@@ -240,9 +240,7 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
 
 
 def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
-    source = yaml.safe_load(
-        (FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8")
-    )
+    source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
     published = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
     )
