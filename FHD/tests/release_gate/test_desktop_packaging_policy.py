@@ -305,10 +305,14 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     installer = (REPO_ROOT / "scripts" / "package" / "build-installer.sh").read_text(
         encoding="utf-8"
     )
+    builder = (REPO_ROOT / "desktop" / "electron-builder.yml").read_text(encoding="utf-8")
     dmg_builder = (REPO_ROOT / "scripts" / "package" / "create-mac-dmg.sh").read_text(
         encoding="utf-8"
     )
     notarize = (REPO_ROOT / "desktop" / "build" / "notarize.cjs").read_text(encoding="utf-8")
+    before_pack = (REPO_ROOT / "desktop" / "build" / "before-pack.cjs").read_text(
+        encoding="utf-8"
+    )
 
     assert "xattr -cr desktop/node_modules/electron/dist" in installer
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
@@ -330,6 +334,14 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "SKIP_DESKTOP_BUILD=1 but desktop/dist/main.js is missing" in installer
     assert "msg.includes('abortedUpload')" in notarize
     assert "msg.includes('deadlineExceeded')" in notarize
+    # Keep a dist-local manifest in the ASAR: Electron's packaged startup can
+    # resolve dist/ as the app root before it loads dist/main.js.
+    assert "beforePack: build/before-pack.cjs" in builder
+    assert "  - dist/**" in builder
+    assert "writeDesktopRuntimePackage(desktopDir)" in before_pack
+    assert "path.join(distDir, 'package.json')" in before_pack
+    assert "main: 'main.js'" in before_pack
+    assert "desktop runtime entry is missing" in before_pack
 
 
 def test_desktop_staging_bundles_visible_office_employee_executors() -> None:
