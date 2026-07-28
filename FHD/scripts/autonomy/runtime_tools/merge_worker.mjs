@@ -23,6 +23,31 @@ const REQUIRE_BOT_IDENTITY = process.env.MERGE_WORKER_REQUIRE_BOT_IDENTITY !== '
 const BOT_MERGE_WORKFLOW = String(
   process.env.MERGE_WORKER_BOT_WORKFLOW || 'fhd-ai-self-heal-auto-merge.yml',
 ).trim();
+const BOT_MERGE_WATCHDOG_REPOSITORY = String(
+  process.env.MERGE_WORKER_REPOSITORY || '',
+).trim();
+export const BOT_MERGE_WATCHDOG_STALE_MS = Math.max(
+  30 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_BOT_WATCHDOG_STALE_MS || String(45 * 60 * 1000),
+    10,
+  ),
+);
+const BOT_MERGE_WATCHDOG_CHECK_MS = Math.max(
+  60_000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_BOT_WATCHDOG_CHECK_MS || String(5 * 60 * 1000),
+    10,
+  ),
+);
+const BOT_MERGE_WATCHDOG_DISPATCH_COOLDOWN_MS = Math.max(
+  15 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_BOT_WATCHDOG_DISPATCH_COOLDOWN_MS
+      || String(30 * 60 * 1000),
+    10,
+  ),
+);
 const BACKEND_CI_WORKFLOW = String(
   process.env.MERGE_WORKER_BACKEND_CI_WORKFLOW || 'modstore-ci-backend-python.yml',
 ).trim();
@@ -91,6 +116,8 @@ const FORBIDDEN_AUTO_MERGE_PATHS = [
 
 let cachedToken = '';
 let cachedTokenAt = 0;
+let botMergeWatchdogLastCheckedAt = 0;
+let botMergeWatchdogLastDispatchAt = 0;
 
 function log(...args) {
   console.log(new Date().toISOString().slice(11, 19), '[merge-worker]', ...args);
@@ -289,6 +316,90 @@ export function selectMatchingWorkflowRun(rows, mergeSha) {
     .sort((left, right) => (
       Date.parse(String(right?.createdAt || '')) - Date.parse(String(left?.createdAt || ''))
     ))[0] || null;
+}
+
+export function botMergeWatchdogDecision(
+  rows,
+  {
+    nowMs = Date.now(),
+    staleAfterMs = BOT_MERGE_WATCHDOG_STALE_MS,
+    lastDispatchAtMs = 0,
+    dispatchCooldownMs = BOT_MERGE_WATCHDOG_DISPATCH_COOLDOWN_MS,
+  } = {},
+) {
+  const items = Array.isArray(rows) ? rows : [];
+  const active = items.find((row) => (
+    ['queued', 'in_progress', 'requested', 'waiting']
+      .includes(String(row?.status || '').trim().toLowerCase())
+  ));
+  if (active) {
+    return {
+      dispatch: false,
+      reason: 'workflow-active',
+      latest_run_at: String(active.createdAt || ''),
+    };
+  }
+  const latestRunMs = items.reduce((latest, row) => {
+    const parsed = Date.parse(String(row?.createdAt || ''));
+    return Number.isFinite(parsed) ? Math.max(latest, parsed) : latest;
+  }, 0);
+  if (latestRunMs > 0 && nowMs - latestRunMs < staleAfterMs) {
+    return {
+      dispatch: false,
+      reason: 'workflow-recent',
+      latest_run_at: new Date(latestRunMs).toISOString(),
+    };
+  }
+  if (lastDispatchAtMs > 0 && nowMs - lastDispatchAtMs < dispatchCooldownMs) {
+    return {
+      dispatch: false,
+      reason: 'dispatch-cooldown',
+      latest_run_at: latestRunMs > 0 ? new Date(latestRunMs).toISOString() : '',
+    };
+  }
+  return {
+    dispatch: true,
+    reason: latestRunMs > 0 ? 'workflow-stale' : 'workflow-missing',
+    latest_run_at: latestRunMs > 0 ? new Date(latestRunMs).toISOString() : '',
+  };
+}
+
+async function maybeRecoverStaleBotMergeWorkflow(nowMs = Date.now()) {
+  if (!BOT_MERGE_WORKFLOW || !BOT_MERGE_WATCHDOG_REPOSITORY) return;
+  if (nowMs - botMergeWatchdogLastCheckedAt < BOT_MERGE_WATCHDOG_CHECK_MS) return;
+  botMergeWatchdogLastCheckedAt = nowMs;
+  const { stdout } = await execFileAsync('gh', [
+    'run', 'list',
+    '--repo', BOT_MERGE_WATCHDOG_REPOSITORY,
+    '--workflow', BOT_MERGE_WORKFLOW,
+    '--limit', '5',
+    '--json', 'databaseId,event,status,conclusion,createdAt,url',
+  ], {
+    cwd: process.env.HOME || '/tmp',
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  const decision = botMergeWatchdogDecision(JSON.parse(stdout || '[]'), {
+    nowMs,
+    lastDispatchAtMs: botMergeWatchdogLastDispatchAt,
+  });
+  if (!decision.dispatch) return;
+  await execFileAsync('gh', [
+    'workflow', 'run', BOT_MERGE_WORKFLOW,
+    '--repo', BOT_MERGE_WATCHDOG_REPOSITORY,
+    '--ref', 'main',
+    '-f', 'dry_run=false',
+    '-f', 'scan_regular_prs=true',
+  ], {
+    cwd: process.env.HOME || '/tmp',
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 60_000,
+  });
+  botMergeWatchdogLastDispatchAt = nowMs;
+  log(
+    `  watchdog dispatched ${BOT_MERGE_WORKFLOW} `
+    + `reason=${decision.reason} latest=${decision.latest_run_at || 'none'}`,
+  );
 }
 
 export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
@@ -1565,6 +1676,11 @@ async function main() {
   log(`已有 ${Object.keys(state).length} 条历史记录`);
 
   while (true) {
+    try {
+      await maybeRecoverStaleBotMergeWorkflow();
+    } catch (err) {
+      log(`合并扫描 watchdog 异常：${String(err).slice(0, 300)}`);
+    }
     try {
       const token = await guestToken();
       await reconcileMergedDeployments(token, state);

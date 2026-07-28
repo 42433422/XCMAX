@@ -6,12 +6,14 @@ import {
   AI_REVIEW_CHUNK_MAX_CHARS,
   AI_REVIEW_MAX_CHUNKS,
   AUTO_PR_LABELS,
+  BOT_MERGE_WATCHDOG_STALE_MS,
   CI_TIMEOUT_POLICY,
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
   INITIAL_PR_LABELS,
   TASK_CONCURRENCY,
   botMergeCheckArgs,
+  botMergeWatchdogDecision,
   buildMergeConflictPayload,
   blockingMergePollReason,
   chunkReviewDiff,
@@ -175,6 +177,53 @@ test('merge task queue never exceeds the configured concurrency', async () => {
   );
   assert.equal(peak, 2);
   assert.deepEqual(results.map((result) => result.value), [2, 4, 6, 8, 10]);
+});
+
+test('bot merge watchdog dispatches only for stale or missing workflow runs', () => {
+  const nowMs = Date.parse('2026-07-28T12:30:00Z');
+  assert.equal(
+    botMergeWatchdogDecision(
+      [{ status: 'completed', createdAt: '2026-07-28T12:00:01Z' }],
+      { nowMs, staleAfterMs: 45 * 60 * 1000 },
+    ).dispatch,
+    false,
+  );
+  assert.deepEqual(
+    botMergeWatchdogDecision(
+      [{ status: 'completed', createdAt: '2026-07-28T11:00:00Z' }],
+      { nowMs, staleAfterMs: 45 * 60 * 1000 },
+    ),
+    {
+      dispatch: true,
+      reason: 'workflow-stale',
+      latest_run_at: '2026-07-28T11:00:00.000Z',
+    },
+  );
+  assert.equal(botMergeWatchdogDecision([], { nowMs }).reason, 'workflow-missing');
+  assert.ok(BOT_MERGE_WATCHDOG_STALE_MS >= 30 * 60 * 1000);
+});
+
+test('bot merge watchdog respects active runs and dispatch cooldown', () => {
+  const nowMs = Date.parse('2026-07-28T12:30:00Z');
+  assert.equal(
+    botMergeWatchdogDecision(
+      [{ status: 'in_progress', createdAt: '2026-07-28T10:00:00Z' }],
+      { nowMs, staleAfterMs: 45 * 60 * 1000 },
+    ).reason,
+    'workflow-active',
+  );
+  assert.equal(
+    botMergeWatchdogDecision(
+      [{ status: 'completed', createdAt: '2026-07-28T10:00:00Z' }],
+      {
+        nowMs,
+        staleAfterMs: 45 * 60 * 1000,
+        lastDispatchAtMs: nowMs - 5 * 60 * 1000,
+        dispatchCooldownMs: 30 * 60 * 1000,
+      },
+    ).reason,
+    'dispatch-cooldown',
+  );
 });
 
 
