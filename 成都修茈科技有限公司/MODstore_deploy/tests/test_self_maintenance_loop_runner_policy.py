@@ -2516,6 +2516,21 @@ def test_reconcile_superseded_post_dispatch_keeps_open_when_branch_ahead():
     assert len(memory["open_items"]) == 1
 
 
+def test_post_dispatch_helpers_resume_and_attach_fields():
+    from modstore_server.self_maintenance_post_dispatch_remediation import (
+        attach_post_dispatch_remediation_fields,
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    detail = "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api"
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", detail) is False
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "git conflict") is True
+
+    item: dict = {}
+    attach_post_dispatch_remediation_fields(item, detail)
+    assert item["failed_post_dispatch_checks"] == ["docker-build-fhd-api"]
+
+
 # ---------------------------------------------------------------------------
 # _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
 # ---------------------------------------------------------------------------

@@ -28,6 +28,34 @@ def is_post_dispatch_merge_failure_detail(detail: str) -> bool:
     return str(detail or "").strip().lower().startswith(_POST_DISPATCH_PREFIX)
 
 
+def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
+    """Whether remediation must restart from the clean base instead of the rejected branch."""
+
+    if reason == "para_merge_conflict" and is_post_dispatch_merge_failure_detail(detail):
+        return False
+    return True
+
+
+def attach_post_dispatch_remediation_fields(remediation_item: Dict[str, Any], detail: str) -> None:
+    """Record failed required-check names on a new automated_remediation open item."""
+
+    if not is_post_dispatch_merge_failure_detail(detail):
+        return
+    failed_checks = parse_post_dispatch_failed_checks(detail)
+    if failed_checks:
+        remediation_item["failed_post_dispatch_checks"] = failed_checks
+
+
+def copy_failed_post_dispatch_checks_to_candidate(
+    candidate: Dict[str, Any], item: Dict[str, Any]
+) -> None:
+    failed_checks = item.get("failed_post_dispatch_checks")
+    if isinstance(failed_checks, list) and failed_checks:
+        candidate["failed_post_dispatch_checks"] = [
+            str(name).strip() for name in failed_checks if str(name).strip()
+        ]
+
+
 def _default_git_is_ancestor(ancestor: str, descendant: str) -> bool:
     repo_root = Path(
         os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"
