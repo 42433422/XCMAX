@@ -55,6 +55,7 @@ from modstore_server.self_maintenance_quality_gate import (
     quality_check_failure,
 )
 from modstore_server.self_maintenance_remediation_lineage import (
+    normalize_automated_remediation_reason,
     remediation_lineage_fields,
     resume_candidate_from_context,
 )
@@ -108,6 +109,69 @@ def test_scheduler_selected_remediation_is_resolved_exactly() -> None:
         "para_task_id": "incident-task",
         "reason": "resume_automated_remediation_candidate",
     }
+
+
+def test_resume_candidate_from_context_normalizes_legacy_target_ref_hold() -> None:
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-legacy-target-ref",
+                "task_id": "task-legacy-target-ref",
+            }
+        ],
+    }
+    context = {
+        "branch": branch,
+        "reason": "structured_qa_verdict_not_pass",
+        "run_id": "r-legacy-target-ref",
+        "task_id": "task-legacy-target-ref",
+    }
+
+    assert resume_candidate_from_context(memory, context) == {
+        "branch": branch,
+        "failed_run_id": "r-legacy-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-legacy-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_normalize_automated_remediation_reason_maps_legacy_target_ref() -> None:
+    branch = "devfleet/cursor/sub-1"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [f"target_branch_unavailable: origin/{branch}"],
+                    "target_branch_available": False,
+                }
+            },
+        }
+    }
+    item = {"branch": branch, "reason": "structured_qa_verdict_not_pass"}
+
+    assert (
+        normalize_automated_remediation_reason(memory, item)
+        == "structured_qa_target_branch_unavailable"
+    )
 
 
 def test_remediation_lineage_emits_scorecard_visible_event() -> None:

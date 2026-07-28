@@ -154,9 +154,10 @@ def _remediation_priority(candidate: dict[str, Any], item_index: int) -> tuple[i
 
 def pending_automated_remediation() -> dict[str, Any] | None:
     """Settle verified receipts, then return one executable unattended repair."""
-    from modstore_server.self_maintenance_loop_runner import (
-        _automated_remediation_resume_plan,
-        _load_loop_memory,
+    from modstore_server.self_maintenance_loop_runner import _load_loop_memory
+    from modstore_server.self_maintenance_remediation_lineage import (
+        automated_remediation_resume_plan,
+        normalize_automated_remediation_reason,
     )
 
     _reconcile_completed_loop_memory_safely()
@@ -206,11 +207,11 @@ def pending_automated_remediation() -> dict[str, Any] | None:
             continue
         if kind != "automated_remediation":
             continue
-        reason = str(item.get("reason") or "").strip()
+        reason = normalize_automated_remediation_reason(memory, item)
         resumable = (
             reason == "para_ai_review_rejected"
             or reason in _SCORE_REMEDIATION_REASONS
-            or _automated_remediation_resume_plan(reason) is not None
+            or automated_remediation_resume_plan(reason) is not None
         )
         if resumable and branch and task_id:
             candidate = _with_remediation_lineage(
