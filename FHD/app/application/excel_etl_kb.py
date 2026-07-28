@@ -160,14 +160,19 @@ _SEED: dict[str, Any] = {
 def _kb_path() -> Path:
     override = str(os.environ.get("FHD_EXCEL_ETL_KB_PATH") or "").strip()
     if override:
-        return Path(override).expanduser().resolve()
-    try:
-        from app.utils.path_utils import get_data_dir
+        candidate = Path(override).expanduser()
+        # ``Path.resolve`` for a relative override would silently use the
+        # bundled desktop cwd.  Make this a deterministic configuration error.
+        if not candidate.is_absolute():
+            from app.application.shipment_excel_etl_security import (
+                ShipmentEtlRuntimeDataDirError,
+            )
 
-        root = Path(get_data_dir())
-    except RECOVERABLE_ERRORS:
-        root = Path.cwd() / "data"
-    root.mkdir(parents=True, exist_ok=True)
+            raise ShipmentEtlRuntimeDataDirError()
+        return candidate.resolve()
+    from app.application.shipment_excel_etl_security import etl_runtime_data_dir
+
+    root = etl_runtime_data_dir()
     return root / "excel_etl_kb.json"
 
 

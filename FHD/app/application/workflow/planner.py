@@ -613,12 +613,10 @@ def _execute_materials_tool(params: dict[str, Any]) -> dict[str, Any]:
 
 def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
-        import os
-
         from app.infrastructure.documents.shipment_document_generator_impl import (
             SimpleLabelGenerator,
+            get_shipment_label_output_dir,
         )
-        from app.utils.path_utils import get_resource_path
 
         products = params.get("products")
         if not isinstance(products, list) or not products:
@@ -628,12 +626,19 @@ def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
                 "error_code": "missing_products",
             }
 
-        labels_dir = get_resource_path("ai_assistant", "商标导出")
-        os.makedirs(labels_dir, exist_ok=True)
+        # Label images are runtime business artifacts.  Never write them into
+        # packaged resources; the helper derives tenant/owner context from the
+        # authenticated request and gives this invocation a fresh run scope.
+        labels_dir, label_run_id = get_shipment_label_output_dir()
         order_number = str(params.get("order_number") or params.get("doc_name") or "LABEL").strip()
         gen = SimpleLabelGenerator(labels_dir)
         labels = gen.generate_labels_for_order(order_number=order_number, products=products)
-        return {"success": True, "data": labels, "message": f"已生成 {len(labels)} 张标签"}
+        return {
+            "success": True,
+            "data": labels,
+            "label_run_id": label_run_id,
+            "message": f"已生成 {len(labels)} 张标签",
+        }
     except ImportError as e:
         logger.error("标签生成服务导入失败: %s", e)
         return {

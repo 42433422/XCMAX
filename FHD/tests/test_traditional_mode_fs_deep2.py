@@ -37,19 +37,23 @@ class TestResolveRootDirDeep:
         assert os.path.isdir(result)
 
     def test_with_env_var_expanded(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Test with ~ expansion
-        monkeypatch.setenv("TRADITIONAL_MODE_ROOT", "~/test_root_xyz")
+        # Exercise environment expansion without creating a test directory in
+        # the real home directory.
+        custom = tmp_path / "expanded_root"
+        monkeypatch.setenv("TRADITIONAL_TEST_ROOT", str(custom))
+        monkeypatch.setenv("TRADITIONAL_MODE_ROOT", "$TRADITIONAL_TEST_ROOT")
         result = tmf._resolve_root_dir()
-        assert "~" not in result
+        assert "$" not in result
         assert os.path.isdir(result)
-        # cleanup
-        os.rmdir(result)
+        assert result == str(custom.resolve())
 
     def test_default_root(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("TRADITIONAL_MODE_ROOT", raising=False)
+        runtime = tmp_path / "userData"
+        monkeypatch.setattr(tmf, "get_desktop_state_dir", lambda: str(runtime))
         result = tmf._resolve_root_dir()
+        assert result == str(runtime / "traditional_workspace")
         assert os.path.isdir(result)
-        assert "bang" in result
 
 
 # ── resolve_safe_path deep ───────────────────────────────────────────────────

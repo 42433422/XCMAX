@@ -682,6 +682,10 @@ class ShipmentApplicationService:
             date=date,
             template_name=resolved_template,
             order_number=order_number,
+            # This id comes from the authenticated route/service caller, not
+            # from a template or parsed natural-language parameter.  The
+            # document adapter uses it to isolate generated label artifacts.
+            owner_user_id=owner_user_id,
         )
         if isinstance(result, dict):
             result["products_source"] = products_source
