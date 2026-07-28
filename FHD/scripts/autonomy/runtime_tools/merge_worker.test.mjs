@@ -25,6 +25,7 @@ import {
   parseMergePollSnapshot,
   parseGithubRepo,
   parseReviewVerdict,
+  requiredLabelsPresent,
   reviewDiffInChunks,
   resolveReviewWithFallback,
   runTaskQueueFairly,
@@ -62,6 +63,17 @@ test('veto labels use the issue labels REST endpoint', () => {
     githubIssueLabelEndpoint('42433422/XCMAX', '555', 'hold-merge'),
     'repos/42433422/XCMAX/issues/555/labels/hold-merge',
   );
+});
+
+test('label writes are idempotent when the remote state already satisfies the gate', () => {
+  assert.equal(
+    requiredLabelsPresent(
+      [{ name: 'risk:r0' }, { name: 'hold-merge' }],
+      ['hold-merge'],
+    ),
+    true,
+  );
+  assert.equal(requiredLabelsPresent(['risk:r0'], ['risk:r0', 'hold-merge']), false);
 });
 
 

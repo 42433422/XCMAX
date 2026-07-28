@@ -608,6 +608,40 @@ export function githubIssueLabelEndpoint(repoFull, prNumber, label) {
   return `${githubIssueLabelsEndpoint(repoFull, prNumber)}/${encodeURIComponent(label)}`;
 }
 
+export function requiredLabelsPresent(existingLabels, requiredLabels) {
+  const existing = new Set(
+    (Array.isArray(existingLabels) ? existingLabels : [])
+      .map((label) => String(label?.name || label || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  return (Array.isArray(requiredLabels) ? requiredLabels : [])
+    .every((label) => existing.has(String(label || '').trim().toLowerCase()));
+}
+
+async function prHasAllLabels(workspace, prNumber, repoFull, labels) {
+  const args = repoFull
+    ? [
+      'api',
+      `repos/${repoFull}/issues/${prNumber}`,
+      '--jq', '[.labels[].name]',
+    ]
+    : [
+      'pr', 'view', prNumber,
+      '--json', 'labels',
+      '--jq', '[.labels[].name]',
+    ];
+  try {
+    const { stdout } = await execFileAsync('gh', args, {
+      cwd: workspace || process.env.HOME,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    return requiredLabelsPresent(JSON.parse(stdout || '[]'), labels);
+  } catch {
+    return false;
+  }
+}
+
 async function addPrLabels(workspace, prNumber, repoFull, labels) {
   // Best-effort 打标签。优先走 issues REST API，避免 `gh pr edit`
   // 查询已下线 Projects Classic 字段时连带失败，导致 veto 标签丢失。
@@ -625,6 +659,13 @@ async function addPrLabels(workspace, prNumber, repoFull, labels) {
     await execFileAsync('gh', args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 });
     return true;
   } catch (err) {
+    if (await prHasAllLabels(workspace, prNumber, repoFull, labels)) {
+      log(
+        `  addPrLabels(${labels.join(',')}) 写回执失败但远端状态已满足 `
+        + `PR #${prNumber}，按幂等成功继续`,
+      );
+      return true;
+    }
     log(`  ⚠️ addPrLabels(${labels.join(',')}) 失败 PR #${prNumber}: ${String(err).slice(0, 200)}`);
     return false;
   }
