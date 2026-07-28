@@ -614,6 +614,7 @@ jobs:
       contents: read
     steps:
       - name: Dispatch Evolution Orchestrator after exact production receipt
+        working-directory: .
         env:
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
         run: |
