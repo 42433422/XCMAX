@@ -56,9 +56,13 @@ jobs:
       - name: Process ai-self-heal PRs by SLA
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PAT 仅用于 update-branch，使 synchronize 产生的新 head 自动运行 PR checks。
-          # merge 仍使用 GITHUB_TOKEN，并由脚本显式派发主干发布，避免双重部署。
+          # PAT 用于 update-branch 与 post-merge workflow_dispatch：
+          # - synchronize 产生的新 head 自动运行 PR checks；
+          # - 独立 actor 派发的主干 CI 完成后仍会产生 workflow_run CD 事件。
+          # merge 本身仍使用 GITHUB_TOKEN，并受三重门禁与 hold-merge veto 约束。
           BRANCH_UPDATE_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+          WORKFLOW_DISPATCH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+          REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN: "1"
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           DRY_RUN_FLAG=""
