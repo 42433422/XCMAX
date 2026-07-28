@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,6 +31,15 @@ _REGION_ROLES = frozenset(
 )
 _ROW_ACTIONS = frozenset({"new", "update", "skip"})
 _SAFE_MAPPING_TRANSFORMS = frozenset({"trim", "number", "date"})
+
+# ETL assistance is advisory.  A provider outage must never turn a preview
+# into a sequence of long, duplicate calls (especially when an auto-detected
+# delivery workbook creates the linked customer/product preview at the same
+# time).  Keep this process-local on purpose: account credentials and quota
+# state are not ETL business data and are never persisted with a run.
+_CIRCUIT_LOCK = threading.Lock()
+_CIRCUIT_OPEN_UNTIL: dict[str, tuple[float, str]] = {}
+_OWNER_CALL_LOCKS: dict[str, threading.Lock] = {}
 
 
 @dataclass(slots=True)
@@ -65,11 +76,19 @@ def etl_llm_mode() -> str:
 
 
 def etl_llm_timeout_seconds() -> float:
-    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "15").strip()
+    """Return the hard latency budget for optional ETL advice.
+
+    The ETL parser and adapters have deterministic fallbacks, so a long model
+    wait provides no correctness benefit.  The outer bounded call below also
+    enforces this value for preview-worker threads, where the structured-output
+    bridge otherwise runs an ``asyncio.run`` call without applying its timeout.
+    """
+
+    raw = str(os.environ.get("FHD_ETL_LLM_TIMEOUT") or "6").strip()
     try:
-        return min(60.0, max(1.0, float(raw)))
+        return min(12.0, max(1.0, float(raw)))
     except ValueError:
-        return 15.0
+        return 6.0
 
 
 def etl_row_advice_limit() -> int:
@@ -85,6 +104,131 @@ def _degradation_code(exc: BaseException) -> str:
     if "quota exhausted" in message or "额度" in message or "429" in message:
         return "ETL_LLM_QUOTA_EXHAUSTED"
     return "ETL_LLM_UNAVAILABLE"
+
+
+def _circuit_key() -> str:
+    """Scope degradation to the current software-account owner when present."""
+
+    try:
+        from app.application.etl.llm_session_provider import current_etl_llm_owner
+
+        owner_user_id = current_etl_llm_owner()
+    except Exception:  # noqa: BLE001 - assist scoping must not block preview
+        owner_user_id = None
+    return f"owner:{owner_user_id}" if owner_user_id is not None else "process"
+
+
+def _circuit_cooldown_seconds(degradation_code: str) -> float:
+    """Use a longer owner cooldown for a confirmed quota exhaustion."""
+
+    env_name = (
+        "FHD_ETL_LLM_QUOTA_COOLDOWN_SECONDS"
+        if degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
+        else "FHD_ETL_LLM_FAILURE_COOLDOWN_SECONDS"
+    )
+    default = 300.0 if degradation_code == "ETL_LLM_QUOTA_EXHAUSTED" else 30.0
+    raw = str(os.environ.get(env_name) or default).strip()
+    try:
+        return min(3600.0, max(1.0, float(raw)))
+    except ValueError:
+        return default
+
+
+def _circuit_degradation(key: str) -> str:
+    now = time.monotonic()
+    with _CIRCUIT_LOCK:
+        state = _CIRCUIT_OPEN_UNTIL.get(key)
+        if state is None:
+            return ""
+        expires_at, degradation_code = state
+        if expires_at <= now:
+            _CIRCUIT_OPEN_UNTIL.pop(key, None)
+            return ""
+        return degradation_code
+
+
+def _open_circuit(key: str, degradation_code: str) -> None:
+    with _CIRCUIT_LOCK:
+        _CIRCUIT_OPEN_UNTIL[key] = (
+            time.monotonic() + _circuit_cooldown_seconds(degradation_code),
+            degradation_code,
+        )
+
+
+def _owner_call_lock(key: str) -> threading.Lock:
+    with _CIRCUIT_LOCK:
+        lock = _OWNER_CALL_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _OWNER_CALL_LOCKS[key] = lock
+        return lock
+
+
+def clear_etl_llm_circuit() -> None:
+    """Clear transient assist degradation state (primarily for lifecycle/tests).
+
+    This contains only process-local timing/error codes.  It never clears an
+    ETL run, a template, an upload, or any account credential.
+    """
+
+    with _CIRCUIT_LOCK:
+        _CIRCUIT_OPEN_UNTIL.clear()
+
+
+def _bounded_structured_completion(
+    messages: list[dict[str, str]],
+    *,
+    schema: dict[str, Any],
+    max_tokens: int,
+    timeout_seconds: float,
+    conversation_service: Any | None,
+    provider: Any | None,
+):
+    """Run one structured LLM call without letting a worker thread stall.
+
+    ``complete_structured_sync`` applies its timeout only when it detects an
+    existing event loop.  Preview workers intentionally do not own one, so an
+    outer daemon-thread deadline is required here.  A timed-out provider call
+    may finish in the background, but the preview returns immediately and the
+    ETL circuit prevents another advisory call while it is unhealthy.
+    """
+
+    from app.infrastructure.llm.structured_output import complete_structured_sync
+
+    box: dict[str, Any] = {}
+
+    def invoke() -> None:
+        try:
+            box["result"] = complete_structured_sync(
+                messages,
+                schema=schema,
+                temperature=0.0,
+                max_tokens=max_tokens,
+                # A schema repair is another provider request.  ETL remains
+                # deterministic without it, so never retry advisory output.
+                max_repairs=0,
+                timeout_seconds=timeout_seconds,
+                profile="etl",
+                conversation_service=conversation_service,
+                provider=provider,
+            )
+        except BaseException as exc:  # noqa: BLE001 - transported to preview fallback
+            box["error"] = exc
+
+    worker = threading.Thread(
+        target=invoke,
+        name="etl-llm-assist",
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=timeout_seconds)
+    if worker.is_alive():
+        raise TimeoutError("ETL LLM assist timed out")
+    if "error" in box:
+        raise box["error"]
+    if "result" not in box:
+        raise RuntimeError("ETL LLM assist returned no result")
+    return box["result"]
 
 
 def _active_software_llm() -> tuple[bool, Any | None, Any | None]:
@@ -126,40 +270,62 @@ def _complete(
     mode = etl_llm_mode()
     if mode == "off":
         return LlmAssistResult()
-    configured, conversation_service, provider = _active_software_llm()
-    if not configured:
+    circuit_key = _circuit_key()
+    circuit_degradation = _circuit_degradation(circuit_key)
+    if circuit_degradation:
         return LlmAssistResult(
             used_llm=False,
-            degraded=mode == "on",
-            degradation_code="ETL_LLM_UNAVAILABLE" if mode == "on" else "",
-        )
-    try:
-        from app.infrastructure.llm.structured_output import complete_structured_sync
-
-        result = complete_structured_sync(
-            messages,
-            schema=schema,
-            temperature=0.0,
-            max_tokens=max_tokens,
-            max_repairs=1,
-            timeout_seconds=etl_llm_timeout_seconds(),
-            profile="etl",
-            conversation_service=conversation_service,
-            provider=provider,
-        )
-        return LlmAssistResult(
-            used_llm=True,
-            model=str(result.model or ""),
-            billing=dict(result.billing or {}),
-            data=dict(result.data),
-        )
-    except Exception as exc:  # noqa: BLE001 - LLM failure must never own ETL execution
-        logger.info("general etl llm assist degraded: %s", type(exc).__name__)
-        return LlmAssistResult(
-            used_llm=True,
             degraded=True,
-            degradation_code=_degradation_code(exc),
+            degradation_code=circuit_degradation,
         )
+
+    # The auto shipment preview can spawn a linked customer/product preview.
+    # Serializing calls for one software account lets the first observed quota
+    # or timeout stop every later advisory stage instead of multiplying it.
+    with _owner_call_lock(circuit_key):
+        circuit_degradation = _circuit_degradation(circuit_key)
+        if circuit_degradation:
+            return LlmAssistResult(
+                used_llm=False,
+                degraded=True,
+                degradation_code=circuit_degradation,
+            )
+        configured, conversation_service, provider = _active_software_llm()
+        if not configured:
+            return LlmAssistResult(
+                used_llm=False,
+                degraded=mode == "on",
+                degradation_code="ETL_LLM_UNAVAILABLE" if mode == "on" else "",
+            )
+        timeout_seconds = etl_llm_timeout_seconds()
+        try:
+            result = _bounded_structured_completion(
+                messages,
+                schema=schema,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+                conversation_service=conversation_service,
+                provider=provider,
+            )
+            return LlmAssistResult(
+                used_llm=True,
+                model=str(result.model or ""),
+                billing=dict(result.billing or {}),
+                data=dict(result.data),
+            )
+        except Exception as exc:  # noqa: BLE001 - LLM failure must never own ETL execution
+            degradation_code = _degradation_code(exc)
+            _open_circuit(circuit_key, degradation_code)
+            logger.info(
+                "general etl llm assist degraded (%s): %s",
+                degradation_code,
+                type(exc).__name__,
+            )
+            return LlmAssistResult(
+                used_llm=True,
+                degraded=True,
+                degradation_code=degradation_code,
+            )
 
 
 _REGION_SCHEMA: dict[str, Any] = {
@@ -445,6 +611,7 @@ __all__ = [
     "advise_field_mappings",
     "advise_row_decisions",
     "advise_workbook_regions",
+    "clear_etl_llm_circuit",
     "etl_llm_enabled",
     "etl_llm_mode",
     "etl_llm_timeout_seconds",

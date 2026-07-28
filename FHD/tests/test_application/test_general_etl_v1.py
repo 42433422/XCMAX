@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from app.application.dataset_rag_app_service import DatasetRagApplicationService
 from app.application.etl.adviser import EtlRowAdviser
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
+from app.application.etl.llm_assist import clear_etl_llm_circuit
 from app.application.etl.parsers import parse_file
 from app.application.etl.service import EtlService, mark_interrupted_runs_on_startup
 from app.application.etl.targets import (
@@ -371,6 +372,73 @@ def test_llm_adviser_failure_never_changes_deterministic_action(etl_db, monkeypa
         persisted = service.get_run(db, run_id=run["id"], owner_user_id=10)
         assert persisted["details"]["llm_degraded"] is True
         db.close()
+
+
+def test_preview_completes_after_structured_llm_quota_without_repeat(etl_db, monkeypatch):
+    """Quota is advisory-only: preview persists deterministic rows immediately."""
+
+    calls = 0
+    clear_etl_llm_circuit()
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setattr(
+        "app.application.etl.llm_assist._active_software_llm",
+        lambda: (True, None, object()),
+    )
+
+    def quota_exhausted(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("provider 429 quota exhausted")
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.structured_output.complete_structured_sync",
+        quota_exhausted,
+    )
+    service = EtlService()
+    monkeypatch.setattr(
+        service,
+        "_submit_preview",
+        lambda run_id, _tenant_id, owner_user_id: service._preview_worker(run_id, owner_user_id),
+    )
+    try:
+        with tenant_scope(6):
+            db = etl_db()
+            upload = service.save_upload(
+                db,
+                owner_user_id=10,
+                file_name="quota-fallback.csv",
+                content_type="text/csv",
+                stream=BytesIO("客户名称\n确定性客户\n".encode()),
+            )
+            db.commit()
+            run = service.create_preview(
+                db,
+                owner_user_id=10,
+                upload_id=upload["upload_id"],
+                target_type="customers",
+            )
+            rows = service.get_rows(
+                db,
+                run_id=run["id"],
+                owner_user_id=10,
+                page=1,
+                page_size=10,
+            )
+            persisted = service.get_run(db, run_id=run["id"], owner_user_id=10)
+            assert persisted["status"] == "preview_ready"
+            assert rows["items"][0]["suggested_action"] == "new"
+            assert rows["items"][0]["final_action"] == "new"
+            assert rows["items"][0]["llm_suggestion"]["degradation_code"] == (
+                "ETL_LLM_QUOTA_EXHAUSTED"
+            )
+            assert persisted["details"]["llm_degraded"] is True
+            db.close()
+    finally:
+        clear_etl_llm_circuit()
+
+    # Mapping advice consumes the sole failed structured call; the later row
+    # adviser sees the owner circuit and cannot keep the preview validating.
+    assert calls == 1
 
 
 def test_batch_llm_advice_never_overrides_adapter_action(etl_db, monkeypatch):
