@@ -5,7 +5,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from app.application.etl.service_shipment_templates import ShipmentTemplateServiceMixin
+from app.application.etl.service_shipment_templates import (
+    ShipmentTemplateServiceMixin,
+    shipment_template_candidate,
+)
 from app.db.models.etl import EtlTemplate, EtlTemplateVersion
 
 
@@ -19,6 +22,36 @@ class _TemplateService(ShipmentTemplateServiceMixin):
 
     def _owned_upload(self, _db, _upload_id, _owner_user_id):
         return self._upload
+
+
+def test_detected_layout_candidate_is_visible_without_persisting_template():
+    source_features = {
+        "regions": [
+            {
+                "id": "侯雪梅!R3C1:10",
+                "sheet": "侯雪梅",
+                "header_row": 3,
+                "status": "selected",
+                "customer_name": "金汉武家私",
+                "order_number": "26-010057A",
+                "headers": ["产品型号", "产品名称", "规格/KG"],
+            }
+        ]
+    }
+
+    candidate = shipment_template_candidate(source_features, "侯雪梅.xlsx")
+
+    assert candidate == {
+        "kind": "shipment_document_layout_candidate",
+        "status": "detected",
+        "name": "金汉武家私-发货单版式",
+        "source_region_id": "侯雪梅!R3C1:10",
+        "sheet": "侯雪梅",
+        "header_row": 3,
+        "customer_name": "金汉武家私",
+        "order_number": "26-010057A",
+        "headers": ["产品型号", "产品名称", "规格/KG"],
+    }
 
 
 def test_save_delivery_layout_defaults_to_selected_customer_name(tmp_path):

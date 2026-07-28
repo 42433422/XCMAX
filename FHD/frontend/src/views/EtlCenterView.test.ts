@@ -304,6 +304,13 @@ describe('EtlCenterView folder workflow', () => {
       target_type: 'shipment_records',
       source_features: {
         business_document_type: 'delivery_note',
+        shipment_template_candidate: {
+          name: '金汉武家私-发货单版式',
+          sheet: '侯雪梅',
+          header_row: 3,
+          customer_name: '金汉武家私',
+          order_number: '26-010057A',
+        },
         target_detection: {
           target_type: 'shipment_records',
           document_type: 'delivery_note_workbook',
@@ -338,6 +345,8 @@ describe('EtlCenterView folder workflow', () => {
     }))
     expect(wrapper.text()).toContain('写入目标')
     expect(wrapper.text()).toContain('发货记录')
+    expect(wrapper.text()).toContain('已获取送货单版式候选：金汉武家私-发货单版式')
+    expect(wrapper.text()).toContain('尚未保存')
     expect(wrapper.text()).toContain('要同时补全客户库和产品库？')
     expect(buttonByText(wrapper, '预演客户及产品')).toBeTruthy()
     expect(etlApiMock.execute).not.toHaveBeenCalled()
@@ -373,6 +382,34 @@ describe('EtlCenterView folder workflow', () => {
       compatibility_preset_id: 'legacy',
     }))
     expect(etlApiMock.preview.mock.calls[0][0].template_id).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('shows a saved personal template before an auto-target preview', async () => {
+    etlApiMock.templates.mockResolvedValue([
+      {
+        id: 'hou-template',
+        name: '侯雪梅客户产品模板',
+        target_type: 'customer_products',
+        current_version: 1,
+        version: {
+          id: 'hou-template-v1',
+          number: 1,
+          source_features: {},
+          field_mappings: [],
+          validation_rules: [],
+          match_keys: [],
+          allowed_update_fields: [],
+          action_rules: {},
+        },
+      },
+    ])
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('select[aria-label="导入模板"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('智能识别（或选择个人模板）')
+    expect(wrapper.text()).toContain('侯雪梅客户产品模板 · 客户及产品 · v1')
     wrapper.unmount()
   })
 

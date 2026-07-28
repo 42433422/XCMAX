@@ -146,6 +146,15 @@ const savedShipmentTemplate = computed<Record<string, unknown> | null>(() => {
 const savedShipmentTemplateName = computed(() => (
   String(savedShipmentTemplate.value?.name || '').trim()
 ))
+const shipmentTemplateCandidate = computed<Record<string, unknown> | null>(() => {
+  const candidate = currentRun.value?.source_features?.shipment_template_candidate
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : null
+})
+const shipmentTemplateCandidateName = computed(() => (
+  String(shipmentTemplateCandidate.value?.name || '').trim()
+))
 const linkedCustomerNames = computed(() => {
   const names = runRows.value
     .map((row) => String(row.normalized.customer_name || '').trim())

@@ -265,6 +265,52 @@ def test_companion_history_uses_source_date_not_workbook_row_order(tmp_path, mon
     )
 
 
+def test_companion_history_keeps_evidenced_numeric_models_separate(tmp_path, monkeypatch):
+    """A numeric SKU after an order marker must not collapse product variants."""
+    path = tmp_path / "numeric-history-models.xlsx"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：金汉武家私  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["9803", "测试面漆", 1, 20, 20, 17, 340])
+        delivery.append(["合计", None, 1, None, 20, None, 340])
+
+        history = workbook.create_sheet("出货历史")
+        # A positive 9804 variant, its return, and a 6832 variant mirror a
+        # real ledger shape: order marker | numeric SKU | blank columns | product.
+        history.append(["金汉武", 45702, "1号", 9804, None, None, "PE 白底漆", 5, 28, 140, 9.2, 1288])
+        history.append(["金汉武", 45702, "1号", "退货9804", None, None, "PE 白底漆", -3, 28, -84, 9.2, -772.8])
+        history.append(["金汉武", 45702, "1号", 6832, None, None, "PE 白底漆", 2, 30, 60, 8, 480])
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    dataset = parse_file(path, target_type="customer_products")
+    products = [
+        row
+        for row in dataset.rows
+        if row.values.get("customer_name") == "金汉武家私"
+        and row.values.get("name") == "PE 白底漆"
+    ]
+
+    assert {
+        (
+            row.values.get("model_number"),
+            row.values.get("specification"),
+            row.values.get("price"),
+        )
+        for row in products
+    } == {("9804", 28.0, 9.2), ("6832", 30.0, 8.0)}
+    assert len(products) == 2
+
+
 def test_modeled_delivery_and_model_less_newer_quote_are_blocked_for_review(tmp_path, monkeypatch):
     """Regression for the 侯雪梅 workbook pattern: never guess a duplicate product."""
     path = tmp_path / "侯雪梅-产品歧义.xlsx"
@@ -309,6 +355,49 @@ def test_modeled_delivery_and_model_less_newer_quote_are_blocked_for_review(tmp_
     assert dataset.source_features["latest_record_selection"]["model_identity_ambiguity_groups"] == 1
     assert any(
         warning["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY" for warning in dataset.warnings
+    )
+
+
+def test_shipment_history_order_note_is_not_treated_as_product_model(tmp_path, monkeypatch):
+    """Status annotations must not manufacture a SKU conflict in a ledger."""
+    path = tmp_path / "shipment-history-order-note.xlsx"
+
+    def build(workbook):
+        delivery = workbook.active
+        delivery.title = "送货单"
+        delivery.append(["成都国圣送货单"])
+        delivery.append(["购货单位：名品（晶美鑫）  订单编号：A-1"])
+        delivery.append(["型号", "产品名称", "数量/件", "规格/KG", "数量/KG", "单价/元", "金额/元"])
+        delivery.append(["9803", "测试面漆", 1, 20, 20, 17, 340])
+        delivery.append(["合计", None, 1, None, 20, None, 340])
+
+        history = workbook.create_sheet("出货历史")
+        # "未签单" is an order-state note in the model column, not a SKU.
+        history.append(["名品（晶美鑫）", 46000, "2", "未签单", None, None, "全哑黑面漆", 1, 20, 20, 18, 360])
+        history.append(["名品（晶美鑫）", 45900, "2", None, None, None, "全哑黑面漆", 1, 20, 20, 17, 340])
+
+    _save_workbook(path, build)
+    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setattr(
+        "app.application.etl.shipment_compat_parser.parse_delivery_note_with_compat_profile",
+        lambda *_args, **_kwargs: None,
+    )
+
+    dataset = parse_file(path, target_type="customer_products")
+    rows = [
+        row
+        for row in dataset.rows
+        if row.values.get("customer_name") == "名品（晶美鑫）"
+        and row.values.get("name") == "全哑黑面漆"
+    ]
+
+    assert len(rows) == 1
+    assert rows[0].values.get("model_number") is None
+    assert rows[0].values["price"] == 18.0
+    assert rows[0].provenance["source_date"] == "2025-12-09"
+    assert not any(
+        issue["code"] == "ETL_PRODUCT_MODEL_AMBIGUITY"
+        for issue in rows[0].provenance.get("validation_issues", [])
     )
 
 

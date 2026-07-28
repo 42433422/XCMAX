@@ -203,6 +203,17 @@ class PreviewServiceMixin:
                 source_features["target_detection"] = summary["target_detection"]
             if compatibility_preset_id:
                 source_features["compatibility_preset_id"] = compatibility_preset_id
+            if run.target_type == "shipment_records":
+                # Surface an auditable, non-persistent layout candidate with
+                # the preview.  The user must still explicitly save it before
+                # it enters their private template library.
+                from app.application.etl.service_shipment_templates import (
+                    shipment_template_candidate,
+                )
+
+                candidate = shipment_template_candidate(source_features, upload.file_name)
+                if candidate:
+                    source_features["shipment_template_candidate"] = candidate
             if not draft.get("field_mappings"):
                 deterministic_mappings = self._suggest_mappings(
                     dataset, get_adapter(run.target_type)

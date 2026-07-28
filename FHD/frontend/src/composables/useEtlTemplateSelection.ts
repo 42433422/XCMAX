@@ -22,7 +22,7 @@ export function useEtlTemplateSelection(options: {
   const templateSelection = ref('')
   const compatibleTemplates = computed(() => (
     options.templates.value.filter((item) => (
-      item.target_type === options.targetType.value
+      (options.targetType.value === 'auto' || item.target_type === options.targetType.value)
       && item.description !== SHIPMENT_DOCUMENT_LAYOUT_DESCRIPTION
     ))
   ))
@@ -45,8 +45,33 @@ export function useEtlTemplateSelection(options: {
     compatiblePresets.value.find((item) => item.id === compatibilityPresetId.value)
   ))
 
-  watch(options.targetType, () => {
-    templateSelection.value = ''
+  watch(options.targetType, (targetType) => {
+    const selection = templateSelection.value
+    if (!selection) return
+    // Compatibility presets remain scoped to their target too. Keep the
+    // previous reset behavior for them (and for an invalid selection) while a
+    // same-target personal template stays selected after it locks the target.
+    if (!selection.startsWith('template:')) {
+      templateSelection.value = ''
+      return
+    }
+    const selectedId = selection.slice('template:'.length)
+    const selectedTemplate = options.templates.value.find((item) => item.id === selectedId)
+    if (!selectedTemplate || selectedTemplate.target_type !== targetType) {
+      templateSelection.value = ''
+    }
+  })
+
+  watch(templateSelection, (selection) => {
+    if (!selection.startsWith('template:') || options.targetType.value !== 'auto') return
+    const selectedId = selection.slice('template:'.length)
+    const selectedTemplate = options.templates.value.find((item) => item.id === selectedId)
+    if (selectedTemplate) {
+      // Choosing a private template is an explicit, deterministic target
+      // choice. It only locks the preview target; execution remains gated by
+      // the regular preview-and-confirm flow.
+      options.targetType.value = selectedTemplate.target_type
+    }
   })
 
   return {

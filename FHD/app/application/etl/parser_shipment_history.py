@@ -23,6 +23,14 @@ _PARENTHETICAL_RE = re.compile(r"[（(][^）)]*[）)]")
 _DATE_TEXT_RE = re.compile(
     r"(?P<year>(?:19|20)\d{2})[年./-](?P<month>\d{1,2})(?:[月./-](?P<day>\d{1,2}))?"
 )
+# Notes such as "未签单" are often written in the model-number column of a
+# running shipment ledger.  They describe the order, not a sellable SKU.  This
+# list is deliberately narrow and only matches complete, well-known status
+# annotations, so a real Chinese model number is still preserved for review.
+_NON_MODEL_ANNOTATION_RE = re.compile(
+    r"^(?:未(?:签单|下单|发货)|(?:单)?下错(?:了)?|(?:已)?作废|取消|无(?:型号|编号|产品型号))$",
+    re.I,
+)
 
 
 def customer_alias_key(value: Any) -> str:
@@ -99,9 +107,42 @@ def _looks_like_product(value: Any) -> bool:
 
 def _looks_like_model(value: Any) -> bool:
     text = clean_cell_text(value)
-    if not text or re.fullmatch(r"\d+号?", text):
+    if (
+        not text
+        or re.fullmatch(r"\d+号?", text)
+        or _NON_MODEL_ANNOTATION_RE.fullmatch(text)
+    ):
         return False
     return bool(re.search(r"[\u4e00-\u9fffA-Za-z0-9]", text))
+
+
+def _nearby_model_number(values: tuple[Any, ...], product_index: int) -> str:
+    """Return a defensible model immediately before a headerless product row.
+
+    A plain number normally remains unsafe: historical ledgers often put a
+    delivery sequence (for example ``1号``) next to the product.  Some real
+    ledgers place a *numeric* product code one cell closer to the product,
+    though (``1号 | 9804 | … | PE白底漆``).  Preserve that code only when the
+    surrounding row independently proves the preceding field is an order
+    marker.  This avoids collapsing separate numeric models into a single
+    name-only product during latest-record selection.
+    """
+
+    nearby = [
+        clean_cell_text(candidate)
+        for candidate in reversed(values[max(1, product_index - 4) : product_index])
+        if clean_cell_text(candidate)
+    ]
+    for offset, text in enumerate(nearby):
+        if _looks_like_model(text):
+            return text
+        if (
+            offset == 0
+            and re.fullmatch(r"\d{3,12}", text)
+            and any(re.fullmatch(r"\d{1,4}号", earlier) for earlier in nearby[1:])
+        ):
+            return text
+    return ""
 
 
 def _line_candidate(values: tuple[Any, ...]) -> dict[str, Any] | None:
@@ -126,12 +167,7 @@ def _line_candidate(values: tuple[Any, ...]) -> dict[str, Any] | None:
             continue
         if amount_error > max(5.0, abs(amount) * 0.03):
             continue
-        model_number = ""
-        for candidate in reversed(values[max(1, index - 4) : index]):
-            text = clean_cell_text(candidate)
-            if _looks_like_model(text):
-                model_number = text
-                break
+        model_number = _nearby_model_number(values, index)
         score = 10 + (2 if model_number else 0)
         candidate = {
             "product_name": product_name,

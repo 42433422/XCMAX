@@ -67,6 +67,41 @@ def _shipment_template_default_name(source_features: dict[str, Any], file_name: 
     return f"{Path(file_name).stem}-发货单版式"
 
 
+def shipment_template_candidate(
+    source_features: dict[str, Any],
+    file_name: str,
+) -> dict[str, Any] | None:
+    """Describe an extracted layout before a user decides to save it.
+
+    A delivery-note upload has already supplied enough structural evidence to
+    tell the user which region will become the print layout.  Persisting that
+    layout is still an explicit user action, but hiding this result until the
+    save button is pressed made it look as if no template had been found at
+    all.  Keep the candidate metadata-only: it never exposes a path or creates
+    an ``etl_templates`` row.
+    """
+
+    region = _selected_shipment_region(source_features)
+    if not region:
+        return None
+    name = _shipment_template_default_name(source_features, file_name)
+    return {
+        "kind": "shipment_document_layout_candidate",
+        "status": "detected",
+        "name": _safe_template_name(name, "发货单版式"),
+        "source_region_id": str(region.get("id") or ""),
+        "sheet": str(region.get("sheet") or ""),
+        "header_row": int(region.get("header_row") or 0),
+        "customer_name": str(region.get("customer_name") or "").strip(),
+        "order_number": str(region.get("order_number") or "").strip(),
+        "headers": [
+            str(header).strip()
+            for header in (region.get("headers") or [])
+            if str(header or "").strip()
+        ],
+    }
+
+
 class ShipmentTemplateServiceMixin:
     def save_run_shipment_template(
         self,
