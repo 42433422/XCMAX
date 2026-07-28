@@ -196,6 +196,31 @@ def test_plan_accepts_only_fully_declared_read_only_direct_python_contract(
     assert reasons["undeclared-direct"] == "direct_python_input_not_declared"
 
 
+def test_explicit_burn_in_handlers_preserve_normal_employee_runtime(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", "1")
+    manifest = _direct_manifest()
+    actions = manifest["employee_config_v2"]["actions"]
+    actions["handlers"] = ["agent", "specialized", "llm_md", "echo"]
+    actions["burn_in_handlers"] = ["direct_python"]
+    actions["agent"] = {"workspace": {"read_only": False}}
+
+    plan = burnin.build_burn_in_plan(
+        limit=1,
+        _contracts={"safe-direct": _contract("safe-direct")},
+        _manifests={"safe-direct": manifest},
+        _proven_ids=set(),
+        _recent_ids=set(),
+    )
+
+    candidate = plan["candidates"][0]
+    assert actions["handlers"] == ["agent", "specialized", "llm_md", "echo"]
+    assert candidate["handlers"] == actions["handlers"]
+    assert candidate["capability_handlers"] == ["direct_python"]
+    assert candidate["burn_in_fixture"] == {"record": {"id": "fixture"}}
+
+
 def test_changed_reviewed_manifest_bypasses_attempt_cooldown(monkeypatch) -> None:
     monkeypatch.setenv("MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", "2")
     contract = _contract("safe-direct")
