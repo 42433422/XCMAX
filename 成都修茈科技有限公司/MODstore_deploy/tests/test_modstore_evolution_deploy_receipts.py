@@ -115,3 +115,43 @@ def test_record_evolution_receipt_is_strong_and_idempotent(monkeypatch) -> None:
     )
     assert repeated["recorded"] == 0
     assert len(events) == 1
+
+
+def test_source_bound_pack_records_one_autonomous_code_qa_deploy_run(monkeypatch) -> None:
+    verified = {
+        "package_id": "autonomy-gap-analyst",
+        "version": "1.0.0",
+        "package_sha256": "b" * 64,
+        "stored_filename": "autonomy-gap-analyst-1.0.0.xcemp",
+        "source_commit_sha": "c" * 40,
+        "catalog_readback_verified": True,
+        "installability_verified": True,
+        "runtime_contract_verified": True,
+    }
+    monkeypatch.setattr(
+        "modstore_server.modstore_evolution_deploy_receipts.verify_catalog_package",
+        lambda package_id, version: dict(verified),
+    )
+    events: list[dict] = []
+
+    result = record_evolution_deployment_receipts(
+        packages=[{"id": "autonomy-gap-analyst", "version": "1.0.0"}],
+        merge_sha=MERGE_SHA,
+        workflow_run_id="67890",
+        rows=[],
+        record_event=events.append,
+        council_builder=lambda package: {"verified": True, "receipt_id": "council-2"},
+    )
+
+    assert result["recorded"] == 1
+    assert len(events) == 5
+    assert {event["run_id"] for event in events} == {
+        "evolution-deploy-67890-autonomy-gap-analyst"
+    }
+    assert events[0]["phase"] == "start"
+    assert events[0]["triggered_by"] == "proactive_signal"
+    assert events[0]["force"] is False
+    assert events[1]["step"] == "code"
+    assert events[2]["step"] == "qa"
+    assert events[3]["event_type"] == "modstore_deployment_verified"
+    assert events[4]["status"] == "completed_merged"

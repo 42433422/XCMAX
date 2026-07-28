@@ -299,6 +299,8 @@ _INTENT_ACCURACY_THRESHOLD = 0.80
 _LEGACY_RATIO_THRESHOLD = 0.25
 _SLO_AVAILABILITY_THRESHOLD = 0.99
 _SLO_ERROR_RATE_THRESHOLD = 0.01
+_AUTONOMY_GAP_PACK_ID = "autonomy-gap-analyst"
+_AUTONOMY_GAP_PACK_VERSION = "1.0.0"
 
 
 def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
@@ -314,8 +316,42 @@ def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _catalog_capability_gap() -> Dict[str, Any]:
+    """Expose one bounded repo-derived gap only while its source is absent."""
+
+    enabled = os.environ.get("MODSTORE_ENABLE_CATALOG_GAP_SCAN", "").strip().lower()
+    if enabled not in {"1", "true", "yes", "on"}:
+        return {"report": {}, "below_threshold": False, "signal_score": 0.0}
+    root = _repo_root()
+    source_dir = (
+        root
+        / "成都修茈科技有限公司"
+        / "MODstore_deploy"
+        / "modstore_server"
+        / "catalog_data"
+        / "files"
+        / f"{_AUTONOMY_GAP_PACK_ID}@{_AUTONOMY_GAP_PACK_VERSION}"
+    )
+    missing = not (source_dir / "manifest.json").is_file()
+    report = {
+        "gap": "founder_autonomy_scorecard_has_no_installable_gap_analyst_employee",
+        "package_id": _AUTONOMY_GAP_PACK_ID,
+        "version": _AUTONOMY_GAP_PACK_VERSION,
+        "expected_source_dir": str(source_dir),
+        "source_present": not missing,
+        "bounded_files": 3,
+        "requires_pr_ci_review": True,
+        "customer_payment_evidence_must_not_be_fabricated": True,
+    }
+    return {
+        "report": report,
+        "below_threshold": missing,
+        "signal_score": 1.0 if missing else 0.0,
+    }
+
+
 def aggregate_signals() -> Dict[str, Any]:
-    """聚合 3 个扫描类 workflow 的 JSON 报告。
+    """Aggregate workflow reports and the explicitly enabled catalog gap.
 
     返回每个源的信号强度（signal_score）+ 是否触发提议（below_threshold）。
     signal_score > 0 表示值得进入 LLM 提议器。
@@ -345,9 +381,14 @@ def aggregate_signals() -> Dict[str, Any]:
             slo_err - _SLO_ERROR_RATE_THRESHOLD,
         )
 
-    signals_to_propose = sum(1 for s in (intent_score, legacy_score, slo_score) if s > 0)
+    catalog_gap = _catalog_capability_gap()
+    catalog_score = float(catalog_gap.get("signal_score") or 0.0)
+    signals_to_propose = sum(
+        1 for s in (catalog_score, intent_score, legacy_score, slo_score) if s > 0
+    )
 
     return {
+        "catalog_capability_gap": catalog_gap,
         "legacy_usage": {
             "report": legacy,
             "below_threshold": legacy_below,
@@ -364,6 +405,6 @@ def aggregate_signals() -> Dict[str, Any]:
             "below_threshold": slo_below,
             "signal_score": slo_score,
         },
-        "total_score": intent_score + legacy_score + slo_score,
+        "total_score": catalog_score + intent_score + legacy_score + slo_score,
         "signals_to_propose": signals_to_propose,
     }
