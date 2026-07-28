@@ -206,6 +206,64 @@ describe('usePrintService', () => {
     })
   })
 
+  describe('checkDocumentPrintJob', () => {
+    it('returns the owner-bound receipt only after CUPS confirms completion', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          print_completed: true,
+          print_state: 'completed',
+          post_print_receipt: 'receipt-after-cups',
+        }),
+      } as Response)
+
+      const result = await service.checkDocumentPrintJob('opaque-job-token')
+
+      expect(result.success).toBe(true)
+      expect(result.printCompleted).toBe(true)
+      expect(result.postPrintReceipt).toBe('receipt-after-cups')
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost/api/print/jobs/opaque-job-token',
+        expect.objectContaining({ credentials: 'include' }),
+      )
+    })
+
+    it('keeps an unconfirmed CUPS job pending without a receipt', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, print_completed: false, print_state: 'pending' }),
+      } as Response)
+
+      const result = await service.checkDocumentPrintJob('opaque-job-token')
+
+      expect(result.success).toBe(true)
+      expect(result.printPending).toBe(true)
+      expect(result.postPrintReceipt).toBeUndefined()
+    })
+
+    it('surfaces an aborted CUPS job without marking it completed', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: false,
+          print_completed: false,
+          print_state: 'aborted',
+          message: 'media-empty-error',
+        }),
+      } as Response)
+
+      const result = await service.checkDocumentPrintJob('opaque-job-token')
+
+      expect(result.success).toBe(false)
+      expect(result.printCompleted).toBe(false)
+      expect(result.printState).toBe('aborted')
+    })
+  })
+
   describe('executePrintTask', () => {
     it('sets isPrinting during execution', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -236,23 +294,42 @@ describe('usePrintService', () => {
     it('tracks label failures', async () => {
       vi.spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, summary: { label_printer_ready: true } }),
+        } as Response)
+        .mockResolvedValueOnce({
           ok: false,
           status: 500,
           json: async () => ({ success: false, message: 'Printer jam' }),
         } as Response)
-        .mockResolvedValue({
+        .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ success: true, updated: true, post_print_receipt: 'receipt-2' }),
+          json: async () => ({ success: true, print_completed: true, post_print_receipt: 'receipt-2' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, updated: true }),
         } as Response)
       const summary = await service.executePrintTask(['/bad.pdf'], '/doc.pdf', 1, undefined, 'token-2')
       expect(summary.labelFailed).toBe(1)
       expect(summary.logs).toHaveLength(1)
       expect(summary.logs[0]).toContain('标签打印失败')
+      // The delivery document and its shipment state are authoritative.  A
+      // configured label printer failure is a visible warning, not a false
+      // "shipment failed" result.
+      expect(summary.success).toBe(true)
     })
 
     it('tracks document print failure', async () => {
       vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, summary: { label_printer_ready: true } }),
+        } as Response)
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -263,14 +340,66 @@ describe('usePrintService', () => {
           status: 500,
           json: async () => ({ success: false, message: 'Doc error' }),
         } as Response)
+      const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf', 1)
+      expect(summary.shipmentPrinted).toBe(false)
+      expect(summary.logs).toContainEqual(expect.stringContaining('发货单打印失败'))
+    })
+
+    it('skips optional labels when no label printer is configured but completes the delivery document', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, summary: { label_printer_ready: false } }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, print_completed: true, post_print_receipt: 'doc-receipt' }),
+        } as Response)
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           json: async () => ({ success: true, updated: true }),
         } as Response)
-      const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf', 1)
-      expect(summary.shipmentPrinted).toBe(false)
-      expect(summary.logs).toContainEqual(expect.stringContaining('发货单打印失败'))
+
+      const summary = await service.executePrintTask(
+        ['/label-1.pdf', '/label-2.pdf'],
+        '/doc.pdf',
+        1,
+        undefined,
+        'token-optional-labels',
+      )
+
+      expect(summary.labelSkipped).toBe(2)
+      expect(summary.labelFailed).toBe(0)
+      expect(summary.shipmentMarked).toBe(true)
+      expect(summary.success).toBe(true)
+      expect(fetchSpy.mock.calls.map(([url]) => String(url))).not.toContain('http://localhost/api/print/label')
+    })
+
+    it('does not mark a shipment printed while CUPS reports a queued document job', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          print_completed: false,
+          print_state: 'queued',
+          job_id: 'Canon_TS3700_series-42',
+          print_job_token: 'opaque-pending-job',
+          print_tracking_available: true,
+        }),
+      } as Response)
+
+      const summary = await service.executePrintTask([], '/doc.pdf', 1, undefined, 'token-queued')
+
+      expect(summary.pending).toBe(true)
+      expect(summary.shipmentPending).toBe(true)
+      expect(summary.shipmentMarked).toBe(false)
+      expect(summary.pendingPrintJobToken).toBe('opaque-pending-job')
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      expect(String(fetchSpy.mock.calls[0][0])).toBe('http://localhost/api/print/document')
     })
 
     it('logs warning when orderId is missing', async () => {
@@ -327,7 +456,7 @@ describe('usePrintService', () => {
         message: '打印完成',
       }
       const msg = service.buildPrintSummaryMessage(summary, 1, '/doc.pdf')
-      expect(msg).toContain('已发送打印')
+      expect(msg).toContain('已确认打印')
       expect(msg).toContain('已标记已打印')
     })
 

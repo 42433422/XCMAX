@@ -78,7 +78,7 @@
                 {{ $t('chat.downloadShipment') }}
               </a>
               <button
-                v-if="currentTask?.type === 'shipment_generate'"
+                v-if="currentTask?.type === 'shipment_generate' && !currentTask?.printPending && !currentTask?.printCompleted && !currentTask?.printTerminal"
                 type="button"
                 class="btn btn-success btn-sm"
                 data-action="start-print"
@@ -86,6 +86,34 @@
               >
                 {{ $t('chat.startPrint') }}
               </button>
+              <span
+                v-else-if="currentTask?.type === 'shipment_generate' && currentTask?.printPending"
+                class="task-print-pending"
+              >
+                已提交打印队列，等待设备完成；尚未标记已打印。
+                <button
+                  v-if="currentTask?.printJobToken"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-action="check-print-status"
+                  :disabled="currentTask?.printStatusChecking"
+                  @click="$emit('check-print-status')"
+                >
+                  {{ currentTask?.printStatusChecking ? '正在检查' : '检查打印状态' }}
+                </button>
+              </span>
+              <span
+                v-else-if="currentTask?.type === 'shipment_generate' && currentTask?.printCompleted"
+                class="task-print-pending"
+              >
+                已由打印机确认完成，发货记录已更新。
+              </span>
+              <span
+                v-else-if="currentTask?.type === 'shipment_generate' && currentTask?.printTerminal"
+                class="task-print-pending"
+              >
+                当前打印任务未完成且不能重复提交；请重新生成发货单后再打印。
+              </span>
               <button
                 v-if="currentTask?.type === 'excel_import' && currentTask?.completed"
                 type="button"
@@ -335,6 +363,7 @@ const emit = defineEmits<{
   'set-custom-order-number': [value: string]
   'shipment-download-click': []
   'start-print': []
+  'check-print-status': []
   'switch-view': [view: string]
   'set-task-filter': [filter: 'all' | 'running' | 'success' | 'failed']
   'clear-task-history': []

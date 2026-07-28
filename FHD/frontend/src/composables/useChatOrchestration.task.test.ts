@@ -6,6 +6,8 @@ const lastShipmentExecution = ref<Record<string, unknown> | null>(null)
 const addAndSaveMessage = vi.fn().mockResolvedValue(undefined)
 const executePrintTask = vi.fn()
 const buildPrintSummaryMessage = vi.fn(() => '打印完成')
+const checkDocumentPrintJob = vi.fn()
+const markAsPrinted = vi.fn()
 const upsertTask = vi.fn()
 const handleChatRequiresToken = vi.fn()
 const authenticatedRequestInitMock = vi.hoisted(() => vi.fn().mockResolvedValue({
@@ -113,6 +115,8 @@ vi.mock('./usePrintService', async () => {
       isPrinting: ref(false),
       executePrintTask,
       buildPrintSummaryMessage,
+      checkDocumentPrintJob,
+      markAsPrinted,
     }),
   }
 })
@@ -220,6 +224,8 @@ describe('useChatOrchestration task/print', () => {
     vi.clearAllMocks()
     lastShipmentExecution.value = null
     executePrintTask.mockResolvedValue({ success: true, message: 'ok' })
+    checkDocumentPrintJob.mockResolvedValue({ success: true, printPending: true, message: '仍在队列' })
+    markAsPrinted.mockResolvedValue({ success: true, message: '已更新' })
   })
 
   afterEach(() => {
@@ -255,6 +261,83 @@ describe('useChatOrchestration task/print', () => {
       'generated-print-token',
     )
     expect(buildPrintSummaryMessage).toHaveBeenCalled()
+  })
+
+  it('keeps a queued CUPS job pending, then marks shipment only after a status check returns completion', async () => {
+    lastShipmentExecution.value = {
+      filePath: '/tmp/doc.pdf',
+      labelPaths: [],
+      purchaseUnit: '甲公司',
+      orderId: 42,
+      printToken: 'generated-print-token',
+      taskListId: 'shipment-1',
+    }
+    executePrintTask.mockResolvedValue({
+      success: false,
+      pending: true,
+      shipmentPending: true,
+      pendingPrintJobToken: 'opaque-cups-job',
+      printTrackingAvailable: true,
+      message: '等待设备完成',
+    })
+    checkDocumentPrintJob.mockResolvedValue({
+      success: true,
+      printCompleted: true,
+      printPending: false,
+      postPrintReceipt: 'receipt-after-cups',
+      message: '已完成',
+    })
+    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    api.currentTask.value = {
+      type: 'shipment_generate',
+      title: '发货单',
+      description: '已生成',
+      completed: true,
+    }
+
+    await api.sendMessage('开始打印')
+    expect(api.currentTask.value?.printPending).toBe(true)
+    expect(api.currentTask.value?.printJobToken).toBe('opaque-cups-job')
+    expect(markAsPrinted).not.toHaveBeenCalled()
+
+    await api.checkPendingShipmentPrintFromTaskCard()
+
+    expect(checkDocumentPrintJob).toHaveBeenCalledWith('opaque-cups-job')
+    expect(markAsPrinted).toHaveBeenCalledWith('/tmp/doc.pdf', 42, 'receipt-after-cups')
+    expect(api.currentTask.value?.printPending).toBe(false)
+    expect(api.currentTask.value?.printCompleted).toBe(true)
+    expect(api.currentTask.value?.printJobToken).toBeUndefined()
+  })
+
+  it('leaves a CUPS job pending when the status check is still pending', async () => {
+    lastShipmentExecution.value = {
+      filePath: '/tmp/doc.pdf',
+      labelPaths: [],
+      purchaseUnit: '甲公司',
+      orderId: 42,
+      pendingPrintJobToken: 'opaque-cups-job',
+    }
+    checkDocumentPrintJob.mockResolvedValue({
+      success: true,
+      printPending: true,
+      printCompleted: false,
+      message: '仍在队列',
+    })
+    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    api.currentTask.value = {
+      type: 'shipment_generate',
+      title: '发货单',
+      description: '等待设备完成',
+      completed: true,
+      printPending: true,
+      printJobToken: 'opaque-cups-job',
+    }
+
+    await api.checkPendingShipmentPrintFromTaskCard()
+
+    expect(api.currentTask.value?.printPending).toBe(true)
+    expect(api.currentTask.value?.printCompleted).not.toBe(true)
+    expect(markAsPrinted).not.toHaveBeenCalled()
   })
 
   it('confirmTask without api_url reports failure', async () => {

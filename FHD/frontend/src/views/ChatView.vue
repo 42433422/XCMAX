@@ -55,6 +55,7 @@
         @set-custom-order-number="setCustomOrderNumber"
         @shipment-download-click="handleShipmentDownloadClick"
         @start-print="startPrintFromTaskCard"
+        @check-print-status="checkPendingShipmentPrintFromTaskCard"
         @switch-view="emitSwitchView"
         @set-task-filter="setTaskFilter"
         @clear-task-history="clearTaskHistory"
@@ -286,6 +287,7 @@ const {
   newConversation,
   handleShipmentDownloadClick,
   startPrintFromTaskCard,
+  checkPendingShipmentPrintFromTaskCard,
   copyAssistantPushContent,
   openAssistantFloatFromTaskPanel,
   syncProModeState,

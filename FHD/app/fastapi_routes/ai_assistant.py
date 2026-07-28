@@ -416,6 +416,7 @@ def compat_print_shipment_file(
     """
 
     from app.application.print_authorization import (
+        defer_document_print_capability,
         finish_document_print_capability,
         reserve_document_print_capability,
     )
@@ -464,12 +465,34 @@ def compat_print_shipment_file(
     except RECOVERABLE_ERRORS:
         finish_document_print_capability(reservation, print_succeeded=False)
         raise
-    post_print_receipt = finish_document_print_capability(
-        reservation,
-        print_succeeded=bool(result.get("success")),
-    )
+    print_succeeded = bool(result.get("success"))
+    print_completed = bool(result.get("print_completed", print_succeeded))
+    post_print_receipt = None
+    if print_succeeded and not print_completed:
+        pending_job = defer_document_print_capability(
+            reservation,
+            printer_name=result.get("printer"),
+            job_id=result.get("job_id"),
+        )
+        if pending_job.get("success"):
+            result["print_job_token"] = pending_job["print_job_token"]
+            result["print_tracking_available"] = bool(pending_job.get("tracking_available"))
+        else:
+            finish_document_print_capability(
+                reservation,
+                print_succeeded=True,
+                print_completed=False,
+            )
+            result["print_tracking_available"] = False
+    else:
+        post_print_receipt = finish_document_print_capability(
+            reservation,
+            print_succeeded=print_succeeded,
+            print_completed=print_completed,
+        )
     if result.get("success"):
-        result["post_print_receipt"] = post_print_receipt
+        if post_print_receipt:
+            result["post_print_receipt"] = post_print_receipt
         result["printed_order_id"] = order_id
     status = 200 if result.get("success") else 400
     traced = _trace_ai_assistant_route(

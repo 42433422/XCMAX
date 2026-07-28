@@ -21,10 +21,16 @@ from typing import Any
 
 PRINT_CAPABILITY_TTL_SECONDS = 15 * 60
 POST_PRINT_RECEIPT_TTL_SECONDS = 5 * 60
+PENDING_PRINT_JOB_TTL_SECONDS = 15 * 60
 
 _lock = threading.RLock()
 _print_capabilities: dict[str, dict[str, Any]] = {}
 _post_print_receipts: dict[str, dict[str, Any]] = {}
+# A pending CUPS job is not a print receipt.  It is an owner-bound, opaque
+# tracker which permits a *read-only* IPP status check after the bounded
+# submission monitor times out.  Keeping it process-local follows the same
+# safe-on-restart semantics as one-click print capabilities.
+_pending_document_print_jobs: dict[str, dict[str, Any]] = {}
 
 
 def _positive_user_id(value: object) -> int | None:
@@ -66,7 +72,11 @@ def normalize_printable_path(file_path: object) -> str | None:
 
 def _cleanup_locked() -> None:
     now = time.time()
-    for mapping in (_print_capabilities, _post_print_receipts):
+    for mapping in (
+        _print_capabilities,
+        _post_print_receipts,
+        _pending_document_print_jobs,
+    ):
         expired = [
             token
             for token, record in mapping.items()
@@ -193,8 +203,16 @@ def finish_document_print_capability(
     reservation: dict[str, Any],
     *,
     print_succeeded: bool,
+    print_completed: bool = True,
 ) -> str | None:
-    """Release a failed reservation or turn a successful one into a receipt."""
+    """Finish a print reservation without falsely claiming physical completion.
+
+    ``print_succeeded`` means the OS accepted the submission.  On macOS CUPS
+    that is not equivalent to pages leaving the printer: a bounded IPP monitor
+    supplies ``print_completed``.  A queued/pending job consumes the one-click
+    capability so a repeat click cannot duplicate it, but yields no receipt and
+    therefore cannot move the shipment record to ``printed``.
+    """
 
     token = str((reservation or {}).get("capability_token") or "").strip()
     if not token:
@@ -209,6 +227,8 @@ def finish_document_print_capability(
             return None
 
         _print_capabilities.pop(token, None)
+        if not print_completed:
+            return None
         receipt = secrets.token_urlsafe(32)
         _post_print_receipts[receipt] = {
             "owner_user_id": int(record["owner_user_id"]),
@@ -217,6 +237,211 @@ def finish_document_print_capability(
             "expires_at": time.time() + POST_PRINT_RECEIPT_TTL_SECONDS,
         }
         return receipt
+
+
+def defer_document_print_capability(
+    reservation: dict[str, Any],
+    *,
+    printer_name: object,
+    job_id: object,
+) -> dict[str, Any]:
+    """Turn a submitted-but-unconfirmed print into an owner-bound tracker.
+
+    CUPS can acknowledge ``lp`` while a device is offline.  The original
+    capability must still be consumed (otherwise a second click would submit
+    a duplicate job), but no shipment receipt may exist until a later,
+    authenticated status check sees ``completed``.  A missing job id is kept
+    as an explicitly untrackable terminal-pending record rather than allowing
+    a blind retry of an already submitted document.
+    """
+
+    capability_token = str((reservation or {}).get("capability_token") or "").strip()
+    if not capability_token:
+        return {
+            "success": False,
+            "error_code": "PRINT_PENDING_TRACKER_INVALID",
+            "message": "打印任务状态无法追踪",
+        }
+
+    normalized_printer = str(printer_name or "").strip()
+    normalized_job = str(job_id or "").strip()
+    with _lock:
+        _cleanup_locked()
+        record = _print_capabilities.get(capability_token)
+        if not record:
+            return {
+                "success": False,
+                "error_code": "PRINT_PENDING_TRACKER_INVALID",
+                "message": "打印确认已失效，无法追踪状态",
+            }
+        if not bool(record.get("reserved")):
+            return {
+                "success": False,
+                "error_code": "PRINT_PENDING_TRACKER_INVALID",
+                "message": "打印任务未处于可追踪状态",
+            }
+
+        _print_capabilities.pop(capability_token, None)
+        tracker = secrets.token_urlsafe(32)
+        expires_at = min(
+            float(record.get("expires_at") or 0.0),
+            time.time() + PENDING_PRINT_JOB_TTL_SECONDS,
+        )
+        _pending_document_print_jobs[tracker] = {
+            "owner_user_id": int(record["owner_user_id"]),
+            "file_path": str(record["file_path"]),
+            "order_id": _normalized_order_id(record.get("order_id")),
+            "printer_name": normalized_printer,
+            "job_id": normalized_job,
+            "tracking_available": bool(normalized_printer and normalized_job),
+            "state": "pending",
+            "reason": "",
+            "post_print_receipt": "",
+            "expires_at": expires_at,
+        }
+        return {
+            "success": True,
+            "print_job_token": tracker,
+            "tracking_available": bool(normalized_printer and normalized_job),
+            "expires_at": int(expires_at),
+        }
+
+
+def get_pending_document_print_job(
+    print_job_token: object,
+    *,
+    owner_user_id: object,
+) -> dict[str, Any]:
+    """Get trusted pending-job metadata for an authenticated owner only."""
+
+    token = str(print_job_token or "").strip()
+    owner = _positive_user_id(owner_user_id)
+    if owner is None:
+        return {
+            "success": False,
+            "error_code": "PRINT_AUTH_REQUIRED",
+            "message": "登录身份无效，不能查询打印状态",
+        }
+    if not token:
+        return {
+            "success": False,
+            "error_code": "PRINT_PENDING_TRACKER_INVALID",
+            "message": "缺少打印状态查询凭据",
+        }
+
+    with _lock:
+        _cleanup_locked()
+        record = _pending_document_print_jobs.get(token)
+        if not record:
+            return {
+                "success": False,
+                "error_code": "PRINT_PENDING_TRACKER_INVALID",
+                "message": "打印状态查询凭据已过期或无效，请重新生成发货单",
+            }
+        if int(record.get("owner_user_id") or 0) != owner:
+            return {
+                "success": False,
+                "error_code": "PRINT_PENDING_TRACKER_OWNER_MISMATCH",
+                "message": "该打印任务不属于当前登录用户",
+            }
+        return {
+            "success": True,
+            "print_job_token": token,
+            "printer_name": str(record.get("printer_name") or ""),
+            "job_id": str(record.get("job_id") or ""),
+            "tracking_available": bool(record.get("tracking_available")),
+            "state": str(record.get("state") or "pending"),
+            "reason": str(record.get("reason") or ""),
+            "post_print_receipt": str(record.get("post_print_receipt") or ""),
+        }
+
+
+def settle_pending_document_print_job(
+    print_job_token: object,
+    *,
+    owner_user_id: object,
+    state: object,
+    reason: object = "",
+) -> dict[str, Any]:
+    """Persist one read-only CUPS state observation and issue a receipt once.
+
+    The caller has already owner-validated the tracker via
+    :func:`get_pending_document_print_job`.  This function repeats that check
+    while holding the lock so concurrent status polls cannot mint two receipts.
+    """
+
+    token = str(print_job_token or "").strip()
+    owner = _positive_user_id(owner_user_id)
+    normalized_state = str(state or "pending").strip().lower()
+    if normalized_state not in {"pending", "completed", "aborted", "unknown"}:
+        normalized_state = "pending"
+    if owner is None or not token:
+        return {
+            "success": False,
+            "error_code": "PRINT_PENDING_TRACKER_INVALID",
+            "message": "打印状态查询凭据无效",
+        }
+
+    with _lock:
+        _cleanup_locked()
+        record = _pending_document_print_jobs.get(token)
+        if not record:
+            return {
+                "success": False,
+                "error_code": "PRINT_PENDING_TRACKER_INVALID",
+                "message": "打印状态查询凭据已过期或无效，请重新生成发货单",
+            }
+        if int(record.get("owner_user_id") or 0) != owner:
+            return {
+                "success": False,
+                "error_code": "PRINT_PENDING_TRACKER_OWNER_MISMATCH",
+                "message": "该打印任务不属于当前登录用户",
+            }
+
+        existing_state = str(record.get("state") or "pending")
+        if existing_state == "completed":
+            return {
+                "success": True,
+                "state": "completed",
+                "post_print_receipt": str(record.get("post_print_receipt") or ""),
+            }
+        if existing_state == "aborted":
+            return {
+                "success": False,
+                "state": "aborted",
+                "reason": str(record.get("reason") or ""),
+            }
+
+        record["reason"] = str(reason or "").strip()
+        if normalized_state == "completed":
+            receipt = secrets.token_urlsafe(32)
+            _post_print_receipts[receipt] = {
+                "owner_user_id": int(record["owner_user_id"]),
+                "file_path": str(record["file_path"]),
+                "order_id": _normalized_order_id(record.get("order_id")),
+                "expires_at": time.time() + POST_PRINT_RECEIPT_TTL_SECONDS,
+            }
+            record["state"] = "completed"
+            record["post_print_receipt"] = receipt
+            return {
+                "success": True,
+                "state": "completed",
+                "post_print_receipt": receipt,
+            }
+        if normalized_state == "aborted":
+            record["state"] = "aborted"
+            return {
+                "success": False,
+                "state": "aborted",
+                "reason": str(record.get("reason") or ""),
+            }
+
+        record["state"] = "pending"
+        return {
+            "success": True,
+            "state": "pending",
+            "reason": str(record.get("reason") or ""),
+        }
 
 
 def consume_post_print_receipt(
@@ -285,6 +510,9 @@ def consume_post_print_receipt(
                 "message": "打印回执与发货记录不匹配",
             }
         _post_print_receipts.pop(raw_receipt, None)
+        for pending in _pending_document_print_jobs.values():
+            if str(pending.get("post_print_receipt") or "") == raw_receipt:
+                pending["receipt_consumed"] = True
         return {
             "success": True,
             "file_path": path,
@@ -298,14 +526,19 @@ def _clear_print_authorizations_for_tests() -> None:
     with _lock:
         _print_capabilities.clear()
         _post_print_receipts.clear()
+        _pending_document_print_jobs.clear()
 
 
 __all__ = [
     "POST_PRINT_RECEIPT_TTL_SECONDS",
+    "PENDING_PRINT_JOB_TTL_SECONDS",
     "PRINT_CAPABILITY_TTL_SECONDS",
     "consume_post_print_receipt",
+    "defer_document_print_capability",
     "finish_document_print_capability",
+    "get_pending_document_print_job",
     "issue_document_print_capability",
     "normalize_printable_path",
     "reserve_document_print_capability",
+    "settle_pending_document_print_job",
 ]

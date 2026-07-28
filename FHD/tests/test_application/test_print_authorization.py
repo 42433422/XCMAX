@@ -5,9 +5,12 @@ from unittest.mock import MagicMock, patch
 from app.application.print_authorization import (
     _clear_print_authorizations_for_tests,
     consume_post_print_receipt,
+    defer_document_print_capability,
     finish_document_print_capability,
+    get_pending_document_print_job,
     issue_document_print_capability,
     reserve_document_print_capability,
+    settle_pending_document_print_job,
 )
 from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.services.tools_workflow_registered import _registered_router_print
@@ -98,6 +101,143 @@ def test_failed_print_releases_capability_for_a_user_retry(tmp_path) -> None:
         file_path=document,
     )
     assert retry["success"] is True
+
+
+def test_pending_cups_job_is_owner_bound_and_mints_receipt_only_after_completion(tmp_path) -> None:
+    document = tmp_path / "shipment.xlsx"
+    document.write_bytes(b"xlsx")
+    _clear_print_authorizations_for_tests()
+    capability = issue_document_print_capability(
+        file_path=document,
+        owner_user_id=101,
+        order_id=42,
+    )
+    assert capability is not None
+    reserved = reserve_document_print_capability(
+        capability["document_token"],
+        owner_user_id=101,
+        file_path=document,
+        order_id=42,
+    )
+    assert reserved["success"] is True
+
+    pending = defer_document_print_capability(
+        reserved,
+        printer_name="Canon_TS3700_series",
+        job_id="Canon_TS3700_series-15",
+    )
+    assert pending["success"] is True
+    assert pending["tracking_available"] is True
+
+    # Submission consumes the one-click capability, so it cannot duplicate a
+    # job while CUPS is still waiting for the physical printer.
+    replay = reserve_document_print_capability(
+        capability["document_token"],
+        owner_user_id=101,
+        file_path=document,
+        order_id=42,
+    )
+    assert replay["success"] is False
+    assert replay["error_code"] == "PRINT_CONFIRMATION_INVALID"
+
+    foreign = get_pending_document_print_job(
+        pending["print_job_token"],
+        owner_user_id=202,
+    )
+    assert foreign["success"] is False
+    assert foreign["error_code"] == "PRINT_PENDING_TRACKER_OWNER_MISMATCH"
+
+    still_pending = settle_pending_document_print_job(
+        pending["print_job_token"],
+        owner_user_id=101,
+        state="pending",
+    )
+    assert still_pending == {"success": True, "state": "pending", "reason": ""}
+
+    completed = settle_pending_document_print_job(
+        pending["print_job_token"],
+        owner_user_id=101,
+        state="completed",
+    )
+    assert completed["success"] is True
+    assert completed["state"] == "completed"
+    receipt = completed["post_print_receipt"]
+    assert receipt
+
+    # Concurrent/repeated polls reuse the same receipt rather than minting a
+    # second authority to mark the shipment.
+    repeated = settle_pending_document_print_job(
+        pending["print_job_token"],
+        owner_user_id=101,
+        state="completed",
+    )
+    assert repeated["post_print_receipt"] == receipt
+
+    consumed = consume_post_print_receipt(
+        receipt,
+        owner_user_id=101,
+        file_path=document,
+        order_id=42,
+    )
+    assert consumed["success"] is True
+
+
+def test_pending_cups_abort_never_mints_a_print_receipt(tmp_path) -> None:
+    document = tmp_path / "shipment.xlsx"
+    document.write_bytes(b"xlsx")
+    _clear_print_authorizations_for_tests()
+    capability = issue_document_print_capability(file_path=document, owner_user_id=101)
+    assert capability is not None
+    reserved = reserve_document_print_capability(
+        capability["document_token"],
+        owner_user_id=101,
+        file_path=document,
+    )
+    pending = defer_document_print_capability(
+        reserved,
+        printer_name="Canon_TS3700_series",
+        job_id="Canon_TS3700_series-16",
+    )
+    aborted = settle_pending_document_print_job(
+        pending["print_job_token"],
+        owner_user_id=101,
+        state="aborted",
+        reason="media-empty-error",
+    )
+    assert aborted["success"] is False
+    assert aborted["state"] == "aborted"
+    assert aborted["reason"] == "media-empty-error"
+
+
+def test_legacy_print_dispatch_does_not_treat_a_queued_cups_job_as_completed(tmp_path) -> None:
+    document = tmp_path / "shipment.xlsx"
+    document.write_bytes(b"xlsx")
+    _clear_print_authorizations_for_tests()
+    service = MagicMock()
+    service.print_document.return_value = {
+        "success": True,
+        "message": "CUPS queued",
+        "printer": "Canon_TS3700_series",
+        "job_id": "Canon_TS3700_series-17",
+        "print_completed": False,
+    }
+    capability = issue_document_print_capability(file_path=document, owner_user_id=101)
+    assert capability is not None
+
+    with patch("app.services.get_printer_service", return_value=service):
+        queued = dispatch_legacy_tool_payload(
+            "print",
+            "print_document",
+            {"file_path": str(document), "print_token": capability["document_token"]},
+            json_response_fn=_legacy_json,
+            hdr_getter=lambda _name, _default=None: _default,
+            parse_order_text_fn=lambda _text: {},
+            owner_user_id=101,
+        )
+
+    assert queued["status_code"] == 200
+    assert queued["payload"]["print_job_token"]
+    assert "post_print_receipt" not in queued["payload"]
 
 
 def test_legacy_print_tool_requires_the_same_owner_bound_capability(tmp_path) -> None:

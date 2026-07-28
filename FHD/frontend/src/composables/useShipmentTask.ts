@@ -36,6 +36,14 @@ export interface ShipmentTask {
     }
   }
   completed?: boolean
+  /** The document was accepted by CUPS but physical completion is still unconfirmed. */
+  printPending?: boolean
+  /** Opaque owner-bound token used only to recheck a submitted CUPS job. */
+  printJobToken?: string
+  printTrackingAvailable?: boolean
+  printStatusChecking?: boolean
+  printCompleted?: boolean
+  printTerminal?: boolean
   customOrderNumber?: string
   items?: unknown[]
   order_number?: string
@@ -78,6 +86,7 @@ export function useShipmentTask(
     printToken?: string
     /** 右侧任务列表中「发货单生成」条目的 id，用于生成后衔接打印再标为 100% */
     taskListId?: string
+    pendingPrintJobToken?: string
   } | null>(null)
 
   async function handleModifyCommand(message: string): Promise<boolean> {

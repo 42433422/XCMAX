@@ -74,6 +74,23 @@ class PrinterService:
                 return printer.get("name")
         return None
 
+    @staticmethod
+    def _printer_is_printable(printer: dict | None) -> bool:
+        if not isinstance(printer, dict):
+            return False
+        if "is_printable" in printer:
+            return bool(printer.get("is_printable"))
+        return str(printer.get("status") or "").strip() not in {
+            "",
+            "未连接",
+            "不可用",
+            "离线",
+            "缺纸",
+            "已暂停",
+            "错误",
+            "异常",
+        }
+
     def get_printer_selection(self) -> dict:
         data = self._load_selection()
         return {
@@ -108,30 +125,48 @@ class PrinterService:
         if selected_label is None:
             selected_label = self._guess_label_printer(printers)
 
+        def printer_of(name: str | None) -> dict:
+            if not name:
+                return {}
+            return next((p for p in printers if p.get("name") == name), {}) or {}
+
         def status_of(name: str | None) -> str:
             if not name:
                 return "未连接"
-            match = next((p for p in printers if p.get("name") == name), None)
-            return (match or {}).get("status") or "未知"
+            return str(printer_of(name).get("status") or "未知")
+
+        def printable(name: str | None) -> bool:
+            if not name:
+                return False
+            printer = printer_of(name)
+            # CUPS may expose a destination as idle while its IPP reason is
+            # offline-report/media-empty-error/paused.  The adapter supplies
+            # ``is_printable`` for that case; preserve the old behaviour for
+            # Windows/older adapters which do not expose the field.
+            if "is_printable" in printer:
+                return bool(printer.get("is_printable"))
+            return status_of(name) not in {"未连接", "不可用", "离线", "缺纸", "已暂停", "错误", "异常"}
 
         classified = {
             "document_printer": {
                 "name": selected_doc,
                 "status": status_of(selected_doc),
-                "is_connected": bool(selected_doc),
+                "is_connected": printable(selected_doc),
             },
             "label_printer": {
                 "name": selected_label,
                 "status": status_of(selected_label),
-                "is_connected": bool(selected_label),
+                "is_connected": printable(selected_label),
             },
         }
         summary = {
             "total_printers": len(printers),
-            "document_printer_ready": bool(selected_doc),
-            "label_printer_ready": bool(selected_label),
+            "document_printer_ready": printable(selected_doc),
+            "label_printer_ready": printable(selected_label),
             "all_ready": (
-                bool(selected_doc) and bool(selected_label) and selected_doc != selected_label
+                printable(selected_doc)
+                and printable(selected_label)
+                and selected_doc != selected_label
             ),
         }
         return {
@@ -174,7 +209,9 @@ class PrinterService:
             return None
         selection = self.get_printer_selection()
         preferred = self._resolve_name(selection.get("document_printer"), printers)
-        return preferred or self._guess_document_printer(printers)
+        candidate = preferred or self._guess_document_printer(printers)
+        printer = next((item for item in printers if item.get("name") == candidate), None)
+        return candidate if self._printer_is_printable(printer) else None
 
     def get_label_printer(self) -> str | None:
         printers = self.printer_utils.get_available_printers()
@@ -182,19 +219,27 @@ class PrinterService:
             return None
         selection = self.get_printer_selection()
         preferred = self._resolve_name(selection.get("label_printer"), printers)
-        return preferred or self._guess_label_printer(printers)
+        candidate = preferred or self._guess_label_printer(printers)
+        printer = next((item for item in printers if item.get("name") == candidate), None)
+        return candidate if self._printer_is_printable(printer) else None
 
     def print_document(
         self, file_path: str, printer_name: str | None = None, use_automation: bool = False
     ) -> dict:
         try:
+            printers = self.printer_utils.get_available_printers()
             if not printer_name:
-                printer_name = (
-                    self.get_document_printer() or self.printer_utils.get_default_printer()
-                )
+                printer_name = self.get_document_printer()
+            else:
+                printer_name = self._resolve_name(printer_name, printers)
 
             if not printer_name:
-                return {"success": False, "message": "未指定打印机且无法获取默认打印机"}
+                return {"success": False, "message": "未找到可用发货单打印机，请先检查打印机在线、纸张和暂停状态"}
+
+            printer = next((item for item in printers if item.get("name") == printer_name), None)
+            if not self._printer_is_printable(printer):
+                status = str((printer or {}).get("status") or "不可用")
+                return {"success": False, "message": f"发货单打印机当前不可打印：{status}"}
 
             if use_automation:
                 return self.enhanced_utils.print_file_enhanced(
@@ -210,11 +255,19 @@ class PrinterService:
 
     def print_label(self, file_path: str, printer_name: str | None = None, copies: int = 1) -> dict:
         try:
+            printers = self.printer_utils.get_available_printers()
             if not printer_name:
                 printer_name = self.get_label_printer()
+            else:
+                printer_name = self._resolve_name(printer_name, printers)
 
             if not printer_name:
                 return {"success": False, "message": "未找到标签打印机"}
+
+            printer = next((item for item in printers if item.get("name") == printer_name), None)
+            if not self._printer_is_printable(printer):
+                status = str((printer or {}).get("status") or "不可用")
+                return {"success": False, "message": f"标签打印机当前不可打印：{status}"}
 
             results = []
             for i in range(copies):
@@ -234,6 +287,20 @@ class PrinterService:
         except RECOVERABLE_ERRORS as e:
             logger.error("打印标签失败: %s", e)
             return {"success": False, "message": str(e)}
+
+    def get_document_print_job_status(self, printer_name: str, job_id: str) -> dict:
+        """Read a CUPS job state without submitting another print job."""
+
+        try:
+            return self.printer_utils.get_cups_print_job_status(printer_name, job_id)
+        except RECOVERABLE_ERRORS as e:
+            logger.error("查询发货单打印状态失败: %s", e)
+            return {
+                "state": "unknown",
+                "job_id": str(job_id or ""),
+                "reason": "打印状态查询暂不可用",
+                "query_available": False,
+            }
 
     def test_printer(self, printer_name: str) -> dict:
         try:

@@ -581,6 +581,7 @@ def dispatch_legacy_tool_payload(
             # trigger a physical print: use the same owner-bound capability
             # issued alongside a generated shipment document.
             from app.application.print_authorization import (
+                defer_document_print_capability,
                 finish_document_print_capability,
                 reserve_document_print_capability,
             )
@@ -607,12 +608,36 @@ def dispatch_legacy_tool_payload(
             except RECOVERABLE_ERRORS as exc:
                 finish_document_print_capability(reservation, print_succeeded=False)
                 return _j({"success": False, "message": f"打印失败：{exc}"}, 500)
-            receipt = finish_document_print_capability(
-                reservation,
-                print_succeeded=bool(result.get("success")),
-            )
+            print_succeeded = bool(result.get("success"))
+            print_completed = bool(result.get("print_completed", print_succeeded))
+            receipt = None
+            if print_succeeded and not print_completed:
+                pending_job = defer_document_print_capability(
+                    reservation,
+                    printer_name=result.get("printer"),
+                    job_id=result.get("job_id"),
+                )
+                if pending_job.get("success"):
+                    result["print_job_token"] = pending_job["print_job_token"]
+                    result["print_tracking_available"] = bool(
+                        pending_job.get("tracking_available")
+                    )
+                else:
+                    finish_document_print_capability(
+                        reservation,
+                        print_succeeded=True,
+                        print_completed=False,
+                    )
+                    result["print_tracking_available"] = False
+            else:
+                receipt = finish_document_print_capability(
+                    reservation,
+                    print_succeeded=print_succeeded,
+                    print_completed=print_completed,
+                )
             if result.get("success"):
-                result["post_print_receipt"] = receipt
+                if receipt:
+                    result["post_print_receipt"] = receipt
             return _j(result, 200 if result.get("success") else 400)
         if action == "test":
             result = svc.test_printer(str(params.get("printer_name") or "").strip())

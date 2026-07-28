@@ -9,22 +9,29 @@ from fastapi.testclient import TestClient
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.print_authorization import (
     _clear_print_authorizations_for_tests,
+    defer_document_print_capability,
     issue_document_print_capability,
+    reserve_document_print_capability,
 )
 from app.fastapi_routes import print_routes
 
 
-def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _client(
+    fake_service: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    authenticated_owner: dict[str, int] | None = None,
+) -> TestClient:
     monkeypatch.setattr(print_routes, "_svc", lambda: fake_service)
     print_routes._print_confirm_cache.clear()
     _clear_print_authorizations_for_tests()
+    owner_state = authenticated_owner if authenticated_owner is not None else {"user_id": 101}
     app = FastAPI()
 
     @app.middleware("http")
     async def authenticated_owner(request, call_next):
         # A print capability is valid only for middleware-authenticated state;
         # the X-User-Id header below is intentionally not the authority.
-        request.state.user_id = 101
+        request.state.user_id = owner_state["user_id"]
         return await call_next(request)
 
     app.include_router(print_routes.router)
@@ -172,6 +179,128 @@ def test_document_route_rejects_raw_paths_and_foreign_capabilities(
     assert foreign.json()["error_code"] == "PRINT_CONFIRMATION_OWNER_MISMATCH"
     svc.print_document.assert_not_called()
 
+
+def test_queued_cups_document_is_reconciled_before_receipt_is_issued(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = InMemoryAgentRunRepository()
+    document = tmp_path / "document.pdf"
+    document.write_bytes(b"%PDF")
+    svc = MagicMock()
+    svc.print_document.return_value = {
+        "success": True,
+        "message": "打印任务已提交到 macOS CUPS，正在等待设备完成",
+        "printer": "Canon_TS3700_series",
+        "job_id": "Canon_TS3700_series-42",
+        "print_completed": False,
+        "print_state": "queued",
+    }
+    svc.get_document_print_job_status.return_value = {
+        "state": "pending",
+        "job_id": "Canon_TS3700_series-42",
+        "query_available": True,
+    }
+    client = _client(svc, monkeypatch)
+    capability = issue_document_print_capability(
+        file_path=document,
+        owner_user_id=101,
+        order_id=42,
+    )
+    assert capability is not None
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+
+    with patch(
+        "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+        return_value=repo,
+    ):
+        submitted = client.post(
+            "/api/print/document",
+            json={
+                "file_path": str(document),
+                "print_token": capability["document_token"],
+                "order_id": 42,
+            },
+        )
+
+    assert submitted.status_code == 200
+    payload = submitted.json()
+    assert payload["print_completed"] is False
+    assert payload["print_state"] == "queued"
+    assert payload["print_job_token"]
+    assert "post_print_receipt" not in payload
+
+    # The spent capability cannot create a duplicate physical job while the
+    # current CUPS job is still pending.
+    replay = client.post(
+        "/api/print/document",
+        json={
+            "file_path": str(document),
+            "print_token": capability["document_token"],
+            "order_id": 42,
+        },
+    )
+    assert replay.status_code == 409
+
+    pending = client.get(f"/api/print/jobs/{payload['print_job_token']}")
+    assert pending.status_code == 200
+    assert pending.json()["success"] is True
+    assert pending.json()["print_completed"] is False
+    assert "post_print_receipt" not in pending.json()
+
+    svc.get_document_print_job_status.return_value = {
+        "state": "completed",
+        "job_id": "Canon_TS3700_series-42",
+        "query_available": True,
+    }
+    completed = client.get(f"/api/print/jobs/{payload['print_job_token']}")
+    assert completed.status_code == 200
+    assert completed.json()["success"] is True
+    assert completed.json()["print_completed"] is True
+    assert completed.json()["post_print_receipt"]
+
+    svc.get_document_print_job_status.return_value = {
+        "state": "aborted",
+        "job_id": "Canon_TS3700_series-42",
+        "reason": "media-empty-error",
+    }
+    # Once completed, later probes cannot downgrade the terminal state.
+    stable = client.get(f"/api/print/jobs/{payload['print_job_token']}")
+    assert stable.status_code == 200
+    assert stable.json()["print_state"] == "completed"
+
+
+def test_pending_job_status_rejects_a_different_authenticated_owner(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document = tmp_path / "document.pdf"
+    document.write_bytes(b"%PDF")
+    svc = MagicMock()
+    owner_state = {"user_id": 101}
+    client = _client(svc, monkeypatch, owner_state)
+    capability = issue_document_print_capability(file_path=document, owner_user_id=101)
+    assert capability is not None
+    reservation = reserve_document_print_capability(
+        capability["document_token"],
+        owner_user_id=101,
+        file_path=document,
+    )
+    tracker = defer_document_print_capability(
+        reservation,
+        printer_name="Canon_TS3700_series",
+        job_id="Canon_TS3700_series-42",
+    )
+    assert tracker["success"] is True
+
+    owner_state["user_id"] = 202
+    response = client.get(f"/api/print/jobs/{tracker['print_job_token']}")
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "PRINT_PENDING_TRACKER_OWNER_MISMATCH"
+    svc.get_document_print_job_status.assert_not_called()
 
 def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
     tmp_path,
