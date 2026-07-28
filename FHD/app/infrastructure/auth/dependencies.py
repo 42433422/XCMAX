@@ -85,19 +85,27 @@ def require_identified_user(
 
 
 def session_id_from_request(request: Request) -> str:
-    headers = getattr(request, "headers", {}) or {}
     # 移动端 AuthInterceptor 显式发 X-Session-ID；优先用，避免把 JWT 当 session_id 解析失败。
-    x_sid_raw = headers.get("X-Session-ID") or ""
-    x_sid = x_sid_raw.strip() if isinstance(x_sid_raw, str) else ""
+    x_sid = _header_session_id(request)
     if x_sid:
         return x_sid
-    auth_raw = headers.get("Authorization") or ""
-    auth = auth_raw if isinstance(auth_raw, str) else ""
-    if auth.startswith("Bearer "):
-        bearer = auth[7:].strip()
-        if bearer:
-            return bearer
+    bearer = _bearer_token(request)
+    if bearer:
+        return bearer
     return _cookie_session_id(request)
+
+
+def _header_session_id(request: Request) -> str:
+    headers = getattr(request, "headers", {}) or {}
+    raw = headers.get("X-Session-ID") or ""
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _bearer_token(request: Request) -> str:
+    headers = getattr(request, "headers", {}) or {}
+    raw = headers.get("Authorization") or ""
+    auth = raw if isinstance(raw, str) else ""
+    return auth[7:].strip() if auth.startswith("Bearer ") else ""
 
 
 def _cookie_session_id(request: Request) -> str:
@@ -159,7 +167,15 @@ def resolve_session_user(request: Request) -> Any | None:
     # to retain their tenant/user context instead of fail-closing to a generic
     # card.
     cookie_sid = _cookie_session_id(request)
-    if cookie_sid and cookie_sid != sid:
+    # Keep the explicitly supplied mobile X-Session-ID authoritative even when
+    # it is invalid.  The fallback is narrowly for the desktop request shape:
+    # a non-FHD Bearer market token plus the browser's own FHD session cookie.
+    if (
+        not _header_session_id(request)
+        and _bearer_token(request)
+        and cookie_sid
+        and cookie_sid != sid
+    ):
         return _resolve_stateful_session_user(cookie_sid)
     return None
 
