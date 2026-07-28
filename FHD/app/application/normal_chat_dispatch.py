@@ -328,6 +328,12 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
         parsed.get("unit_name", ""),
         parsed.get("products") or [],
         text,
+        order_number=parsed.get("order_number"),
+        order_number_provenance=(
+            parsed.get("order_number_provenance")
+            if isinstance(parsed.get("order_number_provenance"), dict)
+            else None
+        ),
     )
     body["normal_slot_dispatch"] = True
     return body

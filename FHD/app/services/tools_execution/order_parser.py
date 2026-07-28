@@ -33,6 +33,11 @@ _ORDER_PUNCTUATION_PATTERN = r"[，,。；;、：:]"
 _ORDER_NUMBER_PATTERN = (
     r"(?:\d+(?:\.\d+)?|[一二两三四五六七八九]?十[一二三四五六七八九]?|[一二两三四五六七八九零〇])"
 )
+_DOCUMENT_NUMBER_PATTERN = re.compile(
+    r"(?P<label>发货单号|送货单号|出货单号|订单号|单号|编号)"
+    r"\s*(?:是|为)?\s*[:：]?\s*"
+    r"(?P<number>[0-9A-Za-z][0-9A-Za-z_-]{0,63})"
+)
 
 
 def _clean_named_product(value: str) -> str:
@@ -97,8 +102,24 @@ def parse_named_product_order(order_text: str) -> dict | None:
     if not unit_name or not product_and_measurements:
         return None
 
+    # In a literal-product request, an explicitly labelled number is a document
+    # number rather than product identity.  This is intentionally scoped to
+    # this parser: bare ``编号9803`` model-number orders still take the strict
+    # model path below.  ``型号`` remains a product identifier in every form.
+    document_number = ""
+    document_number_label = ""
+    number_match = _DOCUMENT_NUMBER_PATTERN.search(product_and_measurements)
+    if number_match:
+        document_number = str(number_match.group("number") or "").strip()
+        document_number_label = str(number_match.group("label") or "").strip()
+        product_and_measurements = (
+            product_and_measurements[: number_match.start()]
+            + " "
+            + product_and_measurements[number_match.end() :]
+        ).strip()
+
     # Explicit model labels always remain in the strict model-number flow.
-    if re.search(r"(?:编号|型号)\s*[:：]?", product_and_measurements):
+    if re.search(r"(?:型号)\s*[:：]?", product_and_measurements):
         return None
 
     spec_match = re.search(
@@ -128,7 +149,7 @@ def parse_named_product_order(order_text: str) -> dict | None:
     if re.fullmatch(r"[0-9A-Za-z-]{3,16}", product_name):
         return None
 
-    return {
+    result = {
         "success": True,
         "unit_name": unit_name,
         "products": [
@@ -139,6 +160,14 @@ def parse_named_product_order(order_text: str) -> dict | None:
             }
         ],
     }
+    if document_number:
+        result["order_number"] = document_number
+        result["order_number_provenance"] = {
+            "kind": "explicit_document_number",
+            "label": document_number_label,
+            "value": document_number,
+        }
+    return result
 
 
 def _parse_order_text(order_text: str) -> dict:

@@ -126,6 +126,25 @@ class TestParseOrderTextWithUnitName:
             ],
         }
 
+    def test_named_product_uses_labelled_number_as_document_number_not_model(self):
+        result = _parse_order_text("打印金汉武发货单，黑棕面用修色精，编号9803，规格28，3桶")
+
+        assert result["success"] is True
+        assert result["unit_name"] == "金汉武"
+        assert result["products"] == [
+            {
+                "name": "黑棕面用修色精",
+                "quantity_tins": 3,
+                "tin_spec": 28.0,
+            }
+        ]
+        assert result["order_number"] == "9803"
+        assert result["order_number_provenance"] == {
+            "kind": "explicit_document_number",
+            "label": "编号",
+            "value": "9803",
+        }
+
 
 class TestParseOrderTextBoxAndKg:
     def test_box_quantity(self):

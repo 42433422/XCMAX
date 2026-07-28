@@ -527,11 +527,17 @@ class ShipmentNumberModeService:
                 "data": {"parsed_data": parsed},
             }, 400
 
+        try:
+            trusted_owner_user_id = int(owner_user_id) if owner_user_id is not None else 0
+        except (TypeError, ValueError):
+            trusted_owner_user_id = 0
+
         # 严格策略：所有主库匹配都限定在当前租户；名称模式还必须唯一地
         # 落在当前购买单位下，不能用全局/模糊产品结果替代。
         if not product_catalog:
             product_catalog = self._load_active_product_catalog()
 
+        preview_product_provenance: list[dict[str, Any]] = []
         for idx, product in enumerate(products, start=1):
             model_number = str(product.get("model_number") or "").strip().upper()
             product_name = str(product.get("product_name") or product.get("name") or "").strip()
@@ -562,6 +568,7 @@ class ShipmentNumberModeService:
                     "data": {"parsed_data": parsed},
                 }, 400
 
+            product_from_preview: dict[str, Any] | None = None
             if not model_number:
                 matched_product, resolution_error, related_rows = self._resolve_scoped_product_name(
                     product_name=product_name,
@@ -591,19 +598,44 @@ class ShipmentNumberModeService:
                                 "candidates": candidates,
                             },
                         }, 400
-                    return {
-                        "success": False,
-                        "message": (
-                            "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
-                            f"失败原因：第{idx}项型号缺失，且未找到购买单位“{unit_to_use}”下的产品名称“{product_name}”。"
-                        ),
-                        "error_code": "NUMBER_MODE_PRODUCT_NAME_NOT_FOUND",
-                        "data": {
-                            "parsed_data": parsed,
-                            "unit_name": unit_to_use,
-                            "product_name": product_name,
-                        },
-                    }, 400
+                    # A candidate never becomes a master product here.  Only
+                    # an authenticated user's preview-ready ETL snapshot can
+                    # supply an exact literal name for this one confirmed
+                    # document; missing/ambiguous candidates retain the strict
+                    # product-not-found response below.
+                    if trusted_owner_user_id > 0:
+                        try:
+                            from app.application.etl.shipment_preview_fallback import (
+                                resolve_preview_product_candidate,
+                            )
+
+                            product_from_preview = resolve_preview_product_candidate(
+                                owner_user_id=trusted_owner_user_id,
+                                unit_name=unit_to_use,
+                                product_name=product_name,
+                            )
+                        except RECOVERABLE_ERRORS:
+                            product_from_preview = None
+                    if product_from_preview is not None:
+                        matched_product = {
+                            "name": product_from_preview.get("name"),
+                            "model_number": product_from_preview.get("model_number"),
+                            "price": product_from_preview.get("price"),
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "message": (
+                                "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                f"失败原因：第{idx}项型号缺失，且未找到购买单位“{unit_to_use}”下的产品名称“{product_name}”。"
+                            ),
+                            "error_code": "NUMBER_MODE_PRODUCT_NAME_NOT_FOUND",
+                            "data": {
+                                "parsed_data": parsed,
+                                "unit_name": unit_to_use,
+                                "product_name": product_name,
+                            },
+                        }, 400
 
                 canonical_name = str(matched_product.get("name") or product_name).strip()
                 canonical_model = str(matched_product.get("model_number") or "").strip().upper()
@@ -614,8 +646,12 @@ class ShipmentNumberModeService:
                     model_number = canonical_model
                 if product.get("unit_price") in (None, ""):
                     product["unit_price"] = matched_product.get("price")
+                if product_from_preview is not None:
+                    provenance = product_from_preview.get("provenance")
+                    if isinstance(provenance, dict):
+                        preview_product_provenance.append(dict(provenance))
 
-            if model_number:
+            if model_number and product_from_preview is None:
                 matched_product, resolution_error, related_rows = (
                     self._resolve_scoped_product_model(
                         model_number=model_number,
@@ -671,10 +707,16 @@ class ShipmentNumberModeService:
                 if product.get("unit_price") in (None, ""):
                     product["unit_price"] = matched_product.get("price")
 
-        try:
-            trusted_owner_user_id = int(owner_user_id) if owner_user_id is not None else 0
-        except (TypeError, ValueError):
-            trusted_owner_user_id = 0
+        parsed_order_number = str(parsed.get("order_number") or "").strip()
+        requested_order_number = str(custom_order_number or "").strip()
+        effective_order_number = requested_order_number or parsed_order_number
+        parsed_order_number_provenance = (
+            parsed.get("order_number_provenance")
+            if parsed_order_number
+            and parsed_order_number == effective_order_number
+            and isinstance(parsed.get("order_number_provenance"), dict)
+            else None
+        )
 
         generate_kwargs: dict[str, Any] = {
             "unit_name": unit_to_use,
@@ -682,7 +724,7 @@ class ShipmentNumberModeService:
             "template_name": (str(template_name or "").strip() or None),
             "template_id": (str(template_id or "").strip() or None),
             "preferred_template": (str(preferred_template or "").strip() or None),
-            "order_number": (str(custom_order_number or "").strip() or None),
+            "order_number": effective_order_number or None,
             "intent": "shipment_generate",
             "raw_text": text,
         }
@@ -698,6 +740,25 @@ class ShipmentNumberModeService:
         result = self._normalize_success_payload(result)
 
         if result.get("success"):
+            if parsed_order_number_provenance is not None:
+                result["order_number_provenance"] = dict(parsed_order_number_provenance)
+            if preview_product_provenance:
+                warning = (
+                    "本次产品信息来自尚未执行的 ETL 预演候选，仅用于本次已确认的发货单；"
+                    "未写入产品库。"
+                )
+                existing_warnings = result.get("warnings")
+                warnings = list(existing_warnings) if isinstance(existing_warnings, list) else []
+                warnings.append(
+                    {
+                        "code": "ETL_PREVIEW_PRODUCT_CANDIDATE_USED",
+                        "message": warning,
+                    }
+                )
+                result["warnings"] = warnings
+                result["etl_preview_provenance"] = {
+                    "products": preview_product_provenance,
+                }
             return result, 200
 
         return {

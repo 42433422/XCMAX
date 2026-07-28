@@ -676,17 +676,32 @@ class ShipmentApplicationService:
                     "file_path": None,
                 }
 
-        result = self._document_generator.generate(
-            unit_name=unit_name,
-            products=product_rows,
-            date=date,
-            template_name=resolved_template,
-            order_number=order_number,
-            # This id comes from the authenticated route/service caller, not
-            # from a template or parsed natural-language parameter.  The
-            # document adapter uses it to isolate generated label artifacts.
-            owner_user_id=owner_user_id,
-        )
+        try:
+            result = self._document_generator.generate(
+                unit_name=unit_name,
+                products=product_rows,
+                date=date,
+                template_name=resolved_template,
+                order_number=order_number,
+                # This id comes from the authenticated route/service caller, not
+                # from a template or parsed natural-language parameter.  The
+                # document adapter uses it to isolate generated label artifacts.
+                owner_user_id=owner_user_id,
+            )
+        finally:
+            # ``etl-preview:`` layouts are intentionally one-use artifacts.
+            # The generator is synchronous, so the source workbook can be
+            # removed immediately after it has been consumed, even on failure.
+            cleanup_path = str(template_meta.get("_cleanup_path") or "").strip()
+            if cleanup_path:
+                try:
+                    from app.application.etl.shipment_preview_fallback import (
+                        cleanup_ephemeral_preview_layout,
+                    )
+
+                    cleanup_ephemeral_preview_layout(cleanup_path)
+                except RECOVERABLE_ERRORS:
+                    logger.debug("清理 ETL 预演临时发货单版式失败", exc_info=True)
         if isinstance(result, dict):
             result["products_source"] = products_source
             if template_meta:
@@ -700,6 +715,8 @@ class ShipmentApplicationService:
                     "score": template_meta.get("score"),
                     "error_code": template_meta.get("error_code"),
                     "ok": template_meta.get("ok"),
+                    "warning": template_meta.get("warning"),
+                    "provenance": template_meta.get("provenance"),
                 }
                 if result.get("success") and template_meta.get("template_id"):
                     try:

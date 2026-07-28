@@ -432,9 +432,7 @@ class AIChatInstantToolsMixin:
 
             if not parsed.get("success"):
                 fallback_order_text = str(
-                    parsed_params.get("order_text")
-                    or safe_slots.get("order_text")
-                    or ""
+                    parsed_params.get("order_text") or safe_slots.get("order_text") or ""
                 ).strip()
                 if fallback_order_text and fallback_order_text != safe_order_text:
                     safe_order_text = fallback_order_text
@@ -506,15 +504,24 @@ class AIChatInstantToolsMixin:
                     "",
                 )
 
-            preview = build_shipment_preview_response_dict(unit_name, products, safe_order_text)
+            preview = build_shipment_preview_response_dict(
+                unit_name,
+                products,
+                safe_order_text,
+                order_number=parsed.get("order_number"),
+                order_number_provenance=(
+                    parsed.get("order_number_provenance")
+                    if isinstance(parsed.get("order_number_provenance"), dict)
+                    else None
+                ),
+            )
             preview_params = preview["task"]["payload"]["params"]
 
             # Template preferences are carried to the click payload, but no
             # client-supplied owner id is ever added here.  The server injects
             # the authenticated owner after confirmation.
             optional_params = {
-                "template_id": safe_slots.get("template_id")
-                or parsed_params.get("template_id"),
+                "template_id": safe_slots.get("template_id") or parsed_params.get("template_id"),
                 "template_name": safe_slots.get("template_name")
                 or safe_slots.get("template")
                 or parsed_params.get("template_name")
@@ -523,8 +530,7 @@ class AIChatInstantToolsMixin:
                 or safe_slots.get("template")
                 or parsed_params.get("preferred_template"),
                 "date": parsed_params.get("date") or safe_slots.get("date"),
-                "order_number": parsed_params.get("order_number")
-                or safe_slots.get("order_number"),
+                "order_number": parsed_params.get("order_number") or safe_slots.get("order_number"),
             }
             for key, value in optional_params.items():
                 if value is not None and str(value).strip():

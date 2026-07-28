@@ -218,7 +218,9 @@ def _private_layout_rows(owner_user_id: int | None) -> list[dict[str, Any]]:
                 if version is None:
                     continue
                 features = load_json(version.source_features_json, {})
-                meta = features.get("shipment_document_template") if isinstance(features, dict) else {}
+                meta = (
+                    features.get("shipment_document_template") if isinstance(features, dict) else {}
+                )
                 if not isinstance(meta, dict):
                     continue
                 path = _safe_private_layout_path(
@@ -249,11 +251,78 @@ def _private_layout_rows(owner_user_id: int | None) -> list[dict[str, Any]]:
         return []
 
 
-def _resolve_private_layout_id(template_id: str, owner_user_id: int | None) -> dict[str, Any] | None:
+def _resolve_private_layout_id(
+    template_id: str, owner_user_id: int | None
+) -> dict[str, Any] | None:
     normalized = str(template_id or "").strip()
     if not normalized.startswith("etl:"):
         return None
-    return next((row for row in _private_layout_rows(owner_user_id) if row["id"] == normalized), None)
+    return next(
+        (row for row in _private_layout_rows(owner_user_id) if row["id"] == normalized), None
+    )
+
+
+def _preview_layout_result(
+    candidate: dict[str, Any],
+    *,
+    unit_name: str,
+) -> dict[str, Any]:
+    """Convert one trusted ETL preview layout into resolver metadata.
+
+    ``cleanup_path`` remains an internal key.  The shipment application service
+    removes it after the synchronous workbook generator consumes the temporary
+    file; it is never promoted to a saved template.
+    """
+
+    path = str(candidate.get("path") or "")
+    out = _result(
+        ok=True,
+        path=path,
+        template_id=str(candidate.get("template_id") or ""),
+        template_name=str(candidate.get("name") or Path(path).name),
+        template_type="发货单",
+        source="etl_preview_candidate",
+        reason="resolved_etl_preview_layout_candidate",
+        unit_name=unit_name or None,
+    )
+    out["warning"] = str(candidate.get("warning") or "")
+    out["provenance"] = (
+        dict(candidate.get("provenance")) if isinstance(candidate.get("provenance"), dict) else {}
+    )
+    out["_cleanup_path"] = str(candidate.get("cleanup_path") or path)
+    return out
+
+
+def _resolve_preview_layout_candidate(
+    *,
+    owner_user_id: int | None,
+    unit_name: str,
+    run_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Materialize a one-use, owner-scoped ETL preview layout.
+
+    It is deliberately a final fallback after private/persisted templates.  A
+    source upload is re-validated by the ETL helper; no caller-supplied path or
+    unscoped run can reach the workbook generator.
+    """
+
+    if owner_user_id is None or not str(unit_name or "").strip():
+        return None
+    try:
+        from app.application.etl.shipment_preview_fallback import (
+            materialize_preview_layout_candidate,
+        )
+
+        candidate = materialize_preview_layout_candidate(
+            owner_user_id=owner_user_id,
+            unit_name=unit_name,
+            run_id=run_id,
+        )
+    except RECOVERABLE_ERRORS:
+        return None
+    if not isinstance(candidate, dict) or not str(candidate.get("path") or "").strip():
+        return None
+    return _preview_layout_result(candidate, unit_name=unit_name)
 
 
 def _score_template(
@@ -342,6 +411,53 @@ def _match_row_by_name(rows: list[dict[str, Any]], needle: str) -> dict[str, Any
     return None
 
 
+def _best_unit_template(
+    rows: list[dict[str, Any]],
+    *,
+    preferred_types: tuple[str, ...],
+    unit_name: str,
+) -> tuple[dict[str, Any] | None, int]:
+    """Select only a real customer-name match, never a generic default."""
+
+    unit_token = _normalize_unit_token(unit_name)
+    if not unit_token:
+        return None, -1
+    best: dict[str, Any] | None = None
+    best_score = -1
+    for row in rows:
+        score = _score_template(row, preferred_types=preferred_types, unit_name=unit_name)
+        name_token = _normalize_unit_token(str(row.get("name") or row.get("filename") or ""))
+        unit_hit = bool(
+            name_token
+            and (unit_token == name_token or unit_token in name_token or name_token in unit_token)
+        )
+        if unit_hit and score > best_score:
+            best_score = score
+            best = row
+    return best, best_score
+
+
+def _template_row_result(
+    row: dict[str, Any],
+    *,
+    unit_name: str,
+    score: int,
+    source: str | None = None,
+) -> dict[str, Any]:
+    path = str(row.get("path") or "")
+    return _result(
+        ok=True,
+        path=path,
+        template_id=str(row.get("id") or ""),
+        template_name=row.get("name") or Path(path).name,
+        template_type=row.get("template_type"),
+        source=source or row.get("source") or "unit_match",
+        reason=f"unit_match:{unit_name}",
+        score=score,
+        unit_name=unit_name,
+    )
+
+
 def _log_template_usage(
     template_id: str | None,
     *,
@@ -416,6 +532,26 @@ def resolve_shipment_template(
     strict_mode = shipment_template_strict_enabled(strict)
     scoped_owner_user_id = _current_owner_user_id(owner_user_id)
 
+    # An opaque preview-layout reference is not a persisted template.  It can
+    # only resolve through the current tenant + authenticated owner and becomes
+    # a one-use temporary workbook during this confirmed generation request.
+    if tid.startswith("etl-preview:"):
+        run_id = tid.split(":", 1)[1].strip()
+        preview = _resolve_preview_layout_candidate(
+            owner_user_id=scoped_owner_user_id,
+            unit_name=unit,
+            run_id=run_id or None,
+        )
+        if preview:
+            return preview
+        return _result(
+            ok=False,
+            template_id=tid,
+            reason="preview_template_not_found",
+            error_code="ETL_PREVIEW_TEMPLATE_NOT_FOUND",
+            unit_name=unit or None,
+        )
+
     # Private ETL layouts never enter the tenant-wide generic template store.
     # Resolve an opaque ``etl:<uuid>`` only against the authenticated owner's
     # own tenant-scoped record before considering any legacy IDs.
@@ -442,10 +578,44 @@ def resolve_shipment_template(
             unit_name=unit or None,
         )
 
+    private_rows = _private_layout_rows(scoped_owner_user_id)
+
+    # Priority for the upload -> same-customer bill loop:
+    # explicit user selection (handled above) > a saved personal layout for
+    # this customer > an unsaved ETL preview layout > generic/shared defaults.
+    # A generic template must not hide the layout the user just extracted, but
+    # a deliberately saved personal customer layout remains authoritative.
+    if not tid and not tname and not pref and unit:
+        private_unit, private_unit_score = _best_unit_template(
+            private_rows,
+            preferred_types=preferred_types,
+            unit_name=unit,
+        )
+        if private_unit is not None and private_unit_score >= 0:
+            return _template_row_result(
+                private_unit,
+                unit_name=unit,
+                score=private_unit_score,
+                source="etl_private",
+            )
+        preview = _resolve_preview_layout_candidate(
+            owner_user_id=scoped_owner_user_id,
+            unit_name=unit,
+        )
+        if preview:
+            return preview
+
     try:
         store = _get_template_store()
     except RECOVERABLE_ERRORS as exc:
         logger.warning("模版库不可用，打单回退 legacy: %s", exc)
+        if not tid and not tname and not pref:
+            preview = _resolve_preview_layout_candidate(
+                owner_user_id=scoped_owner_user_id,
+                unit_name=unit,
+            )
+            if preview:
+                return preview
         return _result(
             ok=False,
             path=tname or None,
@@ -455,8 +625,6 @@ def resolve_shipment_template(
             error_code="TEMPLATE_STORE_UNAVAILABLE",
             unit_name=unit or None,
         )
-
-    private_rows = _private_layout_rows(scoped_owner_user_id)
 
     # 1) template_id
     if tid:
@@ -697,6 +865,19 @@ def resolve_shipment_template(
             if log_usage:
                 _log_template_usage(out["template_id"], action="resolve", result_text=out["reason"])
             return out
+
+    # A detected delivery-note layout is usable only when the user has not
+    # selected a persisted template and no persisted/default layout resolved.
+    # It stays out of the template library and is deleted after this confirmed
+    # document generation.  This closes upload -> preview -> one document
+    # without turning an unexecuted ETL preview into master/template data.
+    if not tid and not tname and not pref:
+        preview = _resolve_preview_layout_candidate(
+            owner_user_id=scoped_owner_user_id,
+            unit_name=unit,
+        )
+        if preview:
+            return preview
 
     return _result(
         ok=False,

@@ -159,15 +159,45 @@ def _build_number_preview_items(unit_name: str, products) -> dict[str, Any]:
 
 
 def build_shipment_preview_response_dict(
-    unit_name: str, products, order_text: str
+    unit_name: str,
+    products,
+    order_text: str,
+    *,
+    order_number: str | None = None,
+    order_number_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build a confirmation-only shipment task.
+
+    A manually labelled document number is carried as data on the confirmation
+    payload, never executed at parse time.  The original natural-language text
+    remains present for audit/reparse on the confirmed endpoint.
+    """
+
+    manual_order_number = str(order_number or "").strip()
     preview = _build_number_preview_items(unit_name, products)
     total_text = (
         f"，预估总价 ¥{format_money(preview['grand_total'])}"
         if preview.get("grand_total") is not None
         else ""
     )
+    order_number_text = f"，单号：{manual_order_number}" if manual_order_number else ""
     items = preview["items"]
+    params: dict[str, Any] = {
+        "order_text": order_text,
+        "unit_name": unit_name,
+        "products": products or [],
+        "number_mode": True,
+    }
+    if manual_order_number:
+        params["order_number"] = manual_order_number
+        if isinstance(order_number_provenance, dict):
+            params["order_number_provenance"] = dict(order_number_provenance)
+    response_data: dict[str, Any] = {
+        "routing": "normal_slot_dispatch",
+        "intent": "shipment_preview",
+    }
+    if manual_order_number and isinstance(order_number_provenance, dict):
+        response_data["order_number_provenance"] = dict(order_number_provenance)
     return {
         "success": True,
         "message": "已识别订单，请确认执行",
@@ -175,26 +205,21 @@ def build_shipment_preview_response_dict(
         "task": {
             "type": "shipment_generate",
             "title": "发货单预览",
-            "description": f"单位：{unit_name}，共 {len(products or [])} 项{total_text}。确认后将生成并可继续打印。",
+            "description": (
+                f"单位：{unit_name}，共 {len(products or [])} 项{total_text}{order_number_text}。"
+                "确认后将生成并可继续打印。"
+            ),
             "items": items,
             "api_url": "/api/tools/execute",
             "method": "POST",
             "payload": {
                 "tool_id": "shipment_generate",
                 "action": "执行",
-                "params": {
-                    "order_text": order_text,
-                    "unit_name": unit_name,
-                    "products": products or [],
-                    "number_mode": True,
-                },
+                "params": params,
             },
             "switch_view": "orders",
         },
-        "data": {
-            "routing": "normal_slot_dispatch",
-            "intent": "shipment_preview",
-        },
+        "data": response_data,
     }
 
 
@@ -293,6 +318,12 @@ def unified_chat_single_payload(
                     parsed_retry.get("unit_name", ""),
                     parsed_retry.get("products") or [],
                     message,
+                    order_number=parsed_retry.get("order_number"),
+                    order_number_provenance=(
+                        parsed_retry.get("order_number_provenance")
+                        if isinstance(parsed_retry.get("order_number_provenance"), dict)
+                        else None
+                    ),
                 )
                 return body
 

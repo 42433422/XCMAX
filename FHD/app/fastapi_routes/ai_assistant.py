@@ -193,7 +193,17 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
 
         from app.application.ai_chat_helpers import build_shipment_preview_response_dict
 
-        preview = build_shipment_preview_response_dict(unit_name, products, order_text)
+        preview = build_shipment_preview_response_dict(
+            unit_name,
+            products,
+            order_text,
+            order_number=parsed.get("order_number"),
+            order_number_provenance=(
+                parsed.get("order_number_provenance")
+                if isinstance(parsed.get("order_number_provenance"), dict)
+                else None
+            ),
+        )
         task_params = preview["task"]["payload"]["params"]
         # These values describe the user's requested layout only.  Do not
         # carry an owner identifier from this legacy request: the confirmed
@@ -432,10 +442,15 @@ def compat_print_shipment_file(
     )
     if not reservation.get("success"):
         error_code = str(reservation.get("error_code") or "")
-        status_code = 403 if error_code in {
-            "PRINT_AUTH_REQUIRED",
-            "PRINT_CONFIRMATION_OWNER_MISMATCH",
-        } else 409
+        status_code = (
+            403
+            if error_code
+            in {
+                "PRINT_AUTH_REQUIRED",
+                "PRINT_CONFIRMATION_OWNER_MISMATCH",
+            }
+            else 409
+        )
         return _fail(
             str(reservation.get("message") or "打印确认无效"),
             status_code,

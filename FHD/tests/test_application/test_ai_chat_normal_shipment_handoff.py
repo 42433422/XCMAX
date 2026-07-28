@@ -153,3 +153,26 @@ def test_pro_chat_returns_the_same_confirmation_card_without_generating_document
     assert payload["params"]["order_text"] == ORDER_TEXT
     assert payload["params"]["products"] == PARSED_NAMED_ORDER["products"]
     shipment_service.generate_shipment_document.assert_not_called()
+
+
+def test_confirmation_card_carries_explicit_document_number_without_execution():
+    """A labelled number stays a preview field until the user clicks confirm."""
+
+    from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+
+    preview = build_shipment_preview_response_dict(
+        "金汉武",
+        PARSED_NAMED_ORDER["products"],
+        "打印金汉武发货单，黑棕面用修色精，编号9803，规格28，3桶",
+        order_number="9803",
+        order_number_provenance={
+            "kind": "explicit_document_number",
+            "label": "编号",
+            "value": "9803",
+        },
+    )
+
+    payload = _assert_confirmation_card(preview)
+    assert payload["params"]["order_number"] == "9803"
+    assert payload["params"]["order_number_provenance"]["kind"] == "explicit_document_number"
+    assert preview["data"]["order_number_provenance"]["value"] == "9803"
