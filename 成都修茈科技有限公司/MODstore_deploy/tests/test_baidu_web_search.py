@@ -166,7 +166,7 @@ async def test_web_search_fallback_crawler_first(monkeypatch: pytest.MonkeyPatch
 
 
 def test_contact_web_search_budget_sec(monkeypatch: pytest.MonkeyPatch) -> None:
-    from modstore_server.research_tools import contact_web_search_budget_sec
+    from modstore_server.contact_company_web_search import contact_web_search_budget_sec
 
     monkeypatch.delenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", raising=False)
     assert contact_web_search_budget_sec() == 5.0
@@ -183,12 +183,13 @@ async def test_search_company_names_via_web_respects_budget(
     import asyncio
     import time
 
+    from modstore_server import contact_company_web_search as ccw
     from modstore_server import research_tools as rt
 
     monkeypatch.setenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", "1.2")
-    monkeypatch.setattr(rt, "contact_web_company_search_enabled", lambda: True)
+    monkeypatch.setattr(ccw, "contact_web_company_search_enabled", lambda: True)
     monkeypatch.setattr(
-        rt,
+        ccw,
         "contact_company_web_search_queries",
         lambda q: [q, f"{q} site:qcc.com", f"{q} 企查查"],
     )
@@ -200,10 +201,10 @@ async def test_search_company_names_via_web_respects_budget(
         await asyncio.sleep(3.0)
         return [], "", ["slow"]
 
-    monkeypatch.setattr(rt, "_contact_company_web_fetch_one", _slow_fetch)
+    monkeypatch.setattr(ccw, "_contact_company_web_fetch_one", _slow_fetch)
 
     started = time.monotonic()
-    names, err, via = await rt.search_company_names_via_web("成都修茈", max_results=5)
+    names, err, via = await ccw.search_company_names_via_web("成都修茈", max_results=5)
     elapsed = time.monotonic() - started
     assert names == []
     assert via == ""
