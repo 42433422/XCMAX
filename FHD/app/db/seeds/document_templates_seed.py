@@ -183,10 +183,31 @@ def _insert_template_row(spec: dict[str, Any]) -> str:
     try:
         with get_db() as db:
             existing = db.execute(
-                text("SELECT id FROM templates WHERE template_key = :k LIMIT 1"),
+                text(
+                    "SELECT id, original_file_path, is_active "
+                    "FROM templates WHERE template_key = :k LIMIT 1"
+                ),
                 {"k": key},
             ).fetchone()
             if existing:
+                old_path = str(getattr(existing, "original_file_path", "") or "").strip()
+                needs_path_fix = (not old_path) or (not Path(old_path).is_file())
+                needs_reactivate = int(getattr(existing, "is_active", 1) or 0) != 1
+                if needs_path_fix or needs_reactivate:
+                    db.execute(
+                        text(
+                            """
+                            UPDATE templates
+                            SET original_file_path = :p,
+                                is_active = 1,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = :id
+                            """
+                        ),
+                        {"p": file_path, "id": existing.id},
+                    )
+                    db.commit()
+                    return "repaired"
                 return "skipped"
 
             db.execute(
@@ -246,6 +267,7 @@ def ensure_initial_document_templates() -> dict[str, Any]:
 
     files = sync_bundled_template_files()
     inserted: list[str] = []
+    repaired: list[str] = []
     skipped: list[str] = []
     failed: list[str] = []
 
@@ -254,6 +276,8 @@ def ensure_initial_document_templates() -> dict[str, Any]:
         key = str(spec["template_key"])
         if status == "inserted":
             inserted.append(key)
+        elif status == "repaired":
+            repaired.append(key)
         elif status == "skipped":
             skipped.append(key)
         else:
@@ -263,16 +287,18 @@ def ensure_initial_document_templates() -> dict[str, Any]:
         "success": not failed,
         "copied_count": int(files.get("copied_count") or 0),
         "inserted": inserted,
+        "repaired": repaired,
         "skipped": skipped,
         "failed": failed,
         "shipment_path": files.get("shipment_path"),
         "price_list_path": files.get("price_list_path"),
     }
-    if inserted or files.get("copied_count"):
+    if inserted or repaired or files.get("copied_count"):
         logger.info(
-            "初始单据模板种子完成: copied=%s inserted=%s skipped=%s failed=%s",
+            "初始单据模板种子完成: copied=%s inserted=%s repaired=%s skipped=%s failed=%s",
             result["copied_count"],
             inserted,
+            repaired,
             skipped,
             failed,
         )

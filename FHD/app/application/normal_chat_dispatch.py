@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 _PRICE_LIST_DOC_RE = re.compile(r"价格表|价目表|价目")
+# 支持「XC 演示客户」「成都某某有限公司」等；允许中间空格/间隔号
 _PRICE_LIST_CUSTOMER_RE = re.compile(
-    r"([^\s，,。]{2,}(?:有限公司|集团有限公司|实业有限公司|公司|单位|客户|厂|店))"
+    r"((?:[^\s，,。]+[\s·]*){1,4}?(?:有限公司|集团有限公司|实业有限公司|公司|单位|客户|厂|店))"
 )
 
 

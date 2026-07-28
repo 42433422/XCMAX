@@ -742,6 +742,66 @@ function finishToChat() {
   finishHostPackFlow()
 }
 
+async function runSeedDemo() {
+  seedBusy.value = true
+  seedSummary.value = ''
+  try {
+    const industry = pickedIndustryId.value || '通用'
+    const res = await apiFetch('/api/platform-shell/onboarding/seed-demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ industry_id: industry }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || body?.success === false) {
+      throw new Error(body?.message || body?.detail || `HTTP ${res.status}`)
+    }
+    const customer = body?.data?.customer?.name || '演示客户'
+    const product = body?.data?.product?.name || '演示产品'
+    const customerEntity = body?.data?.customer?.entity || '客户'
+    const productEntity = body?.data?.product?.entity || '产品'
+    const queries = body?.data?.demo_queries || {}
+    const priceListHint = queries.price_list || '打印演示客户有限公司的价格表'
+    const shipmentHint = queries.shipment || '打印演示客户有限公司发货单，编号A001，规格28，一共3桶'
+    seedSummary.value = `已写入：${customer}、${product}；模板与购买单位已就绪`
+    seedDemoLead.value = `为空企业写入演示${customerEntity}/${productEntity}、购买单位与单据模板。可在对话试用：${priceListHint}`
+    demoCustomerMarker.value = customer
+    aiDemoPrompt.value = queries.ai_prompt || `请列出当前租户下的演示${customerEntity}「${customer}」并一句话总结。`
+    aiDemoLead.value = `请确认 AI 能读取刚创建的「${customer}」。随后可试「${shipmentHint}」。`
+    queueWorkspacePrefsSync({ onboarding_seed_done: true })
+    goStep('first-ai-task')
+  } catch (e) {
+    seedSummary.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    seedBusy.value = false
+  }
+}
+
+async function runFirstAiTask() {
+  aiDemoBusy.value = true
+  aiDemoReply.value = ''
+  try {
+    const res = await apiFetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: aiDemoPrompt.value,
+        session_id: `onboarding-${Date.now()}`,
+      }),
+    })
+    const body = await res.json().catch(() => ({}))
+    const text = String(body?.response || body?.message || body?.data?.response || '').trim()
+    aiDemoReply.value = text || 'AI 已响应（请进入对话查看完整内容）'
+    if (text.includes(demoCustomerMarker.value) || text.includes('演示客户') || text.includes('演示')) {
+      queueWorkspacePrefsSync({ onboarding_ai_demo_done: true })
+    }
+  } catch (e) {
+    aiDemoReply.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    aiDemoBusy.value = false
+  }
+}
+
 function finishOnboardingComplete() {
   queueWorkspacePrefsSync({
     product_flow_completed: true,

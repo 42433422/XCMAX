@@ -15,6 +15,18 @@ def test_route_price_list_before_bare_print() -> None:
     assert "成都某某有限公司" in str(rr["slots"].get("customer_name", ""))
 
 
+def test_route_price_list_spaced_demo_customer() -> None:
+    rr = route_normal_mode_message("打印XC 演示客户的价格表")
+    assert rr["intent"] == "price_list"
+    assert "演示客户" in str(rr["slots"].get("customer_name", ""))
+
+
+def test_route_price_list_print_demo_unit() -> None:
+    rr = route_normal_mode_message("打印演示客户有限公司的价格表")
+    assert rr["intent"] == "price_list"
+    assert rr["slots"].get("customer_name") == "演示客户有限公司"
+
+
 def test_route_price_list_price_catalog_alias() -> None:
     rr = route_normal_mode_message("生成甲厂价目表")
     assert rr["intent"] == "price_list"
