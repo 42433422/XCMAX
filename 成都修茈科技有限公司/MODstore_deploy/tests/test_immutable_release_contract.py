@@ -226,6 +226,7 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert "attested_branch_head_sha" in rendered
         assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
         assert "/api/ops/self-maintenance/deployment-receipt" in rendered
+        assert ".recorded == true or .idempotent == true" in rendered
         assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
         assert "evolution-packages.json" in rendered
         assert "catalog_data/files/" in rendered
