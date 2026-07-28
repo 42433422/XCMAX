@@ -16,7 +16,7 @@ from app.fastapi_routes import market_account as ma
 class TestMarketBaseUrl:
     def test_default(self, monkeypatch):
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
-        assert ma._market_base_url() == "http://127.0.0.1:8765"
+        assert ma._market_base_url() == "http://127.0.0.1:8788"
 
     def test_custom(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "  https://market.example.com/  ")
@@ -24,7 +24,7 @@ class TestMarketBaseUrl:
 
     def test_empty_env(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "")
-        assert ma._market_base_url() == "http://127.0.0.1:8765"
+        assert ma._market_base_url() == "http://127.0.0.1:8788"
 
 
 # ========================= _auth_header =======================================

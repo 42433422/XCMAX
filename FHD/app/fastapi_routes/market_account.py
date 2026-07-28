@@ -26,7 +26,7 @@ _ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def _market_base_url() -> str:
-    return (os.environ.get("XCAGI_MARKET_BASE_URL") or "http://127.0.0.1:8765").strip().rstrip("/")
+    return (os.environ.get("XCAGI_MARKET_BASE_URL") or "http://127.0.0.1:8788").strip().rstrip("/")
 
 
 def _auth_header(raw: str) -> str:

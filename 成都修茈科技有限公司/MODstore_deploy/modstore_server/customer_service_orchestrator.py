@@ -137,6 +137,21 @@ def _enrich_cs_context(
 ) -> Dict[str, Any]:
     """会话 context 写入可信用户身份（不信任前端伪造的 user_id）。"""
     ctx = dict(context or {})
+    if _is_external_customer_context(ctx):
+        # 外部渠道中的 User 只是会话/工单归属账号，不是正在咨询的客户。
+        # 归属信息可用于审计，但绝不能进入客户称呼、会员或角色上下文。
+        for key in (
+            "user_id",
+            "display_name",
+            "membership",
+            "account_role",
+            "plan_id",
+            "email_hint",
+        ):
+            ctx.pop(key, None)
+        ctx["owner_user_id"] = getattr(user, "id", None)
+        ctx["identity_scope"] = "external_customer"
+        return ctx
     try:
         from modstore_server.xiaoc_cs_ssot import resolve_user_identity
 
@@ -157,6 +172,28 @@ def _enrich_cs_context(
     return ctx
 
 
+def _is_external_customer_context(context: Optional[Dict[str, Any]]) -> bool:
+    ctx = context or {}
+    external_userid = str(ctx.get("external_userid") or "").strip()
+    channel = str(ctx.get("channel") or "").strip().lower()
+    return bool(external_userid and channel not in {"", "web", "market_web"})
+
+
+def _merge_session_context(
+    row: CustomerServiceSession,
+    enriched: Dict[str, Any],
+) -> CustomerServiceSession:
+    try:
+        prev = json_loads(row.context_json) if row.context_json else {}
+        if not isinstance(prev, dict):
+            prev = {}
+        merged = {**prev, **{k: v for k, v in enriched.items() if v is not None}}
+        row.context_json = json_dumps(merged)
+    except Exception:  # noqa: BLE001
+        pass
+    return row
+
+
 def ensure_session(
     db: Session,
     *,
@@ -174,19 +211,38 @@ def ensure_session(
             .first()
         )
         if row:
-            # 补全已有会话的称呼字段（不覆盖渠道等前端上下文）
-            try:
-                prev = json_loads(row.context_json) if row.context_json else {}
-                if not isinstance(prev, dict):
-                    prev = {}
-                merged = {**prev, **{k: v for k, v in enriched.items() if v is not None}}
-                row.context_json = json_dumps(merged)
-            except Exception:  # noqa: BLE001
-                pass
-            return row
+            return _merge_session_context(row, enriched)
+    external_userid = str(enriched.get("external_userid") or "").strip()
+    external_team_id = str(enriched.get("team_id") or "").strip()
+    channel = str(enriched.get("channel") or "web")[:32]
+    if external_userid and _is_external_customer_context(enriched):
+        candidates = (
+            db.query(CustomerServiceSession)
+            .filter(
+                CustomerServiceSession.user_id == user.id,
+                CustomerServiceSession.channel == channel,
+                CustomerServiceSession.status == "open",
+            )
+            .order_by(CustomerServiceSession.id.desc())
+            .limit(100)
+            .all()
+        )
+        for candidate in candidates:
+            previous = json_loads(candidate.context_json, {})
+            previous_team_id = (
+                str(previous.get("team_id") or "").strip()
+                if isinstance(previous, dict)
+                else ""
+            )
+            if (
+                isinstance(previous, dict)
+                and str(previous.get("external_userid") or "").strip() == external_userid
+                and (not external_team_id or previous_team_id == external_team_id)
+            ):
+                return _merge_session_context(candidate, enriched)
     row = CustomerServiceSession(
         user_id=user.id,
-        channel=str(enriched.get("channel") or "web")[:32],
+        channel=channel,
         status="open",
         title="AI 客服会话",
         context_json=json_dumps(enriched),
@@ -212,6 +268,7 @@ def handle_customer_message(
     context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     context = _enrich_cs_context(user, context, db=db)
+    reply_user = None if _is_external_customer_context(context) else user
     text = (message or "").strip()
     image_data_url = str((context or {}).get("image_data_url") or "").strip()
     if image_data_url and not image_data_url.startswith("data:image/"):
@@ -450,7 +507,20 @@ def handle_customer_message(
         _enrich_extracted_from_prior_issue(db, session=session, text=text, extracted=extracted)
 
     if not need_ticket:
-        reply = _chat_only_reply(text, intent=intent, user=user, db=db)
+        reply = ""
+        reply_source = "rules"
+        if _is_external_customer_context(context) and not is_greeting(text):
+            reply = _llm_generate_external_reply(
+                text,
+                intent=intent,
+                user=user,
+                db=db,
+                session=session,
+            )
+            if reply:
+                reply_source = "llm"
+        if not reply:
+            reply = _chat_only_reply(text, intent=intent, user=reply_user, db=db)
         # 对话优先：不对客户展示意图/调试卡片，元数据只进 payload 供审计
         cards: list[Dict[str, Any]] = []
         assistant_msg = CustomerServiceMessage(
@@ -466,6 +536,7 @@ def handle_customer_message(
                     "actions": [],
                     "cards": cards,
                     "intent": classified,
+                    "reply_source": reply_source,
                 }
             ),
         )
@@ -562,7 +633,9 @@ def handle_customer_message(
                     "还不会结案。可继续补充截图或具体页面。"
                 )
         else:
-            xiaoc_reply = _xiaoc_general_reply(issue_text, user=user, db=db, ticketed=True)
+            xiaoc_reply = _xiaoc_general_reply(
+                issue_text, user=reply_user, db=db, ticketed=True
+            )
             if xiaoc_reply:
                 reply = xiaoc_reply
         # 工单摘要同步为真实问题，避免侧栏/详情只剩「提交工单」
@@ -842,6 +915,10 @@ def classify_customer_intent(
         intent = str(llm.get("intent") or "general").strip().lower()
         if intent not in KNOWN_INTENTS:
             intent = "general"
+        if intent == "greeting" and not is_greeting(text):
+            # 模型不能把带有业务信息的完整句子降级成寒暄模板。
+            intent = "general"
+            llm["reason"] = "non_greeting_text_corrected"
         # 模型偶发仍把界面故障塞进 general：用缺陷语义纠偏（不替代主分类）
         if intent == "general" and _looks_like_product_issue(text):
             intent = "product_issue"
@@ -976,6 +1053,138 @@ def _llm_classify_intent(text: str) -> Optional[Dict[str, Any]]:
             return pool.submit(asyncio.run, _inner()).result(timeout=15)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _platform_llm_reply_text(out: Any) -> str:
+    if not isinstance(out, dict) or not out.get("ok"):
+        return ""
+    for key in ("content", "text", "response", "reply"):
+        value = out.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    message = out.get("message")
+    if isinstance(message, dict):
+        value = message.get("content")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    raw = out.get("raw")
+    if isinstance(raw, dict):
+        blocks = raw.get("content")
+        if isinstance(blocks, list):
+            for block in blocks:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                ):
+                    return str(block["text"]).strip()
+    return ""
+
+
+def _llm_generate_external_reply(
+    text: str,
+    *,
+    intent: str,
+    user: Optional[User],
+    db: Session,
+    session: CustomerServiceSession,
+) -> str:
+    """用平台模型生成外部客户正文；内部归属账号只用于泄漏拦截。"""
+    flag = os.environ.get("MODSTORE_CS_LLM_REPLY")
+    if flag is None:
+        flag = os.environ.get("MODSTORE_CS_LLM_INTENT") or "1"
+    if flag.strip().lower() in {"0", "false", "off", "no"}:
+        return ""
+
+    from modstore_server.xiaoc_cs_ssot import knowledge_block_for_query, xiaoc_system_prompt
+
+    mode = (
+        "market_cs"
+        if intent
+        in {
+            "refund",
+            "catalog_complaint",
+            "catalog_review",
+            "account_support",
+            "llm_extension",
+        }
+        else "corp"
+    )
+    system_prompt = xiaoc_system_prompt(mode=mode)
+    system_prompt += (
+        "\n\n你正在外部客服渠道回复真实客户。承载会话的内部账号不是客户，"
+        "禁止称呼或透露内部用户名、邮箱、会员等级、管理员/企业角色。"
+        "只根据客户主动提供的信息和本会话历史作答。"
+        "客户介绍所在公司或地区时，要自然承接并追问其业务目标，不要退回通用寒暄。"
+        "只输出给客户看的正文，不要输出 JSON、意图标签或调试信息。"
+    )
+    try:
+        knowledge = knowledge_block_for_query(text, top_k=4, mode=mode)
+    except Exception:  # noqa: BLE001
+        knowledge = ""
+    if knowledge:
+        system_prompt += f"\n\n{knowledge}"
+
+    rows = (
+        db.query(CustomerServiceMessage)
+        .filter(CustomerServiceMessage.session_id == session.id)
+        .order_by(CustomerServiceMessage.id.desc())
+        .limit(12)
+        .all()
+    )
+    history = [
+        {"role": row.role, "content": str(row.content or "")[:2000]}
+        for row in reversed(rows)
+        if row.role in {"user", "assistant"} and str(row.content or "").strip()
+    ]
+    if not history or history[-1]["role"] != "user":
+        history.append({"role": "user", "content": text[:2000]})
+    messages = [{"role": "system", "content": system_prompt}, *history]
+
+    async def _inner() -> str:
+        from modstore_server.services.llm import (
+            chat_dispatch_via_platform_only,
+            resolve_platform_bench_llm,
+        )
+
+        provider, model = resolve_platform_bench_llm()
+        if not provider or not model:
+            return ""
+        out = await chat_dispatch_via_platform_only(
+            provider,
+            model,
+            messages,
+            max_tokens=384,
+        )
+        return _platform_llm_reply_text(out)
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            reply = pool.submit(asyncio.run, _inner()).result(timeout=20).strip()
+    except Exception:  # noqa: BLE001
+        return ""
+    if not reply:
+        return ""
+
+    compact = re.sub(r"\s+", "", reply)
+    owner_markers = {
+        str(getattr(user, "username", None) or "").strip(),
+        str(getattr(user, "email", None) or "").strip(),
+    }
+    if any(marker and marker in reply for marker in owner_markers):
+        return ""
+    if any(
+        marker in compact
+        for marker in (
+            "暂时无法理解您的需求",
+            "[ClientName]",
+            "我的主人",
+            "内部账号",
+            "管理员身份",
+        )
+    ):
+        return ""
+    return reply[:2000]
 
 
 def _chat_only_reply(

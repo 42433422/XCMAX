@@ -348,7 +348,12 @@ onBeforeUnmount(stopPolling)
 
 <style scoped>
 .founder-view {
+  height: 100%;
   min-height: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px;
   color: #10213d;
   background:

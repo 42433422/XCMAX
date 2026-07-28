@@ -1673,6 +1673,7 @@ def _registered_router_dataset_rag(
             "version": params.get("version") or "",
             "metadata_filter": as_dict(params.get("metadata_filter")),
             "rerank": as_bool(params.get("rerank"), default=False),
+            "include_public": as_bool(params.get("include_public"), default=False),
             "access_context": access_context(DATASET_READ_PERMISSION),
         }
         include_answer = as_bool(params.get("include_answer"), default=True)

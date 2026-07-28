@@ -192,8 +192,18 @@ vi.mock('@/utils/roleMenuProfile', () => ({
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
+  ADMIN_OPERATOR_ATTENDANCE_MOD_IDS: new Set<string>(['attendance-industry', 'taiyangniao-pro']),
   ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES: new Set<string>(['admin-entitlements']),
+  ADMIN_OPERATOR_HIDDEN_MOD_IDS: new Set<string>(['sz-qsm-pro']),
   ADMIN_OPERATOR_HOME_ROUTE: 'admin-home',
+  ADMIN_OPERATOR_ROUTE_NAMES: new Set<string>([
+    'login',
+    'chat',
+    'workflow-visualization',
+    'product-onboarding',
+    'admin-entitlements',
+    'admin-home',
+  ]),
 }))
 
 vi.mock('@admin-console-inject/adminHostRoutes', () => ({
@@ -438,6 +448,12 @@ describe('router/index 覆盖率补齐', () => {
     it('admin console 中 blocked route name 重定向到 operator home', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
       await router.push('/admin/entitlements')
+      expect(router.currentRoute.value.name).toBe('admin-home')
+    })
+
+    it('admin console 中企业行业 Mod 直达重定向到 operator home', async () => {
+      mockIsAdminConsoleSpa.mockReturnValue(true)
+      await router.push('/mod/taiyangniao-pro')
       expect(router.currentRoute.value.name).toBe('admin-home')
     })
 
@@ -872,9 +888,8 @@ describe('router/index 覆盖率补齐', () => {
     it('shouldRouteToProductOnboarding + admin console 时不重定向', async () => {
       mockShouldRouteToProductOnboarding.mockReturnValue(true)
       mockIsAdminConsoleSpa.mockReturnValue(true)
-      await router.push('/settings')
-      // admin console 中不触发 product onboarding
-      // 但可能被其他守卫处理
+      await router.push('/workflow-visualization')
+      expect(router.currentRoute.value.name).toBe('workflow-visualization')
     })
   })
 

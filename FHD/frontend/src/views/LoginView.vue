@@ -33,6 +33,8 @@ const accountProfileStore = useAccountProfileStore();
 const username = ref('');
 const accountKind = ref<AccountKind>(isAdminConsoleSpa() ? 'admin' : 'enterprise');
 const password = ref('');
+const mfaCode = ref('');
+const mfaRequired = ref(false);
 const showPassword = ref(false);
 const loading = ref(false);
 /** 桌面壳：隐藏「管理员登录」入口（管理端仅网页 SSOT） */
@@ -96,6 +98,7 @@ const canSubmit = computed(() => {
     return phone.value.trim().length >= 5 && smsCode.value.trim().length >= 6;
   }
   if (loginMode.value === 'qr') return false;
+  if (mfaRequired.value && mfaCode.value.trim().length !== 6) return false;
   return username.value.trim().length > 0 && password.value.length > 0;
 });
 
@@ -131,6 +134,15 @@ const loginHelpRoute = computed(() => ({
 }));
 
 function applySavedLoginPreferences() {
+  if (isAdminConsoleSpa()) {
+    saveLoginPreferences({
+      rememberPassword: false,
+      autoLogin: false,
+      username: '',
+      password: '',
+    });
+    return;
+  }
   const prefs = loadLoginPreferences();
   rememberPassword.value = prefs.rememberPassword;
   autoLogin.value = prefs.autoLogin;
@@ -223,9 +235,11 @@ async function completeLoginSuccess(raw: Record<string, unknown>) {
   // Token handoff and MOD discovery are optional post-login bootstrap work.
   // They must never hold the login button in "正在登录" or delay the first
   // usable ERP screen when the market/MOD service is slow or offline.
-  void applyMarketTokensAfterFhdLogin(raw).catch((marketErr) => {
-    console.warn('[Login] market token handoff after auth:', marketErr);
-  });
+  if (!isAdminConsoleSpa()) {
+    void applyMarketTokensAfterFhdLogin(raw).catch((marketErr) => {
+      console.warn('[Login] market token handoff after auth:', marketErr);
+    });
+  }
   if (isEnterpriseEdition.value) {
     void (async () => {
       try {
@@ -387,11 +401,17 @@ async function submitLogin() {
     const result =
       loginMode.value === 'phone'
         ? await authApi.loginWithPhoneCode(phone.value.trim(), smsCode.value.trim(), accountKind.value)
-        : await authApi.login(username.value.trim(), password.value, accountKind.value);
+        : await authApi.login(
+            username.value.trim(),
+            password.value,
+            accountKind.value,
+            mfaRequired.value ? mfaCode.value.trim() : '',
+          );
     const raw = result as unknown as Record<string, unknown>;
     const ok = raw?.success === true || (raw?.data as Record<string, unknown> | undefined)?.success === true;
     if (!ok) {
       const nested = (raw?.data as Record<string, unknown> | undefined) || {};
+      mfaRequired.value = Boolean(raw.mfa_required ?? nested.mfa_required);
       errorMessage.value = formatLoginFailurePayload({
         ...nested,
         message: raw.message ?? nested.message,
@@ -401,8 +421,8 @@ async function submitLogin() {
       return;
     }
     saveLoginPreferences({
-      rememberPassword: rememberPassword.value,
-      autoLogin: autoLogin.value,
+      rememberPassword: !isAdminConsoleSpa() && rememberPassword.value,
+      autoLogin: !isAdminConsoleSpa() && autoLogin.value,
       username: username.value.trim(),
       password: password.value,
     });
@@ -532,7 +552,27 @@ async function submitLogin() {
             </button>
           </div>
 
-          <div class="login-options" role="group" :aria-label="$t('login.loginOptions')">
+          <div v-if="mfaRequired" class="login-field">
+            <label class="login-label" for="lv-mfa-code">{{ $t('login.labelMfaCode') }}</label>
+            <input
+              id="lv-mfa-code"
+              v-model="mfaCode"
+              class="login-input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              :placeholder="$t('login.mfaCodePlaceholder')"
+              :disabled="loading"
+            />
+          </div>
+
+          <div
+            v-if="!isAdminConsoleSpa()"
+            class="login-options"
+            role="group"
+            :aria-label="$t('login.loginOptions')"
+          >
             <label class="login-option">
               <input
                 v-model="autoLogin"

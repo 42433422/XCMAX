@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import os
+import secrets
 import threading
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -76,6 +78,16 @@ class CustomerServiceChatBody(BaseModel):
     image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
 
 
+class CustomerServiceChannelChatBody(BaseModel):
+    message: str = Field(default="", max_length=8000)
+    channel: str = Field(default="wework", max_length=32)
+    external_userid: str = Field(default="", max_length=128)
+    contact_name: str = Field(default="", max_length=128)
+    open_kfid: str = Field(default="", max_length=128)
+    session_id: Optional[int] = None
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+
 class StandardBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     scenario: str = Field(default="general", max_length=64)
@@ -95,6 +107,45 @@ class IntegrationBody(BaseModel):
     scenario: str = Field(default="general", max_length=64)
     config: Dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+
+
+def _require_internal_api_key(request: Request) -> None:
+    expected = (
+        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
+        or os.environ.get("MODSTORE_INTERNAL_API_KEY")
+        or os.environ.get("MODSTORE_CS_CHANNEL_TOKEN")
+        or ""
+    ).strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal api not configured")
+    got = (request.headers.get("x-internal-api-key") or "").strip()
+    if not got or not secrets.compare_digest(got, expected):
+        raise HTTPException(status_code=403, detail="invalid internal api key")
+
+
+def _resolve_channel_user(db: Session, context: Dict[str, Any]) -> User:
+    """把外部渠道消息归属到平台客服用户；优先使用上下文显式用户。"""
+    for key in ("market_user_id", "user_id", "owner_user_id"):
+        try:
+            user_id = int(context.get(key) or 0)
+        except (TypeError, ValueError):
+            user_id = 0
+        if user_id > 0:
+            row = db.get(User, user_id)
+            if row is not None:
+                return row
+    for key in ("owner_email", "email"):
+        email = str(context.get(key) or "").strip()
+        if email:
+            row = db.query(User).filter(User.email == email).order_by(User.id.asc()).first()
+            if row is not None:
+                return row
+    row = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+    if row is None:
+        row = db.query(User).order_by(User.id.asc()).first()
+    if row is None:
+        raise HTTPException(status_code=503, detail="customer-service owner user not found")
+    return row
 
 
 @router.post("/chat")
@@ -184,6 +235,46 @@ async def customer_service_chat(
             }
         )
     return result
+
+
+@router.post("/channel/chat")
+async def customer_service_channel_chat(
+    body: CustomerServiceChannelChatBody,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """服务端渠道桥接入口：客来来等渠道只做收发，平台客服负责会话/工单真相。"""
+    _require_internal_api_key(request)
+    message = str(body.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="请输入文字")
+    context = dict(body.context or {})
+    channel = (body.channel or "wework")[:32]
+    external_userid = (body.external_userid or "")[:128]
+    context.update(
+        {
+            "channel": channel,
+            "external_userid": external_userid,
+            "contact_name": (body.contact_name or external_userid or "")[:128],
+            "open_kfid": (body.open_kfid or "")[:128],
+            "source": str(context.get("source") or "customer_service_channel")[:64],
+        }
+    )
+    user = _resolve_channel_user(db, context)
+    result = handle_customer_message(
+        db,
+        user=user,
+        message=message,
+        session_id=body.session_id,
+        context=context,
+    )
+    db.commit()
+    return {
+        **result,
+        "ok": bool(result.get("ok", True)),
+        "channel": channel,
+        "external_userid": external_userid,
+    }
 
 
 @router.get("/sessions")

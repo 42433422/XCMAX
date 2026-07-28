@@ -5,8 +5,9 @@
   2. ``XCAGI_API_PORT``（保留兼容老 .env 习惯写法）
   3. 默认 ``5000``——macOS 上 AirPlay / ControlCe 可能占用 :5000（commplex-main）。
 
-首选端口被占用时，会自动向后寻找下一个可用端口（最多尝试 100 个），
-无需手动改环境变量。如需固定端口，仍可通过 ``FASTAPI_PORT`` 显式指定。
+显式配置端口时必须占用该端口，端口冲突会直接退出，避免受管进程悄悄
+漂移到下一端口并与旧实例共同写库。仅未配置端口，或显式设置
+``XCAGI_ALLOW_PORT_FALLBACK=1`` 时，才会向后寻找可用端口。
 """
 
 from __future__ import annotations
@@ -35,18 +36,30 @@ def _resolve_host() -> str:
 
 
 def _resolve_port(host: str) -> int:
-    """解析监听端口；首选端口被占用时自动寻找下一个可用端口。"""
+    """解析监听端口；显式端口默认严格绑定，防止产生双实例。"""
     preferred = 42422
+    explicit_port = False
     for key in ("FASTAPI_PORT", "XCAGI_API_PORT", "PORT"):
         raw = os.environ.get(key)
         if raw and raw.strip().isdigit():
             port = int(raw.strip())
             if 1 <= port <= 65535:
                 preferred = port
+                explicit_port = True
                 break
 
     if _is_port_available(host, preferred):
         return preferred
+
+    allow_fallback = (
+        os.environ.get("XCAGI_ALLOW_PORT_FALLBACK", "").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if explicit_port and not allow_fallback:
+        raise RuntimeError(
+            f"端口 {preferred} 已被占用；为避免管理 API 双实例，拒绝自动切换端口。"
+            "请停止旧进程，或显式设置 XCAGI_ALLOW_PORT_FALLBACK=1。"
+        )
 
     upper = min(preferred + 100, 65535)
     for candidate in range(preferred + 1, upper + 1):

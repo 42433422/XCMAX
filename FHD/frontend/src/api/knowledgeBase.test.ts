@@ -42,6 +42,12 @@ describe('knowledgeBaseApi', () => {
     )
   })
 
+  it('loads the active enterprise tenant directory', async () => {
+    await knowledgeBaseApi.tenants()
+
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/rbac/tenants')
+  })
+
   it('loads the bounded Persy knowledge graph', async () => {
     await knowledgeBaseApi.graph('team brain', 999)
 
@@ -99,6 +105,7 @@ describe('knowledgeBaseApi', () => {
     expect((form as FormData).get('file')).toBe(file)
     expect((form as FormData).get('source')).toBe('Policy')
     expect((form as FormData).get('chunk_strategy')).toBe('semantic')
+    expect((form as FormData).get('metadata_json')).toBe('{}')
   })
 
   it('queries dataset with answer and rerank options', async () => {
@@ -120,7 +127,36 @@ describe('knowledgeBaseApi', () => {
         version: '',
         metadata_filter: {},
         rerank: true,
+        include_public: true,
       },
+    )
+  })
+
+  it('scopes status, graph, and queries to an explicit admin tenant', async () => {
+    await knowledgeBaseApi.status('persy-knowledge', {
+      includeDocuments: true,
+      tenantId: 'tenant-a',
+    })
+    await knowledgeBaseApi.graph('persy-knowledge', 80, { tenantId: 'tenant-a' })
+    await knowledgeBaseApi.query({
+      datasetId: 'persy-knowledge',
+      query: 'private policy',
+      tenantId: 'tenant-a',
+      includePublic: false,
+    })
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/status?tenant_id=tenant-a',
+    )
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/graph?limit=80&tenant_id=tenant-a',
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/query',
+      expect.objectContaining({
+        tenant_id: 'tenant-a',
+        include_public: false,
+      }),
     )
   })
 
@@ -163,6 +199,26 @@ describe('knowledgeBaseApi', () => {
     )
     expect(mocks.api.delete).toHaveBeenCalledWith(
       '/api/knowledge/v1/datasets/persy-knowledge/documents/doc%20%2F%201',
+    )
+  })
+
+  it('publishes a public draft through the governed publication route', async () => {
+    await knowledgeBaseApi.setDocumentPublication(
+      'persy-knowledge',
+      'doc / 1',
+      'published',
+      '内容审核完成',
+      'draft',
+    )
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.patch).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/documents/doc%20%2F%201/publication',
+      {
+        status: 'published',
+        reason: '内容审核完成',
+        expected_status: 'draft',
+      },
     )
   })
 })

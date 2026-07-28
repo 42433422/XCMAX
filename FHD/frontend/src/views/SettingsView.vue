@@ -167,6 +167,24 @@
         <details
           v-if="isLoggedIn && isLocalAdmin"
           class="settings-card"
+          open
+        >
+          <summary class="settings-row">
+            <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
+              <i class="fa fa-key"></i>
+            </span>
+            <span class="settings-row__label">管理员登录安全</span>
+            <span class="settings-row__meta">密码与动态验证</span>
+            <span class="settings-row__arrow" aria-hidden="true"></span>
+          </summary>
+          <div class="settings-card__body settings-card__body--list">
+            <AdminMfaSetup />
+          </div>
+        </details>
+
+        <details
+          v-if="isLoggedIn && isLocalAdmin"
+          class="settings-card"
           data-tutorial-id="settings-audit-logs"
         >
           <summary class="settings-row">
@@ -941,6 +959,7 @@ import {
 } from '@/constants/genericModPack';
 import HostModBridgeView from '@/components/HostModBridgeView.vue';
 import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue';
+import AdminMfaSetup from '@/components/settings/AdminMfaSetup.vue';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 import { setAppLocale } from '@/i18n';

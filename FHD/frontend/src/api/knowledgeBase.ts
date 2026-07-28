@@ -14,6 +14,34 @@ export interface KnowledgeBaseDocument {
   metadata?: Record<string, unknown>
 }
 
+export interface KnowledgeTenant {
+  id: number | string
+  tenant_id?: string
+  code?: string
+  name?: string
+  is_active?: boolean
+  plan_id?: string
+}
+
+export interface KnowledgeTenantDirectoryResponse {
+  success: boolean
+  data?: KnowledgeTenant[]
+  message?: string
+}
+
+export type KnowledgePublicationStatus = 'draft' | 'published' | 'archived'
+
+export interface KnowledgePublicationResponse {
+  success: boolean
+  dataset_id?: string
+  document_id?: string
+  previous_status?: string
+  publication_status?: KnowledgePublicationStatus
+  document?: KnowledgeBaseDocument
+  message?: string
+  error_code?: string
+}
+
 export interface KnowledgeBaseStatus {
   success: boolean
   dataset_id: string
@@ -136,6 +164,7 @@ export interface KnowledgeBaseUploadPayload {
   tenantId?: string
   version?: string
   versionLabel?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface KnowledgeBaseIngestResponse {
@@ -177,6 +206,7 @@ export interface KnowledgeBaseQueryPayload {
   version?: string
   metadataFilter?: Record<string, unknown>
   rerank?: boolean
+  includePublic?: boolean
 }
 
 export interface KnowledgeBaseQueryResponse {
@@ -299,6 +329,10 @@ export const knowledgeBaseApi = {
     return api.get<KnowledgeOmniscientOverview>('/api/knowledge/v1/omniscient')
   },
 
+  tenants(): Promise<KnowledgeTenantDirectoryResponse> {
+    return api.get<KnowledgeTenantDirectoryResponse>('/api/rbac/tenants')
+  },
+
   async omniscientQuery(payload: {
     query: string
     topK?: number
@@ -313,10 +347,13 @@ export const knowledgeBaseApi = {
 
   status(
     datasetId = PERSY_KNOWLEDGE_DATASET_ID,
-    options: { includeDocuments?: boolean } = {},
+    options: { includeDocuments?: boolean; tenantId?: string } = {},
   ): Promise<KnowledgeBaseStatus> {
     const includeDocuments = options.includeDocuments !== false
-    const suffix = includeDocuments ? '/status' : '/status?include_documents=false'
+    const params = new URLSearchParams()
+    if (!includeDocuments) params.set('include_documents', 'false')
+    if (options.tenantId) params.set('tenant_id', options.tenantId)
+    const suffix = `/status${params.size ? `?${params.toString()}` : ''}`
     return api.get<KnowledgeBaseStatus>(datasetPath(datasetId, suffix))
   },
 
@@ -356,9 +393,12 @@ export const knowledgeBaseApi = {
   graph(
     datasetId = PERSY_KNOWLEDGE_DATASET_ID,
     limit = 80,
+    options: { tenantId?: string } = {},
   ): Promise<KnowledgeGraphResponse> {
     const boundedLimit = Math.max(20, Math.min(Number(limit) || 80, 160))
-    return api.get<KnowledgeGraphResponse>(datasetPath(datasetId, `/graph?limit=${boundedLimit}`))
+    const params = new URLSearchParams({ limit: String(boundedLimit) })
+    if (options.tenantId) params.set('tenant_id', options.tenantId)
+    return api.get<KnowledgeGraphResponse>(datasetPath(datasetId, `/graph?${params.toString()}`))
   },
 
   async ingestDocument(payload: KnowledgeBaseIngestPayload): Promise<KnowledgeBaseIngestResponse> {
@@ -387,6 +427,7 @@ export const knowledgeBaseApi = {
     form.append('version', payload.version || '')
     form.append('version_label', payload.versionLabel || '')
     form.append('chunk_strategy', 'semantic')
+    form.append('metadata_json', JSON.stringify(payload.metadata || {}))
     return api.post<KnowledgeBaseIngestResponse>(
       datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/documents/upload'),
       form,
@@ -405,6 +446,7 @@ export const knowledgeBaseApi = {
         version: payload.version || '',
         metadata_filter: payload.metadataFilter || {},
         rerank: payload.rerank === true,
+        include_public: payload.includePublic !== false,
       },
     )
   },
@@ -493,6 +535,23 @@ export const knowledgeBaseApi = {
     await primeCsrfCookie()
     return api.delete<KnowledgeBaseStatus>(
       datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}`),
+    )
+  },
+
+  async setDocumentPublication(
+    datasetId: string,
+    documentId: string,
+    status: KnowledgePublicationStatus,
+    reason: string,
+    expectedStatus?: KnowledgePublicationStatus,
+  ): Promise<KnowledgePublicationResponse> {
+    await primeCsrfCookie()
+    return api.patch<KnowledgePublicationResponse>(
+      datasetPath(
+        datasetId,
+        `/documents/${encodeURIComponent(documentId)}/publication`,
+      ),
+      { status, reason, expected_status: expectedStatus },
     )
   },
 }

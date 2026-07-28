@@ -97,16 +97,40 @@ def list_deploy_events(
 
 
 def operating_metrics_windows() -> dict[str, Any]:
-    """Return 30d + 90d operating windows (live evaluate + optional jsonl history)."""
+    """Return 30d + 90d operating windows, preferring durable daily snapshots."""
     from app.domain.autonomy.operating_metrics import evaluate_autonomy_window
+
+    history = _read_jsonl(autonomy_metrics_path(), limit=120)
+    snapshots: dict[int, dict[str, Any]] = {}
+    for row in history:
+        try:
+            days = int(row.get("window_days") or 0)
+        except (TypeError, ValueError):
+            continue
+        if days not in {30, 90} or days in snapshots:
+            continue
+        if str(row.get("cohort") or "operational") != "operational":
+            continue
+        snapshots[days] = row
 
     windows: dict[str, Any] = {}
     for days in (30, 90):
-        try:
-            report = evaluate_autonomy_window(days)
-        except RECOVERABLE_ERRORS as exc:
-            report = {"window_days": days, "error": str(exc), "veto_rate": 0.0, "total": 0}
+        report = snapshots.get(days)
+        source = "snapshot"
+        if report is None:
+            try:
+                report = evaluate_autonomy_window(days)
+                source = "live"
+            except RECOVERABLE_ERRORS as exc:
+                report = {
+                    "window_days": days,
+                    "error": str(exc),
+                    "veto_rate": 0.0,
+                    "total": 0,
+                }
+                source = "error"
         windows[str(days)] = {
+            **report,
             "window_days": days,
             "veto_rate": float(report.get("veto_rate") or 0.0),
             "action_count": int(report.get("total") or 0),
@@ -122,9 +146,10 @@ def operating_metrics_windows() -> dict[str, Any]:
             "complete": report.get("complete"),
             "observed_days": report.get("observed_days"),
             "by_decision": report.get("by_decision") or {},
+            "source": source,
+            "snapshot_at": report.get("snapshot_at"),
         }
 
-    history = _read_jsonl(autonomy_metrics_path(), limit=60)
     trend_30: list[dict[str, Any]] = []
     for row in reversed(history):
         if int(row.get("window_days") or 0) != 30:

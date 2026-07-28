@@ -221,17 +221,16 @@ async def admin_autonomy_overview(request: Request):
         operating_metrics_windows,
     )
     from app.application.autonomy.approval_resume import list_pending_actions
-    from app.application.autonomy.audit_log import (
-        list_autonomy_audit,
-        summarize_autonomy_audit,
-    )
+    from app.application.autonomy.audit_log import list_autonomy_audit
     from app.application.ops_closure_status import build_ops_closure_status
 
-    audit_items = list_autonomy_audit(limit=20)
-    audit_summary = summarize_autonomy_audit(days=30)
-    metrics = operating_metrics_windows()
-    deploy = list_deploy_events(limit=20)
-    pending = list_pending_actions()
+    audit_items, metrics, deploy, pending = await asyncio.gather(
+        asyncio.to_thread(list_autonomy_audit, limit=20),
+        asyncio.to_thread(operating_metrics_windows),
+        asyncio.to_thread(list_deploy_events, limit=20),
+        asyncio.to_thread(list_pending_actions),
+    )
+    audit_summary = dict((metrics.get("windows") or {}).get("30") or {})
 
     runtime: dict[str, Any] = {}
     try:

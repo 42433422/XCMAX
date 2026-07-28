@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "dataset_id": "persy-knowledge",
+  "revision": "2026-07-28",
+  "owner": "成都修茈科技有限公司",
+  "audience": "public",
+  "documents": [
+    {
+      "document_id": "public-company-brand-v1",
+      "title": "修茈科技公司与品牌",
+      "file": "documents/01-company-brand.md",
+      "category": "company",
+      "source_urls": [
+        "https://xiu-ci.com/about.html",
+        "https://xiu-ci.com/"
+      ],
+      "keywords": ["成都修茈科技有限公司", "修茈科技", "XCAGI Automation", "AI员工", "业务自动化"],
+      "reply_excerpt": "成都修茈科技有限公司是一家面向中小企业和组织的 AI 员工与业务自动化技术服务商，核心方向是把企业数据、流程、工具和 AI 员工连接起来，让 AI 在授权范围内完成可复核的真实业务任务。"
+    },
+    {
+      "document_id": "public-xcagi-platform-v1",
+      "title": "XCAGI AI 员工桌面平台",
+      "file": "documents/02-xcagi-platform.md",
+      "category": "product",
+      "source_urls": [
+        "https://xiu-ci.com/services.html",
+        "https://xiu-ci.com/download"
+      ],
+      "keywords": ["XCAGI", "XCMAX", "AI员工桌面平台", "统一宿主", "企业工作空间"],
+      "reply_excerpt": "XCAGI 是修茈科技建设的 AI 员工桌面平台，把行业工具、企业数据、任务协作和 AI 员工连接到同一工作空间。它不只是聊天工具，还能在授权范围内调用业务能力、形成任务记录并交付可复核结果。"
+    },
+    {
+      "document_id": "public-mod-agent-market-v1",
+      "title": "行业 Mod、AI 员工与修茈 AI 市场",
+      "file": "documents/03-mod-agent-market.md",
+      "category": "product",
+      "source_urls": [
+        "https://xiu-ci.com/services.html",
+        "https://xiu-ci.com/market/"
+      ],
+      "keywords": ["行业Mod", "AI员工", "修茈AI市场", "MODstore", "任务执行"],
+      "reply_excerpt": "行业 Mod 为 XCAGI 提供可安装的业务对象、流程和工具，AI 员工使用这些能力执行岗位任务，XCAGI 则提供统一身份、桌面和运行环境。您可以在修茈 AI 市场查看当前上架及可授权能力。"
+    },
+    {
+      "document_id": "public-kellai-v1",
+      "title": "客来来客户增长工作台",
+      "file": "documents/04-kellai.md",
+      "category": "product",
+      "source_urls": [
+        "https://xiu-ci.com/download#kellai"
+      ],
+      "keywords": ["客来来", "客户增长", "多渠道客服", "商机跟进", "小C"],
+      "reply_excerpt": "客来来是观微数智与成都修茈科技联合发布的客户增长、多渠道客服和商机跟进工作台，可集中渠道消息、客户档案、销售漏斗、跟进任务、服务工单和 AI 建议。当前公开状态为联合测试版，渠道能力需完成对应平台授权。"
+    },
+    {
+      "document_id": "public-customer-sales-solutions-v1",
+      "title": "客服获客与销售跟进方案",
+      "file": "documents/05-customer-sales-solutions.md",
+      "category": "solution",
+      "source_urls": [
+        "https://xiu-ci.com/solutions.html",
+        "https://xiu-ci.com/download#kellai"
+      ],
+      "keywords": ["客服获客", "销售跟进", "客户档案", "线索", "工单", "回执"],
+      "reply_excerpt": "客服获客与销售跟进方案把已授权渠道咨询、小C接待、需求澄清、留资、销售协同、工单和结果回执连接起来，并集中客户阶段、负责人和下一步动作。具体渠道、数据、权限和验收指标需要结合实际业务确认。"
+    },
+    {
+      "document_id": "public-knowledge-production-solutions-v1",
+      "title": "企业知识与生产运营方案",
+      "file": "documents/06-knowledge-production-solutions.md",
+      "category": "solution",
+      "source_urls": [
+        "https://xiu-ci.com/solutions.html",
+        "https://xiu-ci.com/case-manufacture.html"
+      ],
+      "keywords": ["企业知识管理", "Persy", "生产运营", "库存", "出货", "单据", "标签打印"],
+      "reply_excerpt": "企业知识方案可把制度、产品资料和经验按来源与权限建库，通过 Persy 提供可追溯问答和记忆审核；生产运营方案可连接客户、产品、订单、物料、库存、出货、单据和标签打印。正式执行仍以确定性规则、权限和人工复核为准。"
+    },
+    {
+      "document_id": "public-deployment-security-v1",
+      "title": "部署方式、数据与安全边界",
+      "file": "documents/07-deployment-security.md",
+      "category": "trust",
+      "source_urls": [
+        "https://xiu-ci.com/about.html",
+        "https://xiu-ci.com/services.html"
+      ],
+      "keywords": ["本地部署", "离线部署", "PostgreSQL", "数据安全", "租户隔离", "权限", "审计"],
+      "reply_excerpt": "部署方式会根据数据敏感度、联网条件、模型要求和并发量评估，可选本地或离线、本地数据配合在线 AI，以及 PostgreSQL 性能部署等路径。上线前需明确数据位置、出网范围、模型服务商、权限、备份、日志和删除规则。"
+    },
+    {
+      "document_id": "public-delivery-support-v1",
+      "title": "实施、验收与售后支持",
+      "file": "documents/08-delivery-support.md",
+      "category": "delivery",
+      "source_urls": [
+        "https://xiu-ci.com/contact.html"
+      ],
+      "keywords": ["实施", "验收", "交付", "工单", "售后", "SLA", "人工复核"],
+      "reply_excerpt": "实施通常从一个可验收场景开始，依次确认目标、数据、岗位、权限、人工确认点、产物和指标，再完成联调、试运行、培训与书面验收。售后问题会保留工单号、状态、处理证据和原渠道回执，具体 SLA 以有效合同为准。"
+    },
+    {
+      "document_id": "public-licensing-pricing-v1",
+      "title": "授权版本、价格与费用边界",
+      "file": "documents/09-licensing-pricing.md",
+      "category": "commercial",
+      "source_urls": [
+        "https://xiu-ci.com/contact.html",
+        "https://xiu-ci.com/download"
+      ],
+      "keywords": ["Normal", "Pro", "Max", "Ultra", "永久授权", "价格", "Token", "VIP"],
+      "reply_excerpt": "公开目录口径为 Normal 9,800 元、Pro 39,800 元、Max 98,000 元、Ultra 298,000 元起。授权、模型 Token、服务器、第三方通道、实施、定制和维保属于不同费用范围，最终价格、折扣、税率和交付范围必须以正式报价或合同为准。"
+    },
+    {
+      "document_id": "public-scenarios-v1",
+      "title": "适用行业与公开场景",
+      "file": "documents/10-scenarios.md",
+      "category": "scenario",
+      "source_urls": [
+        "https://xiu-ci.com/cases.html",
+        "https://xiu-ci.com/case-manufacture.html",
+        "https://xiu-ci.com/case-edu.html",
+        "https://xiu-ci.com/case-park.html"
+      ],
+      "keywords": ["制造业", "校园", "园区", "中小企业", "业务场景", "案例"],
+      "reply_excerpt": "公开场景覆盖制造与生产运营、客服销售与客户增长、企业知识管理、校园协同和园区企业服务等方向。通常建议从一个高频、真实、可脱敏且可验收的任务开始；演示、试点、联合测试和正式上线会按真实状态区分。"
+    },
+    {
+      "document_id": "public-faq-v1",
+      "title": "客户常见问题",
+      "file": "documents/11-faq.md",
+      "category": "faq",
+      "source_urls": [
+        "https://xiu-ci.com/about.html",
+        "https://xiu-ci.com/contact.html"
+      ],
+      "keywords": ["常见问题", "系统接入", "私有部署", "上线周期", "AI准确率", "人工确认"],
+      "reply_excerpt": "修茈科技提供 AI 员工与企业业务自动化，可评估 API、文件、数据库等现有系统接入方式，并支持部分本地、离线或项目化部署。AI 结果受数据和模型影响，不承诺完全替代员工或 100% 准确，高风险动作保留人工确认。"
+    },
+    {
+      "document_id": "public-contact-navigation-v1",
+      "title": "产品入口与联系渠道",
+      "file": "documents/12-contact-navigation.md",
+      "category": "navigation",
+      "source_urls": [
+        "https://xiu-ci.com/",
+        "https://xiu-ci.com/contact.html",
+        "https://xiu-ci.com/download",
+        "https://xiu-ci.com/market/"
+      ],
+      "keywords": ["官网", "下载", "联系", "预约演示", "AI市场", "support@xiu-ci.com"],
+      "reply_excerpt": "您可以访问 xiu-ci.com 查看官网，前往 xiu-ci.com/download 获取 XCAGI 与客来来入口，或通过 xiu-ci.com/contact.html 提交需求和预约演示。客服邮箱是 support@xiu-ci.com，预约时建议提供行业、当前流程和最希望解决的问题。"
+    },
+    {
+      "document_id": "public-ai-industry-guide-v1",
+      "title": "主流 AI 人物、公司与产品辨析",
+      "file": "documents/13-ai-industry-guide.md",
+      "category": "faq",
+      "source_urls": [
+        "https://deepseek.com/",
+        "https://apnews.com/article/0673d5c39d90108189cc31b88d85b9f8",
+        "https://www.doubao.com/legal/feature_intro",
+        "https://ai.tencent.com/platform/"
+      ],
+      "keywords": ["梁文锋", "梁文峰", "DeepSeek", "豆包", "元宝", "字节跳动", "腾讯", "AI助手"],
+      "reply_excerpt": "您说的“梁文峰”通常是指梁文锋。梁文锋是 DeepSeek 创始人，是人物；豆包是字节跳动推出的 AI 助手；元宝是腾讯推出的 AI 助手。若您想比较的是 DeepSeek、豆包和元宝，简单说就是三者所属公司、模型生态和产品入口不同，具体功能以当前版本为准。"
+    }
+  ],
+  "quality_queries": [
+    {
+      "query": "成都修茈科技有限公司是做什么的",
+      "expected_document_ids": ["public-company-brand-v1", "public-faq-v1", "public-contact-navigation-v1"],
+      "must_contain": ["AI 员工", "业务自动化"]
+    },
+    {
+      "query": "XCAGI是什么",
+      "expected_document_ids": ["public-xcagi-platform-v1", "public-faq-v1", "public-mod-agent-market-v1"],
+      "must_contain": ["统一宿主", "桌面平台"]
+    },
+    {
+      "query": "客来来是什么，有什么功能",
+      "expected_document_ids": ["public-kellai-v1", "public-faq-v1", "public-customer-sales-solutions-v1"],
+      "must_contain": ["多渠道客服", "商机跟进"]
+    },
+    {
+      "query": "行业Mod和AI员工是什么关系",
+      "expected_document_ids": ["public-mod-agent-market-v1", "public-faq-v1", "public-xcagi-platform-v1"],
+      "must_contain": ["行业 Mod", "AI 员工"]
+    },
+    {
+      "query": "制造业订单库存出货怎么做",
+      "expected_document_ids": ["public-knowledge-production-solutions-v1", "public-scenarios-v1"],
+      "must_contain": ["生产", "库存"]
+    },
+    {
+      "query": "是否支持本地离线和私有部署",
+      "expected_document_ids": ["public-deployment-security-v1", "public-faq-v1"],
+      "must_contain": ["本地", "部署"]
+    },
+    {
+      "query": "你们怎么实施和验收",
+      "expected_document_ids": ["public-delivery-support-v1", "public-faq-v1"],
+      "must_contain": ["验收", "交付"]
+    },
+    {
+      "query": "XCMax价格和版本是什么",
+      "expected_document_ids": ["public-licensing-pricing-v1", "public-faq-v1"],
+      "must_contain": ["永久授权", "Normal"]
+    },
+    {
+      "query": "怎么联系修茈科技预约演示",
+      "expected_document_ids": ["public-contact-navigation-v1"],
+      "must_contain": ["support@xiu-ci.com", "联系"]
+    },
+    {
+      "query": "梁文峰，豆包，元宝区别",
+      "expected_document_ids": ["public-ai-industry-guide-v1"],
+      "must_contain": ["梁文锋", "豆包", "元宝"]
+    }
+  ]
+}

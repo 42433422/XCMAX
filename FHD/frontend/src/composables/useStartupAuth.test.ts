@@ -31,7 +31,13 @@ vi.mock('@/utils/hostPackOnboardingGate', () => ({
   clearHostPackSkippedSession: vi.fn(),
 }))
 
+vi.mock('@/utils/adminConsoleUrl', () => ({
+  isAdminConsoleSpa: vi.fn().mockReturnValue(false),
+}))
+
 import { authApi } from '@/api/auth'
+import { fetchSessionMarketHandoff } from '@/api/marketAccount'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 describe('useStartupAuth', () => {
   let mockRouter: any
@@ -44,6 +50,7 @@ describe('useStartupAuth', () => {
     mockModsStore = { initialize: vi.fn().mockResolvedValue(undefined) }
     mockDismiss = vi.fn()
     vi.clearAllMocks()
+    ;(isAdminConsoleSpa as any).mockReturnValue(false)
   })
 
   function getComposable() {
@@ -126,10 +133,18 @@ describe('useStartupAuth', () => {
   })
 
   it('syncMarketTokensFromSession handles errors gracefully', async () => {
-    const { fetchSessionMarketHandoff } = await import('@/api/marketAccount')
     ;(fetchSessionMarketHandoff as any).mockRejectedValue(new Error('No session'))
     const { syncMarketTokensFromSession } = getComposable()
     // Should not throw
     await syncMarketTokensFromSession()
+  })
+
+  it('does not request enterprise market handoff in the admin console', async () => {
+    ;(isAdminConsoleSpa as any).mockReturnValue(true)
+    const { syncMarketTokensFromSession } = getComposable()
+
+    await syncMarketTokensFromSession()
+
+    expect(fetchSessionMarketHandoff).not.toHaveBeenCalled()
   })
 })

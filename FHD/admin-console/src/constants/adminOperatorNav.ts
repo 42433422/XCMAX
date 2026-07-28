@@ -8,7 +8,6 @@ import type { CoreMenuCatalogItem } from '@/constants/coreMenuCatalog'
 export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'xcmax-admin', name: '服务器后台总览', iconClass: 'fa-dashboard' },
   { key: 'founder-autonomy', name: '创始人状态', iconClass: 'fa-compass' },
-  { key: 'automation-policy', name: '自动化方针', iconClass: 'fa-random' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
   { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },
   { key: 'employee-autonomy', name: '员工自治', iconClass: 'fa-users' },
@@ -81,10 +80,6 @@ export const ADMIN_OPERATOR_ROUTE_NAMES = new Set([
   'brain',
   'wechat-contacts',
   'mod-landing',
-  'attendance-industry-home',
-  'attendance-industry-settings',
-  'taiyangniao-pro-home',
-  'taiyangniao-pro-settings',
 ])
 
 export const ADMIN_OPERATOR_HIDDEN_MOD_IDS = new Set([

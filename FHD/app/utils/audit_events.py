@@ -14,6 +14,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows uses O_APPEND atomicity
+    fcntl = None
+
 
 def audit_log_path() -> str:
     """审计 JSONL 落盘路径（``AUDIT_LOG_PATH``，去空白）；未配置返回空串。"""
@@ -35,7 +40,17 @@ def append_audit_event(record: dict[str, Any]) -> None:
         payload.setdefault("ts", datetime.now(UTC).isoformat())
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        with open(target, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
+        line = (json.dumps(payload, ensure_ascii=False, default=str) + "\n").encode("utf-8")
+        fd = os.open(target, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        try:
+            if fcntl is not None:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            os.write(fd, line)
+            os.fsync(fd)
+        finally:
+            if fcntl is not None:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+        os.chmod(target, 0o600)
     except OSError:
         return

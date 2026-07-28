@@ -3,6 +3,7 @@
  */
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
@@ -61,6 +62,10 @@ export default defineConfig(() => ({
   root: sunbirdRoot,
   plugins: [
     vue(),
+    VueI18nPlugin({
+      include: [path.join(hostSrc, 'i18n/locales/**/*.json')],
+      runtimeOnly: true,
+    }),
     AutoImport({ resolvers: [ElementPlusResolver()], dts: false }),
     Components({ resolvers: [ElementPlusResolver({ importStyle: 'css' })], dts: false }),
   ],

@@ -6,8 +6,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 from xcagi_common.csrf import (
-    MUTATING_HTTP_METHODS,
-    SAFE_HTTP_METHODS,
     csrf_tokens_match,
     generate_csrf_token,
 )
@@ -57,6 +55,14 @@ def _csrf_exempt_path(path: str) -> bool:
     return False
 
 
+def _csrf_exempt_internal_customer_service_channel(request: Request) -> bool:
+    """客来来等服务端桥接调用：无浏览器 Cookie，安全由端点内的内部 key 校验承担。"""
+    path = (request.url.path or "").split("?", 1)[0].rstrip("/")
+    if not path.startswith("/api/customer-service/channel/"):
+        return False
+    return bool((request.headers.get("x-internal-api-key") or "").strip())
+
+
 def _csrf_disabled_for_tests() -> bool:
     """仅用于自动化测试（``conftest`` 设置 ``MODSTORE_DISABLE_CSRF=1``）；生产环境禁止开启。"""
     return (os.environ.get("MODSTORE_DISABLE_CSRF") or "").strip().lower() in (
@@ -97,6 +103,10 @@ class CSRFMiddleware:
             return
 
         if _csrf_exempt_path(request.url.path):
+            await self.app(scope, receive, send)
+            return
+
+        if _csrf_exempt_internal_customer_service_channel(request):
             await self.app(scope, receive, send)
             return
 
