@@ -209,10 +209,10 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
 
 
 def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> None:
-    source = yaml.safe_load((ROOT / ".github/workflows/prod-deploy-receipt.yml").read_text())
-    published = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml").read_text()
-    )
+    source_path = ROOT / ".github/workflows/prod-deploy-receipt.yml"
+    published_path = REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml"
+    source = yaml.safe_load(source_path.read_text())
+    published = yaml.safe_load(published_path.read_text())
 
     for workflow in (source, published):
         trigger = workflow[True]
@@ -232,6 +232,11 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert "catalog_data/files/" in rendered
         assert "workflow_status" in rendered
         assert "completed" in rendered
+    for workflow_path in (source_path, published_path):
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        assert '"-z"' in workflow_text
+        assert 'split(b"\\0")' in workflow_text
+        assert "os.fsdecode" in workflow_text
 
 
 def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
