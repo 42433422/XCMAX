@@ -36,6 +36,7 @@ import {
   runTaskQueueFairly,
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
+  selfUpdateTemporaryPath,
 } from './merge_worker.mjs';
 
 test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
@@ -75,6 +76,13 @@ test('self-update rejects tampered or unrelated GitHub content', () => {
       sha: gitBlobSha(unrelated),
     }),
     /self-update-source-identity-invalid/,
+  );
+});
+
+test('self-update syntax-check temporary file preserves the mjs extension', () => {
+  assert.equal(
+    selfUpdateTemporaryPath('/runtime/merge-worker.mjs', 24906),
+    '/runtime/merge-worker.mjs.self-update.24906.mjs',
   );
 });
 
