@@ -10,6 +10,7 @@ import {
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
   INITIAL_PR_LABELS,
+  TASK_CONCURRENCY,
   buildMergeConflictPayload,
   blockingMergePollReason,
   chunkReviewDiff,
@@ -25,6 +26,7 @@ import {
   parseReviewVerdict,
   reviewDiffInChunks,
   resolveReviewWithFallback,
+  runTaskQueueFairly,
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
 } from './merge_worker.mjs';
@@ -112,6 +114,54 @@ test('merge retries use bounded exponential backoff', () => {
   assert.equal(retry.attempts, 2);
   assert.equal(retry.reason, 'HTTP 503');
   assert.ok(Date.parse(retry.next_retry_at) > 1_000);
+});
+
+test('merge task queue uses bounded concurrency without head-of-line blocking', async () => {
+  let releaseFirst;
+  const firstBlocked = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstStarted = false;
+  let secondCompleted = false;
+
+  const run = runTaskQueueFairly(
+    ['first', 'second', 'third'],
+    async (item) => {
+      if (item === 'first') {
+        firstStarted = true;
+        await firstBlocked;
+      }
+      if (item === 'second') secondCompleted = true;
+      return item;
+    },
+    2,
+  );
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(firstStarted, true);
+  assert.equal(secondCompleted, true);
+  releaseFirst();
+  const results = await run;
+  assert.deepEqual(results.map((result) => result.value), ['first', 'second', 'third']);
+  assert.ok(TASK_CONCURRENCY >= 1 && TASK_CONCURRENCY <= 8);
+});
+
+test('merge task queue never exceeds the configured concurrency', async () => {
+  let active = 0;
+  let peak = 0;
+  const results = await runTaskQueueFairly(
+    [1, 2, 3, 4, 5],
+    async (item) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return item * 2;
+    },
+    2,
+  );
+  assert.equal(peak, 2);
+  assert.deepEqual(results.map((result) => result.value), [2, 4, 6, 8, 10]);
 });
 
 

@@ -32,6 +32,10 @@ const PRODUCTION_DEPLOY_WORKFLOW = String(
 const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
 const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
+export const TASK_CONCURRENCY = Math.min(
+  8,
+  Math.max(1, Number.parseInt(process.env.MERGE_WORKER_TASK_CONCURRENCY || '4', 10)),
+);
 const AI_REVIEW_TIMEOUT_MS = Math.max(
   30_000,
   Number.parseInt(process.env.MERGE_WORKER_AI_REVIEW_TIMEOUT_MS || '180000', 10),
@@ -297,6 +301,37 @@ export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
     reason: String(reason || '').slice(0, 2000),
     status: 'retrying',
   };
+}
+
+export async function runTaskQueueFairly(
+  tasks,
+  handler,
+  concurrency = TASK_CONCURRENCY,
+) {
+  const items = Array.isArray(tasks) ? tasks : [];
+  if (items.length === 0) return [];
+  const workerCount = Math.min(
+    items.length,
+    Math.max(1, Number.parseInt(String(concurrency), 10) || 1),
+  );
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function consume() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      try {
+        results[index] = {
+          status: 'fulfilled',
+          value: await handler(items[index], index),
+        };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, () => consume()));
+  return results;
 }
 
 async function listWorkflowRuns(workspace, repoFull, workflow, mergeSha) {
@@ -1489,8 +1524,14 @@ async function main() {
       if (queue.length > 0) {
         log(`队列 ${queue.length} 个任务`);
       }
-      for (const task of queue) {
-        await processTask(token, task, state);
+      const results = await runTaskQueueFairly(
+        queue,
+        (task) => processTask(token, task, state),
+      );
+      for (const result of results) {
+        if (result?.status === 'rejected') {
+          log(`队列任务异常：${String(result.reason).slice(0, 300)}`);
+        }
       }
     } catch (err) {
       log(`轮询异常：${String(err).slice(0, 300)}`);
