@@ -1089,7 +1089,8 @@ async def test_stream_user_id_from_header():
             async for chunk in compat_chat_stream_async(req, body):
                 chunks.append(chunk)
 
-    assert chunks == [b"chunk"]
+    assert chunks[0].startswith(b'data: {"type": "tool_progress"')
+    assert chunks[1:] == [b"chunk"]
 
 
 # ===========================================================================
@@ -1131,7 +1132,8 @@ async def test_stream_persona_industry_from_ctx():
         async for chunk in compat_chat_stream_async(req, body):
             chunks.append(chunk)
 
-    assert chunks == [b"persona-chunk"]
+    assert chunks[0].startswith(b'data: {"type": "tool_progress"')
+    assert chunks[1:] == [b"persona-chunk"]
     assert body.system_prompt == "system prompt text"
 
 
@@ -1187,7 +1189,8 @@ async def test_stream_persona_industry_from_derive():
         async for chunk in compat_chat_stream_async(req, body):
             chunks.append(chunk)
 
-    assert chunks == [b"derived-chunk"]
+    assert chunks[0].startswith(b'data: {"type": "tool_progress"')
+    assert chunks[1:] == [b"derived-chunk"]
     assert body.system_prompt == "derived prompt"
 
 

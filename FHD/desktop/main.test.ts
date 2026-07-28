@@ -283,6 +283,51 @@ describe('main — OTA proxy PAC', () => {
   })
 })
 
+describe('main — packaged chat transport defaults', () => {
+  const savedNativeStream = process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM
+  const savedFirstTokenTimeout = process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC
+
+  beforeEach(() => {
+    delete process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM
+    delete process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC
+    electronMocks.app.isPackaged = false
+  })
+
+  afterEach(() => {
+    if (savedNativeStream === undefined) delete process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM
+    else process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM = savedNativeStream
+    if (savedFirstTokenTimeout === undefined) delete process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC
+    else process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC = savedFirstTokenTimeout
+    electronMocks.app.isPackaged = false
+  })
+
+  it('uses non-native Modstore streaming with a 60s first-result budget in a package', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(desktopChatTransportEnv({}, true)).toEqual({
+      XCAGI_MODSTORE_USE_NATIVE_STREAM: '0',
+      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '60',
+    })
+  })
+
+  it('preserves explicit operator overrides', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(
+      desktopChatTransportEnv(
+        {
+          XCAGI_MODSTORE_USE_NATIVE_STREAM: '1',
+          XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '75',
+        },
+        true,
+      ),
+    ).toEqual({})
+  })
+
+  it('does not alter source-development transport defaults', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(desktopChatTransportEnv({}, false)).toEqual({})
+  })
+})
+
 describe('main — ED25519_PUBLIC_KEY_PEM', () => {
   it('is a valid PEM-formatted Ed25519 public key', async () => {
     const { ED25519_PUBLIC_KEY_PEM } = await import('./main.js')

@@ -9,6 +9,7 @@ mixed results), compat_chat_stream_async.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1090,6 +1091,12 @@ class TestExecuteCompatChatBatch:
 
 
 class TestCompatChatStreamAsync:
+    @staticmethod
+    def _event(chunk: bytes) -> dict[str, Any]:
+        text = chunk.decode("utf-8")
+        assert text.startswith("data: ")
+        return json.loads(text[6:].strip())
+
     @pytest.mark.asyncio
     async def test_stream_yields_chunks(self):
         body = XcagiCompatChatBody(message="hi")
@@ -1109,7 +1116,12 @@ class TestCompatChatStreamAsync:
             chunks = []
             async for chunk in compat_chat_stream_async(request, body):
                 chunks.append(chunk)
-            assert chunks == [b"chunk1", b"chunk2"]
+            assert self._event(chunks[0]) == {
+                "type": "tool_progress",
+                "label": "正在连接模型服务",
+                "phase": "model_connect",
+            }
+            assert chunks[1:] == [b"chunk1", b"chunk2"]
 
     @pytest.mark.asyncio
     async def test_stream_with_explicit_ai_tier(self):
@@ -1129,7 +1141,65 @@ class TestCompatChatStreamAsync:
             chunks = []
             async for chunk in compat_chat_stream_async(request, body, ai_tier="p2"):
                 chunks.append(chunk)
-            assert chunks == [b"data"]
+            assert self._event(chunks[0])["type"] == "tool_progress"
+            assert chunks[1:] == [b"data"]
             # Verify ai_tier was passed through
             _, kwargs = mock_planner_stream.call_args
             assert kwargs.get("ai_tier") == "p2"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("source,mode", [("normal", "basic"), ("pro", "professional")])
+    async def test_shipment_phrase_returns_confirmation_without_llm_or_execution(
+        self, source: str, mode: str
+    ):
+        """The exact desktop stream path must only issue a preview card.
+
+        This is intentionally tested for both profiles because the stream
+        endpoint is shared.  The task remains an unexecuted shipment_generate
+        request; no print or database write is allowed here.
+        """
+
+        body = XcagiCompatChatBody(
+            message="打印侯雪梅发货单，编号9803，规格28，3桶",
+            source=source,
+            mode=mode,
+        )
+        request = _make_request()
+        preview = {
+            "success": True,
+            "message": "已识别订单，请确认执行",
+            "response": '已识别订单，请点击"确认执行"生成发货单。',
+            "task": {
+                "type": "shipment_generate",
+                "title": "发货单预览",
+                "payload": {"tool_id": "shipment_generate", "action": "执行"},
+            },
+        }
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment", "slots": {}},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
+                return_value=preview,
+            ) as preview_fn,
+            patch(
+                "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
+                side_effect=AssertionError("shipment preview must not invoke the LLM stream"),
+            ) as stream_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        assert preview_fn.call_args.args == (body.message,)
+        stream_fn.assert_not_called()
+        events = [self._event(chunk) for chunk in chunks]
+        assert events == [
+            {"type": "token", "text": preview["response"]},
+            {"type": "done", "result": preview},
+        ]
+        assert events[-1]["result"]["task"]["type"] == "shipment_generate"
+        assert "print" not in events[-1]["result"]

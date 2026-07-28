@@ -237,7 +237,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   function resolveChatTimeoutMs(message: string): number {
     const text = String(message || '').trim()
     const isComplexTask = /(导入|入库|数据库|工作流|执行|创建|新增|批量|excel|上传|加入数据库)/i.test(text)
-    return isComplexTask ? 90000 : 30000
+    // Packaged desktop adapts the authenticated non-stream model response
+    // into SSE when a provider buffers native deltas.  Allow that completed
+    // response to arrive while the stream shows a progress event; the old
+    // 30-second browser abort could otherwise beat the backend's 60-second
+    // first-result budget and surface a misleading client timeout.
+    return isComplexTask ? 120000 : 75000
   }
 
   function enqueueChatBatchMessage(

@@ -31,6 +31,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _ensure_vector_index_if_needed,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
+    _sse_event_line,
     _xcagi_chat_http_exc,
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,
@@ -43,6 +44,37 @@ from app.services.conversation.modstore_adapter import create_modstore_openai_cl
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _stream_shipment_preview_payload(message: str) -> dict[str, Any] | None:
+    """Return the deterministic *preview* for an order-like chat message.
+
+    The regular stream path used to jump straight to the legacy LLM planner.
+    That meant the same ``打印客户发货单…`` request which the non-streaming
+    normal/pro paths recognise locally could wait for a model first token (and
+    fail before a confirmation card was ever shown).  Keep this deliberately
+    narrow and side-effect free: it only creates a preview task.  The existing
+    confirmation flow still owns the later tool execution and the separate
+    print authorisation remains required.
+    """
+
+    try:
+        from app.application.normal_chat_dispatch import (
+            route_normal_mode_message,
+            run_normal_slot_shipment_preview,
+        )
+
+        route = route_normal_mode_message(message)
+        if route.get("intent") != "shipment":
+            return None
+        payload = run_normal_slot_shipment_preview(message)
+        return payload if isinstance(payload, dict) else None
+    except RECOVERABLE_ERRORS:
+        # A deterministic convenience path must never hide the normal,
+        # receipt-enforced planner error path when a local read dependency is
+        # temporarily unavailable.
+        logger.debug("stream shipment preview fast path skipped", exc_info=True)
+        return None
 
 
 def _request_session_candidates(request: Request) -> list[str]:
@@ -917,6 +949,33 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    # Shipping / order phrases are deliberately handled before persona and
+    # model work for both normal and pro callers.  This only renders the
+    # confirmation task; it does not execute a tool, write a record, or submit
+    # a print job.  Keeping it at the common stream entry makes the UI's
+    # default `/api/ai/chat/stream` route behave like the non-streaming path.
+    shipment_preview = _stream_shipment_preview_payload(body.message)
+    if shipment_preview is not None:
+        response_text = str(
+            shipment_preview.get("response") or shipment_preview.get("message") or ""
+        )
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": shipment_preview})
+        return
+
+    # Emit a protocol-level progress event before any persona lookup or
+    # blocking model call.  Desktop clients understand `tool_progress`, so
+    # this gives visible feedback without polluting the assistant reply.  The
+    # underlying guarded stream still reports its explicit provider error or
+    # total timeout; this is not a synthetic success/fallback answer.
+    yield _sse_event_line(
+        {
+            "type": "tool_progress",
+            "label": "正在连接模型服务",
+            "phase": "model_connect",
+        }
+    )
+
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

@@ -347,6 +347,33 @@ function sanitizeBackendProxyEnv(
   return next
 }
 
+/**
+ * Packaged desktop chat uses the request-scoped market session token.  Some
+ * upstream model gateways accept a native SSE connection but buffer its first
+ * delta for an unbounded period.  The compatibility client can instead call
+ * the same authenticated non-stream endpoint and adapt its completed reply
+ * back to desktop SSE.  Keep native streaming available as an explicit
+ * operator override, and leave development behaviour untouched.
+ */
+export function desktopChatTransportEnv(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+  isPackaged: boolean = app.isPackaged,
+): Record<string, string> {
+  if (!isPackaged) return {}
+
+  const resolved: Record<string, string> = {}
+  if (!String(env.XCAGI_MODSTORE_USE_NATIVE_STREAM || '').trim()) {
+    resolved.XCAGI_MODSTORE_USE_NATIVE_STREAM = '0'
+  }
+  // The non-native request returns one synthetic SSE chunk only after the
+  // model has finished.  Do not let the legacy 20s native-first-token budget
+  // reject that valid request before it can be adapted for the UI.
+  if (!String(env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '').trim()) {
+    resolved.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC = '60'
+  }
+  return resolved
+}
+
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
@@ -818,6 +845,7 @@ async function startBackend(): Promise<void> {
     cwd: executable.cwd,
     env: {
       ...sanitizeBackendProxyEnv(process.env),
+      ...desktopChatTransportEnv(),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,

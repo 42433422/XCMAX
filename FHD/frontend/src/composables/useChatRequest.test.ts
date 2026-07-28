@@ -226,15 +226,15 @@ describe('useChatRequest', () => {
     vi.useRealTimers()
   })
 
-  it('resolveChatTimeoutMs returns 90000 for complex tasks', () => {
-    expect(request.resolveChatTimeoutMs('导入数据库')).toBe(90000)
-    expect(request.resolveChatTimeoutMs('批量excel上传')).toBe(90000)
-    expect(request.resolveChatTimeoutMs('执行工作流')).toBe(90000)
+  it('resolveChatTimeoutMs returns 120000 for complex tasks', () => {
+    expect(request.resolveChatTimeoutMs('导入数据库')).toBe(120000)
+    expect(request.resolveChatTimeoutMs('批量excel上传')).toBe(120000)
+    expect(request.resolveChatTimeoutMs('执行工作流')).toBe(120000)
   })
 
-  it('resolveChatTimeoutMs returns 30000 for simple tasks', () => {
-    expect(request.resolveChatTimeoutMs('你好')).toBe(30000)
-    expect(request.resolveChatTimeoutMs('简单问题')).toBe(30000)
+  it('resolveChatTimeoutMs returns 75000 for simple tasks', () => {
+    expect(request.resolveChatTimeoutMs('你好')).toBe(75000)
+    expect(request.resolveChatTimeoutMs('简单问题')).toBe(75000)
   })
 
   it('enqueueChatBatchMessage queues and flushes', () => {
