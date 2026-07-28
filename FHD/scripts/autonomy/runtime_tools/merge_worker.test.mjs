@@ -226,6 +226,16 @@ test('bot merge watchdog respects active runs and dispatch cooldown', () => {
   );
 });
 
+test('bot merge watchdog uses the workflow-runs REST API instead of gh workflow resolution', () => {
+  const source = readFileSync(
+    new URL('./merge_worker.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /actions\/workflows\/\$\{BOT_MERGE_WORKFLOW\}\/runs/);
+  assert.match(source, /payload\.workflow_runs/);
+  assert.doesNotMatch(source, /'run', 'list',[\s\S]*'--workflow', BOT_MERGE_WORKFLOW/);
+});
+
 
 test('operational failures retry but explicit review and identity vetoes are terminal', () => {
   assert.equal(isTransientMergeFailure('HTTP 503 service unavailable'), true);

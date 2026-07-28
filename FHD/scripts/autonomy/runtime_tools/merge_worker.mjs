@@ -369,17 +369,22 @@ async function maybeRecoverStaleBotMergeWorkflow(nowMs = Date.now()) {
   if (nowMs - botMergeWatchdogLastCheckedAt < BOT_MERGE_WATCHDOG_CHECK_MS) return;
   botMergeWatchdogLastCheckedAt = nowMs;
   const { stdout } = await execFileAsync('gh', [
-    'run', 'list',
-    '--repo', BOT_MERGE_WATCHDOG_REPOSITORY,
-    '--workflow', BOT_MERGE_WORKFLOW,
-    '--limit', '5',
-    '--json', 'databaseId,event,status,conclusion,createdAt,url',
+    'api',
+    '--method', 'GET',
+    `repos/${BOT_MERGE_WATCHDOG_REPOSITORY}/actions/workflows/${BOT_MERGE_WORKFLOW}/runs`,
+    '-f', 'per_page=5',
   ], {
     cwd: process.env.HOME || '/tmp',
     maxBuffer: 10 * 1024 * 1024,
     timeout: 30_000,
   });
-  const decision = botMergeWatchdogDecision(JSON.parse(stdout || '[]'), {
+  const payload = JSON.parse(stdout || '{}');
+  const rows = (Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [])
+    .map((row) => ({
+      createdAt: row?.created_at,
+      status: row?.status,
+    }));
+  const decision = botMergeWatchdogDecision(rows, {
     nowMs,
     lastDispatchAtMs: botMergeWatchdogLastDispatchAt,
   });
