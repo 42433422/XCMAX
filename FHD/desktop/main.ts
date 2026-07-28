@@ -24,6 +24,7 @@ import {
   getUpdateStatus,
   installUpdate,
   readLocalBuildSha,
+  readLocalBuildVersion,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import {
@@ -708,6 +709,8 @@ const startupMarks: DesktopStartupMarks = {}
 
 export function readPackagedAppVersion(): string {
   if (!app.isPackaged) return 'dev'
+  const buildVersion = readLocalBuildVersion()
+  if (buildVersion) return buildVersion
   const candidates = [
     path.join(process.resourcesPath, 'backend', 'version.txt'),
     path.join(process.resourcesPath, 'product-sku.json')
@@ -724,6 +727,12 @@ export function readPackagedAppVersion(): string {
     }
   }
   return app.getVersion()
+}
+
+/** Exact product version passed from the desktop shell to its local backend. */
+export function readDesktopRuntimeVersion(): string {
+  if (app.isPackaged) return readPackagedAppVersion()
+  return String(process.env.XCAGI_VERSION || '').trim() || '1.0.0.0'
 }
 
 /** 前端 hash 变更时须清 Electron 缓存，避免旧 index-*.js 引用已不存在的 chunk。 */
@@ -859,6 +868,7 @@ async function startBackend(): Promise<void> {
       ...sanitizeBackendProxyEnv(process.env),
       ...desktopChatTransportEnv(),
       XCAGI_DESKTOP_MODE: '1',
+      XCAGI_VERSION: readDesktopRuntimeVersion(),
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
@@ -951,6 +961,7 @@ function runBackendMigration(options: {
     env: {
       ...sanitizeBackendProxyEnv(process.env),
       XCAGI_DESKTOP_MODE: '1',
+      XCAGI_VERSION: readDesktopRuntimeVersion(),
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
@@ -1628,7 +1639,7 @@ function bootstrap(): void {
             },
             restartCountRef: () => restartCount,
             port: DEFAULT_PORT,
-            appVersion: app.getVersion(),
+            appVersion: readDesktopRuntimeVersion(),
             buildSha: readLocalBuildSha(),
             configPath: null,
             // Phase 1：注入 backend 重启 / 版本回滚闭包（与 main.ts 现有逻辑共存）

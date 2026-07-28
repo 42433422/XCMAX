@@ -102,6 +102,32 @@ function buildInfoCandidates(): string[] {
   ]
 }
 
+/**
+ * Product version embedded in the immutable build identity of a packaged app.
+ *
+ * Electron's ``app.getVersion()`` intentionally uses the three-component
+ * toolchain version, while the signed release artifact can carry a four-part
+ * product version.  Keep this separate from the updater's version comparison
+ * so the local backend and its health endpoint can report the artifact the
+ * user actually installed.
+ */
+export function readLocalBuildVersion(): string {
+  if (!app.isPackaged) {
+    return String(process.env.XCAGI_VERSION || '').trim()
+  }
+  for (const filePath of buildInfoCandidates()) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { version?: string }
+      const version = String(raw.version || '').trim()
+      if (version) return version
+    } catch {
+      /* try next build identity source */
+    }
+  }
+  return ''
+}
+
 export function readLocalBuildSha(): string {
   if (!app.isPackaged) {
     return String(process.env.XCAGI_BUILD_SHA || '').trim()

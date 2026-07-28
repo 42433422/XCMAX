@@ -584,6 +584,36 @@ describe('main — readPackagedAppVersion', () => {
     const { readPackagedAppVersion } = await import('./main.js')
     expect(readPackagedAppVersion()).toBe('dev')
   })
+
+  it('uses the packaged build-info product version for the backend runtime', async () => {
+    const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
+    const tmpResources = path.join(
+      os.tmpdir(),
+      `xcagi-test-build-info-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    )
+    fs.mkdirSync(tmpResources, { recursive: true })
+    fs.writeFileSync(
+      path.join(tmpResources, 'build-info.json'),
+      JSON.stringify({ version: '1.0.2.4' }),
+      'utf8',
+    )
+    electronMocks.app.isPackaged = true
+    ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
+
+    try {
+      const { readDesktopRuntimeVersion, readPackagedAppVersion } = await import('./main.js')
+      expect(readPackagedAppVersion()).toBe('1.0.2.4')
+      expect(readDesktopRuntimeVersion()).toBe('1.0.2.4')
+    } finally {
+      electronMocks.app.isPackaged = false
+      if (savedResourcesPath === undefined) {
+        delete (process as { resourcesPath?: string }).resourcesPath
+      } else {
+        ;(process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
+      }
+      fs.rmSync(tmpResources, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('main — frontend cache', () => {
