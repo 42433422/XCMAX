@@ -592,6 +592,7 @@ def test_historical_para_state_can_use_fail_closed_github_evidence(
         "base_branch": "main",
         "branch": "devfleet/cursor/sub-1-c0250e",
         "expected_merge_sha": "",
+        "expected_task_id": task_id,
     }
 
 
