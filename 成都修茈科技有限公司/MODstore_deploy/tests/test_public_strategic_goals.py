@@ -8,7 +8,11 @@ from modstore_server.models import get_engine, get_session_factory
 from modstore_server.public_strategic_goals import verified_strategic_goal_items
 
 
-def _status(*, integrity: bool = True) -> dict:
+def _status(
+    *,
+    integrity: bool = True,
+    created_at: str = "2026-07-29T06:00:00+00:00",
+) -> dict:
     return {
         "ok": integrity,
         "ready": integrity,
@@ -16,7 +20,7 @@ def _status(*, integrity: bool = True) -> dict:
         "recent_receipts": [
             {
                 "receipt_id": "council-goal-one",
-                "created_at": "2026-07-29T06:00:00+00:00",
+                "created_at": created_at,
                 "verified": True,
                 "goal_id": "goal-one",
                 "loop_run_id": "loop-one",
@@ -71,3 +75,15 @@ def test_broken_council_hash_chain_exposes_no_goal(monkeypatch) -> None:
     )
 
     assert verified_strategic_goal_items() == []
+
+
+def test_verified_goal_uses_shanghai_business_day(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "modstore_server.strategic_council.strategic_council_status",
+        lambda limit=100: _status(created_at="2026-07-28T16:05:00+00:00"),
+    )
+
+    [item] = verified_strategic_goal_items()
+
+    assert item["day"] == "2026-07-29"
+    assert item["ts"] == "00:05"

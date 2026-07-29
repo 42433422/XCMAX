@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 _PUBLIC_STATUS = {
     "auto_approved": "dispatched",
@@ -25,6 +26,18 @@ _STATUS_LABEL = {
 
 def _iso(value: Any) -> str:
     return value.isoformat() if isinstance(value, datetime) else str(value or "")
+
+
+def _shanghai_day_and_time(value: Any) -> tuple[str, str]:
+    raw = _iso(value).strip()
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        local = parsed.astimezone(ZoneInfo("Asia/Shanghai"))
+        return local.strftime("%Y-%m-%d"), local.strftime("%H:%M")
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
+        return raw[:10], raw[11:16] if len(raw) >= 16 else ""
 
 
 def verified_strategic_goal_items(*, limit: int = 100) -> list[dict[str, Any]]:
@@ -75,6 +88,7 @@ def verified_strategic_goal_items(*, limit: int = 100) -> list[dict[str, Any]]:
         raw_status = str(goal.status or "proposed").lower()
         public_status = _PUBLIC_STATUS.get(raw_status, "open")
         created_at = str(receipt.get("created_at") or _iso(goal.created_at))
+        business_day, business_time = _shanghai_day_and_time(created_at)
         output.append(
             {
                 "title": str(goal.title or goal_id).strip()[:180],
@@ -86,9 +100,9 @@ def verified_strategic_goal_items(*, limit: int = 100) -> list[dict[str, Any]]:
                 "owner": "Para · 变更评审员",
                 "employee_id": "change-request-auditor",
                 "kind": "update",
-                "day": created_at[:10],
+                "day": business_day,
                 "updated_at": _iso(goal.updated_at or goal.created_at)[:40],
-                "ts": created_at[11:16] if len(created_at) >= 16 else "",
+                "ts": business_time,
                 "source": "verified_strategic_council",
                 "goal_id": goal_id,
                 "loop_run_id": str(receipt["loop_run_id"]).strip(),
