@@ -136,11 +136,7 @@ def remaining_candidates_after_failure(
         return []
     if is_wallet_balance_failure(error_text, status_code):
         # 钱包没钱：平台 Key 预授权仍会失败；仅尝试用户 BYOK
-        return [
-            (p, m)
-            for p, m in rest
-            if key_source_by_provider.get(p) == "user_override"
-        ]
+        return [(p, m) for p, m in rest if key_source_by_provider.get(p) == "user_override"]
     return rest
 
 
