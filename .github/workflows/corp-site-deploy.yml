@@ -27,6 +27,7 @@ on:
       - '成都修茈科技有限公司/contact-channels.js'
       - '成都修茈科技有限公司/visualization.js'
       - '成都修茈科技有限公司/world-will.js'
+      - '成都修茈科技有限公司/world-will-ticker.js'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
@@ -101,7 +102,7 @@ jobs:
               # overwritten by git snapshots — refresh them after publish instead.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" \
                        "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" \
-                       "${GIT_SITE}/world-will.js" \
+                       "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/download-release.json" "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
@@ -187,9 +188,12 @@ jobs:
             echo "[verify] world-will company hall:"
             xc_curl -o /tmp/xc-world-will.html https://xiu-ci.com/world-will
             xc_curl -o /tmp/xc-world-will.js https://xiu-ci.com/world-will.js
+            xc_curl -o /tmp/xc-world-will-ticker.js https://xiu-ci.com/world-will-ticker.js
             xc_curl -o /tmp/xc-company-hall.json https://xiu-ci.com/download-company-hall.json
             grep -E -q '公司大厅|hall-depts|download-company-hall' /tmp/xc-world-will.html
             grep -E -q 'filteredFeed|hall-timeline|download-company-hall' /tmp/xc-world-will.js
+            grep -F -q '/api/public/action-board' /tmp/xc-world-will.js
+            grep -F -q '/api/public/action-board' /tmp/xc-world-will-ticker.js
             grep -E -q 'public_company_hall|presence_model|departments' /tmp/xc-company-hall.json
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then
