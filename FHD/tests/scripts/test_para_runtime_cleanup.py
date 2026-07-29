@@ -44,6 +44,7 @@ def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
         "PARA_CLEANUP_ARCHIVE_KEEP": "2",
         "PARA_TEST_NODE_ARGS": str(marker),
         "XCMAX_WORKTREE_GC_ENABLED": "0",
+        "XCMAX_EPHEMERAL_GC_ENABLED": "0",
     }
     return env, archive_dir, log_dir, workspace_root
 
@@ -317,3 +318,117 @@ def test_apply_removes_only_old_clean_worktree_already_merged_to_main(
         check=True,
     ).stdout
     assert "merged-feature" in branches
+
+
+def test_ephemeral_cleanup_requires_age_name_and_inactivity(
+    tmp_path: Path,
+) -> None:
+    env, _, _, _ = _runtime(tmp_path)
+    ephemeral_root = tmp_path / "ephemeral"
+    ephemeral_root.mkdir()
+
+    removable = ephemeral_root / "xcmax-qa-old"
+    removable.mkdir()
+    (removable / "payload.bin").write_bytes(b"x" * 1024)
+    _age(removable, minutes=120)
+
+    young = ephemeral_root / "xcmax-qa-young"
+    young.mkdir()
+    unrelated = ephemeral_root / "keep-user-artifact"
+    unrelated.mkdir()
+    _age(unrelated, minutes=120)
+    active = ephemeral_root / "qa-target-active"
+    active.mkdir()
+    _age(active, minutes=120)
+    opened = ephemeral_root / "sm-qa-open"
+    opened.mkdir()
+    _age(opened, minutes=120)
+    mounted = ephemeral_root / "xcagi-electron-diagnose-mounted"
+    mounted.mkdir()
+    _age(mounted, minutes=120)
+    nested_git = ephemeral_root / "xcmax-review-preserve-git"
+    (nested_git / ".git").mkdir(parents=True)
+    _age(nested_git, minutes=120)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_lsof = fake_bin / "lsof"
+    fake_lsof.write_text(
+        "#!/bin/sh\n"
+        'if [ "$2" = "-d" ]; then\n'
+        '  printf "p1\\nn%s\\n" "$PARA_TEST_ACTIVE_CWD"\n'
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$2" = "+D" ] && [ "$3" = "$PARA_TEST_OPEN_DIR" ]; then\n'
+        '  printf "p1\\nn%s/open.txt\\n" "$PARA_TEST_OPEN_DIR"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    fake_lsof.chmod(0o755)
+    fake_mount = fake_bin / "mount"
+    fake_mount.write_text(
+        '#!/bin/sh\nprintf "/dev/test on %s (apfs, read-only)\\n" "$PARA_TEST_MOUNT_DIR"\n',
+        encoding="utf-8",
+    )
+    fake_mount.chmod(0o755)
+    env.update(
+        {
+            "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+            "XCMAX_EPHEMERAL_GC_ENABLED": "1",
+            "XCMAX_EPHEMERAL_ROOT": str(ephemeral_root),
+            "XCMAX_EPHEMERAL_RETENTION_MINUTES": "60",
+            "PARA_TEST_ACTIVE_CWD": str(active),
+            "PARA_TEST_OPEN_DIR": str(opened),
+            "PARA_TEST_MOUNT_DIR": str(mounted),
+        }
+    )
+
+    preview = subprocess.run(
+        ["bash", str(CLEANUP_SCRIPT), "--reason", "test-preview"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert preview.returncode == 0, preview.stderr
+    assert removable.exists()
+    assert "失活非 Git 临时目录 candidates=1" in preview.stdout
+
+    applied = subprocess.run(
+        ["bash", str(CLEANUP_SCRIPT), "--apply", "--reason", "test-apply"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert applied.returncode == 0, applied.stderr
+    assert not removable.exists()
+    assert young.exists()
+    assert unrelated.exists()
+    assert active.exists()
+    assert opened.exists()
+    assert mounted.exists()
+    assert nested_git.exists()
+
+
+def test_ephemeral_cleanup_rejects_broad_root(tmp_path: Path) -> None:
+    env, _, _, _ = _runtime(tmp_path)
+    env.update(
+        {
+            "XCMAX_EPHEMERAL_GC_ENABLED": "1",
+            "XCMAX_EPHEMERAL_ROOT": "/",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(CLEANUP_SCRIPT), "--apply"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "拒绝不安全的临时目录根" in result.stdout
