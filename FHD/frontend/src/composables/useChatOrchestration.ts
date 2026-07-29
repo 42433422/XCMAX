@@ -32,50 +32,11 @@ import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
+import { syncPriceListTaskToShipmentExecution } from './usePriceListPrintTask'
+import { asAutoAction, asPlannerPayload, asShipmentTask, errorMessage, getXcagiWindow, type DynamicShipmentTask } from './useChatOrchestrationHelpers'
 import type { UseChatViewOptions } from './useChatView'
-import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
-
-type XcagiChatWindow = Window & {
-  __VUE_CHAT_FILL__?: (value: string) => boolean
-  setWorkModeFromChat?: (enabled: boolean) => void
-  setMonitorModeFromChat?: (enabled: boolean) => void
-  refreshWorkModeMonitorList?: () => void
-  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
-  isProTaskAcquisitionMessage?: (message: string) => boolean
-  jarvisSendMessage?: (message: string) => void
-}
-
-type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
-
-function getXcagiWindow(): XcagiChatWindow {
-  return window as XcagiChatWindow
-}
-
-function asShipmentTask(value: unknown): DynamicShipmentTask {
-  const row = asRecord(value)
-  return {
-    ...row,
-    type: asString(row.type),
-  } as DynamicShipmentTask
-}
-
-function asPlannerPayload(value: unknown): ChatPlannerPayload {
-  return asRecord(value) as ChatPlannerPayload
-}
-
-function asAutoAction(value: unknown): ChatAutoAction {
-  return asRecord(value) as ChatAutoAction
-}
-
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error ? err.message : asString(err, fallback)
-}
-
-function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
-  const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
-  return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
-}
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -676,25 +637,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       scheduleAutoConfirmTask(nextTask)
     }
 
-    // 价格表已生成任务：写入打印上下文，供「开始打印」复用
-    if (nextTask.type === 'price_list_export' && nextTask.completed) {
-      const filePath = asString(
-        nextTask.file_path || nextTask.filePath || asRecord(nextTask.data).file_path
-      )
-      const downloadUrl =
-        asString(nextTask.downloadUrl || nextTask.download_url) ||
-        buildShipmentDownloadUrl(nextTask)
-      if (downloadUrl && !nextTask.downloadUrl) {
-        nextTask.downloadUrl = downloadUrl
-      }
-      if (filePath) {
-        lastShipmentExecution.value = {
-          filePath,
-          purchaseUnit: asString(nextTask.customer_name || asRecord(nextTask.data).customer_name),
-          orderId: null,
-          labelPaths: [],
-        }
-      }
+    if (syncPriceListTaskToShipmentExecution(nextTask, {
+      lastShipmentExecution,
+      buildShipmentDownloadUrl,
+    })) {
       return
     }
 

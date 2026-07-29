@@ -51,8 +51,8 @@ def _candidate_paths_for_rel(rel: str) -> list[Path]:
     filename = Path(rel_norm).name if rel_norm else ""
     if filename:
         try:
-            from app.utils.path_utils import get_app_data_dir, get_resource_path
             from app.utils.operational_errors import RECOVERABLE_ERRORS
+            from app.utils.path_utils import get_app_data_dir, get_resource_path
 
             candidates.append(
                 (Path(get_app_data_dir()) / "424" / "document_templates" / filename).resolve()
