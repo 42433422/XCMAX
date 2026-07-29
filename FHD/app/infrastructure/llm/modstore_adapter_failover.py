@@ -22,27 +22,29 @@ def _failover_enabled(self) -> bool:
     raw = os.environ.get("XCAGI_LLM_CHAT_FAILOVER", "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
 
+
 def _fetch_llm_status_sync(self) -> dict[str, Any] | None:
     try:
         with httpx.Client(
-            timeout=httpx.Timeout(min(adapter.timeout, 15.0), connect=5.0),
-            headers=adapter._build_headers(),
+            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+            headers=self._build_headers(),
         ) as client:
-            response = client.get(f"{adapter.platform_url}/api/llm/status")
+            response = client.get(f"{self.platform_url}/api/llm/status")
             if response.status_code >= 400:
                 return None
             data = response.json()
             return data if isinstance(data, dict) else None
     except RECOVERABLE_ERRORS:
         return None
+
 
 def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
     try:
         with httpx.Client(
-            timeout=httpx.Timeout(min(adapter.timeout, 15.0), connect=5.0),
-            headers=adapter._build_headers(),
+            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+            headers=self._build_headers(),
         ) as client:
-            response = client.get(f"{adapter.platform_url}/api/llm/resolve-chat-default")
+            response = client.get(f"{self.platform_url}/api/llm/resolve-chat-default")
             if response.status_code >= 400:
                 return None
             data = response.json()
@@ -50,39 +52,42 @@ def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
     except RECOVERABLE_ERRORS:
         return None
 
+
 def _ensure_catalog_sync(self) -> dict[str, Any] | None:
-    catalog = adapter._cached_catalog()
+    catalog = self._cached_catalog()
     if catalog is not None:
         return catalog
     try:
         with httpx.Client(
-            timeout=httpx.Timeout(min(adapter.timeout, 15.0), connect=5.0),
-            headers=adapter._build_headers(),
+            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+            headers=self._build_headers(),
         ) as client:
-            response = client.get(f"{adapter.platform_url}/api/llm/catalog")
+            response = client.get(f"{self.platform_url}/api/llm/catalog")
             if response.status_code >= 400:
                 return None
             raw = response.json()
         if isinstance(raw, dict):
-            adapter._remember_catalog(raw)
+            self._remember_catalog(raw)
             return raw
     except RECOVERABLE_ERRORS:
         return None
     return None
 
+
 def _list_chat_failover_candidates_sync(
     self, primary_provider: str, primary_model: str
 ) -> list[tuple[str, str]]:
-    if not adapter._failover_enabled():
+    if not _failover_enabled(self):
         return [(primary_provider, primary_model)]
     return build_chat_failover_candidates(
         primary_provider=primary_provider,
         primary_model=primary_model,
-        status_payload=adapter._fetch_llm_status_sync(),
-        catalog_payload=adapter._ensure_catalog_sync(),
-        resolved_default=adapter._fetch_resolve_chat_default_sync(),
+        status_payload=_fetch_llm_status_sync(self),
+        catalog_payload=_ensure_catalog_sync(self),
+        resolved_default=_fetch_resolve_chat_default_sync(self),
         max_attempts=chat_failover_max_attempts(),
     )
+
 
 def _post_market_chat_sync(
     self,
@@ -95,7 +100,7 @@ def _post_market_chat_sync(
     allow_failover: bool,
     extra: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    url = f"{adapter.platform_url}/api/llm/chat"
+    url = f"{self.platform_url}/api/llm/chat"
     payload: Dict[str, Any] = {
         "provider": provider,
         "model": model,
@@ -106,13 +111,13 @@ def _post_market_chat_sync(
     }
     if extra:
         payload.update(extra)
-    if adapter.user_id:
-        payload["user_id"] = adapter.user_id
+    if self.user_id:
+        payload["user_id"] = self.user_id
     t0 = time.perf_counter()
     with httpx.Client(
-        timeout=httpx.Timeout(adapter.timeout, connect=10.0),
+        timeout=httpx.Timeout(self.timeout, connect=10.0),
         limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-        headers=adapter._build_headers(),
+        headers=self._build_headers(),
     ) as client:
         response = client.post(url, json=payload)
         latency_ms = (time.perf_counter() - t0) * 1000.0
@@ -131,7 +136,9 @@ def _post_market_chat_sync(
     used_provider = str(result.get("provider") or provider)
     used_model = str(result.get("model") or model)
     try:
-        from app.neuro_bus.application_neuro_bridge import neuro_notify_ai_model_roundtrip
+        from app.neuro_bus.application_neuro_bridge import (
+            neuro_notify_ai_model_roundtrip,
+        )
 
         raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
         raw_total = 0
@@ -143,7 +150,7 @@ def _post_market_chat_sync(
             model=f"modstore:{used_provider}/{used_model}",
             latency_ms=latency_ms,
             token_count=raw_total,
-            user_id=str(adapter.user_id or ""),
+            user_id=str(self.user_id or ""),
         )
     except RECOVERABLE_ERRORS:
         pass
@@ -157,4 +164,4 @@ def _post_market_chat_sync(
         result.get("billed", False),
         result.get("failover_from"),
     )
-    return adapter._normalize_response(result, used_provider, used_model)
+    return self._normalize_response(result, used_provider, used_model)
