@@ -729,6 +729,7 @@ def retrieve_knowledge_for_mode(
                 return out
     return out
 
+
 def knowledge_block_for_query(query: str, *, top_k: int = 5, mode: str = "external") -> str:
     """按 mode 组装知识库摘录块（默认偏保守：仅公开库）。"""
     chunks = retrieve_knowledge_for_mode(query, mode=mode, top_k=top_k)
