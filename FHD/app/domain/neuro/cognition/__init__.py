@@ -1,21 +1,33 @@
-"""认知层（Cognition Layer）—— Conscious 处理器的 LLM 能力升级。
+"""认知层（Cognition Layer）—— Conscious 处理器的 LLM + 因果/技能/软约束能力。
 
 Phase 2 组件：
-- ``LLMPort``：LLM 端口适配器，封装现有 ``LLMProviderRegistry``，不锁定到任何 LLM 提供方。
-- ``WorkingMemory``：工作记忆，会话级短期记忆 + 可选长期向量召回。
-- ``AttentionSelector``：注意力选择器，从工作记忆中选取与当前查询最相关的上下文。
-- ``ConsciousLLMHandler``：Conscious 处理器的默认 LLM 处理器，整合上述三者。
-
-设计原则：
-1. 不重新发明 LLM 抽象——复用 ``app/infrastructure/llm/providers/`` 已有的 Protocol + Registry。
-2. 不锁定 LLM 提供方——Registry 已支持 20+ provider（DeepSeek/OpenAI/Xiaomi/SiliconFlow…）。
-3. best-effort——任何后端不可用都降级为空，不阻断 Conscious 处理（与 EmployeeMemoryManager 一致）。
-4. SLA 感知——Conscious 目标 <200ms，但 LLM 调用可能超时；SLA 控制器记录违规但不杀请求。
+- ``LLMPort`` / ``WorkingMemory`` / ``AttentionSelector`` / ``ConsciousLLMHandler``
+全栈补齐（2026-07）：
+- ``CausalGraph`` + ``CounterfactualProbe``：可干预因果（非纯相关检索）
+- ``SkillRouter``：开放世界技能契约（封闭意图仅 bootstrap）
+- ``SoftConstraints`` + ``plan_graph_log``：阈值软约束与多步 PlanGraph 落盘
+- ``CognitiveOrchestrator``：串起上述能力供意图/对话路径调用
 """
 
 from app.domain.neuro.cognition.attention_selector import AttentionResult, AttentionSelector
+from app.domain.neuro.cognition.causal_graph import (
+    CausalGraph,
+    explain_relatedness,
+    get_order_fulfillment_graph,
+)
+from app.domain.neuro.cognition.cognitive_orchestrator import (
+    CognitiveOrchestrator,
+    get_cognitive_orchestrator,
+    reset_cognitive_orchestrator,
+)
 from app.domain.neuro.cognition.conscious_llm_handler import ConsciousLLMHandler
+from app.domain.neuro.cognition.counterfactual import CounterfactualProbe, probe_counterfactual
 from app.domain.neuro.cognition.llm_port import LLMPort, get_llm_port, reset_llm_port
+from app.domain.neuro.cognition.plan_constraints import (
+    SoftConstraints,
+    select_processor_by_cost,
+)
+from app.domain.neuro.cognition.skill_contract import SkillRouter, get_skill_router
 from app.domain.neuro.cognition.working_memory import (
     WorkingMemory,
     get_working_memory,
@@ -32,4 +44,16 @@ __all__ = [
     "AttentionSelector",
     "AttentionResult",
     "ConsciousLLMHandler",
+    "CausalGraph",
+    "get_order_fulfillment_graph",
+    "explain_relatedness",
+    "CounterfactualProbe",
+    "probe_counterfactual",
+    "SkillRouter",
+    "get_skill_router",
+    "SoftConstraints",
+    "select_processor_by_cost",
+    "CognitiveOrchestrator",
+    "get_cognitive_orchestrator",
+    "reset_cognitive_orchestrator",
 ]
