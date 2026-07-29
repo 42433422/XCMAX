@@ -318,4 +318,80 @@ def verify_github_self_maintenance_merge(
     }
 
 
-__all__ = ["verify_github_self_maintenance_merge"]
+def verify_github_self_maintenance_veto(
+    *,
+    branch: str,
+    base_branch: str,
+    fetch_json: Callable[[str, dict[str, str] | None], Any] | None = None,
+) -> dict[str, Any]:
+    """Verify that the exact branch remains unmerged behind an explicit veto."""
+
+    repository = _repository()
+    safe_head = _safe_branch(branch)
+    safe_base = _safe_branch(base_branch)
+    if not repository:
+        return {"ok": False, "reason": "github_repository_invalid"}
+    if not safe_head or not safe_base:
+        return {"ok": False, "reason": "github_branch_invalid"}
+    fetch = fetch_json or _default_fetch_json
+    owner = repository.split("/", 1)[0]
+    try:
+        pulls = fetch(
+            f"/repos/{repository}/pulls",
+            {
+                "head": f"{owner}:{safe_head}",
+                "per_page": "20",
+                "state": "all",
+            },
+        )
+    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+        return {"ok": False, "reason": "github_pull_evidence_unavailable"}
+    candidates = []
+    if isinstance(pulls, list):
+        for pull in pulls:
+            if not isinstance(pull, dict):
+                continue
+            head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+            base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+            if str(head.get("ref") or "") == safe_head and str(base.get("ref") or "") == safe_base:
+                candidates.append(pull)
+    if len(candidates) != 1:
+        return {"ok": False, "reason": "github_pull_not_unique"}
+    try:
+        pull_number = int(candidates[0].get("number"))
+        pull = fetch(f"/repos/{repository}/pulls/{pull_number}", None)
+    except Exception:  # noqa: BLE001 - evidence outage must remain unknown
+        return {"ok": False, "reason": "github_pull_detail_unavailable"}
+    if not isinstance(pull, dict):
+        return {"ok": False, "reason": "github_pull_detail_invalid"}
+    try:
+        detail_number = int(pull.get("number"))
+    except (TypeError, ValueError):
+        return {"ok": False, "reason": "github_pull_detail_invalid"}
+    head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+    base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+    labels = pull.get("labels") if isinstance(pull.get("labels"), list) else []
+    label_names = {
+        str(label.get("name") or "").strip().lower() for label in labels if isinstance(label, dict)
+    }
+    if (
+        detail_number != pull_number
+        or str(head.get("ref") or "") != safe_head
+        or str(base.get("ref") or "") != safe_base
+        or pull.get("merged") is not False
+        or _timestamp(pull.get("merged_at")) is not None
+    ):
+        return {"ok": False, "reason": "github_unmerged_pull_contradiction"}
+    if "hold-merge" not in label_names:
+        return {"ok": False, "reason": "github_explicit_veto_missing"}
+    return {
+        "ok": True,
+        "evidence_ref": f"github-pr:{pull_number}:unmerged:veto:hold-merge",
+        "reason": "github_unmerged_pull_explicitly_vetoed",
+    }
+
+
+__all__ = [
+    "verify_github_self_maintenance_merge",
+    "verify_github_self_maintenance_veto",
+]
