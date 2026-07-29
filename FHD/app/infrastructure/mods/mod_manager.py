@@ -543,36 +543,64 @@ class ModManager:
         return mods
 
     def load_mod(self, mod_id: str) -> bool:
+        from .mod_levels import (
+            composite_definition,
+            composite_member_ids,
+            composite_owner_for_mod_id,
+            sort_mods_for_loading,
+        )
+
+        requested_id = str(mod_id or "").strip()
+        composite_owner = composite_owner_for_mod_id(requested_id)
+        if composite_owner == requested_id:
+            members = set(composite_member_ids(composite_owner))
+            scanned = [m for m in sort_mods_for_loading(self.scan_mods()) if m.id in members]
+            if not scanned:
+                self._record_load_failure(
+                    requested_id,
+                    "composite",
+                    "统一 ERP 没有可加载的内部系统组件",
+                )
+                return False
+            root_id = str(composite_definition(composite_owner).get("legacy_root_id") or "").strip()
+            root = [item for item in scanned if item.id == root_id]
+            scanned = root + [item for item in scanned if item.id != root_id]
+            success = False
+            for metadata in scanned:
+                if self.load_mod(metadata.id):
+                    success = True
+            return success
+
         try:
             from app.mod_sdk.product_skus import assert_mod_allowed_for_sku
 
-            assert_mod_allowed_for_sku(mod_id)
+            assert_mod_allowed_for_sku(requested_id)
         except PermissionError as exc:
-            logger.warning("[ModManager] Mod blocked for SKU: %s — %s", mod_id, exc)
-            self._record_load_failure(mod_id, "sku_policy", str(exc))
+            logger.warning("[ModManager] Mod blocked for SKU: %s — %s", requested_id, exc)
+            self._record_load_failure(requested_id, "sku_policy", str(exc))
             return False
 
         registry = get_mod_registry()
 
-        logger.info("[ModManager] Attempting to load mod: %s", mod_id)
+        logger.info("[ModManager] Attempting to load mod: %s", requested_id)
 
-        if registry.get_mod_metadata(mod_id):
-            logger.info("[ModManager] Mod %s is already loaded", mod_id)
+        if registry.get_mod_metadata(requested_id):
+            logger.info("[ModManager] Mod %s is already loaded", requested_id)
             # 与 load_mod_routes 对齐：历史上偶发「注册表已有元数据但 _loaded_mods 漏记」，
             # 会导致该 Mod 的 /api/mod/<id>/... 永远不挂载（仅命中 SPA 兜底 404）。
-            if mod_id not in self._loaded_mods:
+            if requested_id not in self._loaded_mods:
                 logger.warning(
                     "[ModManager] Mod %s in registry but missing from _loaded_mods; syncing list",
-                    mod_id,
+                    requested_id,
                 )
-                self._loaded_mods.append(mod_id)
+                self._loaded_mods.append(requested_id)
             return True
 
-        mod_path = self.resolve_mod_directory(mod_id)
+        mod_path = self.resolve_mod_directory(requested_id)
         logger.info("[ModManager] Mod path: %s", mod_path)
         if not mod_path:
             self._record_load_failure(
-                mod_id,
+                requested_id,
                 "fs",
                 f"目录不存在（已搜索 mods 根: {self.all_mods_roots()}）",
             )
@@ -580,8 +608,8 @@ class ModManager:
 
         metadata = parse_manifest(mod_path)
         if not metadata:
-            logger.error("[ModManager] Failed to parse manifest for mod: %s", mod_id)
-            self._record_load_failure(mod_id, "manifest", "manifest.json 无效或缺少 id")
+            logger.error("[ModManager] Failed to parse manifest for mod: %s", requested_id)
+            self._record_load_failure(requested_id, "manifest", "manifest.json 无效或缺少 id")
             return False
 
         logger.info(
@@ -592,28 +620,30 @@ class ModManager:
         )
 
         if normalize_artifact({"artifact": metadata.artifact}) == ARTIFACT_BUNDLE:
-            if registry.get_mod_metadata(mod_id):
+            if registry.get_mod_metadata(requested_id):
                 return True
             if registry.register_mod(metadata):
-                self._loaded_mods.append(mod_id)
-                logger.info("[ModManager] Registered bundle metadata only (no backend): %s", mod_id)
+                self._loaded_mods.append(requested_id)
+                logger.info(
+                    "[ModManager] Registered bundle metadata only (no backend): %s", requested_id
+                )
                 return True
-            logger.warning("[ModManager] Bundle %s register_mod returned False", mod_id)
+            logger.warning("[ModManager] Bundle %s register_mod returned False", requested_id)
             return True
 
         deps = registry.list_mod_ids()
         logger.info("[ModManager] Current loaded mods for dependency check: %s", deps)
         if not validate_dependencies(metadata, deps):
-            logger.warning("[ModManager] Dependencies not satisfied for mod: %s", mod_id)
+            logger.warning("[ModManager] Dependencies not satisfied for mod: %s", requested_id)
             self._record_load_failure(
-                mod_id,
+                requested_id,
                 "dependencies",
                 "依赖未满足（需先加载所依赖的 mod，或检查 manifest dependencies）",
             )
             return False
 
         try:
-            effective_id = (metadata.id or mod_id).strip()
+            effective_id = (metadata.id or requested_id).strip()
             self._load_mod_backend(effective_id, mod_path, metadata)
             registry.register_mod(metadata)
             if effective_id not in self._loaded_mods:
@@ -621,12 +651,12 @@ class ModManager:
             logger.info(
                 "[ModManager] Mod loaded successfully: %s%s",
                 effective_id,
-                f" (requested {mod_id})" if effective_id != mod_id else "",
+                f" (requested {requested_id})" if effective_id != requested_id else "",
             )
             return True
         except RECOVERABLE_ERRORS as e:
-            logger.error("[ModManager] Failed to load mod %s: %s", mod_id, e, exc_info=True)
-            self._record_load_failure(mod_id, "backend", _short_exc_message(e))
+            logger.error("[ModManager] Failed to load mod %s: %s", requested_id, e, exc_info=True)
+            self._record_load_failure(requested_id, "backend", _short_exc_message(e))
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
@@ -666,6 +696,16 @@ class ModManager:
         _register_mod_hooks(mod_id, metadata)
 
     def unload_mod(self, mod_id: str) -> bool:
+        from .mod_levels import composite_member_ids, composite_owner_for_mod_id
+
+        requested_id = str(mod_id or "").strip()
+        if composite_owner_for_mod_id(requested_id) == requested_id:
+            success = True
+            for member_id in reversed(composite_member_ids(requested_id)):
+                if member_id in self._loaded_mods:
+                    success = self.unload_mod(member_id) and success
+            return success
+
         registry = get_mod_registry()
         instance = registry.get_mod_instance(mod_id)
 
@@ -911,6 +951,10 @@ class ModManager:
                         errors.append(f"缺少必填字段：{field}")
 
                 art = normalize_artifact(manifest)
+                from .mod_levels import descriptor_for_manifest, validate_layer_manifest
+
+                errors.extend(validate_layer_manifest(manifest, strict=False))
+                layer = descriptor_for_manifest(manifest)
                 if art == ARTIFACT_BUNDLE:
                     errors.extend(validate_bundle_manifest(manifest, depth=0))
                 elif art == ARTIFACT_EMPLOYEE_PACK:
@@ -943,6 +987,8 @@ class ModManager:
                         "version": version,
                         "author": manifest.get("author", ""),
                         "artifact": art,
+                        "mod_level": layer.level,
+                        "mod_kind": layer.kind,
                         "errors": errors,
                         "warnings": warnings,
                     },
@@ -974,6 +1020,19 @@ class ModManager:
             "description": m.description or "",
             "primary": bool(m.primary),
             "artifact": art,
+            "mod_level": int(getattr(m, "mod_level", 0) or 0),
+            "mod_kind": str(getattr(m, "mod_kind", "") or ""),
+            "parent_mod_id": str(getattr(m, "parent_mod_id", "") or ""),
+            "parent_mod_ids": list(getattr(m, "parent_mod_ids", ()) or ()),
+            "lifecycle": str(getattr(m, "lifecycle", "") or ""),
+            "market_installable": bool(getattr(m, "market_installable", False)),
+            "employee_mode": str(getattr(m, "employee_mode", "") or ""),
+            "fixed_employees": list(getattr(m, "fixed_employees", ()) or ()),
+            "employee_slots": list(getattr(m, "employee_slots", ()) or ()),
+            "composite_owner": str(getattr(m, "composite_owner", "") or ""),
+            "internal_component": bool(getattr(m, "internal_component", False)),
+            "public_mod_id": str(getattr(m, "composite_owner", "") or getattr(m, "id", "") or ""),
+            "legacy_layer": bool(getattr(m, "legacy_layer", False)),
             "industry": dict(m.industry) if isinstance(m.industry, dict) else {},
             "ui_labels": dict(m.ui_labels) if isinstance(m.ui_labels, dict) else {},
             "ui_starter_pack": (
@@ -990,6 +1049,69 @@ class ModManager:
         if art == ARTIFACT_BUNDLE:
             row["type"] = "bundle"
         return row
+
+    @staticmethod
+    def _collapse_public_composite_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """将内部 bridge 组件投影为一个公开的统一系统 Mod。"""
+        from .mod_levels import composite_definition
+
+        output: list[dict[str, Any]] = []
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            owner = str(row.get("composite_owner") or "").strip()
+            if owner and owner != str(row.get("id") or "").strip():
+                grouped.setdefault(owner, []).append(row)
+            else:
+                output.append(row)
+
+        for owner, members in grouped.items():
+            definition = composite_definition(owner)
+            root_id = str(definition.get("legacy_root_id") or "").strip()
+            root = next((row for row in members if row.get("id") == root_id), members[0])
+            component_ids = [str(row.get("id") or "").strip() for row in members]
+            component_ids = [mid for mid in component_ids if mid]
+            fixed_employees: list[str] = []
+            workflow_employees: list[dict[str, Any]] = []
+            for row in members:
+                for employee_id in row.get("fixed_employees") or []:
+                    token = str(employee_id or "").strip()
+                    if token and token not in fixed_employees:
+                        fixed_employees.append(token)
+                for employee in row.get("workflow_employees") or []:
+                    if isinstance(employee, dict) and employee not in workflow_employees:
+                        workflow_employees.append(employee)
+            projected = dict(root)
+            projected.update(
+                {
+                    "id": owner,
+                    "name": str(definition.get("label") or "统一 ERP 系统 Mod"),
+                    "description": "宿主内置的统一系统 Mod；legacy bridge 仅作为内部实现组件。",
+                    "mod_level": int(definition.get("level") or 2),
+                    "mod_kind": str(definition.get("kind") or "system_mod"),
+                    "parent_mod_id": "xcagi-host-core",
+                    "parent_mod_ids": ["xcagi-host-core"],
+                    "lifecycle": str(definition.get("lifecycle") or "bundled"),
+                    "market_installable": False,
+                    "employee_mode": "fixed",
+                    "fixed_employees": fixed_employees,
+                    "workflow_employees": workflow_employees,
+                    "composite_owner": owner,
+                    "public_mod_id": owner,
+                    "internal_component": False,
+                    "composite": True,
+                    "component_ids": component_ids,
+                    "component_count": len(component_ids),
+                    "legacy_ids": component_ids,
+                }
+            )
+            output.append(projected)
+        return output
+
+    def list_public_mods(self) -> list[dict[str, Any]]:
+        """返回面向产品 UI 的 Mod 列表，bridge 组件收敛为统一 ERP。"""
+        if is_mods_disabled():
+            return []
+        return self._collapse_public_composite_rows(self.list_all_mods())
 
     def list_mods(self) -> list[dict[str, Any]]:
         """
@@ -1049,12 +1171,42 @@ class ModManager:
         self._recent_load_failures = []
         self._blueprint_failures = []
         mods = self.scan_mods()
-        # primary Mod 先加载，便于后续依赖其它 Mod 的声明顺序（当前主要影响日志与排查顺序）
-        mods.sort(key=lambda m: (not m.primary, (m.id or "").lower()))
+        # 依赖优先；primary 只表示业务主入口，不再决定加载先后。
+        from .mod_levels import composite_member_ids, descriptor_for_metadata, sort_mods_for_loading
+
+        mods = sort_mods_for_loading(mods)
         logger.info("[ModManager] load_all_mods: scanned %s mods", len(mods))
         loaded = []
+        handled_composites: set[str] = set()
 
         for metadata in mods:
+            layer = descriptor_for_metadata(metadata)
+            if layer.composite_owner:
+                owner = layer.composite_owner
+                if owner in handled_composites:
+                    continue
+                handled_composites.add(owner)
+                if self.load_mod(owner):
+                    loaded.append(owner)
+                    loaded.extend(
+                        mid
+                        for mid in composite_member_ids(owner)
+                        if mid in self._loaded_mods and mid not in loaded
+                    )
+                continue
+            if layer.level == 3 and not self._is_primary_root_mod(metadata):
+                logger.info(
+                    "[ModManager] Skipping %s layer=%s outside active user mods root: %s",
+                    metadata.id,
+                    layer.kind,
+                    metadata.mod_path,
+                )
+                self._record_load_failure(
+                    metadata.id,
+                    "runtime_layer_policy",
+                    "L3 行业/定制 Mod 只允许从当前主 mods 根加载；预制行业包需先完成 seed",
+                )
+                continue
             try:
                 from app.enterprise.mod_entitlements import is_mod_visible_for_enterprise
 
@@ -1088,6 +1240,19 @@ class ModManager:
 
         logger.info("[ModManager] load_all_mods result: %s", loaded)
         return loaded
+
+    def _is_primary_root_mod(self, metadata: ModMetadata) -> bool:
+        """L3 只接受主 mods 根中的已安装实体，避免扫描仓库/只读种子池自动激活。"""
+        try:
+            root = os.path.abspath(self.mods_root)
+            raw_mod_path = str(getattr(metadata, "mod_path", "") or "").strip()
+            # 测试/兼容调用有时只构造 ModMetadata 而不填 mod_path；真实扫描结果始终有路径。
+            if not raw_mod_path:
+                return True
+            mod_path = os.path.abspath(raw_mod_path)
+            return os.path.commonpath([root, mod_path]) == root
+        except (OSError, ValueError):
+            return False
 
 
 _mod_manager: ModManager | None = None

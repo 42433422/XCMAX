@@ -56,6 +56,8 @@ def is_infrastructure_mod_hidden_from_store(mod_id: str) -> bool:
         return False
     if mid in (HOST_FOUNDATION_EMPLOYEE_PACK_ID, HOST_FOUNDATION_BUNDLE_MOD_ID):
         return False
+    if mid == "xcagi-erp":
+        return True
     if is_host_bridge_mod_id(mid):
         return True
     if is_workflow_employee_mod_id(mid):
@@ -251,7 +253,10 @@ def materialize_host_foundation_bridges(edition: str | None = None) -> dict[str,
     missing = [mid for mid in expected if mid not in installed]
     return {
         "edition": ed,
+        "public_mod_id": "xcagi-erp",
+        "component_mode": "internal_components",
         "expected_mod_ids": expected,
+        "internal_component_ids": expected,
         "missing_mod_ids": missing,
         "ready": not missing,
         "seed": seeded,
@@ -308,10 +313,18 @@ def host_foundation_catalog_row(*, installed: bool = False) -> dict[str, Any]:
         "version": "1.0.0",
         "author": "成都修茈科技有限公司",
         "description": (
-            "以员工包交付的通用宿主底座：安装后自动写入对话/ERP/审批/客服等 "
-            f"{len(GENERIC_HOST_MOD_IDS)} 个 bridge Mod，无需在商店逐项安装基础设施 Mod。"
+            "以员工包交付的通用宿主底座：安装后自动启用统一 ERP 系统 Mod 的 "
+            f"{len(GENERIC_HOST_MOD_IDS)} 个内部能力片段，无需在商店逐项安装基础设施。"
         ),
         "artifact": "employee_pack",
+        "mod_level": 4,
+        "mod_kind": "employee_pack",
+        "employee_mode": "fixed",
+        "owner_layer": "host_core",
+        "lifecycle": "bundled",
+        "market_installable": False,
+        "parent_mod_id": "xcagi-host-core",
+        "config": {"host_foundation_pack": True},
         "store_collection": STORE_COLLECTION_HOST_FOUNDATION,
         "is_installed": installed,
         "source": "local",

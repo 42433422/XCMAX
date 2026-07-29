@@ -77,11 +77,29 @@ def build_platform_shell_payload(installed_mod_ids: list[str] | None = None) -> 
 
     from app.mod_sdk.host_profile import build_host_profile_api_payload, load_host_profile
 
+    try:
+        from app.infrastructure.mods.mod_levels import composite_member_ids
+
+        unified_erp_components = list(composite_member_ids("xcagi-erp"))
+    except ImportError:
+        unified_erp_components = []
+
     prof = load_host_profile()
     return {
         "schema_version": 1,
         "edition": edition,
         "core_workflow_mod_id": core_wf,
+        "system_mods": [
+            {
+                "mod_id": "xcagi-erp",
+                "label": "统一 ERP 系统 Mod",
+                "level": 2,
+                "component_mod_ids": unified_erp_components,
+                "installed": all(mid in installed for mid in unified_erp_components)
+                if unified_erp_components
+                else False,
+            }
+        ],
         "protected_client_mod_ids": list(protected),
         "minimal_host_mod_ids": list(minimal_ids),
         "generic_host_mod_ids": list(generic_ids),

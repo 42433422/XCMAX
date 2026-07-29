@@ -127,12 +127,15 @@ def _is_extension_row(d: dict[str, Any]) -> bool:
 
 
 def _item_to_mod_info(d: dict[str, Any]) -> dict[str, Any]:
+    from app.infrastructure.mods.mod_levels import descriptor_for_manifest
+
     mid = str(d.get("id") or "").strip()
     name = str(d.get("name") or mid or "未命名").strip() or mid
     ver = str(d.get("version") or "1.0.0").strip() or "1.0.0"
     author = str(d.get("author") or "—").strip() or "—"
     desc = str(d.get("description") or "").strip()
     installed = _is_extension_row(d)
+    layer = descriptor_for_manifest({**d, "id": mid})
     return {
         "id": mid,
         "name": name,
@@ -149,6 +152,13 @@ def _item_to_mod_info(d: dict[str, Any]) -> dict[str, Any]:
         "dependencies": {},
         "source": "local",
         "catalog_base_url": catalog_base_url(),
+        "mod_level": layer.level,
+        "mod_kind": layer.kind,
+        "parent_mod_id": layer.parent_mod_id,
+        "parent_mod_ids": list(layer.parent_mod_ids),
+        "lifecycle": layer.lifecycle,
+        "market_installable": layer.market_installable,
+        "employee_mode": layer.employee_mode,
     }
 
 
@@ -166,10 +176,13 @@ def _installed_by_id() -> dict[str, dict[str, Any]]:
 
 
 def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str, Any]:
+    from app.infrastructure.mods.mod_levels import descriptor_for_manifest
+
     mid = str(d.get("id") or d.get("pkg_id") or "").strip()
     version = str(d.get("version") or "1.0.0").strip() or "1.0.0"
     name = str(d.get("name") or mid or "未命名").strip() or mid
     commerce = d.get("commerce") if isinstance(d.get("commerce"), dict) else {}
+    layer = descriptor_for_manifest({**d, "id": mid})
     download_url = str(d.get("download_url") or "").strip()
     from app.mod_sdk.host_foundation import catalog_store_collection
 
@@ -202,6 +215,13 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
             d.get("store_collection") or commerce.get("collection") or ""
         ).strip(),
         "public_listing": bool(d.get("public_listing")),
+        "mod_level": layer.level,
+        "mod_kind": layer.kind,
+        "parent_mod_id": layer.parent_mod_id,
+        "parent_mod_ids": list(layer.parent_mod_ids),
+        "lifecycle": layer.lifecycle,
+        "market_installable": layer.market_installable,
+        "employee_mode": layer.employee_mode,
     }
     if not row_out["store_collection"]:
         row_out["store_collection"] = catalog_store_collection(row_out)
@@ -211,12 +231,15 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
 async def _remote_rows() -> list[dict[str, Any]]:
     from fastapi import HTTPException
 
+    from app.infrastructure.mods.mod_levels import market_catalog_row_allowed
     from app.mod_sdk.host_foundation import is_infrastructure_mod_hidden_from_store
 
     installed_ids = set(_installed_by_id())
     rows: list[dict[str, Any]] = []
     try:
         async for row in iter_catalog_packages():
+            if not market_catalog_row_allowed(row):
+                continue
             info = _remote_to_mod_info(row, installed_ids)
             mid = str(info.get("id") or "").strip()
             if not mid:
@@ -239,6 +262,7 @@ async def _map_market_catalog_page(
         is_public_catalog_row,
         market_item_to_package_row,
     )
+    from app.infrastructure.mods.mod_levels import market_catalog_row_allowed
 
     installed_ids = set(_installed_by_id())
     items_raw = data.get("items") if isinstance(data.get("items"), list) else []
@@ -252,6 +276,8 @@ async def _map_market_catalog_page(
             continue
         row = market_item_to_package_row(raw)
         if not row or not is_public_catalog_row(row):
+            continue
+        if not market_catalog_row_allowed(row):
             continue
         info = _remote_to_mod_info(row, installed_ids)
         hint = collection_hint or str((row.get("commerce") or {}).get("collection") or "").strip()
@@ -425,29 +451,41 @@ async def _install_from_catalog(
         )
         normalized_path = _normalize_package_zip(tmp_path)
         from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
-        from app.infrastructure.mods.artifact_package import peek_artifact
+        from app.infrastructure.mods.artifact_package import peek_artifact, peek_manifest_from_zip
+        from app.infrastructure.mods.mod_levels import market_install_block_reason
 
-        if peek_artifact(normalized_path) == ARTIFACT_EMPLOYEE_PACK:
-            from app.infrastructure.mods.employee_registry import get_employee_registry
-
-            ok, message = get_employee_registry().install_from_package(
-                normalized_path, verify_signature=False
+        try:
+            artifact = peek_artifact(normalized_path)
+        except (OSError, ValueError) as exc:
+            return ModStoreInstallResult(
+                success=False,
+                message=f"市场包无效：{exc}",
+                data={"id": pkg_id},
             )
-            return ModStoreInstallResult(success=bool(ok), message=message, data=None)
+        if artifact != ARTIFACT_EMPLOYEE_PACK:
+            return ModStoreInstallResult(
+                success=False,
+                message="当前市场仅允许安装 AI 员工包；系统、行业和定制 Mod 不允许从市场安装",
+                data={"id": pkg_id, "artifact": artifact},
+            )
+        try:
+            manifest = peek_manifest_from_zip(normalized_path)
+        except (OSError, ValueError) as exc:
+            return ModStoreInstallResult(
+                success=False,
+                message=f"员工包 manifest 无效：{exc}",
+                data={"id": pkg_id},
+            )
+        blocked = market_install_block_reason(manifest)
+        if blocked:
+            return ModStoreInstallResult(success=False, message=blocked, data={"id": pkg_id})
 
-        from app.infrastructure.mods.mod_manager import get_mod_manager
+        from app.infrastructure.mods.employee_registry import get_employee_registry
 
-        ok, message, metadata = get_mod_manager().install_mod_package(
-            normalized_path,
-            verify_signature=False,
-            activate=activate,
+        ok, message = get_employee_registry().install_from_package(
+            normalized_path, verify_signature=False
         )
-        data = (
-            dataclasses.asdict(metadata)
-            if metadata and dataclasses.is_dataclass(metadata)
-            else None
-        )
-        return ModStoreInstallResult(success=bool(ok), message=message, data=data)
+        return ModStoreInstallResult(success=bool(ok), message=message, data=None)
     finally:
         for p in {tmp_path, normalized_path}:
             try:
@@ -667,7 +705,7 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
 
 @router.post("/install-industry-seed", response_model=ModStoreInstallResult)
 async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
-    """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
+    """L3：只从内置 industry-seeds 池安装所选行业 Mod，不走市场下载。"""
     payload = await _request_payload(request)
     raw = _safe_text(
         payload.get("industry_id") or payload.get("mod_id") or payload.get("industryId")

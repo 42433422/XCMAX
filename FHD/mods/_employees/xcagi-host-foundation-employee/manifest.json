@@ -4,6 +4,12 @@
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",
   "description": "以员工包交付的通用宿主底座：安装后自动写入对话/ERP/审批/客服等 bridge Mod，无需在商店逐项安装基础设施 Mod。",
+  "mod_level": 4,
+  "mod_kind": "employee_pack",
+  "employee_mode": "fixed",
+  "owner_layer": "host_core",
+  "lifecycle": "bundled",
+  "market_installable": false,
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {

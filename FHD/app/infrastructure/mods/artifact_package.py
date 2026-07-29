@@ -116,6 +116,7 @@ def validate_xcagi_host_profile_extensions(manifest: dict[str, Any]) -> list[str
 
 def validate_employee_pack_manifest(manifest: dict[str, Any]) -> list[str]:
     from .artifact_constants import ARTIFACT_EMPLOYEE_PACK
+    from .mod_levels import validate_layer_manifest
 
     errs: list[str] = []
     if normalize_artifact(manifest) != ARTIFACT_EMPLOYEE_PACK:
@@ -132,5 +133,9 @@ def validate_employee_pack_manifest(manifest: dict[str, Any]) -> list[str]:
         errs.append("scope 仅支持 global 或 host（预留 host_mod 二期）")
     if scope == "host" and not (manifest.get("host_mod") or "").strip():
         errs.append("scope=host 时需填写 host_mod（二期启用）")
+    layer_declared = any(
+        key in manifest for key in ("mod_level", "mod_kind", "layer_kind", "employee_mode")
+    )
+    errs.extend(validate_layer_manifest(manifest, strict=layer_declared))
     errs.extend(validate_xcagi_host_profile_extensions(manifest))
     return errs

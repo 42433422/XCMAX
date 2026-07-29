@@ -245,7 +245,7 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
             "industry_id": iid,
             "mod_id": mod_id,
             "source": None,
-            "message": "安装包未包含 industry-seeds 池，请从扩展市场安装",
+            "message": "安装包未包含预制行业种子池；行业 Mod 不允许从市场安装",
         }
 
     src = _resolve_seed_source(mod_id, pool)
@@ -256,7 +256,7 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
             "industry_id": iid,
             "mod_id": mod_id,
             "source": str(pool),
-            "message": f"行业种子池中无 {mod_id}，请从扩展市场安装",
+            "message": f"预制行业种子池中无 {mod_id}；行业 Mod 不允许从市场安装",
         }
 
     try:
@@ -292,47 +292,13 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
 
 
 async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any]:
-    """池内 seed 优先；失败则 Catalog 安装。"""
+    """兼容旧函数名：只安装内置预制行业种子，不再走 Catalog 网络兜底。"""
     result = seed_industry_mod(industry_id)
     if result.get("success"):
         keep = str(result.get("mod_id") or "")
         if keep:
             result["deactivated"] = deactivate_other_open_industry_mods(keep)
-        return result
-
-    mod_id = str(result.get("mod_id") or "").strip()
-    status = str(result.get("status") or "")
-    if not mod_id or status not in ("pool_missing", "not_in_pool"):
-        return result
-
-    try:
-        from app.fastapi_routes.mod_store_routes import _install_from_catalog
-
-        catalog = await _install_from_catalog(mod_id, "", activate=True)
-        if catalog.success:
-            deactivate_other_open_industry_mods(mod_id)
-            return {
-                "success": True,
-                "status": "catalog",
-                "industry_id": result.get("industry_id"),
-                "mod_id": mod_id,
-                "source": "catalog",
-                "message": catalog.message or "已从扩展市场安装行业 Mod",
-                "catalog": True,
-            }
-        return {
-            **result,
-            "success": False,
-            "status": "catalog_failed",
-            "message": catalog.message or result.get("message"),
-        }
-    except RECOVERABLE_ERRORS as exc:
-        return {
-            **result,
-            "success": False,
-            "status": "catalog_failed",
-            "message": str(exc),
-        }
+    return result
 
 
 __all__ = [

@@ -1,5 +1,11 @@
 {
   "id": "xcagi-core-workflow-employees",
+  "mod_level": 2,
+  "mod_kind": "system_mod",
+  "parent_mod_id": "xcagi-host-core",
+  "composite_owner": "xcagi-erp",
+  "lifecycle": "bundled",
+  "market_installable": false,
   "name": "XCAGI 核心工作流（四名内置员工）",
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",

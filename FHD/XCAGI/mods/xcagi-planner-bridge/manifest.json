@@ -1,5 +1,11 @@
 {
   "id": "xcagi-planner-bridge",
+  "mod_level": 2,
+  "mod_kind": "system_mod",
+  "parent_mod_id": "xcagi-host-core",
+  "composite_owner": "xcagi-erp",
+  "lifecycle": "bundled",
+  "market_installable": false,
   "name": "XCAGI 对话 Planner 门面 Mod",
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",
