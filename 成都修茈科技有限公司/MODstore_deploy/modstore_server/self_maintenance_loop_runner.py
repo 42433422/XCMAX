@@ -73,6 +73,9 @@ from .self_maintenance_remediation_lineage import (
     automated_remediation_resume_plan as _automated_remediation_resume_plan,
 )
 from .self_maintenance_remediation_lineage import (
+    normalize_automated_remediation_reason as _normalize_automated_remediation_reason,
+)
+from .self_maintenance_remediation_lineage import (
     remediation_lineage_fields as _remediation_lineage_fields,
 )
 from .self_maintenance_remediation_lineage import (
@@ -885,34 +888,6 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
     )
 
 
-def _stored_qa_target_ref_missing(memory: Dict[str, Any], item: Dict[str, Any]) -> bool:
-    """Recover the precise QA-only cause from legacy generic verdict memory."""
-
-    if str(item.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
-        return False
-    branch = str(item.get("branch") or "").strip()
-    if not branch:
-        return False
-    decision = (
-        memory.get("last_policy_decision")
-        if isinstance(memory.get("last_policy_decision"), dict)
-        else {}
-    )
-    if str(decision.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
-        return False
-    structured_gate = (
-        decision.get("structured_gate") if isinstance(decision.get("structured_gate"), dict) else {}
-    )
-    qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
-    if qa.get("target_branch_available") is not False:
-        return False
-    blocking = qa.get("blocking_findings")
-    return isinstance(blocking, list) and any(
-        "target_branch_unavailable" in str(finding) and branch in str(finding)
-        for finding in blocking
-    )
-
-
 def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _env_bool("MODSTORE_SELF_MAINTENANCE_RESUME_REVIEW_QA", True):
         return None
@@ -1076,9 +1051,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "human_strategy_approval",  # legacy ledger compatibility
         }:
             continue
-        reason = str(item.get("reason") or "")
-        if _stored_qa_target_ref_missing(memory, item):
-            reason = "structured_qa_target_branch_unavailable"
+        reason = _normalize_automated_remediation_reason(memory, item)
         resume_plan = _automated_remediation_resume_plan(reason)
         if resume_plan is None:
             continue
@@ -1147,7 +1120,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "human_strategy_approval",  # legacy ledger compatibility
         }:
             continue
-        reason = str(item.get("reason") or "")
+        reason = _normalize_automated_remediation_reason(memory, item)
         if reason == "para_ai_review_rejected":
             branch = str(item.get("branch") or "").strip()
             para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
@@ -1164,8 +1137,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     ],
                 }
             continue
-        if _stored_qa_target_ref_missing(memory, item):
-            reason = "structured_qa_target_branch_unavailable"
         if reason in {
             "auto_merge_safety_score_v2_too_low",
             "auto_merge_safety_score_v3_too_low",
