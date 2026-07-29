@@ -14,7 +14,7 @@ vi.mock('@/api/core', () => ({
   },
 }))
 
-import xcmaxMarketProxy, { isLocalDutyApiAvailable } from './xcmaxMarketProxy'
+import xcmaxMarketProxy from './xcmaxMarketProxy'
 
 describe('xcmaxMarketProxy', () => {
   beforeEach(() => {
@@ -108,38 +108,69 @@ describe('xcmaxMarketProxy local duty api probe', () => {
     expect(await mod.isLocalDutyApiAvailable()).toBe(true)
   })
 
-  it('getEmployeeStatus returns empty status on 404', async () => {
+  it('getEmployeeStatus rejects instead of fabricating an empty status on 404', async () => {
     apiGet.mockResolvedValueOnce({})
     apiGet.mockRejectedValueOnce({ status: 404 })
     const mod = await import('./xcmaxMarketProxy')
-    const r = (await mod.default.getEmployeeStatus('emp1')) as { deployed: boolean; employee_id: string }
-    expect(r.deployed).toBe(false)
-    expect(r.employee_id).toBe('emp1')
+    await expect(mod.default.getEmployeeStatus('emp1')).rejects.toThrow(
+      'AI 员工 emp1 的运行状态不存在',
+    )
   })
 
-  it('getEmployeeManifest returns empty manifest when not found', async () => {
+  it('getEmployeeManifest rejects instead of fabricating empty handlers when not found', async () => {
     apiGet.mockResolvedValueOnce({})
     apiGet.mockRejectedValueOnce({ message: '员工不存在' })
     const mod = await import('./xcmaxMarketProxy')
-    const r = (await mod.default.getEmployeeManifest('emp2')) as { handlers: unknown[]; employee_id: string }
-    expect(r.handlers).toEqual([])
-    expect(r.employee_id).toBe('emp2')
+    await expect(mod.default.getEmployeeManifest('emp2')).rejects.toThrow(
+      'AI 员工 emp2 的 manifest 不存在',
+    )
   })
 
-  it('adminDutyGraphHealth falls back when local api unavailable (404 probe)', async () => {
+  it('adminDutyGraphHealth reports unavailable when both health APIs fail', async () => {
     apiGet.mockRejectedValueOnce({ status: 404 })
     apiGet.mockRejectedValueOnce({ status: 404 })
     const mod = await import('./xcmaxMarketProxy')
-    const r = (await mod.default.adminDutyGraphHealth()) as { ok: boolean; source: string }
+    const r = (await mod.default.adminDutyGraphHealth()) as {
+      ok: boolean
+      source: string
+      staffing: { error: string }
+    }
+    expect(r.ok).toBe(false)
+    expect(r.source).toBe('runtime-unavailable')
+    expect(r.staffing.error).toContain('均不可用')
+  })
+
+  it('getEmployeeStatus rejects when local api is unavailable', async () => {
+    apiGet.mockRejectedValueOnce({ status: 404 })
+    const mod = await import('./xcmaxMarketProxy')
+    await expect(mod.default.getEmployeeStatus('emp3')).rejects.toThrow(
+      'AI 员工运行时不可用',
+    )
+  })
+
+  it('adminDutyGraphHealth preserves explicit ops fallback health', async () => {
+    apiGet.mockRejectedValueOnce({ status: 404 })
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      staffing: { planned_count: 55, registered_count: 55 },
+    })
+    const mod = await import('./xcmaxMarketProxy')
+    const r = (await mod.default.adminDutyGraphHealth()) as {
+      ok: boolean
+      source: string
+    }
     expect(r.ok).toBe(true)
-    expect(r.source).toContain('fallback')
+    expect(r.source).toBe('ops-fallback')
   })
 
-  it('getEmployeeStatus returns empty status when local api unavailable', async () => {
+  it('adminDutyGraphHealth does not promote an ambiguous ops payload to healthy', async () => {
     apiGet.mockRejectedValueOnce({ status: 404 })
+    apiGet.mockResolvedValueOnce({
+      staffing: { planned_count: 55, registered_count: 55 },
+    })
     const mod = await import('./xcmaxMarketProxy')
-    const r = (await mod.default.getEmployeeStatus('emp3')) as { deployed: boolean }
-    expect(r.deployed).toBe(false)
+    const r = (await mod.default.adminDutyGraphHealth()) as { ok: boolean }
+    expect(r.ok).toBe(false)
   })
 
   it('executeEmployeeTask posts to local employee execute when local api is available', async () => {
