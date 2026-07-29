@@ -3,16 +3,19 @@
     <div class="page-content brain-page">
       <div class="page-header brain-agent-header">
         <div class="brain-agent-title-row">
-          <h2>AI智脑集成</h2>
+          <h2>{{ activeTab === 'private-mod' ? '客户私有 Mod 生产中心' : 'AI智脑集成' }}</h2>
           <span class="brain-agent-badge" title="编排与观测控制台">Agent</span>
         </div>
-        <p class="muted brain-sub">
+        <p v-if="activeTab !== 'private-mod'" class="muted brain-sub">
           下方为 <strong>Agent 控制台</strong>（对话走 <code class="brain-mono">/api/ai/unified_chat</code>，与主助手同源 Planner）。
           P1 / P2 与口令说明见状态条；架构、OpenAPI、code-editor 联调仍在页内分区。
         </p>
+        <p v-else class="muted brain-sub">
+          客户私有 Mod 的业务模块与 AI 员工分轨生产、测试、验收和交付；私有版本只对绑定客户开放。
+        </p>
       </div>
 
-      <div class="brain-status-bar" role="region" aria-label="Agent 状态">
+      <div v-if="activeTab !== 'private-mod'" class="brain-status-bar" role="region" aria-label="Agent 状态">
         <div class="brain-status-chips">
           <span
             class="brain-chip"
@@ -40,7 +43,7 @@
       </div>
 
       <!-- Claude Code 风格：主对话壳（深色控制台 + 底部输入） -->
-      <section class="brain-agent-console" aria-label="Agent 对话">
+      <section v-if="activeTab !== 'private-mod'" class="brain-agent-console" aria-label="Agent 对话">
         <header class="brain-agent-console__head">
           <div class="brain-agent-console__title">
             <span class="brain-agent-console__dot" aria-hidden="true" />
@@ -100,7 +103,11 @@
         </div>
       </section>
 
-      <div class="brain-layout" :style="brainPaneStyle">
+      <div
+        class="brain-layout"
+        :class="{ 'brain-layout--private': activeTab === 'private-mod' }"
+        :style="brainPaneStyle"
+      >
         <div class="brain-main">
           <div class="brain-tabs" role="tablist" aria-label="智脑分区">
             <button
@@ -116,6 +123,8 @@
               {{ t.label }}
             </button>
           </div>
+
+          <PrivateModDeliveryPanel v-if="activeTab === 'private-mod'" />
 
           <div v-show="activeTab === 'architecture'" class="brain-panel card brain-card">
             <div class="card-header">Level 3 · 页面层（Vue3）</div>
@@ -308,7 +317,7 @@
           />
         </div>
 
-        <aside class="brain-obs" aria-label="观测与活动">
+        <aside v-if="activeTab !== 'private-mod'" class="brain-obs" aria-label="观测与活动">
           <div class="brain-obs-section">
             <div class="brain-obs-title">活动流</div>
             <p class="muted brain-obs-hint">占位：后续可对接 Planner / Agent 事件或审计日志。</p>
@@ -346,9 +355,11 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ApiError } from '@/api'
 import chatApi from '@/api/chat'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
+import PrivateModDeliveryPanel from '@/components/privateMod/PrivateModDeliveryPanel.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { apiFetch } from '@/utils/apiBase'
 import {
@@ -359,14 +370,16 @@ import {
 
 const BRAIN_AGENT_SESSION_KEY = 'xcagi_brain_agent_session_id'
 const BRAIN_LAYOUT_MQ = '(max-width: 960px)'
+const route = useRoute()
 
 const tabs = [
+  { id: 'private-mod', label: '客户定制' },
   { id: 'architecture', label: '架构' },
   { id: 'api', label: 'API' },
   { id: 'skills', label: 'Skill' }
 ]
 
-const activeTab = ref('architecture')
+const activeTab = ref(route.query.focus === 'private-mod' ? 'private-mod' : 'architecture')
 const isBrainPaneResizable = ref(true)
 let brainPaneViewportMedia = null
 
@@ -1325,6 +1338,14 @@ onUnmounted(() => {
   gap: 20px;
   align-items: stretch;
   --brain-obs-width: 320px;
+}
+
+.brain-layout--private {
+  display: block;
+}
+
+.brain-layout--private .brain-main {
+  width: 100%;
 }
 
 @media (max-width: 960px) {

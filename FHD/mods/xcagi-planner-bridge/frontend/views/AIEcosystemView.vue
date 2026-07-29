@@ -35,7 +35,7 @@
           <span class="app-launcher-name">Qclaw龙虾生态</span>
           <span class="app-launcher-desc">龙虾业务数据洞察与经营分析</span>
         </button>
-        <button class="app-launcher" type="button" @click="goShellPage('brain')">
+        <button class="app-launcher" type="button" @click="goShellPage('brain', { focus: 'private-mod' })">
           <span class="app-launcher-icon app-launcher-icon--brain" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M12 4.2c-3.2 0-5.2 2.3-5.2 4.8 0 1.1.35 2.1.92 2.95-.58.78-.92 1.72-.92 2.75 0 2.05 1.75 3.7 4.3 3.7h2.8c2.55 0 4.3-1.65 4.3-3.7 0-1.03-.34-1.97-.92-2.75.57-.85.92-1.85.92-2.95 0-2.5-2-4.8-5.2-4.8Z" fill="#fff" opacity="0.96" />
@@ -44,8 +44,8 @@
               <circle cx="13.8" cy="9.1" r="0.85" fill="#7c3aed" />
             </svg>
           </span>
-          <span class="app-launcher-name">AI智脑集成</span>
-          <span class="app-launcher-desc">Agent 控制台，同源 Planner 与 unified_chat 联调</span>
+          <span class="app-launcher-name">生产员工</span>
+          <span class="app-launcher-desc">客户私有 Mod、业务模块与 AI 员工的生产、测试、验收和交付</span>
         </button>
         <button class="app-launcher" type="button" @click="goShellPage('mod-store')">
           <span class="app-launcher-icon app-launcher-icon--store" aria-hidden="true">
@@ -280,13 +280,13 @@ const extractAssistantTextFromChatPayload = (p) => {
     .join('')
 }
 
-const goShellPage = (name) => {
+const goShellPage = (name, query = {}) => {
   const modPath = resolvePlannerPageRedirectForRouteName(name)
   if (modPath) {
-    router.push(modPath)
+    router.push({ path: modPath, query })
     return
   }
-  router.push({ name })
+  router.push({ name, query })
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {
