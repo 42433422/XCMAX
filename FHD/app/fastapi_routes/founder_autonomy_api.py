@@ -148,6 +148,50 @@ async def ops_founder_autonomy(request: Request):
     return {"success": True, "data": snapshot}
 
 
+@router.post("/ops/strategic-plan", response_model=None)
+async def ops_strategic_plan(request: Request):
+    """LLM 季度目标分解：回答「这个季度做哪三个功能」。
+
+    Body JSON:
+      - goal: 战略目标文本（可选）
+      - critique: 反思修正意见（可选）
+      - quarter: 如 2026-Q3（可选）
+      - use_llm: 默认 true；false 强制启发式
+      - persist: 默认 true
+    """
+    gate = admin_routes._require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    try:
+        body = await request.json()
+    except RECOVERABLE_ERRORS:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    from app.application.autonomy.strategic_plan_app_service import build_quarterly_plan
+
+    plan = await build_quarterly_plan(
+        body.get("goal"),
+        critique=body.get("critique"),
+        quarter=body.get("quarter"),
+        use_llm=bool(body.get("use_llm", True)),
+        persist=bool(body.get("persist", True)),
+    )
+    return {"success": True, "data": plan}
+
+
+@router.get("/ops/strategic-plan/latest", response_model=None)
+async def ops_strategic_plan_latest(request: Request):
+    """读取最近一次季度战略计划。"""
+    gate = admin_routes._require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    from app.application.autonomy.strategic_plan_app_service import latest_plan
+
+    plan = latest_plan()
+    return {"success": True, "data": plan}
+
+
 @router.post("/ops/founder-autonomy/refresh-internal", response_model=None)
 async def ops_founder_autonomy_refresh_internal(request: Request):
     """Refresh the public projection with independent machine and market credentials."""

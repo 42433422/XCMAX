@@ -23,8 +23,15 @@
 - `WorkflowPlanner`：多步 PlanGraph JSONL 落盘；校验失败触发 prompt 反思提案
 - `EvolutionHandler`：新增 `evolution.reflect`
 
+## 战略规划（自治层，非阈值机）
+
+- `StrategicPlanner`：LLM 拆解「这个季度做哪三个功能」+ `reflect_and_revise`
+- `adaptive_thresholds`：`CRASH_THRESHOLD` 等硬常量 → floor/ceiling 软约束
+- API：`POST /api/xcmax/ops/strategic-plan`；CLI：`scripts/autonomy/strategic_quarterly_planner.py`
+- Impact LLM 顾问轨：`scripts/autonomy/impact_advisor.py`（`XCAGI_IMPACT_LLM=1`）
+
 ## 验收
 
 ```bash
-cd FHD && python -m pytest tests/test_neuro_bus/test_cognitive_full_stack.py -q
+cd FHD && python -m pytest tests/test_neuro_bus/test_cognitive_full_stack.py tests/test_autonomy/test_strategic_planner.py -q
 ```
