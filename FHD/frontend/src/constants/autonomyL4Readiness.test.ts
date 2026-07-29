@@ -42,10 +42,11 @@ describe('AUTONOMY_L4_READINESS', () => {
     expect(AUTO_DEPLOY_GAP_IDS).toContain('p0-auto-deploy')
   })
 
-  it('tracks callback / runtime-sync / implement-pack gaps', () => {
+  it('tracks callback / runtime-sync / implement-pack / metric-search gaps', () => {
     expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-callback')
     expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-runtime-sync')
     expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-implement-pack')
+    expect(AUTO_DEPLOY_GAP_IDS).toContain('p1-metric-search')
   })
 })
 

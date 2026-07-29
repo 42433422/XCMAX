@@ -95,6 +95,7 @@ from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.ui_server import run_ui_server
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
+from retort_engine.metric_search import EvalSpec, MetricSearchConfig, run_metric_search
 from retort_engine.workspace_hygiene import clean_workspace
 
 
@@ -113,6 +114,31 @@ def main(argv: list[str] | None = None) -> int:
     evolve.add_argument("--use-llm", action="store_true")
     evolve.add_argument("--wait-llm-sec", type=float, default=240)
     evolve.add_argument("--json", action="store_true")
+    metric_search = sub.add_parser(
+        "metric-search",
+        help="WeCo/AIDE-style best-first metric tree search over code trials",
+    )
+    metric_search.add_argument("--project", default=".")
+    metric_search.add_argument(
+        "--eval-command",
+        required=True,
+        help="Shell command that prints '<metric>: <number>'",
+    )
+    metric_search.add_argument("--metric", required=True, help="Metric name to parse")
+    metric_search.add_argument(
+        "--higher-is-better",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    metric_search.add_argument("--parse-regex", default="")
+    metric_search.add_argument("--max-nodes", type=int, default=8)
+    metric_search.add_argument("--beam", type=int, default=2)
+    metric_search.add_argument("--wall-time-limit-sec", type=float, default=300.0)
+    metric_search.add_argument("--eval-timeout-sec", type=float, default=120.0)
+    metric_search.add_argument("--run-id", default="")
+    metric_search.add_argument("--output-dir", default="")
+    metric_search.add_argument("--objective", default="")
+    metric_search.add_argument("--json", action="store_true")
     absorb_cmd = sub.add_parser("absorb")
     absorb_cmd.add_argument("--own-project", default=".")
     source = absorb_cmd.add_mutually_exclusive_group(required=True)
@@ -504,6 +530,34 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Stop reason: {result['stop_reason']}")
             print(_format_scores("Final scores", result["final_assessment"]["scores"]))
         return 0 if result["status"] == "converged" else 1
+    if args.command == "metric-search":
+        result = run_metric_search(
+            MetricSearchConfig(
+                project=args.project,
+                eval_spec=EvalSpec(
+                    metric_name=args.metric,
+                    eval_command=args.eval_command,
+                    higher_is_better=bool(args.higher_is_better),
+                    parse_regex=args.parse_regex or "",
+                ),
+                max_nodes=args.max_nodes,
+                beam=args.beam,
+                wall_time_limit_sec=args.wall_time_limit_sec,
+                eval_timeout_sec=args.eval_timeout_sec,
+                run_id=args.run_id or "",
+                output_dir=args.output_dir or None,
+                objective=args.objective
+                or f"Improve {args.metric} via bounded code trials",
+            )
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort metric-search status: {result['status']}")
+            print(f"Best node: {result.get('best_node_id') or '-'}")
+            print(f"Best score: {result.get('best_score')}")
+            print(f"Tree: {result.get('tree_path')}")
+        return 0 if result.get("status") == "ok" else 1
     if args.command == "absorb":
         result = absorb(
             {
