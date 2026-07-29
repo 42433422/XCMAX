@@ -177,7 +177,9 @@ def test_runtime_status_endpoint(client):
     assert {"total", "healthy", "failing", "stale"} <= set(body["summary"])
     assert "stale_after_seconds" in body
     assert body["employee_duty"] == {
+        "registration_observable": False,
         "registered_cron_count": 0,
+        "registration_failing_count": 0,
         "observed_cron_count": 0,
         "last_success_count": 0,
         "failing_count": 0,
@@ -188,7 +190,6 @@ def test_runtime_status_endpoint(client):
 
 def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
     import modstore_server.api.scheduler_runtime_api as runtime_api
-    import modstore_server.workflow_scheduler as workflow_scheduler
 
     monkeypatch.setattr(
         runtime_api,
@@ -196,6 +197,22 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
         lambda **_kwargs: {
             "ok": True,
             "jobs": [
+                {
+                    "job_id": "employee_cron_registered:one",
+                    "last_status": "success",
+                },
+                {
+                    "job_id": "employee_cron_registered:two",
+                    "last_status": "success",
+                },
+                {
+                    "job_id": "employee_cron_registered:never-ran",
+                    "last_status": "success",
+                },
+                {
+                    "job_id": "employee_cron_registered:registration-failed",
+                    "last_status": "failed",
+                },
                 {"job_id": "employee_cron:one", "last_status": "success"},
                 {"job_id": "employee_cron:two", "last_status": "failed"},
                 {"job_id": "employee_cron:old-unregistered", "last_status": "success"},
@@ -203,20 +220,13 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
             "summary": {"total": 3, "healthy": 2, "failing": 1, "stale": 0},
         },
     )
-    monkeypatch.setattr(
-        workflow_scheduler,
-        "list_employee_cron_jobs",
-        lambda: [
-            {"employee_id": "one"},
-            {"employee_id": "two"},
-            {"employee_id": "never-ran"},
-        ],
-    )
 
     body = runtime_api.scheduler_runtime()
 
     assert body["employee_duty"] == {
+        "registration_observable": True,
         "registered_cron_count": 3,
+        "registration_failing_count": 1,
         "observed_cron_count": 2,
         "last_success_count": 1,
         "failing_count": 1,
