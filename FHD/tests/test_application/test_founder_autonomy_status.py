@@ -352,9 +352,7 @@ def test_planned_workforce_gap_changes_next_step_without_inflating_score() -> No
                         "employee_id": "host-checker",
                         "remediation": {
                             "task_id": "workforce-gap-aaaaaaaaaaaaaaaa",
-                            "target_files": [
-                                "FHD/mods/_employees/host-checker/manifest.json"
-                            ],
+                            "target_files": ["FHD/mods/_employees/host-checker/manifest.json"],
                             "closure_event": "later_strict_burnin_receipt_accepted",
                             "auto_close": False,
                         },
@@ -372,9 +370,7 @@ def test_planned_workforce_gap_changes_next_step_without_inflating_score() -> No
     evolution = _dimensions(snapshot)["evolution"]
 
     assert evolution["progress"] == 40
-    assert evolution["next_gap"] == (
-        "执行已生成的 1 个员工能力修复工单，并取得后续严格试运行回执"
-    )
+    assert evolution["next_gap"] == ("执行已生成的 1 个员工能力修复工单，并取得后续严格试运行回执")
     assert snapshot["live_summary"]["workforce_capability_gap_count"] == 1
     assert snapshot["live_summary"]["planned_workforce_remediations"] == 1
 
@@ -582,9 +578,7 @@ def test_untrusted_runtime_provenance_caps_founder_and_system_truth() -> None:
         "dirty_worktree",
         "head_sha_mismatch",
     ]
-    assert any(
-        item["kind"] == "runtime_provenance" for item in snapshot["attention"]["items"]
-    )
+    assert any(item["kind"] == "runtime_provenance" for item in snapshot["attention"]["items"])
 
 
 def test_empty_authoritative_customer_ledger_only_proves_ledger_and_capacity() -> None:

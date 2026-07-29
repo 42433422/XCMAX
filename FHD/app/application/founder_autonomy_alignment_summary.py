@@ -23,9 +23,7 @@ def build_alignment_live_summary(
         "autonomy_audit_count": audit_total,
         "prohibited_miss_status": autonomy_audit.get("prohibited_miss_evidence_status")
         or ("detected" if prohibited_miss else "unknown"),
-        "prohibited_posthoc_coverage_rate": _as_float(
-            autonomy_audit.get("posthoc_coverage_rate")
-        ),
+        "prohibited_posthoc_coverage_rate": _as_float(autonomy_audit.get("posthoc_coverage_rate")),
         "prohibited_posthoc_allow_count": _as_int(autonomy_audit.get("allow_count")),
         "prohibited_posthoc_conclusive_count": _as_int(
             autonomy_audit.get("posthoc_conclusive_count")
@@ -36,9 +34,7 @@ def build_alignment_live_summary(
         "prohibited_posthoc_eligible_conclusive_count": _as_int(
             autonomy_audit.get("posthoc_eligible_conclusive_count")
         ),
-        "prohibited_posthoc_pending_count": _as_int(
-            autonomy_audit.get("posthoc_pending_count")
-        ),
+        "prohibited_posthoc_pending_count": _as_int(autonomy_audit.get("posthoc_pending_count")),
         "prohibited_posthoc_pending_contracts": _as_list(
             autonomy_audit.get("posthoc_pending_contracts")
         ),
