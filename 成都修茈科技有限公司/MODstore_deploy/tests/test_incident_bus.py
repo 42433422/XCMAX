@@ -205,6 +205,77 @@ def test_successful_task_event_without_subscription_is_record_only(fresh_db, mon
     assert calls == []
 
 
+def test_change_request_submission_only_dispatches_explicit_auditor(fresh_db, monkeypatch):
+    sf = models.get_session_factory()
+    with sf() as s:
+        s.add(
+            models.User(
+                username="change_request_admin",
+                password_hash="x",
+                email="change-request@example.com",
+                is_admin=True,
+            )
+        )
+        s.add(
+            models.CatalogItem(
+                pkg_id="change-request-auditor",
+                version="1.0.0",
+                name="Change Request Auditor",
+                artifact="employee_pack",
+            )
+        )
+        s.add(
+            models.EmployeeTriggerBinding(
+                employee_id="change-request-auditor",
+                event_type="ops.change_request.submitted",
+                is_active=True,
+                priority=1,
+            )
+        )
+        s.commit()
+
+    generic_calls = {"orchestrator": 0, "team": 0, "market": 0}
+    employee_calls: list[str] = []
+
+    def fail_generic(kind):
+        def _fail(*_args, **_kwargs):
+            generic_calls[kind] += 1
+            raise AssertionError(f"change-request workflow signal reached {kind}")
+
+        return _fail
+
+    monkeypatch.setattr(
+        "modstore_server.unified_autonomy_orchestrator.orchestrate_incident",
+        fail_generic("orchestrator"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator.dispatch_incident_team",
+        fail_generic("team"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_task_market.dispatch_incident_via_market",
+        fail_generic("market"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.execute_employee_task",
+        lambda employee_id, *_args, **_kwargs: employee_calls.append(employee_id) or {"ok": True},
+    )
+    monkeypatch.setattr(
+        "modstore_server.node_coordinator.claim_incident_for_node",
+        lambda _event_id: {"claimed": True},
+    )
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
+
+    assert publish(
+        "ops.change_request.submitted",
+        {"change_request_id": 47, "risk_level": "low"},
+        source="deploy-release-officer",
+    )
+
+    assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
+    assert employee_calls == ["change-request-auditor"]
+
+
 @pytest.mark.parametrize(
     ("event_type", "payload"),
     [
@@ -212,9 +283,13 @@ def test_successful_task_event_without_subscription_is_record_only(fresh_db, mon
         ("backup.completed", {"trigger": "scheduled", "ok": True}),
         ("backup.ondemand_completed", {"trigger": "manual", "ok": True}),
         ("backup.dr_guard.cleared", {"reason": "probe_recovered"}),
+        (
+            "ops.change_request.submitted",
+            {"change_request_id": 47, "risk_level": "low"},
+        ),
     ],
 )
-def test_successful_workflow_signal_skips_generic_incident_fanout(
+def test_binding_only_workflow_signal_skips_generic_incident_fanout(
     fresh_db,
     monkeypatch,
     event_type,
@@ -238,7 +313,7 @@ def test_successful_workflow_signal_skips_generic_incident_fanout(
     def fail_generic(kind):
         def _fail(*_args, **_kwargs):
             generic_calls[kind] += 1
-            raise AssertionError(f"successful workflow signal reached {kind}")
+            raise AssertionError(f"binding-only workflow signal reached {kind}")
 
         return _fail
 
