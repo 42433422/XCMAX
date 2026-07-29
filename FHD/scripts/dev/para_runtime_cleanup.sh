@@ -331,7 +331,7 @@ cleanup_stale_ephemeral_directories() {
     active_cwd_under "${active_cwds}" "${directory}" && continue
     mount_under "${mount_output}" "${directory}" && continue
     git -C "${directory}" rev-parse --is-inside-work-tree >/dev/null 2>&1 && continue
-    if find "${directory}" -mindepth 1 -maxdepth 3 -name .git -print -quit |
+    if find "${directory}" -mindepth 1 -name .git -print -quit |
       grep -q .; then
       continue
     fi
