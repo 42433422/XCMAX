@@ -389,6 +389,17 @@ export function isTransientMergeFailure(reason) {
   return true;
 }
 
+export function mergeFailuresAreRetryable(results) {
+  return Array.isArray(results)
+    && results.length > 0
+    && results.every((result) => {
+      if (result?.vetoed) return false;
+      if (result?.retryable === true) return true;
+      if (result?.retryable === false) return false;
+      return isTransientMergeFailure(result?.reason || result?.error);
+    });
+}
+
 export function isProcessTimeoutError(err) {
   const message = String(err?.message || err || '');
   const code = String(err?.code || '').toUpperCase();
@@ -1708,6 +1719,7 @@ async function processTask(token, task, state) {
               prNumber,
               merged: false,
               reason,
+              retryable: true,
               vetoed: false,
             });
           } else {
@@ -1750,7 +1762,7 @@ async function processTask(token, task, state) {
         // Review/policy vetoes are terminal. Operational failures retry with
         // bounded exponential backoff before being reported as a conflict.
         const reason = failed.map((r) => `${r.branch}: ${r.reason || r.error}`).join('\n');
-        const retryable = failed.every((result) => !result.vetoed && isTransientMergeFailure(result.reason || result.error));
+        const retryable = mergeFailuresAreRetryable(failed);
         let terminalAttempts = Number(state[task.id]?.attempts || 0);
         if (retryable) {
           const retry = nextMergeRetryState(state[task.id], reason);

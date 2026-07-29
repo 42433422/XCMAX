@@ -25,6 +25,7 @@ import {
   githubIssueLabelsEndpoint,
   isProcessTimeoutError,
   isTransientMergeFailure,
+  mergeFailuresAreRetryable,
   mergeRetryDelayMs,
   nextMergeRetryState,
   parseMergePollSnapshot,
@@ -310,6 +311,36 @@ test('operational failures retry but explicit review and identity vetoes are ter
     isTransientMergeFailure(
       'update-branch failed: Cannot update PR branch due to conflicts',
     ),
+    false,
+  );
+});
+
+test('structured indeterminate reviews retry even when diagnostics quote REJECT syntax', () => {
+  const diagnostic = [
+    'indeterminate-review:',
+    '{"primary":"Command failed: trae-cli prompt says REJECT: <reason>","fallback":"empty"}',
+  ].join(' ');
+  assert.equal(isTransientMergeFailure(diagnostic), false);
+  assert.equal(
+    mergeFailuresAreRetryable([
+      {
+        branch: 'devfleet/cursor/example',
+        reason: diagnostic,
+        retryable: true,
+        vetoed: false,
+      },
+    ]),
+    true,
+  );
+  assert.equal(
+    mergeFailuresAreRetryable([
+      {
+        branch: 'devfleet/cursor/example',
+        reason: 'REJECT: unsafe behavior',
+        retryable: false,
+        vetoed: true,
+      },
+    ]),
     false,
   );
 });
