@@ -2636,6 +2636,47 @@ def test_reconcile_indeterminate_review_merge_failure_continues_on_rejected_bran
     assert "indeterminate-review" in prompt
 
 
+def test_reconcile_hold_merge_label_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-81ba09",
+                "para_task_id": "task-hold",
+                "run_id": "run-hold",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-81ba09",
+            "detail": "hold-merge-label-failed-before-review",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-81ba09",
+    )
+    prompt = _code_task_text("run-hold-retry", {"gaps": []}, memory, candidate)
+    assert "hold-merge label infrastructure" in prompt
+    assert "hold-merge-label-failed-before-review" in prompt
+
+
 def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
     memory = {
         "closed_items": [],
@@ -2692,10 +2733,16 @@ def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
             "Command failed: gh pr checks 813 --watch --fail-fast"
         ),
         "Error: bot merge checks failed or unavailable: gh CLI unavailable",
+        "hold-merge-label-failed-before-review",
+        "devfleet/cursor/sub-1-81ba09: hold-merge-label-remove-failed-after-review",
     ],
 )
 def test_para_merge_conflict_continues_on_merge_worker_detail_formats(detail: str):
     assert para_merge_conflict_continues_on_rejected_branch(detail) is True
+
+
+def test_para_merge_conflict_does_not_continue_on_git_content_conflict():
+    assert para_merge_conflict_continues_on_rejected_branch("git merge conflict in foo.py") is False
 
 
 def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
