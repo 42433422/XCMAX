@@ -1523,7 +1523,12 @@ def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypa
     assert "continue_existing_code_task" not in result
     prompt = _code_task_text("run-next", {}, memory, result)
     assert "RETORT SCOPE REMEDIATION" in prompt
-    assert "Do not copy its repository-wide formatting churn" in prompt
+    assert "never continue, merge, rebase, or cherry-pick the rejected branch" in prompt
+    assert "overrides the generic KB-writing instruction" in prompt
+    assert '"max_changed_files": 6' in prompt
+    assert '"max_changed_lines": 400' in prompt
+    assert '"max_diff_chars": 12000' in prompt
+    assert '"FHD/XCAGI/kb/"' in prompt
 
 
 def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
