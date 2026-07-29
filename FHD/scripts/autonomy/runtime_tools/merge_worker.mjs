@@ -383,6 +383,7 @@ export function isTransientMergeFailure(reason) {
     'post-dispatch-check-failed',
     'reject:',
     'required checks failed',
+    'cannot update pr branch due to conflicts',
   ];
   if (terminal.some((pattern) => text.includes(pattern))) return false;
   return true;
