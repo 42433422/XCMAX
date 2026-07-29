@@ -13,7 +13,7 @@
     "通用": {
       "mod_id": "xcagi-planner-bridge",
       "product_name": "通用基础行业包",
-      "note": "开放行业基础种子；通用账号以对话与智能生态底座起步"
+      "note": "1.0-A 首样板；开放行业基础种子；通用账号以对话与智能生态底座起步；验收见 docs/customer/ACCEPTANCE_GENERIC_1.0-A.md"
     },
     "考勤": {
       "mod_id": "attendance-industry",
@@ -61,7 +61,7 @@
   },
   "industries": {
     "通用": {
-      "summary": "保持干净页面：对话与智能生态即可起步，其它能力按需再补。",
+      "summary": "1.0-A 首样板。保持干净页面：对话与智能生态即可起步，其它能力按需再补。",
       "host_mod_ids": [],
       "optional_host_mod_ids": [
         "xcagi-planner-excel-tools",
