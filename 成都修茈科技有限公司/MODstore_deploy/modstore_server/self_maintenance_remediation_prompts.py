@@ -10,6 +10,12 @@ _OPERATIONAL_MERGE_FAILURE_PREFIXES = (
     "bot merge checks failed or unavailable:",
 )
 
+# merge_worker.mjs throws these when GitHub label API fails; branch code is unchanged.
+_BRANCH_PRESERVING_MERGE_WORKER_TOKENS = (
+    "hold-merge-label-failed-before-review",
+    "hold-merge-label-remove-failed-after-review",
+)
+
 
 def _strip_error_prefix(text: str) -> str:
     lowered = text.strip().lower()
@@ -43,6 +49,8 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
     for candidate in _operational_merge_reason_candidates(detail):
         lowered = candidate.lower()
         if any(lowered.startswith(prefix) for prefix in _OPERATIONAL_MERGE_FAILURE_PREFIXES):
+            return True
+        if any(token in lowered for token in _BRANCH_PRESERVING_MERGE_WORKER_TOKENS):
             return True
     return False
 
@@ -80,9 +88,10 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     if continue_on_branch:
         strategy = (
             "The previous Para merge task failed during post-dispatch required-check polling, "
-            "gh pr checks polling infrastructure (bot merge checks failed or unavailable), or "
-            "indeterminate AI review infrastructure, after the candidate branch already passed "
-            "earlier gates. Continue on the rejected "
+            "gh pr checks polling infrastructure (bot merge checks failed or unavailable), "
+            "merge-worker hold-merge label infrastructure, or indeterminate AI review "
+            "infrastructure, after the candidate branch already passed earlier gates. Continue on "
+            "the rejected "
             "branch as the mutable base: diff it against main, keep the existing production fix "
             "when already present on main, and only add the smallest delta still missing. Do not "
             "restart from the clean baseline or reimplement an already-merged fix. If every "
