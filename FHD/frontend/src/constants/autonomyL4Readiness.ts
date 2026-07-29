@@ -31,7 +31,7 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
   targetLevel: 'L4',
   currentLabel: 'AI 自愈脚本系统（三步半闭环 → 监督下闭环）',
   updatedNote:
-    '2026-07-21 verify-l4：7 个 gap 修复协同验证通过。P0-1 staging env 模板就绪；P0-2 autonomy_callback.py + 4 处集成点落地（p1-callback → ok）；P0-3 fhd-deploy.yml 3 处 production-only 改 (production||staging)；P1-1 approval_resume.py mobile push hook + merge_github_pr/close_github_issue executor；P1-2 bus.py 7 开关默认全开；P1-3 ai_review.py fail-open path-level 兜底。待 staging CVM SSH 引导 secrets 后实战验证。',
+    '2026-07-29：新增 p1-metric-search（Retort metric-search + ledger bridge，status=partial）。此前 2026-07-21 verify-l4：P0-1 staging env 模板；P0-2 autonomy_callback；P0-3 deploy staging 通道；P1 callback/runtime-sync/implement-pack/IM 多项 ok。待 staging secrets + heldout metric-search 实战。',
   steps: [
     {
       id: 'step1',
@@ -118,9 +118,26 @@ export const AUTONOMY_L4_READINESS: AutonomyL4Readiness = {
       title: '连接点 4 implement-pack 曾仅靠标签隐式触发',
       status: 'ok',
       impact:
-        'evolution_decision_ledger.cmd_implement_pack 经 gh workflow run 显式触发 fhd-ai-issue-implement.yml；标签路径仅作手工兜底',
+        'evolution_decision_ledger.cmd_implement_pack 经 gh workflow run 显式触发 fhd-ai-issue-implement.yml；标签路径仅作手工兜底；另支持 EVOLUTION_IMPLEMENT_MODE=retort-metric-search',
       nextStep: '观察一周 evolution-orchestrator → implement 链路成功率',
       ownerSurface: 'ci',
+    },
+    {
+      id: 'p1-metric-search',
+      severity: 'P1',
+      title: '演化代码自优缺可测 metric 树搜索',
+      status: 'partial',
+      impact:
+        'Retort 已落地 metric-search（SolutionTree + best-first + parseable eval）；ledger propose 强制 eval 契约，implement 可走 retort-metric-search。尚未用 heldout_oracle 做连续实战，不宣称进化态 L4 已达成',
+      nextStep:
+        '用 heldout_oracle.resolved_rate 跑一次非 dry-run metric-search；把 best_score 写入 evolution ledger 并观察 7 日',
+      ownerSurface: 'modstore',
+      actions: [
+        {
+          label: 'evolution_decision_ledger',
+          href: 'https://github.com/42433422/XCMAX/blob/main/FHD/scripts/autonomy/evolution_decision_ledger.py',
+        },
+      ],
     },
     {
       id: 'p1-im',
