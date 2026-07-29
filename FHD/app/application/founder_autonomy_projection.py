@@ -95,6 +95,13 @@ def build_public_founder_autonomy_projection(
             "paid_delivery_verified": bool(live.get("outcome_verified")),
             "customer_acceptance_verified": bool(live.get("customer_acceptance_verified")),
             "employee_workforce_ready": bool(live.get("employee_workforce_ready")),
+            "employee_production_workforce_ready": bool(
+                live.get("employee_production_workforce_ready")
+            ),
+            "employee_production_proven_count": _as_int(live.get("production_proven_employees")),
+            "employee_production_proof_ratio": _as_float(
+                live.get("employee_production_proof_ratio")
+            ),
             "alignment_posthoc": {
                 "status": str(live.get("prohibited_miss_status") or "unknown"),
                 "coverage_rate": _as_float(live.get("prohibited_posthoc_coverage_rate")),

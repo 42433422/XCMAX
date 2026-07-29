@@ -1808,50 +1808,16 @@ def _register_employee_cron_jobs() -> None:
             schedule_source: str = schedule_source_local,
         ) -> None:
             try:
-                import importlib
+                from modstore_server.employee_duty_cron_runtime import (
+                    execute_employee_cron_duty,
+                )
 
-                employee_executor = importlib.import_module("modstore_server.employee_executor")
-                from modstore_server.services.llm import resolve_platform_bench_llm
-
-                project_root = _employee_project_root()
-                bench_provider, bench_model = resolve_platform_bench_llm()
-                employee_executor.execute_employee_task(
-                    eid,
-                    brief,
-                    {
-                        "trigger": "schedule",
-                        "schedule_source": schedule_source,
-                        "work_contract": {
-                            "schema": "xcagi.duty_employee_work_contracts/v1",
-                            "mode": str(work_contract.get("mode") or "execute"),
-                            "risk_level": str(work_contract.get("risk_level") or "medium"),
-                            "acceptance": list(work_contract.get("acceptance") or []),
-                        },
-                        # The reviewed work-contract SSOT is the explicit
-                        # runtime approval for low/medium duty execution.  It
-                        # must not authorize high-risk work, which continues
-                        # through the existing approval/veto path below.
-                        "allow_medium_risk": str(work_contract.get("risk_level") or "medium")
-                        .strip()
-                        .lower()
-                        in {"low", "medium"},
-                        # Founder/veto stays available through the pending
-                        # question queue, but a 7x24 worker must never occupy a
-                        # scheduler thread while waiting for a human reply.
-                        "non_blocking_human_questions": True,
-                        # Scheduled duty never grants the high-risk bypass.  A
-                        # release/payment/destructive action still needs the
-                        # existing approval/veto path even if a contract exists.
-                        "allow_high_risk_real_run": False,
-                        **({"project_root": project_root} if project_root else {}),
-                    },
-                    user_id=0,
-                    # Duty work is a platform expense and must follow the
-                    # configured platform route, even when an old employee
-                    # manifest still names a previous provider/model.
-                    bench_llm_override=(
-                        (bench_provider, bench_model) if bench_provider and bench_model else None
-                    ),
+                execute_employee_cron_duty(
+                    employee_id=eid,
+                    task_brief=brief,
+                    work_contract=work_contract,
+                    schedule_source=schedule_source,
+                    project_root=_employee_project_root(),
                 )
             except Exception:
                 logger.exception("employee cron job failed: %s", eid)
