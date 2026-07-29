@@ -8,6 +8,7 @@ import AdminEntitlementsView from './AdminEntitlementsView.vue'
 const mockListUsers = vi.fn().mockResolvedValue({ users: [] })
 const mockListAssignableMods = vi.fn().mockResolvedValue({ mods: [] })
 const mockListUserMods = vi.fn().mockResolvedValue({ mod_ids: [] })
+const mockGetUserPrivateDelivery = vi.fn().mockResolvedValue({ data: { projects: [] } })
 const mockBindUserMod = vi.fn().mockResolvedValue({ success: true })
 const mockUnbindUserMod = vi.fn().mockResolvedValue({ success: true })
 const mockSetUserEnterprise = vi.fn().mockResolvedValue({ success: true })
@@ -21,6 +22,7 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     listUsers: () => mockListUsers(),
     listAssignableMods: () => mockListAssignableMods(),
     listUserMods: (id: number) => mockListUserMods(id),
+    getUserPrivateDelivery: (id: number) => mockGetUserPrivateDelivery(id),
     bindUserMod: (uid: number, mid: string) => mockBindUserMod(uid, mid),
     unbindUserMod: (uid: number, mid: string) => mockUnbindUserMod(uid, mid),
     setUserEnterprise: (uid: number, val: boolean) => mockSetUserEnterprise(uid, val),
@@ -69,6 +71,7 @@ describe('AdminEntitlementsView', () => {
     vi.clearAllMocks()
     mockListUsers.mockResolvedValue({ users: [] })
     mockListAssignableMods.mockResolvedValue({ mods: [] })
+    mockGetUserPrivateDelivery.mockResolvedValue({ data: { projects: [] } })
     mockApiFetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: { installed: [], available: [] } }),
@@ -210,6 +213,41 @@ describe('AdminEntitlementsView', () => {
     await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
     expect(wrapper.find('.admin-user-detail__actions button').text()).toContain('进入代管')
+  })
+
+  it('shows private delivery stages and rework history for the selected user', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [{ id: 7, username: 'customer', is_enterprise: true, mod_ids: ['customer-mod'] }],
+    })
+    mockListUserMods.mockResolvedValue({ mod_ids: ['customer-mod'] })
+    mockGetUserPrivateDelivery.mockResolvedValue({
+      data: {
+        projects: [
+          {
+            mod_id: 'customer-mod',
+            name: '客户 Mod',
+            overall_status: 'rework',
+            overall_label: '返工中',
+            tracks: {
+              business: { status: 'testing', timeline: [] },
+              employees: {
+                status: 'rework',
+                timeline: [{ status: 'rework', at: '2026-07-29T12:00:00Z', note: '补充回归用例' }],
+              },
+            },
+          },
+        ],
+      },
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.find('.admin-user-card').trigger('click')
+    await flushPromises()
+    const panel = wrapper.find('.admin-private-delivery')
+    expect(panel.text()).toContain('客户 Mod')
+    expect(panel.text()).toContain('测试中')
+    expect(panel.text()).toContain('返工中')
+    expect(panel.text()).toContain('补充回归用例')
   })
 
   it('shows "尚未绑定客户 Mod" when user has no mods', async () => {
