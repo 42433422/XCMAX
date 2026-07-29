@@ -1,11 +1,6 @@
 """小C 客服 SSOT：人设 + 知识库三档隔离检索。
 
-SSOT 口径（2026-07）：
-- 大脑：管理端小C（MODstore butler）/ 官网 corp-chat
-- 公开库：persy-knowledge（官网/市场客服只读）
-- 内部库：xiaoc-internal（仅管理端小C 可读可写策略）
-- 客户私有库：仅企业桌面端；Web 小C 禁止触及
-- 客来来客服通过 external 模式接入公开库，不读取内部库或客户私有库
+公开库供官网/市场/客来来客服只读；内部库仅管理端小C；客户私有库仅企业桌面端。
 """
 
 from __future__ import annotations
@@ -19,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .xiaoc_public_scope import is_published_public_chunk, public_query_kwargs
+
 logger = logging.getLogger(__name__)
 
 PUBLIC_DATASET_ID = "persy-knowledge"
@@ -27,17 +24,7 @@ INTERNAL_DATASET_ID = "xiaoc-internal"
 PERSY_DATASET_ID = PUBLIC_DATASET_ID
 
 _PRIVATE_DATASET_PREFIXES = ("user_", "desktop_", "tenant_")
-_DENY_PRIVATE_LABELS = (
-    INTERNAL_DATASET_ID,
-    "user_*",
-    "desktop_private",
-    "tenant_private",
-)
-_PUBLISHED_PUBLIC_FILTER: Dict[str, str] = {
-    "audience": "public",
-    "publication_status": "published",
-    "knowledge_owner": "chengdu-xiuci-technology",
-}
+_DENY_PRIVATE_LABELS = (INTERNAL_DATASET_ID, "user_*", "desktop_private", "tenant_private")
 
 _VISITOR_ID_RE = re.compile(r"^v_[A-Za-z0-9_-]{8,64}$")
 
@@ -683,8 +670,7 @@ def _local_retrieve(
                 "access_context": access,
             }
             if target_dataset_id == PUBLIC_DATASET_ID:
-                query_kwargs["tenant_id"] = "public"
-                query_kwargs["metadata_filter"] = dict(_PUBLISHED_PUBLIC_FILTER)
+                query_kwargs.update(public_query_kwargs())
             result = get_dataset_rag_app_service().query(**query_kwargs)
             chunks = result.get("chunks") if isinstance(result, dict) else []
             return list(chunks[:top_k]) if isinstance(chunks, list) else []
@@ -731,7 +717,7 @@ def retrieve_knowledge_for_mode(
             continue
         chunks = retrieve_dataset_knowledge(q, dataset_id=did, top_k=per_ds)
         if did == PUBLIC_DATASET_ID:
-            chunks = [chunk for chunk in chunks if _is_published_public_chunk(chunk)]
+            chunks = [chunk for chunk in chunks if is_published_public_chunk(chunk)]
         for c in chunks:
             if not isinstance(c, dict):
                 continue
@@ -742,20 +728,6 @@ def retrieve_knowledge_for_mode(
             if len(out) >= k:
                 return out
     return out
-
-
-def _is_published_public_chunk(chunk: Any) -> bool:
-    if not isinstance(chunk, dict):
-        return False
-    metadata = chunk.get("metadata")
-    if not isinstance(metadata, dict):
-        return False
-    return (
-        metadata.get("audience") == "public"
-        and metadata.get("publication_status") == "published"
-        and metadata.get("knowledge_owner") == "chengdu-xiuci-technology"
-    )
-
 
 def knowledge_block_for_query(query: str, *, top_k: int = 5, mode: str = "external") -> str:
     """按 mode 组装知识库摘录块（默认偏保守：仅公开库）。"""

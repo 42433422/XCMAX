@@ -178,7 +178,9 @@ class ExcelVectorIngestApplicationService:
             "chunk_count": written,
         }
 
-    def _build_chunks(self, sheets: dict[str, pd.DataFrame], source_file: str) -> list[ExcelVectorChunk]:
+    def _build_chunks(
+        self, sheets: dict[str, pd.DataFrame], source_file: str
+    ) -> list[ExcelVectorChunk]:
         chunks: list[ExcelVectorChunk] = []
 
         for sheet_name, df in sheets.items():

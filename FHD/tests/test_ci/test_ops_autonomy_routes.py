@@ -180,9 +180,7 @@ class TestCsSsotRetrieve:
             "knowledge_owner": "chengdu-xiuci-technology",
         }
 
-    def test_cs_ssot_retrieve_rejects_private_dataset(
-        self, autonomy_client: TestClient
-    ) -> None:
+    def test_cs_ssot_retrieve_rejects_private_dataset(self, autonomy_client: TestClient) -> None:
         response = autonomy_client.post(
             "/api/ops/autonomy/cs-ssot/retrieve",
             headers=_AUTH_HEADERS,
