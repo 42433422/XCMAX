@@ -592,7 +592,15 @@ async function runBootstrap() {
         )
       }
     }
-    const customSeedIds = [...(baselinePlan.value?.account_custom_mod_ids || [])]
+    // 仅对配置了 delivery_seed_package 的账号定制 Mod 拉客户种子；
+    // 员工扩展（如 xcagi-core-workflow-employees）走 bundling / installMod，不走交付种子。
+    const customSeedIds = [
+      ...new Set(
+        (baselinePlan.value?.account_delivery_seed_packages || [])
+          .map((row) => String(row?.mod_id || '').trim())
+          .filter(Boolean),
+      ),
+    ]
     for (const modId of customSeedIds) {
       try {
         const ir = await installCustomerDeliverySeed(modId, pickedIndustryId.value)

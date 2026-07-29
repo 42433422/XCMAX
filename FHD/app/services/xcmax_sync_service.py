@@ -18,6 +18,7 @@
   ecosystem      智能生态配置
   workflow_employee  员工工作流节点
   account_entitlements 账号权益快照（管理员强制推送到企业端）
+  private_mod_delivery 客户私有 Mod 双轨交付状态
   im_message         IM 消息（im_messages）
   im_read_state      IM 已读游标（im_conversation_members.last_read_message_id）
 """
@@ -840,6 +841,26 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
         logger.warning(
             "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
         )
+
+
+@register_entity_applier("private_mod_delivery")
+def _apply_private_mod_delivery(item: dict[str, Any]) -> None:
+    """客户私有 Mod 交付快照：同步到管理端可查询的账号状态文件。"""
+    payload = item.get("payload") or {}
+    if not isinstance(payload, dict):
+        return
+    entity_id = str(payload.get("market_user_id") or item.get("entity_id") or "").strip()
+    if not entity_id:
+        return
+    try:
+        from app.services.private_mod_delivery import account_scope, apply_account_state
+
+        apply_account_state(
+            account_scope(int(entity_id), str(payload.get("username") or "")),
+            payload,
+        )
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("apply_private_mod_delivery failed user=%s: %s", entity_id, exc)
 
 
 def apply_inbox(limit: int = 200) -> dict[str, Any]:
