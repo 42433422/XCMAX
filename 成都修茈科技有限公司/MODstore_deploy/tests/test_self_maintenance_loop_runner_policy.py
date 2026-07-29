@@ -48,6 +48,9 @@ from modstore_server.self_maintenance_loop_runner import (
     ensure_clean_baseline,
     loop_memory_path,
 )
+from modstore_server.self_maintenance_para_merge_remediation import (
+    classify_para_merge_review_detail,
+)
 from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
     matches_isort_check_command,
@@ -2433,7 +2436,10 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
         "para_task_id": "task-1",
         "reason": "resume_para_ai_review_rejection",
         "rejected_branch": "devfleet/codex/fix-1",
+        "review_actionable_findings": True,
         "review_feedback": feedback,
+        "review_veto_branch_hint": "",
+        "review_veto_code": "",
     }
     assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
     prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
@@ -2456,6 +2462,125 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
     )
     assert repeated["changed"] is False
     assert len(memory["open_items"]) == 1
+
+
+def test_classify_indeterminate_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/codex/sub-1-46107b: indeterminate-review",
+    )
+    assert meta["veto_code"] == "indeterminate-review"
+    assert meta["branch_hint"] == "devfleet/codex/sub-1-46107b"
+    assert meta["actionable_code_findings"] is False
+
+
+def test_classify_diff_too_large_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/cursor/sub-1-ee8a21: diff-too-large:37810",
+    )
+    assert meta["veto_code"] == "diff-too-large"
+    assert meta["branch_hint"] == "devfleet/cursor/sub-1-ee8a21"
+    assert meta["actionable_code_findings"] is False
+    assert meta["review_diff_chars"] == 37810
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_indeterminate_veto_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "kind": "automated_remediation",
+                "para_task_id": "task-cursor-indeterminate",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large-327",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=12), "git_diff_chars": 29900}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_diff_too_large_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_auto_merge_policy_rejects_diff_over_para_merge_review_budget():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=5), "git_diff_chars": 59051}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory={})
+
+    assert result["ok"] is False
+    assert result["reason"] == "diff_too_large_for_para_merge_review"
+
+
+def test_reconcile_diff_too_large_merge_review_veto_prompts_shrink_hint():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-3ee902",
+                "para_task_id": "task-diff-large",
+                "run_id": "run-diff-large",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "devfleet/cursor/sub-1-3ee902: diff-too-large:59051"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/cursor/sub-1-3ee902",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    item = memory["open_items"][0]
+    assert item["review_veto_code"] == "diff-too-large"
+    assert item["review_diff_chars"] == 59051
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-followup", {"gaps": []}, memory, candidate)
+    assert "DIFF TOO LARGE MERGE REVIEW VETO" in prompt
 
 
 def test_reconcile_real_para_merge_sha_closes_matching_open_item():
