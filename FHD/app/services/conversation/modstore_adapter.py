@@ -109,6 +109,15 @@ def _to_openai_object(value: Any) -> Any:
     return value
 
 
+def _response_status_code(response: Any, default: int = 200) -> int:
+    raw = getattr(response, "status_code", default)
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str) and raw.isdigit():
+        return int(raw)
+    return default
+
+
 def _normalize_stream_choice(choice: Dict[str, Any]) -> Dict[str, Any]:
     if "delta" in choice:
         return choice
@@ -463,6 +472,11 @@ class ModstorePlatformAdapter:
             extra=extra,
         )
 
+    def _normalize_response(
+        self, raw_response: Dict[str, Any], provider: str, model: str
+    ) -> Dict[str, Any]:
+        return normalize_market_chat_response(raw_response, provider, model)
+
     def _resolve_provider_model(
         self,
         provider: str = None,
@@ -627,11 +641,12 @@ class ModstorePlatformAdapter:
                 client = await self._get_client()
                 response = await client.post(url, json=payload)
                 latency_ms = (time.perf_counter() - t0) * 1000.0
-                if response.status_code >= 400:
+                status_code = _response_status_code(response)
+                if status_code >= 400:
                     error_text = response.text[:500]
-                    err = ValueError(f"平台错误({response.status_code}): {error_text}")
+                    err = ValueError(f"平台错误({status_code}): {error_text}")
                     if idx + 1 < len(candidates) and is_market_chat_failoverable(
-                        response.status_code, error_text
+                        status_code, error_text
                     ):
                         logger.warning(
                             "[Modstore] 异步换模重试 %s/%s -> %s err=%s",
@@ -642,7 +657,7 @@ class ModstorePlatformAdapter:
                         )
                         last_error = err
                         continue
-                    logger.error("[Modstore] 平台返回错误 %s: %s", response.status_code, error_text)
+                    logger.error("[Modstore] 平台返回错误 %s: %s", status_code, error_text)
                     raise err
                 result = response.json()
                 used_provider = str(result.get("provider") or prov)
@@ -845,11 +860,12 @@ class ModstorePlatformAdapter:
                 headers=self._build_headers(),
             ) as client:
                 with client.stream("POST", url, json=payload) as response:
-                    if response.status_code >= 400:
+                    status_code = _response_status_code(response)
+                    if status_code >= 400:
                         error_text = response.read().decode("utf-8", errors="ignore")[:500]
-                        err = ValueError(f"平台错误({response.status_code}): {error_text}")
+                        err = ValueError(f"平台错误({status_code}): {error_text}")
                         if idx + 1 < len(candidates) and is_market_chat_failoverable(
-                            response.status_code, error_text
+                            status_code, error_text
                         ):
                             logger.warning(
                                 "[Modstream] 流式换模 %s/%s -> %s",
@@ -862,7 +878,7 @@ class ModstorePlatformAdapter:
                         else:
                             logger.error(
                                 "[Modstream] 平台同步流式返回错误 %s: %s",
-                                response.status_code,
+                                status_code,
                                 error_text,
                             )
                             raise err
@@ -901,11 +917,12 @@ class ModstorePlatformAdapter:
         try:
             client = await self._get_client()
             response = await client.get(url)
+            status_code = _response_status_code(response)
 
-            if response.status_code == 200:
+            if status_code == 200:
                 return cast("list[dict[str, Any]]", response.json().get("providers", []))
             else:
-                logger.warning("[Modstore] 获取供应商列表失败: %s", response.status_code)
+                logger.warning("[Modstore] 获取供应商列表失败: %s", status_code)
                 return []
 
         except RECOVERABLE_ERRORS as e:
@@ -928,11 +945,12 @@ class ModstorePlatformAdapter:
         try:
             client = await self._get_client()
             response = await client.get(url)
+            status_code = _response_status_code(response)
 
-            if response.status_code == 200:
+            if status_code == 200:
                 return cast("dict[str, Any]", response.json())
             else:
-                return {"error": f"HTTP {response.status_code}"}
+                return {"error": f"HTTP {status_code}"}
 
         except RECOVERABLE_ERRORS as e:
             return {"error": str(e)}
@@ -975,11 +993,6 @@ def create_modstore_adapter_from_env() -> Optional[ModstorePlatformAdapter]:
         return None
 
     return ModstorePlatformAdapter()
-
-    def _normalize_response(
-        self, raw_response: Dict[str, Any], provider: str, model: str
-    ) -> Dict[str, Any]:
-        return normalize_market_chat_response(raw_response, provider, model)
 
 
 class _ModstoreOpenAICompletions:

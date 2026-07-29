@@ -18,6 +18,15 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _response_status_code(response: Any, default: int = 200) -> int:
+    raw = getattr(response, "status_code", default)
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str) and raw.isdigit():
+        return int(raw)
+    return default
+
+
 def _failover_enabled(self) -> bool:
     raw = os.environ.get("XCAGI_LLM_CHAT_FAILOVER", "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
@@ -30,7 +39,7 @@ def _fetch_llm_status_sync(self) -> dict[str, Any] | None:
             headers=self._build_headers(),
         ) as client:
             response = client.get(f"{self.platform_url}/api/llm/status")
-            if response.status_code >= 400:
+            if _response_status_code(response) >= 400:
                 return None
             data = response.json()
             return data if isinstance(data, dict) else None
@@ -45,7 +54,7 @@ def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
             headers=self._build_headers(),
         ) as client:
             response = client.get(f"{self.platform_url}/api/llm/resolve-chat-default")
-            if response.status_code >= 400:
+            if _response_status_code(response) >= 400:
                 return None
             data = response.json()
             return data if isinstance(data, dict) else None
@@ -63,7 +72,7 @@ def _ensure_catalog_sync(self) -> dict[str, Any] | None:
             headers=self._build_headers(),
         ) as client:
             response = client.get(f"{self.platform_url}/api/llm/catalog")
-            if response.status_code >= 400:
+            if _response_status_code(response) >= 400:
                 return None
             raw = response.json()
         if isinstance(raw, dict):
@@ -121,16 +130,17 @@ def _post_market_chat_sync(
     ) as client:
         response = client.post(url, json=payload)
         latency_ms = (time.perf_counter() - t0) * 1000.0
-        if response.status_code >= 400:
+        status_code = _response_status_code(response)
+        if status_code >= 400:
             error_text = response.text[:500]
             logger.error(
                 "[Modstore] 平台同步返回错误 %s provider=%s/%s: %s",
-                response.status_code,
+                status_code,
                 provider,
                 model,
                 error_text,
             )
-            raise ValueError(f"平台错误({response.status_code}): {error_text}")
+            raise ValueError(f"平台错误({status_code}): {error_text}")
         result = response.json()
 
     used_provider = str(result.get("provider") or provider)
