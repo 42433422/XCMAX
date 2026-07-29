@@ -8,7 +8,6 @@ then delegates real work to duty employees through the existing Para bridge.
 from __future__ import annotations
 
 import base64
-import fnmatch
 import hashlib
 import hmac
 import json
@@ -48,6 +47,19 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_merge_policy import (
+    DEFAULT_FORBIDDEN_GLOBS as DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS,
+)
+from .self_maintenance_merge_policy import DEFAULT_SCOPE_GLOBS as DEFAULT_AUTO_MERGE_SCOPE_GLOBS
+from .self_maintenance_merge_policy import (
+    absolute_forbidden_globs as _shared_auto_merge_absolute_forbidden_globs,
+)
+from .self_maintenance_merge_policy import file_matches_any_glob as _shared_file_matches_any_glob
+from .self_maintenance_merge_policy import forbidden_globs as _shared_auto_merge_forbidden_globs
+from .self_maintenance_merge_policy import max_files as _shared_auto_merge_max_files
+from .self_maintenance_merge_policy import max_lines as _shared_auto_merge_max_lines
+from .self_maintenance_merge_policy import normalize_repo_path as _shared_normalize_repo_path
+from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
 from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
@@ -100,64 +112,6 @@ DEFAULT_STATUS_FILE = (
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
 )
 DEFAULT_AUTO_MERGE_GLOBS = [DEFAULT_STATUS_FILE]
-DEFAULT_AUTO_MERGE_SCOPE_GLOBS = [
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_*.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_learning.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_metrics_job.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_knowledge.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_kb_redisvl.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_model_router.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_team_orchestrator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/adaptive_release_controller.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/auto_merge_audit_sampler.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomous_risk_gate.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/human_uncertainty_queue.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/kb_self_maintenance.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/node_coordinator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/predictive_maintenance.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/release_recovery_orchestrator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/unified_autonomy_orchestrator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/auto_approve_policy.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/ops_staged_auto_approve.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/cr_narrow_ci.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_vibe_prep.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/evolution_signal_collector.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/models_project_context.py",
-    "FHD/XCAGI/kb/fixes/*.json",
-    "FHD/XCAGI/kb/fixes/*.md",
-    "FHD/XCAGI/kb/patterns/*.json",
-    "FHD/XCAGI/kb/patterns/*.md",
-    "FHD/XCAGI/kb/metrics/*.jsonl",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_duty_workforce_learning.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_metrics_job.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_knowledge*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_auto_approve_policy*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_ops_staged_auto_approve*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_digest_vibe_prep.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_project_context*.py",
-]
-DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS = [
-    "*.env",
-    "*.env.*",
-    "**/*.db",
-    "**/*.sqlite",
-    "**/*.sqlite3",
-    "**/*secret*",
-    "**/*credential*",
-    "**/*token*",
-    ".github/workflows/*",
-    "**/migrations/**",
-    "**/alembic/**",
-    "**/models.py",
-    "**/models/**",
-    "**/api/app_factory.py",
-    "**/Dockerfile*",
-    "**/docker-compose*.yml",
-    "**/requirements*.txt",
-    "**/pyproject.toml",
-    "**/package-lock.json",
-]
 _PARA_GUEST_AUTH_CACHE: Dict[str, tuple] = {}
 _PARA_GUEST_AUTH_TTL_SECONDS = 1800  # 30 分钟
 _PARA_GUEST_AUTH_FILE_SAFETY_SECONDS = 60
@@ -3252,25 +3206,19 @@ def _allowed_auto_merge_globs() -> List[str]:
 
 
 def _auto_merge_scope_globs() -> List[str]:
-    return _env_list(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS",
-        DEFAULT_AUTO_MERGE_SCOPE_GLOBS,
-    )
+    return _shared_auto_merge_scope_globs()
 
 
 def _auto_merge_forbidden_globs() -> List[str]:
-    return _env_list(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS",
-        DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS,
-    )
+    return _shared_auto_merge_forbidden_globs()
 
 
 def _auto_merge_max_files() -> int:
-    return _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_FILES", 12)
+    return _shared_auto_merge_max_files()
 
 
 def _auto_merge_max_lines() -> int:
-    return _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_LINES", 600)
+    return _shared_auto_merge_max_lines()
 
 
 def _step_reports(steps: List[Dict[str, Any]]) -> str:
@@ -4093,7 +4041,7 @@ def _reject_and_retry_kb_schema_failure(
 
 
 def _normalize_repo_path(file_name: str) -> str:
-    return (file_name or "").replace("\\", "/").strip().strip('"').strip("'")
+    return _shared_normalize_repo_path(file_name)
 
 
 def _diff_stats_changed_files_consistency(
@@ -4135,8 +4083,7 @@ def _diff_stats_changed_files_consistency(
 
 
 def _file_matches_any_glob(file_name: str, globs: List[str]) -> bool:
-    normalized = _normalize_repo_path(file_name)
-    return any(fnmatch.fnmatch(normalized, pattern) for pattern in globs)
+    return _shared_file_matches_any_glob(file_name, globs)
 
 
 def _files_match_allowed_globs(files: List[str], globs: List[str]) -> bool:
@@ -4645,19 +4592,7 @@ def _assess_branch_auto_merge_policy(
             }
         )
 
-    absolute_forbidden_globs = _env_list(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_ABSOLUTE_FORBIDDEN_GLOBS",
-        [
-            "*.env",
-            "*.env.*",
-            "**/*.db",
-            "**/*.sqlite",
-            "**/*.sqlite3",
-            "**/*secret*",
-            "**/*credential*",
-            "**/*token*",
-        ],
-    )
+    absolute_forbidden_globs = _shared_auto_merge_absolute_forbidden_globs()
     absolute_forbidden_hits = [
         file_name
         for file_name in normalized_files
