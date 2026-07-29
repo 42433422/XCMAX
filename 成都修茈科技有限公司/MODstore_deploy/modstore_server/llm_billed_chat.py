@@ -504,7 +504,7 @@ async def stream_billed_llm_chat(
                     else:
                         charge = calculate_charge(db, prov, mdl, usage)
                         await wallet.settle(authorization_header(request), hold, charge, request_id)
-                    conversation_id = save_success_log(
+                    saved_conversation_id = save_success_log(
                         db,
                         user_id=user.id,
                         provider=prov,
@@ -519,7 +519,7 @@ async def stream_billed_llm_chat(
                     done = {
                         "ok": True,
                         "content": content,
-                        "conversation_id": conversation_id,
+                        "conversation_id": saved_conversation_id,
                         "usage": usage.__dict__,
                         "charge_amount": float(charge),
                         "hold_no": hold.hold_no,

@@ -109,7 +109,9 @@ def build_chat_failover_candidates(
         add(str(resolved_default.get("provider") or ""), str(resolved_default.get("model") or ""))
 
     catalog = catalog_payload or {}
-    providers_catalog = catalog.get("providers") if isinstance(catalog.get("providers"), list) else []
+    providers_catalog = (
+        catalog.get("providers") if isinstance(catalog.get("providers"), list) else []
+    )
     by_provider: dict[str, dict[str, Any]] = {}
     for block in providers_catalog:
         if isinstance(block, dict):
