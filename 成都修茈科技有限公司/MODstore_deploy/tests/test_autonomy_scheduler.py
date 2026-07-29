@@ -80,6 +80,47 @@ def test_pending_remediation_requires_executable_branch_and_task(
     assert pending_automated_remediation() is None
 
 
+def test_pending_remediation_normalizes_legacy_target_ref_verdict_hold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "run-legacy",
+                "branch": branch,
+                "task_id": "task-legacy",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        lambda: memory,
+    )
+
+    assert pending_automated_remediation() == {
+        "branch": branch,
+        "reason": "structured_qa_target_branch_unavailable",
+        "run_id": "run-legacy",
+        "task_id": "task-legacy",
+    }
+
+
 def test_pending_remediation_prefers_latest_executable_failed_review(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
