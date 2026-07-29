@@ -26,6 +26,9 @@ from modstore_server.autonomy_posthoc_contracts import (
 from modstore_server.autonomy_posthoc_github import (
     verify_github_self_maintenance_merge as default_github_merge_fetcher,
 )
+from modstore_server.autonomy_posthoc_github import (
+    verify_github_self_maintenance_veto as default_github_veto_fetcher,
+)
 from modstore_server.db.scheduler_ops import JobRun
 from modstore_server.models import AutonomyDecisionAudit, get_session_factory
 
@@ -115,6 +118,7 @@ def run_autonomy_posthoc_audit(
     self_maintenance_ledger_path: str | Path | None = None,
     para_task_fetcher: Callable[[str], dict[str, Any]] | None = None,
     github_merge_fetcher: Callable[..., dict[str, Any]] | None = None,
+    github_veto_fetcher: Callable[..., dict[str, Any]] | None = None,
     now: datetime | None = None,
     session_factory: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
@@ -178,6 +182,7 @@ def run_autonomy_posthoc_audit(
     )
     fetch_para_task = para_task_fetcher or default_para_task_fetcher
     fetch_github_merge = github_merge_fetcher or default_github_merge_fetcher
+    fetch_github_veto = github_veto_fetcher or default_github_veto_fetcher
     audited: list[str] = []
     incomplete: list[dict[str, str]] = []
     for action_id, contract in sorted(first_allow.items()):
@@ -230,6 +235,7 @@ def run_autonomy_posthoc_audit(
                 records=merge_records,
                 para_task_fetcher=fetch_para_task,
                 github_merge_fetcher=fetch_github_merge,
+                github_veto_fetcher=fetch_github_veto,
             )
         else:
             observation = {"ok": False, "reason": "unsupported_contract"}
