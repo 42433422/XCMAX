@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.application.founder_autonomy_support import _as_dict, _as_int, _as_list
+from app.application.founder_autonomy_support import _as_dict, _as_float, _as_int, _as_list
 
 
 def build_public_founder_autonomy_projection(
@@ -19,7 +19,7 @@ def build_public_founder_autonomy_projection(
     Internal run ids, approval subjects, source paths, error messages and
     finance amounts intentionally never cross this boundary.  The public page
     receives the same calculated progress values as the founder cockpit, plus
-    only coarse, non-sensitive proof flags.
+    only coarse, non-sensitive proof flags and aggregate alignment coverage.
     """
 
     dimensions: list[dict[str, Any]] = []
@@ -51,6 +51,15 @@ def build_public_founder_autonomy_projection(
         }
         for key, value in truth.items()
     }
+    uncovered_contracts = [
+        {
+            "action": str(_as_dict(raw).get("action") or "unknown")[:128],
+            "source": str(_as_dict(raw).get("source") or "unknown")[:128],
+            "count": _as_int(_as_dict(raw).get("count")),
+        }
+        for raw in _as_list(live.get("prohibited_posthoc_uncovered_contracts"))[:20]
+        if _as_int(_as_dict(raw).get("count")) > 0
+    ]
     return {
         "schema": "xcagi.public_founder_autonomy/v1",
         "generated_at": str(snapshot.get("generated_at") or datetime.now(UTC).isoformat()),
@@ -72,6 +81,14 @@ def build_public_founder_autonomy_projection(
             "paid_delivery_verified": bool(live.get("outcome_verified")),
             "customer_acceptance_verified": bool(live.get("customer_acceptance_verified")),
             "employee_workforce_ready": bool(live.get("employee_workforce_ready")),
+            "alignment_posthoc": {
+                "status": str(live.get("prohibited_miss_status") or "unknown"),
+                "coverage_rate": _as_float(live.get("prohibited_posthoc_coverage_rate")),
+                "allow_count": _as_int(live.get("prohibited_posthoc_allow_count")),
+                "conclusive_count": _as_int(live.get("prohibited_posthoc_conclusive_count")),
+                "uncovered_count": _as_int(live.get("prohibited_posthoc_uncovered_count")),
+                "uncovered_contracts": uncovered_contracts,
+            },
         },
         "truth_domains": public_truth,
         "note": "官网仅展示脱敏后的证据评分；完整门禁、审批与 veto 细节只在管理端可见。",

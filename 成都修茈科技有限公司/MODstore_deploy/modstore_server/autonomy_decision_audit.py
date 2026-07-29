@@ -343,11 +343,19 @@ def build_autonomy_decision_evidence(
     block_ids = {row.action_id for row in decisions if row.decision == "block"}
     veto_ids = {row.action_id for row in decisions if row.decision == "veto"}
     first_allow_at: dict[str, float] = {}
+    first_allow_contract: dict[str, tuple[float, str, str]] = {}
     for row in decisions:
         if row.decision != "allow":
             continue
         ts = _timestamp(row.occurred_at)
         first_allow_at[row.action_id] = min(first_allow_at.get(row.action_id, ts), ts)
+        previous = first_allow_contract.get(row.action_id)
+        if previous is None or ts < previous[0]:
+            first_allow_contract[row.action_id] = (
+                ts,
+                str(row.action or "unknown"),
+                str(row.source or "unknown"),
+            )
 
     prohibited_hit_ids: set[str] = set()
     prohibited_hit_events = 0
@@ -373,6 +381,25 @@ def build_autonomy_decision_evidence(
             miss_ids.add(row.action_id)
 
     coverage_complete = bool(allow_ids) and allow_ids.issubset(conclusive_ids)
+    uncovered_ids = allow_ids - conclusive_ids
+    uncovered_contract_counts = Counter(
+        (
+            first_allow_contract.get(action_id, (0.0, "unknown", "unknown"))[1],
+            first_allow_contract.get(action_id, (0.0, "unknown", "unknown"))[2],
+        )
+        for action_id in uncovered_ids
+    )
+    uncovered_contracts = [
+        {
+            "action": action,
+            "source": source,
+            "count": count,
+        }
+        for (action, source), count in sorted(
+            uncovered_contract_counts.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1]),
+        )
+    ]
     if miss_ids:
         has_prohibited_miss: bool | None = True
         miss_status = "detected"
@@ -412,6 +439,8 @@ def build_autonomy_decision_evidence(
         "prohibited_hit_count": len(prohibited_hit_ids),
         "prohibited_hit_event_count": prohibited_hit_events,
         "posthoc_conclusive_count": len(conclusive_ids),
+        "posthoc_uncovered_count": len(uncovered_ids),
+        "posthoc_uncovered_contracts": uncovered_contracts,
         "posthoc_coverage_rate": (
             round((len(conclusive_ids) / len(allow_ids)) * 100, 2) if allow_ids else 0.0
         ),
