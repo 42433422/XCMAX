@@ -60,6 +60,9 @@ from .self_maintenance_merge_policy import max_files as _shared_auto_merge_max_f
 from .self_maintenance_merge_policy import max_lines as _shared_auto_merge_max_lines
 from .self_maintenance_merge_policy import normalize_repo_path as _shared_normalize_repo_path
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
+from .self_maintenance_para_merge_remediation import (
+    resume_from_clean_baseline_for_para_merge,
+)
 from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
@@ -88,7 +91,6 @@ from .self_maintenance_remediation_lineage import (
 from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
-    para_merge_conflict_continues_on_rejected_branch,
     qa_executor_retry_prompt,
 )
 from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
@@ -2385,10 +2387,7 @@ def _reconcile_requested_merge_feedback(
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
-            resume_from_clean_baseline = not (
-                reason == "para_merge_conflict"
-                and para_merge_conflict_continues_on_rejected_branch(detail)
-            )
+            resume_from_clean_baseline = resume_from_clean_baseline_for_para_merge(reason, detail)
             open_items.append(
                 {
                     "branch": rejected_branch,

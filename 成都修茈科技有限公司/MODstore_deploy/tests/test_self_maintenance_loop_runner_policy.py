@@ -2787,6 +2787,42 @@ def test_reconcile_update_branch_content_conflict_restarts_from_clean_base():
     assert para_merge_conflict_continues_on_rejected_branch(detail) is False
 
 
+def test_para_merge_remediation_branch_preserving_helpers():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_branch_preserving_para_merge_failure_detail,
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    assert is_branch_preserving_para_merge_failure_detail(
+        "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api"
+    )
+    assert is_branch_preserving_para_merge_failure_detail("hold-merge-label-failed-before-review")
+    assert is_branch_preserving_para_merge_failure_detail(
+        "bot merge checks failed or unavailable: Command failed: gh pr checks 813"
+    )
+    update_branch_detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    assert not is_branch_preserving_para_merge_failure_detail(update_branch_detail)
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict", "hold-merge-label-failed-before-review"
+        )
+        is False
+    )
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict",
+            "bot merge checks failed or unavailable: gh pr checks 813",
+        )
+        is False
+    )
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", update_branch_detail)
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
+
+
 def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
     memory = {
         "closed_items": [],
