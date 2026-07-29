@@ -48,6 +48,7 @@ from retort_engine.external_process_adjudication import (
 from retort_engine.heterogeneous_absorption_replay import (
     build_heterogeneous_absorption_replay,
 )
+from retort_engine.metric_search import EvalSpec, MetricSearchConfig, run_metric_search
 from retort_engine.multi_project_absorption_replay import (
     build_multi_project_absorption_replay,
 )
@@ -95,7 +96,6 @@ from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.ui_server import run_ui_server
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
-from retort_engine.metric_search import EvalSpec, MetricSearchConfig, run_metric_search
 from retort_engine.workspace_hygiene import clean_workspace
 
 

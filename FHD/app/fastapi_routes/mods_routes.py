@@ -94,9 +94,7 @@ def _register_mods_endpoints(router) -> None:
             public_mod_ids = [str(row.get("id") or "").strip() for row in public_rows]
             public_mod_ids = [mid for mid in public_mod_ids if mid]
             internal_component_ids = [
-                mid
-                for mid in installed_on_disk
-                if mid not in set(public_mod_ids)
+                mid for mid in installed_on_disk if mid not in set(public_mod_ids)
             ]
 
             primary_mods = [m for m in scanned if m.primary and m.id]

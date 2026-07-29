@@ -148,11 +148,7 @@ def extract_eval_spec(proposal: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     criteria = pack.get("acceptance_criteria")
     if isinstance(criteria, list):
         for item in criteria:
-            if (
-                isinstance(item, dict)
-                and item.get("eval_command")
-                and item.get("metric_name")
-            ):
+            if isinstance(item, dict) and item.get("eval_command") and item.get("metric_name"):
                 return {
                     "metric_name": str(item["metric_name"]).strip(),
                     "eval_command": str(item["eval_command"]).strip(),

@@ -207,7 +207,7 @@ def list_installed_pack_records() -> list[dict[str, Any]]:
             try:
                 out.append(load_employee_pack_from_disk(pack_id))
             except DATA_SHAPE:
-                logger.debug("skip broken employee pack %s", pack_id, exc_info=True)
+                logger.debug("skip broken employee pack", exc_info=True)
     except RECOVERABLE_ERRORS:
         logger.debug("list_installed_pack_records failed", exc_info=True)
     return out
