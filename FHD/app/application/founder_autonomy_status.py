@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.application.founder_autonomy_alignment_summary import build_alignment_live_summary
+from app.application.founder_autonomy_employee_summary import build_employee_live_summary
 from app.application.founder_autonomy_primary_gates import build_primary_gate_sets
 from app.application.founder_autonomy_projection import (
     build_public_founder_autonomy_projection,
@@ -424,27 +425,7 @@ def build_founder_autonomy_snapshot(
             "blocking_gate_keys": _as_list(active_gates.get("blocking_keys")),
             "governance_ok": governance_clear,
             "governance_summary": _as_dict(governance_gate.get("summary")),
-            "planned_employees": planned,
-            "registered_employees": registered,
-            "assigned_employees": assigned_employees,
-            "proven_employees": proven_employees,
-            "burn_in_proven_employees": burn_in_proven_employees,
-            "production_proven_employees": production_proven_employees,
-            "shell_employees": shell_employees,
-            "employee_workforce_ready": workforce_ready,
-            "employee_production_workforce_ready": production_workforce_ready,
-            "employee_assignment_ratio": _as_float(employee_capability.get("assignment_ratio")),
-            "employee_proof_ratio": _as_float(employee_capability.get("proof_ratio")),
-            "employee_burn_in_proof_ratio": _as_float(
-                employee_capability.get("burn_in_proof_ratio")
-            ),
-            "employee_production_proof_ratio": _as_float(
-                employee_capability.get("production_proof_ratio")
-            ),
-            "employee_production_window_hours": _as_int(
-                employee_capability.get("production_window_hours")
-            ),
-            "platform_llm": _as_dict(employee_capability.get("platform_llm")),
+            **build_employee_live_summary(employee_capability, locals()),
             "loop_participants": len(participants),
             "goals_total": int(goals_total),
             "goals_closed": int(goals_closed),
