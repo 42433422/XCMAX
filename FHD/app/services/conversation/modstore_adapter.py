@@ -436,13 +436,10 @@ class ModstorePlatformAdapter:
 
         return headers
 
-
     def _list_chat_failover_candidates_sync(
         self, primary_provider: str, primary_model: str
     ) -> list[tuple[str, str]]:
-        return _mfailover._list_chat_failover_candidates_sync(
-            self, primary_provider, primary_model
-        )
+        return _mfailover._list_chat_failover_candidates_sync(self, primary_provider, primary_model)
 
     def _post_market_chat_sync(
         self,
@@ -978,8 +975,6 @@ def create_modstore_adapter_from_env() -> Optional[ModstorePlatformAdapter]:
         return None
 
     return ModstorePlatformAdapter()
-
-
 
     def _normalize_response(
         self, raw_response: Dict[str, Any], provider: str, model: str

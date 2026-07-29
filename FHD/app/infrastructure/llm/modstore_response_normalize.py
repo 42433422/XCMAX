@@ -43,9 +43,7 @@ def normalize_market_chat_response(
         for idx, choice in enumerate(raw_choices):
             choice_dict = choice if isinstance(choice, dict) else {}
             message = (
-                choice_dict.get("message")
-                if isinstance(choice_dict.get("message"), dict)
-                else {}
+                choice_dict.get("message") if isinstance(choice_dict.get("message"), dict) else {}
             )
             normalized_message: Dict[str, Any] = {
                 "role": message.get("role") or "assistant",
