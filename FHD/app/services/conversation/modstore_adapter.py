@@ -44,10 +44,10 @@ from app.application.workflow.multimodal_user_content import (
     messages_have_image_parts,
     replace_image_parts_with_ocr_text,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
 from app.infrastructure.llm import modstore_adapter_failover as _mfailover
+from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
 from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 

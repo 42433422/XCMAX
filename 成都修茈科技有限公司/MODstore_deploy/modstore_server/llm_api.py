@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user, _require_admin
 from modstore_server.infrastructure.db import get_db
+from modstore_server.llm_billed_chat import run_billed_llm_chat, stream_billed_llm_chat
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
@@ -44,7 +45,6 @@ from modstore_server.llm_chat_proxy import (
     image_dispatch,
     video_dispatch,
 )
-from modstore_server.llm_billed_chat import run_billed_llm_chat, stream_billed_llm_chat
 from modstore_server.llm_crypto import encrypt_secret, fernet_configured
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,

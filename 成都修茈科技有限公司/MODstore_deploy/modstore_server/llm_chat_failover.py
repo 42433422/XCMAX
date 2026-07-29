@@ -89,8 +89,9 @@ async def list_chat_failover_candidates(
 
     # 账户默认（若与主模型不同）优先于任意厂商遍历
     try:
-        from modstore_server.models import User as UserModel
         import json
+
+        from modstore_server.models import User as UserModel
 
         urow = db.query(UserModel).filter(UserModel.id == int(user_id)).first()
         raw = ((urow.default_llm_json if urow else None) or "").strip()
