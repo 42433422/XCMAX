@@ -1735,6 +1735,10 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
+        from modstore_server.employee_cron_registration_ledger import (
+            reconcile_employee_cron_registrations,
+            record_employee_cron_registration,
+        )
         from modstore_server.models import get_session_factory
     except Exception:
         logger.exception("employee cron: import failed")
@@ -1754,6 +1758,7 @@ def _register_employee_cron_jobs() -> None:
     sf = get_session_factory()
     registered = 0
     skipped = 0
+    registered_ids: set[str] = set()
     for prof in profiles:
         emp_id = str(prof.get("id") or "").strip()
         if not emp_id:
@@ -1825,14 +1830,26 @@ def _register_employee_cron_jobs() -> None:
         try:
             _scheduler.add_job(_runner, trigger, id=job_id, replace_existing=True)
             registered += 1
+            registered_ids.add(emp_id)
+            record_employee_cron_registration(emp_id, status="success")
             logger.info(
                 "employee cron registered: %s -> %s",
                 emp_id,
                 cron_expr or f"interval {interval_seconds}s",
             )
-        except Exception:
+        except Exception as exc:
+            record_employee_cron_registration(
+                emp_id,
+                status="failed",
+                error=f"registration failed: {exc!r}",
+            )
             logger.exception("employee cron add_job failed: %s", emp_id)
             skipped += 1
+
+    try:
+        reconcile_employee_cron_registrations(registered_ids)
+    except Exception:
+        logger.exception("employee cron: registration ledger reconciliation failed")
 
     logger.info("employee cron: registered=%d skipped=%d", registered, skipped)
 
