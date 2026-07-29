@@ -4,16 +4,47 @@ from __future__ import annotations
 
 from typing import Any
 
+_OPERATIONAL_MERGE_FAILURE_PREFIXES = (
+    "post-dispatch-check-failed:",
+    "indeterminate-review:",
+    "bot merge checks failed or unavailable:",
+)
+
+
+def _strip_error_prefix(text: str) -> str:
+    lowered = text.strip().lower()
+    if lowered.startswith("error:"):
+        return text.strip()[6:].strip()
+    return text.strip()
+
+
+def _operational_merge_reason_candidates(detail: str) -> list[str]:
+    """Yield reason payloads from merge_worker/Para merge_conflict.detail strings."""
+
+    raw = str(detail or "").strip()
+    if not raw:
+        return []
+    candidates: list[str] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        candidates.append(_strip_error_prefix(line))
+        if ": " in line:
+            tail = _strip_error_prefix(line.split(": ", 1)[1])
+            if tail:
+                candidates.append(tail)
+    return candidates
+
 
 def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
     """Operational merge failures where the branch fix should be continued, not rewritten."""
 
-    normalized = str(detail or "").strip().lower()
-    return (
-        normalized.startswith("post-dispatch-check-failed:")
-        or normalized.startswith("indeterminate-review:")
-        or normalized.startswith("bot merge checks failed or unavailable:")
-    )
+    for candidate in _operational_merge_reason_candidates(detail):
+        lowered = candidate.lower()
+        if any(lowered.startswith(prefix) for prefix in _OPERATIONAL_MERGE_FAILURE_PREFIXES):
+            return True
+    return False
 
 
 def external_review_remediation_prompt(resume_candidate: Any) -> str:

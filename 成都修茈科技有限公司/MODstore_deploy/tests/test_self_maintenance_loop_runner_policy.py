@@ -59,6 +59,9 @@ from modstore_server.self_maintenance_remediation_lineage import (
     remediation_lineage_fields,
     resume_candidate_from_context,
 )
+from modstore_server.self_maintenance_remediation_prompts import (
+    para_merge_conflict_continues_on_rejected_branch,
+)
 
 QUALITY_CHECKS_JSON = (
     '"quality_checks":{'
@@ -2675,6 +2678,59 @@ def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
     prompt = _code_task_text("run-gh-checks-retry", {"gaps": []}, memory, candidate)
     assert "gh pr checks polling infrastructure" in prompt
     assert "bot merge checks failed or unavailable" in prompt
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        (
+            "devfleet/cursor/sub-1-16960f: indeterminate-review: "
+            '{"chunks":[{"chunk":1,"diagnostics":{"primary":"timeout"}}]}'
+        ),
+        (
+            "devfleet/cursor/sub-1-67f884: Error: bot merge checks failed or unavailable: "
+            "Command failed: gh pr checks 813 --watch --fail-fast"
+        ),
+        "Error: bot merge checks failed or unavailable: gh CLI unavailable",
+    ],
+)
+def test_para_merge_conflict_continues_on_merge_worker_detail_formats(detail: str):
+    assert para_merge_conflict_continues_on_rejected_branch(detail) is True
+
+
+def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-16960f",
+                "para_task_id": "task-indeterminate-prefixed",
+                "run_id": "run-indeterminate-prefixed",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-16960f",
+            "detail": (
+                "devfleet/cursor/sub-1-16960f: indeterminate-review: "
+                '{"chunks":[{"chunk":1,"diagnostics":{"primary":"Command failed: trae-cli"}}]}'
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
 
 
 # ---------------------------------------------------------------------------
