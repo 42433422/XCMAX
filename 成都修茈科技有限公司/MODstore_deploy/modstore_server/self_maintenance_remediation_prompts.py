@@ -16,6 +16,9 @@ _BRANCH_PRESERVING_MERGE_WORKER_TOKENS = (
     "hold-merge-label-remove-failed-after-review",
 )
 
+# gh pr update-branch content conflicts: branch is behind/diverged from main; rebase on clean base.
+_GIT_CONTENT_CONFLICT_MARKERS = ("cannot update pr branch due to conflicts",)
+
 
 def _strip_error_prefix(text: str) -> str:
     lowered = text.strip().lower()
@@ -48,6 +51,8 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
 
     for candidate in _operational_merge_reason_candidates(detail):
         lowered = candidate.lower()
+        if any(marker in lowered for marker in _GIT_CONTENT_CONFLICT_MARKERS):
+            return False
         if any(lowered.startswith(prefix) for prefix in _OPERATIONAL_MERGE_FAILURE_PREFIXES):
             return True
         if any(token in lowered for token in _BRANCH_PRESERVING_MERGE_WORKER_TOKENS):
@@ -100,10 +105,11 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
         )
     else:
         strategy = (
-            "The previous Para merge task ended in a terminal failure. Start from the configured "
-            "clean base. Use the rejected branch only as read-only evidence, then reproduce the "
-            "smallest valid production fix and focused regression test; do not inherit or "
-            "cherry-pick the whole rejected diff."
+            "The previous Para merge task ended in a terminal failure (including gh pr "
+            "update-branch content conflicts with main). Start from the configured clean base. "
+            "Use the rejected branch only as read-only evidence, then reproduce the smallest "
+            "valid production fix and focused regression test; do not inherit or cherry-pick the "
+            "whole rejected diff."
         )
     return (
         "\n\n=== EXTERNAL MERGE FAILURE REMEDIATION ===\n"

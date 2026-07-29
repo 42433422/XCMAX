@@ -306,6 +306,12 @@ test('operational failures retry but explicit review and identity vetoes are ter
   assert.equal(isTransientMergeFailure('ci-wait-timeout-needs-human: escalate'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-retry: checks still queued'), true);
   assert.equal(isTransientMergeFailure('bot merge checks failed or unavailable'), false);
+  assert.equal(
+    isTransientMergeFailure(
+      'update-branch failed: Cannot update PR branch due to conflicts',
+    ),
+    false,
+  );
 });
 
 test('child process timeout detection includes killed and signal metadata', () => {
