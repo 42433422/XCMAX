@@ -119,6 +119,58 @@ class ConsciousLLMHandler:
             if extra_block:
                 messages.append({"role": "system", "content": extra_block})
 
+        # 因果反事实 + 技能契约（best-effort，失败不阻断）
+        cognitive_meta: dict[str, Any] = {}
+        try:
+            from app.domain.neuro.cognition.cognitive_orchestrator import (
+                get_cognitive_orchestrator,
+            )
+
+            enriched = get_cognitive_orchestrator().enrich_intent_result(
+                {
+                    "text": query,
+                    "intent": context_data.get("intent") if isinstance(context_data, dict) else None,
+                    "confidence": context_data.get("confidence")
+                    if isinstance(context_data, dict)
+                    else 0.0,
+                    "slots": context_data.get("slots") if isinstance(context_data, dict) else {},
+                    "domain": context_data.get("domain") if isinstance(context_data, dict) else "generic",
+                },
+                text=query,
+                risk_level=str(
+                    (context_data or {}).get("risk_level") if isinstance(context_data, dict) else ""
+                )
+                or None,
+            )
+            cognitive_meta = {
+                "skill_route": enriched.get("skill_route"),
+                "counterfactual": enriched.get("counterfactual"),
+                "path_suggestion": enriched.get("path_suggestion"),
+            }
+            cf = enriched.get("counterfactual") or {}
+            if cf.get("narrative"):
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": "【因果反事实探针】\n" + str(cf["narrative"])[:800],
+                    }
+                )
+            skill_route = enriched.get("skill_route") or {}
+            skill = skill_route.get("skill") or {}
+            if skill.get("skill_id"):
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "【技能契约】"
+                            f"skill_id={skill.get('skill_id')} title={skill.get('title')} "
+                            f"side_effects={skill.get('side_effects')}"
+                        )[:500],
+                    }
+                )
+        except RECOVERABLE_ERRORS:
+            logger.debug("cognitive enrich skipped", exc_info=True)
+
         # 用户查询
         messages.append({"role": "user", "content": query})
 
@@ -159,6 +211,7 @@ class ConsciousLLMHandler:
             "tokens_used": 0,
             "latency_ms": elapsed_ms,
             "memory_items_used": len(attention.selected),
+            "cognitive": cognitive_meta,
         }
 
     def _format_context(self, attention: Any) -> str:

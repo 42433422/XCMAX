@@ -18,6 +18,11 @@ import os
 import uuid
 from typing import Any
 
+from app.domain.neuro.cognition.plan_constraints import (
+    is_sla_hit_soft,
+    load_soft_constraints,
+    select_processor_by_cost,
+)
 from app.domain.neuro.processors.coordinator import ProcessorType, RoutingDecision
 from app.neuro_bus.events.base import NeuroEvent
 from app.neuro_bus.routing.policy_router import decide_processor_with_policy
@@ -26,7 +31,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# 各级处理器的 SLA 阈值（毫秒），用于判断 sla_hit
+# 硬阈值仅作兜底先验；生产判断走 soft_constraints（可被 Evolution 白名单晋升）
 _SLA_THRESHOLDS_MS: dict[ProcessorType, float] = {
     ProcessorType.REFLEX: 1.0,
     ProcessorType.SUBCONSCIOUS: 10.0,
@@ -55,11 +60,25 @@ class CognitiveRouter:
         - 决策为 None: MLP 未启用 / shadow 模式 / canary 未命中 → 回退规则路由
         - 决策非 None: MLP 决策了处理器分级
 
-        trace_id 用于后续记录决策结果（反馈闭环）。
+        额外：将软约束路径建议写入 extra（供日志/编排器），不硬杀请求。
         """
         tid = trace_id or uuid.uuid4().hex[:16]
+        enriched_extra = dict(extra or {})
         try:
-            decision = decide_processor_with_policy(text, event, trace_id=tid, extra=extra)
+            prefer = None
+            conf = float(enriched_extra.get("intent_confidence") or 0.0)
+            if conf >= 0.85:
+                prefer = "reflex"
+            elif conf > 0 and conf < 0.45:
+                prefer = "conscious"
+            soft = select_processor_by_cost(prefer=prefer)
+            enriched_extra["soft_constraint_path"] = soft
+        except RECOVERABLE_ERRORS:
+            logger.debug("soft constraint suggestion skipped", exc_info=True)
+        try:
+            decision = decide_processor_with_policy(
+                text, event, trace_id=tid, extra=enriched_extra
+            )
         except RECOVERABLE_ERRORS:
             logger.debug(
                 "CognitiveRouter.route failed, fallback to rule-based",
@@ -103,9 +122,14 @@ class CognitiveRouter:
 
     @staticmethod
     def is_sla_hit(processor_type: ProcessorType, latency_ms: float) -> bool:
-        """判断延迟是否命中该处理器的 SLA 阈值。"""
-        threshold = _SLA_THRESHOLDS_MS.get(processor_type, 200.0)
-        return latency_ms <= threshold
+        """判断延迟是否命中软 SLA（允许 slack；阈值来自 soft_constraints）。"""
+        try:
+            constraints = load_soft_constraints()
+            key = processor_type.value if hasattr(processor_type, "value") else str(processor_type)
+            return is_sla_hit_soft(key, latency_ms, constraints=constraints)
+        except RECOVERABLE_ERRORS:
+            threshold = _SLA_THRESHOLDS_MS.get(processor_type, 200.0)
+            return latency_ms <= threshold
 
     @staticmethod
     def is_enabled() -> bool:
