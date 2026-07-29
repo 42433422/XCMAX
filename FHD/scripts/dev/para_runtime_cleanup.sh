@@ -21,6 +21,9 @@ XCMAX_WORKTREE_GC_ENABLED="${XCMAX_WORKTREE_GC_ENABLED:-1}"
 XCMAX_REPO_ROOT="${XCMAX_REPO_ROOT:-${HOME}/Desktop/XCMAX}"
 XCMAX_WORKTREE_ROOT="${XCMAX_WORKTREE_ROOT:-/private/tmp}"
 XCMAX_WORKTREE_RETENTION_MINUTES="${XCMAX_WORKTREE_RETENTION_MINUTES:-360}"
+XCMAX_EPHEMERAL_GC_ENABLED="${XCMAX_EPHEMERAL_GC_ENABLED:-1}"
+XCMAX_EPHEMERAL_ROOT="${XCMAX_EPHEMERAL_ROOT:-/private/tmp}"
+XCMAX_EPHEMERAL_RETENTION_MINUTES="${XCMAX_EPHEMERAL_RETENTION_MINUTES:-2880}"
 
 APPLY=0
 REASON="scheduled"
@@ -75,6 +78,8 @@ require_uint PARA_MANUAL_DB_BACKUP_RETENTION_DAYS "${PARA_MANUAL_DB_BACKUP_RETEN
 require_uint PARA_MANUAL_DB_BACKUP_KEEP "${PARA_MANUAL_DB_BACKUP_KEEP}"
 require_uint XCMAX_WORKTREE_GC_ENABLED "${XCMAX_WORKTREE_GC_ENABLED}"
 require_uint XCMAX_WORKTREE_RETENTION_MINUTES "${XCMAX_WORKTREE_RETENTION_MINUTES}"
+require_uint XCMAX_EPHEMERAL_GC_ENABLED "${XCMAX_EPHEMERAL_GC_ENABLED}"
+require_uint XCMAX_EPHEMERAL_RETENTION_MINUTES "${XCMAX_EPHEMERAL_RETENTION_MINUTES}"
 
 safe_scoped_dir "${PARA_CLEANUP_ARCHIVE_DIR}" "${PARA_API_ROOT}" || {
   log "拒绝不受限的归档目录: ${PARA_CLEANUP_ARCHIVE_DIR}"
@@ -90,6 +95,10 @@ safe_scoped_dir "${PARA_LOG_DIR}" "${PARA_RUNTIME_ROOT}" || {
 }
 [[ -n "${XCMAX_WORKTREE_ROOT}" && "${XCMAX_WORKTREE_ROOT}" != "/" && "${XCMAX_WORKTREE_ROOT}" != "${HOME%/}" ]] || {
   log "拒绝不安全的 Git 工作树根: ${XCMAX_WORKTREE_ROOT}"
+  exit 2
+}
+[[ -n "${XCMAX_EPHEMERAL_ROOT}" && "${XCMAX_EPHEMERAL_ROOT}" != "/" && "${XCMAX_EPHEMERAL_ROOT}" != "${HOME%/}" ]] || {
+  log "拒绝不安全的临时目录根: ${XCMAX_EPHEMERAL_ROOT}"
   exit 2
 }
 
@@ -239,6 +248,113 @@ cleanup_merged_worktrees() {
   log "已合并干净工作树 candidates=${removed} reclaimable_kb=${removed_kb} apply=${APPLY}"
 }
 
+is_known_ephemeral_name() {
+  case "$1" in
+    qa-target-* | qa_[0-9a-fA-F]*_[0-9]* | sm-qa-* | xc-target-qa-* | xcmax-qa-* | \
+      fhd-etl-*-verify.* | xcagi-a3-4-* | xcagi-debug-app.* | \
+      xcagi-electron-clean.* | xcagi-electron-diagnose-* | xcagi-electron-dist-* | \
+      xcagi-updater-audit.* | xcagi-verify-* | xcmax-employee-verification-fix.* | \
+      xcmax-git-push-fix.* | xcmax-git-push-fix-* | xcmax-modstore-delivery.* | \
+      xcmax-push-fix-* | xcmax-review-* | modstore-delivery-* | \
+      modstore-self-maintenance-*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+active_cwd_under() {
+  local active_cwds="$1"
+  local directory="${2%/}"
+  local active_cwd
+  while IFS= read -r active_cwd; do
+    [[ -n "${active_cwd}" ]] || continue
+    [[ "${active_cwd}" == "${directory}" || "${active_cwd}" == "${directory}/"* ]] &&
+      return 0
+  done <<< "${active_cwds}"
+  return 1
+}
+
+mount_under() {
+  local mount_output="$1"
+  local directory="${2%/}"
+  awk -v root="${directory}" '
+    {
+      marker = " on " root
+      position = index($0, marker)
+      if (position == 0) next
+      suffix = substr($0, position + length(marker))
+      if (suffix ~ /^ \(/ || suffix ~ /^ type / || suffix ~ /^\//) found = 1
+    }
+    END { exit !found }
+  ' <<< "${mount_output}"
+}
+
+cleanup_stale_ephemeral_directories() {
+  local active_cwds
+  local directory
+  local lsof_status
+  local mount_output
+  local name
+  local removed=0
+  local removed_kb=0
+  local size_kb
+
+  (( XCMAX_EPHEMERAL_GC_ENABLED == 1 )) || {
+    log "非 Git 临时目录回收已关闭"
+    return 0
+  }
+  [[ -d "${XCMAX_EPHEMERAL_ROOT}" ]] || {
+    log "临时目录根不存在，跳过: ${XCMAX_EPHEMERAL_ROOT}"
+    return 0
+  }
+  command -v lsof >/dev/null 2>&1 || {
+    log "lsof 不可用，无法排除活动临时目录，本轮不回收"
+    return 0
+  }
+  command -v mount >/dev/null 2>&1 || {
+    log "mount 不可用，无法排除挂载卷，本轮不回收"
+    return 0
+  }
+  if ! active_cwds="$(lsof -n -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')"; then
+    log "无法读取活动工作目录，本轮不回收非 Git 临时目录"
+    return 0
+  fi
+  if ! mount_output="$(mount 2>/dev/null)"; then
+    log "无法读取挂载卷，本轮不回收非 Git 临时目录"
+    return 0
+  fi
+
+  while IFS= read -r -d '' directory; do
+    name="${directory##*/}"
+    is_known_ephemeral_name "${name}" || continue
+    active_cwd_under "${active_cwds}" "${directory}" && continue
+    mount_under "${mount_output}" "${directory}" && continue
+    git -C "${directory}" rev-parse --is-inside-work-tree >/dev/null 2>&1 && continue
+    if find "${directory}" -mindepth 1 -maxdepth 3 -name .git -print -quit |
+      grep -q .; then
+      continue
+    fi
+    if lsof -n +D "${directory}" >/dev/null 2>&1; then
+      continue
+    else
+      lsof_status=$?
+      (( lsof_status == 1 )) || continue
+    fi
+    size_kb="$(du -sk "${directory}" 2>/dev/null | awk '{print $1}')"
+    is_uint "${size_kb}" || size_kb=0
+    if (( APPLY == 1 )); then
+      rm -rf "${directory}"
+    fi
+    removed=$((removed + 1))
+    removed_kb=$((removed_kb + size_kb))
+  done < <(
+    find "${XCMAX_EPHEMERAL_ROOT}" -mindepth 1 -maxdepth 1 -type d \
+      -mmin "+${XCMAX_EPHEMERAL_RETENTION_MINUTES}" -print0
+  )
+  log "失活非 Git 临时目录 candidates=${removed} reclaimable_kb=${removed_kb} apply=${APPLY}"
+}
+
 run_database_retention() {
   [[ -x "${PARA_NODE_BIN}" ]] || {
     log "Node 不可执行: ${PARA_NODE_BIN}"
@@ -277,6 +393,7 @@ log "开始 reason=${REASON} apply=${APPLY}"
 cleanup_stale_workspaces
 cleanup_old_logs
 cleanup_merged_worktrees
+cleanup_stale_ephemeral_directories
 # 先释放旧整库备份，避免在低磁盘时又因新备份触发 SQLITE_FULL。
 prune_series "${PARA_CLEANUP_ARCHIVE_DIR}" "devfleet-*.db" "${PARA_CLEANUP_ARCHIVE_KEEP}"
 prune_series "${PARA_CLEANUP_ARCHIVE_DIR}" "cleanup-*.json" "${PARA_CLEANUP_ARCHIVE_KEEP}"
