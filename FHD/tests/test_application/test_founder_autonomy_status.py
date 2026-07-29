@@ -352,7 +352,9 @@ def test_planned_workforce_gap_changes_next_step_without_inflating_score() -> No
                         "employee_id": "host-checker",
                         "remediation": {
                             "task_id": "workforce-gap-aaaaaaaaaaaaaaaa",
-                            "target_files": ["FHD/mods/_employees/host-checker/manifest.json"],
+                            "target_files": [
+                                "FHD/mods/_employees/host-checker/manifest.json"
+                            ],
                             "closure_event": "later_strict_burnin_receipt_accepted",
                             "auto_close": False,
                         },
@@ -370,7 +372,9 @@ def test_planned_workforce_gap_changes_next_step_without_inflating_score() -> No
     evolution = _dimensions(snapshot)["evolution"]
 
     assert evolution["progress"] == 40
-    assert evolution["next_gap"] == ("执行已生成的 1 个员工能力修复工单，并取得后续严格试运行回执")
+    assert evolution["next_gap"] == (
+        "执行已生成的 1 个员工能力修复工单，并取得后续严格试运行回执"
+    )
     assert snapshot["live_summary"]["workforce_capability_gap_count"] == 1
     assert snapshot["live_summary"]["planned_workforce_remediations"] == 1
 
@@ -410,8 +414,19 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
             "append_only": True,
             "append_only_enforced": True,
             "total": 4,
-            "allow_count": 3,
+            "allow_count": 4,
             "posthoc_conclusive_count": 2,
+            "posthoc_eligible_allow_count": 2,
+            "posthoc_eligible_conclusive_count": 1,
+            "posthoc_pending_count": 1,
+            "posthoc_pending_contracts": [
+                {
+                    "action": "self_maintenance_l1_merge",
+                    "source": "self_maintenance_loop.remote_merge_request",
+                    "count": 1,
+                }
+            ],
+            "posthoc_maturity_minutes": 90,
             "posthoc_uncovered_count": 1,
             "posthoc_coverage_rate": 66.67,
             "prohibited_miss_evidence_status": "unknown",
@@ -439,8 +454,19 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
     assert public["proof"]["alignment_posthoc"] == {
         "status": "unknown",
         "coverage_rate": 66.67,
-        "allow_count": 3,
+        "allow_count": 4,
         "conclusive_count": 2,
+        "eligible_allow_count": 2,
+        "eligible_conclusive_count": 1,
+        "pending_count": 1,
+        "pending_contracts": [
+            {
+                "action": "self_maintenance_l1_merge",
+                "source": "self_maintenance_loop.remote_merge_request",
+                "count": 1,
+            }
+        ],
+        "maturity_minutes": 90,
         "uncovered_count": 1,
         "uncovered_contracts": [
             {
@@ -556,7 +582,9 @@ def test_untrusted_runtime_provenance_caps_founder_and_system_truth() -> None:
         "dirty_worktree",
         "head_sha_mismatch",
     ]
-    assert any(item["kind"] == "runtime_provenance" for item in snapshot["attention"]["items"])
+    assert any(
+        item["kind"] == "runtime_provenance" for item in snapshot["attention"]["items"]
+    )
 
 
 def test_empty_authoritative_customer_ledger_only_proves_ledger_and_capacity() -> None:

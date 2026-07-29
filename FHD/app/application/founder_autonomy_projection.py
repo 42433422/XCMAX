@@ -8,7 +8,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.application.founder_autonomy_support import _as_dict, _as_float, _as_int, _as_list
+from app.application.founder_autonomy_support import (
+    _as_dict,
+    _as_float,
+    _as_int,
+    _as_list,
+)
 
 
 def build_public_founder_autonomy_projection(
@@ -60,9 +65,20 @@ def build_public_founder_autonomy_projection(
         for raw in _as_list(live.get("prohibited_posthoc_uncovered_contracts"))[:20]
         if _as_int(_as_dict(raw).get("count")) > 0
     ]
+    pending_contracts = [
+        {
+            "action": str(_as_dict(raw).get("action") or "unknown")[:128],
+            "source": str(_as_dict(raw).get("source") or "unknown")[:128],
+            "count": _as_int(_as_dict(raw).get("count")),
+        }
+        for raw in _as_list(live.get("prohibited_posthoc_pending_contracts"))[:20]
+        if _as_int(_as_dict(raw).get("count")) > 0
+    ]
     return {
         "schema": "xcagi.public_founder_autonomy/v1",
-        "generated_at": str(snapshot.get("generated_at") or datetime.now(UTC).isoformat()),
+        "generated_at": str(
+            snapshot.get("generated_at") or datetime.now(UTC).isoformat()
+        ),
         "readonly": True,
         "overall_progress": _as_int(snapshot.get("overall_progress")),
         "overall_remaining": _as_int(snapshot.get("overall_remaining")),
@@ -79,14 +95,33 @@ def build_public_founder_autonomy_projection(
             "deploy_verified": bool(live.get("deploy_verified")),
             "paid_value_verified": bool(live.get("production_value_verified")),
             "paid_delivery_verified": bool(live.get("outcome_verified")),
-            "customer_acceptance_verified": bool(live.get("customer_acceptance_verified")),
+            "customer_acceptance_verified": bool(
+                live.get("customer_acceptance_verified")
+            ),
             "employee_workforce_ready": bool(live.get("employee_workforce_ready")),
             "alignment_posthoc": {
                 "status": str(live.get("prohibited_miss_status") or "unknown"),
-                "coverage_rate": _as_float(live.get("prohibited_posthoc_coverage_rate")),
+                "coverage_rate": _as_float(
+                    live.get("prohibited_posthoc_coverage_rate")
+                ),
                 "allow_count": _as_int(live.get("prohibited_posthoc_allow_count")),
-                "conclusive_count": _as_int(live.get("prohibited_posthoc_conclusive_count")),
-                "uncovered_count": _as_int(live.get("prohibited_posthoc_uncovered_count")),
+                "conclusive_count": _as_int(
+                    live.get("prohibited_posthoc_conclusive_count")
+                ),
+                "eligible_allow_count": _as_int(
+                    live.get("prohibited_posthoc_eligible_allow_count")
+                ),
+                "eligible_conclusive_count": _as_int(
+                    live.get("prohibited_posthoc_eligible_conclusive_count")
+                ),
+                "pending_count": _as_int(live.get("prohibited_posthoc_pending_count")),
+                "pending_contracts": pending_contracts,
+                "maturity_minutes": _as_int(
+                    live.get("prohibited_posthoc_maturity_minutes")
+                ),
+                "uncovered_count": _as_int(
+                    live.get("prohibited_posthoc_uncovered_count")
+                ),
                 "uncovered_contracts": uncovered_contracts,
             },
         },
@@ -107,7 +142,11 @@ def _public_projection_targets(repo_root: Path | None = None) -> list[Path]:
     company_root = root / "成都修茈科技有限公司"
     targets = [
         company_root / "download-founder-autonomy.json",
-        company_root / "MODstore_deploy" / "market" / "public" / "download-founder-autonomy.json",
+        company_root
+        / "MODstore_deploy"
+        / "market"
+        / "public"
+        / "download-founder-autonomy.json",
     ]
     configured_live_roots = [
         item.strip()
