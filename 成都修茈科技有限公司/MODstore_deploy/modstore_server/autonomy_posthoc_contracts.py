@@ -356,6 +356,25 @@ def _recorded_at_or_after(record: dict[str, Any], allowed_at: datetime) -> bool:
         return False
 
 
+def _failed_merge_request_attempt(
+    records: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    for record in reversed(records):
+        policy = (
+            record.get("policy_decision") if isinstance(record.get("policy_decision"), dict) else {}
+        )
+        if (
+            str(record.get("phase") or "") == "complete"
+            and str(record.get("status") or "") == "completed_held_for_remediation"
+            and str(policy.get("action") or "") == "hold_for_automated_remediation"
+            and str(policy.get("reason") or "") == "para_merge_request_failed"
+            and str(record.get("para_task_id") or "").strip()
+            and str(record.get("branch") or "").strip()
+        ):
+            return record
+    return None
+
+
 def verify_self_maintenance_merge_action(
     *,
     action_id: str,
@@ -363,6 +382,7 @@ def verify_self_maintenance_merge_action(
     records: list[dict[str, Any]],
     para_task_fetcher: Callable[[str], dict[str, Any]],
     github_merge_fetcher: Callable[..., dict[str, Any]],
+    github_veto_fetcher: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     """Verify a merge allow from independent durable evidence.
 
@@ -389,12 +409,14 @@ def verify_self_maintenance_merge_action(
         ),
         None,
     )
-    task_id = str((request or {}).get("para_task_id") or "").strip()
+    failed_attempt = _failed_merge_request_attempt(run_records) if request is None else None
+    task_receipt = request or failed_attempt or {}
+    task_id = str(task_receipt.get("para_task_id") or "").strip()
     if not task_id:
         return {"ok": False, "reason": "merge_request_receipt_missing"}
-    branch = str((request or {}).get("branch") or "").strip()
+    branch = str(task_receipt.get("branch") or "").strip()
     base_branch = str(
-        (request or {}).get("base_branch") or os.environ.get("MODSTORE_PARA_BRANCH") or "main"
+        task_receipt.get("base_branch") or os.environ.get("MODSTORE_PARA_BRANCH") or "main"
     ).strip()
     para_reason = ""
     try:
@@ -408,6 +430,32 @@ def verify_self_maintenance_merge_action(
     task_status = str(task.get("status") or "").strip().lower()
     task_merge_sha = str(task.get("merge_commit_sha") or "").strip().lower()
     if task_status in _TERMINAL_NO_EFFECT and not task_merge_sha:
+        if failed_attempt is not None:
+            try:
+                veto = github_veto_fetcher(
+                    branch=branch,
+                    base_branch=base_branch,
+                )
+            except Exception:
+                veto = {"ok": False, "reason": "github_veto_evidence_unavailable"}
+            if not isinstance(veto, dict) or veto.get("ok") is not True:
+                return {
+                    "ok": False,
+                    "reason": (
+                        str(veto.get("reason") or "github_veto_evidence_invalid")
+                        if isinstance(veto, dict)
+                        else "github_veto_evidence_invalid"
+                    ),
+                }
+            veto_ref = str(veto.get("evidence_ref") or "").strip()
+            if not veto_ref:
+                return {"ok": False, "reason": "github_veto_evidence_ref_missing"}
+            return {
+                "ok": True,
+                "verdict": "no_prohibited_miss",
+                "evidence_ref": (f"para-task:{task_id}:terminal:{task_status}+{veto_ref}"),
+                "reason": "merge_request_failed_and_pull_remained_vetoed",
+            }
         return {
             "ok": True,
             "verdict": "no_prohibited_miss",

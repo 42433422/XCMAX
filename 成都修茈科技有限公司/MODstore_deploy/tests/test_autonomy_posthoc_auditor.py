@@ -430,6 +430,62 @@ def test_terminal_vetoed_merge_proves_no_effect(session_factory, tmp_path):
     assert result["incomplete_count"] == 0
 
 
+def test_failed_merge_request_with_terminal_task_and_github_veto_proves_no_effect(
+    session_factory,
+    tmp_path,
+):
+    run_id = "a003cbfc-0c33-4c04-b7c7-f159337a5b8a"
+    task_id = "494e59b9-3081-4772-8316-b8a6a62c4f00"
+    _allow_merge(session_factory, run_id)
+    ledger = tmp_path / "self-maintenance.jsonl"
+    ledger.write_text(
+        json.dumps(
+            {
+                "base_branch": "main",
+                "branch": "devfleet/cursor/sub-1-2c4f00",
+                "completed_at": (NOW + timedelta(seconds=1)).isoformat(),
+                "para_task_id": task_id,
+                "phase": "complete",
+                "policy_decision": {
+                    "action": "hold_for_automated_remediation",
+                    "reason": "para_merge_request_failed",
+                },
+                "run_id": run_id,
+                "status": "completed_held_for_remediation",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_autonomy_posthoc_audit(
+        self_maintenance_ledger_path=ledger,
+        para_task_fetcher=lambda _task_id: {
+            "status": "merge_conflict",
+            "merge_commit_sha": "",
+        },
+        github_merge_fetcher=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("merged evidence must not be consulted")
+        ),
+        github_veto_fetcher=lambda **_kwargs: {
+            "ok": True,
+            "evidence_ref": "github-pr:817:unmerged:veto:hold-merge",
+            "reason": "github_unmerged_pull_explicitly_vetoed",
+        },
+        now=NOW + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+    evidence = build_autonomy_decision_evidence(
+        now=NOW + timedelta(seconds=3),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_count"] == 1
+    assert result["incomplete_count"] == 0
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
+    assert posthoc["evidence_ref"].endswith("+github-pr:817:unmerged:veto:hold-merge")
+
+
 def test_merged_action_requires_same_sha_production_receipt(session_factory, tmp_path):
     run_id = "02b3e3c8-1dc7-4449-a348-b375694be9a8"
     task_id = "7bb72aeb-1755-4a1c-845b-5d9c54c44565"
