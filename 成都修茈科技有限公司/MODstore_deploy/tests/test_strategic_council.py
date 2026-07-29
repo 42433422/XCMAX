@@ -124,6 +124,34 @@ def test_retort_engine_unavailable_fails_closed(tmp_path, monkeypatch) -> None:
     assert receipt["roles"]["retort"]["engine_available"] is False
 
 
+def test_live_persy_evidence_uses_only_the_public_persy_dataset(monkeypatch) -> None:
+    from modstore_server import xiaoc_cs_ssot
+
+    monkeypatch.setattr(
+        xiaoc_cs_ssot,
+        "retrieve_knowledge_for_mode",
+        lambda *_args, **_kwargs: pytest.fail("admin multi-dataset retrieval must not be used"),
+    )
+    monkeypatch.setattr(
+        xiaoc_cs_ssot,
+        "retrieve_persy_knowledge",
+        lambda query, *, top_k: [
+            {
+                "document_id": "founder-policy",
+                "dataset_id": "persy-knowledge",
+                "text": f"{query}:{top_k}",
+            }
+        ],
+    )
+
+    evidence = council._live_persy_evidence("无人公司治理边界")
+
+    assert evidence["grounded"] is True
+    assert evidence["dataset_id"] == "persy-knowledge"
+    assert evidence["document_refs"] == ["founder-policy"]
+    assert evidence["source_count"] == 1
+
+
 def test_tampered_ledger_never_reports_ready(tmp_path, monkeypatch) -> None:
     ledger = tmp_path / "council.jsonl"
     monkeypatch.setenv("MODSTORE_STRATEGIC_COUNCIL_LEDGER", str(ledger))

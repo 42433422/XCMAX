@@ -99,6 +99,20 @@ def test_missing_evidence_is_not_reported_as_finished() -> None:
     assert dims["code"]["remaining"] == 100
 
 
+def test_empty_goal_summary_does_not_pass_the_goals_gate() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        goals={"total": 0, "done": 0, "completion_rate": 0.0},
+        surfaces=_surfaces(),
+        generated_at=NOW,
+    )
+    founder = _dimensions(snapshot)["founder"]
+
+    assert "goals" not in {gate["key"] for gate in founder["evidence"]}
+    assert next(gate for gate in founder["gaps"] if gate["key"] == "goals")["gap"] == (
+        "接入可追踪 Goals 与完成率"
+    )
+
+
 def test_complete_evidence_can_reach_the_target_band() -> None:
     rows = [
         {

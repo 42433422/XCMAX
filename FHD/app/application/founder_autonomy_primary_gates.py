@@ -16,7 +16,6 @@ def build_primary_gate_sets(
     planned = facts["planned"]
     proven_employees = facts["proven_employees"]
     shell_employees = facts["shell_employees"]
-    goals = facts["goals"]
     goals_total = facts["goals_total"]
     runtime = facts["runtime"]
     council_ready = facts["council_ready"]
@@ -93,7 +92,7 @@ def build_primary_gate_sets(
             "goals",
             "Goals",
             10,
-            bool(surfaces.get("goals")) and bool(goals),
+            bool(surfaces.get("goals")) and goals_total > 0,
             f"目标条目 {int(goals_total)}",
             "接入可追踪 Goals 与完成率",
             "deployed_runtime",
