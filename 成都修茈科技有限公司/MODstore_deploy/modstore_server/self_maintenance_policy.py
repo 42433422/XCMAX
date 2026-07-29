@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
+_MODSTORE_SERVER_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 _STAT_FOOTER_RE = re.compile(
     r"^\s*\d+\s+files?\s+changed\b|^\s*\d+\s+insertions?\b|^\s*\d+\s+deletions?\b",
     re.IGNORECASE,
@@ -26,6 +29,163 @@ def default_loop_memory_path() -> Path:
         Path.home()
         / "Library/Application Support/XCMAX/modstore-daily/runtime/self_maintenance_loop_memory.json"
     )
+
+
+def _normalize_repo_path(path: str) -> str:
+    return (path or "").replace("\\", "/").strip().strip('"').strip("'")
+
+
+def normalize_merge_review_veto_code(veto: str) -> str:
+    normalized = str(veto or "").strip().lower()
+    if normalized.startswith(_DIFF_TOO_LARGE_MERGE_REVIEW_CODE):
+        return _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    return normalized
+
+
+def _detail_merge_review_veto_code(detail: str) -> str:
+    text = str(detail or "").strip()
+    if not text:
+        return ""
+    if ":" in text:
+        _, _, right = text.partition(":")
+        right = right.strip().lower()
+        if right:
+            return normalize_merge_review_veto_code(right)
+    lowered = text.lower()
+    for marker in _INDETERMINATE_MERGE_REVIEW_CODES:
+        if marker in lowered:
+            return marker
+    if _DIFF_TOO_LARGE_MERGE_REVIEW_CODE in lowered:
+        return _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    return ""
+
+
+def _item_indeterminate_merge_review_veto(item: Dict[str, Any]) -> bool:
+    veto = normalize_merge_review_veto_code(str(item.get("review_veto_code") or ""))
+    if veto in _INDETERMINATE_MERGE_REVIEW_CODES:
+        return True
+    detail_code = _detail_merge_review_veto_code(
+        str(item.get("review_feedback") or item.get("detail") or "")
+    )
+    return detail_code in _INDETERMINATE_MERGE_REVIEW_CODES
+
+
+def _item_diff_too_large_merge_review_veto(item: Dict[str, Any]) -> bool:
+    veto = normalize_merge_review_veto_code(str(item.get("review_veto_code") or ""))
+    if veto == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE:
+        return True
+    detail_code = _detail_merge_review_veto_code(
+        str(item.get("review_feedback") or item.get("detail") or "")
+    )
+    return detail_code == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+
+
+def para_merge_review_max_diff_chars() -> int:
+    raw = os.environ.get("MODSTORE_PARA_MERGE_REVIEW_MAX_DIFF_CHARS")
+    try:
+        return int(raw) if raw else 30000
+    except ValueError:
+        return 30000
+
+
+def parse_merge_review_diff_char_count(detail: str) -> Optional[int]:
+    """Extract reported git diff size from merge-worker veto detail (diff-too-large:NNN)."""
+
+    match = re.search(r"diff-too-large:(\d+)", str(detail or ""), re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def merge_review_veto_is_indeterminate(veto_code: str) -> bool:
+    return normalize_merge_review_veto_code(veto_code) in _INDETERMINATE_MERGE_REVIEW_CODES
+
+
+def merge_review_veto_is_diff_too_large(veto_code: str) -> bool:
+    return normalize_merge_review_veto_code(veto_code) == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+
+
+def classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
+    """Normalize Para merge-worker veto detail for loop remediation."""
+
+    text = str(detail or "").strip()[:4000]
+    lowered = text.lower()
+    branch_hint = ""
+    veto_code = ""
+    if ":" in text:
+        left, _, right = text.partition(":")
+        left = left.strip()
+        right = right.strip().lower()
+        if "/" in left and right:
+            branch_hint = left
+            veto_code = normalize_merge_review_veto_code(right)
+    if not veto_code:
+        for marker in _INDETERMINATE_MERGE_REVIEW_CODES:
+            if marker in lowered:
+                veto_code = marker
+                break
+        if not veto_code and _DIFF_TOO_LARGE_MERGE_REVIEW_CODE in lowered:
+            veto_code = _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    else:
+        veto_code = normalize_merge_review_veto_code(veto_code)
+    actionable_code_findings = bool(
+        text
+        and not merge_review_veto_is_indeterminate(veto_code)
+        and not merge_review_veto_is_diff_too_large(veto_code)
+        and re.search(r"\bREJECT\s*:", text, re.IGNORECASE)
+    )
+    return {
+        "actionable_code_findings": actionable_code_findings,
+        "branch_hint": branch_hint,
+        "detail": text,
+        "review_diff_chars": parse_merge_review_diff_char_count(text),
+        "veto_code": veto_code,
+    }
+
+
+def memory_has_diff_too_large_remediation(memory: Optional[Dict[str, Any]]) -> bool:
+    open_items = memory.get("open_items") if isinstance(memory, dict) else None
+    if not isinstance(open_items, list):
+        return False
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        if (
+            item.get("kind") == "automated_remediation"
+            and item.get("reason") == "para_ai_review_rejected"
+            and _item_diff_too_large_merge_review_veto(item)
+        ):
+            return True
+    return False
+
+
+def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
+    normalized = _normalize_repo_path(path)
+    if not normalized:
+        return False
+    if is_marker_status_path(normalized):
+        return True
+    if "/tests/" in normalized or normalized.startswith("tests/"):
+        return True
+    if normalized.startswith("FHD/XCAGI/kb/"):
+        return True
+    return False
+
+
+def diff_includes_modstore_server_production_path(paths: List[str]) -> bool:
+    for path in paths:
+        normalized = _normalize_repo_path(path)
+        if not normalized.startswith(_MODSTORE_SERVER_PREFIX):
+            continue
+        if is_marker_status_path(normalized):
+            continue
+        if "/tests/" in normalized:
+            continue
+        return True
+    return False
 
 
 def load_loop_memory(path: Optional[Path] = None) -> Dict[str, Any]:
@@ -94,6 +254,30 @@ def loop_memory_requires_executable_change(
         for item in open_items:
             if not isinstance(item, dict):
                 continue
+            if (
+                item.get("kind") == "automated_remediation"
+                and item.get("reason") == "para_ai_review_rejected"
+                and _item_indeterminate_merge_review_veto(item)
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "indeterminate merge-review veto requires executable "
+                        "modstore_server production change"
+                    ),
+                }
+            if (
+                item.get("kind") == "automated_remediation"
+                and item.get("reason") == "para_ai_review_rejected"
+                and _item_diff_too_large_merge_review_veto(item)
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "diff-too-large merge-review veto requires focused "
+                        "modstore_server production change under Para diff budget"
+                    ),
+                }
             text = json.dumps(item, ensure_ascii=False).lower()
             if any(
                 marker in text
@@ -169,10 +353,19 @@ def should_block_marker_only_diff_summary(
 
 
 __all__ = [
+    "classify_para_merge_review_detail",
     "default_loop_memory_path",
+    "diff_includes_modstore_server_production_path",
+    "is_auxiliary_self_maintenance_evidence_path",
     "is_marker_status_path",
     "load_loop_memory",
     "loop_memory_requires_executable_change",
+    "memory_has_diff_too_large_remediation",
+    "merge_review_veto_is_diff_too_large",
+    "merge_review_veto_is_indeterminate",
+    "normalize_merge_review_veto_code",
+    "para_merge_review_max_diff_chars",
     "parse_diff_stat_paths",
+    "parse_merge_review_diff_char_count",
     "should_block_marker_only_diff_summary",
 ]

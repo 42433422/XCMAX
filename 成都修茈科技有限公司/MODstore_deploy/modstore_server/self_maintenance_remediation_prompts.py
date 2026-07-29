@@ -22,7 +22,21 @@ def external_review_remediation_prompt(resume_candidate: Any) -> str:
         return ""
     feedback = str(candidate.get("review_feedback") or "").strip()[:4000]
     rejected_branch = str(candidate.get("rejected_branch") or candidate.get("branch") or "").strip()
-    return (
+    from modstore_server.self_maintenance_policy import (
+        classify_para_merge_review_detail,
+        merge_review_veto_is_diff_too_large,
+        merge_review_veto_is_indeterminate,
+        normalize_merge_review_veto_code,
+    )
+
+    veto_code = normalize_merge_review_veto_code(
+        str(
+            candidate.get("review_veto_code")
+            or classify_para_merge_review_detail(feedback).get("veto_code")
+            or ""
+        )
+    )
+    prompt = (
         "\n\n=== EXTERNAL MERGE REVIEW REMEDIATION ===\n"
         "The independent Para merge reviewer vetoed the previous candidate. "
         "Your current isolated work branch starts from the configured clean base, not from "
@@ -34,6 +48,21 @@ def external_review_remediation_prompt(resume_candidate: Any) -> str:
         f"Rejected reference branch: {rejected_branch or '(missing)'}. "
         f"Exact reviewer findings: {feedback or '(missing feedback: fail closed and inspect the parent diff)'}"
     )
+    if merge_review_veto_is_indeterminate(veto_code):
+        prompt += (
+            "\n\n=== INDETERMINATE MERGE REVIEW VETO ===\n"
+            "Merge-worker returned indeterminate-review (no parseable APPROVE/REJECT). "
+            "Ship focused modstore_server production change plus regression tests; "
+            "keep the diff small and avoid marker-only or KB-only deltas."
+        )
+    elif merge_review_veto_is_diff_too_large(veto_code):
+        prompt += (
+            "\n\n=== DIFF TOO LARGE MERGE REVIEW VETO ===\n"
+            "PR git diff exceeded the Para merge-review budget (default 30000). "
+            "Rebase, drop unrelated commits, keep modstore_server + focused tests only, "
+            "and omit FHD/XCAGI/kb/* on this remediation branch until merge succeeds."
+        )
+    return prompt
 
 
 def external_merge_remediation_prompt(resume_candidate: Any) -> str:
