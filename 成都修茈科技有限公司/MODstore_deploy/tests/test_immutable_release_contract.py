@@ -263,3 +263,14 @@ def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke(
     ):
         assert public_url in workflow
     assert "developer.html | head -8 | grep -i title || true" not in workflow
+
+
+def test_corp_site_deploy_publishes_and_verifies_world_will_ticker() -> None:
+    updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
+
+    assert '"$git_site"/world-will-ticker.js' in updater
+    assert "'成都修茈科技有限公司/world-will-ticker.js'" in workflow
+    assert '"${GIT_SITE}/world-will-ticker.js"' in workflow
+    assert "https://xiu-ci.com/world-will-ticker.js" in workflow
+    assert "grep -F -q '/api/public/action-board' /tmp/xc-world-will-ticker.js" in workflow
