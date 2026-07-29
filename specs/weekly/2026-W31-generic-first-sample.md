@@ -17,6 +17,10 @@
 2. 三动作：智能对话 · capabilities/壳菜单 · neuro-bus 已装
 3. 涂料 / 考勤等垂直样板 **另开清单**，不占用本战役对外承诺
 
+## 全量任务看板
+
+见 [`../checklist-1.0-campaign-full.md`](../checklist-1.0-campaign-full.md)（P0/A/B/C/D/E + 冻结项）。
+
 ## 本周不做
 
 - 不以涂料/客来来/Android 作为首样板演示

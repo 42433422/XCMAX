@@ -6,7 +6,8 @@
 > **L2 种子 mod**：`xcagi-planner-bridge`（见 [`config/industry_baseline.json`](../../config/industry_baseline.json)）  
 > **定位**：干净宿主起步——智能对话 + 智能生态底座；行业垂直能力按需再补，**不**把涂料/考勤等当作首样板承诺。
 
-关联：[`DELIVERABLE_PRODUCT.md`](../DELIVERABLE_PRODUCT.md) · [`guides/PRODUCT_USER_FLOW.md`](../guides/PRODUCT_USER_FLOW.md) · [`CUSTOMER_SUPPORT.md`](CUSTOMER_SUPPORT.md)
+关联：[`DELIVERABLE_PRODUCT.md`](../DELIVERABLE_PRODUCT.md) · [`guides/PRODUCT_USER_FLOW.md`](../guides/PRODUCT_USER_FLOW.md) · [`CUSTOMER_SUPPORT.md`](CUSTOMER_SUPPORT.md)  
+战役全量任务（含商店/消膨胀/工单）：[`../../../specs/checklist-1.0-campaign-full.md`](../../../specs/checklist-1.0-campaign-full.md)
 
 ---
 
