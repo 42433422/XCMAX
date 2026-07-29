@@ -61,6 +61,7 @@ from .self_maintenance_merge_policy import max_lines as _shared_auto_merge_max_l
 from .self_maintenance_merge_policy import normalize_repo_path as _shared_normalize_repo_path
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
 from .self_maintenance_para_merge_remediation import (
+    classify_para_merge_review_detail,
     resume_from_clean_baseline_for_para_merge,
 )
 from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
@@ -1128,6 +1129,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             branch = str(item.get("branch") or "").strip()
             para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
             if branch and para_task_id:
+                feedback = str(item.get("review_feedback") or item.get("detail") or "")[:4000]
+                veto_meta = classify_para_merge_review_detail(feedback)
                 return {
                     "branch": branch,
                     "failed_run_id": str(item.get("run_id") or "").strip(),
@@ -1135,9 +1138,12 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "para_task_id": para_task_id,
                     "reason": "resume_para_ai_review_rejection",
                     "rejected_branch": branch,
-                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
-                        :4000
-                    ],
+                    "review_actionable_findings": veto_meta.get("actionable_code_findings"),
+                    "review_feedback": feedback,
+                    "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
+                    "review_veto_code": str(
+                        item.get("review_veto_code") or veto_meta.get("veto_code") or ""
+                    ),
                 }
             continue
         if reason in {
@@ -2388,23 +2394,31 @@ def _reconcile_requested_merge_feedback(
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
             resume_from_clean_baseline = resume_from_clean_baseline_for_para_merge(reason, detail)
-            open_items.append(
-                {
-                    "branch": rejected_branch,
-                    "created_at": _iso(_utc_now()),
-                    "detail": detail,
-                    "kind": "automated_remediation",
-                    "para_task_id": task_id,
-                    "reason": reason,
-                    "rejected_branch": rejected_branch,
-                    "resume_from_clean_baseline": resume_from_clean_baseline,
-                    "review_feedback": detail if source == "ai-review-veto" else "",
-                    "run_id": str(run.get("run_id") or "").strip(),
-                    "source": source,
-                    "task_status": task_status,
-                    "task_id": task_id,
-                }
+            veto_meta = (
+                classify_para_merge_review_detail(detail) if source == "ai-review-veto" else {}
             )
+            open_item: Dict[str, Any] = {
+                "branch": rejected_branch,
+                "created_at": _iso(_utc_now()),
+                "detail": detail,
+                "kind": "automated_remediation",
+                "para_task_id": task_id,
+                "reason": reason,
+                "rejected_branch": rejected_branch,
+                "resume_from_clean_baseline": resume_from_clean_baseline,
+                "review_feedback": detail if source == "ai-review-veto" else "",
+                "run_id": str(run.get("run_id") or "").strip(),
+                "source": source,
+                "task_status": task_status,
+                "task_id": task_id,
+            }
+            if source == "ai-review-veto":
+                open_item["review_actionable_findings"] = veto_meta.get("actionable_code_findings")
+                open_item["review_veto_branch_hint"] = veto_meta.get("branch_hint") or ""
+                open_item["review_veto_code"] = veto_meta.get("veto_code") or ""
+                if veto_meta.get("review_diff_chars") is not None:
+                    open_item["review_diff_chars"] = veto_meta["review_diff_chars"]
+            open_items.append(open_item)
             changed = True
             remediation_added += 1
 
@@ -4548,19 +4562,50 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
+            diff_includes_modstore_server_production_path,
+            is_auxiliary_self_maintenance_evidence_path,
             is_marker_status_path,
             loop_memory_requires_executable_change,
+            memory_has_diff_too_large_remediation,
+            para_merge_review_max_diff_chars,
         )
 
-        if all(is_marker_status_path(file_name) for file_name in normalized_files):
-            requirement = loop_memory_requires_executable_change(memory)
-            if requirement.get("required"):
+        requirement = loop_memory_requires_executable_change(memory)
+        if requirement.get("required") and memory_has_diff_too_large_remediation(memory):
+            kb_paths = [
+                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
+            ]
+            if kb_paths:
+                return _decision(
+                    {
+                        "changed_files": normalized_files,
+                        "kb_paths": kb_paths,
+                        "ok": False,
+                        "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+                        "self_maintenance_requirement": requirement,
+                    }
+                )
+        if requirement.get("required"):
+            if all(is_marker_status_path(file_name) for file_name in normalized_files):
                 return _decision(
                     {
                         "allowed_globs": allowed,
                         "changed_files": normalized_files,
                         "ok": False,
                         "reason": "marker_only_diff_requires_executable_change",
+                        "self_maintenance_requirement": requirement,
+                    }
+                )
+            if all(
+                is_auxiliary_self_maintenance_evidence_path(file_name)
+                for file_name in normalized_files
+            ) and not diff_includes_modstore_server_production_path(normalized_files):
+                return _decision(
+                    {
+                        "allowed_globs": allowed,
+                        "changed_files": normalized_files,
+                        "ok": False,
+                        "reason": "auxiliary_only_diff_requires_executable_change",
                         "self_maintenance_requirement": requirement,
                     }
                 )
@@ -4572,6 +4617,21 @@ def _assess_branch_auto_merge_policy(
                 "error": str(exc),
                 "ok": False,
                 "reason": "self_maintenance_policy_check_failed",
+            }
+        )
+
+    max_review_chars = para_merge_review_max_diff_chars()
+    diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
+    if diff_chars <= 0 and diff_excerpt:
+        diff_chars = len(diff_excerpt)
+    if diff_chars > max_review_chars:
+        return _decision(
+            {
+                "changed_files": normalized_files,
+                "git_diff_chars": diff_chars,
+                "max_diff_chars": max_review_chars,
+                "ok": False,
+                "reason": "diff_too_large_for_para_merge_review",
             }
         )
 
