@@ -833,6 +833,14 @@ const selectedNodeFacts = computed(() => {
     return rows
   }
   if (node.source) rows.push({ label: '来源', value: node.source })
+  if (metadata.erp_domain_label) rows.push({ label: 'ERP 领域', value: String(metadata.erp_domain_label) })
+  if (metadata.severity) rows.push({ label: '约束级别', value: String(metadata.severity) })
+  if (metadata.symbolic_expression) {
+    rows.push({ label: '符号表达', value: String(metadata.symbolic_expression) })
+  }
+  if (metadata.ontology_version) {
+    rows.push({ label: '本体版本', value: String(metadata.ontology_version) })
+  }
   if (metadata.version_label) rows.push({ label: '版本', value: String(metadata.version_label) })
   if (metadata.parser) rows.push({ label: '解析', value: parserLabel(metadata.parser) })
   if (metadata.chunk_count !== undefined) {
@@ -976,6 +984,11 @@ function nodeTypeLabel(type: string): string {
   return (
     {
       core: 'Persy 核心',
+      erp_ontology: 'ERP 本体',
+      erp_domain: 'ERP 领域',
+      erp_entity: 'ERP 实体',
+      erp_rule: 'ERP 规则',
+      erp_constraint: 'ERP 约束',
       topic: '主题',
       source: '资料来源',
       knowledge: '知识',
@@ -990,6 +1003,11 @@ function nodeIcon(type: string): string {
   return (
     {
       core: 'fa-circle-o',
+      erp_ontology: 'fa-sitemap',
+      erp_domain: 'fa-cubes',
+      erp_entity: 'fa-database',
+      erp_rule: 'fa-code-fork',
+      erp_constraint: 'fa-balance-scale',
       topic: 'fa-tag',
       source: 'fa-file-text-o',
       knowledge: 'fa-lightbulb-o',

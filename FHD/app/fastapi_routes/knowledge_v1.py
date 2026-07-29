@@ -407,6 +407,11 @@ def _merge_persy_recall(
     request: Request,
     params: dict[str, Any],
 ) -> dict[str, Any]:
+    from app.application.erp_domain_ontology import (
+        query_erp_ontology,
+        summarize_erp_ontology_chunks,
+    )
+
     if str(params.get("dataset_id") or "") != _PERSY_DATASET_ID or not payload.get("success"):
         return payload
     query_text = str(params.get("query") or "").strip()
@@ -426,24 +431,37 @@ def _merge_persy_recall(
     }
     if not memory_result.get("success"):
         result["persy_memory"]["error_code"] = str(memory_result.get("error_code") or "")
-        return result
+        memory_chunks: list[dict[str, Any]] = []
+    else:
+        memory_chunks = [
+            dict(chunk) for chunk in memory_result.get("chunks", []) if isinstance(chunk, dict)
+        ]
 
     knowledge_chunks = [
         dict(chunk) for chunk in payload.get("chunks", []) if isinstance(chunk, dict)
     ]
-    memory_chunks = [
-        dict(chunk) for chunk in memory_result.get("chunks", []) if isinstance(chunk, dict)
-    ]
+    erp_result = query_erp_ontology(
+        query_text,
+        top_k=max(1, min(int(params.get("top_k") or 5), 12)),
+    )
+    erp_chunks = [dict(chunk) for chunk in erp_result.get("chunks", []) if isinstance(chunk, dict)]
+    result["erp_ontology"] = {
+        "available": bool(erp_result.get("success")),
+        "count": len(erp_chunks),
+        "retriever": str(erp_result.get("retriever") or ""),
+        "ontology_version": str(erp_result.get("ontology_version") or ""),
+    }
     seen: set[str] = set()
     merged_chunks: list[dict[str, Any]] = []
     for chunk in sorted(
-        [*memory_chunks, *knowledge_chunks],
+        [*memory_chunks, *erp_chunks, *knowledge_chunks],
         key=lambda item: float(item.get("score") or 0.0),
         reverse=True,
     ):
         metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
         fingerprint = str(
             metadata.get("memory_id")
+            or metadata.get("erp_ontology_id")
             or metadata.get("document_id")
             or f"{chunk.get('source')}:{chunk.get('chunk_index')}:{chunk.get('text')}"
         )
@@ -467,17 +485,33 @@ def _merge_persy_recall(
                 "memory_id": memory_metadata.get("memory_id"),
             }
         )
+    for chunk in erp_chunks:
+        erp_metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        citations.append(
+            {
+                "index": len(citations) + 1,
+                "source": "ERP 领域本体",
+                "text": str(chunk.get("text") or ""),
+                "score": chunk.get("score"),
+                "erp_ontology_id": erp_metadata.get("erp_ontology_id"),
+                "symbolic_expression": erp_metadata.get("symbolic_expression"),
+            }
+        )
     result["citations"] = citations
 
-    if memory_chunks and params.get("include_answer", True):
+    if (memory_chunks or erp_chunks) and params.get("include_answer", True):
         memory_summary = "；".join(
             str(chunk.get("text") or "").strip()[:180]
             for chunk in memory_chunks[:3]
             if str(chunk.get("text") or "").strip()
         )
+        erp_summary = summarize_erp_ontology_chunks(erp_chunks)
         knowledge_answer = str(payload.get("answer") or "").strip()
         memory_answer = f"已确认的长期记忆：{memory_summary}。" if memory_summary else ""
-        result["answer"] = "\n\n".join(part for part in (memory_answer, knowledge_answer) if part)
+        erp_answer = f"ERP 领域规则：{erp_summary}。" if erp_summary else ""
+        result["answer"] = "\n\n".join(
+            part for part in (erp_answer, memory_answer, knowledge_answer) if part
+        )
     return result
 
 
@@ -921,19 +955,30 @@ def dataset_graph(
     limit: int = FastAPIQuery(80, ge=20, le=240),
 ) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+    from app.application.erp_domain_ontology import (
+        build_erp_ontology_graph,
+        merge_erp_ontology_graph,
+    )
     from app.application.persy_memory_app_service import merge_memory_graph
 
     access = _dataset_access_context_from_request(request)
     tenant_id = _dataset_read_tenant_scope(access)
     memory_graph: dict[str, Any] = {"success": True, "nodes": [], "edges": [], "stats": {}}
+    erp_graph: dict[str, Any] = {"success": True, "nodes": [], "edges": [], "stats": {}}
     graph_limit = limit
     if dataset_id == _PERSY_DATASET_ID:
         memory_graph = _persy_memory_service().graph(
             access_context=access,
             limit=max(8, min(40, int(limit * 0.28))),
         )
+        erp_graph = build_erp_ontology_graph(
+            dataset_id=dataset_id,
+            limit=max(24, min(64, int(limit * 0.56))),
+        )
         if memory_graph.get("nodes"):
-            graph_limit = max(20, int(limit * 0.62))
+            graph_limit = max(20, int(limit * 0.38))
+        else:
+            graph_limit = max(20, int(limit * 0.48))
     base_graph = get_dataset_rag_app_service().knowledge_graph(
         dataset_id,
         tenant_id=tenant_id,
@@ -942,10 +987,10 @@ def dataset_graph(
     )
     if not base_graph.get("success") or not memory_graph.get("success"):
         return cast("dict[str, Any]", _public_dataset_payload(base_graph))
-    return cast(
-        "dict[str, Any]",
-        _public_dataset_payload(merge_memory_graph(base_graph, memory_graph, limit=limit)),
-    )
+    merged_graph = merge_memory_graph(base_graph, memory_graph, limit=limit)
+    if erp_graph.get("success"):
+        merged_graph = merge_erp_ontology_graph(merged_graph, erp_graph, limit=limit)
+    return cast("dict[str, Any]", _public_dataset_payload(merged_graph))
 
 
 @router.get("/datasets/{dataset_id}/memories")

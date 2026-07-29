@@ -11,6 +11,7 @@ from app.services.intent_service import (
     is_help_request,
     is_negation,
     is_negation_intent,
+    recognize_intents,
 )
 
 
@@ -62,3 +63,20 @@ class TestIntentServiceHelpers:
         assert is_negation_intent("不要生成发货单") is True
         assert is_negation_intent("算了") is True
         assert is_negation_intent("帮我生成") is False
+
+    def test_erp_domain_context_attaches_open_ontology_without_forcing_tool(self):
+        result = recognize_intents("借贷必平衡和 MRP 净需求怎么校验？")
+
+        assert "erp_domain_ontology" in result["intent_hints"]
+        context = result["domain_context"]
+        assert context["source"] == "persy_erp_ontology"
+        rule_ids = {rule["id"] for rule in context["rules"]}
+        assert "accounting.double_entry_balance" in rule_ids
+        assert "manufacturing.mrp_net_requirement" in rule_ids
+        assert any("sum(line.amount" in rule["symbolic_expression"] for rule in context["rules"])
+
+    def test_non_erp_question_does_not_get_domain_context(self):
+        result = recognize_intents("客户北辰科技负责人是谁？")
+
+        assert "domain_context" not in result
+        assert "erp_domain_ontology" not in result["intent_hints"]

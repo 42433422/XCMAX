@@ -92,8 +92,13 @@ def test_persy_memory_routes_cover_review_query_graph_and_delete(tmp_path) -> No
             headers=_headers(),
             json={"query": "北辰科技负责人和续约要求", "top_k": 3},
         )
+        erp_query = client.post(
+            "/api/knowledge/v1/datasets/persy-knowledge/query",
+            headers=_headers(),
+            json={"query": "借贷必平衡和 MRP 净需求怎么约束？", "top_k": 4},
+        )
         graph = client.get(
-            "/api/knowledge/v1/datasets/persy-knowledge/graph?limit=80",
+            "/api/knowledge/v1/datasets/persy-knowledge/graph?limit=120",
             headers=_headers(),
         )
         deleted = client.delete(
@@ -116,9 +121,18 @@ def test_persy_memory_routes_cover_review_query_graph_and_delete(tmp_path) -> No
     )
     assert any(chunk["metadata"].get("document_id") for chunk in unified_query.json()["chunks"])
     assert "已确认的长期记忆" in unified_query.json()["answer"]
+    assert erp_query.status_code == 200
+    assert erp_query.json()["erp_ontology"]["count"] >= 2
+    assert any(
+        chunk["metadata"].get("erp_ontology_id") == "accounting.double_entry_balance"
+        for chunk in erp_query.json()["chunks"]
+    )
+    assert "ERP 领域规则" in erp_query.json()["answer"]
     assert graph.status_code == 200
     assert graph.json()["stats"]["memory_count"] == 1
+    assert graph.json()["stats"]["erp_constraint_count"] >= 1
     assert any(node["id"] == f"memory:{memory_id}" for node in graph.json()["nodes"])
+    assert any(node["type"] == "erp_constraint" for node in graph.json()["nodes"])
     assert deleted.status_code == 200
     assert deleted.json()["memory"]["status"] == "deleted"
 
