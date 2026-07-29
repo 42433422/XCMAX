@@ -410,8 +410,19 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
             "append_only": True,
             "append_only_enforced": True,
             "total": 4,
-            "allow_count": 3,
+            "allow_count": 4,
             "posthoc_conclusive_count": 2,
+            "posthoc_eligible_allow_count": 2,
+            "posthoc_eligible_conclusive_count": 1,
+            "posthoc_pending_count": 1,
+            "posthoc_pending_contracts": [
+                {
+                    "action": "self_maintenance_l1_merge",
+                    "source": "self_maintenance_loop.remote_merge_request",
+                    "count": 1,
+                }
+            ],
+            "posthoc_maturity_minutes": 90,
             "posthoc_uncovered_count": 1,
             "posthoc_coverage_rate": 66.67,
             "prohibited_miss_evidence_status": "unknown",
@@ -439,8 +450,19 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
     assert public["proof"]["alignment_posthoc"] == {
         "status": "unknown",
         "coverage_rate": 66.67,
-        "allow_count": 3,
+        "allow_count": 4,
         "conclusive_count": 2,
+        "eligible_allow_count": 2,
+        "eligible_conclusive_count": 1,
+        "pending_count": 1,
+        "pending_contracts": [
+            {
+                "action": "self_maintenance_l1_merge",
+                "source": "self_maintenance_loop.remote_merge_request",
+                "count": 1,
+            }
+        ],
+        "maturity_minutes": 90,
         "uncovered_count": 1,
         "uncovered_contracts": [
             {
