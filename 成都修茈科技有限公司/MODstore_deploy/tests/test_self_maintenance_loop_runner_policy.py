@@ -4076,6 +4076,49 @@ def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatc
     assert memory["open_items"][0]["reason"] == "structured_review_blocking_findings"
 
 
+def test_para_ai_review_veto_not_starved_by_stale_review_failed_steps():
+    """A newer Para merge-review veto must resume code before stale review holds."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-stale",
+                "kind": "failed_steps",
+                "para_task_id": "task-stale",
+                "retry_count": 1,
+                "run_id": "run-stale",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-veto",
+                "detail": "devfleet/cursor/sub-1-veto: indeterminate-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-veto",
+                "reason": "para_ai_review_rejected",
+                "run_id": "run-veto",
+                "review_feedback": "devfleet/cursor/sub-1-veto: indeterminate-review",
+            },
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-stale",
+                "para_task_id": "task-stale",
+                "run_id": "run-stale",
+            }
+        ],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result is not None
+    assert result["reason"] == "resume_para_ai_review_rejection"
+    assert result["branch"] == "devfleet/cursor/sub-1-veto"
+    assert result["para_task_id"] == "task-veto"
+    assert result["failed_steps"] == ["code"]
+    assert result["review_veto_code"] == "indeterminate-review"
+
+
 def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
     """code类失败项应打印代码重试日志，而不是escalating to human review。"""
     from modstore_server import self_maintenance_loop_runner as loop_runner

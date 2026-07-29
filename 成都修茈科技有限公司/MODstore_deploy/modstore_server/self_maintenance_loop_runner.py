@@ -62,6 +62,7 @@ from .self_maintenance_merge_policy import normalize_repo_path as _shared_normal
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
 from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
+    resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
 )
 from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
@@ -1083,6 +1084,18 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             candidate["continue_existing_code_task"] = True
         return candidate
 
+    # Para merge AI review vetoes are not in the generic code-resume plan, so a
+    # stale failed_steps review/qa hold must not starve the newest veto remediation.
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
+            continue
+        candidate = resume_candidate_from_para_ai_review_item(memory, item)
+        if candidate is not None:
+            return candidate
+
     # Then check for review/qa failures
     review_failed_run_ids = set()
     for item in open_items:
@@ -1125,27 +1138,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         }:
             continue
         reason = _normalize_automated_remediation_reason(memory, item)
-        if reason == "para_ai_review_rejected":
-            branch = str(item.get("branch") or "").strip()
-            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
-            if branch and para_task_id:
-                feedback = str(item.get("review_feedback") or item.get("detail") or "")[:4000]
-                veto_meta = classify_para_merge_review_detail(feedback)
-                return {
-                    "branch": branch,
-                    "failed_run_id": str(item.get("run_id") or "").strip(),
-                    "failed_steps": ["code"],
-                    "para_task_id": para_task_id,
-                    "reason": "resume_para_ai_review_rejection",
-                    "rejected_branch": branch,
-                    "review_actionable_findings": veto_meta.get("actionable_code_findings"),
-                    "review_feedback": feedback,
-                    "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
-                    "review_veto_code": str(
-                        item.get("review_veto_code") or veto_meta.get("veto_code") or ""
-                    ),
-                }
-            continue
+        candidate = resume_candidate_from_para_ai_review_item(memory, item)
+        if candidate is not None:
+            return candidate
         if reason in {
             "auto_merge_safety_score_v2_too_low",
             "auto_merge_safety_score_v3_too_low",
