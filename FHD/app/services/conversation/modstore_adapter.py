@@ -45,11 +45,9 @@ from app.application.workflow.multimodal_user_content import (
     replace_image_parts_with_ocr_text,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.services.conversation.modstore_chat_failover import (
-    build_chat_failover_candidates,
-    chat_failover_max_attempts,
-    is_market_chat_failoverable,
-)
+from app.services.conversation.modstore_chat_failover import is_market_chat_failoverable
+from app.services.conversation import modstore_adapter_failover as _mfailover
+from app.services.conversation.modstore_response_normalize import normalize_market_chat_response
 
 logger = logging.getLogger(__name__)
 
@@ -438,70 +436,12 @@ class ModstorePlatformAdapter:
 
         return headers
 
-    def _failover_enabled(self) -> bool:
-        raw = os.environ.get("XCAGI_LLM_CHAT_FAILOVER", "1").strip().lower()
-        return raw not in {"0", "false", "no", "off"}
-
-    def _fetch_llm_status_sync(self) -> dict[str, Any] | None:
-        try:
-            with httpx.Client(
-                timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
-                headers=self._build_headers(),
-            ) as client:
-                response = client.get(f"{self.platform_url}/api/llm/status")
-                if response.status_code >= 400:
-                    return None
-                data = response.json()
-                return data if isinstance(data, dict) else None
-        except RECOVERABLE_ERRORS:
-            return None
-
-    def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
-        try:
-            with httpx.Client(
-                timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
-                headers=self._build_headers(),
-            ) as client:
-                response = client.get(f"{self.platform_url}/api/llm/resolve-chat-default")
-                if response.status_code >= 400:
-                    return None
-                data = response.json()
-                return data if isinstance(data, dict) else None
-        except RECOVERABLE_ERRORS:
-            return None
-
-    def _ensure_catalog_sync(self) -> dict[str, Any] | None:
-        catalog = self._cached_catalog()
-        if catalog is not None:
-            return catalog
-        try:
-            with httpx.Client(
-                timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
-                headers=self._build_headers(),
-            ) as client:
-                response = client.get(f"{self.platform_url}/api/llm/catalog")
-                if response.status_code >= 400:
-                    return None
-                raw = response.json()
-            if isinstance(raw, dict):
-                self._remember_catalog(raw)
-                return raw
-        except RECOVERABLE_ERRORS:
-            return None
-        return None
 
     def _list_chat_failover_candidates_sync(
         self, primary_provider: str, primary_model: str
     ) -> list[tuple[str, str]]:
-        if not self._failover_enabled():
-            return [(primary_provider, primary_model)]
-        return build_chat_failover_candidates(
-            primary_provider=primary_provider,
-            primary_model=primary_model,
-            status_payload=self._fetch_llm_status_sync(),
-            catalog_payload=self._ensure_catalog_sync(),
-            resolved_default=self._fetch_resolve_chat_default_sync(),
-            max_attempts=chat_failover_max_attempts(),
+        return _mfailover._list_chat_failover_candidates_sync(
+            self, primary_provider, primary_model
         )
 
     def _post_market_chat_sync(
@@ -515,69 +455,16 @@ class ModstorePlatformAdapter:
         allow_failover: bool,
         extra: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        url = f"{self.platform_url}/api/llm/chat"
-        payload: Dict[str, Any] = {
-            "provider": provider,
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "allow_failover": bool(allow_failover),
-        }
-        if extra:
-            payload.update(extra)
-        if self.user_id:
-            payload["user_id"] = self.user_id
-        t0 = time.perf_counter()
-        with httpx.Client(
-            timeout=httpx.Timeout(self.timeout, connect=10.0),
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-            headers=self._build_headers(),
-        ) as client:
-            response = client.post(url, json=payload)
-            latency_ms = (time.perf_counter() - t0) * 1000.0
-            if response.status_code >= 400:
-                error_text = response.text[:500]
-                logger.error(
-                    "[Modstore] 平台同步返回错误 %s provider=%s/%s: %s",
-                    response.status_code,
-                    provider,
-                    model,
-                    error_text,
-                )
-                raise ValueError(f"平台错误({response.status_code}): {error_text}")
-            result = response.json()
-
-        used_provider = str(result.get("provider") or provider)
-        used_model = str(result.get("model") or model)
-        try:
-            from app.neuro_bus.application_neuro_bridge import neuro_notify_ai_model_roundtrip
-
-            raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
-            raw_total = 0
-            try:
-                raw_total = int(raw_usage.get("total_tokens") or 0)
-            except (TypeError, ValueError):
-                raw_total = 0
-            neuro_notify_ai_model_roundtrip(
-                model=f"modstore:{used_provider}/{used_model}",
-                latency_ms=latency_ms,
-                token_count=raw_total,
-                user_id=str(self.user_id or ""),
-            )
-        except RECOVERABLE_ERRORS:
-            pass
-
-        logger.info(
-            "[Modstore] 调用成功 [%.0fms] %s/%s key_source=%s billed=%s failover_from=%s",
-            latency_ms,
-            used_provider,
-            used_model,
-            result.get("key_source", "unknown"),
-            result.get("billed", False),
-            result.get("failover_from"),
+        return _mfailover._post_market_chat_sync(
+            self,
+            provider=provider,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            allow_failover=allow_failover,
+            extra=extra,
         )
-        return self._normalize_response(result, used_provider, used_model)
 
     def _resolve_provider_model(
         self,
@@ -1005,140 +892,6 @@ class ModstorePlatformAdapter:
             raise last_error
         raise ValueError("平台流式聊天失败且无可用备用模型")
 
-    def _normalize_response(
-        self, raw_response: Dict[str, Any], provider: str, model: str
-    ) -> Dict[str, Any]:
-        """
-        将修茈市场响应标准化为OpenAI格式
-
-        修茈市场返回格式:
-        {
-            "success": True,
-            "content": "...",
-            "usage": {...},
-            "charge_amount": 0.01,
-            "key_source": "platform",
-            "provider": "xiaomi",
-            "model": "mimo-v2.5-pro",
-            ...
-        }
-
-        OpenAI标准格式:
-        {
-            "choices": [{
-                "message": {"role": "assistant", "content": "..."},
-                "index": 0,
-                "finish_reason": "stop"
-            }],
-            "usage": {...},
-            "model": "..."
-        }
-        """
-        raw_choices = raw_response.get("choices")
-        if isinstance(raw_choices, list) and raw_choices:
-            normalized_choices: List[Dict[str, Any]] = []
-            for idx, choice in enumerate(raw_choices):
-                choice_dict = choice if isinstance(choice, dict) else {}
-                message = (
-                    choice_dict.get("message")
-                    if isinstance(choice_dict.get("message"), dict)
-                    else {}
-                )
-                normalized_message: Dict[str, Any] = {
-                    "role": message.get("role") or "assistant",
-                    "content": message.get("content") or "",
-                }
-                if message.get("tool_calls"):
-                    normalized_message["tool_calls"] = message.get("tool_calls")
-                normalized_choices.append(
-                    {
-                        "message": normalized_message,
-                        "index": choice_dict.get("index", idx),
-                        "finish_reason": choice_dict.get("finish_reason", "stop"),
-                    }
-                )
-            usage = raw_response.get("usage", {})
-            usage_dict = dict(usage) if isinstance(usage, dict) else {}
-            return {
-                "choices": normalized_choices,
-                "usage": usage_dict,
-                "model": raw_response.get("model") or f"{provider}/{model}",
-                "_modstore_meta": {
-                    "success": raw_response.get("success"),
-                    "provider": raw_response.get("provider") or provider,
-                    "model": raw_response.get("model") or model,
-                    "resolved_model": raw_response.get("model") or f"{provider}/{model}",
-                    "key_source": raw_response.get("key_source"),
-                    "billed": raw_response.get("billed"),
-                    "charge_amount": raw_response.get("charge_amount"),
-                    "charge_amount_cny": raw_response.get("charge_amount"),
-                    "conversation_id": raw_response.get("conversation_id"),
-                    "request_id": raw_response.get("request_id"),
-                    "category": "llm",
-                },
-                "_xcagi_billing": {
-                    "provider": raw_response.get("provider") or provider,
-                    "model": raw_response.get("model") or model,
-                    "resolved_model": raw_response.get("model") or f"{provider}/{model}",
-                    "key_source": raw_response.get("key_source"),
-                    "billed": raw_response.get("billed"),
-                    "charge_amount_cny": raw_response.get("charge_amount"),
-                    "request_id": raw_response.get("request_id"),
-                    "category": "llm",
-                },
-            }
-
-        content = raw_response.get("content", "")
-        usage = raw_response.get("usage", {})
-        tool_calls = raw_response.get("tool_calls")
-
-        # 处理usage对象（可能是dataclass或dict）
-        if hasattr(usage, "__dict__"):
-            usage_dict = usage.__dict__
-        else:
-            usage_dict = dict(usage) if isinstance(usage, dict) else {}
-
-        normalized = {
-            "choices": [
-                {
-                    "message": {
-                        "role": "assistant",
-                        "content": content,
-                        **({"tool_calls": tool_calls} if tool_calls else {}),
-                    },
-                    "index": 0,
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": usage_dict,
-            "model": f"{provider}/{model}",
-            "_modstore_meta": {
-                "success": raw_response.get("success"),
-                "provider": raw_response.get("provider") or provider,
-                "model": raw_response.get("model") or model,
-                "resolved_model": f"{provider}/{model}",
-                "key_source": raw_response.get("key_source"),
-                "billed": raw_response.get("billed"),
-                "charge_amount": raw_response.get("charge_amount"),
-                "charge_amount_cny": raw_response.get("charge_amount"),
-                "conversation_id": raw_response.get("conversation_id"),
-                "request_id": raw_response.get("request_id"),
-                "category": "llm",
-            },
-            "_xcagi_billing": {
-                "provider": raw_response.get("provider") or provider,
-                "model": raw_response.get("model") or model,
-                "resolved_model": f"{provider}/{model}",
-                "key_source": raw_response.get("key_source"),
-                "billed": raw_response.get("billed"),
-                "charge_amount_cny": raw_response.get("charge_amount"),
-                "request_id": raw_response.get("request_id"),
-                "category": "llm",
-            },
-        }
-
-        return normalized
-
     async def get_available_providers(self) -> List[Dict[str, Any]]:
         """
         获取当前可用的供应商列表（通过平台API）
@@ -1225,6 +978,13 @@ def create_modstore_adapter_from_env() -> Optional[ModstorePlatformAdapter]:
         return None
 
     return ModstorePlatformAdapter()
+
+
+
+    def _normalize_response(
+        self, raw_response: Dict[str, Any], provider: str, model: str
+    ) -> Dict[str, Any]:
+        return normalize_market_chat_response(raw_response, provider, model)
 
 
 class _ModstoreOpenAICompletions:
