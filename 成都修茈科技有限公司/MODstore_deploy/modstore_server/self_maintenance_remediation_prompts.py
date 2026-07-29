@@ -9,8 +9,10 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
     """Operational merge failures where the branch fix should be continued, not rewritten."""
 
     normalized = str(detail or "").strip().lower()
-    return normalized.startswith("post-dispatch-check-failed:") or normalized.startswith(
-        "indeterminate-review:"
+    return (
+        normalized.startswith("post-dispatch-check-failed:")
+        or normalized.startswith("indeterminate-review:")
+        or normalized.startswith("bot merge checks failed or unavailable:")
     )
 
 
@@ -46,7 +48,8 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     continue_on_branch = bool(candidate.get("continue_existing_code_task"))
     if continue_on_branch:
         strategy = (
-            "The previous Para merge task failed during post-dispatch required-check polling or "
+            "The previous Para merge task failed during post-dispatch required-check polling, "
+            "gh pr checks polling infrastructure (bot merge checks failed or unavailable), or "
             "indeterminate AI review infrastructure, after the candidate branch already passed "
             "earlier gates. Continue on the rejected "
             "branch as the mutable base: diff it against main, keep the existing production fix "
