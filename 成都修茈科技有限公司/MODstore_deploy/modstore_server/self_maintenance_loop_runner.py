@@ -1411,6 +1411,51 @@ def _last_started_at() -> Optional[datetime]:
     return None
 
 
+def _pending_interrupted_recovery(triggered_by: str) -> Optional[Dict[str, Any]]:
+    """Return the latest same-trigger run that a process restart interrupted.
+
+    A deploy can terminate the loop process after it persisted ``phase=start``
+    but before it wrote a step or terminal row. Lease reconciliation records
+    that interruption truthfully. The next invocation from the same scheduler
+    source must then resume instead of inheriting the ordinary cooldown from
+    work that never reached a terminal outcome.
+    """
+
+    latest_start: Optional[Dict[str, Any]] = None
+    terminal_by_run: Dict[str, Dict[str, Any]] = {}
+    for row in _read_ledger(limit=300):
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        phase = str(row.get("phase") or "").strip()
+        if phase == "start":
+            latest_start = row
+        elif phase in {"complete", "skip"}:
+            terminal_by_run[run_id] = row
+
+    if latest_start is None:
+        return None
+    run_id = str(latest_start.get("run_id") or "").strip()
+    terminal = terminal_by_run.get(run_id)
+    if not isinstance(terminal, dict):
+        return None
+    if str(terminal.get("status") or "").strip() != "abandoned_interrupted":
+        return None
+
+    expected_trigger = str(latest_start.get("triggered_by") or "").strip()
+    current_trigger = str(triggered_by or "").strip()
+    if not expected_trigger or expected_trigger != current_trigger:
+        return None
+    return {
+        "interrupted_at": str(terminal.get("completed_at") or "").strip(),
+        "run_id": run_id,
+        "started_at": str(
+            latest_start.get("started_at") or latest_start.get("created_at") or ""
+        ).strip(),
+        "triggered_by": expected_trigger,
+    }
+
+
 def reconcile_stale_self_maintenance_runs(
     *, exclusive_lease_reacquired: bool = False
 ) -> Dict[str, Any]:
@@ -1497,8 +1542,10 @@ def reconcile_stale_self_maintenance_runs(
                 "action": "stop",
                 "reason": terminal_reason,
                 "exclusive_lease_reacquired": interrupted,
+                "recovery_required": interrupted,
                 "stale_minutes": stale_minutes,
             },
+            "recovery_required": interrupted,
             "run_id": run_id,
             "started_at": _iso(started_at),
             "status": terminal_status,
@@ -1546,8 +1593,14 @@ def should_run_self_maintenance_loop(
 
     cooldown_minutes = self_maintenance_cooldown_minutes(triggered_by)
     last_started = _last_started_at()
+    interrupted_recovery = _pending_interrupted_recovery(triggered_by)
 
-    if not force and last_started is not None and cooldown_minutes > 0:
+    if (
+        not force
+        and interrupted_recovery is None
+        and last_started is not None
+        and cooldown_minutes > 0
+    ):
         next_allowed = last_started + timedelta(minutes=cooldown_minutes)
         if _utc_now() < next_allowed:
             return {
@@ -1560,7 +1613,7 @@ def should_run_self_maintenance_loop(
                 "triggered_by": triggered_by,
             }
 
-    if not force and int(evaluation["signal_count"]) < threshold:
+    if not force and interrupted_recovery is None and int(evaluation["signal_count"]) < threshold:
         return {
             **evaluation,
             "cooldown_minutes": cooldown_minutes,
@@ -1572,7 +1625,12 @@ def should_run_self_maintenance_loop(
     return {
         **evaluation,
         "cooldown_minutes": cooldown_minutes,
-        "reason": "force" if force else "threshold_met",
+        "interrupted_recovery": interrupted_recovery,
+        "reason": (
+            "force"
+            if force
+            else "interrupted_recovery" if interrupted_recovery is not None else "threshold_met"
+        ),
         "should_run": True,
         "threshold": threshold,
     }
