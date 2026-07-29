@@ -48,6 +48,9 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_para_merge_remediation import (
+    resume_from_clean_baseline_for_para_merge,
+)
 from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
@@ -2312,12 +2315,6 @@ def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
     return task if isinstance(task, dict) else {}
 
 
-def _is_para_post_dispatch_merge_failure(detail: str) -> bool:
-    """True when merge-worker stopped after required checks failed post-dispatch."""
-
-    return str(detail or "").strip().lower().startswith("post-dispatch-check-failed:")
-
-
 def _reconcile_requested_merge_feedback(
     memory: Dict[str, Any],
     *,
@@ -2441,9 +2438,7 @@ def _reconcile_requested_merge_feedback(
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
-            resume_from_clean_baseline = not (
-                reason == "para_merge_conflict" and _is_para_post_dispatch_merge_failure(detail)
-            )
+            resume_from_clean_baseline = resume_from_clean_baseline_for_para_merge(reason, detail)
             open_items.append(
                 {
                     "branch": rejected_branch,

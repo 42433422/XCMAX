@@ -37,13 +37,13 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     continue_on_branch = bool(candidate.get("continue_existing_code_task"))
     if continue_on_branch:
         strategy = (
-            "The previous Para merge task failed during post-dispatch required-check polling, "
-            "after the candidate branch already passed code/review/qa. Continue on the rejected "
-            "branch as the mutable base: diff it against main, keep the existing production fix "
-            "when already present on main, and only add the smallest delta still missing. Do not "
-            "restart from the clean baseline or reimplement an already-merged fix. If every "
-            "executable gap is already on main, update loop status with NO_ACTION instead of "
-            "marker-only edits."
+            "The previous Para merge task failed after the candidate branch was already prepared "
+            "(post-dispatch required-check polling, gh pr checks polling, or merge-worker "
+            "hold-label infrastructure). Continue on the rejected branch as the mutable base: "
+            "diff it against main, keep the existing production fix when already present on main, "
+            "and only add the smallest delta still missing. Do not restart from the clean "
+            "baseline or reimplement an already-merged fix. If every executable gap is already on "
+            "main, update loop status with NO_ACTION instead of marker-only edits."
         )
     else:
         strategy = (
