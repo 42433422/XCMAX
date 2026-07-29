@@ -202,3 +202,131 @@ def test_interruption_recovery_does_not_bypass_evolution_pause(monkeypatch) -> N
 
     assert gate["should_run"] is False
     assert gate["reason"] == "evolution_metrics_pause"
+
+
+def test_same_trigger_transient_para_failure_bypasses_cooldown_and_threshold(
+    monkeypatch,
+) -> None:
+    now = datetime(2026, 7, 29, 11, 30, tzinfo=timezone.utc)
+    started_at = now - timedelta(minutes=8)
+    failed_at = now - timedelta(minutes=1)
+    rows = [
+        {
+            **_start("transient-run", started_at),
+            "triggered_by": "automated_remediation",
+        },
+        {
+            "completed_at": failed_at.isoformat(),
+            "error": (
+                "output_failed: handler=para_delegate error=设备 Mac 主设备 "
+                "MODstore Bridge 未在线，请启动 排比 Para 本机代理"
+            ),
+            "phase": "complete",
+            "run_id": "transient-run",
+            "status": "failed",
+            "triggered_by": "automated_remediation",
+        },
+    ]
+    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(
+        runner,
+        "evaluate_self_maintenance_need",
+        lambda: {
+            "runtime_provenance": {"ok": True},
+            "signal_count": 0,
+        },
+    )
+    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+
+    gate = runner.should_run_self_maintenance_loop(
+        force=False,
+        triggered_by="automated_remediation",
+    )
+
+    assert gate["should_run"] is True
+    assert gate["reason"] == "transient_failure_recovery"
+    assert gate["transient_failure_recovery"] == {
+        "failed_at": failed_at.isoformat(),
+        "failure_class": "para_transport_unavailable",
+        "run_id": "transient-run",
+        "started_at": started_at.isoformat(),
+        "triggered_by": "automated_remediation",
+    }
+
+
+def test_non_infrastructure_failure_keeps_cooldown(monkeypatch) -> None:
+    now = datetime(2026, 7, 29, 11, 30, tzinfo=timezone.utc)
+    rows = [
+        {
+            **_start("code-failure", now - timedelta(minutes=8)),
+            "triggered_by": "automated_remediation",
+        },
+        {
+            "completed_at": (now - timedelta(minutes=1)).isoformat(),
+            "error": "delivery_validation_failed: pytest exit=1",
+            "phase": "complete",
+            "run_id": "code-failure",
+            "status": "failed",
+            "triggered_by": "automated_remediation",
+        },
+    ]
+    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(
+        runner,
+        "evaluate_self_maintenance_need",
+        lambda: {
+            "runtime_provenance": {"ok": True},
+            "signal_count": 10,
+        },
+    )
+    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+
+    gate = runner.should_run_self_maintenance_loop(
+        force=False,
+        triggered_by="automated_remediation",
+    )
+
+    assert gate["should_run"] is False
+    assert gate["reason"] == "cooldown"
+
+
+def test_transient_failure_recovery_requires_same_trigger(monkeypatch) -> None:
+    now = datetime(2026, 7, 29, 11, 30, tzinfo=timezone.utc)
+    rows = [
+        {
+            **_start("transient-run", now - timedelta(minutes=8)),
+            "triggered_by": "automated_remediation",
+        },
+        {
+            "completed_at": (now - timedelta(minutes=1)).isoformat(),
+            "error": (
+                "output_failed: handler=para_delegate error="
+                "Server disconnected without sending a response."
+            ),
+            "phase": "complete",
+            "run_id": "transient-run",
+            "status": "failed",
+            "triggered_by": "automated_remediation",
+        },
+    ]
+    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(
+        runner,
+        "evaluate_self_maintenance_need",
+        lambda: {
+            "runtime_provenance": {"ok": True},
+            "signal_count": 10,
+        },
+    )
+    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+
+    gate = runner.should_run_self_maintenance_loop(
+        force=False,
+        triggered_by="scheduler",
+    )
+
+    assert gate["should_run"] is False
+    assert gate["reason"] == "cooldown"
