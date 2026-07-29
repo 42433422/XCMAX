@@ -92,6 +92,14 @@ def test_summary_never_reports_zero_prohibited_miss_without_posthoc_evidence(
     assert unknown["prohibited_hit_count"] == 1
     assert unknown["has_prohibited_miss"] is None
     assert unknown["prohibited_miss_evidence_status"] == "unknown"
+    assert unknown["posthoc_uncovered_count"] == 1
+    assert unknown["posthoc_uncovered_contracts"] == [
+        {
+            "action": "restart_service",
+            "source": "test.audit",
+            "count": 1,
+        }
+    ]
 
     record_posthoc_anomaly_evidence(
         action_id="allow-1",
@@ -108,6 +116,57 @@ def test_summary_never_reports_zero_prohibited_miss_without_posthoc_evidence(
     assert verified["has_prohibited_miss"] is False
     assert verified["prohibited_miss_evidence_status"] == "verified_clear"
     assert verified["posthoc_coverage_rate"] == 100.0
+    assert verified["posthoc_uncovered_count"] == 0
+    assert verified["posthoc_uncovered_contracts"] == []
+
+
+def test_uncovered_contract_summary_is_aggregate_and_has_no_action_ids(
+    session_factory,
+):
+    _decision(
+        session_factory,
+        "private-action-id-1",
+        "allow",
+        action="daily_digest",
+        source="daily_digest.cron",
+    )
+    _decision(
+        session_factory,
+        "private-action-id-2",
+        "allow",
+        action="daily_digest",
+        source="daily_digest.cron",
+    )
+    _decision(
+        session_factory,
+        "private-action-id-3",
+        "allow",
+        action="self_heal_pr_merge",
+        source="approval_dispatcher.auto_merge",
+    )
+
+    evidence = build_autonomy_decision_evidence(
+        session_factory=session_factory,
+        now=NOW,
+    )
+
+    assert evidence["posthoc_uncovered_count"] == 3
+    assert evidence["posthoc_uncovered_contracts"] == [
+        {
+            "action": "daily_digest",
+            "source": "daily_digest.cron",
+            "count": 2,
+        },
+        {
+            "action": "self_heal_pr_merge",
+            "source": "approval_dispatcher.auto_merge",
+            "count": 1,
+        },
+    ]
+    assert "private-action-id" not in json.dumps(
+        evidence["posthoc_uncovered_contracts"],
+        sort_keys=True,
+    )
 
 
 def test_posthoc_miss_requires_correlated_allowed_action(session_factory):

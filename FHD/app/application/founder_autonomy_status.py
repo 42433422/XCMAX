@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from app.application.founder_autonomy_alignment_summary import build_alignment_live_summary
 from app.application.founder_autonomy_primary_gates import build_primary_gate_sets
 from app.application.founder_autonomy_projection import (
     build_public_founder_autonomy_projection,
@@ -446,13 +447,12 @@ def build_founder_autonomy_snapshot(
             "paid_amount_cents": int(paid_amount),
             "production_value_verified": production_value_verified,
             "outcome_verified": outcome_verified,
-            "veto_rate": veto_rate,
-            "autonomy_audit_authoritative": audit_available,
-            "autonomy_audit_count": audit_total,
-            "prohibited_miss_status": autonomy_audit.get("prohibited_miss_evidence_status")
-            or ("detected" if prohibited_miss else "unknown"),
-            "prohibited_posthoc_coverage_rate": _as_float(
-                autonomy_audit.get("posthoc_coverage_rate")
+            **build_alignment_live_summary(
+                autonomy_audit,
+                audit_available=audit_available,
+                audit_total=audit_total,
+                prohibited_miss=prohibited_miss,
+                veto_rate=veto_rate,
             ),
             "veto_channel_available": veto_channel_available,
             "veto_pending": veto_pending,
