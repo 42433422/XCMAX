@@ -483,6 +483,61 @@ def test_merged_action_requires_same_sha_production_receipt(session_factory, tmp
     assert result["incomplete_count"] == 0
 
 
+def test_historical_para_state_can_use_fail_closed_github_evidence(
+    session_factory,
+    tmp_path,
+):
+    run_id = "1f784ba7-4afb-4099-9d7c-f9d2e782d4bd"
+    task_id = "584a11b2-9ff2-4c26-b33c-b10a162066df"
+    _allow_merge(session_factory, run_id)
+    ledger = tmp_path / "self-maintenance.jsonl"
+    ledger.write_text(
+        json.dumps(
+            {
+                "base_branch": "main",
+                "branch": "devfleet/cursor/sub-1-c0250e",
+                "created_at": (NOW + timedelta(seconds=1)).isoformat(),
+                "event": "merge_requested",
+                "ok": True,
+                "para_task_id": task_id,
+                "run_id": run_id,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    observed = {}
+
+    def _missing_para(_task_id):
+        raise RuntimeError("historical task archived")
+
+    def _github_evidence(**kwargs):
+        observed.update(kwargs)
+        return {
+            "ok": True,
+            "verdict": "no_prohibited_miss",
+            "evidence_ref": "github-pr:816:merged:15bc00000000+checks:31+scope:abc",
+            "reason": "github_merged_pr_scope_checks_and_ancestry_verified",
+        }
+
+    result = run_autonomy_posthoc_audit(
+        self_maintenance_ledger_path=ledger,
+        para_task_fetcher=_missing_para,
+        github_merge_fetcher=_github_evidence,
+        now=NOW + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_count"] == 1
+    assert result["incomplete_count"] == 0
+    assert observed == {
+        "allowed_at": NOW,
+        "base_branch": "main",
+        "branch": "devfleet/cursor/sub-1-c0250e",
+        "expected_merge_sha": "",
+    }
+
+
 def test_merge_sha_mismatch_remains_unknown(session_factory, tmp_path):
     run_id = "a4a0774b-ada7-423a-8974-8f0f8af1003e"
     task_id = "6748f024-952e-4361-a497-c2af84b6c893"
@@ -535,6 +590,10 @@ def test_merge_sha_mismatch_remains_unknown(session_factory, tmp_path):
             "status": "merged",
             "merge_commit_sha": "a" * 40,
         },
+        github_merge_fetcher=lambda **_kwargs: {
+            "ok": False,
+            "reason": "github_merge_sha_contradiction",
+        },
         now=NOW + timedelta(seconds=2),
         session_factory=session_factory,
     )
@@ -543,7 +602,7 @@ def test_merge_sha_mismatch_remains_unknown(session_factory, tmp_path):
     assert result["incomplete"] == [
         {
             "action_id": f"loop:{run_id}:self_maintenance_l1_merge",
-            "reason": "exact_production_receipt_missing",
+            "reason": "github_merge_sha_contradiction",
         }
     ]
 
