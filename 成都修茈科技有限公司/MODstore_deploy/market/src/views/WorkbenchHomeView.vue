@@ -503,7 +503,7 @@
                         />
                         <div class="wb-llm-inline wb-llm-inline--desktop" aria-label="模型选择">
                         <div class="wb-mode-segment" role="radiogroup" aria-label="模型模式">
-                          <button type="button" class="wb-mode-segment__btn" :class="{ 'wb-mode-segment__btn--on': modelMode === 'auto' }" role="radio" :aria-checked="modelMode === 'auto'" title="Auto：按账户默认选模；配额/限流时自动切换其它可用模型" @click="modelMode = 'auto'"> Auto </button>
+                          <button type="button" class="wb-mode-segment__btn" :class="{ 'wb-mode-segment__btn--on': modelMode === 'auto' }" role="radio" :aria-checked="modelMode === 'auto'" title="Auto：根据任务自动选择合适模型" @click="modelMode = 'auto'"> Auto </button>
                           <button type="button" class="wb-mode-segment__btn" :class="{ 'wb-mode-segment__btn--on': modelMode === 'manual' }" role="radio" :aria-checked="modelMode === 'manual'" title="自选：手动指定厂商与模型" @click="modelMode = 'manual'"> 自选 </button>
                         </div>
                         <p v-if="modelModeHint" class="wb-llm-hint">{{ modelModeHint }}</p>
@@ -1406,7 +1406,7 @@
               />
             <div class="wb-llm-inline wb-llm-inline--desktop" aria-label="模型选择">
               <div class="wb-mode-segment" role="radiogroup" aria-label="模型模式">
-                <button type="button" class="wb-mode-segment__btn" :class="{ 'wb-mode-segment__btn--on': modelMode === 'auto' }" role="radio" :aria-checked="modelMode === 'auto'" title="Auto：按账户默认选模；配额/限流时自动切换其它可用模型" @click="modelMode = 'auto'">Auto</button>
+                <button type="button" class="wb-mode-segment__btn" :class="{ 'wb-mode-segment__btn--on': modelMode === 'auto' }" role="radio" :aria-checked="modelMode === 'auto'" title="Auto：根据任务自动选择合适模型" @click="modelMode = 'auto'">Auto</button>
                 <button type="button" class="wb-mode-segment__btn" :class="{ 'wb-mode-segment__btn--on': modelMode === 'manual' }" role="radio" :aria-checked="modelMode === 'manual'" title="自选：手动指定厂商与模型" @click="modelMode = 'manual'">自选</button>
               </div>
               <p v-if="modelModeHint" class="wb-llm-hint">{{ modelModeHint }}</p>
@@ -4648,7 +4648,6 @@ async function runDirectChatTurn(opts: {
           ttsStreamAssistantId = ''
         }
       },
-      allowFailover: modelMode.value === 'auto',
     })
     currentStreamHandle = handle
     await handle.done
@@ -5782,7 +5781,7 @@ const mediaGenRunner = {
     const res = await api.llmChat(provider, model, [
       { role: 'system', content: sys },
       { role: 'user', content: usr },
-    ], 1800, null, modelMode.value === 'auto')
+    ], 1800)
     return String(res?.content || '').trim() || '（无输出）'
   },
   async generatePptx(topic: string, markdown: string) {
@@ -5802,7 +5801,7 @@ const mediaGenRunner = {
     const res = await api.llmChat(provider, model, [
       { role: 'system', content: sys },
       { role: 'user', content: usr },
-    ], 2200, null, modelMode.value === 'auto')
+    ], 2200)
     return String(res?.content || '').trim() || '（无输出）'
   },
   async generateVideo(prompt: string, opts: { aspect: string; durationSec: number }) {
@@ -6354,7 +6353,6 @@ async function resummarizeVoiceEmployeePlan(forceConcrete: boolean) {
       onToken: (_delta, soFar) => {
         if (planSession.value) planSession.value.streamingText = soFar
       },
-      allowFailover: modelMode.value === 'auto',
     })
     const { content } = await handle.done
     if (planSession.value) planSession.value.streamingText = ''
@@ -6848,7 +6846,6 @@ async function runVoiceChatTurn(
         if (useTts && !aborted) streamingTts.finish(reply)
         else if (useTts && aborted) streamingTts.stop()
       },
-      allowFailover: modelMode.value === 'auto',
     })
     await voiceStreamHandle.done
   } catch (e) {
@@ -7443,7 +7440,7 @@ async function estimateOrchestrationSeconds(ctx) {
     ].filter(Boolean)
     const res = await api.llmChat(provider, model, [
       { role: 'system', content: ORCH_ESTIMATE_SYSTEM },
-      { role: 'user', content: lines.join('\n', null, modelMode.value === 'auto') },
+      { role: 'user', content: lines.join('\n') },
     ], 256)
     return parseOrchestrationEtaFromLlmText(res?.content)
   } catch {
@@ -7672,7 +7669,7 @@ const currentProviderLabel = computed(() => {
 
 const modelModeHint = computed(() => {
   if (modelMode.value === 'auto') {
-    return 'Auto：按账户默认选模；配额/限流时自动切换其它可用模型'
+    return 'Auto：系统将根据任务自动选择合适模型'
   }
   if (selectedModel.value) {
     return `自选：${currentProviderLabel.value} · ${selectedModel.value}`
@@ -10581,7 +10578,6 @@ async function appendUserAndAssistantPlanTurn(userText, displayText = userText) 
     onToken: (_delta, soFar) => {
       if (planSession.value) planSession.value.streamingText = soFar
     },
-    allowFailover: modelMode.value === 'auto',
   })
   const { content } = await handle.done
   if (planSession.value) planSession.value.streamingText = ''
@@ -10625,7 +10621,6 @@ async function summarizePlanSession() {
     onToken: (_delta, soFar) => {
       if (planSession.value) planSession.value.streamingText = soFar
     },
-    allowFailover: modelMode.value === 'auto',
   })
   let content = ''
   try {
@@ -11002,7 +10997,6 @@ async function requestExecutionChecklist() {
       onToken: (_delta, soFar) => {
         if (planSession.value) planSession.value.streamingText = soFar
       },
-      allowFailover: modelMode.value === 'auto',
     })
     const { content } = await handle.done
     if (planSession.value) planSession.value.streamingText = ''

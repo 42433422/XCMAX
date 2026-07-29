@@ -105,7 +105,7 @@ async def test_list_candidates_prefers_primary_then_others(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_billed_llm_chat_failsover_on_quota(monkeypatch):
-    from modstore_server import llm_api
+    from modstore_server import llm_billed_chat as llm_api
 
     calls: list[tuple[str, str]] = []
 
@@ -161,7 +161,7 @@ async def test_run_billed_llm_chat_failsover_on_quota(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_billed_respects_allow_failover_false(monkeypatch):
-    from modstore_server import llm_api
+    from modstore_server import llm_billed_chat as llm_api
 
     async def fake_once(request, db, user, **kwargs):
         raise HTTPException(429, "insufficient_quota")
