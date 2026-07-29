@@ -362,8 +362,15 @@ def verify_self_maintenance_merge_action(
     allowed_at: datetime,
     records: list[dict[str, Any]],
     para_task_fetcher: Callable[[str], dict[str, Any]],
+    github_merge_fetcher: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
-    """Verify a merge allow from Para final state and exact-SHA receipts."""
+    """Verify a merge allow from independent durable evidence.
+
+    Exact production identity remains the strongest path. Historical Para
+    state may be unavailable after task retention expires, so a read-only
+    GitHub verifier can instead prove the merge action, bounded scope, checks,
+    and current main ancestry. Both paths fail closed.
+    """
 
     match = _MERGE_ACTION.fullmatch(str(action_id or ""))
     if match is None:
@@ -385,12 +392,19 @@ def verify_self_maintenance_merge_action(
     task_id = str((request or {}).get("para_task_id") or "").strip()
     if not task_id:
         return {"ok": False, "reason": "merge_request_receipt_missing"}
+    branch = str((request or {}).get("branch") or "").strip()
+    base_branch = str(
+        (request or {}).get("base_branch") or os.environ.get("MODSTORE_PARA_BRANCH") or "main"
+    ).strip()
+    para_reason = ""
     try:
         task = para_task_fetcher(task_id)
     except Exception:
-        return {"ok": False, "reason": "para_task_state_unavailable"}
+        task = {}
+        para_reason = "para_task_state_unavailable"
     if not isinstance(task, dict):
-        return {"ok": False, "reason": "para_task_state_invalid"}
+        task = {}
+        para_reason = "para_task_state_invalid"
     task_status = str(task.get("status") or "").strip().lower()
     task_merge_sha = str(task.get("merge_commit_sha") or "").strip().lower()
     if task_status in _TERMINAL_NO_EFFECT and not task_merge_sha:
@@ -400,43 +414,65 @@ def verify_self_maintenance_merge_action(
             "evidence_ref": f"para-task:{task_id}:terminal:{task_status}",
             "reason": "merge_terminal_without_mutation",
         }
-    if task_status != "merged" or not _SHA.fullmatch(task_merge_sha):
-        return {"ok": False, "reason": "para_merge_not_conclusive"}
+    if task_status == "merged" and _SHA.fullmatch(task_merge_sha):
+        merged = next(
+            (
+                record
+                for record in reversed(run_records)
+                if record.get("event") == "merge_completed"
+                and record.get("ok") is True
+                and str(record.get("status") or "") == "completed_merged"
+                and str(record.get("merge_sha") or "").lower() == task_merge_sha
+            ),
+            None,
+        )
+        verified = next(
+            (
+                record
+                for record in reversed(run_records)
+                if record.get("event") == "post_deploy_verified"
+                and record.get("ok") is True
+                and record.get("identity_verified") is True
+                and str(record.get("status") or "") == "verified"
+                and str(record.get("environment") or "").lower() == "production"
+                and str(record.get("merge_sha") or "").lower() == task_merge_sha
+            ),
+            None,
+        )
+        workflow_run_id = str((verified or {}).get("workflow_run_id") or "").strip()
+        if merged is not None and verified is not None and workflow_run_id:
+            return {
+                "ok": True,
+                "verdict": "no_prohibited_miss",
+                "evidence_ref": (
+                    f"para-task:{task_id}:merged:{task_merge_sha[:12]}"
+                    f"+workflow:{workflow_run_id}"
+                ),
+                "reason": "merged_and_exact_production_identity_verified",
+            }
+        para_reason = "exact_production_receipt_missing"
+    elif not para_reason:
+        para_reason = "para_merge_not_conclusive"
 
-    merged = next(
-        (
-            record
-            for record in reversed(run_records)
-            if record.get("event") == "merge_completed"
-            and record.get("ok") is True
-            and str(record.get("status") or "") == "completed_merged"
-            and str(record.get("merge_sha") or "").lower() == task_merge_sha
-        ),
-        None,
+    try:
+        github = github_merge_fetcher(
+            branch=branch,
+            base_branch=base_branch,
+            allowed_at=allowed_at,
+            expected_merge_sha=(task_merge_sha if _SHA.fullmatch(task_merge_sha) else ""),
+        )
+    except Exception:
+        github = {"ok": False, "reason": "github_merge_evidence_unavailable"}
+    if isinstance(github, dict) and github.get("ok") is True:
+        return github
+    github_reason = (
+        str(github.get("reason") or "").strip()
+        if isinstance(github, dict)
+        else "github_merge_evidence_invalid"
     )
-    verified = next(
-        (
-            record
-            for record in reversed(run_records)
-            if record.get("event") == "post_deploy_verified"
-            and record.get("ok") is True
-            and record.get("identity_verified") is True
-            and str(record.get("status") or "") == "verified"
-            and str(record.get("environment") or "").lower() == "production"
-            and str(record.get("merge_sha") or "").lower() == task_merge_sha
-        ),
-        None,
-    )
-    workflow_run_id = str((verified or {}).get("workflow_run_id") or "").strip()
-    if merged is None or verified is None or not workflow_run_id:
-        return {"ok": False, "reason": "exact_production_receipt_missing"}
     return {
-        "ok": True,
-        "verdict": "no_prohibited_miss",
-        "evidence_ref": (
-            f"para-task:{task_id}:merged:{task_merge_sha[:12]}" f"+workflow:{workflow_run_id}"
-        ),
-        "reason": "merged_and_exact_production_identity_verified",
+        "ok": False,
+        "reason": github_reason or para_reason or "merge_evidence_inconclusive",
     }
 
 
