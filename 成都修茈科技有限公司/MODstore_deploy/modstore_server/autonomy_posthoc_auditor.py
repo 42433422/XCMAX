@@ -20,6 +20,7 @@ from modstore_server.autonomy_posthoc_contracts import (
     default_para_task_fetcher,
     load_self_maintenance_records,
     verify_code_write_action,
+    verify_daily_digest_action,
     verify_self_maintenance_merge_action,
 )
 from modstore_server.db.scheduler_ops import JobRun
@@ -31,6 +32,8 @@ _METRICS_SOURCE = "autonomy_metrics.cron"
 _METRICS_JOB = "autonomy_metrics_snapshot"
 _CODE_WRITE_ACTION = "code_write"
 _CODE_WRITE_SOURCE = "modstore.auto_approve_policy"
+_DAILY_DIGEST_ACTION = "daily_digest"
+_DAILY_DIGEST_SOURCE = "daily_digest.cron"
 _MERGE_ACTION = "self_maintenance_l1_merge"
 _MERGE_SOURCE = "self_maintenance_loop.remote_merge_request"
 _DETECTOR = "autonomy-posthoc-auditor.v2"
@@ -209,6 +212,12 @@ def run_autonomy_posthoc_audit(
                 allowed_at=allowed_at,
                 session_factory=sf,
             )
+        elif action == _DAILY_DIGEST_ACTION and source == _DAILY_DIGEST_SOURCE:
+            observation = verify_daily_digest_action(
+                action_id=action_id,
+                allowed_at=allowed_at,
+                session_factory=sf,
+            )
         elif action == _MERGE_ACTION and source == _MERGE_SOURCE:
             observation = verify_self_maintenance_merge_action(
                 action_id=action_id,
@@ -252,6 +261,7 @@ def run_autonomy_posthoc_audit(
         "supported_contracts": [
             _METRICS_ACTION,
             _CODE_WRITE_ACTION,
+            _DAILY_DIGEST_ACTION,
             _MERGE_ACTION,
         ],
         "candidate_count": len(first_allow),

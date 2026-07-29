@@ -12,7 +12,11 @@ from modstore_server.autonomy_decision_audit import (
     build_autonomy_decision_evidence,
 )
 from modstore_server.autonomy_posthoc_auditor import run_autonomy_posthoc_audit
-from modstore_server.db.employee_ops import EmployeeChangeRequest, EmployeeSuggestion
+from modstore_server.db.employee_ops import (
+    DailyDigestRecord,
+    EmployeeChangeRequest,
+    EmployeeSuggestion,
+)
 from modstore_server.db.scheduler_ops import JobRun
 
 UTC = timezone.utc
@@ -157,6 +161,123 @@ def test_incomplete_artifact_remains_unknown(session_factory, tmp_path):
     ]
     assert evidence["has_prohibited_miss"] is None
     assert evidence["posthoc_coverage_rate"] == 0.0
+
+
+def _allow_daily_digest(sf, day: str = "2026-07-22") -> None:
+    append_autonomy_decision(
+        action_id=f"daily-digest:{day}",
+        action="daily_digest",
+        decision="allow",
+        policy="autonomy_guard",
+        risk_level="low",
+        actor_class="system",
+        source="daily_digest.cron",
+        occurred_at=NOW,
+        session_factory=sf,
+    )
+
+
+def test_daily_digest_requires_coherent_later_delivery_receipt(
+    session_factory,
+    monkeypatch,
+):
+    monkeypatch.setenv("MODSTORE_DAILY_DIGEST_EMAIL", "owner@example.com")
+    _allow_daily_digest(session_factory)
+    with session_factory() as session:
+        session.add(
+            DailyDigestRecord(
+                day="2026-07-22",
+                subject="MODstore 每日摘要 · 2026-07-22",
+                body_html="<p>bounded digest</p>",
+                recipients_json='["owner@example.com"]',
+                delivery_json=json.dumps(
+                    [
+                        {
+                            "to": "owner@example.com",
+                            "delivered": True,
+                            "mode": "smtp",
+                            "error": "",
+                        }
+                    ]
+                ),
+                delivered=True,
+                source="daily_digest",
+                created_at=NOW + timedelta(seconds=1),
+            )
+        )
+        session.commit()
+
+    result = run_autonomy_posthoc_audit(
+        now=NOW + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+    evidence = build_autonomy_decision_evidence(
+        now=NOW + timedelta(seconds=3),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_count"] == 1
+    assert result["incomplete_count"] == 0
+    assert evidence["has_prohibited_miss"] is False
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
+    assert posthoc["evidence_ref"].startswith("daily-digest-record:")
+    assert "owner@example.com" not in posthoc["evidence_ref"]
+
+
+@pytest.mark.parametrize(
+    ("record_kwargs", "reason"),
+    [
+        (
+            {
+                "recipients_json": '["owner@example.com"]',
+                "delivery_json": '[{"to":"owner@example.com","delivered":false,"mode":"smtp"}]',
+                "delivered": False,
+            },
+            "daily_digest_delivery_receipt_missing",
+        ),
+        (
+            {
+                "recipients_json": '["owner@example.com"]',
+                "delivery_json": '[{"to":"other@example.com","delivered":true,"mode":"smtp"}]',
+                "delivered": True,
+            },
+            "daily_digest_delivery_receipt_incoherent",
+        ),
+    ],
+)
+def test_daily_digest_incomplete_or_contradictory_receipt_stays_unknown(
+    session_factory,
+    monkeypatch,
+    record_kwargs,
+    reason,
+):
+    monkeypatch.setenv("MODSTORE_DAILY_DIGEST_EMAIL", "owner@example.com")
+    _allow_daily_digest(session_factory)
+    with session_factory() as session:
+        session.add(
+            DailyDigestRecord(
+                day="2026-07-22",
+                subject="MODstore 每日摘要 · 2026-07-22",
+                body_html="<p>bounded digest</p>",
+                source="daily_digest",
+                created_at=NOW + timedelta(seconds=1),
+                **record_kwargs,
+            )
+        )
+        session.commit()
+
+    result = run_autonomy_posthoc_audit(
+        now=NOW + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_count"] == 0
+    assert result["incomplete"] == [
+        {
+            "action_id": "daily-digest:2026-07-22",
+            "reason": reason,
+        }
+    ]
 
 
 def _allow_code_write(sf, change_request_id: int) -> None:

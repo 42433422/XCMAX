@@ -7,6 +7,7 @@ inconclusive.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from modstore_server.db.employee_ops import (
+    DailyDigestRecord,
     EmployeeChangeRequest,
     EmployeeSuggestion,
     IncidentEvent,
@@ -22,6 +24,7 @@ from modstore_server.db.employee_ops import (
 
 UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.10
 _CHANGE_REQUEST_ACTION = re.compile(r"^change-request:(\d+):apply$")
+_DAILY_DIGEST_ACTION = re.compile(r"^daily-digest:(\d{4}-\d{2}-\d{2})$")
 _MERGE_ACTION = re.compile(
     r"^loop:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
     r":self_maintenance_l1_merge$",
@@ -218,6 +221,99 @@ def verify_code_write_action(
         }
 
 
+def verify_daily_digest_action(
+    *,
+    action_id: str,
+    allowed_at: datetime,
+    session_factory: Callable[..., Any],
+) -> dict[str, Any]:
+    """Verify a digest allow from its later durable delivery receipt.
+
+    A scheduler success is not sufficient: the independently persisted digest
+    row must match the guarded calendar day, be written after the allow
+    decision, and contain a coherent delivered-recipient receipt.  No address
+    or message body is copied into the autonomy ledger.
+    """
+
+    match = _DAILY_DIGEST_ACTION.fullmatch(str(action_id or ""))
+    if match is None:
+        return {"ok": False, "reason": "unsupported_daily_digest_action_id"}
+    day = match.group(1)
+    from modstore_server.daily_digest import DEFAULT_DIGEST_EMAIL
+
+    configured_recipients = {
+        chunk.strip().lower()
+        for chunk in os.environ.get(
+            "MODSTORE_DAILY_DIGEST_EMAIL",
+            DEFAULT_DIGEST_EMAIL,
+        )
+        .replace(";", ",")
+        .split(",")
+        if chunk.strip() and "@" in chunk
+    }
+    if not configured_recipients:
+        return {"ok": False, "reason": "daily_digest_authorized_recipients_unavailable"}
+    with session_factory() as session:
+        rows = (
+            session.query(DailyDigestRecord)
+            .filter(
+                DailyDigestRecord.day == day,
+                DailyDigestRecord.source == "daily_digest",
+                DailyDigestRecord.delivered.is_(True),
+                DailyDigestRecord.created_at >= _utc(allowed_at),
+            )
+            .order_by(DailyDigestRecord.created_at.asc(), DailyDigestRecord.id.asc())
+            .all()
+        )
+    if not rows:
+        return {"ok": False, "reason": "daily_digest_delivery_receipt_missing"}
+
+    for row in rows:
+        if not str(row.subject or "").strip() or not str(row.body_html or "").strip():
+            continue
+        try:
+            recipients = json.loads(row.recipients_json or "[]")
+            deliveries = json.loads(row.delivery_json or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(recipients, list) or not isinstance(deliveries, list):
+            continue
+        recipient_set = {
+            str(value).strip().lower() for value in recipients if str(value or "").strip()
+        }
+        if recipient_set != configured_recipients:
+            continue
+        delivered_rows = [
+            item
+            for item in deliveries
+            if isinstance(item, dict)
+            and item.get("delivered") is True
+            and str(item.get("to") or "").strip().lower() in recipient_set
+            and bool(str(item.get("mode") or "").strip())
+        ]
+        if not recipient_set or not delivered_rows:
+            continue
+        digest = hashlib.sha256(
+            "\n".join(
+                (
+                    str(row.id),
+                    str(row.day or ""),
+                    str(row.subject or ""),
+                    str(row.body_html or ""),
+                    str(row.recipients_json or ""),
+                    str(row.delivery_json or ""),
+                )
+            ).encode("utf-8")
+        ).hexdigest()
+        return {
+            "ok": True,
+            "verdict": "no_prohibited_miss",
+            "evidence_ref": f"daily-digest-record:{int(row.id)}:sha256:{digest[:40]}",
+            "reason": "durable_digest_delivery_receipt_verified",
+        }
+    return {"ok": False, "reason": "daily_digest_delivery_receipt_incoherent"}
+
+
 def load_self_maintenance_records(path: str | Path | None = None) -> list[dict[str, Any]]:
     if path is None:
         from modstore_server.self_maintenance_loop_runner import ledger_path
@@ -348,5 +444,6 @@ __all__ = [
     "default_para_task_fetcher",
     "load_self_maintenance_records",
     "verify_code_write_action",
+    "verify_daily_digest_action",
     "verify_self_maintenance_merge_action",
 ]
