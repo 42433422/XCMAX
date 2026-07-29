@@ -2745,6 +2745,48 @@ def test_para_merge_conflict_does_not_continue_on_git_content_conflict():
     assert para_merge_conflict_continues_on_rejected_branch("git merge conflict in foo.py") is False
 
 
+def test_reconcile_update_branch_content_conflict_restarts_from_clean_base():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-225e80",
+                "para_task_id": "task-update-branch",
+                "run_id": "run-update-branch",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-225e80",
+            "detail": detail,
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+    candidate = _resume_review_qa_candidate(memory)
+    assert "continue_existing_code_task" not in candidate
+    prompt = _code_task_text("run-update-branch-retry", {"gaps": []}, memory, candidate)
+    assert "update-branch content conflicts" in prompt
+    assert para_merge_conflict_continues_on_rejected_branch(detail) is False
+
+
 def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
     memory = {
         "closed_items": [],
