@@ -405,6 +405,24 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
         },
         approvals={"local_pending": 1},
         customer_value=_ready_customer_value(verified_paid_amount_cents=999999),
+        autonomy_audit={
+            "source_authoritative": True,
+            "append_only": True,
+            "append_only_enforced": True,
+            "total": 4,
+            "allow_count": 3,
+            "posthoc_conclusive_count": 2,
+            "posthoc_uncovered_count": 1,
+            "posthoc_coverage_rate": 66.67,
+            "prohibited_miss_evidence_status": "unknown",
+            "posthoc_uncovered_contracts": [
+                {
+                    "action": "daily_digest",
+                    "source": "daily_digest.cron",
+                    "count": 1,
+                }
+            ],
+        },
         surfaces=_surfaces(),
         generated_at=NOW,
     )
@@ -418,6 +436,20 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
     assert public["proof"]["customer_acceptance_verified"] is True
     assert public["proof"]["runtime_provenance_ok"] is False
     assert public["proof"]["employee_workforce_ready"] is False
+    assert public["proof"]["alignment_posthoc"] == {
+        "status": "unknown",
+        "coverage_rate": 66.67,
+        "allow_count": 3,
+        "conclusive_count": 2,
+        "uncovered_count": 1,
+        "uncovered_contracts": [
+            {
+                "action": "daily_digest",
+                "source": "daily_digest.cron",
+                "count": 1,
+            }
+        ],
+    }
     assert "private-run-id" not in body
     assert "secret-gate" not in body
     assert "999999" not in body
