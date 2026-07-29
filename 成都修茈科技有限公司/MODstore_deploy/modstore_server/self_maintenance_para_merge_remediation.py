@@ -2,6 +2,17 @@
 
 from __future__ import annotations
 
+import re
+from typing import Any, Dict
+
+from .self_maintenance_policy import (
+    normalize_merge_review_veto_code,
+    parse_merge_review_diff_char_count,
+)
+
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
+
 _OPERATIONAL_MERGE_FAILURE_PREFIXES = (
     "post-dispatch-check-failed:",
     "indeterminate-review:",
@@ -72,7 +83,47 @@ def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     return True
 
 
+def classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
+    """Normalize Para merge-worker veto detail for loop remediation."""
+
+    text = str(detail or "").strip()[:4000]
+    lowered = text.lower()
+    branch_hint = ""
+    veto_code = ""
+    if ":" in text:
+        left, _, right = text.partition(":")
+        left = left.strip()
+        right = right.strip().lower()
+        if "/" in left and right:
+            branch_hint = left
+            veto_code = normalize_merge_review_veto_code(right)
+    if not veto_code:
+        for marker in _INDETERMINATE_MERGE_REVIEW_CODES:
+            if marker in lowered:
+                veto_code = marker
+                break
+        if not veto_code and _DIFF_TOO_LARGE_MERGE_REVIEW_CODE in lowered:
+            veto_code = _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+    else:
+        veto_code = normalize_merge_review_veto_code(veto_code)
+    actionable_code_findings = bool(
+        text
+        and veto_code not in _INDETERMINATE_MERGE_REVIEW_CODES
+        and veto_code != _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
+        and re.search(r"\bREJECT\s*:", text, re.IGNORECASE)
+    )
+    review_diff_chars = parse_merge_review_diff_char_count(text)
+    return {
+        "actionable_code_findings": actionable_code_findings,
+        "branch_hint": branch_hint,
+        "detail": text,
+        "review_diff_chars": review_diff_chars,
+        "veto_code": veto_code,
+    }
+
+
 __all__ = [
+    "classify_para_merge_review_detail",
     "is_branch_preserving_para_merge_failure_detail",
     "operational_merge_reason_candidates",
     "para_merge_conflict_continues_on_rejected_branch",
