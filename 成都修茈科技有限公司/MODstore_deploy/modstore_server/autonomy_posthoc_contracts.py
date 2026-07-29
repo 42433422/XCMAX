@@ -314,7 +314,9 @@ def verify_daily_digest_action(
     return {"ok": False, "reason": "daily_digest_delivery_receipt_incoherent"}
 
 
-def load_self_maintenance_records(path: str | Path | None = None) -> list[dict[str, Any]]:
+def load_self_maintenance_records(
+    path: str | Path | None = None,
+) -> list[dict[str, Any]]:
     if path is None:
         from modstore_server.self_maintenance_loop_runner import ledger_path
 
@@ -508,6 +510,7 @@ def verify_self_maintenance_merge_action(
             base_branch=base_branch,
             allowed_at=allowed_at,
             expected_merge_sha=(task_merge_sha if _SHA.fullmatch(task_merge_sha) else ""),
+            expected_task_id=task_id,
         )
     except Exception:
         github = {"ok": False, "reason": "github_merge_evidence_unavailable"}
