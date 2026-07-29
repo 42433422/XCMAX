@@ -219,9 +219,8 @@ def test_watchdog_triggers_cleanup_below_watermark_and_respects_cooldown(
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert marker.read_text(encoding="utf-8").splitlines() == [
-        "--apply --reason low-disk"
-    ]
+    cleanup_calls = marker.read_text(encoding="utf-8").splitlines()
+    assert cleanup_calls == ["--apply --reason low-disk"]
     state = (state_dir / "state.env").read_text(encoding="utf-8")
     assert "last_cleanup_epoch=" in state
     assert "低磁盘水位触发有界清理" in log_file.read_text(encoding="utf-8")
