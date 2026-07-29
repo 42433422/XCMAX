@@ -1,308 +1,257 @@
-"""employee_pack 员工实现（MODstore 生成）。
-
-行为按 manifest.employee_config_v2.actions.handlers 分支：
-  - echo     → 直接回显 payload，不调 LLM
-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
-"""
+"""Deterministic LLM operations snapshot auditor; never probes or mutates."""
 
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any
 
-logger = logging.getLogger(__name__)
-
-EMPLOYEE_ID = "llm-ops-engineer"
-EMPLOYEE_LABEL = "LLM 运维工程师"
-
-SYSTEM_PROMPT = "你是 XCAGI 员工「LLM 运维工程师」。你可以通过专属工具查询平台统一模型、动态能力目录、真实额度和本地用量；额度必须区分 exact、usage_only 与 unknown。被问可用 AI/接口/资产时必须调用 list_available_ai_routes，并以返回的 assets（interfaces/by_category/providers/cli_assets）为准汇报，禁止编造未出现的路径。只有 runtime_selectable=true 的聊天模型可作为员工主路由；生图走 /api/llm/image，生视频走 /api/llm/video；audio/embedding/rerank 以目录发现为主。后台周期巡检发现当前路由额度耗尽或探活失败时，主动选择健康模型切换，切换后复验并在失败时自动回滚。你可检查 Codex、Cursor、Claude、Trae 四家 CLI，并在平台 API 失败时使用只读文本 CLI 兜底，不得向 CLI 传递平台密钥；Codex 产品级 image_generation 未接入平台兜底须如实说明。不要用修改 .env 或源码的方式切换，不得暴露 API key，不得绕过目录与健康检查。按 manifest.employee_config_v2.actions.handlers 选择 agent、specialized、llm_md 或 echo 分支执行；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造外部执行结果。"
-
-DEFAULT_README_SECTIONS = (
-    "## 用途\n" "## 输入\n" "## 输出\n" "## 示例\n" "## 异常与边界\n"
+_HEALTHY = frozenset({"healthy", "ok", "available", "ready"})
+_QUOTA_CLASSES = frozenset({"exact", "usage_only", "unknown"})
+_SENSITIVE_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "authorization",
+        "credential",
+        "password",
+        "secret",
+        "token",
+    }
+)
+_SECRET_VALUE = re.compile(
+    r"(?:sk|key|token|secret)[-_][A-Za-z0-9]{8,}",
+    re.IGNORECASE,
 )
 
 
-def _ok(
-    data: Any,
-    *,
-    warnings: Optional[List[str]] = None,
-    meta: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    return {
-        "ok": True,
-        "summary": (
-            ""
-            if data is None
-            else (
-                data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
-            )[:4000]
-        ),
-        "items": (
-            data
-            if isinstance(data, list)
-            else (
-                [] if data is None else [data] if not isinstance(data, dict) else [data]
+def _text(value: Any, limit: int = 160) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _objects(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _contains_sensitive_value(value: Any, *, key: str = "") -> bool:
+    normalized_key = key.strip().lower()
+    if normalized_key in _SENSITIVE_KEYS and isinstance(value, str) and value.strip():
+        return True
+    if isinstance(value, str):
+        return bool(_SECRET_VALUE.search(value))
+    if isinstance(value, dict):
+        return any(
+            _contains_sensitive_value(item, key=str(item_key)) for item_key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_sensitive_value(item) for item in value)
+    return False
+
+
+def _issue(issues: list[dict[str, str]], code: str, detail: str) -> None:
+    issues.append({"code": code, "detail": detail})
+
+
+def _health_matrix(
+    providers: list[dict[str, Any]],
+    issues: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    matrix: list[dict[str, Any]] = []
+    for index, provider in enumerate(providers):
+        provider_id = _text(provider.get("provider") or provider.get("id"))
+        if not provider_id:
+            provider_id = f"provider-{index + 1}"
+            _issue(issues, "provider_identity_missing", "provider identity is required")
+        health = _text(provider.get("health")).lower() or "unknown"
+        key_configured = provider.get("key_configured") is True
+        quota = provider.get("quota") if isinstance(provider.get("quota"), dict) else {}
+        quota_class = _text(quota.get("classification")).lower() or "unknown"
+        if quota_class not in _QUOTA_CLASSES:
+            _issue(
+                issues,
+                "quota_classification_invalid",
+                f"{provider_id} quota must be exact, usage_only, or unknown",
             )
+            quota_class = "unknown"
+        remaining = quota.get("remaining") if quota_class == "exact" else None
+        if not key_configured:
+            _issue(issues, "provider_key_unconfigured", f"{provider_id} has no configured key")
+        if health not in _HEALTHY:
+            _issue(issues, "provider_unhealthy", f"{provider_id} health is {health}")
+        if quota_class == "exact":
+            try:
+                if float(remaining) <= 0:
+                    _issue(
+                        issues, "provider_quota_depleted", f"{provider_id} exact quota is depleted"
+                    )
+            except (TypeError, ValueError):
+                _issue(
+                    issues,
+                    "exact_quota_remaining_invalid",
+                    f"{provider_id} exact quota requires numeric remaining",
+                )
+                remaining = None
+        matrix.append(
+            {
+                "provider": provider_id,
+                "key_configured": key_configured,
+                "health": health,
+                "quota_classification": quota_class,
+                "remaining": remaining,
+                "latency_ms": provider.get("latency_ms"),
+                "cost_per_million_tokens": provider.get("cost_per_million_tokens"),
+            }
+        )
+    return matrix
+
+
+def _route_issues(
+    route: dict[str, Any],
+    models: list[dict[str, Any]],
+    issues: list[dict[str, str]],
+) -> dict[str, Any]:
+    provider = _text(route.get("provider"))
+    model = _text(route.get("model") or route.get("model_name"))
+    selected = next(
+        (
+            item
+            for item in models
+            if _text(item.get("provider")) == provider
+            and _text(item.get("name") or item.get("model")) == model
         ),
-        "warnings": list(warnings or []),
-        "error": "",
-        "meta": dict(meta or {}),
+        None,
+    )
+    if not provider or not model:
+        _issue(issues, "current_route_incomplete", "current route requires provider and model")
+    elif selected is None:
+        _issue(
+            issues, "current_route_not_in_catalog", "current route is absent from supplied models"
+        )
+    else:
+        if selected.get("runtime_selectable") is not True:
+            _issue(
+                issues,
+                "current_route_not_runtime_selectable",
+                "current route model is not runtime selectable",
+            )
+        if _text(selected.get("health")).lower() not in _HEALTHY:
+            _issue(issues, "current_route_unhealthy", "current route model is not healthy")
+    return {
+        "provider": provider,
+        "model": model,
+        "catalog_match": selected is not None,
+        "runtime_selectable": bool(selected and selected.get("runtime_selectable") is True),
+        "health": _text((selected or {}).get("health")).lower() or "unknown",
     }
 
 
-def _err(
-    msg: str,
-    *,
-    warnings: Optional[List[str]] = None,
-    meta: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    return {
-        "ok": False,
-        "summary": msg[:400],
-        "items": [],
-        "warnings": list(warnings or []),
-        "error": msg[:1000],
-        "meta": dict(meta or {}),
+def _asset_summary(assets: dict[str, Any], issues: list[dict[str, str]]) -> dict[str, Any]:
+    interfaces = sorted(
+        {_text(item, 240) for item in assets.get("interfaces") or [] if _text(item, 240)}
+    )
+    by_category = assets.get("by_category") if isinstance(assets.get("by_category"), dict) else {}
+    categories = {
+        _text(name): len(values) if isinstance(values, list) else 0
+        for name, values in by_category.items()
+        if _text(name)
     }
-
-
-def _manifest_path() -> Optional[Path]:
-    here = Path(__file__).resolve()
-    for parent in (here.parent, *here.parents):
-        cand = parent / "manifest.json"
-        if cand.is_file():
-            return cand
-    return None
-
-
-def _load_manifest() -> Optional[Dict[str, Any]]:
-    mp = _manifest_path()
-    if not mp:
-        return None
-    try:
-        data = json.loads(mp.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    if not isinstance(manifest, dict):
-        return {}
-    v2 = manifest.get("employee_config_v2")
-    return v2 if isinstance(v2, dict) else {}
-
-
-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+    providers = sorted({_text(item) for item in assets.get("providers") or [] if _text(item)})
+    cli_assets = assets.get("cli_assets") if isinstance(assets.get("cli_assets"), dict) else {}
+    if not interfaces:
+        _issue(issues, "asset_interfaces_missing", "assets.interfaces must not be empty")
+    if not categories:
+        _issue(issues, "asset_categories_missing", "assets.by_category must not be empty")
     return {
-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
-        "max_tokens": int(model.get("max_tokens") or 4000),
-        "temperature": float(
-            model.get("temperature") if model.get("temperature") is not None else 0.2
+        "interfaces": interfaces,
+        "category_counts": dict(sorted(categories.items())),
+        "providers": providers,
+        "cli_text_only": sorted(
+            {_text(item) for item in cli_assets.get("text_only") or [] if _text(item)}
+        ),
+        "product_capabilities_not_wired": sorted(
+            {
+                _text(item, 240)
+                for item in cli_assets.get("product_capabilities_not_wired") or []
+                if _text(item, 240)
+            }
         ),
     }
 
 
-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    return a
+def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
+    snapshot = payload.get("llm_ops_snapshot")
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+        missing_snapshot = True
+    else:
+        snapshot = dict(snapshot)
+        missing_snapshot = False
 
+    issues: list[dict[str, str]] = []
+    if missing_snapshot:
+        _issue(issues, "missing_llm_ops_snapshot", "llm_ops_snapshot is required")
+    if snapshot.get("secrets_redacted") is not True:
+        _issue(issues, "secret_redaction_unproven", "snapshot must attest secrets_redacted=true")
+    if _contains_sensitive_value(snapshot):
+        return {
+            "ok": False,
+            "status": "blocked",
+            "summary": "LLM 运维快照包含疑似敏感凭据，已拒绝审计且未回显原值。",
+            "health_matrix": [],
+            "current_route": {},
+            "asset_summary": {},
+            "issues": [
+                {
+                    "code": "sensitive_value_blocked",
+                    "detail": "snapshot contains a credential-like key or value",
+                }
+            ],
+            "evidence": ["input_rejected_before_echo", "no_secret_output"],
+            "read_only": True,
+            "side_effects": [],
+        }
 
-def _handlers(actions: Dict[str, Any]) -> List[str]:
-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
-
-
-async def _handle_echo(
-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
-) -> Dict[str, Any]:
-    return _ok({"echo": payload}, meta={"handler": "echo"})
-
-
-async def _handle_llm_md(
-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
-) -> Dict[str, Any]:
-    call_llm = ctx.get("call_llm")
-    if not callable(call_llm):
-        summary = [
-            f"# {EMPLOYEE_LABEL} 执行方案",
-            "",
-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
-            "",
-            "## 输入",
-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
-            "",
-            "## 下一步",
-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
-        ]
-        return _ok(
-            "\n".join(summary),
-            warnings=["ctx.call_llm unavailable; returned offline plan"],
-            meta={"handler": "llm_md", "offline": True},
-        )
-    cfg = _agent_model(v2)
-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
-    if "##" not in sys_prompt:
-        sys_prompt = (
-            sys_prompt
-            + "\n\n请用 Markdown 输出，固定章节：\n"
-            + DEFAULT_README_SECTIONS
-        )
-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
-    messages = [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": user_msg},
-    ]
-    try:
-        res = await asyncio.wait_for(
-            call_llm(
-                messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]
-            ),
-            timeout=120.0,
-        )
-    except TimeoutError:
-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
-    except Exception as e:  # noqa: BLE001
-        logger.exception("call_llm raised")
-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
-    if not isinstance(res, dict) or not res.get("success"):
-        return _err(
-            str((res or {}).get("error") or "LLM 调用失败")[:400],
-            meta={"handler": "llm_md"},
-        )
-    content = str(res.get("content") or "").strip()
-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
-
-
-async def _handle_webhook(
-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
-) -> Dict[str, Any]:
-    http_post = ctx.get("http_post")
-    if not callable(http_post):
-        return _err(
-            "ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"}
-        )
-    cfg = (
-        _actions(v2).get("webhook")
-        if isinstance(_actions(v2).get("webhook"), dict)
+    providers = _objects(snapshot.get("providers"))
+    models = _objects(snapshot.get("models"))
+    route = (
+        dict(snapshot.get("current_route"))
+        if isinstance(snapshot.get("current_route"), dict)
         else {}
     )
-    url = str(cfg.get("url") or "").strip()
-    if not url:
-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
-    try:
-        r = await asyncio.wait_for(
-            http_post(url, json_body=payload or {}), timeout=30.0
-        )
-    except TimeoutError:
-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
-    except Exception as e:  # noqa: BLE001
-        return _err(
-            "webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url}
-        )
-    if not isinstance(r, dict) or not r.get("ok"):
-        return _err(
-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
-            meta={"handler": "webhook", "url": url},
-        )
-    return _ok(
-        {"status": r.get("status"), "text": r.get("text")},
-        meta={"handler": "webhook", "url": url},
-    )
+    assets = dict(snapshot.get("assets")) if isinstance(snapshot.get("assets"), dict) else {}
+    if not providers:
+        _issue(issues, "providers_missing", "providers health evidence is required")
+    if not models:
+        _issue(issues, "models_missing", "model catalog evidence is required")
+    health_matrix = _health_matrix(providers, issues)
+    route_summary = _route_issues(route, models, issues)
+    asset_summary = _asset_summary(assets, issues)
+    approved = not issues
+    return {
+        "ok": True,
+        "status": "approved" if approved else "needs_review",
+        "summary": (
+            "LLM provider、模型路由、额度分类与 AI 资产快照均满足只读巡检契约。"
+            if approved
+            else "LLM 运维快照已完成只读审计，发现需要处理的健康或契约问题。"
+        ),
+        "health_matrix": health_matrix,
+        "current_route": route_summary,
+        "asset_summary": asset_summary,
+        "issues": issues,
+        "evidence": [
+            "input.llm_ops_snapshot.providers",
+            "input.llm_ops_snapshot.models",
+            "input.llm_ops_snapshot.current_route",
+            "input.llm_ops_snapshot.assets",
+            "no_network_access",
+            "no_secret_access",
+            "no_route_mutation",
+        ],
+        "read_only": True,
+        "side_effects": [],
+    }
 
 
-async def _handle_agent(
-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
-) -> Dict[str, Any]:
-    runner = ctx.get("agent_runner")
-    if runner is None:
-        return _err(
-            "ctx.agent_runner 未注入，请确认 modstore_server 版本",
-            meta={"handler": "agent"},
-        )
-    cfg = _agent_model(v2)
-    task = (
-        payload.get("task")
-        or payload.get("message")
-        or payload.get("input")
-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
-    )
-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
-    try:
-        result = await asyncio.wait_for(
-            runner.run(task, system_prompt=sys_prompt),
-            timeout=300.0,
-        )
-    except TimeoutError:
-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
-    except Exception as e:  # noqa: BLE001
-        logger.exception("agent run raised")
-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
-    if not result.get("ok"):
-        return _err(
-            str(result.get("error") or "agent 失败"),
-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
-        )
-    return _ok(
-        result.get("summary") or "",
-        meta={
-            "handler": "agent",
-            "rounds": result.get("rounds", 0),
-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
-        },
-    )
-
-
-_DISPATCH = {
-    "echo": _handle_echo,
-    "llm_md": _handle_llm_md,
-    "webhook": _handle_webhook,
-    "agent": _handle_agent,
-}
-
-
-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
-    logger.info(
-        "[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12]
-    )
-    payload = payload or {}
-    ctx = ctx or {}
-    manifest = _load_manifest()
-    v2 = _v2(manifest)
-    if not v2:
-        return _err(
-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
-            meta={"employee_id": EMPLOYEE_ID},
-        )
-    handlers = _handlers(_actions(v2))
-    if not handlers:
-        return _err(
-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
-            meta={"employee_id": EMPLOYEE_ID},
-        )
-    requested = (
-        str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
-    )
-    chosen = requested if requested in handlers else handlers[0]
-    fn = _DISPATCH.get(chosen)
-    if fn is None:
-        return _err(
-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
-        )
-    out = await fn(payload, ctx, v2)
-    if isinstance(out, dict):
-        meta = out.setdefault("meta", {})
-        if isinstance(meta, dict):
-            meta.setdefault("declared_handlers", handlers)
-            meta.setdefault("chosen_handler", chosen)
-    return out
+__all__ = ["run"]

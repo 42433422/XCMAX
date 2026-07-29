@@ -1,7 +1,7 @@
 {
   "id": "llm-ops-engineer",
   "name": "LLM 运维工程师",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "admin",
   "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
   "artifact": "employee_pack",
@@ -42,7 +42,7 @@
   "employee_config_v2": {
     "identity": {
       "id": "llm-ops-engineer",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "artifact": "employee_pack",
       "name": "LLM 运维工程师",
       "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
@@ -136,6 +136,9 @@
         "llm_md",
         "echo"
       ],
+      "burn_in_handlers": [
+        "direct_python"
+      ],
       "agent": {
         "workspace": {
           "read_only": false,
@@ -156,6 +159,108 @@
           "query_codex_usage",
           "query_trae_usage"
         ]
+      },
+      "direct_python": {
+        "module": "llm_ops_engineer",
+        "action": "audit_llm_ops_snapshot",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": [
+            "llm_ops_snapshot"
+          ],
+          "properties": {
+            "llm_ops_snapshot": {
+              "type": "object"
+            }
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": [
+            "ok",
+            "status",
+            "summary",
+            "health_matrix",
+            "asset_summary",
+            "issues",
+            "evidence",
+            "read_only",
+            "side_effects"
+          ]
+        },
+        "burn_in_fixture": {
+          "llm_ops_snapshot": {
+            "providers": [
+              {
+                "provider": "primary",
+                "key_configured": true,
+                "health": "healthy",
+                "quota": {
+                  "classification": "exact",
+                  "remaining": 100000
+                },
+                "latency_ms": 180,
+                "cost_per_million_tokens": 1.0
+              }
+            ],
+            "models": [
+              {
+                "provider": "primary",
+                "name": "model-a",
+                "runtime_selectable": true,
+                "health": "healthy",
+                "capabilities": {
+                  "input_modalities": [
+                    "text"
+                  ],
+                  "output_modalities": [
+                    "text"
+                  ]
+                }
+              }
+            ],
+            "current_route": {
+              "provider": "primary",
+              "model": "model-a"
+            },
+            "assets": {
+              "interfaces": [
+                "/api/llm/chat",
+                "/api/llm/image",
+                "/api/llm/video"
+              ],
+              "by_category": {
+                "chat": [
+                  "model-a"
+                ],
+                "image": [
+                  "/api/llm/image"
+                ],
+                "video": [
+                  "/api/llm/video"
+                ],
+                "cli": [
+                  "codex"
+                ]
+              },
+              "providers": [
+                "primary"
+              ],
+              "cli_assets": {
+                "text_only": [
+                  "codex"
+                ],
+                "product_capabilities_not_wired": [
+                  "codex.image_generation"
+                ]
+              }
+            },
+            "secrets_redacted": true
+          }
+        }
       }
     },
     "metadata": {

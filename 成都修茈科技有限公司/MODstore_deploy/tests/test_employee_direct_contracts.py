@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+from modstore_server.duty_burn_in_handlers import bind_reviewed_burn_in_handlers
 from modstore_server.employee_executor import (
     _action_direct_python,
     _deterministic_direct_input_ready,
@@ -21,6 +22,7 @@ ADDITIONAL_DIRECT_WORKERS = {
     "intent-analyst": "intent_analyst",
     "java-payment-bridge-officer": "java_payment_bridge_officer",
     "legacy-archive-curator": "legacy_archive_curator",
+    "llm-ops-engineer": "llm_ops_engineer",
     "log-monitor-incident": "log_monitor_incident",
     "market-frontend-dev": "market_frontend_dev",
     "marketing-site-builder": "marketing_site_builder",
@@ -39,6 +41,7 @@ ADDITIONAL_DIRECT_WORKERS = {
 }
 DIRECT_WORKER_VERSIONS = {employee_id: "1.1.0" for employee_id in ADDITIONAL_DIRECT_WORKERS}
 DIRECT_WORKER_VERSIONS["log-monitor-incident"] = "1.3.0"
+DIRECT_WORKER_VERSIONS["llm-ops-engineer"] = "1.6.0"
 
 
 def _load_worker(employee_id: str, module_name: str):
@@ -288,6 +291,51 @@ def test_additional_direct_workers_accept_their_reviewed_read_only_fixtures() ->
         assert result["side_effects"] == [], employee_id
 
 
+def test_llm_ops_direct_contract_blocks_secret_values_without_echoing_them() -> None:
+    worker = _load_worker("llm-ops-engineer", "llm_ops_engineer")
+    secret = "sk-live-must-never-be-returned"
+    result = worker.run(
+        {
+            "llm_ops_snapshot": {
+                "providers": [{"provider": "unsafe", "api_key": secret}],
+                "secrets_redacted": False,
+            }
+        },
+        {},
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "blocked"
+    assert result["issues"] == [
+        {
+            "code": "sensitive_value_blocked",
+            "detail": "snapshot contains a credential-like key or value",
+        }
+    ]
+    assert secret not in json.dumps(result, ensure_ascii=False)
+
+
+def test_llm_ops_burn_in_binding_does_not_replace_normal_handlers() -> None:
+    manifest = _manifest("llm-ops-engineer")
+    config = manifest["employee_config_v2"]
+    actions = config["actions"]
+    normal_handlers = ["agent", "specialized", "llm_md", "echo"]
+
+    bound = bind_reviewed_burn_in_handlers(
+        config,
+        {
+            "eligible": True,
+            "burn_in_handlers_explicit": True,
+            "capability_handlers": ["direct_python"],
+        },
+    )
+
+    assert actions["handlers"] == normal_handlers
+    assert actions["burn_in_handlers"] == ["direct_python"]
+    assert bound["actions"]["handlers"] == ["direct_python"]
+    assert bound["actions"]["direct_python"] == actions["direct_python"]
+
+
 def test_read_only_burn_in_executes_reviewed_sources_not_stale_catalog(
     monkeypatch,
 ) -> None:
@@ -362,7 +410,11 @@ def test_manifests_declare_complete_deterministic_direct_contracts() -> None:
         actions = manifest["employee_config_v2"]["actions"]
         direct = actions["direct_python"]
         assert manifest["version"] == DIRECT_WORKER_VERSIONS.get(employee_id, "1.1.0")
-        assert actions["handlers"] == ["direct_python"]
+        if employee_id == "llm-ops-engineer":
+            assert actions["handlers"] == ["agent", "specialized", "llm_md", "echo"]
+            assert actions["burn_in_handlers"] == ["direct_python"]
+        else:
+            assert actions["handlers"] == ["direct_python"]
         assert direct["implementation"] == "employee_module"
         assert direct["execution_mode"] == "deterministic"
         assert direct["read_only"] is True
