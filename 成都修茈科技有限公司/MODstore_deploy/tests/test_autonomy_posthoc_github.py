@@ -7,6 +7,7 @@ import pytest
 
 from modstore_server.autonomy_posthoc_github import (
     verify_github_self_maintenance_merge,
+    verify_github_self_maintenance_veto,
 )
 
 UTC = timezone.utc
@@ -137,3 +138,67 @@ def test_github_merge_rejects_para_sha_contradiction_before_secondary_calls():
     result = _verify(_responses(), expected_merge_sha="9" * 40)
 
     assert result == {"ok": False, "reason": "github_merge_sha_contradiction"}
+
+
+def test_github_veto_requires_exact_unmerged_pull_and_hold_label():
+    responses = _responses()
+    responses["pulls"][0].update({"merged_at": None, "state": "open"})
+    responses["detail"].update(
+        {
+            "labels": [{"name": "risk:r0"}, {"name": "hold-merge"}],
+            "merged": False,
+            "merged_at": None,
+            "state": "open",
+        }
+    )
+
+    result = verify_github_self_maintenance_veto(
+        branch=BRANCH,
+        base_branch="main",
+        fetch_json=_fetcher(responses),
+    )
+
+    assert result == {
+        "ok": True,
+        "evidence_ref": "github-pr:799:unmerged:veto:hold-merge",
+        "reason": "github_unmerged_pull_explicitly_vetoed",
+    }
+
+
+@pytest.mark.parametrize(
+    ("detail_update", "reason"),
+    [
+        ({"labels": [{"name": "risk:r0"}]}, "github_explicit_veto_missing"),
+        (
+            {
+                "labels": [{"name": "hold-merge"}],
+                "merged": True,
+                "merged_at": "2026-07-28T11:23:52Z",
+            },
+            "github_unmerged_pull_contradiction",
+        ),
+    ],
+)
+def test_github_veto_missing_or_contradictory_evidence_stays_unknown(
+    detail_update,
+    reason,
+):
+    responses = _responses()
+    responses["pulls"][0].update({"merged_at": None, "state": "open"})
+    responses["detail"].update(
+        {
+            "labels": [{"name": "hold-merge"}],
+            "merged": False,
+            "merged_at": None,
+            "state": "open",
+            **detail_update,
+        }
+    )
+
+    result = verify_github_self_maintenance_veto(
+        branch=BRANCH,
+        base_branch="main",
+        fetch_json=_fetcher(responses),
+    )
+
+    assert result == {"ok": False, "reason": reason}
