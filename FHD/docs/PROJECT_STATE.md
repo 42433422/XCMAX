@@ -83,3 +83,4 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 - 存量生产库若历史 `SKIP_ALEMBIC` 过，需一次 `alembic stamp/upgrade` 对齐（发版流程执行，非代码缺口）
 - 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地
 - 认知全栈补齐（2026-07-29）：SCM lite 因果/反事实、技能契约开放世界、策略向持续学习、软约束规划、白名单自我反思已落地（见 `docs/architecture/COGNITIVE_FULL_STACK_20260729.md`）；全域业务因果与跨行业适配器仍需扩样板
+- 战略自治规划（2026-07-29）：LLM 季度目标分解 + 反思修正 + adaptive_thresholds 已接入；运维 impact-predictor 规则轨仍在，LLM advisory 需 `XCAGI_IMPACT_LLM=1` 开启
