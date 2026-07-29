@@ -13,6 +13,10 @@ PARA_RESTART_FAILURE_THRESHOLD="${PARA_RESTART_FAILURE_THRESHOLD:-3}"
 PARA_RESTART_COOLDOWN_SEC="${PARA_RESTART_COOLDOWN_SEC:-120}"
 PARA_REPAIR_COOLDOWN_SEC="${PARA_REPAIR_COOLDOWN_SEC:-900}"
 PARA_HEALTH_WAIT_SEC="${PARA_HEALTH_WAIT_SEC:-45}"
+PARA_DISK_CHECK_PATH="${PARA_DISK_CHECK_PATH:-${PARA_API_ROOT}}"
+PARA_DISK_MIN_AVAILABLE_KB="${PARA_DISK_MIN_AVAILABLE_KB:-15728640}"
+PARA_CLEANUP_COOLDOWN_SEC="${PARA_CLEANUP_COOLDOWN_SEC:-3600}"
+PARA_CLEANUP_COMMAND="${PARA_CLEANUP_COMMAND:-${HOME}/Library/Application Support/XCMAX/run-para-cleanup.sh}"
 PARA_WATCHDOG_STATE_DIR="${PARA_WATCHDOG_STATE_DIR:-${HOME}/Library/Application Support/XCMAX/para-watchdog}"
 PARA_WATCHDOG_LOG_FILE="${PARA_WATCHDOG_LOG_FILE:-${HOME}/Library/Logs/XCMAX/para-health-watchdog.log}"
 STATE_FILE="${PARA_WATCHDOG_STATE_DIR}/state.env"
@@ -30,6 +34,7 @@ is_uint() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
 
 load_state() {
   failures=0
+  last_cleanup_epoch=0
   last_repair_epoch=0
   last_restart_epoch=0
   if [[ -f "${STATE_FILE}" ]]; then
@@ -38,6 +43,7 @@ load_state() {
       is_uint "${value}" || continue
       case "${key}" in
         failures) failures="${value}" ;;
+        last_cleanup_epoch) last_cleanup_epoch="${value}" ;;
         last_repair_epoch) last_repair_epoch="${value}" ;;
         last_restart_epoch) last_restart_epoch="${value}" ;;
       esac
@@ -48,8 +54,8 @@ load_state() {
 save_state() {
   local tmp
   tmp="$(mktemp "${PARA_WATCHDOG_STATE_DIR}/state.XXXXXX")" || return 1
-  printf 'failures=%s\nlast_repair_epoch=%s\nlast_restart_epoch=%s\n' \
-    "${failures}" "${last_repair_epoch}" "${last_restart_epoch}" > "${tmp}"
+  printf 'failures=%s\nlast_cleanup_epoch=%s\nlast_repair_epoch=%s\nlast_restart_epoch=%s\n' \
+    "${failures}" "${last_cleanup_epoch}" "${last_repair_epoch}" "${last_restart_epoch}" > "${tmp}"
   mv "${tmp}" "${STATE_FILE}"
 }
 
@@ -101,6 +107,52 @@ release_action_lock() {
   rmdir "${LOCK_DIR}" 2>/dev/null || true
 }
 
+available_disk_kb() {
+  df -Pk "${PARA_DISK_CHECK_PATH}" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+maybe_cleanup_disk() {
+  local now="$1"
+  local before_kb
+  local after_kb
+  is_uint "${PARA_DISK_MIN_AVAILABLE_KB}" || {
+    log "PARA_DISK_MIN_AVAILABLE_KB 非法: ${PARA_DISK_MIN_AVAILABLE_KB}"
+    return 1
+  }
+  is_uint "${PARA_CLEANUP_COOLDOWN_SEC}" || {
+    log "PARA_CLEANUP_COOLDOWN_SEC 非法: ${PARA_CLEANUP_COOLDOWN_SEC}"
+    return 1
+  }
+  before_kb="$(available_disk_kb)"
+  is_uint "${before_kb}" || {
+    log "无法读取磁盘剩余空间: ${PARA_DISK_CHECK_PATH}"
+    return 1
+  }
+  (( before_kb < PARA_DISK_MIN_AVAILABLE_KB )) || return 0
+  if (( now - last_cleanup_epoch < PARA_CLEANUP_COOLDOWN_SEC )); then
+    return 0
+  fi
+  [[ -x "${PARA_CLEANUP_COMMAND}" ]] || {
+    log "低磁盘水位但清理命令不可执行: available_kb=${before_kb} command=${PARA_CLEANUP_COMMAND}"
+    return 1
+  }
+  acquire_action_lock || return 1
+  last_cleanup_epoch="${now}"
+  save_state
+  log "低磁盘水位触发有界清理: available_kb=${before_kb} threshold_kb=${PARA_DISK_MIN_AVAILABLE_KB}"
+  if ! "${PARA_CLEANUP_COMMAND}" --apply --reason low-disk >> "${PARA_WATCHDOG_LOG_FILE}" 2>&1; then
+    log "有界清理失败；保留冷却避免反复占用磁盘"
+    release_action_lock
+    return 1
+  fi
+  after_kb="$(available_disk_kb)"
+  log "有界清理完成: before_kb=${before_kb} after_kb=${after_kb:-unknown}"
+  if is_uint "${after_kb}" && (( after_kb < PARA_DISK_MIN_AVAILABLE_KB )); then
+    log "清理后仍低于安全水位；需处理 Para 范围外占用"
+  fi
+  release_action_lock
+}
+
 repair_native_dependency() {
   local now="$1"
   if (( now - last_repair_epoch < PARA_REPAIR_COOLDOWN_SEC )); then
@@ -141,6 +193,8 @@ repair_native_dependency() {
 check_once() {
   local now
   load_state
+  now="$(date +%s)"
+  maybe_cleanup_disk "${now}" || true
   if healthy; then
     if (( failures > 0 )); then
       log "健康恢复，连续失败计数由 ${failures} 清零"
@@ -151,7 +205,6 @@ check_once() {
   fi
 
   failures=$((failures + 1))
-  now="$(date +%s)"
   save_state
   log "健康检查失败（连续 ${failures} 次）"
 
