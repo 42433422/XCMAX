@@ -62,6 +62,40 @@ def _is_review_protocol_retry_reason(normalized: str) -> bool:
     return any(normalized.startswith(prefix) for prefix in _REVIEW_PROTOCOL_PREFIXES)
 
 
+def normalize_automated_remediation_reason(
+    memory: dict[str, Any],
+    item: dict[str, Any],
+) -> str:
+    """Map legacy stored reasons to the executable hold token schedulers should use."""
+
+    reason = str(item.get("reason") or "").strip()
+    if reason != "structured_qa_verdict_not_pass":
+        return reason
+    branch = str(item.get("branch") or "").strip()
+    if not branch:
+        return reason
+    decision = (
+        memory.get("last_policy_decision")
+        if isinstance(memory.get("last_policy_decision"), dict)
+        else {}
+    )
+    if str(decision.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
+        return reason
+    structured_gate = (
+        decision.get("structured_gate") if isinstance(decision.get("structured_gate"), dict) else {}
+    )
+    qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
+    if qa.get("target_branch_available") is not False:
+        return reason
+    blocking = qa.get("blocking_findings")
+    if isinstance(blocking, list) and any(
+        "target_branch_unavailable" in str(finding) and branch in str(finding)
+        for finding in blocking
+    ):
+        return "structured_qa_target_branch_unavailable"
+    return reason
+
+
 def automated_remediation_resume_plan(reason: str) -> tuple[list[str], bool] | None:
     """Map durable hold reasons to downstream steps and branch pinning."""
     normalized = str(reason or "").strip()
@@ -106,7 +140,9 @@ def resume_candidate_from_context(
     if matched_item is None:
         return None
 
-    reason = str(remediation_context.get("reason") or "").strip()
+    reason = normalize_automated_remediation_reason(memory, matched_item)
+    if not reason:
+        reason = str(remediation_context.get("reason") or "").strip()
     raw_steps = remediation_context.get("steps")
     failed_steps = (
         [str(step) for step in raw_steps if str(step) in {"code", "review", "qa"}]
@@ -203,6 +239,7 @@ def unavailable_context_record(
 
 __all__ = [
     "automated_remediation_resume_plan",
+    "normalize_automated_remediation_reason",
     "remediation_lineage_fields",
     "resume_candidate_from_context",
     "unavailable_context_record",
