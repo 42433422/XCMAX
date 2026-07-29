@@ -4557,53 +4557,26 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
-            diff_includes_modstore_server_production_path,
-            is_auxiliary_self_maintenance_evidence_path,
-            is_marker_status_path,
-            loop_memory_requires_executable_change,
-            memory_has_diff_too_large_remediation,
+            assess_loop_memory_executable_change_blockers,
             para_merge_review_max_diff_chars,
         )
 
-        requirement = loop_memory_requires_executable_change(memory)
-        if requirement.get("required") and memory_has_diff_too_large_remediation(memory):
-            kb_paths = [
-                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
-            ]
-            if kb_paths:
-                return _decision(
-                    {
-                        "changed_files": normalized_files,
-                        "kb_paths": kb_paths,
-                        "ok": False,
-                        "reason": "kb_paths_blocked_during_diff_too_large_remediation",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-        if requirement.get("required"):
-            if all(is_marker_status_path(file_name) for file_name in normalized_files):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "marker_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-            if all(
-                is_auxiliary_self_maintenance_evidence_path(file_name)
-                for file_name in normalized_files
-            ) and not diff_includes_modstore_server_production_path(normalized_files):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "auxiliary_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
+        blocker = assess_loop_memory_executable_change_blockers(normalized_files, memory)
+        if blocker.get("blocked"):
+            payload: Dict[str, Any] = {
+                "changed_files": blocker.get("changed_files") or normalized_files,
+                "ok": False,
+                "reason": blocker.get("reason"),
+                "self_maintenance_requirement": blocker.get("requirement"),
+            }
+            if blocker.get("kb_paths"):
+                payload["kb_paths"] = blocker["kb_paths"]
+            if blocker.get("reason") in {
+                "marker_only_diff_requires_executable_change",
+                "auxiliary_only_diff_requires_executable_change",
+            }:
+                payload["allowed_globs"] = allowed
+            return _decision(payload)
     except Exception as exc:
         return _decision(
             {

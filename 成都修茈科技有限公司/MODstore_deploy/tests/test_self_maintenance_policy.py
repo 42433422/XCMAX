@@ -99,3 +99,45 @@ def test_parse_merge_review_diff_char_count_and_memory_flag():
     }
     assert memory_has_diff_too_large_remediation(memory) is True
     assert memory_has_diff_too_large_remediation({"open_items": []}) is False
+
+
+def test_executable_change_blockers_unified_under_required_memory():
+    from modstore_server.self_maintenance_policy import (
+        assess_loop_memory_executable_change_blockers,
+    )
+
+    diff_too_large_memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    kb_result = assess_loop_memory_executable_change_blockers(
+        [
+            "FHD/XCAGI/kb/fixes/sample-fix.json",
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        ],
+        diff_too_large_memory,
+    )
+    assert kb_result["blocked"] is True
+    assert kb_result["reason"] == "kb_paths_blocked_during_diff_too_large_remediation"
+
+    marker_result = assess_loop_memory_executable_change_blockers(
+        ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"],
+        diff_too_large_memory,
+    )
+    assert marker_result["blocked"] is True
+    assert marker_result["reason"] == "marker_only_diff_requires_executable_change"
+
+    production_result = assess_loop_memory_executable_change_blockers(
+        [
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+            "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+        ],
+        diff_too_large_memory,
+    )
+    assert production_result["blocked"] is False

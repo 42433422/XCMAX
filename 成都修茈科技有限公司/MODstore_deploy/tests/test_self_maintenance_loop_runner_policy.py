@@ -2534,6 +2534,29 @@ def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
     assert result["kb_paths"] == [files[0]]
 
 
+def test_auto_merge_policy_blocks_marker_only_during_diff_too_large_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large-marker",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "marker_only_diff_requires_executable_change"
+
+
 def test_auto_merge_policy_rejects_diff_over_para_merge_review_budget():
     files = [
         "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",

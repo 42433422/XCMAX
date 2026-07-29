@@ -284,6 +284,56 @@ def is_marker_status_path(path: str) -> bool:
     return normalized == MARKER_STATUS_FILENAME or normalized.endswith("/" + MARKER_STATUS_FILENAME)
 
 
+def assess_loop_memory_executable_change_blockers(
+    files: List[str],
+    memory: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Run every loop-memory executable-change blocker in one fail-closed pass."""
+
+    requirement = loop_memory_requires_executable_change(memory)
+    if not requirement.get("required"):
+        return {"blocked": False, "requirement": requirement}
+
+    normalized_files = [_normalize_repo_path(file_name) for file_name in files if file_name]
+
+    if memory_has_diff_too_large_remediation(memory):
+        kb_paths = [
+            file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
+        ]
+        if kb_paths:
+            return {
+                "blocked": True,
+                "changed_files": normalized_files,
+                "kb_paths": kb_paths,
+                "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+                "requirement": requirement,
+            }
+
+    if normalized_files and all(is_marker_status_path(file_name) for file_name in normalized_files):
+        return {
+            "blocked": True,
+            "changed_files": normalized_files,
+            "reason": "marker_only_diff_requires_executable_change",
+            "requirement": requirement,
+        }
+
+    if (
+        normalized_files
+        and all(
+            is_auxiliary_self_maintenance_evidence_path(file_name) for file_name in normalized_files
+        )
+        and not diff_includes_modstore_server_production_path(normalized_files)
+    ):
+        return {
+            "blocked": True,
+            "changed_files": normalized_files,
+            "reason": "auxiliary_only_diff_requires_executable_change",
+            "requirement": requirement,
+        }
+
+    return {"blocked": False, "requirement": requirement}
+
+
 def should_block_marker_only_diff_summary(
     diff_summary: str, memory: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
@@ -307,6 +357,7 @@ def should_block_marker_only_diff_summary(
 
 
 __all__ = [
+    "assess_loop_memory_executable_change_blockers",
     "default_loop_memory_path",
     "diff_includes_modstore_server_production_path",
     "is_auxiliary_self_maintenance_evidence_path",
