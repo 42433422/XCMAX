@@ -208,8 +208,11 @@ def build_founder_autonomy_snapshot(
     employee_dashboard_ok = bool(employee_autonomy) and not bool(employee_autonomy.get("error"))
     assigned_employees = _as_int(employee_capability.get("assigned_count"))
     proven_employees = _as_int(employee_capability.get("proven_count"))
+    burn_in_proven_employees = _as_int(employee_capability.get("burn_in_proven_count"))
+    production_proven_employees = _as_int(employee_capability.get("production_proven_count"))
     shell_employees = _as_int(employee_capability.get("shell_count"))
     workforce_ready = bool(employee_capability.get("workforce_ready"))
+    production_workforce_ready = bool(employee_capability.get("production_workforce_ready"))
     workforce_assigned = bool(planned) and assigned_employees >= max(1, round(planned * 0.95))
     unresolved_dead_letters = _as_int(dead_letters.get("unresolved_count"))
     resolved_dead_letters = _as_int(dead_letters.get("resolved_count"))
@@ -360,6 +363,7 @@ def build_founder_autonomy_snapshot(
         evolution_gates=evolution_gates,
         alignment_gates=alignment_gates,
         workforce_ready=workforce_ready,
+        founder_workforce_ready=production_workforce_ready,
         pending_total=pending_total,
         governance_clear=governance_clear,
         runtime_provenance_ok=runtime_provenance_ok,
@@ -381,7 +385,7 @@ def build_founder_autonomy_snapshot(
         veto_pending=veto_pending,
         prohibited_miss=prohibited_miss,
         planned=planned,
-        proven_employees=proven_employees,
+        proven_employees=production_proven_employees,
         shell_employees=shell_employees,
         retort_open=retort_open,
         retort_critical=retort_critical,
@@ -400,7 +404,7 @@ def build_founder_autonomy_snapshot(
             "human_intervention_rare": pending_total <= 5
             and retort_open == 0
             and governance_clear
-            and workforce_ready
+            and production_workforce_ready
             and runtime_provenance_ok,
         },
         "live_summary": {
@@ -424,10 +428,23 @@ def build_founder_autonomy_snapshot(
             "registered_employees": registered,
             "assigned_employees": assigned_employees,
             "proven_employees": proven_employees,
+            "burn_in_proven_employees": burn_in_proven_employees,
+            "production_proven_employees": production_proven_employees,
             "shell_employees": shell_employees,
             "employee_workforce_ready": workforce_ready,
+            "employee_production_workforce_ready": production_workforce_ready,
             "employee_assignment_ratio": _as_float(employee_capability.get("assignment_ratio")),
             "employee_proof_ratio": _as_float(employee_capability.get("proof_ratio")),
+            "employee_burn_in_proof_ratio": _as_float(
+                employee_capability.get("burn_in_proof_ratio")
+            ),
+            "employee_production_proof_ratio": _as_float(
+                employee_capability.get("production_proof_ratio")
+            ),
+            "employee_production_window_hours": _as_int(
+                employee_capability.get("production_window_hours")
+            ),
+            "platform_llm": _as_dict(employee_capability.get("platform_llm")),
             "loop_participants": len(participants),
             "goals_total": int(goals_total),
             "goals_closed": int(goals_closed),
