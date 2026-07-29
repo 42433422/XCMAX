@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .self_maintenance_policy import (
     normalize_merge_review_veto_code,
     parse_merge_review_diff_char_count,
 )
+from .self_maintenance_remediation_lineage import normalize_automated_remediation_reason
 
 _INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
@@ -83,6 +84,35 @@ def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     return True
 
 
+def resume_candidate_from_para_ai_review_item(
+    memory: Dict[str, Any],
+    item: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Build a code-resume candidate for Para merge-worker AI review vetoes."""
+
+    reason = normalize_automated_remediation_reason(memory, item)
+    if reason != "para_ai_review_rejected":
+        return None
+    branch = str(item.get("branch") or "").strip()
+    para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+    if not branch or not para_task_id:
+        return None
+    feedback = str(item.get("review_feedback") or item.get("detail") or "")[:4000]
+    veto_meta = classify_para_merge_review_detail(feedback)
+    return {
+        "branch": branch,
+        "failed_run_id": str(item.get("run_id") or "").strip(),
+        "failed_steps": ["code"],
+        "para_task_id": para_task_id,
+        "reason": "resume_para_ai_review_rejection",
+        "rejected_branch": branch,
+        "review_actionable_findings": veto_meta.get("actionable_code_findings"),
+        "review_feedback": feedback,
+        "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
+        "review_veto_code": str(item.get("review_veto_code") or veto_meta.get("veto_code") or ""),
+    }
+
+
 def classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
     """Normalize Para merge-worker veto detail for loop remediation."""
 
@@ -127,5 +157,6 @@ __all__ = [
     "is_branch_preserving_para_merge_failure_detail",
     "operational_merge_reason_candidates",
     "para_merge_conflict_continues_on_rejected_branch",
+    "resume_candidate_from_para_ai_review_item",
     "resume_from_clean_baseline_for_para_merge",
 ]
