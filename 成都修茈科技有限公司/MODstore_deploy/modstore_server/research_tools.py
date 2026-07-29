@@ -794,9 +794,7 @@ def contact_web_search_budget_sec() -> float:
     return impl()
 
 
-def rank_contact_serp_rows(
-    query: str, rows: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+def rank_contact_serp_rows(query: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     from modstore_server.contact_company_web_search import (
         rank_contact_serp_rows as impl,
     )
@@ -804,9 +802,7 @@ def rank_contact_serp_rows(
     return impl(query, rows)
 
 
-async def contact_known_site_company_lookup(
-    query: str, *, max_results: int = 5
-) -> List[str]:
+async def contact_known_site_company_lookup(query: str, *, max_results: int = 5) -> List[str]:
     from modstore_server.contact_company_web_search import (
         contact_known_site_company_lookup as impl,
     )
