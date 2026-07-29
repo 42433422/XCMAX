@@ -2633,6 +2633,50 @@ def test_reconcile_indeterminate_review_merge_failure_continues_on_rejected_bran
     assert "indeterminate-review" in prompt
 
 
+def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-67f884",
+                "para_task_id": "task-gh-checks",
+                "run_id": "run-gh-checks",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-67f884",
+            "detail": (
+                "bot merge checks failed or unavailable: Command failed: gh pr checks 813 "
+                "--watch --fail-fast --interval 10 --repo 42433422/XCMAX"
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-67f884",
+    )
+    prompt = _code_task_text("run-gh-checks-retry", {"gaps": []}, memory, candidate)
+    assert "gh pr checks polling infrastructure" in prompt
+    assert "bot merge checks failed or unavailable" in prompt
+
+
 # ---------------------------------------------------------------------------
 # _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
 # ---------------------------------------------------------------------------
