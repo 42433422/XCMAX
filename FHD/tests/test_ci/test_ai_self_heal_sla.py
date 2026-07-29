@@ -770,6 +770,59 @@ class TestMergeAndDispatchApi:
 
         assert client.get_pr_mergeability(42) == (True, "behind")
 
+    def test_mergeability_retries_transient_unknown_until_behind(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        unknown = MagicMock()
+        unknown.status_code = 200
+        unknown.json.return_value = {
+            "mergeable": None,
+            "mergeable_state": "unknown",
+        }
+        behind = MagicMock()
+        behind.status_code = 200
+        behind.json.return_value = {
+            "mergeable": True,
+            "mergeable_state": "behind",
+        }
+        mock_http.get.side_effect = [unknown, behind]
+        client.client = mock_http
+        sleep = MagicMock()
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_ATTEMPTS", 3)
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_BASE_SECONDS", 0.25)
+        monkeypatch.setattr(sla.time, "sleep", sleep)
+
+        assert client.get_pr_mergeability(42) == (True, "behind")
+        assert mock_http.get.call_count == 2
+        sleep.assert_called_once_with(0.25)
+
+    def test_mergeability_unknown_retry_is_bounded_and_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        unknown = MagicMock()
+        unknown.status_code = 200
+        unknown.json.return_value = {
+            "mergeable": None,
+            "mergeable_state": "unknown",
+        }
+        mock_http.get.return_value = unknown
+        client.client = mock_http
+        sleep = MagicMock()
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_ATTEMPTS", 3)
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_BASE_SECONDS", 0.25)
+        monkeypatch.setattr(sla.time, "sleep", sleep)
+
+        assert client.get_pr_mergeability(42) == (
+            None,
+            "unknown_after_3_attempts",
+        )
+        assert mock_http.get.call_count == 3
+        assert [call.args[0] for call in sleep.call_args_list] == [0.25, 0.5]
+
     def test_update_branch_sends_expected_head_sha(self) -> None:
         client = _make_real_client()
         mock_http = MagicMock()
