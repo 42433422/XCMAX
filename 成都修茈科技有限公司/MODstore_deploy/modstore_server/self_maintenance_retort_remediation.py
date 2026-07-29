@@ -2,9 +2,33 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 RETORT_SCOPE_REASON = "retort_scope_too_large"
+RETORT_SCOPE_MAX_FILES = 6
+RETORT_SCOPE_MAX_CHANGED_LINES = 400
+RETORT_SCOPE_MAX_DIFF_CHARS = 12_000
+RETORT_SCOPE_EXCLUDED_PATHS = (
+    ".github/workflows/",
+    "FHD/XCAGI/kb/",
+    "config/source_governance_baseline.json",
+    "scripts/dev/source_governance.py",
+    "self_maintenance_loop_status.py",
+)
+
+
+def retort_scope_remediation_contract() -> dict[str, Any]:
+    """Return the deterministic diff budget for a clean-base Retort retry."""
+
+    return {
+        "base_ref": "origin/main",
+        "excluded_paths": list(RETORT_SCOPE_EXCLUDED_PATHS),
+        "max_changed_files": RETORT_SCOPE_MAX_FILES,
+        "max_changed_lines": RETORT_SCOPE_MAX_CHANGED_LINES,
+        "max_diff_chars": RETORT_SCOPE_MAX_DIFF_CHARS,
+        "required_shape": "production root-cause files plus focused regression tests only",
+    }
 
 
 def retort_scope_only_clarification(value: Any) -> bool:
@@ -94,14 +118,34 @@ def retort_scope_remediation_prompt(resume_candidate: Any) -> str:
         return ""
     rejected_branch = str(candidate.get("branch") or "").strip()
     feedback = str(candidate.get("remediation_feedback") or "").strip()[:4000]
+    contract = retort_scope_remediation_contract()
     return (
         "\n\n=== RETORT SCOPE REMEDIATION ===\n"
         "Retort did not approve the previous candidate because its change surface was too "
-        "large for unattended review. Start from the configured clean base. Inspect the "
-        "rejected branch only as read-only evidence, then reproduce only the smallest "
-        "production fix and focused regression test. Do not copy its repository-wide "
-        "formatting churn. The diff-scoped Black/isort commands below must pass without "
-        "formatting unrelated historical files. "
+        "large for unattended review. Start from the current remote main fetched into "
+        "`origin/main`; never continue, merge, rebase, or cherry-pick the rejected branch. "
+        "Inspect that branch only as read-only evidence and select exactly one still-missing "
+        "production root cause. Reproduce only that source fix and its focused regression "
+        "tests. This retry intentionally overrides the generic KB-writing instruction: the "
+        "previous workspace is already salvaged separately, so do not add KB, metrics, status, "
+        "governance-baseline, workflow, generated, or documentation files to this branch. "
+        "Before commit and again before reporting completion, run `git diff --name-only "
+        "origin/main...HEAD`, `git diff --numstat origin/main...HEAD`, and "
+        "`git diff origin/main...HEAD | wc -c`; all limits in "
+        "RETORT_SCOPE_CONTRACT_JSON must pass. If the rejected fix is already on main, choose "
+        "one bounded executable gap from current evidence instead of replaying historical "
+        "commits or creating a marker-only change. The diff-scoped Black/isort commands below "
+        "must pass without formatting unrelated historical files. "
+        f"RETORT_SCOPE_CONTRACT_JSON: {json.dumps(contract, ensure_ascii=False, sort_keys=True)}. "
         f"Rejected reference branch: {rejected_branch or '(missing)'}. "
         f"Exact scope feedback: {feedback or '(missing)'}"
     )
+
+
+__all__ = [
+    "RETORT_SCOPE_REASON",
+    "reconcile_retort_scope_remediations",
+    "retort_scope_only_clarification",
+    "retort_scope_remediation_contract",
+    "retort_scope_remediation_prompt",
+]
