@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.services.conversation.modstore_chat_failover import (
+from app.infrastructure.llm.modstore_chat_failover import (
     build_chat_failover_candidates,
     chat_failover_max_attempts,
 )

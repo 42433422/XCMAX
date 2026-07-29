@@ -150,11 +150,6 @@ async def resolve_default_llm_route(db: Session, user_id: int) -> dict[str, Any]
     )
 
 
-
-
-
-
-
 def _membership_meta(plan_id: str | None) -> Dict[str, Any]:
     pid = (plan_id or "").strip()
     tier_map = {
@@ -1108,9 +1103,6 @@ async def llm_chat(
         payload["failover_from"] = out["failover_from"]
         payload["failover_attempts"] = out.get("failover_attempts") or []
     return payload
-
-
-
 
 
 @router.post("/chat/stream")

@@ -1,4 +1,4 @@
-from app.services.conversation.modstore_chat_failover import (
+from app.infrastructure.llm.modstore_chat_failover import (
     build_chat_failover_candidates,
     is_market_chat_failoverable,
 )

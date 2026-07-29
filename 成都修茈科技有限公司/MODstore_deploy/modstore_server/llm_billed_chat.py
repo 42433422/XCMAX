@@ -363,7 +363,9 @@ async def stream_billed_llm_chat(
                     key_source_by_provider=key_source_by_provider,
                 )
                 if not rest:
-                    yield _sse("error", {"ok": False, "error": last_error, "status": exc.status_code})
+                    yield _sse(
+                        "error", {"ok": False, "error": last_error, "status": exc.status_code}
+                    )
                     return
                 queue = queue[: idx + 1] + rest
                 idx += 1
@@ -376,9 +378,7 @@ async def stream_billed_llm_chat(
                         hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
                     )
                 else:
-                    preauth_amount = estimate_preauthorization(
-                        db, prov, mdl, msgs, max_tokens
-                    )
+                    preauth_amount = estimate_preauthorization(db, prov, mdl, msgs, max_tokens)
                     hold = await wallet.preauthorize(
                         authorization_header(request),
                         preauth_amount,
@@ -396,7 +396,9 @@ async def stream_billed_llm_chat(
                     key_source_by_provider=key_source_by_provider,
                 )
                 if not rest:
-                    yield _sse("error", {"ok": False, "error": last_error, "status": exc.status_code})
+                    yield _sse(
+                        "error", {"ok": False, "error": last_error, "status": exc.status_code}
+                    )
                     return
                 logger.warning(
                     "llm stream preauth failover after %s/%s: %s",
@@ -458,9 +460,8 @@ async def stream_billed_llm_chat(
                                 "failed to release LLM wallet hold after stream upstream error"
                             )
                         last_error = str(err)
-                        if (
-                            not emitted_delta
-                            and is_chat_failoverable_failure(last_error, status_code)
+                        if not emitted_delta and is_chat_failoverable_failure(
+                            last_error, status_code
                         ):
                             rest = remaining_candidates_after_failure(
                                 queue,
@@ -502,9 +503,7 @@ async def stream_billed_llm_chat(
                         charge = Decimal("0")
                     else:
                         charge = calculate_charge(db, prov, mdl, usage)
-                        await wallet.settle(
-                            authorization_header(request), hold, charge, request_id
-                        )
+                        await wallet.settle(authorization_header(request), hold, charge, request_id)
                     conversation_id = save_success_log(
                         db,
                         user_id=user.id,
@@ -546,9 +545,7 @@ async def stream_billed_llm_chat(
                         error=str(exc),
                         hold_no=hold.hold_no,
                     )
-                    await wallet.release(
-                        authorization_header(request), hold, str(exc), request_id
-                    )
+                    await wallet.release(authorization_header(request), hold, str(exc), request_id)
                 except Exception:
                     logger.exception(
                         "failed to release LLM wallet hold after unexpected stream error"
@@ -578,4 +575,3 @@ async def stream_billed_llm_chat(
             "X-Accel-Buffering": "no",
         },
     )
-
