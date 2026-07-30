@@ -14,6 +14,7 @@ from pathlib import Path
 
 from app.utils.time import utc_now_naive
 
+from .backup_retention import cleanup_local_backups
 from .paths import configure_desktop_environment, ensure_desktop_dirs
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,10 @@ def backup_database(
             pass
         return None
 
+    # Age-only retention is unsafe for multi-gigabyte desktop databases. Prune
+    # immediately after every successful backup, including updater migration
+    # snapshots, while explicitly protecting the just-validated recovery point.
+    cleanup_local_backups(dirs["backups"], protected=(target,))
     return target
 
 

@@ -55,6 +55,14 @@ def register_essential_compat_routes(app: FastAPI) -> None:
         logger.warning("essential system routes skipped: %s", e)
 
     try:
+        from app.fastapi_routes.tools_execute import router as tools_execute_router
+
+        app.include_router(tools_execute_router)
+        logger.info("Registered tools_execute (essential, /api/tools/execute)")
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("essential tools_execute skipped: %s", e)
+
+    try:
         from app.fastapi_routes.domains.product.compat_routes import router as product_compat_router
 
         app.include_router(product_compat_router, prefix="/api")

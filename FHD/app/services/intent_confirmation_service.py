@@ -216,27 +216,89 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
         slots = intent_result.get("slots", {})
 
         if not intent or intent == "unk":
+            raw_input = intent_result.get("raw_input") or intent_result.get("text")
+            # 开放世界：技能契约候选 / 新技能提案（不绑死封闭意图表）
+            skill_route: dict[str, Any] | None = None
+            try:
+                from app.domain.neuro.cognition.cognitive_orchestrator import (
+                    get_cognitive_orchestrator,
+                )
+
+                enriched = get_cognitive_orchestrator().enrich_intent_result(
+                    intent_result,
+                    text=str(raw_input or ""),
+                    domain=str(intent_result.get("domain") or "generic"),
+                )
+                skill_route = enriched.get("skill_route")
+            except Exception:  # noqa: BLE001
+                logger.debug("skill_route enrich failed", exc_info=True)
+
             # 进化状态闭环：未命中意图 → 能力提案 → GitHub issue → ai-implement
             try:
                 record_capability_proposal(
-                    raw_input=intent_result.get("raw_input") or intent_result.get("text"),
+                    raw_input=raw_input,
                     reason="intent_unknown",
                     context={
                         "intent_result": {
                             k: v
                             for k, v in intent_result.items()
                             if k in ("primary_intent", "tool_key", "deepseek_intent", "slots")
-                        }
+                        },
+                        "skill_route": skill_route,
                     },
                 )
             except Exception:  # noqa: BLE001
                 logger.debug("capability_proposal record failed", exc_info=True)
+
+            # 有高分技能候选时，引导补槽而非纯「未理解」
+            if skill_route and skill_route.get("status") == "skill_candidate":
+                skill = skill_route.get("skill") or {}
+                required = list(skill.get("required_slots") or [])
+                title = str(skill.get("title") or skill.get("skill_id") or "该操作")
+                if required:
+                    return {
+                        "status": "missing_slots",
+                        "intent": skill.get("via_bootstrap_intent") or skill.get("skill_id"),
+                        "slots": slots,
+                        "missing_slots": required,
+                        "question": f"我理解您可能想「{title}」。请补充：{'、'.join(required)}",
+                        "pending_data": {
+                            "intent": skill.get("via_bootstrap_intent") or skill.get("skill_id"),
+                            "slots": slots,
+                            "missing_slots": required,
+                            "skill_id": skill.get("skill_id"),
+                        },
+                        "skill_route": skill_route,
+                    }
+                return {
+                    "status": "complete",
+                    "intent": skill.get("via_bootstrap_intent") or skill.get("skill_id"),
+                    "slots": slots,
+                    "question": None,
+                    "pending_data": {
+                        "intent": skill.get("via_bootstrap_intent") or skill.get("skill_id"),
+                        "slots": slots,
+                        "missing_slots": [],
+                        "skill_id": skill.get("skill_id"),
+                    },
+                    "skill_route": skill_route,
+                }
+
+            question = "抱歉，我没有理解您的意思。请告诉我您想做什么？"
+            if skill_route and skill_route.get("status") == "skill_proposal":
+                proposal = skill_route.get("proposal") or {}
+                pid = str(proposal.get("proposed_skill_id") or "open")
+                question = (
+                    f"这个需求还不在已注册技能里；我已记录为开放技能提案「{pid}」。"
+                    "请再用一句话描述目标（含客户/订单等关键信息）。"
+                )
             return {
                 "status": "unclear",
                 "intent": None,
                 "slots": {},
-                "question": "抱歉，我没有理解您的意思。请告诉我您想做什么？",
+                "question": question,
                 "pending_data": None,
+                "skill_route": skill_route,
             }
 
         missing = check_missing_slots(intent, slots)

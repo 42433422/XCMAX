@@ -64,6 +64,52 @@ def test_build_trajectory_empty_when_no_items():
     assert traj == []
 
 
+def test_verified_strategic_goal_is_visible_with_loop_linkage(monkeypatch):
+    from modstore_server import public_action_board
+
+    monkeypatch.setattr(public_action_board, "_calendar_today", lambda: "2026-07-29")
+    monkeypatch.setattr(
+        public_action_board,
+        "verified_strategic_goal_items",
+        lambda limit=100: [
+            {
+                "title": "实现创始人退出日常运营",
+                "priority": "P1",
+                "status": "in_progress",
+                "status_label": "进行中",
+                "line": "P-S",
+                "line_label": "软件线",
+                "owner": "Para · 变更评审员",
+                "employee_id": "change-request-auditor",
+                "kind": "update",
+                "day": "2026-07-29",
+                "updated_at": "2026-07-29T06:00:00+00:00",
+                "ts": "06:00",
+                "source": "verified_strategic_council",
+                "goal_id": "goal-founder-autonomy",
+                "loop_run_id": "loop-founder-autonomy",
+                "para_task_id": "para-founder-autonomy",
+                "receipt_id": "council-founder-autonomy",
+            }
+        ],
+    )
+
+    board = build_public_action_board()
+
+    assert board["day"] == "2026-07-29"
+    assert board["day_stale"] is False
+    assert board["goals"]["summary"]["total"] >= 1
+    goal = next(
+        item for item in board["goals"]["items"] if item.get("goal_id") == "goal-founder-autonomy"
+    )
+    assert goal["loop_run_id"] == "loop-founder-autonomy"
+    assert goal["para_task_id"] == "para-founder-autonomy"
+    trajectory = next(
+        item for item in board["trajectory"] if item.get("goal_id") == "goal-founder-autonomy"
+    )
+    assert trajectory["source"] == "verified_strategic_council"
+
+
 def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
     monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(tmp_path))
     corp = tmp_path / "成都修茈科技有限公司"
@@ -75,3 +121,13 @@ def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
     data = json.loads(target.read_text(encoding="utf-8"))
     assert data["schema"] == "xcagi.public_action_board/v1"
     assert isinstance(data.get("trajectory"), list)
+
+
+def test_public_visuals_prefer_live_action_board_api():
+    company_root = Path(__file__).resolve().parents[2]
+    for name in ("download-action-board.js", "world-will-ticker.js", "world-will.js"):
+        script = (company_root / name).read_text(encoding="utf-8")
+        assert script.index("fetchBoard('/api/public/action-board'") < script.index(
+            "fetchBoard('/download-action-board.json'"
+        )
+        assert "payload.data" in script

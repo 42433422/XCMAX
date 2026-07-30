@@ -8,7 +8,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.application.founder_autonomy_support import _as_dict, _as_float, _as_int, _as_list
+from app.application.founder_autonomy_support import (
+    _as_dict,
+    _as_float,
+    _as_int,
+    _as_list,
+)
 
 
 def build_public_founder_autonomy_projection(
@@ -60,6 +65,15 @@ def build_public_founder_autonomy_projection(
         for raw in _as_list(live.get("prohibited_posthoc_uncovered_contracts"))[:20]
         if _as_int(_as_dict(raw).get("count")) > 0
     ]
+    pending_contracts = [
+        {
+            "action": str(_as_dict(raw).get("action") or "unknown")[:128],
+            "source": str(_as_dict(raw).get("source") or "unknown")[:128],
+            "count": _as_int(_as_dict(raw).get("count")),
+        }
+        for raw in _as_list(live.get("prohibited_posthoc_pending_contracts"))[:20]
+        if _as_int(_as_dict(raw).get("count")) > 0
+    ]
     return {
         "schema": "xcagi.public_founder_autonomy/v1",
         "generated_at": str(snapshot.get("generated_at") or datetime.now(UTC).isoformat()),
@@ -81,11 +95,27 @@ def build_public_founder_autonomy_projection(
             "paid_delivery_verified": bool(live.get("outcome_verified")),
             "customer_acceptance_verified": bool(live.get("customer_acceptance_verified")),
             "employee_workforce_ready": bool(live.get("employee_workforce_ready")),
+            "employee_production_workforce_ready": bool(
+                live.get("employee_production_workforce_ready")
+            ),
+            "employee_production_proven_count": _as_int(live.get("production_proven_employees")),
+            "employee_production_proof_ratio": _as_float(
+                live.get("employee_production_proof_ratio")
+            ),
             "alignment_posthoc": {
                 "status": str(live.get("prohibited_miss_status") or "unknown"),
                 "coverage_rate": _as_float(live.get("prohibited_posthoc_coverage_rate")),
                 "allow_count": _as_int(live.get("prohibited_posthoc_allow_count")),
                 "conclusive_count": _as_int(live.get("prohibited_posthoc_conclusive_count")),
+                "eligible_allow_count": _as_int(
+                    live.get("prohibited_posthoc_eligible_allow_count")
+                ),
+                "eligible_conclusive_count": _as_int(
+                    live.get("prohibited_posthoc_eligible_conclusive_count")
+                ),
+                "pending_count": _as_int(live.get("prohibited_posthoc_pending_count")),
+                "pending_contracts": pending_contracts,
+                "maturity_minutes": _as_int(live.get("prohibited_posthoc_maturity_minutes")),
                 "uncovered_count": _as_int(live.get("prohibited_posthoc_uncovered_count")),
                 "uncovered_contracts": uncovered_contracts,
             },

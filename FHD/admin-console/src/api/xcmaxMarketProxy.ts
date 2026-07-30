@@ -43,17 +43,21 @@ export async function isLocalDutyApiAvailable(): Promise<boolean> {
   return localDutyApiProbe
 }
 
-function emptyLocalManifest(employeeId: string) {
-  return { employee_id: employeeId, name: employeeId, handlers: [] }
+function explicitHealthOk(health: Record<string, unknown>): boolean {
+  return health.ok === true || health.success === true || health.healthy === true
 }
 
-function emptyLocalStatus(employeeId: string) {
-  return {
-    employee_id: employeeId,
-    deployed: false,
-    last_execution: null,
-    execution_stats: { total_executions: 0, success_count: 0, success_rate: 0 },
+function assertDutyGraphHealth(health: Record<string, unknown>): void {
+  const staffing = health.staffing as Record<string, unknown> | undefined
+  const staffingError = typeof staffing?.error === 'string' ? staffing.error.trim() : ''
+  const message = typeof health.message === 'string' ? health.message.trim() : ''
+  if (staffingError || !explicitHealthOk(health)) {
+    throw new Error(staffingError || message || '编制健康接口未返回可信健康状态')
   }
+}
+
+function dutyRuntimeUnavailable(resource: string): Error {
+  return new Error(`AI 员工运行时不可用，无法读取${resource}`)
 }
 
 async function fallbackDutyHealth() {
@@ -61,18 +65,25 @@ async function fallbackDutyHealth() {
     const ops = (await api.get('/api/xcmax/ops/duty-health')) as Record<string, unknown>
     const staffing = ops?.staffing
     if (staffing && typeof staffing === 'object') {
-      return { ok: true, source: 'ops-fallback', staffing }
+      return {
+        ...ops,
+        ok: explicitHealthOk(ops),
+        source: 'ops-fallback',
+        staffing,
+      }
     }
   } catch {
     /* ignore */
   }
   return {
-    ok: true,
-    source: 'client-fallback',
+    ok: false,
+    success: false,
+    source: 'runtime-unavailable',
+    message: '本地与运维编制健康接口均不可用',
     staffing: {
-      planned_count: 0,
-      registered_count: 0,
+      error: '本地与运维编制健康接口均不可用',
       missing_employees: [],
+      missing_local_employee_packs: [],
       extra_employees: [],
       areas: [],
     },
@@ -80,6 +91,7 @@ async function fallbackDutyHealth() {
 }
 
 const xcmaxMarketProxy = {
+  assertDutyGraphHealth,
   adminListNoKeyEmployees: () => marketReq('admin/duty-graph/no-key-employees'),
   adminAlignSingleEmployeeLlmToAuto: (pkgId: string, dryRun = false) =>
     marketReq(`admin/employee-packs/${encodeURIComponent(pkgId)}/align-llm-to-auto-single?dry_run=${dryRun ? 'true' : 'false'}`, {
@@ -138,17 +150,23 @@ const xcmaxMarketProxy = {
     )
   },
   getEmployeeStatus: async (employeeId: string) => {
-    if (!(await isLocalDutyApiAvailable())) return emptyLocalStatus(employeeId)
+    if (!(await isLocalDutyApiAvailable())) {
+      throw dutyRuntimeUnavailable(`员工 ${employeeId} 的运行状态`)
+    }
     try {
       return await api.get(`${LOCAL_PREFIX}/employees/${encodeURIComponent(employeeId)}/status`)
     } catch (e: unknown) {
       const err = e as { status?: number }
-      if (err?.status === 404) return emptyLocalStatus(employeeId)
+      if (err?.status === 404) {
+        throw new Error(`AI 员工 ${employeeId} 的运行状态不存在`)
+      }
       throw e
     }
   },
   getEmployeeManifest: async (employeeId: string) => {
-    if (!(await isLocalDutyApiAvailable())) return emptyLocalManifest(employeeId)
+    if (!(await isLocalDutyApiAvailable())) {
+      throw dutyRuntimeUnavailable(`员工 ${employeeId} 的 manifest`)
+    }
     try {
       return await api.get(`${LOCAL_PREFIX}/employees/${encodeURIComponent(employeeId)}/manifest`)
     } catch (e: unknown) {
@@ -158,7 +176,7 @@ const xcmaxMarketProxy = {
         || String(err?.message || '').includes('不存在')
         || String(err?.message || '').includes('未找到')
       ) {
-        return emptyLocalManifest(employeeId)
+        throw new Error(`AI 员工 ${employeeId} 的 manifest 不存在`)
       }
       throw e
     }
