@@ -7,7 +7,6 @@ from typing import Any
 
 from app.application.excel_vector_app_service import HashEmbedder
 from app.application.ports.vector_store import VectorStorePort
-from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
 
 
 @dataclass
@@ -15,6 +14,12 @@ class UserMemoryVectorChunk:
     chunk_id: str
     content: str
     metadata: dict[str, Any]
+
+
+def _get_user_memory_vector_store() -> VectorStorePort:
+    from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
+
+    return get_user_memory_vector_store()
 
 
 class UserMemoryVectorIngestApplicationService:
@@ -25,7 +30,7 @@ class UserMemoryVectorIngestApplicationService:
         vector_store: VectorStorePort | None = None,
         embedder: HashEmbedder | None = None,
     ) -> None:
-        self._vector_store = vector_store or get_user_memory_vector_store()
+        self._vector_store = vector_store or _get_user_memory_vector_store()
         self._embedder = embedder or HashEmbedder()
 
     def _ensure_user_index(self, user_id: str) -> None:
@@ -156,7 +161,7 @@ class UserMemoryRagApplicationService:
         vector_store: VectorStorePort | None = None,
         embedder: HashEmbedder | None = None,
     ) -> None:
-        self._vector_store = vector_store or get_user_memory_vector_store()
+        self._vector_store = vector_store or _get_user_memory_vector_store()
         self._embedder = embedder or HashEmbedder()
 
     def query(self, user_id: str, query_text: str, top_k: int = 5) -> dict[str, Any]:

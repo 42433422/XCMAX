@@ -1,19 +1,10 @@
-"""
-用户记忆服务 - UserMemoryService
-
-提供跨会话的长期记忆能力，包括：
-- 用户偏好记忆
-- 操作模式学习
-- 上下文摘要
-- 反馈记录与难例挖掘
-
-支持 SQLite 和 JSON 文件两种存储后端。
-"""
+"""用户记忆服务：跨会话长期偏好、操作模式、上下文摘要与反馈记录。"""
 
 import hashlib
 import json
 import logging
 import os
+import threading
 import uuid
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field, fields
@@ -146,6 +137,7 @@ class UserMemoryStore:
             return
 
         self.storage_type = storage_type
+        self._lock = threading.RLock()
         self._memory_cache: dict[str, UserMemory] = {}
         self._cache_dirty: dict[str, bool] = {}
         self._load_all_memories()
@@ -392,44 +384,45 @@ class UserMemoryService(NeuroEventPublisherMixin):
             confidence=confidence,
             evidence=evidence,
         )
-        memory = self._store.get_memory(user_id) or UserMemory(user_id=user_id)
         fingerprint = self._memory_v2_fingerprint(normalized_type, normalized_key, value)
-        for record in memory.memory_v2_records:
-            if record.get("fingerprint") == fingerprint and record.get("status") in {
-                "pending",
-                "active",
-                "rejected",
-            }:
-                return {"success": True, "created": False, "candidate": dict(record)}
+        with self._store._lock:
+            memory = self._store.get_memory(user_id) or UserMemory(user_id=user_id)
+            for record in memory.memory_v2_records:
+                if record.get("fingerprint") == fingerprint and record.get("status") in {
+                    "pending",
+                    "active",
+                    "rejected",
+                }:
+                    return {"success": True, "created": False, "candidate": dict(record)}
 
-        now = datetime.now().isoformat()
-        candidate = {
-            "memory_id": f"mem_{uuid.uuid4().hex[:12]}",
-            "memory_type": normalized_type,
-            "key": normalized_key,
-            "value": value,
-            "status": "rejected" if governance["source_policy"] == "blocked" else "pending",
-            "confidence": governance["confidence"],
-            "source": governance["source"],
-            "source_policy": governance["source_policy"],
-            "source_trust": governance["source_trust"],
-            "source_evidence_required": governance["source_evidence_required"],
-            "requires_user_confirmation": governance["requires_user_confirmation"],
-            "auto_confirm_allowed": governance["auto_confirm_allowed"],
-            "eligible_for_planner": governance["eligible_for_planner"],
-            "governance_flags": governance["governance_flags"],
-            "evidence": governance["evidence"],
-            "fingerprint": fingerprint,
-            "created_at": now,
-            "updated_at": now,
-        }
-        if candidate["status"] == "rejected":
-            candidate["rejected_at"] = now
-            candidate["rejected_reason"] = "source_policy_blocked"
-        memory.memory_v2_records.insert(0, candidate)
-        memory.memory_v2_records = memory.memory_v2_records[:MAX_MEMORY_V2_RECORDS]
-        self._store.save_memory(user_id, memory)
-        return {"success": True, "created": True, "candidate": dict(candidate)}
+            now = datetime.now().isoformat()
+            candidate = {
+                "memory_id": f"mem_{uuid.uuid4().hex[:12]}",
+                "memory_type": normalized_type,
+                "key": normalized_key,
+                "value": value,
+                "status": "rejected" if governance["source_policy"] == "blocked" else "pending",
+                "confidence": governance["confidence"],
+                "source": governance["source"],
+                "source_policy": governance["source_policy"],
+                "source_trust": governance["source_trust"],
+                "source_evidence_required": governance["source_evidence_required"],
+                "requires_user_confirmation": governance["requires_user_confirmation"],
+                "auto_confirm_allowed": governance["auto_confirm_allowed"],
+                "eligible_for_planner": governance["eligible_for_planner"],
+                "governance_flags": governance["governance_flags"],
+                "evidence": governance["evidence"],
+                "fingerprint": fingerprint,
+                "created_at": now,
+                "updated_at": now,
+            }
+            if candidate["status"] == "rejected":
+                candidate["rejected_at"] = now
+                candidate["rejected_reason"] = "source_policy_blocked"
+            memory.memory_v2_records.insert(0, candidate)
+            memory.memory_v2_records = memory.memory_v2_records[:MAX_MEMORY_V2_RECORDS]
+            self._store.save_memory(user_id, memory)
+            return {"success": True, "created": True, "candidate": dict(candidate)}
 
     def confirm_memory_candidate(
         self,

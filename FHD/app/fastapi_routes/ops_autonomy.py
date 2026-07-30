@@ -366,6 +366,9 @@ async def cs_ssot_retrieve(
         top_k = 5
     top_k = max(1, min(top_k, 12))
     dataset_id = str(body.get("dataset_id") or "persy-knowledge").strip() or "persy-knowledge"
+    allowed_datasets = {"persy-knowledge", "xiaoc-internal"}
+    if dataset_id not in allowed_datasets:
+        raise HTTPException(status_code=403, detail="dataset is not allowed for cs ssot")
 
     from app.application.dataset_rag_app_service import (
         DATASET_ADMIN_PERMISSION,
@@ -380,15 +383,30 @@ async def cs_ssot_retrieve(
         permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
         is_admin=True,
     )
-    result = get_dataset_rag_app_service().query(
-        dataset_id=dataset_id,
-        query=query,
-        top_k=top_k,
-        access_context=access,
-    )
+    candidate_k = min(50, max(12, top_k * 3))
+    query_kwargs: dict[str, Any] = {
+        "dataset_id": dataset_id,
+        "query": query,
+        "top_k": candidate_k,
+        "rerank": True,
+        "access_context": access,
+    }
+    if dataset_id == "persy-knowledge":
+        query_kwargs.update(
+            {
+                "tenant_id": "public",
+                "metadata_filter": {
+                    "audience": "public",
+                    "publication_status": "published",
+                    "knowledge_owner": "chengdu-xiuci-technology",
+                },
+            }
+        )
+    result = get_dataset_rag_app_service().query(**query_kwargs)
     chunks = result.get("chunks") if isinstance(result, dict) else []
     if not isinstance(chunks, list):
         chunks = []
+    chunks = chunks[:top_k]
     return {
         "ok": bool(result.get("success")) if isinstance(result, dict) else True,
         "dataset_id": dataset_id,

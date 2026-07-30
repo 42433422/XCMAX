@@ -1,11 +1,6 @@
 """小C 客服 SSOT：人设 + 知识库三档隔离检索。
 
-SSOT 口径（2026-07）：
-- 大脑：管理端小C（MODstore butler）/ 官网 corp-chat
-- 公开库：persy-knowledge（官网/市场客服只读）
-- 内部库：xiaoc-internal（仅管理端小C 可读可写策略）
-- 客户私有库：仅企业桌面端；Web 小C 禁止触及
-- 客来来暂不纳入
+公开库供官网/市场/客来来客服只读；内部库仅管理端小C；客户私有库仅企业桌面端。
 """
 
 from __future__ import annotations
@@ -19,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .xiaoc_public_scope import is_published_public_chunk, public_query_kwargs
+
 logger = logging.getLogger(__name__)
 
 PUBLIC_DATASET_ID = "persy-knowledge"
@@ -27,12 +24,7 @@ INTERNAL_DATASET_ID = "xiaoc-internal"
 PERSY_DATASET_ID = PUBLIC_DATASET_ID
 
 _PRIVATE_DATASET_PREFIXES = ("user_", "desktop_", "tenant_")
-_DENY_PRIVATE_LABELS = (
-    INTERNAL_DATASET_ID,
-    "user_*",
-    "desktop_private",
-    "tenant_private",
-)
+_DENY_PRIVATE_LABELS = (INTERNAL_DATASET_ID, "user_*", "desktop_private", "tenant_private")
 
 _VISITOR_ID_RE = re.compile(r"^v_[A-Za-z0-9_-]{8,64}$")
 
@@ -487,13 +479,15 @@ XIAOC_ADMIN_DUTIES = """你的核心职责（管理端 / 市场工作台）：
 XIAOC_CORP_DUTIES = """你同时是成都修茈科技有限公司官网对外客服（小C）。
 
 你能做的事：
-- 介绍修茈科技的产品（AI Excel 单据识别、标签打印、MODstore 智能体市场、XCAGI 工作台等）
+- 介绍修茈科技、XCAGI、行业 Mod、AI 员工、修茈 AI 市场、客来来及公开解决方案
 - 引导用户去产品中心、解决方案、客户案例、联系我们、AI 市场（/market/）
 - 价格/报价问题说明需根据场景定制，引导填写联系表单或登录 AI 市场查看会员方案
 
 限制：
 - 不要假装能操作用户浏览器、不要执行跳转/点击/填表等工具
 - 不要编造具体合同金额或未公示的资质证照
+- 客来来是联合发布的独立产品品牌，不得称为“修茈科技旗下产品”或单方自有产品
+- 未经项目确认，不得把“可配置、可评估”的方案能力描述成已经自动打通或已经上线
 - 回复控制在 200 字以内
 - 可提供相对路径链接，如 /contact.html、/services.html、/market/
 - 知识库仅公开库只读；禁止内部库与客户私有/桌面库
@@ -666,14 +660,20 @@ def _local_retrieve(
                 permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
                 is_admin=True,
             )
-            result = get_dataset_rag_app_service().query(
-                dataset_id=dataset_id or PUBLIC_DATASET_ID,
-                query=query,
-                top_k=top_k,
-                access_context=access,
-            )
+            candidate_k = min(50, max(12, top_k * 3))
+            target_dataset_id = dataset_id or PUBLIC_DATASET_ID
+            query_kwargs: Dict[str, Any] = {
+                "dataset_id": target_dataset_id,
+                "query": query,
+                "top_k": candidate_k,
+                "rerank": True,
+                "access_context": access,
+            }
+            if target_dataset_id == PUBLIC_DATASET_ID:
+                query_kwargs.update(public_query_kwargs())
+            result = get_dataset_rag_app_service().query(**query_kwargs)
             chunks = result.get("chunks") if isinstance(result, dict) else []
-            return list(chunks) if isinstance(chunks, list) else []
+            return list(chunks[:top_k]) if isinstance(chunks, list) else []
         except Exception as exc:  # noqa: BLE001
             logger.debug("cs-ssot local retrieve failed via %s: %s", root, exc)
             continue
@@ -716,6 +716,8 @@ def retrieve_knowledge_for_mode(
         if not dataset_allowed_for_mode(did, mode=policy.get("mode") or mode):
             continue
         chunks = retrieve_dataset_knowledge(q, dataset_id=did, top_k=per_ds)
+        if did == PUBLIC_DATASET_ID:
+            chunks = [chunk for chunk in chunks if is_published_public_chunk(chunk)]
         for c in chunks:
             if not isinstance(c, dict):
                 continue

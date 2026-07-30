@@ -1,129 +1,74 @@
 """
-NeuroDDD 域门面层
+NeuroDDD 域门面层。
 
-域门面（Domain Facade）是 NeuroDDD 架构中路由层与领域层的桥接层。
-与传统 DDD 的 Facade 不同，NeuroDDD 域门面：
-- 变更操作通过 NeuroBus 发布领域事件
-- 查询操作直接委托给领域服务（Conscious Processor 同步调用模式）
-- 跨域操作通过 CommandGateway 实现请求-回复
-
-参考：shipment_event_primary.py 是完整的 CommandGateway 模式范例。
+该包是路由层与领域层的桥接层。聚合导出保持兼容，但具体门面按需加载，避免
+``app.application`` 统一入口导入时拉起 pandas / 向量库等重依赖。
 """
 
-from app.application.facades.ai_conversation_facade import AIConversationService
-from app.application.facades.conversation_facade import (
-    get_conversation_service,
-    get_data_analysis_service,
-    get_user_preference_service,
-)
-from app.application.facades.excel_facade import get_ai_product_parser, get_product_import_service
-from app.application.facades.intent_facade import BertIntentClassifier
-from app.application.facades.inventory_facade import (
-    InventoryService,
-    PurchaseService,
-    ReportService,
-)
-from app.application.facades.kitten_facade import (
-    FinancialReportPlugin,
-    InventoryValuationPlugin,
-    KittenReportExportService,
-    analysis_save_service,
-    build_kitten_business_snapshot,
-    build_kitten_docx,
-    chart_service,
-    generate_office_file,
-    pop_document_pickup,
-)
-from app.application.facades.mobile_relay_facade import (
-    MobileRelayService,
-    register_desktop_relay,
-)
-from app.application.facades.ocr_facade import get_ocr_service
-from app.application.facades.print_facade import printer_service
-from app.application.facades.query_facade import (
-    find_product,
-    find_purchase_unit,
-    get_product_names,
-    get_purchase_units,
-    query_service,
-)
-from app.application.facades.session_facade import (
-    get_auth_service,
-    get_database_service,
-    get_session_service,
-    get_system_service,
-)
-from app.application.facades.shipment_event_primary import (
-    ShipmentApplicationServiceEventPrimary,
-)
-from app.application.facades.template_facade import (
-    _extract_structured_excel_preview,
-    document_templates_service,
-)
-from app.application.facades.tools_facade import (
-    _parse_order_text,
-    execute_registered_workflow_tool,
-    execute_tool_from_payload,
-    get_workflow_tool_registry,
-    run_archive_tools_execute,
-    set_tool_execute_headers,
-)
-from app.application.facades.tts_facade import synthesize_to_data_uri, trigger_common_tts_warmup
-from app.application.facades.user_cs_employee_facade import (
-    EMPLOYEE_MOD_ID,
-    run_user_cs_employee,
-)
-from app.application.facades.wechat_facade import (
-    refresh_wechat_contacts_from_decrypt,
-    wechat_message_source_size_payload,
-)
+from __future__ import annotations
 
-__all__ = [
-    "ShipmentApplicationServiceEventPrimary",
-    "AIConversationService",
-    "BertIntentClassifier",
-    "EMPLOYEE_MOD_ID",
-    "InventoryService",
-    "MobileRelayService",
-    "PurchaseService",
-    "ReportService",
-    "KittenReportExportService",
-    "FinancialReportPlugin",
-    "InventoryValuationPlugin",
-    "document_templates_service",
-    "_extract_structured_excel_preview",
-    "_parse_order_text",
-    "execute_registered_workflow_tool",
-    "execute_tool_from_payload",
-    "get_workflow_tool_registry",
-    "run_archive_tools_execute",
-    "set_tool_execute_headers",
-    "build_kitten_business_snapshot",
-    "build_kitten_docx",
-    "chart_service",
-    "analysis_save_service",
-    "generate_office_file",
-    "pop_document_pickup",
-    "find_product",
-    "find_purchase_unit",
-    "get_product_names",
-    "get_purchase_units",
-    "query_service",
-    "get_conversation_service",
-    "get_data_analysis_service",
-    "get_user_preference_service",
-    "get_ai_product_parser",
-    "get_product_import_service",
-    "get_auth_service",
-    "get_database_service",
-    "get_session_service",
-    "get_system_service",
-    "get_ocr_service",
-    "refresh_wechat_contacts_from_decrypt",
-    "wechat_message_source_size_payload",
-    "printer_service",
-    "register_desktop_relay",
-    "run_user_cs_employee",
-    "synthesize_to_data_uri",
-    "trigger_common_tts_warmup",
-]
+from importlib import import_module
+from typing import Any
+
+_EXPORTS = {
+    "AIConversationService": "app.application.facades.ai_conversation_facade",
+    "ShipmentApplicationServiceEventPrimary": "app.application.facades.shipment_event_primary",
+    "BertIntentClassifier": "app.application.facades.intent_facade",
+    "EMPLOYEE_MOD_ID": "app.application.facades.user_cs_employee_facade",
+    "run_user_cs_employee": "app.application.facades.user_cs_employee_facade",
+    "InventoryService": "app.application.facades.inventory_facade",
+    "PurchaseService": "app.application.facades.inventory_facade",
+    "ReportService": "app.application.facades.inventory_facade",
+    "MobileRelayService": "app.application.facades.mobile_relay_facade",
+    "register_desktop_relay": "app.application.facades.mobile_relay_facade",
+    "KittenReportExportService": "app.application.facades.kitten_facade",
+    "FinancialReportPlugin": "app.application.facades.kitten_facade",
+    "InventoryValuationPlugin": "app.application.facades.kitten_facade",
+    "document_templates_service": "app.application.facades.template_facade",
+    "_extract_structured_excel_preview": "app.application.facades.template_facade",
+    "_parse_order_text": "app.application.facades.tools_facade",
+    "execute_registered_workflow_tool": "app.application.facades.tools_facade",
+    "execute_tool_from_payload": "app.application.facades.tools_facade",
+    "get_workflow_tool_registry": "app.application.facades.tools_facade",
+    "run_archive_tools_execute": "app.application.facades.tools_facade",
+    "set_tool_execute_headers": "app.application.facades.tools_facade",
+    "build_kitten_business_snapshot": "app.application.facades.kitten_facade",
+    "build_kitten_docx": "app.application.facades.kitten_facade",
+    "chart_service": "app.application.facades.kitten_facade",
+    "analysis_save_service": "app.application.facades.kitten_facade",
+    "generate_office_file": "app.application.facades.kitten_facade",
+    "pop_document_pickup": "app.application.facades.kitten_facade",
+    "find_product": "app.application.facades.query_facade",
+    "find_purchase_unit": "app.application.facades.query_facade",
+    "get_product_names": "app.application.facades.query_facade",
+    "get_purchase_units": "app.application.facades.query_facade",
+    "query_service": "app.application.facades.query_facade",
+    "get_conversation_service": "app.application.facades.conversation_facade",
+    "get_data_analysis_service": "app.application.facades.conversation_facade",
+    "get_user_preference_service": "app.application.facades.conversation_facade",
+    "get_ai_product_parser": "app.application.facades.excel_facade",
+    "get_product_import_service": "app.application.facades.excel_facade",
+    "get_auth_service": "app.application.facades.session_facade",
+    "get_database_service": "app.application.facades.session_facade",
+    "get_session_service": "app.application.facades.session_facade",
+    "get_system_service": "app.application.facades.session_facade",
+    "get_ocr_service": "app.application.facades.ocr_facade",
+    "refresh_wechat_contacts_from_decrypt": "app.application.facades.wechat_facade",
+    "wechat_message_source_size_payload": "app.application.facades.wechat_facade",
+    "printer_service": "app.application.facades.print_facade",
+    "synthesize_to_data_uri": "app.application.facades.tts_facade",
+    "trigger_common_tts_warmup": "app.application.facades.tts_facade",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        module_name = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value

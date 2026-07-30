@@ -9,6 +9,7 @@ dependencies = []
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.27",
+    "apscheduler>=3.10",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
     "socksio>=1.0",
@@ -19,6 +20,7 @@ web = [
     "python-dotenv>=1.0",
     "python-alipay-sdk>=3.4",
     "python-pptx>=0.6.23",
+    "Pillow>=10.0",
     "PyYAML>=6.0",
     "paramiko>=3.4",
     "cryptography>=42.0",
@@ -29,7 +31,6 @@ web = [
     # 仅在配置了 BUTLER_QQ_* env 后真正启用；未安装则 butler_qq_bridge 路由跳过注册。
     "pynacl>=1.5",
     "qq-botpy>=1.2.1",
-    "xcagi-common @ file:../../packages/xcagi_common",
 ]
 knowledge = [
     "chromadb>=0.5",
@@ -68,6 +69,7 @@ dev = [
   "PyYAML>=6.0",
   "black==26.3.1",
   "isort==6.1.0",
+  "apscheduler>=3.10",
   "jsonschema>=4.21",
   "mypy>=1.8",
   "openpyxl>=3.1",
@@ -81,8 +83,8 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["modman*", "modstore_server*"]
+where = [".", "../../packages/xcagi_common"]
+include = ["modman*", "modstore_server*", "xcagi_common*"]
 
 [tool.setuptools.package-data]
 modman = ["data/*.json"]
@@ -99,7 +101,7 @@ known_first_party = ["modman", "modstore_server"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "../../packages/xcagi_common"]
 addopts = "-q"
 asyncio_mode = "auto"
 xfail_strict = true
