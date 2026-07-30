@@ -12,12 +12,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.system import routes
+from app.fastapi_routes.tools_execute import router as tools_execute_router
 
 
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(routes.router)
+    app.include_router(tools_execute_router)
     return TestClient(app, raise_server_exceptions=False)
 
 
