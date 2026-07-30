@@ -176,7 +176,6 @@ def apply_validation_rules(
 
 def has_blocking_issues(issues: list[dict[str, Any]]) -> bool:
     return any(
-        isinstance(issue, dict)
-        and str(issue.get("severity") or "error").strip().lower() == "error"
+        isinstance(issue, dict) and str(issue.get("severity") or "error").strip().lower() == "error"
         for issue in issues
     )

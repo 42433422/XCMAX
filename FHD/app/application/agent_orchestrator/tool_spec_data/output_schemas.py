@@ -12,6 +12,19 @@ _DEFAULT_OUTPUT_SCHEMA: dict[str, Any] = {
     },
 }
 
+
+def _memory_mutation_output_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "memory": {"type": "object"},
+            "message": {"type": "string"},
+        },
+    }
+
+
 _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("business_db", "read"): {
         "type": "object",
@@ -1135,40 +1148,8 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "message": {"type": "string"},
         },
     },
-    ("memory_v2", "confirm"): {
-        "type": "object",
-        "required": ["success"],
-        "properties": {
-            "success": {"type": "boolean"},
-            "memory": {"type": "object"},
-            "message": {"type": "string"},
-        },
-    },
-    ("memory_v2", "reject"): {
-        "type": "object",
-        "required": ["success"],
-        "properties": {
-            "success": {"type": "boolean"},
-            "memory": {"type": "object"},
-            "message": {"type": "string"},
-        },
-    },
-    ("memory_v2", "correct"): {
-        "type": "object",
-        "required": ["success"],
-        "properties": {
-            "success": {"type": "boolean"},
-            "memory": {"type": "object"},
-            "message": {"type": "string"},
-        },
-    },
-    ("memory_v2", "delete"): {
-        "type": "object",
-        "required": ["success"],
-        "properties": {
-            "success": {"type": "boolean"},
-            "memory": {"type": "object"},
-            "message": {"type": "string"},
-        },
-    },
+    ("memory_v2", "confirm"): _memory_mutation_output_schema(),
+    ("memory_v2", "reject"): _memory_mutation_output_schema(),
+    ("memory_v2", "correct"): _memory_mutation_output_schema(),
+    ("memory_v2", "delete"): _memory_mutation_output_schema(),
 }

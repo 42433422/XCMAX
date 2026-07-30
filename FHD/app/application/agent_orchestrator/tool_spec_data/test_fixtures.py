@@ -367,9 +367,7 @@ _SPECIAL_TEST_FIXTURES: dict[tuple[str, str], list[dict[str, Any]]] = {
             "output": {
                 "success": True,
                 "data": {
-                    "employee_pack_tools": [
-                        {"employee_id": "quote-agent", "name": "报价员工"}
-                    ],
+                    "employee_pack_tools": [{"employee_id": "quote-agent", "name": "报价员工"}],
                     "installed_employee_pack_count": 1,
                 },
             },

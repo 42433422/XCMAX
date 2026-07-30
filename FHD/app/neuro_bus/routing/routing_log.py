@@ -26,7 +26,9 @@ def _runtime_data_root() -> Path | None:
     also uses the platform application-data directory if that variable is
     unexpectedly absent.
     """
-    raw = (os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or "").strip()
+    raw = (
+        os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+    ).strip()
     if raw:
         return Path(raw).expanduser().resolve()
     if _is_frozen_runtime():

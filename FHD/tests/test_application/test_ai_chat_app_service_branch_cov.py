@@ -3275,6 +3275,7 @@ class TestTryHandleDynamicWorkflow:
         mock_agent_run = _make_agent_run(status="completed")
         with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
+            mock_inst.get_run.return_value = _make_agent_run(status="waiting_user")
             mock_inst.continue_run.return_value = mock_agent_run
             with patch.object(
                 svc,

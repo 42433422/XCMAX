@@ -145,7 +145,15 @@ class PrinterService:
             # Windows/older adapters which do not expose the field.
             if "is_printable" in printer:
                 return bool(printer.get("is_printable"))
-            return status_of(name) not in {"未连接", "不可用", "离线", "缺纸", "已暂停", "错误", "异常"}
+            return status_of(name) not in {
+                "未连接",
+                "不可用",
+                "离线",
+                "缺纸",
+                "已暂停",
+                "错误",
+                "异常",
+            }
 
         classified = {
             "document_printer": {
@@ -234,7 +242,10 @@ class PrinterService:
                 printer_name = self._resolve_name(printer_name, printers)
 
             if not printer_name:
-                return {"success": False, "message": "未找到可用发货单打印机，请先检查打印机在线、纸张和暂停状态"}
+                return {
+                    "success": False,
+                    "message": "未找到可用发货单打印机，请先检查打印机在线、纸张和暂停状态",
+                }
 
             printer = next((item for item in printers if item.get("name") == printer_name), None)
             if not self._printer_is_printable(printer):

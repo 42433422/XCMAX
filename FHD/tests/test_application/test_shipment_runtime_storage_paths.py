@@ -54,7 +54,9 @@ def test_label_output_rejects_relative_user_data_before_touching_bundle(monkeypa
         documents.get_shipment_label_output_dir(tenant_id=42, owner_user_id=7, run_id="run-1")
 
 
-def test_label_output_rejects_a_user_data_override_inside_frozen_resources(tmp_path, monkeypatch) -> None:
+def test_label_output_rejects_a_user_data_override_inside_frozen_resources(
+    tmp_path, monkeypatch
+) -> None:
     from app.infrastructure.documents import shipment_document_generator_impl as documents
 
     resource_root = tmp_path / "XCAGI.app" / "Contents" / "Resources" / "backend"
@@ -77,16 +79,17 @@ def test_print_label_tool_uses_scoped_runtime_dir_and_returns_run_id() -> None:
     scoped_dir = "/tmp/XCAGI/labels/tenants/42/owners/7/runs/run-1"
     generator = MagicMock()
     generator.generate_labels_for_order.return_value = [{"filename": "label.png"}]
-    with patch(
-        "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
-        return_value=(scoped_dir, "run-1"),
-    ), patch(
-        "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
-        return_value=generator,
-    ) as generator_cls:
-        result = _execute_print_label_tool(
-            {"products": [{"name": "A"}], "order_number": "DO-9803"}
-        )
+    with (
+        patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+            return_value=(scoped_dir, "run-1"),
+        ),
+        patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
+            return_value=generator,
+        ) as generator_cls,
+    ):
+        result = _execute_print_label_tool({"products": [{"name": "A"}], "order_number": "DO-9803"})
 
     assert result["success"] is True
     assert result["label_run_id"] == "run-1"
@@ -112,7 +115,9 @@ def test_legacy_etl_runtime_state_and_bare_outputs_never_use_cwd(tmp_path, monke
     expected_data = user_data / "data"
     assert security.etl_runtime_data_dir() == expected_data
     assert app_service._fingerprint_store_path() == expected_data / "shipment_etl_fingerprints.json"
-    assert fingerprint_store._legacy_db_path() == expected_data / "shipment_etl_fingerprints.sqlite3"
+    assert (
+        fingerprint_store._legacy_db_path() == expected_data / "shipment_etl_fingerprints.sqlite3"
+    )
     assert excel_etl_kb._kb_path() == expected_data / "excel_etl_kb.json"
     assert security.resolve_etl_output_path("repaired.xlsx") == (
         expected_data / "etl" / "outputs" / "repaired.xlsx"

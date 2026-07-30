@@ -27,18 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 def _normalized_root(value: str) -> str:
-    return os.path.realpath(
-        os.path.abspath(os.path.expanduser(os.path.expandvars(value)))
-    )
+    return os.path.realpath(os.path.abspath(os.path.expanduser(os.path.expandvars(value))))
 
 
 def _validated_desktop_state_dir() -> str:
-    """Return userData only after rejecting a relative explicit data root.
-
-    ``get_desktop_state_dir`` performs ``mkdir`` itself. Validate both
-    environment values before it is called, otherwise a relative value could
-    create a writable directory under the packaged backend's current directory.
-    """
+    """Return userData only after rejecting a relative explicit data root."""
 
     for env_name in ("XCAGI_DESKTOP_DATA_DIR", "XCAGI_DATA_DIR"):
         explicit = os.environ.get(env_name) or ""

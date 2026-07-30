@@ -126,21 +126,24 @@ def test_resolve_customer_named_etl_layout_from_short_customer_alias(tmp_path: P
     store.resolve_template_file.return_value = None
     store.list_templates.return_value = []
     store.get_default_for_type.return_value = None
-    with patch(
-        "app.application.shipment_template_resolve._get_template_store",
-        return_value=store,
-    ), patch(
-        "app.application.shipment_template_resolve._private_layout_rows",
-        return_value=[
-            {
-                "id": "etl:42",
-                "name": "金汉武家私-发货单版式",
-                "path": str(customer_tpl),
-                "template_type": "发货单",
-                "source": "etl_private",
-                "is_active": 1,
-            }
-        ],
+    with (
+        patch(
+            "app.application.shipment_template_resolve._get_template_store",
+            return_value=store,
+        ),
+        patch(
+            "app.application.shipment_template_resolve._private_layout_rows",
+            return_value=[
+                {
+                    "id": "etl:42",
+                    "name": "金汉武家私-发货单版式",
+                    "path": str(customer_tpl),
+                    "template_type": "发货单",
+                    "source": "etl_private",
+                    "is_active": 1,
+                }
+            ],
+        ),
     ):
         out = resolve_shipment_template(unit_name="金汉武", owner_user_id=9)
     assert out["ok"] is True
@@ -167,12 +170,15 @@ def test_private_etl_template_id_requires_the_current_owner(tmp_path: Path):
     def private_rows(owner_user_id):
         return [row] if owner_user_id == 9 else []
 
-    with patch(
-        "app.application.shipment_template_resolve._get_template_store",
-        return_value=store,
-    ), patch(
-        "app.application.shipment_template_resolve._private_layout_rows",
-        side_effect=private_rows,
+    with (
+        patch(
+            "app.application.shipment_template_resolve._get_template_store",
+            return_value=store,
+        ),
+        patch(
+            "app.application.shipment_template_resolve._private_layout_rows",
+            side_effect=private_rows,
+        ),
     ):
         allowed = resolve_shipment_template(template_id="etl:private-42", owner_user_id=9)
         denied = resolve_shipment_template(template_id="etl:private-42", owner_user_id=10)
@@ -189,15 +195,19 @@ def test_private_layout_path_cannot_be_selected_by_another_owner(tmp_path: Path)
     foreign.parent.mkdir(parents=True)
     foreign.write_bytes(b"xlsx")
     store = MagicMock()
-    with patch(
-        "app.application.shipment_template_resolve._get_template_store",
-        return_value=store,
-    ), patch(
-        "app.utils.path_utils.get_app_data_dir",
-        return_value=str(root),
-    ), patch(
-        "app.infrastructure.tenant_scope.current_tenant_id",
-        return_value=7,
+    with (
+        patch(
+            "app.application.shipment_template_resolve._get_template_store",
+            return_value=store,
+        ),
+        patch(
+            "app.utils.path_utils.get_app_data_dir",
+            return_value=str(root),
+        ),
+        patch(
+            "app.infrastructure.tenant_scope.current_tenant_id",
+            return_value=7,
+        ),
     ):
         out = resolve_shipment_template(template_name=str(foreign), owner_user_id=10)
 
@@ -282,9 +292,11 @@ def test_private_layout_query_filters_tenant_and_owner_in_database(tmp_path: Pat
         def __exit__(self, *_args):
             self.session.close()
 
-    with patch("app.db.session.get_db", return_value=_Context()), patch(
-        "app.utils.path_utils.get_app_data_dir", return_value=str(runtime)
-    ), tenant_scope(7):
+    with (
+        patch("app.db.session.get_db", return_value=_Context()),
+        patch("app.utils.path_utils.get_app_data_dir", return_value=str(runtime)),
+        tenant_scope(7),
+    ):
         rows = _private_layout_rows(9)
 
     assert [row["id"] for row in rows] == ["etl:own"]

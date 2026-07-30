@@ -226,7 +226,7 @@ class TestXcagiChatHttpExc:
 
     def test_value_error_platform_error(self):
         exc = helpers._xcagi_chat_http_exc(
-            ValueError("平台错误(502): {\"authorization\": \"do-not-return-this\"}")
+            ValueError('平台错误(502): {"authorization": "do-not-return-this"}')
         )
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 502

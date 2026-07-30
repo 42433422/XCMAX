@@ -85,11 +85,12 @@ def create_fastapi_app(
     app = FastAPI(
         title="XCAGI FastAPI",
         description="XCAGI 企业 AI 员工平台 - FastAPI 版本",
-        version=runtime_version,
+        version="1.0.0.0",
         docs_url="/docs" if enable_docs else None,
         redoc_url="/redoc" if enable_docs else None,
         lifespan=lifespan,
     )
+    app.version = runtime_version
 
     app.state.config = config_object
 

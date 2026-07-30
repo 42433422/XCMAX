@@ -666,9 +666,7 @@ def test_amount_validation_uses_weight_when_piece_count_is_not_price_basis(tmp_p
                     "document_id": "weight-price",
                     "document_type": "delivery_note",
                     "sheet": "业务单",
-                    "header_fields": [
-                        {"role": "customer", "label": "客户", "value": "甲公司"}
-                    ],
+                    "header_fields": [{"role": "customer", "label": "客户", "value": "甲公司"}],
                     "tables": [
                         {
                             "header_start_row": 2,
@@ -791,11 +789,7 @@ def test_safety_routed_export_does_not_report_target_mismatch(tmp_path):
     )
 
     assert dataset is not None
-    codes = {
-        issue["code"]
-        for row in dataset.rows
-        for issue in row.provenance["validation_issues"]
-    }
+    codes = {issue["code"] for row in dataset.rows for issue in row.provenance["validation_issues"]}
     assert "ETL_DOCUMENT_TARGET_MISMATCH" not in codes
 
 

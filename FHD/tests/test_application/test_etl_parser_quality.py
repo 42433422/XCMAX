@@ -673,7 +673,9 @@ def test_shipment_template_stops_before_next_document_route_in_same_sheet(tmp_pa
                 {
                     "route_id": "route-a",
                     "sheet": "送货单合集",
-                    "data_ranges": [{"header_start_row": 3, "data_start_row": 4, "data_end_row": 4}],
+                    "data_ranges": [
+                        {"header_start_row": 3, "data_start_row": 4, "data_end_row": 4}
+                    ],
                 },
                 {
                     "route_id": "route-b",

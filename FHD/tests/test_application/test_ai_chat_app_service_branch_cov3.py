@@ -1316,7 +1316,9 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="这是ACME的订单，需要5桶M1规格25",
         )
-        assert result["task"]["payload"]["params"]["order_text"] == "这是ACME的订单，需要5桶M1规格25"
+        assert (
+            result["task"]["payload"]["params"]["order_text"] == "这是ACME的订单，需要5桶M1规格25"
+        )
         assert "toolCall" not in result
 
     def test_shipment_generate_with_all_slots_no_original(self):

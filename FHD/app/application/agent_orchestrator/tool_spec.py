@@ -430,9 +430,7 @@ def get_tool_action_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
 
 
 _INTEGER_TEXT_RE = re.compile(r"^[+-]?\d+$")
-_NUMBER_TEXT_RE = re.compile(
-    r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$"
-)
+_NUMBER_TEXT_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
 
 def normalize_tool_call_params(
@@ -514,9 +512,7 @@ def _validate_schema_payload(
         normalized_key = str(key)
         value = payload.get(normalized_key)
         output_empty_collection_is_receipt = (
-            subject == "工具输出"
-            and normalized_key == "data"
-            and isinstance(value, (list, dict))
+            subject == "工具输出" and normalized_key == "data" and isinstance(value, (list, dict))
         )
         if normalized_key not in payload or (
             not output_empty_collection_is_receipt and _is_empty(value)

@@ -100,9 +100,7 @@ def _template_bounds(
         and int(item.get("header_row") or 0) > header_row
     ]
     next_starts.extend(
-        row
-        for row in _document_start_rows(source_features, sheet=sheet_name)
-        if row > header_row
+        row for row in _document_start_rows(source_features, sheet=sheet_name) if row > header_row
     )
     end_limit = min(next_starts) - 1 if next_starts else 0
     return region, start, end_limit

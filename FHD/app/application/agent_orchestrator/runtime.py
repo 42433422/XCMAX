@@ -301,11 +301,7 @@ class AgentRunRuntime:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            active = sorted(
-                run_id
-                for run_id, future in self._futures.items()
-                if not future.done()
-            )
+            active = sorted(run_id for run_id, future in self._futures.items() if not future.done())
         queued = self._repo.list_by_status(ACTIVE_RUN_STATUSES | {"paused", "waiting_user"})
         counts: dict[str, int] = {}
         for run in queued:
@@ -328,9 +324,7 @@ class AgentRunRuntime:
                 "queue_state": "running",
                 "worker_instance_id": self._worker_instance_id,
                 "worker_started_at": utc_now_iso(),
-                "lease_expires_at": (
-                    datetime.now(UTC) + timedelta(minutes=10)
-                ).isoformat(),
+                "lease_expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
             }
         )
         run.add_event(

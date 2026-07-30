@@ -403,9 +403,7 @@ def parse_file(
                 document_plan=document_plan,
                 max_rows=max_rows,
             )
-            if planned is not None and (
-                planned.rows or bool(document_plan.get("routing_scope"))
-            ):
+            if planned is not None and (planned.rows or bool(document_plan.get("routing_scope"))):
                 return planned
         if compatibility_preset_id and target_type not in {
             "customer_products",

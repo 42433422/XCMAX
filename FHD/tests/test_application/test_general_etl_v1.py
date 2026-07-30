@@ -765,10 +765,7 @@ def test_preview_persists_sheet_inventory_before_business_classification(
                 "stage": persisted.stage,
                 "progress": persisted.progress,
                 "sheet_count": details.get("workbook_sheet_count"),
-                "sheet_names": [
-                    item.get("sheet")
-                    for item in details.get("sheet_inventory") or []
-                ],
+                "sheet_names": [item.get("sheet") for item in details.get("sheet_inventory") or []],
                 "evidence_sheet_count": (evidence or {}).get("workbook_sheet_count"),
             }
         )
@@ -1079,10 +1076,7 @@ def test_degraded_document_preview_can_reanalyze_original_upload(etl_db, monkeyp
         ),
     )
     source = (
-        Path(__file__).parents[1]
-        / "fixtures"
-        / "network_forms"
-        / "form_采购订单_七彩乐园.xlsx"
+        Path(__file__).parents[1] / "fixtures" / "network_forms" / "form_采购订单_七彩乐园.xlsx"
     )
 
     with tenant_scope(8):

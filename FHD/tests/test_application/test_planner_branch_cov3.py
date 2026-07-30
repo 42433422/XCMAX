@@ -879,12 +879,15 @@ class TestExecutePrintLabelTool:
     def test_successful_generation(self) -> None:
         mock_gen = MagicMock()
         mock_gen.generate_labels_for_order.return_value = ["label1.png", "label2.png"]
-        with patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
-            return_value=mock_gen,
-        ), patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
-            return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-1", "run-1"),
+        with (
+            patch(
+                "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
+                return_value=mock_gen,
+            ),
+            patch(
+                "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+                return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-1", "run-1"),
+            ),
         ):
             result = _execute_print_label_tool(
                 {"products": [{"name": "P1"}], "order_number": "ORD001"}
@@ -897,12 +900,15 @@ class TestExecutePrintLabelTool:
         """doc_name 作为 order_number 的别名。"""
         mock_gen = MagicMock()
         mock_gen.generate_labels_for_order.return_value = []
-        with patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
-            return_value=mock_gen,
-        ), patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
-            return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-2", "run-2"),
+        with (
+            patch(
+                "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
+                return_value=mock_gen,
+            ),
+            patch(
+                "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+                return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-2", "run-2"),
+            ),
         ):
             _execute_print_label_tool({"products": [{"name": "P1"}], "doc_name": "DOC001"})
             mock_gen.generate_labels_for_order.assert_called_once_with(
@@ -912,12 +918,15 @@ class TestExecutePrintLabelTool:
     def test_default_order_number_when_missing(self) -> None:
         mock_gen = MagicMock()
         mock_gen.generate_labels_for_order.return_value = []
-        with patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
-            return_value=mock_gen,
-        ), patch(
-            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
-            return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-3", "run-3"),
+        with (
+            patch(
+                "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
+                return_value=mock_gen,
+            ),
+            patch(
+                "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+                return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-3", "run-3"),
+            ),
         ):
             _execute_print_label_tool({"products": [{"name": "P1"}]})
             mock_gen.generate_labels_for_order.assert_called_once_with(
@@ -3346,12 +3355,13 @@ class TestFallbackPlanAdditional:
         assert result.intent == "add_product_to_unit"
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
-    def test_default_fallback_to_customers_when_no_products(self) -> None:
-        """无 products 工具时回退查询客户。"""
+    def test_default_fallback_does_not_guess_customers(self) -> None:
+        """无明确业务对象时不猜成客户查询。"""
         planner = _make_planner()
         reg = {"customers": _sample_registry()["customers"]}
         result = planner._fallback_plan("pid", "随便看看", reg)
-        assert any(n.tool_id == "customers" for n in result.nodes)
+        assert result.intent == "clarification_required"
+        assert result.nodes == []
 
     def test_default_fallback_empty_registry(self) -> None:
         """空注册表时返回空节点图。"""
@@ -3405,13 +3415,13 @@ class TestFallbackPlanAdditional:
             result = planner._fallback_plan("pid", "交给员工处理", _sample_registry())
             assert result.intent == "employee_dispatch"
 
-    def test_business_db_read_no_business_db_tool_falls_through(self) -> None:
-        """数据库读取意图但注册表无 business_db 时落入默认查询。"""
+    def test_business_db_read_without_authorized_tool_is_blocked(self) -> None:
+        """数据库读取意图不得绕过 business_db 工具退化成普通查询。"""
         planner = _make_planner()
         reg = {"products": _sample_registry()["products"]}
         result = planner._fallback_plan("pid", "查数据库产品", reg)
-        # 无 business_db 工具，落入默认 products 查询
-        assert any(n.tool_id == "products" for n in result.nodes)
+        assert result.intent == "clarification_required"
+        assert result.nodes == []
 
     def test_add_product_intent_without_products_tool(self) -> None:
         """添加产品意图但注册表无 products 时不生成 products 节点。"""

@@ -310,9 +310,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
         encoding="utf-8"
     )
     notarize = (REPO_ROOT / "desktop" / "build" / "notarize.cjs").read_text(encoding="utf-8")
-    before_pack = (REPO_ROOT / "desktop" / "build" / "before-pack.cjs").read_text(
-        encoding="utf-8"
-    )
+    before_pack = (REPO_ROOT / "desktop" / "build" / "before-pack.cjs").read_text(encoding="utf-8")
 
     assert 'xattr -cr "${DESKTOP_ELECTRON_DIST}"' in installer
     assert '"--config.electronDist=${DESKTOP_ELECTRON_DIST}"' in installer

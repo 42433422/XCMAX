@@ -314,11 +314,7 @@ def test_large_workbook_uses_compact_prompt_and_longer_document_budget(monkeypat
     }
 
     compact = _compact_document_evidence(evidence)
-    compact_cells = sum(
-        len(row[1])
-        for sheet in compact["sheets"]
-        for row in sheet["rows"]
-    )
+    compact_cells = sum(len(row[1]) for sheet in compact["sheets"] for row in sheet["rows"])
 
     assert len(compact["sheets"]) == 11
     assert compact_cells <= 960

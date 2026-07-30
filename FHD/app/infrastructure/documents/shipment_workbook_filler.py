@@ -144,7 +144,9 @@ def fill_shipment_workbook(
             values = {
                 "model_number": product.get("model_number") or "",
                 "name": product.get("name") or product.get("product_name") or "",
-                "quantity_tins": int(quantity_tins) if quantity_tins.is_integer() else quantity_tins,
+                "quantity_tins": int(quantity_tins)
+                if quantity_tins.is_integer()
+                else quantity_tins,
                 "tin_spec": int(tin_spec) if tin_spec.is_integer() else tin_spec,
                 "quantity_kg": quantity_kg,
                 "unit_price": unit_price,
@@ -159,9 +161,9 @@ def fill_shipment_workbook(
             column = mapping.get(field)
             if column:
                 letter = get_column_letter(column)
-                worksheet.cell(total_row, column).value = (
-                    f"=SUM({letter}{first_data_row}:{letter}{last_data_row})"
-                )
+                worksheet.cell(
+                    total_row, column
+                ).value = f"=SUM({letter}{first_data_row}:{letter}{last_data_row})"
         workbook.calculation.fullCalcOnLoad = True
         workbook.calculation.forceFullCalc = True
         destination = Path(output_path)

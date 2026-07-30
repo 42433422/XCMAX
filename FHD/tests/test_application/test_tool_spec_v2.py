@@ -458,9 +458,7 @@ def test_validate_tool_call_checks_schema_types() -> None:
 
 def test_normalize_tool_call_params_canonicalizes_unambiguous_scalars() -> None:
     assert normalize_tool_call_params("products", "delete", {"id": "198"}) == {"id": 198}
-    assert normalize_tool_call_params("products", "delete", {"id": "198x"}) == {
-        "id": "198x"
-    }
+    assert normalize_tool_call_params("products", "delete", {"id": "198x"}) == {"id": "198x"}
 
 
 def test_validate_tool_call_rejects_invalid_document_format() -> None:

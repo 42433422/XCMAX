@@ -1,10 +1,9 @@
 <template src="./EtlCenterView.template.html"></template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   etlApi,
-  type EtlAction,
   type EtlCapabilities,
   type EtlFieldMapping,
   type EtlRun,
@@ -17,9 +16,35 @@ import {
   ignoredReasonLabel,
   useEtlFolderBatch,
 } from '@/composables/useEtlFolderBatch'
+import { useEtlRunActions } from '@/composables/useEtlRunActions'
+import { useEtlRunPresentation } from '@/composables/useEtlRunPresentation'
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
 import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
+import {
+  actionLabel,
+  actionReason,
+  compactRecord,
+  confidenceClass,
+  diffText,
+  documentHeaderFields,
+  documentIssues,
+  documentTables,
+  documentTypeLabel,
+  fileStructureLabel,
+  formatTime,
+  hasBlockingRowIssues,
+  latestRecordSelectionText,
+  ocrTableRow,
+  rowAdviceReason,
+  sheetPlanRows,
+  sheetPlanStatusLabel,
+  sheetRangeText,
+  sheetRoleLabel,
+  sheetStructureLabel,
+  stageLabel,
+  statusLabel,
+} from '@/utils/etlCenterPresentation'
 
 type TabId = EtlRunTab
 
@@ -111,195 +136,87 @@ const {
   loadRows,
 })
 
-const currentCapability = computed(() => {
-  const target = currentRun.value?.target_type || targetType.value
-  return capabilities.value?.targets.find((item) => item.type === target)
+const {
+  currentCapability,
+  updatableFields,
+  allowedActionsForRow,
+  bulkNewRows,
+  documentUnderstanding,
+  understoodDocuments,
+  sheetInventory,
+  documentRoutes,
+  workbookRootRunId,
+  hasPendingDocumentRoutes,
+  documentSummaryText,
+  requiresDocumentConfirmation,
+  canReanalyzeDocumentWithLlm,
+  sourceFieldOptions,
+  canExecute,
+  summaryCards,
+  savedShipmentTemplate,
+  savedShipmentTemplateName,
+  shipmentTemplateCandidates,
+  shipmentTemplateCandidate,
+  shipmentTemplateCandidateName,
+  linkedCustomerProductPreview,
+  linkedCustomerNames,
+  runOutcomeText,
+  regionSummary,
+  detectedRegions,
+  workbookSheetPlan,
+  latestRecordSelection,
+  llmPlanningText,
+} = useEtlRunPresentation({
+  capabilities,
+  currentRun,
+  targetType,
+  runRows,
+  allowedUpdateFields,
+  validRowsOnly,
+  selectedShipmentTemplateRegionId,
 })
-const updatableFields = computed(() => currentCapability.value?.fields.filter((field) => field.updatable) || [])
-function allowedActionsForRow(row: EtlRunRow): EtlAction[] {
-  const actions = currentCapability.value?.supported_actions || ['new', 'skip']
-  return [...new Set([...actions, 'skip'])].filter((item): item is EtlAction => {
-    if (item === 'error') return false
-    if (item === 'update' && (!row.match_ref || allowedUpdateFields.value.length === 0)) return false
-    if (item === 'new' && (row.match_ref || row.suggested_action === 'skip')) return false
-    return true
-  })
-}
-const bulkNewRows = computed(() => runRows.value.filter((row) => (
-  !hasBlockingRowIssues(row)
-  && !row.match_ref
-  && row.suggested_action !== 'skip'
-)))
-const documentUnderstanding = computed<Record<string, unknown> | null>(() => {
-  const value = currentRun.value?.source_features?.document_understanding
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-})
-const understoodDocuments = computed<Array<Record<string, unknown>>>(() => {
-  const value = documentUnderstanding.value?.documents
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-})
-const sheetInventory = computed<Array<Record<string, unknown>>>(() => {
-  const detailsValue = currentRun.value?.details?.sheet_inventory
-  const understandingValue = documentUnderstanding.value?.sheet_inventory
-  const value = Array.isArray(detailsValue) ? detailsValue : understandingValue
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-})
-const documentRoutes = computed<Array<Record<string, unknown>>>(() => {
-  const value = currentRun.value?.details?.document_routes
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-})
-const workbookRootRunId = computed(() => (
-  String(currentRun.value?.details?.workbook_root_run_id || '').trim()
-))
-const hasPendingDocumentRoutes = computed(() => documentRoutes.value.some((route) => (
-  ['planned', 'queued', 'previewing'].includes(String(route.status || ''))
-)))
-const documentSummaryText = computed(() => {
-  const original = String(documentUnderstanding.value?.summary || '').trim()
-  const englishWords = original.match(/[A-Za-z]{3,}/g) || []
-  if (/[\u3400-\u9fff]/u.test(original) && englishWords.length < 3) return original
-  if (!understoodDocuments.value.length) return llmPlanningText.value
-  const labels = [...new Set(understoodDocuments.value.map((document) => (
-    documentTypeLabel(document.document_type)
-  )))]
-  const tableCount = understoodDocuments.value.reduce(
-    (total, document) => total + documentTables(document).length,
-    0,
-  )
-  return `识别为${labels.join('、')}，共 ${understoodDocuments.value.length} 张单；已定位单据头和 ${tableCount} 个明细表，等待人工确认。`
-})
-const requiresDocumentConfirmation = computed(() => (
-  documentUnderstanding.value?.requires_confirmation === true
-))
-const canReanalyzeDocumentWithLlm = computed(() => {
-  const llm = documentUnderstanding.value?.llm
-  return (
-    currentRun.value?.status === 'preview_ready'
-    && Boolean(
-      llm
-      && typeof llm === 'object'
-      && !Array.isArray(llm)
-      && (llm as Record<string, unknown>).degraded === true,
-    )
-  )
-})
-const sourceFieldOptions = computed(() => {
-  const headers = Array.isArray(currentRun.value?.source_features?.headers)
-    ? currentRun.value?.source_features.headers.map((item) => String(item || '')).filter(Boolean)
-    : []
-  const rowHeaders = runRows.value.flatMap((row) => Object.keys(row.source || {}))
-  return [...new Set([...headers, ...rowHeaders])]
-})
-const canExecute = computed(() => {
-  if (!currentRun.value || currentRun.value.status !== 'preview_ready') return false
-  if (requiresDocumentConfirmation.value && !currentRun.value.draft.document_confirmed) return false
-  if (currentRun.value.summary.error && !validRowsOnly.value) return false
-  return currentRun.value.summary.new + currentRun.value.summary.update > 0
-})
-const summaryCards = computed(() => [
-  { action: 'new', label: '新增', count: currentRun.value?.summary.new || 0 },
-  { action: 'update', label: '更新', count: currentRun.value?.summary.update || 0 },
-  { action: 'skip', label: '跳过', count: currentRun.value?.summary.skip || 0 },
-  { action: 'error', label: '需确认', count: currentRun.value?.summary.error || 0 },
-])
-const savedShipmentTemplate = computed<Record<string, unknown> | null>(() => {
-  const candidate = currentRun.value?.details?.shipment_document_template
-  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-    ? candidate as Record<string, unknown>
-    : null
-})
-const savedShipmentTemplateName = computed(() => (
-  String(savedShipmentTemplate.value?.name || '').trim()
-))
-const shipmentTemplateCandidates = computed<Array<Record<string, unknown>>>(() => {
-  const listed = currentRun.value?.source_features?.shipment_template_candidates
-  if (Array.isArray(listed)) {
-    return listed.filter(
-      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item),
-    )
-  }
-  const legacy = currentRun.value?.source_features?.shipment_template_candidate
-  return legacy && typeof legacy === 'object' && !Array.isArray(legacy)
-    ? [legacy as Record<string, unknown>]
-    : []
-})
-const shipmentTemplateCandidate = computed<Record<string, unknown> | null>(() => {
-  const selected = shipmentTemplateCandidates.value.find(
-    (candidate) => String(candidate.source_region_id || '') === selectedShipmentTemplateRegionId.value,
-  )
-  return selected || shipmentTemplateCandidates.value[0] || null
-})
-const shipmentTemplateCandidateName = computed(() => (
-  String(shipmentTemplateCandidate.value?.name || '').trim()
-))
-const linkedCustomerProductPreview = computed<Record<string, unknown> | null>(() => {
-  const linked = currentRun.value?.details?.linked_customer_products_preview
-  return linked && typeof linked === 'object' && !Array.isArray(linked)
-    ? linked as Record<string, unknown>
-    : null
-})
-const linkedCustomerNames = computed(() => {
-  const names = runRows.value
-    .map((row) => String(row.normalized.customer_name || '').trim())
-    .filter(Boolean)
-  return [...new Set(names)]
-})
-const plannedBusinessRows = computed(() => {
-  if (!currentRun.value) return 0
-  return currentRun.value.summary.new
-    + currentRun.value.summary.update
-    + currentRun.value.summary.skip
-})
-const runOutcomeText = computed(() => {
-  if (!currentRun.value) return ''
-  const summary = currentRun.value.summary
-  if (currentRun.value.status === 'completed') {
-    return `已写入 ${summary.executed} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
-  }
-  return `计划处理 ${plannedBusinessRows.value} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
-})
-const regionSummary = computed<Record<string, unknown> | null>(() => {
-  const value = currentRun.value?.source_features?.region_summary
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-})
-const detectedRegions = computed<Array<Record<string, unknown>>>(() => {
-  const value = currentRun.value?.source_features?.regions
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-})
-const workbookSheetPlan = computed<Array<Record<string, unknown>>>(() => {
-  const value = currentRun.value?.source_features?.sheet_plan
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-})
-const latestRecordSelection = computed<Record<string, unknown> | null>(() => {
-  const value = currentRun.value?.source_features?.latest_record_selection
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-})
-const llmPlanningText = computed(() => {
-  const document = documentUnderstanding.value?.llm
-  const structure = currentRun.value?.source_features?.llm_structure
-  const mapping = currentRun.value?.source_features?.llm_mapping
-  const entries = [document, structure, mapping].filter(
-    (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
-  )
-  if (entries.some((item) => item.used_llm === true && item.degraded !== true)) return '软件 LLM 已完成单据理解和字段建议'
-  if (entries.some((item) => item.degraded === true)) return 'LLM 已降级，当前结果由确定性规则生成'
-  return '当前结构由确定性规则识别'
+
+const {
+  saveCurrentAsTemplate,
+  saveCurrentAsShipmentTemplate,
+  previewCustomerProductsFromShipment,
+  refreshRuns,
+  selectRun,
+  openDocumentRoute,
+  openWorkbookRoot,
+  retryRun,
+  reanalyzeDocumentWithLlm,
+  rollbackRun,
+  saveWebhook,
+  testWebhook,
+} = useEtlRunActions({
+  currentRun,
+  runs,
+  templates,
+  targetConfigs,
+  targetType,
+  targetConfigId,
+  activeTab,
+  rowPage,
+  rowActionFilter,
+  runRows,
+  rowTotal,
+  busy,
+  pageError,
+  personalTemplateName,
+  shipmentTemplateName,
+  shipmentTemplateMessage,
+  customerProductPreviewMessage,
+  showWebhookForm,
+  webhookDraft,
+  webhookTestMessage,
+  shipmentTemplateCandidate,
+  linkedCustomerProductPreview,
+  workbookRootRunId,
+  router,
+  syncDraft,
+  schedulePoll,
+  loadRows,
 })
 
 async function bootstrap() {
@@ -507,246 +424,6 @@ async function executeCurrentRun() {
   }
 }
 
-async function saveCurrentAsTemplate() {
-  if (!currentRun.value) return
-  const name = personalTemplateName.value.trim()
-  if (!name) {
-    pageError.value = '请输入个人模板名称'
-    return
-  }
-  busy.value = true
-  try {
-    await etlApi.createTemplate({
-      name,
-      target_type: currentRun.value.target_type,
-      draft: currentRun.value.draft,
-      source_features: currentRun.value.source_features,
-    })
-    templates.value = await etlApi.templates()
-    personalTemplateName.value = ''
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '模板保存失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function saveCurrentAsShipmentTemplate() {
-  if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
-  const name = shipmentTemplateName.value.trim()
-  busy.value = true
-  shipmentTemplateMessage.value = ''
-  try {
-    const result = await etlApi.saveShipmentTemplate(
-      currentRun.value.id,
-      name,
-      String(shipmentTemplateCandidate.value?.source_region_id || ''),
-    )
-    shipmentTemplateMessage.value = result.name
-      ? `已保存“${result.name}”。${result.message}`
-      : result.message
-    shipmentTemplateName.value = ''
-    currentRun.value = await etlApi.run(currentRun.value.id)
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '发货单版式保存失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function previewCustomerProductsFromShipment() {
-  if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
-  const sourceRun = currentRun.value
-  const linkedRunId = String(linkedCustomerProductPreview.value?.run_id || '').trim()
-  if (linkedRunId) {
-    busy.value = true
-    pageError.value = ''
-    try {
-      const customerProductRun = await etlApi.run(linkedRunId)
-      currentRun.value = customerProductRun
-      targetType.value = 'customer_products'
-      rowPage.value = 1
-      rowActionFilter.value = ''
-      runRows.value = []
-      rowTotal.value = 0
-      if (!runs.value.some((run) => run.id === customerProductRun.id)) {
-        runs.value = [customerProductRun, ...runs.value]
-      }
-      customerProductPreviewMessage.value = '这是同一上传文件自动建立的客户及产品预演；尚未执行，不会写入客户库或产品库。'
-      syncDraft()
-      activeTab.value = tabForRunStatus(customerProductRun.status)
-      if (customerProductRun.status === 'preview_ready') await loadRows()
-      await router.replace({ path: '/business-docking', query: { run_id: customerProductRun.id } })
-      schedulePoll()
-    } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '读取关联客户及产品预演失败'
-    } finally {
-      busy.value = false
-    }
-    return
-  }
-  if (!sourceRun.upload_id) {
-    pageError.value = '原始上传文件不可用，无法创建客户及产品预演。请重新上传该工作簿。'
-    return
-  }
-  busy.value = true
-  pageError.value = ''
-  shipmentTemplateMessage.value = ''
-  customerProductPreviewMessage.value = ''
-  try {
-    const customerProductRun = await etlApi.preview({
-      upload_id: sourceRun.upload_id,
-      target_type: 'customer_products',
-    })
-    currentRun.value = customerProductRun
-    targetType.value = 'customer_products'
-    rowPage.value = 1
-    rowActionFilter.value = ''
-    runRows.value = []
-    rowTotal.value = 0
-    const retainedRuns = runs.value.some((run) => run.id === sourceRun.id)
-      ? runs.value
-      : [sourceRun, ...runs.value]
-    runs.value = [
-      customerProductRun,
-      ...retainedRuns.filter((run) => run.id !== customerProductRun.id),
-    ]
-    customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品预演；请先核对附表规划与行级结果，点击“确认执行”前不会写入客户库或产品库。'
-    syncDraft()
-    activeTab.value = 'preview'
-    await router.replace({
-      path: '/business-docking',
-      query: { run_id: customerProductRun.id },
-    })
-    schedulePoll()
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '创建客户及产品预演失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function refreshRuns() {
-  runs.value = await etlApi.runs()
-  if (currentRun.value) {
-    const latest = runs.value.find((item) => item.id === currentRun.value?.id)
-    if (latest) currentRun.value = latest
-  }
-}
-
-async function selectRun(run: EtlRun) {
-  customerProductPreviewMessage.value = ''
-  currentRun.value = await etlApi.run(run.id)
-  syncDraft()
-  activeTab.value = 'history'
-  await router.replace({ path: '/business-docking', query: { run_id: run.id } })
-  schedulePoll()
-}
-
-async function openDocumentRoute(route: Record<string, unknown>) {
-  const runId = String(route.run_id || '').trim()
-  if (!runId) return
-  pageError.value = ''
-  try {
-    currentRun.value = await etlApi.run(runId)
-    syncDraft()
-    activeTab.value = currentRun.value.status === 'preview_ready' ? 'preview' : 'history'
-    if (currentRun.value.status === 'preview_ready') await loadRows()
-    await router.replace({ path: '/business-docking', query: { run_id: runId } })
-    schedulePoll()
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '读取单据预演失败'
-  }
-}
-
-async function openWorkbookRoot() {
-  if (!workbookRootRunId.value) return
-  await openDocumentRoute({ run_id: workbookRootRunId.value })
-}
-
-async function retryRun() {
-  if (!currentRun.value) return
-  busy.value = true
-  try {
-    currentRun.value = await etlApi.retry(currentRun.value.id)
-    activeTab.value = 'upload'
-    schedulePoll()
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '重试失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function reanalyzeDocumentWithLlm() {
-  if (!currentRun.value) return
-  busy.value = true
-  pageError.value = ''
-  try {
-    currentRun.value = await etlApi.reanalyzeLlm(currentRun.value.id)
-    activeTab.value = 'upload'
-    schedulePoll()
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : 'LLM 重新识别失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function rollbackRun() {
-  if (!currentRun.value || !window.confirm('确认撤销本次内部写入？更新将恢复前镜像，新增记录将被删除。')) return
-  busy.value = true
-  try {
-    currentRun.value = await etlApi.rollback(currentRun.value.id)
-    await refreshRuns()
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '撤销失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function saveWebhook() {
-  busy.value = true
-  try {
-    const headers = JSON.parse(webhookDraft.headersJson || '{}')
-    if (!headers || Array.isArray(headers) || typeof headers !== 'object') {
-      throw new Error('普通请求头必须是 JSON 对象')
-    }
-    const config = await etlApi.createTargetConfig({
-      name: webhookDraft.name,
-      endpoint_url: webhookDraft.endpoint_url,
-      headers,
-      secret: webhookDraft.secret,
-    })
-    targetConfigs.value = await etlApi.targetConfigs()
-    targetConfigId.value = config.id
-    showWebhookForm.value = false
-    webhookDraft.name = ''
-    webhookDraft.endpoint_url = ''
-    webhookDraft.headersJson = '{}'
-    webhookDraft.secret = ''
-  } catch (error) {
-    pageError.value = error instanceof Error ? error.message : 'Webhook 配置保存失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function testWebhook() {
-  if (!targetConfigId.value) return
-  busy.value = true
-  webhookTestMessage.value = ''
-  try {
-    await etlApi.testTarget(targetConfigId.value)
-    webhookTestMessage.value = '连接测试成功'
-  } catch (error) {
-    webhookTestMessage.value = error instanceof Error ? error.message : '连接测试失败'
-  } finally {
-    busy.value = false
-  }
-}
-
 function targetField(key: string) {
   return currentCapability.value?.fields.find((field) => field.key === key)
 }
@@ -766,176 +443,9 @@ function targetLabel(type: string) {
   if (type === 'auto') return '智能识别（推荐）'
   return capabilities.value?.targets.find((item) => item.type === type)?.label || type
 }
-function actionLabel(action: string) {
-  return ({ new: '新增', update: '更新', skip: '跳过', error: '需确认' } as Record<string, string>)[action] || action
-}
-function actionReason(action: string) {
-  return action === 'skip' ? '重复数据，默认不写入' : '无差异'
-}
-function stageLabel(stage: string) {
-  return ({
-    queued: '等待后台任务',
-    parsing: '读取文件',
-    classifying_sheets: '逐 Sheet 识别业务对象',
-    validating: '转换与校验',
-    preview_ready: '预演完成',
-    executing: '执行写入',
-  } as Record<string, string>)[stage] || stage
-}
-function statusLabel(status: string) {
-  return ({ planned: '已规划', queued: '排队中', previewing: '预演中', preview_ready: '待确认', executing: '执行中', completed: '已完成', failed: '失败', interrupted: '已中断' } as Record<string, string>)[status] || status
-}
-function hasBlockingRowIssues(row: EtlRunRow) {
-  return row.validation_issues.some((issue) => issue.severity === 'error')
-}
 function routesForSheet(sheet: Record<string, unknown>) {
   const sheetName = String(sheet.sheet || '')
   return documentRoutes.value.filter((route) => String(route.sheet || '') === sheetName)
-}
-function sheetStructureLabel(value: unknown) {
-  return ({
-    empty: '空工作表',
-    single_document: '一表一单',
-    multi_document: '一表多单',
-    unclassified: '待识别',
-    not_inspected: '待取证',
-  } as Record<string, string>)[String(value || '')] || '待识别'
-}
-function sheetRangeText(sheet: Record<string, unknown>) {
-  const observed = String(sheet.observed_effective_range || '').trim()
-  const physical = String(sheet.physical_range || '').trim()
-  if (sheet.is_empty === true) return '无业务单元格'
-  if (sheet.evidence_complete === true && observed) return `有效区域 ${observed}`
-  if (observed && physical && observed !== physical) return `已取证 ${observed} · 物理范围 ${physical}`
-  return observed || physical ? `区域 ${observed || physical}` : '区域待确认'
-}
-function sheetRoleLabel(role: unknown) {
-  return ({
-    delivery_note_template_and_records: '送货单版式与发货数据',
-    supporting_customer_product_data: '客户与产品补充数据',
-    finance_or_reconciliation: '财务或对账附表',
-    reference_catalog: '参考目录',
-    non_target_appendix: '非业务附表',
-  } as Record<string, string>)[String(role || '')] || '工作表'
-}
-function sheetPlanStatusLabel(status: unknown) {
-  return ({
-    included: '纳入预演',
-    reviewed: '已读取，仅作参考',
-    excluded: '已排除',
-  } as Record<string, string>)[String(status || '')] || '已检查'
-}
-function sheetPlanRows(item: Record<string, unknown>) {
-  const rows = Number(item.rows || 0)
-  return Number.isFinite(rows) && rows > 0 ? `${rows} 行候选数据` : ''
-}
-function latestRecordSelectionText(selection: Record<string, unknown>) {
-  const stale = Number(selection.stale_records_skipped || 0)
-  const future = Number(selection.future_dated_records_skipped || 0)
-  const parts = [
-    !Number.isFinite(stale) || stale <= 0
-      ? '同一客户同一产品按来源日期择最新有效记录。'
-      : `同一客户同一产品已按来源日期选择最新有效记录，并排除 ${stale} 条较早或同日旧记录。`,
-  ]
-  if (Number.isFinite(future) && future > 0) parts.push(`另隔离 ${future} 条未来日期记录。`)
-  return parts.join(' ')
-}
-function confidenceClass(value: number) {
-  return value >= 0.9 ? 'confidence-high' : value >= 0.6 ? 'confidence-medium' : 'confidence-low'
-}
-function documentTypeLabel(type: unknown) {
-  return ({
-    purchase_order: '采购单',
-    delivery_note: '送货单',
-    quotation: '报价单',
-    invoice: '发票',
-    packing_list: '装箱单',
-    attendance: '考勤表',
-    customer_directory: '客户表',
-    product_catalog: '产品表',
-    shipment_ledger: '出货明细',
-    generic_table: '通用表格',
-    ignore: '不导入',
-  } as Record<string, string>)[String(type || '')] || String(type || '未知单据')
-}
-function fileStructureLabel(type: unknown) {
-  return ({
-    single_document: '一份文件一张单',
-    one_per_sheet: '每个工作表一张单',
-    multiple_sections: '同一工作表多段单据',
-    mixed_workbook: '多种业务对象混合',
-    summary: '汇总表',
-    unknown: '待确认',
-  } as Record<string, string>)[String(type || '')] || String(type || '待确认')
-}
-function documentHeaderFields(document: Record<string, unknown>) {
-  const value = document.header_fields
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-}
-function documentTables(document: Record<string, unknown>) {
-  const value = document.tables
-  return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    : []
-}
-function documentIssues(document: Record<string, unknown>) {
-  const value = document.issues
-  if (!Array.isArray(value)) return []
-  return value.map((item) => {
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      return localizedModelText(
-        (item as Record<string, unknown>).message,
-        '模型发现单据结构存在需要人工确认的问题，请结合来源单元格复核。',
-      )
-    }
-    return localizedModelText(
-      item,
-      '模型发现单据结构存在需要人工确认的问题，请结合来源单元格复核。',
-    )
-  }).filter(Boolean)
-}
-function localizedModelText(value: unknown, fallback: string) {
-  const text = String(value || '').trim()
-  if (!text) return fallback
-  const lower = text.toLowerCase()
-  if (
-    lower.includes('total')
-    && ['no total', 'not present', 'no explicit', 'missing'].some((marker) => lower.includes(marker))
-  ) {
-    const amount = text.match(/(?:would\s+be|equals?|is)\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.[0-9]+)?)/i)?.[1]
-    const calculated = amount ? `；按明细金额计算合计为 ${amount}` : ''
-    return `单据中未找到明确的合计金额单元格${calculated}，请人工核对。`
-  }
-  if (lower.includes('complete normalized record') && lower.includes('new insert')) {
-    return '字段完整且未发现重复记录，模型建议新增；最终仍以主数据校验结果为准。'
-  }
-  if (/[\u3400-\u9fff]/u.test(text) && (text.match(/[A-Za-z]{3,}/g) || []).length < 3) return text
-  return fallback
-}
-function rowAdviceReason(row: EtlRunRow) {
-  return localizedModelText(
-    row.llm_suggestion.reason,
-    row.llm_suggestion.action
-      ? '模型已给出处理建议；最终仍以系统校验结果为准。'
-      : '确定性规则建议',
-  )
-}
-function compactRecord(value: Record<string, unknown>) {
-  return Object.entries(value).slice(0, 5).map(([key, item]) => `${key}: ${String(item ?? '')}`).join(' · ')
-}
-function ocrTableRow(row: EtlRunRow) {
-  const table = row.provenance.table_position
-  return table && typeof table === 'object' && 'row' in table
-    ? String((table as Record<string, unknown>).row || row.source_row)
-    : String(row.source_row)
-}
-function diffText(row: EtlRunRow) {
-  return JSON.stringify({ 更新前: row.before, 更新后: row.after }, null, 2)
-}
-function formatTime(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : '—'
 }
 
 onMounted(bootstrap)

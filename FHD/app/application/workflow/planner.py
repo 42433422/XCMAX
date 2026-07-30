@@ -55,347 +55,18 @@ _UNDERSPECIFIED_REQUESTS = frozenset(
 )
 
 
-def _requires_clarification_before_execution(
-    message: str,
-    context: dict[str, Any] | None = None,
-) -> bool:
-    """Block execution when the user has not supplied an actionable goal."""
-    ctx = context or {}
-    if any(
-        ctx.get(key)
-        for key in (
-            "excel_analysis",
-            "last_excel_analysis_context",
-            "artifacts",
-            "attachments",
-            "uploaded_files",
-        )
-    ):
-        return False
-
-    text = re.sub(r"[\s，,。.!！?？;；:：]+", "", str(message or "")).strip().lower()
-    if not text:
-        return True
-    if text in _UNDERSPECIFIED_REQUESTS:
-        return True
-
-    generic_tokens = ("看看", "处理", "弄一下", "随便", "你决定", "看着办")
-    executable_tokens = (
-        "查",
-        "查询",
-        "读取",
-        "新增",
-        "创建",
-        "更新",
-        "删除",
-        "导入",
-        "导出",
-        "打印",
-        "生成",
-        "分析",
-        "汇总",
-        "报表",
-        "客户",
-        "产品",
-        "订单",
-        "库存",
-        "文件",
-        "表格",
-        "员工",
-    )
-    return (
-        len(text) <= 12
-        and any(token in text for token in generic_tokens)
-        and not any(token in text for token in executable_tokens)
-    )
-
-
-def _clean_db_slot_value(value: str) -> str:
-    text = str(value or "").strip(" \t\r\n，,。；;：:")
-    for token in (
-        "到数据库",
-        "写入数据库",
-        "加入数据库",
-        "添加到数据库",
-        "保存到数据库",
-        "入库",
-        "数据库",
-    ):
-        text = text.replace(token, "")
-    text = re.sub(r"^(新增|添加|创建|写入|保存|客户|单位|购买单位|产品|商品)\s*", "", text)
-    text = re.sub(r"\s*(客户|单位|购买单位|产品|商品)$", "", text)
-    return text.strip(" \t\r\n，,。；;：:")
-
-
-def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
-    for pattern in patterns:
-        match = re.search(pattern, message, flags=re.I)
-        if match:
-            value = _clean_db_slot_value(match.group(1))
-            if value:
-                return value
-    quoted = re.search(r"[「“\"']([^」”\"']+)[」”\"']", message)
-    if quoted:
-        return _clean_db_slot_value(quoted.group(1))
-    return ""
-
-
-def _looks_like_business_db_write(message: str, lower: str) -> bool:
-    if not any(k in message for k in _DB_WRITE_KEYWORDS) and not any(
-        k in lower for k in ("add", "create", "insert", "upsert")
-    ):
-        return False
-    return (
-        any(k in message for k in ("数据库", "入库", "写库"))
-        or "db" in lower
-        or "database" in lower
-    )
-
-
-def _infer_business_db_entity(message: str) -> str:
-    if any(k in message for k in ("产品", "商品")):
-        return "products"
-    if any(k in message for k in ("客户", "单位", "购买单位")):
-        return "customers"
-    if any(k in message for k in ("原材料", "物料")):
-        return "materials"
-    if any(k in message for k in ("出货", "发货", "发货单")):
-        return "shipment_records"
-    return "products"
-
-
-def _explicit_mutation_kind(message: str) -> str:
-    text = str(message or "").strip()
-    lower = text.lower()
-    if any(token in text for token in ("查询已删除", "查看已删除", "读取已删除")):
-        return ""
-    if re.search(r"(?:删除|移除|删掉|删了)", text) or re.search(
-        r"\b(?:delete|remove)\b", lower
-    ):
-        return "delete"
-    if re.search(r"(?:修改|更新|改为|改成)", text) or re.search(
-        r"\b(?:update|modify|rename)\b", lower
-    ):
-        return "update"
-    if any(token in text for token in _DB_WRITE_KEYWORDS) or re.search(
-        r"\b(?:add|create|insert|upsert)\b", lower
-    ):
-        return "create"
-    return ""
-
-
-def _extract_explicit_product_mutation_node(message: str) -> WorkflowNode | None:
-    if not any(token in message for token in ("产品", "商品")):
-        return None
-    id_match = re.search(
-        r"(?:产品|商品)\s*(?:ID|id|编号)?\s*[:：]?\s*(\d+)",
-        message,
-    )
-    if not id_match:
-        return None
-    product_id = int(id_match.group(1))
-    mutation = _explicit_mutation_kind(message)
-    if mutation == "delete":
-        return WorkflowNode(
-            node_id=f"delete_product_{product_id}",
-            tool_id="products",
-            action="delete",
-            params={"id": product_id},
-            risk="high",
-            description=f"删除产品ID {product_id}",
-            idempotent=False,
-        )
-    if mutation == "update":
-        name_match = re.search(
-            r"(?:名称|名字)\s*(?:修改|更新|改)?\s*(?:为|成|至)\s*([^，,。；;\n]+)",
-            message,
-            re.I,
-        )
-        if not name_match:
-            return None
-        name = name_match.group(1).strip()
-        if not name:
-            return None
-        return WorkflowNode(
-            node_id=f"update_product_{product_id}",
-            tool_id="products",
-            action="update",
-            params={"id": product_id, "name": name},
-            risk="medium",
-            description=f"将产品ID {product_id}的名称修改为「{name}」",
-            idempotent=False,
-        )
-    return None
-
-
-def _validate_explicit_mutation_alignment(message: str, plan: PlanGraph) -> str | None:
-    mutation = _explicit_mutation_kind(message)
-    if not mutation:
-        return None
-    explicit_product_node = _extract_explicit_product_mutation_node(message)
-    if explicit_product_node is not None:
-        for node in plan.nodes or []:
-            if (
-                str(node.tool_id or "").strip() == explicit_product_node.tool_id
-                and str(node.action or "").strip().lower()
-                == explicit_product_node.action
-            ):
-                return None
-        return (
-            f"明确的产品 {mutation} 必须使用 "
-            f"{explicit_product_node.tool_id}.{explicit_product_node.action}"
-        )
-    accepted_actions = {
-        "create": {"create", "batch_create", "ensure_exists", "upsert"},
-        "update": {"update", "batch_update", "upsert"},
-        "delete": {"delete", "batch_delete"},
-    }[mutation]
-    for node in plan.nodes or []:
-        action = str(node.action or "").strip().lower()
-        operation = str((node.params or {}).get("operation") or "").strip().lower()
-        if action in accepted_actions or operation in accepted_actions:
-            return None
-    return f"用户明确要求 {mutation}，但计划未包含对应写操作"
-
-
-def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
-    entity = _infer_business_db_entity(message)
-    if entity == "customers":
-        unit_name = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:客户|单位)",
-            ),
-        )
-        if not unit_name:
-            return None
-        return WorkflowNode(
-            node_id="write_business_customer",
-            tool_id="business_db",
-            action="write",
-            params={
-                "entity": "customers",
-                "operation": "upsert",
-                "payload": {"unit_name": unit_name, "customer_name": unit_name},
-            },
-            risk="medium",
-            description=f"写入客户 {unit_name}",
-            idempotent=True,
-        )
-
-    if entity == "products":
-        product_name = _extract_named_slot(
-            message,
-            (
-                r"(?:产品|商品)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:产品|商品)",
-            ),
-        )
-        unit_name = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:给|到|为)\s*([^\s，,。；;]+)\s*(?:客户|单位)?",
-            ),
-        )
-        if not product_name or not unit_name:
-            return None
-        model_match = re.search(r"(?:型号|model)\s*[:：]?\s*([A-Za-z0-9._-]+)", message, re.I)
-        payload: dict[str, Any] = {
-            "name_or_model": product_name,
-            "product_name": product_name,
-            "unit_name": unit_name,
-        }
-        if model_match:
-            payload["model_number"] = model_match.group(1).strip().upper()
-        return WorkflowNode(
-            node_id="write_business_product",
-            tool_id="business_db",
-            action="write",
-            params={"entity": "products", "operation": "create", "payload": payload},
-            risk="medium",
-            description=f"写入产品 {product_name}",
-            idempotent=False,
-        )
-
-    return None
-
-
-def _extract_business_db_read_keyword(message: str, entity: str) -> str:
-    quoted = re.search(r"[「“\"']([^」”\"']+)[」”\"']", message)
-    if quoted:
-        return _clean_db_slot_value(quoted.group(1))
-
-    if entity == "products":
-        model = re.search(
-            r"(?:产品|商品)?型号\s*[:：为是的]?\s*([A-Za-z0-9._-]+)",
-            message,
-            re.I,
-        )
-        if model:
-            return model.group(1).strip()
-        slot = _extract_named_slot(
-            message,
-            (
-                r"(?:产品|商品|型号|model)\s*[:：的]?\s*([A-Za-z0-9._-]+|[^\s，,。；;]+)",
-                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:产品|商品)?\s*([A-Za-z0-9._-]+)",
-            ),
-        )
-        if slot:
-            return slot
-        model = re.search(r"\b[A-Za-z0-9][A-Za-z0-9._-]{1,}\b", message)
-        if model:
-            return model.group(0).strip()
-
-    if entity == "customers":
-        slot = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：的]?\s*([^\s，,。；;]+)",
-                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:客户|单位)?\s*([^\s，,。；;]+)",
-            ),
-        )
-        if slot:
-            return slot
-
-    if entity == "materials":
-        slot = _extract_named_slot(
-            message,
-            (
-                r"(?:原材料|物料|材料)\s*[:：的]?\s*([^\s，,。；;]+)",
-                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:原材料|物料|材料)?\s*([^\s，,。；;]+)",
-            ),
-        )
-        if slot:
-            return slot
-
-    cleaned = str(message or "").strip()
-    for token in (
-        "查询数据库",
-        "读取数据库",
-        "查数据库",
-        "读数据库",
-        "数据库",
-        "database",
-        "查库",
-        "读库",
-        "查询",
-        "读取",
-        "查",
-        "读",
-        "产品",
-        "商品",
-        "客户",
-        "单位",
-        "购买单位",
-        "原材料",
-        "物料",
-        "材料",
-    ):
-        cleaned = cleaned.replace(token, " ")
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n，,。；;：:")
-    return cleaned or str(message or "").strip()
+from app.application.workflow.planner_business_intent import (
+    _clean_db_slot_value,
+    _explicit_mutation_kind,
+    _extract_business_db_read_keyword,
+    _extract_business_db_write_node,
+    _extract_explicit_product_mutation_node,
+    _extract_named_slot,
+    _infer_business_db_entity,
+    _looks_like_business_db_write,
+    _requires_clarification_before_execution,
+    _validate_explicit_mutation_alignment,
+)
 
 
 def get_tool_registry() -> dict[str, Any]:
@@ -1436,80 +1107,12 @@ def _filter_tool_registry_for_profile(
     return filtered
 
 
-class LLMWorkflowPlanner:
+from app.application.workflow.planner_llm_support import PlannerLlmSupportMixin
+
+
+class LLMWorkflowPlanner(PlannerLlmSupportMixin):
     def __init__(self) -> None:
         self._ai_service = get_ai_conversation_service()
-
-    def _request_llm_completion(
-        self,
-        messages: list[dict[str, str]],
-        *,
-        context: dict[str, Any],
-        temperature: float,
-        max_tokens: int,
-    ) -> dict[str, Any] | None:
-        """Use the signed-in market model first, then the legacy direct key."""
-        try:
-            from app.http.request_context import get_current_http_request
-            from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
-
-            request = get_current_http_request()
-            auth_session_id = str(context.get("_auth_session_id") or "").strip()
-            if request is not None:
-                adapter = ModstorePlatformAdapter.from_request(request)
-            elif auth_session_id:
-                adapter = ModstorePlatformAdapter.from_session(session_id=auth_session_id)
-            else:
-                adapter = getattr(self._ai_service, "modstore_adapter", None)
-
-            adapter_token = getattr(adapter, "auth_token", "") if adapter is not None else ""
-            if adapter is not None and isinstance(adapter_token, str) and adapter_token.strip():
-                response = adapter.chat_completion_sync(
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-                if isinstance(response, dict):
-                    try:
-                        from app.desktop_runtime import is_desktop_mode
-                        from app.infrastructure.llm.providers.modstore_provider import (
-                            ModstoreProvider,
-                        )
-                        from app.infrastructure.llm.providers.registry import get_llm_registry
-
-                        if is_desktop_mode():
-                            get_llm_registry().register("modstore", ModstoreProvider(adapter))
-                    except RECOVERABLE_ERRORS:
-                        logger.debug("桌面会话模型未写入进程级可用状态", exc_info=True)
-                    response["_xcagi_planner_route"] = "session_market"
-                    return response
-        except RECOVERABLE_ERRORS as err:
-            logger.warning("会话模型规划失败，尝试直连兼容路径: %s", err)
-
-        api_key = getattr(self._ai_service, "api_key", "") or ""
-        if not api_key:
-            return None
-
-        from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-
-        api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
-        response = _get_planner_http_client().post(
-            api_url,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": getattr(self._ai_service, "model", "") or "deepseek-chat",
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
-        )
-        if response.status_code >= 400:
-            return None
-        payload = response.json()
-        if isinstance(payload, dict):
-            payload["_xcagi_planner_route"] = "legacy_direct"
-            return payload
-        return None
 
     def plan(
         self,
@@ -1520,12 +1123,10 @@ class LLMWorkflowPlanner:
     ) -> PlanGraph:
         context = dict(context or {})
         plan_id = uuid.uuid4().hex
-
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
-
         if _requires_clarification_before_execution(message, context):
             return PlanGraph(
                 plan_id=plan_id,
@@ -1543,14 +1144,12 @@ class LLMWorkflowPlanner:
                     "completion_criteria": ["用户提供可执行目标与必要参数"],
                 },
             )
-
         explicit_product_node = _extract_explicit_product_mutation_node(message)
         if explicit_product_node is not None:
             product_tool = registry_for_plan.get(explicit_product_node.tool_id)
             actions = (
                 product_tool.get("actions")
-                if isinstance(product_tool, dict)
-                and isinstance(product_tool.get("actions"), dict)
+                if isinstance(product_tool, dict) and isinstance(product_tool.get("actions"), dict)
                 else {}
             )
             if explicit_product_node.action in actions:
@@ -1591,7 +1190,6 @@ class LLMWorkflowPlanner:
                     "goal": message,
                 },
             )
-
         # 专业模式 ReAct/CoT 前：拉取用户记忆 RAG 命中摘要，注入到 context（只放摘要文本）。
         # 目的：让规划器在“选择工具/补全关键 params”时更贴近用户习惯，但避免把全量历史注入 prompt。
         try:
@@ -1622,7 +1220,6 @@ class LLMWorkflowPlanner:
             logger.debug("Memory v2 服务不可用（不阻断主流程）")
         except RECOVERABLE_ERRORS as e:
             logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
-
         planned = self._plan_with_react_multiagent(
             plan_id=plan_id,
             user_id=user_id,
@@ -1644,7 +1241,6 @@ class LLMWorkflowPlanner:
                 )
                 return planned
             logger.warning("ReAct/CoT 计划校验失败，回退规则规划: %s", err)
-
         return self._fallback_plan(
             plan_id,
             message,
@@ -1678,7 +1274,6 @@ class LLMWorkflowPlanner:
         )
         if candidate is None:
             return None
-
         candidate_error = validate_plan_graph(candidate)
         if candidate_error is None:
             candidate_error = self._validate_required_params(candidate, tool_registry)
@@ -1704,7 +1299,6 @@ class LLMWorkflowPlanner:
                 }
             )
             return candidate
-
         # 1) 抽取 probe：只探测 low-risk + idempotent 的节点
         runtime_context_for_probe = dict(context or {})
         runtime_context_for_probe["message"] = str(message or "")
@@ -1723,12 +1317,10 @@ class LLMWorkflowPlanner:
             meta = actions.get(act)
             if not isinstance(meta, dict):
                 continue
-
             risk = str(meta.get("risk") or "").strip().lower()
             idempotent = bool(meta.get("idempotent", False))
             if risk != "low" or not idempotent:
                 continue
-
             # 只对“查询类/列举类”探测，避免意义不明的 view/info 探测
             if act not in (
                 "query",
@@ -1935,32 +1527,6 @@ class LLMWorkflowPlanner:
                 return repaired
 
         logger.warning("CriticAgent 修复失败（回退 fallback）: %s", err)
-        return None
-
-    @staticmethod
-    def _validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> str | None:
-        """检查节点 params 是否满足 tool_registry 的 required_params。"""
-        for node in plan.nodes or []:
-            tool_spec = (tool_registry or {}).get(str(node.tool_id) or "")
-            if not isinstance(tool_spec, dict):
-                continue
-            actions = tool_spec.get("actions") or {}
-            if not isinstance(actions, dict):
-                continue
-            action_meta = actions.get(str(node.action) or "")
-            if not isinstance(action_meta, dict):
-                continue
-            required_params = action_meta.get("required_params") or []
-            if not isinstance(required_params, list):
-                required_params = []
-            params = node.params or {}
-            for key in required_params:
-                if (
-                    key not in params
-                    or params.get(key) is None
-                    or str(params.get(key)).strip() == ""
-                ):
-                    return f"节点 {node.node_id} 缺少 required_params: {key}"
         return None
 
     def _critic_repair_with_llm(
@@ -2410,9 +1976,13 @@ class LLMWorkflowPlanner:
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
 
-        if not nodes and not explicit_product_mutation and (
-            any(k in lower for k in ("db", "database"))
-            or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+        if (
+            not nodes
+            and not explicit_product_mutation
+            and (
+                any(k in lower for k in ("db", "database"))
+                or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+            )
         ):
             if "business_db" in tool_registry:
                 intent = "business_db_read"
@@ -2430,8 +2000,13 @@ class LLMWorkflowPlanner:
                     )
                 )
 
-        if not nodes and not explicit_product_mutation and (
-            ("添加" in message or "新增" in message or "create" in lower) and ("产品" in message)
+        if (
+            not nodes
+            and not explicit_product_mutation
+            and (
+                ("添加" in message or "新增" in message or "create" in lower)
+                and ("产品" in message)
+            )
         ):
             intent = "add_product_to_unit"
             todo = [
@@ -2474,9 +2049,7 @@ class LLMWorkflowPlanner:
             entity = _infer_business_db_entity(message)
             keyword = _extract_business_db_read_keyword(message, entity)
             has_product_object = any(key in message for key in ("产品", "商品", "型号"))
-            has_customer_object = any(
-                key in message for key in ("客户", "单位", "购买单位")
-            )
+            has_customer_object = any(key in message for key in ("客户", "单位", "购买单位"))
             if has_product_object and "products" in tool_registry:
                 nodes.append(
                     WorkflowNode(

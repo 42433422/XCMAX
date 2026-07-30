@@ -36,11 +36,14 @@ def test_background_agent_run_policy_keeps_single_crud_in_current_turn():
         ]
     )
 
-    assert AIChatApplicationService._should_background_agent_run(
-        plan,
-        {},
-        "新增产品：验收产品",
-    ) is False
+    assert (
+        AIChatApplicationService._should_background_agent_run(
+            plan,
+            {},
+            "新增产品：验收产品",
+        )
+        is False
+    )
 
 
 def test_background_agent_run_policy_enables_explicit_batch_work():
@@ -53,11 +56,14 @@ def test_background_agent_run_policy_enables_explicit_batch_work():
         ]
     )
 
-    assert AIChatApplicationService._should_background_agent_run(
-        plan,
-        {},
-        "后台批量导入全部文件",
-    ) is True
+    assert (
+        AIChatApplicationService._should_background_agent_run(
+            plan,
+            {},
+            "后台批量导入全部文件",
+        )
+        is True
+    )
 
 
 def _durable_product_run(*, user_id: str = "u1", status: str = "waiting_user"):

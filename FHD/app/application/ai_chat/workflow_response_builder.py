@@ -247,15 +247,15 @@ class AIChatWorkflowResponseMixin:
         if item.tool_id == "products" and item.action in ("query", "list"):
             rows = out.get("data")
             rows = rows if isinstance(rows, list) else []
+            if not rows and message:
+                return [f"- {item.node_id}: 成功（{message}）"]
             lines = [f"- {item.node_id}: 成功（产品查询 {len(rows)} 条）"]
             for row in rows[:5]:
                 if not isinstance(row, dict):
                     continue
                 product_id = row.get("id")
                 model_number = str(row.get("model_number") or "-").strip()
-                product_name = str(
-                    row.get("name") or row.get("product_name") or "-"
-                ).strip()
+                product_name = str(row.get("name") or row.get("product_name") or "-").strip()
                 unit_name = str(row.get("unit") or row.get("unit_name") or "-").strip()
                 price = row.get("price")
                 price_text = f"￥{price}" if price not in (None, "") else "未设置价格"

@@ -38,6 +38,18 @@ import {
   type RollbackTriggerResult,
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import {
+  buildBackendEditionEnv,
+  buildDesktopBackendEnv,
+  desktopChatTransportEnv,
+  resolveDesktopUserDataPath,
+} from './backend-environment'
+export {
+  buildBackendEditionEnv,
+  buildDesktopBackendEnv,
+  desktopChatTransportEnv,
+  resolveDesktopUserDataPath,
+} from './backend-environment'
 import { runBackendMigrationProcess } from './backend-migration'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { AutonomyController } from './autonomy/controller'
@@ -190,17 +202,6 @@ export async function applyOtaProxyBypass(): Promise<void> {
   })
 }
 
-export function resolveDesktopUserDataPath(appDataPath: string): string {
-  const override = String(process.env.XCAGI_DESKTOP_USER_DATA_DIR || '').trim()
-  const acceptanceProbe =
-    process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE === '1' ||
-    process.env.XCAGI_DESKTOP_TEST === '1'
-  if (acceptanceProbe && override) {
-    return path.resolve(override)
-  }
-  return path.join(appDataPath, 'XCAGI')
-}
-
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）。
 // 验收探针可通过 XCAGI_DESKTOP_ACCEPTANCE_PROBE=1 使用临时 userData，
 // 避免冷启候选包时污染用户当前安装实例的数据目录。
@@ -340,25 +341,6 @@ export function readJsonTextFile(filePath: string): string {
   return text.replace(/^\uFEFF/, '')
 }
 
-function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
-    const raw = String(next[key] || '').trim().toLowerCase()
-    if (
-      raw.startsWith('socks://') ||
-      raw.startsWith('socks4://') ||
-      raw.startsWith('socks5://') ||
-      raw.startsWith('socks5h://')
-    ) {
-      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
-      delete next[key]
-    }
-  }
-  return next
-}
-
 /**
  * Packaged desktop chat uses the request-scoped market session token.  Some
  * upstream model gateways accept a native SSE connection but buffer its first
@@ -367,85 +349,11 @@ function sanitizeBackendProxyEnv(
  * back to desktop SSE.  Keep native streaming available as an explicit
  * operator override, and leave development behaviour untouched.
  */
-export function desktopChatTransportEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
-  isPackaged: boolean = app.isPackaged,
-): Record<string, string> {
-  if (!isPackaged) return {}
-
-  const resolved: Record<string, string> = {}
-  if (!String(env.XCAGI_MODSTORE_USE_NATIVE_STREAM || '').trim()) {
-    resolved.XCAGI_MODSTORE_USE_NATIVE_STREAM = '0'
-  }
-  // The non-native request returns one synthetic SSE chunk only after the
-  // model has finished.  Do not let a missing or inherited legacy 20s
-  // native-first-token budget reject that valid request before the adapter
-  // can surface a real provider response (for example quota exhaustion).
-  // Keep an explicit value above 20s intact for operators who deliberately
-  // tune the desktop budget.
-  const configuredFirstTokenTimeout = Number(
-    String(env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '').trim(),
-  )
-  if (
-    !Number.isFinite(configuredFirstTokenTimeout) ||
-    configuredFirstTokenTimeout <= 20
-  ) {
-    // The market adapter's synchronous fallback has a 60s transport timeout.
-    // Leave a small margin so its structured provider error wins the race over
-    // this UI-facing guard instead of being mislabeled as a first-token timeout.
-    resolved.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC = '75'
-  }
-  return resolved
-}
-
-export function buildDesktopBackendEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
-  userDataDir: string
-): Record<string, string | undefined> {
-  const next = sanitizeBackendProxyEnv(env)
-  const dataDir = path.join(userDataDir, 'data')
-  const desktopDatabaseUrl =
-    String(next.XCAGI_DESKTOP_DATABASE_URL || '').trim() || `sqlite:///${path.join(dataDir, 'xcagi.db')}`
-  const desktopVectorUrl =
-    String(next.XCAGI_DESKTOP_VECTOR_DB_URL || '').trim() || desktopDatabaseUrl
-
-  return {
-    ...next,
-    XCAGI_DESKTOP_MODE: '1',
-    XCAGI_DATA_DIR: userDataDir,
-    XCAGI_DESKTOP_DATA_DIR: userDataDir,
-    DATABASE_PATH: dataDir,
-    DATABASE_URL: desktopDatabaseUrl,
-    VECTOR_DB_URL: desktopVectorUrl
-  }
-}
-
 export function backendEditionEnv(): Record<string, string> {
-  const sku = readPackagedProductSku()
-  if (!sku) {
-    return {
-      XCAGI_PRODUCT_SKU: 'generic',
-      XCAGI_GENERIC_EDITION: '1',
-      XCAGI_PLATFORM_SHELL: '1',
-      XCAGI_DEFAULT_EDITION: 'generic',
-      FHD_ETL_CENTER_ENABLED: process.env.FHD_ETL_CENTER_ENABLED || '0'
-    }
-  }
-  const edition = SKU_RUNTIME_EDITION[sku]
-  const env: Record<string, string> = {
-    XCAGI_PRODUCT_SKU: sku,
-    XCAGI_PLATFORM_SHELL: sku === 'enterprise' ? '0' : '1',
-    XCAGI_DEFAULT_EDITION: edition,
-    XCAGI_EDITION: edition,
-    FHD_ETL_CENTER_ENABLED:
-      process.env.FHD_ETL_CENTER_ENABLED || (sku === 'enterprise' ? '1' : '0')
-  }
-  if (edition === 'minimal') {
-    env.XCAGI_MINIMAL_EDITION = '1'
-  } else if (edition === 'generic') {
-    env.XCAGI_GENERIC_EDITION = '1'
-  }
-  return env
+  return buildBackendEditionEnv(
+    readPackagedProductSku(),
+    process.env.FHD_ETL_CENTER_ENABLED,
+  )
 }
 
 let mainWindow: BrowserWindow | null = null

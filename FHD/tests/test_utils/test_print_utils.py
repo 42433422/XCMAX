@@ -305,7 +305,9 @@ class TestMacosCupsPrinterUtils:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("app.utils.print_utils.win32print", None),
-            patch.object(pu, "_run_cups", side_effect=[printer_result, default_result, state_result]),
+            patch.object(
+                pu, "_run_cups", side_effect=[printer_result, default_result, state_result]
+            ),
         ):
             printers = pu.get_available_printers()
 
@@ -338,7 +340,9 @@ class TestMacosCupsPrinterUtils:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("app.utils.print_utils.win32print", None),
-            patch.object(pu, "_run_cups", side_effect=[printer_result, default_result, state_result]),
+            patch.object(
+                pu, "_run_cups", side_effect=[printer_result, default_result, state_result]
+            ),
         ):
             printers = pu.get_available_printers()
 

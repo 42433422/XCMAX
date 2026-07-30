@@ -67,11 +67,7 @@ def _composed_headers(worksheet: Any, table: dict[str, Any]) -> list[str]:
 
 def _header_values(document: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
-    header_fields = [
-        item
-        for item in document.get("header_fields") or []
-        if isinstance(item, dict)
-    ]
+    header_fields = [item for item in document.get("header_fields") or [] if isinstance(item, dict)]
     for item in header_fields:
         role = str(item.get("role") or "")
         if role == "other":
@@ -181,10 +177,7 @@ def _row_arithmetic_issues(
     if not quantities or unit_price is None or amount is None:
         return []
     tolerance = max(Decimal("0.01"), abs(amount) * Decimal("0.0001"))
-    candidates = [
-        (header, quantity * unit_price)
-        for header, quantity in quantities
-    ]
+    candidates = [(header, quantity * unit_price) for header, quantity in quantities]
     if any(abs(expected - amount) <= tolerance for _header, expected in candidates):
         return []
     quantity_header, expected = candidates[0]
@@ -193,10 +186,7 @@ def _row_arithmetic_issues(
             "code": "ETL_LINE_AMOUNT_MISMATCH",
             "severity": "warning" if target_type in {"export_xlsx", "export_csv"} else "error",
             "field": roles.get("amount", ""),
-            "message": (
-                f"{quantity_header} × 单价为 {expected}，"
-                f"与明细金额 {amount} 不一致"
-            ),
+            "message": (f"{quantity_header} × 单价为 {expected}，与明细金额 {amount} 不一致"),
         }
     ]
 
@@ -379,9 +369,7 @@ def parse_workbook_with_document_plan(
                     issue = {
                         "code": "ETL_DOCUMENT_TOTAL_MISMATCH",
                         "severity": (
-                            "warning"
-                            if target_type in {"export_xlsx", "export_csv"}
-                            else "error"
+                            "warning" if target_type in {"export_xlsx", "export_csv"} else "error"
                         ),
                         "field": "",
                         "message": f"明细合计 {actual_total} 与单据总额 {expected_total} 不一致",
@@ -398,9 +386,7 @@ def parse_workbook_with_document_plan(
             )
             if str(document.get("document_type") or "") == "delivery_note":
                 tables = [
-                    table
-                    for table in document.get("tables") or []
-                    if isinstance(table, dict)
+                    table for table in document.get("tables") or [] if isinstance(table, dict)
                 ]
                 if tables:
                     first_table = tables[0]
@@ -417,9 +403,7 @@ def parse_workbook_with_document_plan(
                             "header_row": int(first_table.get("header_end_row") or 0),
                             "last_column": int(first_table.get("last_column") or 0),
                             "headers": _composed_headers(worksheet, first_table),
-                            "customer_name": _party_name(
-                                _header_role_value(document, "customer")
-                            ),
+                            "customer_name": _party_name(_header_role_value(document, "customer")),
                             "order_number": str(
                                 _header_role_value(document, "document_number") or ""
                             ).strip(),

@@ -97,7 +97,7 @@ class TestXcagiChatHttpExcExtended:
         assert result.status_code == 502
 
     def test_market_quota_429_uses_stable_code_and_safe_message(self):
-        exc = ValueError("平台错误(429): {\"error\": \"quota exhausted\"}")
+        exc = ValueError('平台错误(429): {"error": "quota exhausted"}')
         result = ch._xcagi_chat_http_exc(exc)
 
         assert result.status_code == 429
@@ -115,8 +115,8 @@ class TestXcagiChatHttpExcExtended:
 
     def test_nested_quota_error_wins_over_outer_provider_status_without_raw_body(self):
         exc = ValueError(
-            "平台错误(502): {\"upstream\": \"429 quota exhausted\", "
-            "\"authorization\": \"do-not-return-this\"}"
+            '平台错误(502): {"upstream": "429 quota exhausted", '
+            '"authorization": "do-not-return-this"}'
         )
 
         result = ch._xcagi_chat_http_exc(exc)
@@ -127,7 +127,7 @@ class TestXcagiChatHttpExcExtended:
 
     def test_generic_platform_error_is_safe_and_distinct_from_timeout(self):
         result = ch._xcagi_chat_http_exc(
-            ValueError("平台错误(502): {\"authorization\": \"do-not-return-this\"}")
+            ValueError('平台错误(502): {"authorization": "do-not-return-this"}')
         )
 
         assert result.status_code == 502

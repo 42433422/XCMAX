@@ -1012,9 +1012,8 @@ class TestFallbackPlanBranches:
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         registry = get_tool_registry()
         plan = planner._fallback_plan("p1", "查询信息", registry)
-        assert plan.intent == "generic_workflow"
-        # Should fall back to a query node.
-        assert len(plan.nodes) >= 1
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_generic_fallback_without_products(self):
         from app.application.workflow.planner import LLMWorkflowPlanner
@@ -1029,15 +1028,15 @@ class TestFallbackPlanBranches:
             }
         }
         plan = planner._fallback_plan("p1", "查询信息", registry)
-        assert plan.intent == "generic_workflow"
-        assert any(n.tool_id == "customers" for n in plan.nodes)
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_generic_fallback_no_tools(self):
         from app.application.workflow.planner import LLMWorkflowPlanner
 
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         plan = planner._fallback_plan("p1", "查询信息", {})
-        assert plan.intent == "generic_workflow"
+        assert plan.intent == "clarification_required"
         assert plan.nodes == []
 
     def test_risk_level_high(self):

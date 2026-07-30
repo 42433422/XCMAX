@@ -45,8 +45,7 @@ def _observed_range(sheet: dict[str, Any]) -> tuple[str, int]:
     min_column = min(int(cell.get("column") or 1) for cell in cells)
     max_column = max(int(cell.get("column") or 1) for cell in cells)
     return (
-        f"{get_column_letter(min_column)}{min_row}:"
-        f"{get_column_letter(max_column)}{max_row}",
+        f"{get_column_letter(min_column)}{min_row}:{get_column_letter(max_column)}{max_row}",
         len(cells),
     )
 
@@ -78,20 +77,14 @@ def build_sheet_inventory(
         observed_range, observed_cell_count = _observed_range(sheet_evidence)
         sheet_documents = documents_by_sheet.get(name, [])
         document_types = [
-            str(document.get("document_type") or "generic_table")
-            for document in sheet_documents
+            str(document.get("document_type") or "generic_table") for document in sheet_documents
         ]
         max_row = int(raw_sheet.get("max_row") or 0)
         max_column = int(raw_sheet.get("max_column") or 0)
-        is_empty = (
-            observed_cell_count == 0
-            and max_row <= 1
-            and max_column <= 1
-        )
+        is_empty = observed_cell_count == 0 and max_row <= 1 and max_column <= 1
         inspected = name in evidence_by_sheet
         sheet_requires_review = any(
-            bool(document.get("requires_review"))
-            for document in sheet_documents
+            bool(document.get("requires_review")) for document in sheet_documents
         )
         if is_empty:
             structure = "empty"
@@ -131,8 +124,7 @@ def build_sheet_inventory(
                 "structure": structure,
                 "document_count": len(sheet_documents),
                 "document_ids": [
-                    str(document.get("document_id") or "")
-                    for document in sheet_documents
+                    str(document.get("document_id") or "") for document in sheet_documents
                 ],
                 "business_objects": list(dict.fromkeys(document_types)),
             }
@@ -177,9 +169,7 @@ def build_document_routes(
         planned_rows = sum(
             max(
                 0,
-                int(table.get("data_end_row") or 0)
-                - int(table.get("data_start_row") or 0)
-                + 1,
+                int(table.get("data_end_row") or 0) - int(table.get("data_start_row") or 0) + 1,
             )
             for table in tables
         )
@@ -289,9 +279,7 @@ def scoped_document_plan(
             "recommended_target_type": route.get("recommended_target_type"),
             "route_reason": route.get("route_reason"),
         },
-        "workbook_document_count": int(
-            understanding.get("document_count") or len(documents)
-        ),
+        "workbook_document_count": int(understanding.get("document_count") or len(documents)),
     }
 
 

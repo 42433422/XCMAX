@@ -35,9 +35,9 @@ def test_wechat_sync_writes_raw_and_decrypted_databases_to_user_data(tmp_path, m
     }
     key_utils_module = ModuleType("key_utils")
     key_utils_module.strip_key_metadata = lambda value: value
-    key_utils_module.get_key_info = lambda _keys, rel: {
-        "enc_key": "00" * 32
-    } if rel == "message/message_0.db" else None
+    key_utils_module.get_key_info = lambda _keys, rel: (
+        {"enc_key": "00" * 32} if rel == "message/message_0.db" else None
+    )
     decrypt_module = ModuleType("decrypt_db")
 
     def _decrypt(raw_path: str, decrypted_path: str, _key: bytes) -> bool:
@@ -68,7 +68,9 @@ def test_wechat_sync_writes_raw_and_decrypted_databases_to_user_data(tmp_path, m
 
 def test_wechat_contact_refresh_prefers_user_data_decrypted_cache(tmp_path, monkeypatch) -> None:
     runtime = tmp_path / "userData"
-    contact_db = runtime / "integrations" / "wechat" / "decrypt" / "decrypted" / "contact" / "contact.db"
+    contact_db = (
+        runtime / "integrations" / "wechat" / "decrypt" / "decrypted" / "contact" / "contact.db"
+    )
     contact_db.parent.mkdir(parents=True)
     with sqlite3.connect(contact_db) as conn:
         conn.execute(

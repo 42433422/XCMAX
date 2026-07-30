@@ -302,6 +302,7 @@ def test_pending_job_status_rejects_a_different_authenticated_owner(
     assert response.json()["error_code"] == "PRINT_PENDING_TRACKER_OWNER_MISMATCH"
     svc.get_document_print_job_status.assert_not_called()
 
+
 def test_workflow_label_dispatch_route_executes_through_agent_orchestrator(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

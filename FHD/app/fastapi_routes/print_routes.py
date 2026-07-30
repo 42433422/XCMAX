@@ -276,10 +276,15 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
         )
         if not reservation.get("success"):
             error_code = str(reservation.get("error_code") or "")
-            status_code = 403 if error_code in {
-                "PRINT_AUTH_REQUIRED",
-                "PRINT_CONFIRMATION_OWNER_MISMATCH",
-            } else 409
+            status_code = (
+                403
+                if error_code
+                in {
+                    "PRINT_AUTH_REQUIRED",
+                    "PRINT_CONFIRMATION_OWNER_MISMATCH",
+                }
+                else 409
+            )
             return JSONResponse(reservation, status_code=status_code)
         result = _run_print_agent(
             request=request,
@@ -312,9 +317,7 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
             )
             if pending_job.get("success"):
                 result["print_job_token"] = pending_job["print_job_token"]
-                result["print_tracking_available"] = bool(
-                    pending_job.get("tracking_available")
-                )
+                result["print_tracking_available"] = bool(pending_job.get("tracking_available"))
             else:
                 # The operating system already owns a job, so never release
                 # the one-click capability for a duplicate submission.  This
@@ -374,10 +377,15 @@ def get_document_print_job_status(request: Request, print_job_token: str):
     )
     if not tracked.get("success"):
         error_code = str(tracked.get("error_code") or "")
-        status_code = 403 if error_code in {
-            "PRINT_AUTH_REQUIRED",
-            "PRINT_PENDING_TRACKER_OWNER_MISMATCH",
-        } else 404
+        status_code = (
+            403
+            if error_code
+            in {
+                "PRINT_AUTH_REQUIRED",
+                "PRINT_PENDING_TRACKER_OWNER_MISMATCH",
+            }
+            else 404
+        )
         return JSONResponse(tracked, status_code=status_code)
 
     existing_state = str(tracked.get("state") or "pending")

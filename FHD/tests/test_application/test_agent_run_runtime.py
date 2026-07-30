@@ -201,6 +201,4 @@ def test_runtime_recovers_idempotent_step_but_guards_non_idempotent_step() -> No
     assert guarded is not None
     assert guarded.status == "waiting_user"
     assert guarded.steps[0].status == "waiting_user"
-    assert "step.recovery_confirmation_required" in [
-        event.event_type for event in guarded.events
-    ]
+    assert "step.recovery_confirmation_required" in [event.event_type for event in guarded.events]

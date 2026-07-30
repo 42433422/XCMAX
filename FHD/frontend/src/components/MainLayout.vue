@@ -544,19 +544,10 @@ onBeforeUnmount(() => {
 .main-container {
   position: relative;
 }
-
 @media (max-width: 768px) {
-  .sidebar-shell,
-  .sidebar-hover-trigger {
-    display: none;
-    width: 0;
-    flex: 0 0 0;
-  }
-
+  .sidebar-shell, .sidebar-hover-trigger { display: none; width: 0; flex: 0 0 0; }
   .main-container :deep(.main-content) {
-    width: 100%;
-    flex: 1 1 100%;
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
+    width: 100%; flex: 1 1 100%; padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
   }
 }
 

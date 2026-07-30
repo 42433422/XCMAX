@@ -1133,7 +1133,6 @@ class AIChatExcelImportMixin:
         )
         if employee_mentioned and employee_action:
             return True
-
         db_mentioned = (
             any(k in t for k in ("数据库", "查库", "读库", "写库"))
             or "database" in lower
@@ -1190,7 +1189,6 @@ class AIChatExcelImportMixin:
         ):
             if ctx.get(key):
                 return True
-
         lower = t.lower()
         controlled_db = any(
             k in t

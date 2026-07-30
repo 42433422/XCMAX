@@ -54,8 +54,7 @@ def _bundled_policies_dir() -> Path:
 def _uses_runtime_policy_store() -> bool:
     """Whether policy state must live outside a signed desktop bundle."""
     return bool(getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")) or (
-        os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
-        in {"1", "true", "yes", "on"}
+        os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
     )
 
 

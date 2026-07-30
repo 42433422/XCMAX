@@ -26,10 +26,7 @@ def _body(message: str = "查询产品 9803") -> helpers.XcagiCompatChatBody:
 
 
 def _decode_events(chunks: list[bytes]) -> list[dict]:
-    return [
-        json.loads(chunk.decode("utf-8").removeprefix("data: ").strip())
-        for chunk in chunks
-    ]
+    return [json.loads(chunk.decode("utf-8").removeprefix("data: ").strip()) for chunk in chunks]
 
 
 def test_stream_uses_mainline_payload_without_legacy_adapter() -> None:

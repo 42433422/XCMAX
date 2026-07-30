@@ -1061,18 +1061,21 @@ class TestFallbackPlanBranches:
         assert result.intent == "add_product_to_unit"
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
-    def test_default_fallback_to_products_query(self) -> None:
-        """无匹配意图时默认查询产品。"""
+    def test_default_fallback_requires_clarification(self) -> None:
+        """无明确业务对象时不得猜成产品查询。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "随便看看", _sample_registry())
-        assert any(n.tool_id == "products" for n in result.nodes)
+        assert result.intent == "clarification_required"
+        assert result.nodes == []
+        assert result.metadata["execution_policy"] == "blocked_no_safe_action"
 
-    def test_default_fallback_to_customers_when_no_products(self) -> None:
-        """无 products 工具时回退查询客户。"""
+    def test_default_fallback_does_not_guess_customers(self) -> None:
+        """缺少明确业务对象时也不得猜成客户查询。"""
         planner = _make_planner()
         reg = {"customers": _sample_registry()["customers"]}
         result = planner._fallback_plan("pid", "随便看看", reg)
-        assert any(n.tool_id == "customers" for n in result.nodes)
+        assert result.intent == "clarification_required"
+        assert result.nodes == []
 
     def test_default_fallback_empty_registry(self) -> None:
         """空注册表时返回空节点图。"""

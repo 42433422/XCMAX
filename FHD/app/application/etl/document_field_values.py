@@ -40,11 +40,7 @@ def _normalized_date(candidates: list[str]) -> str:
             candidate,
         )
         if match:
-            return (
-                f"{int(match.group(1)):04d}-"
-                f"{int(match.group(2)):02d}-"
-                f"{int(match.group(3)):02d}"
-            )
+            return f"{int(match.group(1)):04d}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
     return ""
 
 

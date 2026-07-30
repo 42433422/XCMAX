@@ -12,7 +12,6 @@ import os
 from pathlib import PurePosixPath
 from typing import Any
 
-
 _ENTITY_META: dict[str, tuple[str, str, str]] = {
     "customers": ("products.db", "客户/产品主库", "customers / purchase_units"),
     "products": ("products.db", "客户/产品主库", "products"),
@@ -120,7 +119,18 @@ def _product_items(params: dict[str, Any], output: dict[str, Any]) -> list[dict[
         if not isinstance(raw, dict):
             continue
         item: dict[str, Any] = {}
-        for key in ("id", "name", "product_name", "model_number", "product_code", "unit", "qty", "quantity", "unit_price", "price"):
+        for key in (
+            "id",
+            "name",
+            "product_name",
+            "model_number",
+            "product_code",
+            "unit",
+            "qty",
+            "quantity",
+            "unit_price",
+            "price",
+        ):
             value = raw.get(key)
             if value not in (None, ""):
                 item[key] = value
@@ -154,11 +164,25 @@ def _product_change(
     for item in items:
         item["change_type"] = change_type
     counts = {
-        "created": _count(output.get("created_products") or output.get("created"), len(items) if operation in {"create", "upsert"} else 0),
-        "updated": _count(output.get("updated_products") or output.get("updated"), len(items) if operation == "update" else 0),
-        "deleted": _count(output.get("deleted_products") or output.get("deleted"), len(items) if operation == "delete" else 0),
+        "created": _count(
+            output.get("created_products") or output.get("created"),
+            len(items) if operation in {"create", "upsert"} else 0,
+        ),
+        "updated": _count(
+            output.get("updated_products") or output.get("updated"),
+            len(items) if operation == "update" else 0,
+        ),
+        "deleted": _count(
+            output.get("deleted_products") or output.get("deleted"),
+            len(items) if operation == "delete" else 0,
+        ),
     }
-    labels = {"create": "新增产品", "update": "修改产品", "delete": "删除产品", "upsert": "新增/更新产品"}
+    labels = {
+        "create": "新增产品",
+        "update": "修改产品",
+        "delete": "删除产品",
+        "upsert": "新增/更新产品",
+    }
     return {
         **database,
         "entity": "products",
@@ -182,11 +206,13 @@ def _field_changes(output: dict[str, Any]) -> list[dict[str, Any]]:
         new_value = after.get(key)
         if old_value == new_value or key in {"updated_at", "created_at"}:
             continue
-        fields.append({
-            "field": _text(key, limit=80),
-            "before": _text(old_value, limit=120),
-            "after": _text(new_value, limit=120),
-        })
+        fields.append(
+            {
+                "field": _text(key, limit=80),
+                "before": _text(old_value, limit=120),
+                "after": _text(new_value, limit=120),
+            }
+        )
     return fields[:20]
 
 
@@ -213,11 +239,23 @@ def build_orchestration_evidence(
     print_info: dict[str, Any] | None = None
 
     is_employee = tool == "employee" or tool.endswith("employee")
-    is_print = tool in {"print", "business_event"} or tool == "shipment_orders" and operation == "print"
+    is_print = (
+        tool in {"print", "business_event"} or tool == "shipment_orders" and operation == "print"
+    )
     is_read = operation in {"read", "query", "list", "exists"}
     is_write = operation in {
-        "write", "create", "update", "delete", "batch_create", "batch_delete", "upsert",
-        "stock_in", "stock_out", "transfer", "approve_order", "create_inbound",
+        "write",
+        "create",
+        "update",
+        "delete",
+        "batch_create",
+        "batch_delete",
+        "upsert",
+        "stock_in",
+        "stock_out",
+        "transfer",
+        "approve_order",
+        "create_inbound",
     }
 
     if is_employee:
@@ -225,18 +263,29 @@ def build_orchestration_evidence(
             params.get("employee_id") or params.get("pack_id") or params.get("tool_name") or tool,
             limit=100,
         )
-        employees.append({
-            "employee_id": employee_id,
-            "employee_name": _text(params.get("employee_name") or employee_id, limit=120),
-            "task": _text(params.get("task") or params.get("user_request") or runtime_context.get("message"), limit=180),
-            "status": status,
-        })
+        employees.append(
+            {
+                "employee_id": employee_id,
+                "employee_name": _text(params.get("employee_name") or employee_id, limit=120),
+                "task": _text(
+                    params.get("task")
+                    or params.get("user_request")
+                    or runtime_context.get("message"),
+                    limit=180,
+                ),
+                "status": status,
+            }
+        )
 
     if tool == "business_db":
         if entity in _ENTITY_META:
-            databases.append(_database(entity, runtime_context, role="write" if is_write else "read"))
+            databases.append(
+                _database(entity, runtime_context, role="write" if is_write else "read")
+            )
             if is_write and entity == "products":
-                change = _product_change(str(params.get("operation") or "create"), params, output, databases[0])
+                change = _product_change(
+                    str(params.get("operation") or "create"), params, output, databases[0]
+                )
                 if change:
                     changes.append(change)
     elif tool in _ENTITY_META:
@@ -255,7 +304,9 @@ def build_orchestration_evidence(
         raw_path = _text(params.get("file_path"), limit=240)
         print_info = {
             "kind": "label" if "label" in operation else "document",
-            "printer_name": _text(params.get("printer_name") or output.get("printer_name"), limit=120),
+            "printer_name": _text(
+                params.get("printer_name") or output.get("printer_name"), limit=120
+            ),
             "copies": _count(params.get("copies") or params.get("quantity"), 1),
             "template": _text(params.get("template") or params.get("template_id"), limit=120),
             "file_name": PurePosixPath(raw_path).name if raw_path else "",
@@ -265,7 +316,17 @@ def build_orchestration_evidence(
     if not databases and is_read:
         databases.append(_database(entity, runtime_context, role="read"))
 
-    kind = "employee" if is_employee else "print" if is_print else "database_write" if changes or is_write else "database_read" if databases else "tool"
+    kind = (
+        "employee"
+        if is_employee
+        else "print"
+        if is_print
+        else "database_write"
+        if changes or is_write
+        else "database_read"
+        if databases
+        else "tool"
+    )
     labels = {
         "employee": "调用 AI 员工",
         "print": "打印/打单",
@@ -288,7 +349,10 @@ def build_orchestration_evidence(
         evidence["print"] = print_info
     if is_read:
         evidence["query"] = _text(
-            params.get("keyword") or params.get("query") or params.get("model_number") or runtime_context.get("message"),
+            params.get("keyword")
+            or params.get("query")
+            or params.get("model_number")
+            or runtime_context.get("message"),
             limit=180,
         )
         rows = output.get("data")
