@@ -4562,6 +4562,7 @@ def _assess_branch_auto_merge_policy(
             is_marker_status_path,
             loop_memory_requires_executable_change,
             memory_has_diff_too_large_remediation,
+            memory_has_retort_scope_remediation,
             para_merge_review_max_diff_chars,
         )
 
@@ -4577,6 +4578,20 @@ def _assess_branch_auto_merge_policy(
                         "kb_paths": kb_paths,
                         "ok": False,
                         "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+                        "self_maintenance_requirement": requirement,
+                    }
+                )
+        if requirement.get("required") and memory_has_retort_scope_remediation(memory):
+            kb_paths = [
+                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
+            ]
+            if kb_paths:
+                return _decision(
+                    {
+                        "changed_files": normalized_files,
+                        "kb_paths": kb_paths,
+                        "ok": False,
+                        "reason": "kb_paths_blocked_during_retort_scope_remediation",
                         "self_maintenance_requirement": requirement,
                     }
                 )
